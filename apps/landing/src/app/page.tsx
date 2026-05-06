@@ -94,7 +94,7 @@ function Hero() {
         </div>
 
         <p className="mt-6 text-sm text-neutral-500">
-          Open beta · BYO Anthropic key for free unlimited usage · Bae-key trial: 5 reviews/month
+          Open beta · BYO Anthropic key for free unlimited usage · Trial: 5 reviews/month, no card
         </p>
       </div>
     </section>
@@ -254,7 +254,7 @@ function Pricing() {
         />
       </div>
       <p className="mt-8 text-xs text-neutral-500 max-w-prose">
-        Trial tier (5 reviews / 2 autofix per month, Bae-managed key) available without a card while we run open beta.
+        Trial tier (5 reviews / 2 autofix per month, platform-managed key) available without a card while we run open beta.
         Stripe metering ships once moat data accumulates from real usage.
       </p>
     </section>
@@ -389,7 +389,7 @@ function Footer() {
           >
             Install GitHub App
           </a>
-          <a href="mailto:seunghunbae@3svs.com" className="block hover:text-accent-900">Contact</a>
+          <a href="mailto:hi@conclave-ai.dev" className="block hover:text-accent-900">Contact</a>
         </nav>
       </div>
       <p className="mx-auto max-w-5xl px-6 mt-10 text-xs text-neutral-400">

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS saas_users (
   github_login    TEXT NOT NULL,                     -- e.g., "seunghunbae-3svs"
   email           TEXT,                              -- optional, from GH email scope
   tier            TEXT NOT NULL DEFAULT 'free',      -- free | solo | pro
-  byo_anthropic   INTEGER NOT NULL DEFAULT 0,        -- 0=Bae key, 1=BYO Anthropic key
+  byo_anthropic   INTEGER NOT NULL DEFAULT 0,        -- 0=platform-managed key, 1=BYO Anthropic key
   data_share_opt_in INTEGER NOT NULL DEFAULT 1,      -- federated catalog contribution; default ON
   created_at      TEXT NOT NULL,
   last_active_at  TEXT NOT NULL
