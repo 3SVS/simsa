@@ -60,12 +60,12 @@ this repo goes through the `release.yml` GitHub Action — never run
 
 ## Scope of this repo
 
-**In scope:** the 18 workspace packages, the docs under `docs/`, the
-CI workflows, the architecture + decisions files.
+**In scope:** the 24 workspace packages, the docs under `docs/`, the
+CI workflows, the architecture + decisions files, and the central-plane
+Cloudflare Worker that powers the SaaS at `conclave-ai.dev`.
 
-**Out of scope:** a hosted service around Conclave AI (that would be
-a separate repo). A web dashboard for reviews (also separate). Plugins
-for IDEs other than via MCP (MCP is the integration story).
+**Out of scope:** plugins for IDEs other than via MCP (MCP is the
+integration story).
 
 ## When in doubt
 
@@ -75,4 +75,10 @@ across the monorepo is the point of the monorepo.
 
 ## License
 
-MIT — same as the project.
+[FSL-1.1-Apache-2.0](LICENSE) — Functional Source License with an
+Apache 2.0 future license. Contributions land under the same license.
+By submitting a PR you agree your contribution is licensed accordingly.
+
+In short: anything goes except running this as a competing managed
+SaaS before the Change Date (2028-05-07). After that, automatic
+Apache 2.0 — full open source.

@@ -621,7 +621,7 @@ test("runRework: low-confidence-only scan findings do NOT block", async () => {
   assert.ok(stdout.join("").includes("low/medium finding"));
 });
 
-test("runRework: commit is authored as conclave-worker[bot]", async () => {
+test("runRework: commit is authored as the GitHub App bot", async () => {
   const store = makeStore([makeEpisodic()]);
   const writer = makeWriter();
   const worker = makeWorker();
@@ -646,6 +646,13 @@ test("runRework: commit is authored as conclave-worker[bot]", async () => {
   const commit = git.calls.find((c) => c.args.includes("commit"));
   assert.ok(commit, "commit call should exist");
   const joined = commit.args.join(" ");
-  assert.ok(joined.includes("conclave-worker[bot]"), `author missing: ${joined}`);
-  assert.ok(joined.includes("noreply@conclave.ai"), `email missing: ${joined}`);
+  // v0.16.1 — switched to the GitHub App canonical noreply format so
+  // deploy gates (e.g. Vercel) that match commit-email → GH-account
+  // accept these commits. Was conclave-worker[bot] <noreply@conclave.ai>;
+  // now uses <APP_ID>+<APP_SLUG>[bot]@users.noreply.github.com.
+  assert.ok(joined.includes("conclave-ai-code-council[bot]"), `author missing: ${joined}`);
+  assert.ok(
+    joined.includes("3620556+conclave-ai-code-council[bot]@users.noreply.github.com"),
+    `GH App noreply email missing: ${joined}`,
+  );
 });

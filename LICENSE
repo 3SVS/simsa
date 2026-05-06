@@ -1,21 +1,146 @@
-MIT License
+Functional Source License, Version 1.1, Apache 2.0 Future License
 
-Copyright (c) 2026 Seunghun Bae
+Abbreviation
+============
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+FSL-1.1-Apache-2.0
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Notice
+======
+
+Copyright 2026 3SVS
+
+Functional Source License, Version 1.1, Apache 2.0 Future License
+
+
+Terms and Conditions
+====================
+
+Licensor: 3SVS
+
+Software: Conclave AI — the source code in this repository, including
+the @conclave-ai/* npm packages, the central-plane Cloudflare Worker,
+and the conclave-ai.dev landing surface.
+
+
+License Grant
+-------------
+
+Subject to your compliance with this License, the Licensor hereby
+grants you the right to use, copy, modify, create derivative works of,
+publicly perform, publicly display, and redistribute the Software for
+any Permitted Purpose identified below.
+
+
+Permitted Purpose
+-----------------
+
+A Permitted Purpose is any purpose other than a Competing Use. A
+Competing Use means making the Software available to others in a
+commercial product or service that:
+
+1. substitutes for the Software;
+
+2. substitutes for any other product or service we (the Licensor)
+   offer using the Software that exists as of the date we make the
+   Software available; or
+
+3. offers the same or substantially similar functionality as the
+   Software (or a Competing Use of any of the foregoing).
+
+Permitted Purposes specifically include using the Software:
+
+1. for your internal business operations;
+
+2. for non-commercial education;
+
+3. for non-commercial research;
+
+4. as part of an open source project (free or paid) that does not
+   itself constitute a Competing Use;
+
+5. in connection with professional services that you provide to a
+   licensee using the Software in accordance with these terms.
+
+
+Notices
+-------
+
+You must give any other recipients of the Software a copy of this
+License.
+
+You must retain, in the source form of any derivative works that you
+distribute, all copyright, patent, trademark, and attribution notices
+from the source form of the Software, excluding those notices that do
+not pertain to any part of the derivative works.
+
+If you modify the Software, you must include in any modified copies of
+the Software prominent notices stating that you have modified the
+Software.
+
+
+Redistribution
+--------------
+
+The Permitted Purpose limitation continues to apply to those who
+receive the Software from you. You may not impose additional
+restrictions on the rights granted in this License.
+
+
+Future License
+==============
+
+On the second anniversary of the date the Software is Made Available
+under this License, or such earlier date as Licensor may specify (each,
+the "Change Date"), the Software will automatically also be made
+available under the Apache License, Version 2.0.
+
+After the Change Date, anyone is authorized to use the Software under
+the terms of the Apache License, Version 2.0.
+
+The Software was first Made Available under this License on
+2026-05-07. The Change Date is therefore 2028-05-07.
+
+
+Trademarks
+==========
+
+This License does not grant you any right in any trademark, service
+mark, trade name, or logo of Licensor or its affiliates ("Conclave AI",
+"3SVS", and the Conclave AI logo are trademarks of 3SVS), provided that
+you may use a trademark or logo of Licensor as required by Section 6 of
+the Apache License, Version 2.0 (Notices) when redistributing the
+Software.
+
+
+Disclaimer
+==========
+
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED ON
+AN "AS IS" BASIS, AND LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND
+CONDITIONS WITH RESPECT TO THE SOFTWARE, EITHER EXPRESS, IMPLIED, OR
+STATUTORY, INCLUDING, WITHOUT LIMITATION, ANY IMPLIED WARRANTIES OF
+TITLE, MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-
+INFRINGEMENT, AND THE ABSENCE OF LATENT OR OTHER DEFECTS, WHETHER OR
+NOT DISCOVERABLE.
+
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL LICENSOR
+BE LIABLE TO YOU ON ANY LEGAL THEORY (INCLUDING, WITHOUT LIMITATION,
+NEGLIGENCE) OR OTHERWISE FOR ANY DIRECT, SPECIAL, INDIRECT, INCIDENTAL,
+CONSEQUENTIAL, PUNITIVE, EXEMPLARY, OR OTHER LOSSES, COSTS, EXPENSES,
+OR DAMAGES ARISING OUT OF THIS LICENSE OR USE OF THE SOFTWARE, EVEN
+WHERE LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH LOSSES,
+COSTS, EXPENSES, OR DAMAGES.
+
+If a court of competent jurisdiction finds that you violated this
+License, you must pay reasonable attorneys' fees and costs incurred by
+Licensor in enforcing this License.
+
+
+About FSL
+=========
+
+The Functional Source License is a source-available license developed
+to balance contributor and user freedom with sustainable open source
+business viability. See https://fsl.software for details.
