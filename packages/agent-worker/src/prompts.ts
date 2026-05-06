@@ -1,23 +1,21 @@
 import type { Blocker } from "@conclave-ai/core";
 import type { WorkerContext } from "./types.js";
 
-export const WORKER_SYSTEM_PROMPT = `You are the Worker agent on Conclave AI. Your job is to turn council blockers into a concrete code patch.
+export const WORKER_SYSTEM_PROMPT = `You are the Worker agent on Conclave AI. Your job is to turn council blockers into complete file rewrites that resolve those blockers.
 
-Upstream context: a multi-agent review council flagged blockers on a pull request. The council's role is to spot problems. Your role is to fix them — produce a unified diff that, when applied with \`git apply\` on top of the PR head commit, resolves the blockers without regressing anything else.
+Upstream context: a multi-agent review council flagged blockers on a pull request. The council's role is to spot problems. Your role is to fix them — produce the full new content of every file that needs changing, so the caller can write those contents directly to disk.
 
 Hard rules:
-- You MUST respond by calling the submit_patch tool exactly once. Do not emit free-form text.
-- The \`patch\` field MUST be a valid unified diff — with \`diff --git\` or \`---\`/\`+++\` headers and \`@@\` hunks — not prose, not a code snippet.
+- You MUST respond by calling the submit_rewrite tool exactly once. Do not emit free-form text.
+- The \`rewrites\` array MUST contain one entry per file you change. Each \`content\` field MUST be the COMPLETE new file — every line from top to bottom. Do NOT produce diffs, patches, or partial snippets. The caller overwrites the file wholesale.
 - Fix ONLY the blockers the council raised. Do not refactor unrelated code, rename things, reformat files, or add features. Scope creep is a worse failure than leaving a minor blocker untouched.
-- Modify EXISTING files only. Do NOT create new files (including test files, documentation, scripts, or config files) unless a blocker explicitly names a missing file as the defect. Adding a test file "just to cover the fix" counts as scope creep and is forbidden — the human reviewer adds tests, not the worker.
+- Modify EXISTING files only. Do NOT create new files (including test files, documentation, scripts, or config files) unless a blocker explicitly names a missing file as the defect.
+- Preserve EVERY line you are not changing — copy it verbatim into \`content\`. The most common mistake is accidentally dropping lines while assembling the full file. Re-read the snapshot line by line before submitting.
 - Preserve existing public APIs, exports, file paths, import styles, and indentation conventions (tabs vs spaces, quote style) exactly as the source uses them.
 - If a blocker requires information you don't have (a file not included in the snapshots, or ambiguity about intent), skip it and note that in \`summary\`. Never invent file contents you haven't been shown.
-- If NO blocker is fixable with the information given, return an empty \`patch\` string, an empty \`filesTouched\` array, and explain in \`summary\` what the caller should gather before retrying.
+- If NO blocker is fixable with the information given, return an empty \`rewrites\` array and explain in \`summary\` what the caller should gather before retrying.
 - \`commitMessage\` should be a single line (≤ 72 chars), conventional-commit style where it fits. No trailing period.
-- \`filesTouched\` must list every repo-relative path the patch modifies, creates, or deletes — forward slashes, exactly as they appear in the patch headers.
-- The caller applies your patch with \`git apply --recount\`, which only recomputes the line *counts* B and D in \`@@ -A,B +C,D @@\` — the *starting line* A is still checked against the actual file. An off-by-one starting line rejects on stricter git installations, so make A match the line in the source where your first context line actually lives. If you're unsure, count from the file snapshots provided.
-- Every hunk MUST include at least 2-3 lines of unchanged context BEFORE the first changed line and 2-3 lines AFTER the last changed line. With only one line of leading context, both \`git apply --recount\` AND the GNU \`patch -p1 --fuzz=3\` fallback can fail to anchor the hunk on stricter installations — there isn't enough surrounding text to uniquely locate the change. When the change is at the very top of a file (line 1-2), prepend whatever leading context exists; when it's at the bottom, do the same with trailing context.
-- When a blocker says "module X is imported but not in this diff" (or similar — missing import target, runtime-safety, app-boot risk), prefer to wrap the call site in try/catch with a no-op fallback instead of creating the missing module from scratch. You don't know what the missing module is supposed to do; guessing risks shipping wrong behavior. Example fix: replace \`import { initX } from './x.js'; initX()\` with \`try { const { initX } = await import('./x.js'); initX(); } catch {}\` — keeps the call site harmless even when the module is missing or throws. Document the fallback in a one-line comment.`;
+- When a blocker says "module X is imported but not in this diff" (or similar), prefer to wrap the call site in try/catch with a no-op fallback instead of creating the missing module from scratch. Document the fallback in a one-line comment.`;
 
 function renderBlockers(reviews: WorkerContext["reviews"]): string {
   const lines: string[] = [];
@@ -54,7 +52,7 @@ export function buildWorkerPrompt(ctx: WorkerContext): string {
   } else {
     sections.push(`# Blockers to fix`);
     sections.push(
-      `(None of the council verdicts carry blockers. Return an empty patch and note this in summary — the caller should not have invoked rework.)`,
+      `(None of the council verdicts carry blockers. Return an empty rewrites array and note this in summary — the caller should not have invoked rework.)`,
     );
     sections.push("");
   }
@@ -62,7 +60,7 @@ export function buildWorkerPrompt(ctx: WorkerContext): string {
   if (ctx.fileSnapshots.length > 0) {
     sections.push(`# Current file contents`);
     sections.push(
-      `These are the files on the PR branch right now, at sha ${ctx.newSha}. Base your patch on these exact contents.`,
+      `These are the files on the PR branch right now, at sha ${ctx.newSha}. Your rewrites MUST be based on these exact contents — copy every line verbatim, then apply targeted edits for the blockers.`,
     );
     sections.push("");
     for (const snap of ctx.fileSnapshots) {
@@ -74,7 +72,7 @@ export function buildWorkerPrompt(ctx: WorkerContext): string {
     }
   } else {
     sections.push(
-      `# Current file contents\n(no snapshots provided — return an empty patch and list the files you need in summary)`,
+      `# Current file contents\n(no snapshots provided — return an empty rewrites array and list the files you need in summary)`,
     );
     sections.push("");
   }
@@ -90,24 +88,19 @@ export function buildWorkerPrompt(ctx: WorkerContext): string {
     sections.push("");
   }
 
-  // v0.13.19 (H1 #4) — when the apply layer rejected a previous
-  // attempt, inline that feedback so the worker can correct the
-  // specific failure mode (off-by-N start line, miscounted header,
-  // hallucinated context). Keeps the retry loop cheap because the
-  // worker doesn't have to re-derive what's wrong.
   if (ctx.previousAttempts && ctx.previousAttempts.length > 0) {
     sections.push(`# Previous attempts that were REJECTED`);
     sections.push(
-      `Your earlier patch(es) for this exact blocker did not apply. Read the rejection reason carefully and emit a corrected patch. Common failure modes: off-by-N starting line in the @@ -A,B @@ header, hunk B/D counts that don't match the body, hallucinated context lines, or context with subtly different whitespace. Do NOT repeat the same shape.`,
+      `Your earlier rewrite(s) for this exact blocker were rejected. Read the rejection reason carefully and produce corrected file contents.`,
     );
     sections.push("");
     ctx.previousAttempts.forEach((att, idx) => {
       sections.push(`## Attempt ${idx + 1} (rejected)`);
-      sections.push("Patch you submitted:");
-      sections.push("```diff");
-      sections.push(att.patch);
-      sections.push("```");
-      sections.push("Rejection reason from `git apply --check --recount`:");
+      sections.push("Files you rewrote:");
+      for (const rw of att.rewrites) {
+        sections.push(`- ${rw.path}`);
+      }
+      sections.push("Rejection reason:");
       sections.push("```");
       sections.push(att.rejectReason);
       sections.push("```");
@@ -116,15 +109,13 @@ export function buildWorkerPrompt(ctx: WorkerContext): string {
   }
 
   sections.push(
-    `Call submit_patch exactly once with a unified diff, a commit message, the list of files touched, and a one-paragraph summary.`,
+    `Call submit_rewrite exactly once with the complete new contents of every file that needs changing, a commit message, and a one-paragraph summary.`,
   );
   return sections.join("\n");
 }
 
 /**
- * Stable prefix suitable for Anthropic prompt caching. Mirrors the shape
- * used by agent-claude — system prompt plus any pinned RAG strings that
- * don't change per call.
+ * Stable prefix suitable for Anthropic prompt caching.
  */
 export function buildCacheablePrefix(ctx: WorkerContext): string {
   const parts: string[] = [WORKER_SYSTEM_PROMPT];
@@ -134,9 +125,6 @@ export function buildCacheablePrefix(ctx: WorkerContext): string {
   if (ctx.failureCatalog && ctx.failureCatalog.length > 0) {
     parts.push("failure-catalog:\n" + ctx.failureCatalog.slice(0, 8).join("\n"));
   }
-  // H3 #13 — auto-tuned hints from past worker bails. Same prefix slot
-  // as the answer-keys / failure-catalog so Anthropic prompt caching
-  // still hits across calls when the hint set is stable.
   if (ctx.priorBailHints && ctx.priorBailHints.length > 0) {
     const lines = ctx.priorBailHints
       .slice(0, 5)
@@ -145,7 +133,7 @@ export function buildCacheablePrefix(ctx: WorkerContext): string {
       [
         "## Past worker bails — avoid these failure modes",
         "Previous autofix runs on similar shapes hit these terminal states.",
-        "Take extra care to produce a complete, applicable patch that doesn't",
+        "Take extra care to produce complete, correct file contents that don't",
         "repeat the same root cause.",
         "",
         ...lines,

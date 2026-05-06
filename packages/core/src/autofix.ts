@@ -12,17 +12,33 @@
 import type { Blocker, ReviewResult } from "./agent.js";
 
 /**
+ * A single file rewrite produced by the Worker agent.
+ * `content` is the COMPLETE new file contents — the caller writes
+ * this directly to disk, bypassing `git apply` entirely.
+ */
+export interface FileRewrite {
+  /** Repo-relative path (forward slashes). */
+  path: string;
+  /** Complete new file contents. Overwrites the file wholesale. */
+  content: string;
+}
+
+/**
  * One blocker plus the worker's attempt to resolve it. Produced by the
  * per-blocker autofix orchestrator before anything gets applied.
  *
- * `patch` is a unified-diff string (the ClaudeWorker output). `status`
- * reports what we plan to do with it:
- *   - "ready"        → passed `git apply --check`, passed secret-guard,
- *                      in-allowlist, within diff budget.
+ * `rewrites` holds full-file replacements (ClaudeWorker v0.14+ output).
+ * `patch` is kept for mechanical handlers (AF-4..AF-11) that set it to
+ * a comment sentinel for terminal reporting.
+ *
+ * `status` reports what we plan to do with it:
+ *   - "ready"        → worker produced rewrites (or handler staged on disk),
+ *                      passed secret-guard and deny-list checks.
  *   - "skipped"      → policy reason (design domain, allowlist, etc.).
  *                      `reason` carries the human explanation.
- *   - "conflict"     → worker produced a patch but it doesn't apply.
- *   - "secret-block" → secret-guard flagged the patch.
+ *   - "conflict"     → legacy: worker produced a patch that didn't apply.
+ *                      No longer emitted by the rewrite worker path.
+ *   - "secret-block" → secret-guard flagged the content.
  *   - "worker-error" → LLM/transport failure (CircuitBreaker, timeout).
  */
 export type BlockerFixStatus =
@@ -38,20 +54,15 @@ export interface BlockerFix {
   /** Agent id that raised it ("claude", "openai", "design", …). */
   agent: string;
   status: BlockerFixStatus;
+  /** Full-file rewrites produced by the Worker agent (v0.14+). */
+  rewrites?: FileRewrite[];
+  /** Legacy: unified-diff patch. Still used by mechanical handlers (AF-4..11). */
   patch?: string;
   commitMessage?: string;
   appliedFiles?: string[];
   reason?: string;
   tokensUsed?: number;
   costUsd?: number;
-  /**
-   * v0.13.19 (H1 #4) — number of worker calls made for this blocker
-   * before reaching the final status. 1 = first attempt was the
-   * accepted patch; >1 = retry-with-feedback loop was needed
-   * (each retry is another worker call costing ~$0.20). Operators
-   * use this to decide whether the worker prompt needs further
-   * tuning. Absent on first-attempt-success for backward compat.
-   */
   workerAttempts?: number;
 }
 

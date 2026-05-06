@@ -2,14 +2,9 @@
  * UX-2 / UX-3 / AF-1 — terminal progress emit + per-blocker progress
  * + apply-conflict partial-apply rescue.
  *
- * Live catch: eventbadge PR #39 had 9 council blockers across code,
- * design, and runtime defects. Pre-fix, autofix:
- *   - emitted progress only at iter-started + iter-done (success path),
- *     so Telegram showed "auto fixing 1/3" then went silent forever.
- *   - bailed the entire iteration on the first apply-conflict, wiping
- *     8 clean patches because of 1 off-by-N hunk (`reset --hard HEAD`).
- *   - posted UX-1 unified bail summary only as PR comment, never to
- *     the progress stream Telegram listens on.
+ * v0.14 update: worker now uses full-file rewrites (submit_rewrite).
+ * "Conflicts" are simulated by injecting a writeFile mock that throws
+ * for specific file paths, rather than mocking git apply failures.
  *
  * Post-fix:
  *   UX-2 — every shouldPostSummary terminal status fires
@@ -19,9 +14,9 @@
  *          autofix-blocker-done with index/total/label/outcome so
  *          users see "fixing blocker 3/9: contrast violation" instead
  *          of staring at "auto fixing 1/3".
- *   AF-1 — apply-conflict on one patch restores ONLY that patch's files
- *          (`git checkout HEAD -- <files>`), keeps the others, and
- *          continues the iteration. Bail only when EVERY patch failed.
+ *   AF-1 — writeFile failure on one rewrite restores ONLY that
+ *          rewrite's already-written files, keeps the others, and
+ *          continues the iteration. Bail only when EVERY rewrite failed.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -44,49 +39,41 @@ const baseArgs = {
   reworkCycle: 0,
 };
 
-function makeWorker({ patch } = {}) {
+function makeWorker() {
   return {
-    work: async () => ({
-      patch:
-        patch ?? "diff --git a/src/x.ts b/src/x.ts\n--- a/src/x.ts\n+++ b/src/x.ts\n@@\n-a\n+b\n",
-      message: "fix",
-      appliedFiles: ["src/x.ts"],
-      costUsd: 0.01,
-      tokensUsed: 100,
-    }),
+    work: async (ctx) => {
+      const blocker = ctx.reviews[0].blockers[0];
+      return {
+        rewrites: [{ path: blocker.file, content: `// fixed ${blocker.file}\nexport const x: number = 1;\n` }],
+        message: `fix ${blocker.message}`,
+        appliedFiles: [blocker.file],
+        costUsd: 0.01,
+        tokensUsed: 100,
+      };
+    },
   };
 }
 
-function makeGit({ failApplyOn = [], applyLoopOnly = false } = {}) {
-  // failApplyOn: filenames whose apply should fail.
-  // applyLoopOnly: true → only the apply-loop (autofix.ts) calls fail;
-  //                per-blocker pre-validation (autofix-worker.ts) passes.
-  //                This simulates real-world apply-loop conflicts: pre-
-  //                validation passed, but a later patch conflicts after
-  //                an earlier patch has modified the worktree.
-  // The mock distinguishes the two by tempPath prefix:
-  //   .conclave-autofix-{id}.patch        — per-blocker validation
-  //   .conclave-autofix-apply-{id}.patch  — sequential apply-loop
-  let lastTempPatchContents = "";
+function makeGit() {
   const calls = [];
-  const exec = async (bin, args, opts) => {
+  const exec = async (bin, args, _opts) => {
     calls.push({ bin, args: [...args] });
-    const lastArg = args[args.length - 1] ?? "";
-    const isApplyLoop = typeof lastArg === "string" && lastArg.includes(".conclave-autofix-apply-");
-    if (bin === "git" && args[0] === "apply") {
-      const willFail = failApplyOn.some((f) => lastTempPatchContents.includes(f))
-        && (!applyLoopOnly || isApplyLoop);
-      if (willFail) throw new Error(`error: patch failed: ${lastTempPatchContents.match(/diff --git a\/(\S+)/)?.[1] ?? "unknown"}`);
-    }
-    if (bin === "patch") {
-      const willFail = failApplyOn.some((f) => lastTempPatchContents.includes(f))
-        && (!applyLoopOnly || isApplyLoop);
-      if (willFail) throw new Error(`patch: **** unexpected end of file in patch`);
-    }
     return { stdout: "", stderr: "", code: 0 };
   };
-  exec._setLastTemp = (s) => { lastTempPatchContents = s; };
   return { exec, calls };
+}
+
+function makeWriteFile({ failOn = [] } = {}) {
+  const calls = [];
+  const fn = async (absPath, content) => {
+    calls.push({ absPath, content });
+    // Normalize Windows backslashes so failOn matchers (e.g. "src/b.ts") are platform-portable.
+    const norm = absPath.replace(/\\/g, "/");
+    if (failOn.some((f) => norm.includes(f))) {
+      throw new Error(`EACCES: permission denied writing ${absPath}`);
+    }
+  };
+  return { calls, fn };
 }
 
 function makeVerifier({ buildOk = true, testsOk = true } = {}) {
@@ -150,17 +137,10 @@ function stubGh() {
   return { calls, fn };
 }
 
-// Drives the mock writeTempPatch so makeGit can simulate selective
-// apply failure by inspecting the patch body.
-function makeWriteTempPatch(git) {
-  return async (_path, contents) => {
-    git.exec._setLastTemp(contents);
-  };
-}
-
 test("UX-3: per-blocker progress emits autofix-blocker-started + done with index/total/label/outcome", async () => {
   const { events, notifier } = captureProgress();
   const git = makeGit();
+  const writeFile = makeWriteFile();
   const verdict = JSON.stringify({
     councilVerdict: "rework",
     episodicId: "ep-ux3-test",
@@ -175,8 +155,7 @@ test("UX-3: per-blocker progress emits autofix-blocker-started + done with index
       verifier: makeVerifier(),
       readFile: async () => verdict,
       readVerdictFile: async () => verdict,
-      writeTempPatch: makeWriteTempPatch(git),
-      removeTempPatch: async () => {},
+      writeFile: writeFile.fn,
       gh: stubGh().fn,
       runReview: async () => ({
         verdict: "rework",
@@ -204,9 +183,9 @@ test("UX-3: per-blocker progress emits autofix-blocker-started + done with index
 
 test("UX-2: bailed-no-patches emits autofix-cycle-ended with bailStatus + counts + cost", async () => {
   const { events, notifier } = captureProgress();
-  // Force every patch to conflict by making the worker return an
-  // un-appliable diff and the git mock reject every apply.
-  const git = makeGit({ failApplyOn: ["src/"] });
+  // Force every writeFile to fail → all fixes conflict → bailed-no-patches.
+  const writeFile = makeWriteFile({ failOn: ["src/"] });
+  const git = makeGit();
   const verdict = JSON.stringify({
     councilVerdict: "rework",
     episodicId: "ep-ux2-test",
@@ -221,8 +200,7 @@ test("UX-2: bailed-no-patches emits autofix-cycle-ended with bailStatus + counts
       verifier: makeVerifier(),
       readFile: async () => verdict,
       readVerdictFile: async () => verdict,
-      writeTempPatch: makeWriteTempPatch(git),
-      removeTempPatch: async () => {},
+      writeFile: writeFile.fn,
       gh: stubGh().fn,
       runReview: async () => ({
         verdict: "rework",
@@ -243,29 +221,12 @@ test("UX-2: bailed-no-patches emits autofix-cycle-ended with bailStatus + counts
   assert.ok(result.status.startsWith("bailed-"));
 });
 
-test("AF-1: 1 patch conflicts among 3 → other 2 survive, iteration commits, status=approved/awaiting", async () => {
-  // Worker returns the SAME boilerplate patch for every blocker; the
-  // git mock fails apply ONLY when the temp patch contains "src/b.ts"
-  // (the second blocker's file). The first and third blockers' patches
-  // succeed. Pre-AF-1 the entire iteration would `reset --hard HEAD` and
-  // bail. Post-AF-1 it commits the 2 survivors.
+test("AF-1: 1 rewrite fails among 3 → other 2 survive, iteration commits, status=approved/awaiting", async () => {
+  // writeFile fails only for src/b.ts. Fixes for src/a.ts and src/c.ts succeed.
+  // Pre-AF-1 the entire iteration would bail. Post-AF-1 it commits the 2 survivors.
   const { events, notifier } = captureProgress();
-  let workerCallIdx = 0;
-  const worker = {
-    work: async (ctx) => {
-      const blocker = ctx.reviews[0].blockers[0];
-      workerCallIdx += 1;
-      // Encode the file in the diff so the git mock can selectively reject.
-      return {
-        patch: `diff --git a/${blocker.file} b/${blocker.file}\n--- a/${blocker.file}\n+++ b/${blocker.file}\n@@\n-a\n+b\n`,
-        message: `fix ${blocker.message}`,
-        appliedFiles: [blocker.file],
-        costUsd: 0.01,
-        tokensUsed: 100,
-      };
-    },
-  };
-  const git = makeGit({ failApplyOn: ["src/b.ts"], applyLoopOnly: true });
+  const git = makeGit();
+  const writeFile = makeWriteFile({ failOn: ["src/b.ts"] });
   const verdict = JSON.stringify({
     councilVerdict: "rework",
     episodicId: "ep-af1-test",
@@ -275,13 +236,12 @@ test("AF-1: 1 patch conflicts among 3 → other 2 survive, iteration commits, st
     { ...baseArgs, pr: 1, maxIterations: 1, verdictFile: "/tmp/v.json" },
     {
       loadConfig: async () => fakeConfig,
-      worker,
+      worker: makeWorker(),
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => verdict,
       readVerdictFile: async () => verdict,
-      writeTempPatch: makeWriteTempPatch(git),
-      removeTempPatch: async () => {},
+      writeFile: writeFile.fn,
       gh: stubGh().fn,
       runReview: async () => ({
         verdict: "approve",
@@ -292,54 +252,34 @@ test("AF-1: 1 patch conflicts among 3 → other 2 survive, iteration commits, st
       notifiers: [notifier],
     },
   );
-  // Should NOT be bailed-no-patches — partial-apply rescue kept 2 of 3.
+  // Should NOT be bailed-no-patches — 2 of 3 rewrites succeeded.
   assert.ok(
     result.status === "awaiting-approval" || result.status === "approved" || result.status === "deferred-to-next-review",
     `expected non-bail status, got ${result.status}`,
   );
-  // The commit + push step should have run (one of the 2 surviving fixes).
-  const stub = stubGh();
-  // Confirm at least one iteration recorded ≥1 ready fix.
   assert.ok(result.iterations.length >= 1);
-  // AF-1 partial-restore: post-Bug-#3 we restore from the INDEX
-  // (`git checkout -- <files>`), not from HEAD. Restoring from HEAD
-  // would clobber both the handler-staged in-place edits and any
-  // earlier successful worker patches in this same iteration that
-  // we've been incrementally `git add`-ing.
-  const checkoutRestore = git.calls.find(
-    (c) => c.bin === "git" && c.args[0] === "checkout" && c.args[1] === "--",
-  );
-  assert.ok(checkoutRestore, "AF-1 must call `git checkout -- <files>` (from index) for the conflicting patch");
-  // No `git reset --hard HEAD` should fire mid-iteration when at least
-  // one fix survived.
+  // src/a.ts and src/c.ts were written and staged; src/b.ts was not.
+  const stagedFiles = git.calls
+    .filter((c) => c.bin === "git" && c.args[0] === "add" && c.args[1] === "--")
+    .map((c) => c.args[2]);
+  assert.ok(stagedFiles.some((f) => f === "src/a.ts"), "src/a.ts must be staged");
+  assert.ok(stagedFiles.some((f) => f === "src/c.ts"), "src/c.ts must be staged");
+  assert.ok(!stagedFiles.some((f) => f === "src/b.ts"), "src/b.ts must NOT be staged (write failed)");
+  // No git apply calls (v0.14+ uses writeFile, not git apply).
+  const applyCall = git.calls.find((c) => c.bin === "git" && c.args[0] === "apply");
+  assert.ok(!applyCall, "git apply must NOT be called in v0.14+ rewrite path");
+  // No `git reset --hard HEAD` should fire mid-iteration when at least one fix survived.
   const hardResets = git.calls.filter(
     (c) => c.bin === "git" && c.args[0] === "reset" && c.args.includes("--hard"),
   );
-  // Some hardResets are OK in test scaffolding (e.g. rollback on
-  // verifier-fail elsewhere); we only assert <= 1 to allow the budget /
-  // build-fail safety paths but catch the "wipe-all-on-conflict" regression.
-  assert.ok(hardResets.length <= 1, `pre-AF-1 would reset --hard ALL changes; got ${hardResets.length} reset calls`);
+  assert.ok(hardResets.length <= 1, `unexpected reset --hard: ${hardResets.length} calls`);
 });
 
-test("AF-1: ALL 3 patches conflict in apply-loop → bail with bailed-no-patches + apply-conflict reason", async () => {
-  // Per-blocker pre-validation passes; the apply-loop fails for every
-  // patch (e.g., concurrent modification). No patch survives — must
-  // bail cleanly and emit autofix-cycle-ended with the apply-conflict
-  // reason (the "every patch this iteration rejected" path I added).
+test("AF-1: ALL 3 rewrites fail → bail with bailed-no-patches + apply-conflict reason", async () => {
+  // writeFile throws for all src/ files → all fixes conflict → bail.
   const { events, notifier } = captureProgress();
-  const worker = {
-    work: async (ctx) => {
-      const blocker = ctx.reviews[0].blockers[0];
-      return {
-        patch: `diff --git a/${blocker.file} b/${blocker.file}\n--- a/${blocker.file}\n+++ b/${blocker.file}\n@@\n-a\n+b\n`,
-        message: "fix",
-        appliedFiles: [blocker.file],
-        costUsd: 0.01,
-        tokensUsed: 100,
-      };
-    },
-  };
-  const git = makeGit({ failApplyOn: ["src/"], applyLoopOnly: true });
+  const git = makeGit();
+  const writeFile = makeWriteFile({ failOn: ["src/"] });
   const verdict = JSON.stringify({
     councilVerdict: "rework",
     episodicId: "ep-af1-all",
@@ -349,13 +289,12 @@ test("AF-1: ALL 3 patches conflict in apply-loop → bail with bailed-no-patches
     { ...baseArgs, pr: 1, maxIterations: 1, verdictFile: "/tmp/v.json" },
     {
       loadConfig: async () => fakeConfig,
-      worker,
+      worker: makeWorker(),
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => verdict,
       readVerdictFile: async () => verdict,
-      writeTempPatch: makeWriteTempPatch(git),
-      removeTempPatch: async () => {},
+      writeFile: writeFile.fn,
       gh: stubGh().fn,
       runReview: async () => ({
         verdict: "rework",

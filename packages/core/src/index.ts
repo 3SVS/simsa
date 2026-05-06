@@ -55,6 +55,7 @@ export {
   DEFAULT_AUTOFIX_DENY_PATTERNS,
 } from "./autofix.js";
 export type {
+  FileRewrite,
   BlockerFix,
   BlockerFixStatus,
   AutofixIteration,

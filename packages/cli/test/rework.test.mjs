@@ -145,13 +145,17 @@ function makeEpisodic(overrides = {}) {
   };
 }
 
-function makeWorker({ patch = "diff --git a/src/x.ts b/src/x.ts\n@@\n-a\n+b\n", message = "fix: x", appliedFiles = ["src/x.ts"] } = {}) {
+const VALID_REWRITES = [
+  { path: "src/x.ts", content: "export const x: number = 1;\nexport const y = 2;\n" },
+];
+
+function makeWorker({ rewrites = VALID_REWRITES, message = "fix: x", appliedFiles = rewrites.map((r) => r.path) } = {}) {
   const calls = [];
   return {
     calls,
     work: async (ctx) => {
       calls.push(ctx);
-      return { patch, message, appliedFiles, tokensUsed: 100, costUsd: 0.01 };
+      return { rewrites, message, appliedFiles, tokensUsed: 100, costUsd: 0.01 };
     },
   };
 }
@@ -201,7 +205,7 @@ const baseArgs = {
   help: false,
 };
 
-test("runRework: happy path — applies patch, commits, pushes, records outcome", async () => {
+test("runRework: happy path — applies rewrites, commits, pushes, records outcome", async () => {
   const store = makeStore([makeEpisodic()]);
   const writer = makeWriter();
   const worker = makeWorker();
@@ -209,8 +213,7 @@ test("runRework: happy path — applies patch, commits, pushes, records outcome"
   const fileReads = [];
   const stdout = [];
   const stderr = [];
-  const tempWrites = [];
-  const tempRemoves = [];
+  const filesWritten = [];
 
   const code = await runRework(
     { ...baseArgs, pr: 1 },
@@ -225,8 +228,7 @@ test("runRework: happy path — applies patch, commits, pushes, records outcome"
         fileReads.push(p);
         return "export const x = 1;\n";
       },
-      writeTempPatch: async (p, c) => { tempWrites.push({ p, c }); },
-      removeTempPatch: async (p) => { tempRemoves.push(p); },
+      writeFile: async (p, c) => { filesWritten.push({ p, c }); },
       stdout: (s) => stdout.push(s),
       stderr: (s) => stderr.push(s),
     },
@@ -238,10 +240,11 @@ test("runRework: happy path — applies patch, commits, pushes, records outcome"
   assert.equal(worker.calls[0].repo, "acme/x");
   assert.equal(worker.calls[0].fileSnapshots.length, 1);
   assert.equal(worker.calls[0].fileSnapshots[0].path, "src/x.ts");
-  assert.equal(tempWrites.length, 1);
+  assert.equal(filesWritten.length, 1, "writeFile should be called once per rewrite");
+  // Normalize Windows backslashes so this assertion is platform-portable.
+  assert.ok(filesWritten[0].p.replace(/\\/g, "/").endsWith("src/x.ts"), "should write to src/x.ts");
   const gitCmds = git.calls.map((c) => c.args.join(" "));
-  assert.ok(gitCmds.some((c) => c.startsWith("apply --check --recount")), `git apply --check --recount missing: ${gitCmds.join(" | ")}`);
-  assert.ok(gitCmds.some((c) => c === `apply --recount ${tempWrites[0].p}`), "git apply --recount missing");
+  assert.ok(!gitCmds.some((c) => c.includes("apply")), `git apply should NOT be called: ${gitCmds.join(" | ")}`);
   assert.ok(gitCmds.some((c) => c === "add -A"), "git add -A missing");
   assert.ok(gitCmds.some((c) => c.includes("commit")), "git commit missing");
   assert.ok(gitCmds.some((c) => c === "push"), "git push missing");
@@ -294,8 +297,7 @@ test("runRework: --no-push applies + commits but does not push", async () => {
       gh: makeGh(),
       git: git.exec,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       stdout: () => {},
       stderr: () => {},
     },
@@ -396,10 +398,10 @@ test("runRework: CircuitBreaker open returns exit 2", async () => {
   assert.ok(stderr.join("").includes("circuit breaker"));
 });
 
-test("runRework: empty patch (worker gave up) returns exit 1", async () => {
+test("runRework: empty rewrites (worker gave up) returns exit 1", async () => {
   const store = makeStore([makeEpisodic()]);
   const writer = makeWriter();
-  const worker = makeWorker({ patch: "", appliedFiles: [] });
+  const worker = makeWorker({ rewrites: [], appliedFiles: [] });
   const git = makeGit();
   const stderr = [];
 
@@ -421,21 +423,14 @@ test("runRework: empty patch (worker gave up) returns exit 1", async () => {
   assert.equal(code, 1);
   assert.equal(git.calls.length, 0);
   assert.equal(writer.recorded.length, 0);
-  assert.ok(stderr.join("").includes("could not produce a patch"));
+  assert.ok(stderr.join("").includes("could not produce file rewrites"));
 });
 
-test("runRework: git apply --check failure returns exit 1 and does NOT record outcome", async () => {
+test("runRework: writeFile failure returns exit 1 and does NOT record outcome", async () => {
   const store = makeStore([makeEpisodic()]);
   const writer = makeWriter();
   const worker = makeWorker();
   const stderr = [];
-
-  const git = async (_bin, args, _opts) => {
-    if (args[0] === "apply" && args[1] === "--check") {
-      throw new Error("error: patch does not apply");
-    }
-    return { stdout: "", stderr: "" };
-  };
 
   const code = await runRework(
     { ...baseArgs, pr: 1 },
@@ -445,10 +440,9 @@ test("runRework: git apply --check failure returns exit 1 and does NOT record ou
       writer,
       worker,
       gh: makeGh(),
-      git,
+      git: makeGit().exec,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => { throw new Error("ENOSPC: no space left on device"); },
       stdout: () => {},
       stderr: (s) => stderr.push(s),
     },
@@ -456,7 +450,7 @@ test("runRework: git apply --check failure returns exit 1 and does NOT record ou
 
   assert.equal(code, 1);
   assert.equal(writer.recorded.length, 0);
-  assert.ok(stderr.join("").includes("does not apply cleanly"));
+  assert.ok(stderr.join("").includes("file write failed"));
 });
 
 test("runRework: missing blocker file is noted on stderr but worker still runs", async () => {
@@ -475,8 +469,7 @@ test("runRework: missing blocker file is noted on stderr but worker still runs",
       gh: makeGh(),
       git: makeGit().exec,
       readFile: async () => { throw new Error("ENOENT"); },
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       stdout: () => {},
       stderr: (s) => stderr.push(s),
     },
@@ -488,15 +481,15 @@ test("runRework: missing blocker file is noted on stderr but worker still runs",
   assert.equal(worker.calls[0].fileSnapshots.length, 0);
 });
 
-test("runRework: secret-guard blocks when worker patch contains a secret", async () => {
+test("runRework: secret-guard blocks when worker rewrite contains a secret", async () => {
   const store = makeStore([makeEpisodic()]);
   const writer = makeWriter();
   const worker = makeWorker();
   const git = makeGit();
   const stderr = [];
 
-  // Return a "blocked" scan result regardless of patch contents.
-  const fakeScan = (_patch, _opts) => ({
+  // Return a "blocked" scan result regardless of content.
+  const fakeScan = (_content, _opts) => ({
     blocked: true,
     findings: [{
       ruleId: "openai-key",
@@ -519,8 +512,7 @@ test("runRework: secret-guard blocks when worker patch contains a secret", async
       gh: makeGh(),
       git: git.exec,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       secretScan: fakeScan,
       stdout: () => {},
       stderr: (s) => stderr.push(s),
@@ -542,7 +534,7 @@ test("runRework: --allow-secret forwards to the scanner", async () => {
   const worker = makeWorker();
   const git = makeGit();
   const seenAllow = [];
-  const fakeScan = (_patch, opts) => {
+  const fakeScan = (_content, opts) => {
     seenAllow.push(opts?.allow ?? []);
     return { blocked: false, findings: [] };
   };
@@ -557,8 +549,7 @@ test("runRework: --allow-secret forwards to the scanner", async () => {
       gh: makeGh(),
       git: git.exec,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       secretScan: fakeScan,
       stdout: () => {},
       stderr: () => {},
@@ -587,8 +578,7 @@ test("runRework: --skip-secret-guard does not invoke the scanner at all", async 
       gh: makeGh(),
       git: git.exec,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       secretScan: fakeScan,
       stdout: () => {},
       stderr: () => {},
@@ -620,8 +610,7 @@ test("runRework: low-confidence-only scan findings do NOT block", async () => {
       gh: makeGh(),
       git: git.exec,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       secretScan: fakeScan,
       stdout: (s) => stdout.push(s),
       stderr: () => {},
@@ -648,8 +637,7 @@ test("runRework: commit is authored as conclave-worker[bot]", async () => {
       gh: makeGh(),
       git: git.exec,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       stdout: () => {},
       stderr: () => {},
     },

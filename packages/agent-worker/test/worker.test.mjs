@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EfficiencyGate } from "@conclave-ai/core";
-import { ClaudeWorker, looksLikeUnifiedDiff, parsePatchToolUse, WORKER_SYSTEM_PROMPT } from "../dist/index.js";
+import { ClaudeWorker, parseRewriteToolUse, WORKER_SYSTEM_PROMPT } from "../dist/index.js";
 
 function makeMockClient(responses) {
   let i = 0;
@@ -19,21 +19,16 @@ function makeMockClient(responses) {
   };
 }
 
-const VALID_PATCH = `diff --git a/src/x.ts b/src/x.ts
-index 1234567..89abcde 100644
---- a/src/x.ts
-+++ b/src/x.ts
-@@ -1,3 +1,3 @@
--export const x = 1;
-+export const x: number = 1;
- export const y = 2;
- export const z = 3;
-`;
+const VALID_REWRITES = [
+  {
+    path: "src/x.ts",
+    content: "export const x: number = 1;\nexport const y = 2;\nexport const z = 3;\n",
+  },
+];
 
-function patchResponse({
-  patch = VALID_PATCH,
+function rewriteResponse({
+  rewrites = VALID_REWRITES,
   commitMessage = "fix(x): annotate x as number",
-  filesTouched = ["src/x.ts"],
   summary = "Addresses type-error blocker from Claude.",
   inputTokens = 2_000,
   outputTokens = 400,
@@ -46,8 +41,8 @@ function patchResponse({
       {
         type: "tool_use",
         id: "tool_1",
-        name: "submit_patch",
-        input: { patch, commitMessage, filesTouched, summary },
+        name: "submit_rewrite",
+        input: { rewrites, commitMessage, summary },
       },
     ],
     stop_reason: "tool_use",
@@ -78,79 +73,103 @@ const reviewCtx = {
   ],
 };
 
-test("ClaudeWorker: returns a WorkerOutcome with patch, message, and appliedFiles", async () => {
+test("ClaudeWorker: returns a WorkerOutcome with rewrites, message, and appliedFiles", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 1 });
-  const client = makeMockClient([patchResponse()]);
+  const client = makeMockClient([rewriteResponse()]);
   const worker = new ClaudeWorker({ apiKey: "test-key", gate, client });
   const outcome = await worker.work(reviewCtx);
-  assert.equal(outcome.patch, VALID_PATCH);
+  assert.ok(Array.isArray(outcome.rewrites), "outcome.rewrites must be an array");
+  assert.equal(outcome.rewrites.length, 1);
+  assert.equal(outcome.rewrites[0].path, "src/x.ts");
+  assert.ok(outcome.rewrites[0].content.includes("x: number"));
   assert.equal(outcome.message, "fix(x): annotate x as number");
   assert.deepEqual(outcome.appliedFiles, ["src/x.ts"]);
   assert.ok(typeof outcome.costUsd === "number" && outcome.costUsd > 0);
   assert.ok(typeof outcome.tokensUsed === "number" && outcome.tokensUsed === 2_400);
 });
 
-test("ClaudeWorker: preserves empty-patch signal when worker gives up", async () => {
+test("ClaudeWorker: preserves empty-rewrites signal when worker gives up", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 1 });
   const client = makeMockClient([
-    patchResponse({ patch: "", filesTouched: [], summary: "Need the contents of src/other.ts to proceed." }),
+    rewriteResponse({ rewrites: [], commitMessage: "chore: no fix possible", summary: "Need the contents of src/other.ts to proceed." }),
   ]);
   const worker = new ClaudeWorker({ apiKey: "k", gate, client });
   const outcome = await worker.work(reviewCtx);
-  assert.equal(outcome.patch, "");
+  assert.deepEqual(outcome.rewrites, []);
   assert.deepEqual(outcome.appliedFiles, []);
 });
 
-test("ClaudeWorker: trims whitespace from filesTouched entries and drops empties", async () => {
+test("ClaudeWorker: trims whitespace from rewrite paths and drops empty paths", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 1 });
   const client = makeMockClient([
-    patchResponse({ filesTouched: ["  src/x.ts  ", "", "src/y.ts"] }),
+    rewriteResponse({
+      rewrites: [
+        { path: "  src/x.ts  ", content: "content-x" },
+        { path: "", content: "should-be-dropped" },
+        { path: "src/y.ts", content: "content-y" },
+      ],
+    }),
   ]);
   const worker = new ClaudeWorker({ apiKey: "k", gate, client });
   const outcome = await worker.work(reviewCtx);
   assert.deepEqual(outcome.appliedFiles, ["src/x.ts", "src/y.ts"]);
 });
 
-test("ClaudeWorker: throws when response has no submit_patch tool_use block", async () => {
+test("ClaudeWorker: throws when response has no submit_rewrite tool_use block", async () => {
   const client = {
     calls: [],
     messages: {
       create: async () => ({
         id: "msg",
         model: "claude-sonnet-4-6",
-        content: [{ type: "text", text: "here is a patch in prose" }],
+        content: [{ type: "text", text: "here is some prose" }],
         stop_reason: "end_turn",
         usage: { input_tokens: 100, output_tokens: 10 },
       }),
     },
   };
   const worker = new ClaudeWorker({ apiKey: "k", client, gate: new EfficiencyGate({ perPrUsd: 1 }) });
-  await assert.rejects(() => worker.work(reviewCtx), /did not include a submit_patch tool_use/);
-});
-
-test("ClaudeWorker: throws when patch does not look like a unified diff", async () => {
-  const client = makeMockClient([
-    patchResponse({ patch: "just some code, not a diff\nconst x = 1;\n" }),
-  ]);
-  const worker = new ClaudeWorker({ apiKey: "k", client, gate: new EfficiencyGate({ perPrUsd: 1 }) });
-  await assert.rejects(() => worker.work(reviewCtx), /does not look like a unified diff/);
+  await assert.rejects(() => worker.work(reviewCtx), /did not include a submit_rewrite tool_use/);
 });
 
 test("ClaudeWorker: throws when commitMessage is empty", async () => {
-  const client = makeMockClient([patchResponse({ commitMessage: "   " })]);
+  const client = makeMockClient([rewriteResponse({ commitMessage: "   " })]);
   const worker = new ClaudeWorker({ apiKey: "k", client, gate: new EfficiencyGate({ perPrUsd: 1 }) });
   await assert.rejects(() => worker.work(reviewCtx), /commitMessage must be a non-empty string/);
 });
 
-test("ClaudeWorker: throws when filesTouched is not an array of strings", async () => {
-  const client = makeMockClient([patchResponse({ filesTouched: [42, "src/x.ts"] })]);
+test("ClaudeWorker: throws when rewrites is not an array", async () => {
+  const client = makeMockClient([
+    {
+      id: "msg_test",
+      model: "claude-sonnet-4-6",
+      content: [
+        {
+          type: "tool_use",
+          id: "t",
+          name: "submit_rewrite",
+          input: { rewrites: "not-an-array", commitMessage: "fix", summary: "ok" },
+        },
+      ],
+      stop_reason: "tool_use",
+      usage: { input_tokens: 100, output_tokens: 10 },
+    },
+  ]);
   const worker = new ClaudeWorker({ apiKey: "k", client, gate: new EfficiencyGate({ perPrUsd: 1 }) });
-  await assert.rejects(() => worker.work(reviewCtx), /filesTouched must be an array of strings/);
+  await assert.rejects(() => worker.work(reviewCtx), /rewrites must be an array/);
+});
+
+test("ClaudeWorker: throws when a rewrite entry is missing path or content", async () => {
+  const client = makeMockClient([
+    rewriteResponse({ rewrites: [{ path: "src/x.ts" }] }), // missing content
+  ]);
+  const worker = new ClaudeWorker({ apiKey: "k", client, gate: new EfficiencyGate({ perPrUsd: 1 }) });
+  await assert.rejects(() => worker.work(reviewCtx), /path and content/);
 });
 
 test("ClaudeWorker: sends system prompt with cache_control ephemeral", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 1 });
-  const client = makeMockClient([patchResponse()]);
+  const client = makeMockClient([rewriteResponse()]);
   const worker = new ClaudeWorker({ apiKey: "k", gate, client });
   await worker.work(reviewCtx);
   const params = client.calls[0];
@@ -158,19 +177,19 @@ test("ClaudeWorker: sends system prompt with cache_control ephemeral", async () 
   assert.equal(params.system[0].cache_control?.type, "ephemeral");
 });
 
-test("ClaudeWorker: forces submit_patch tool via tool_choice", async () => {
+test("ClaudeWorker: forces submit_rewrite tool via tool_choice", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 1 });
-  const client = makeMockClient([patchResponse()]);
+  const client = makeMockClient([rewriteResponse()]);
   const worker = new ClaudeWorker({ apiKey: "k", gate, client });
   await worker.work(reviewCtx);
   const params = client.calls[0];
   assert.equal(params.tool_choice.type, "tool");
-  assert.equal(params.tool_choice.name, "submit_patch");
+  assert.equal(params.tool_choice.name, "submit_rewrite");
 });
 
 test("ClaudeWorker: records a metric on the shared gate", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 1 });
-  const client = makeMockClient([patchResponse({ inputTokens: 5_000, outputTokens: 800 })]);
+  const client = makeMockClient([rewriteResponse({ inputTokens: 5_000, outputTokens: 800 })]);
   const worker = new ClaudeWorker({ apiKey: "k", gate, client });
   await worker.work(reviewCtx);
   const summary = gate.metrics.summary();
@@ -181,7 +200,7 @@ test("ClaudeWorker: records a metric on the shared gate", async () => {
 
 test("ClaudeWorker: respects a shared budget cap", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 0.005 });
-  const client = makeMockClient([patchResponse({ inputTokens: 10_000, outputTokens: 1_000 })]);
+  const client = makeMockClient([rewriteResponse({ inputTokens: 10_000, outputTokens: 1_000 })]);
   const worker = new ClaudeWorker({ apiKey: "k", gate, client });
   await assert.rejects(() => worker.work(reviewCtx), /budget/);
 });
@@ -198,7 +217,7 @@ test("ClaudeWorker: missing API key AND no injected client throws in constructor
 
 test("ClaudeWorker: prompt includes blocker text and file snapshot contents", async () => {
   const gate = new EfficiencyGate({ perPrUsd: 1 });
-  const client = makeMockClient([patchResponse()]);
+  const client = makeMockClient([rewriteResponse()]);
   const worker = new ClaudeWorker({ apiKey: "k", gate, client });
   await worker.work(reviewCtx);
   const prompt = client.calls[0].messages[0].content;
@@ -208,20 +227,7 @@ test("ClaudeWorker: prompt includes blocker text and file snapshot contents", as
   assert.ok(prompt.includes("abc123"), "prompt should include the head sha");
 });
 
-test("looksLikeUnifiedDiff: accepts common diff header forms", () => {
-  assert.equal(looksLikeUnifiedDiff("diff --git a/x b/x\n"), true);
-  assert.equal(looksLikeUnifiedDiff("--- a/x\n+++ b/x\n"), true);
-  assert.equal(looksLikeUnifiedDiff("Index: src/x.ts\n"), true);
-  assert.equal(looksLikeUnifiedDiff("\n\ndiff --git a/x b/x\n"), true);
-});
-
-test("looksLikeUnifiedDiff: rejects prose and code snippets", () => {
-  assert.equal(looksLikeUnifiedDiff("const x = 1;\n"), false);
-  assert.equal(looksLikeUnifiedDiff("Here's the fix: ...\n"), false);
-  assert.equal(looksLikeUnifiedDiff(""), false);
-});
-
-test("parsePatchToolUse: direct parser happy path (no LLM)", () => {
+test("parseRewriteToolUse: direct parser happy path (no LLM)", () => {
   const response = {
     id: "m",
     model: "claude-sonnet-4-6",
@@ -229,11 +235,10 @@ test("parsePatchToolUse: direct parser happy path (no LLM)", () => {
       {
         type: "tool_use",
         id: "t",
-        name: "submit_patch",
+        name: "submit_rewrite",
         input: {
-          patch: VALID_PATCH,
+          rewrites: [{ path: "src/x.ts", content: "export const x: number = 1;\n" }],
           commitMessage: "fix: something",
-          filesTouched: ["src/x.ts"],
           summary: "ok",
         },
       },
@@ -241,29 +246,23 @@ test("parsePatchToolUse: direct parser happy path (no LLM)", () => {
     stop_reason: "tool_use",
     usage: { input_tokens: 1, output_tokens: 1 },
   };
-  const parsed = parsePatchToolUse(response);
-  assert.equal(parsed.patch, VALID_PATCH);
+  const parsed = parseRewriteToolUse(response);
+  assert.equal(parsed.rewrites.length, 1);
+  assert.equal(parsed.rewrites[0].path, "src/x.ts");
   assert.equal(parsed.message, "fix: something");
   assert.deepEqual(parsed.appliedFiles, ["src/x.ts"]);
 });
 
-// v0.13.9 — guard against regression of leading-context guidance in
-// the worker system prompt. eventbadge#29 sha 279cb22 produced a
-// patch with only one line of leading context (`export function ...`)
-// that BOTH `git apply --recount` and `patch -p1 --fuzz=3` rejected.
-// The prompt now requires 2-3 lines of leading + trailing context;
-// these snapshot assertions lock that guidance in.
-test("WORKER_SYSTEM_PROMPT: requires 2-3 lines of leading context", () => {
+test("WORKER_SYSTEM_PROMPT: instructs worker to write complete file contents", () => {
   const p = WORKER_SYSTEM_PROMPT;
-  assert.match(p, /leading context/i, "prompt must mention 'leading context'");
-  assert.match(p, /2-3 lines/i, "prompt must specify the 2-3 lines requirement");
-  assert.match(p, /starting line/i, "prompt must call out that the @@ start line A is verified");
+  assert.match(p, /complete new file contents|full new content/i, "prompt must instruct worker to write full file");
+  assert.match(p, /submit_rewrite/i, "prompt must mention submit_rewrite tool");
+  assert.match(p, /every line/i, "prompt must emphasize preserving every line");
 });
 
-test("WORKER_SYSTEM_PROMPT: starting-line guidance overrides the old 'do not need to be exact' wording", () => {
+test("WORKER_SYSTEM_PROMPT: does not mention unified diff or git apply", () => {
   const p = WORKER_SYSTEM_PROMPT;
-  // Pre-v0.13.9 the prompt told the worker @@ headers "DO NOT need
-  // to be exact". That literal wording masked the off-by-one failure
-  // mode; assert it's gone.
-  assert.doesNotMatch(p, /DO NOT need to be exact/, "old (overly permissive) wording must be removed");
+  assert.doesNotMatch(p, /unified.diff/i, "new prompt must NOT mention unified diff");
+  assert.doesNotMatch(p, /git apply/i, "new prompt must NOT mention git apply");
+  assert.doesNotMatch(p, /@@ .* @@/, "new prompt must NOT contain hunk headers");
 });

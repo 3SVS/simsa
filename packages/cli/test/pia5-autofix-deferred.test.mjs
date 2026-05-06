@@ -42,7 +42,7 @@ const baseArgs = {
 function makeWorker() {
   return {
     work: async () => ({
-      patch: "diff --git a/src/x.ts b/src/x.ts\n--- a/src/x.ts\n+++ b/src/x.ts\n@@\n-a\n+b\n",
+      rewrites: [{ path: "src/x.ts", content: "export const x: number = 1;\n" }],
       message: "fix: x",
       appliedFiles: ["src/x.ts"],
       costUsd: 0.01,
@@ -109,8 +109,7 @@ test("PIA-5: max-iterations + pushes succeeded → deferred-to-next-review, exit
       git: makeGit().exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: stubGh,
       runReview: async () => ({
         verdict: "rework",
@@ -142,8 +141,7 @@ test("PIA-5: max-iterations + push always fails → bailed-max-iterations, exit 
       git: makeGit({ pushFails: true }).exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: stubGh,
       runReview: async () => ({
         verdict: "rework",
@@ -177,8 +175,7 @@ test("PIA-5: build fails → no commit, no push, max-iter bail = bailed-max-iter
       git: makeGit().exec,
       verifier: makeVerifier({ buildOk: false }),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: stubGh,
       runReview: async () => ({
         verdict: "rework",
@@ -207,8 +204,7 @@ test("PIA-5: deferred-to-next-review status type is reachable + exported in core
       git: makeGit().exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: stubGh,
       runReview: async () => ({
         verdict: "rework",

@@ -1,8 +1,8 @@
 import { EfficiencyGate, estimateTokens } from "@conclave-ai/core";
 import type { AnthropicCreateParams, AnthropicLike, AnthropicResponse } from "./anthropic-types.js";
-import { PATCH_TOOL_NAME, PATCH_TOOL_DESCRIPTION, PATCH_TOOL_INPUT_SCHEMA } from "./patch-tool.js";
+import { REWRITE_TOOL_NAME, REWRITE_TOOL_DESCRIPTION, REWRITE_TOOL_INPUT_SCHEMA } from "./patch-tool.js";
 import { buildWorkerPrompt, buildCacheablePrefix, WORKER_SYSTEM_PROMPT } from "./prompts.js";
-import { parsePatchToolUse } from "./patch-parser.js";
+import { parseRewriteToolUse } from "./patch-parser.js";
 import { actualCost, estimateCallCost } from "./pricing.js";
 import type { WorkerContext, WorkerOutcome } from "./types.js";
 
@@ -106,17 +106,17 @@ export class ClaudeWorker {
           messages: [{ role: "user", content: userPrompt }],
           tools: [
             {
-              name: PATCH_TOOL_NAME,
-              description: PATCH_TOOL_DESCRIPTION,
-              input_schema: PATCH_TOOL_INPUT_SCHEMA,
+              name: REWRITE_TOOL_NAME,
+              description: REWRITE_TOOL_DESCRIPTION,
+              input_schema: REWRITE_TOOL_INPUT_SCHEMA,
             },
           ],
-          tool_choice: { type: "tool", name: PATCH_TOOL_NAME },
+          tool_choice: { type: "tool", name: REWRITE_TOOL_NAME },
         };
         const response: AnthropicResponse = await client.messages.create(params);
         const latencyMs = Date.now() - started;
 
-        const parsed = parsePatchToolUse(response);
+        const parsed = parseRewriteToolUse(response);
         const cost = actualCost(model, {
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,

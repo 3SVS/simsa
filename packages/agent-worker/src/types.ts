@@ -1,4 +1,5 @@
 import type { ReviewResult } from "@conclave-ai/core";
+import type { FileRewrite } from "@conclave-ai/core";
 
 /**
  * Snapshot of a file as it exists on the PR branch right now.
@@ -13,26 +14,27 @@ export interface FileSnapshot {
   contents: string;
 }
 
+// Re-export so callers can import FileRewrite from this package.
+export type { FileRewrite };
+
 /**
- * v0.13.19 (H1 #4) — feedback from the previous worker attempt that
- * the apply layer rejected. Used by the autofix retry loop to teach
- * the worker not to re-emit the same broken patch shape (off-by-N
- * starting line, miscounted hunk header, hallucinated context, etc.).
+ * Feedback from a previous worker attempt that was rejected (e.g. the
+ * rewrites did not fix the blocker or a build step caught a regression).
+ * Kept for future retry-with-feedback loops; not currently populated by
+ * the autofix CLI (v0.14 rewrite path has no apply-level retry).
  */
 export interface WorkerRejectedAttempt {
-  /** The patch the worker emitted on the previous attempt. */
-  patch: string;
-  /** What the apply layer said when it rejected — e.g. the
-   * `git apply --check --recount` stderr. Truncated to the most useful
-   * lines (typically <500 chars). */
+  /** The rewrites the worker emitted on the previous attempt. */
+  rewrites: FileRewrite[];
+  /** Why the attempt was rejected — e.g. build failure tail or reviewer note. */
   rejectReason: string;
 }
 
-/** Everything the worker needs to produce a rework patch. */
+/** Everything the worker needs to produce file rewrites. */
 export interface WorkerContext {
   repo: string;
   pullNumber: number;
-  /** Head commit of the PR branch that the patch will be applied on top of. */
+  /** Head commit of the PR branch that the rewrites will be applied on top of. */
   newSha: string;
   /** Council verdicts from the review round that triggered this rework. */
   reviews: ReviewResult[];
@@ -43,33 +45,27 @@ export interface WorkerContext {
   answerKeys?: readonly string[];
   failureCatalog?: readonly string[];
   /**
-   * Previous attempts on the SAME blocker that the apply layer
-   * rejected. Empty/undefined on the first call. The autofix worker
-   * retry loop fills this for retry calls so the worker can correct
-   * the specific failure mode (e.g. "you said line 17 but the hunk
-   * landed at line 18").
+   * Previous attempts on the SAME blocker that were rejected. Empty/undefined
+   * on the first call. Reserved for future retry-with-feedback loops.
    */
   previousAttempts?: readonly WorkerRejectedAttempt[];
   /**
    * H3 #13 — auto-tuned hints synthesized from past `rework-loop-failure`
-   * catalog entries (one short line each, e.g.
-   * `bailed-no-patches on debug-noise: console.log left in compressImage`).
-   * The worker prompt builder splices them into a dedicated "Past
-   * bails — avoid these failure modes" section so the worker sees
-   * concrete prior failure shapes instead of leaning on a static
-   * prompt that drifts. Populated by the autofix CLI from
-   * extractPriorBailHints over the retrieved failure-catalog.
+   * catalog entries (one short line each). Populated by the autofix CLI.
    */
   priorBailHints?: readonly string[];
 }
 
-/** Result of a worker invocation — ready to hand to `git apply` + commit. */
+/** Result of a worker invocation — ready to write to disk + commit. */
 export interface WorkerOutcome {
-  /** Unified diff patch, applicable with `git apply`. */
-  patch: string;
+  /**
+   * Full-file rewrites produced by the worker. Each entry replaces a
+   * file on the PR branch wholesale. Empty array means the worker gave up.
+   */
+  rewrites: FileRewrite[];
   /** Commit message subject (single line, conventional-commit style encouraged). */
   message: string;
-  /** Files this patch is expected to touch — used for post-apply sanity checking. */
+  /** Convenience: paths of files this rewrite touches (= rewrites[*].path). */
   appliedFiles: string[];
   tokensUsed?: number;
   costUsd?: number;

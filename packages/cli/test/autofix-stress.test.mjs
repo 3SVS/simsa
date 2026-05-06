@@ -141,7 +141,7 @@ const ghPopulatesRepo = async () => ({
   stderr: "",
 });
 
-// Worker that returns one patch per blocker call. Tests configure each
+// Worker that returns one rewrite per blocker call. Tests configure each
 // blocker's outcome via the `outcomes` array indexed by call order.
 function makeProgrammableWorker(outcomes) {
   let i = 0;
@@ -152,7 +152,7 @@ function makeProgrammableWorker(outcomes) {
       const file = ctx.blocker?.file ?? "src/x.ts";
       if (o === "ok") {
         return {
-          patch: goodPatch(file),
+          rewrites: [{ path: file, content: `// fixed\nexport const x: number = 1;\n` }],
           message: `fix: ${ctx.blocker?.category}`,
           appliedFiles: [file],
           costUsd: 0.01,
@@ -160,16 +160,13 @@ function makeProgrammableWorker(outcomes) {
         };
       }
       if (o === "no-patch") {
-        return { patch: "", message: "", appliedFiles: [], costUsd: 0.01, tokensUsed: 50 };
+        return { rewrites: [], message: "", appliedFiles: [], costUsd: 0.01, tokensUsed: 50 };
       }
       if (o === "garbage") {
-        return {
-          patch: "this is not a diff",
-          message: "fix: junk",
-          appliedFiles: [file],
-          costUsd: 0.01,
-          tokensUsed: 100,
-        };
+        // "garbage" in the rewrite model is: malformed content that still applies.
+        // Since writes can't fail due to content format, we simulate by returning
+        // an empty rewrites array (worker gave up), same effect as "no-patch".
+        return { rewrites: [], message: "fix: junk", appliedFiles: [], costUsd: 0.01, tokensUsed: 100 };
       }
       throw new Error(`worker fault: ${o}`);
     },
@@ -248,7 +245,6 @@ async function drive(scenario) {
   const stdoutBuf = [];
   const stderrBuf = [];
   const mergeCalls = [];
-  const tempPatches = []; // captures every `writeTempPatch(path, contents)`
   const verdicts = scenario.verdicts ?? [
     { verdict: "rework", blockers: scenario.blockers },
     { verdict: "approve" },
@@ -265,8 +261,7 @@ async function drive(scenario) {
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async (p, c) => { tempPatches.push({ path: p, contents: c }); },
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       mergePr: async (n) => { mergeCalls.push(n); },
       runReview: makeReviewSequence(verdicts),
@@ -280,7 +275,6 @@ async function drive(scenario) {
     result: out.result,
     git,
     mergeCalls,
-    tempPatches,
     stdout: stdoutBuf.join(""),
     stderr: stderrBuf.join(""),
   };
@@ -292,20 +286,14 @@ function assertHandlerStagedNeverApplied(scenario, drive) {
   const handlerStagedFiles = (scenario.handlerOutcomes ?? [])
     .map((o, i) => (o === "claim" || o === "claim-no-patch" ? scenario.blockers[i]?.file : null))
     .filter(Boolean);
-  // I4 — handler-staged sentinel patches (start with `# AF-`) must
-  // NEVER end up in a temp .patch fed to git apply. The v0.14.18 bug
-  // was exactly this — handler sentinels leaked into stillReady and
-  // got fed to apply. With the fix, only real diffs reach apply.
-  const sentinelLeaks = drive.tempPatches.filter((p) =>
-    p.contents.trimStart().startsWith("# AF-") || p.contents.trim() === "",
+  // I4 — in v0.14+ worker uses full-file rewrites (no git apply), so handler
+  // sentinels can never leak into a git apply call. The invariant is
+  // trivially satisfied; we just verify no `git apply` is called at all
+  // with handler-staged sentinel content.
+  const applyWithSentinel = drive.git.calls.filter(
+    (c) => c.bin === "git" && c.args[0] === "apply",
   );
-  assert.equal(
-    sentinelLeaks.length,
-    0,
-    `[I4] ${sentinelLeaks.length} handler sentinel patch(es) leaked into git apply: ${sentinelLeaks
-      .map((p) => p.contents.slice(0, 80))
-      .join(" | ")}`,
-  );
+  assert.equal(applyWithSentinel.length, 0, `[I4] git apply must NOT be called in v0.14+ worker-rewrite path`);
   // I5 — never `git checkout HEAD --` a handler-staged file mid-apply
   // (rolling back the in-place edit). Build-fail revert uses
   // `git reset --hard HEAD` which is a different path and is allowed

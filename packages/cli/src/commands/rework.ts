@@ -1,6 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile, writeFile, unlink } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   BudgetTracker,
@@ -153,9 +153,6 @@ export interface ReworkDeps {
   git?: Exec;
   /** Reads a file's contents at a path inside cwd. */
   readFile?: (absPath: string) => Promise<string>;
-  /** Write + delete temp patch file; defaults to fs/promises. */
-  writeTempPatch?: (absPath: string, contents: string) => Promise<void>;
-  removeTempPatch?: (absPath: string) => Promise<void>;
   /** Stdout / stderr sinks — override in tests. */
   stdout?: (s: string) => void;
   stderr?: (s: string) => void;
@@ -170,6 +167,8 @@ export interface ReworkDeps {
   workerFactory?: (opts: ClaudeWorkerOptions) => { work: (ctx: Parameters<ClaudeWorker["work"]>[0]) => Promise<WorkerOutcome> };
   /** Patch scanner — defaults to `scanPatch` from @conclave-ai/secret-guard. */
   secretScan?: (patch: string, opts?: { allow?: readonly string[] }) => ScanResult;
+  /** Writes a file to disk — injectable for tests (defaults to fs.writeFile). */
+  writeFile?: (absPath: string, content: string, encoding: BufferEncoding) => Promise<void>;
 }
 
 const defaultGit: Exec = async (bin, args, opts) => {
@@ -333,72 +332,60 @@ export async function runRework(args: ReworkArgs, deps: ReworkDeps = {}): Promis
     throw err;
   }
 
-  if (!outcome.patch) {
-    stderr(`rework: worker could not produce a patch — no changes applied\n`);
+  if (!outcome.rewrites || outcome.rewrites.length === 0) {
+    stderr(`rework: worker could not produce file rewrites — no changes applied\n`);
     return 1;
   }
 
   stdout(
-    `rework: worker proposed patch (${outcome.appliedFiles.length} file${
-      outcome.appliedFiles.length === 1 ? "" : "s"
-    }, ${outcome.patch.length} bytes)\n`,
+    `rework: worker proposed rewrites for ${outcome.rewrites.length} file${
+      outcome.rewrites.length === 1 ? "" : "s"
+    }: ${outcome.rewrites.map((r) => r.path).join(", ")}\n`,
   );
   stdout(`rework: commit message: ${outcome.message}\n`);
 
   if (!args.skipSecretGuard) {
-    const scan = (deps.secretScan ?? scanPatch)(outcome.patch, { allow: args.allowSecrets });
-    if (scan.blocked) {
-      stderr(
-        `rework: secret-guard blocked the patch — ${scan.findings.length} high-confidence finding(s):\n`,
-      );
-      for (const f of scan.findings) stderr(`  ${formatFinding(f)}\n`);
-      stderr(
-        `rework: run with --allow-secret <ruleId> only after a human confirms the match is a false positive\n`,
-      );
-      return 1;
+    const scanner = deps.secretScan ?? scanPatch;
+    let blocked = false;
+    for (const rw of outcome.rewrites) {
+      const scan = scanner(rw.content, { allow: args.allowSecrets });
+      if (scan.blocked) {
+        stderr(
+          `rework: secret-guard blocked ${rw.path} — ${scan.findings.length} high-confidence finding(s):\n`,
+        );
+        for (const f of scan.findings) stderr(`  ${formatFinding(f)}\n`);
+        blocked = true;
+      } else if (scan.findings.length > 0) {
+        stdout(`rework: secret-guard saw ${scan.findings.length} low/medium finding(s) in ${rw.path}, not blocking\n`);
+      }
     }
-    if (scan.findings.length > 0) {
-      stdout(`rework: secret-guard saw ${scan.findings.length} low/medium finding(s), not blocking\n`);
+    if (blocked) {
+      stderr(`rework: run with --allow-secret <ruleId> only after a human confirms the match is a false positive\n`);
+      return 1;
     }
   }
 
   if (args.dryRun) {
-    stdout(`---\n${outcome.patch}\n---\n`);
+    for (const rw of outcome.rewrites) {
+      stdout(`=== ${rw.path} (${rw.content.split("\n").length} lines) ===\n${rw.content}\n`);
+    }
     stdout(`rework: --dry-run, not applying\n`);
     return 0;
   }
 
-  const patchPath = path.join(args.cwd, ".conclave-rework.patch");
-  const writeTemp = deps.writeTempPatch ?? ((p: string, c: string) => writeFile(p, c, "utf8"));
-  const removeTemp = deps.removeTempPatch ?? ((p: string) => unlink(p));
-
-  await writeTemp(patchPath, outcome.patch);
-
+  // Write each rewrite directly to disk — no `git apply` needed.
+  const { writeFile: fsWriteFile } = await import("node:fs/promises");
+  const writeFileFn = deps.writeFile ?? ((p: string, c: string, enc: BufferEncoding) => fsWriteFile(p, c, enc));
   try {
-    // --recount lets git apply recompute the @@ hunk header line counts from
-    // the actual hunk content. LLMs (Claude, GPT, Gemini) routinely get those
-    // counts wrong — the hunk body is correct but the header claims e.g.
-    // "7 lines" when only 3 are present, which `git apply` would otherwise
-    // reject as "corrupt patch at line N". --recount is the official git
-    // option designed for exactly this case.
-    await git("git", ["apply", "--check", "--recount", patchPath], { cwd: args.cwd });
-  } catch (err) {
-    await removeTemp(patchPath).catch(() => undefined);
-    const msg = err instanceof Error ? err.message : String(err);
-    stderr(`rework: patch does not apply cleanly — ${msg}\n`);
+    for (const rw of outcome.rewrites) {
+      const absPath = path.isAbsolute(rw.path) ? rw.path : path.join(args.cwd, rw.path);
+      await writeFileFn(absPath, rw.content, "utf8");
+    }
+  } catch (writeErr) {
+    stderr(`rework: file write failed — ${(writeErr as Error).message}\n`);
     return 1;
   }
 
-  await git("git", ["apply", "--recount", patchPath], { cwd: args.cwd });
-  await removeTemp(patchPath).catch(() => undefined);
-
-  // `git add -A` stages every change the apply actually produced — tracked
-  // modifications AND untracked new files. Using `outcome.appliedFiles`
-  // as the pathspec was fragile: the worker can report a file it meant
-  // to create whose hunk `git apply --recount` didn't actually materialise
-  // (common with new-file hunks), and `git add -- <missing>` then fails
-  // with "did not match any files". Trusting git's view of the workspace
-  // post-apply is more robust than the worker's self-report.
   await git("git", ["add", "-A"], { cwd: args.cwd });
 
   // v0.8 — autonomous pipeline: embed the cycle counter in the commit

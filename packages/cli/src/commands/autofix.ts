@@ -35,14 +35,13 @@ import {
 import { formatFinding, scanPatch, type ScanResult } from "@conclave-ai/secret-guard";
 import { fetchPrState, fetchDeployStatus as defaultFetchDeployStatus, fetchPreviewUrl, type DeployStatus, type GhRunner, type PullRequestState } from "@conclave-ai/scm-github";
 import { loadConfig, resolveMemoryRoot, type ConclaveConfig } from "../lib/config.js";
-import { runPerBlocker, type GitLike, type WorkerLike } from "../lib/autofix-worker.js";
+import { runPerBlocker, type WorkerLike, type GitLike } from "../lib/autofix-worker.js";
 import { renderBailSummary, shouldPostSummary } from "../lib/bail-summary.js";
 import {
   buildTerminalReport,
   isAutonomyTerminal,
   type DeployOutcome,
 } from "../lib/terminal-report.js";
-import { recountHunkHeaders } from "../lib/patch-fixup.js";
 import { runSpecialHandlers } from "../lib/autofix-handlers/index.js";
 import { writeSolutionSidecar } from "../lib/solution-sidecar.js";
 import { resolveKey } from "../lib/credentials.js";
@@ -222,11 +221,10 @@ export interface AutofixDeps {
   git?: GitLike;
   /** Read a file for the per-blocker snapshot. */
   readFile?: (absPath: string) => Promise<string>;
+  /** Write a file to disk (used when applying worker rewrites). Defaults to fs.writeFile. */
+  writeFile?: (absPath: string, content: string, encoding: string) => Promise<void>;
   /** Load verdict JSON from disk. */
   readVerdictFile?: (absPath: string) => Promise<string>;
-  /** Temp-patch helpers for per-blocker validation. */
-  writeTempPatch?: (absPath: string, contents: string) => Promise<void>;
-  removeTempPatch?: (absPath: string) => Promise<void>;
   /** Secret-guard scanner override. */
   secretScan?: (patch: string, opts?: { allow?: readonly string[] }) => ScanResult;
   /** Build / test runners. */
@@ -1055,11 +1053,8 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
             },
             {
               worker,
-              git,
               cwd: args.cwd,
               ...(deps.readFile ? { readFile: deps.readFile } : {}),
-              ...(deps.writeTempPatch ? { writeTempPatch: deps.writeTempPatch } : {}),
-              ...(deps.removeTempPatch ? { removeTempPatch: deps.removeTempPatch } : {}),
             },
           ),
         );
@@ -1111,14 +1106,27 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
     //     here. They bypass the unified-diff secret scan because
     //     the only handler today (binary-encoding) only re-encodes
     //     existing file bytes; no new content is introduced.
-    const readyFixes = fixes.filter((f) => f.status === "ready" && f.patch);
+    // Secret-guard: scan patch content (handlers) or rewrite content (worker).
+    const readyFixes = fixes.filter((f) => f.status === "ready" && (f.patch || f.rewrites));
     if (!args.skipSecretGuard) {
       const scanner = deps.secretScan ?? scanPatch;
       for (const rf of readyFixes) {
-        const scan = scanner(rf.patch!, { allow: args.allowSecrets });
-        if (scan.blocked) {
-          rf.status = "secret-block";
-          rf.reason = `secret-guard blocked: ${scan.findings.map((f) => formatFinding(f)).join("; ")}`;
+        if (rf.rewrites) {
+          // Scan each rewrite's content as a single "blob".
+          for (const rw of rf.rewrites) {
+            const scan = scanner(rw.content, { allow: args.allowSecrets });
+            if (scan.blocked) {
+              rf.status = "secret-block";
+              rf.reason = `secret-guard blocked ${rw.path}: ${scan.findings.map((f) => formatFinding(f)).join("; ")}`;
+              break;
+            }
+          }
+        } else if (rf.patch) {
+          const scan = scanner(rf.patch, { allow: args.allowSecrets });
+          if (scan.blocked) {
+            rf.status = "secret-block";
+            rf.reason = `secret-guard blocked: ${scan.findings.map((f) => formatFinding(f)).join("; ")}`;
+          }
         }
       }
     }
@@ -1137,14 +1145,17 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
     // AddressSearch.jsx + colorExtractor.js correctly, then got
     // reverted by partial-restore, leaving only AF-4's new-file stub.
     const stillReady = fixes.filter(
-      (f) => f.status === "ready" && f.patch && !handlerStagedFixes.has(f),
+      (f) => f.status === "ready" && (f.patch || f.rewrites) && !handlerStagedFixes.has(f),
     );
     const stillReadyHandlerStaged = fixes.filter(
       (f) => f.status === "ready" && handlerStagedFixes.has(f),
     );
 
-    // --- Diff-budget guard ---------------------------------------------
-    const patches = stillReady.map((f) => f.patch!);
+    // --- Diff-budget guard (handler sentinel patches only) ---------------
+    // Worker rewrites do not produce unified diffs — the diff budget
+    // only applies to handler sentinel patch strings (which are tiny
+    // comment headers). Worker rewrites bypass this gate by design.
+    const patches = stillReady.filter((f) => f.patch && !f.rewrites).map((f) => f.patch!);
     const summary = summarizeAutofixPatches(patches);
     if (summary.totalLines > DIFF_BUDGET_LINES) {
       stderr(
@@ -1182,7 +1193,13 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
           `\n`,
       );
       for (const rf of stillReady) {
-        stdout(`--- ${rf.blocker.file ?? "(unscoped)"} — ${rf.blocker.category} ---\n${rf.patch}\n`);
+        if (rf.rewrites) {
+          for (const rw of rf.rewrites) {
+            stdout(`--- ${rw.path} — ${rf.blocker.category} [full-file-rewrite, ${rw.content.split("\n").length} lines] ---\n`);
+          }
+        } else {
+          stdout(`--- ${rf.blocker.file ?? "(unscoped)"} — ${rf.blocker.category} ---\n${rf.patch}\n`);
+        }
       }
       for (const hf of stillReadyHandlerStaged) {
         stdout(
@@ -1251,251 +1268,59 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
       };
     }
 
-    // --- Apply patches sequentially (AF-1: partial-apply rescue) -------
-    //     Each patch runs through `git apply --recount` (already validated
-    //     individually). When one patch conflicts mid-iteration, we restore
-    //     ONLY its target files via `git checkout HEAD -- <files>`, mark
-    //     the fix as conflict, and continue with the rest. Pre-AF-1 the
-    //     policy was "rollback all, partial autofix is worse than no
-    //     autofix" — but with 9 blockers per cycle (eventbadge PR #39 LIVE
-    //     catch: code + design + runtime), one off-by-N hunk killed every
-    //     other clean patch. New rule: keep what applied, drop what didn't,
-    //     proceed to commit + push. Remaining blockers go to next cycle.
-    const appliedPaths: string[] = [];
-    // Bug #4 — defer subsequent worker patches that target a file an
-    // earlier patch (worker or handler) already modified in this
-    // iteration. Pre-fix all worker patches were generated against the
-    // ORIGINAL file content; applying patch A shifts line numbers, so
-    // patch B (also for file A) still references stale lines and
-    // `git apply` rejects it as a context mismatch. Past mitigations
-    // (recountHunkHeaders, GNU patch --fuzz, --3way) help when the
-    // shift is small, but with multiple agents reporting the same
-    // contrast issue at slightly different lines, the cascading
-    // conflict is reliable. New rule: at most ONE worker patch per
-    // file per iteration. The deferred patches' blockers will be re-
-    // surfaced by the next review cycle (which sees the updated file)
-    // and worker will regenerate against current content.
+    // --- Apply rewrites (AF-1: partial-apply rescue) --------------------
+    //     v0.14: workers produce full-file rewrites instead of unified diffs.
+    //     Write contents directly to disk + `git add`. No `git apply` needed
+    //     — apply failures are structurally impossible with this approach.
     //
-    // Files that handlers staged also count as "already touched". If
-    // a worker patch targets a handler-staged file, defer it too —
-    // the handler ran first per autofix.ts:1003, so any worker hunk
-    // for that same file is by definition stale relative to current
-    // disk state.
+    //     The one-file-per-iteration rule still applies: if an earlier
+    //     rewrite (or handler) already modified a file, defer the later
+    //     rewrite so the next review cycle regenerates against the updated
+    //     file contents.
+    const appliedPaths: string[] = [];
     const filesTouchedThisIter = new Set<string>();
     for (const hf of stillReadyHandlerStaged) {
       for (const f of hf.appliedFiles ?? []) filesTouchedThisIter.add(f);
     }
     for (const rf of stillReady) {
-      const tempPath = path.join(args.cwd, `.conclave-autofix-apply-${shortId()}.patch`);
-      // Defer this patch if its target file is already touched.
       const targetFiles = (rf.appliedFiles ?? []).filter((f) => f.length > 0);
       const conflictingFile = targetFiles.find((f) => filesTouchedThisIter.has(f));
       if (conflictingFile) {
         rf.status = "conflict";
         rf.reason = `deferred: file ${conflictingFile} already modified earlier this iteration; next review cycle will regenerate against current content`;
         stderr(
-          `autofix: deferring patch for blocker [${rf.blocker.category}] @ ${rf.blocker.file ?? "<unscoped>"} — file already touched this iteration\n`,
+          `autofix: deferring rewrite for blocker [${rf.blocker.category}] @ ${rf.blocker.file ?? "<unscoped>"} — file already touched this iteration\n`,
         );
         continue;
       }
-      // v0.13.10 — programmatically rewrite hunk headers so B/D match
-      // the body. The worker reliably miscounts (eventbadge#29 cycle 2:
-      // emitted B=7 with 5 source lines → "corrupt patch at line 10"
-      // from `git apply --recount` because the parser ran out of body
-      // mid-hunk). recountHunkHeaders is idempotent for already-correct
-      // patches, so it's safe to always run.
-      const fixedPatch = recountHunkHeaders(rf.patch!);
-      // Use deps.writeTempPatch when injected (test path) so the test
-       // can intercept the patch body. Falls back to fs.writeFile in
-       // production. Errors are swallowed both ways — the apply step
-       // immediately below detects a missing file via its own error.
-      const writeTempPatchHook = deps.writeTempPatch ?? (async (p: string, c: string) => {
-        await fs.writeFile(p, c, "utf8");
-      });
-      await writeTempPatchHook(tempPath, fixedPatch).catch(() => undefined);
-      try {
-        // re-check then apply (files may have shifted after earlier patches).
-        await git("git", ["apply", "--check", "--recount", tempPath], { cwd: args.cwd });
-        await git("git", ["apply", "--recount", tempPath], { cwd: args.cwd });
-        appliedPaths.push(...(rf.appliedFiles ?? []));
-        // Bug #3 — incrementally stage successful applies so a later
-        // partial-restore in this loop doesn't wipe them. Pre-fix the
-        // staging happened only at end-of-iteration (after the loop),
-        // so AF-1's `git checkout HEAD -- <file>` reverted ANY prior
-        // success on the same file (worker patch N applied, worker
-        // patch N+1 conflicted on same file → restore wiped patch N
-        // AND any handler-staged in-place edits to that file).
-        for (const f of rf.appliedFiles ?? []) {
-          await git("git", ["add", "--", f], { cwd: args.cwd }).catch(() => undefined);
-          filesTouchedThisIter.add(f);
-        }
-      } catch (gitErr) {
-        // v0.13.8 — fallback: GNU `patch -p1 --fuzz=3 -F 3`.
-        //
-        // Live test on eventbadge#29 (sha 279cb22) surfaced this:
-        // worker generated a patch where the hunk header line number
-        // was off by one ("@@ -17,..." but the deletion target was
-        // actually at line 18). `git apply --recount` only recomputes
-        // line COUNTS — it does not relocate hunks; offset tolerance
-        // exists but is not always enough on Linux runners (worked
-        // locally on Windows git 2.53.0, failed on Linux git 2.53.0
-        // with the same blob + same patch). GNU `patch(1)` has built-
-        // in fuzz/fuzz-context tolerance and accepts off-by-N starting
-        // line numbers, which catches this class of worker miscount.
-        //
-        // We only attempt the fallback if `patch` is on PATH; on
-        // Windows runners it isn't, and the original error stays the
-        // surfaced reason so the diagnostic still helps.
-        let fuzzApplied = false;
-        // Bug #5 — Try `git apply --3way --recount` BEFORE falling out
-        // to GNU patch. 3-way merge resolves context drift cleanly when
-        // the file's blob is in HEAD (which is the common case here —
-        // worker generates a patch against HEAD, file shifts only
-        // slightly). Avoids GNU `patch`'s line-by-line fuzz heuristic
-        // and produces cleaner intermediate state on success.
-        try {
-          await git("git", ["apply", "--3way", "--recount", tempPath], { cwd: args.cwd });
-          fuzzApplied = true;
-          appliedPaths.push(...(rf.appliedFiles ?? []));
-          for (const f of rf.appliedFiles ?? []) {
-            await git("git", ["add", "--", f], { cwd: args.cwd }).catch(() => undefined);
-            filesTouchedThisIter.add(f);
-          }
-          stderr(`autofix: \`git apply\` rejected the patch; \`git apply --3way\` resolved via 3-way merge\n`);
-        } catch { /* fall through to GNU patch fuzz */ }
-        // v0.13.13 — capture the fuzz-fallback failure reason so we
-        // can see it in the conflict diagnostic when BOTH `git apply`
-        // and `patch -p1 --fuzz=3` reject. Pre-fix the patch(1)
-        // stderr/stdout was silently swallowed and only the original
-        // git apply error surfaced; on eventbadge#29 cycle 3 this
-        // hid the actual mismatch reason from operators.
-        let fuzzReason: string | undefined;
-        if (!fuzzApplied) try {
-          const r = await git(
-            "patch",
-            ["-p1", "--fuzz=3", "-F", "3", "--no-backup-if-mismatch", "-i", tempPath],
-            { cwd: args.cwd },
-          );
-          fuzzApplied = true;
-          appliedPaths.push(...(rf.appliedFiles ?? []));
-          // Bug #3 — incrementally stage successful applies (see above).
-          for (const f of rf.appliedFiles ?? []) {
-            await git("git", ["add", "--", f], { cwd: args.cwd }).catch(() => undefined);
-            filesTouchedThisIter.add(f);
-          }
-          stderr(`autofix: \`git apply\` rejected the patch; \`patch -p1 --fuzz=3\` fallback succeeded (likely off-by-N hunk line number from worker)\n`);
-          if (r.stdout && r.stdout.trim()) {
-            // patch(1) prints "Hunk #1 succeeded at NN with fuzz Z" —
-            // surface that so operators see the actual offset/fuzz
-            // patch had to apply. Helpful when comparing rework cycles.
-            stderr(`autofix:   patch(1) said: ${r.stdout.trim()}\n`);
-          }
-        } catch (fuzzErr) {
-          // patch(1) also failed (or isn't installed). Capture the
-          // reason so the conflict report can surface it.
-          fuzzReason = fuzzErr instanceof Error
-            ? (fuzzErr as Error & { stdout?: string; stderr?: string }).stderr ||
-              (fuzzErr as Error & { stdout?: string; stderr?: string }).stdout ||
-              fuzzErr.message
-            : String(fuzzErr);
-        }
-        if (fuzzApplied) {
-          continue;
-        }
-        const err = gitErr;
-        // Mark THIS fix as conflict and bail the iteration. Stage gets
-        // reset below.
-        rf.status = "conflict";
-        const reason = err instanceof Error ? err.message : String(err);
-        // v0.13.5 — capture the patch + a snippet of the target file
-        // around the rejection point so operators can see EXACTLY why
-        // the patch failed (line ending mismatch, context drift,
-        // wrong indent — all leave fingerprints in the dump).
-        // Pre-fix the conflict reason was just `git apply --check ...
-        // failed: error: patch failed: <file>:<line>` with no way to
-        // see the patch itself; the temp file got unlinked in finally.
-        let patchDump = "";
-        let fileSnippet = "";
-        try {
-          patchDump = (rf.patch ?? "").slice(0, 1500);
-        } catch { /* ignore */ }
-        const targetFile = rf.blocker.file;
-        if (targetFile) {
+      if (rf.rewrites) {
+        // Full-file rewrite path (worker v0.14+).
+        const writeFileFn = deps.writeFile ?? ((p: string, c: string, enc: BufferEncoding) => fs.writeFile(p, c, enc));
+        let writeOk = true;
+        const writtenPaths: string[] = [];
+        for (const rw of rf.rewrites) {
           try {
-            const fp = path.isAbsolute(targetFile)
-              ? targetFile
-              : path.join(args.cwd, targetFile);
-            const buf = await fs.readFile(fp, "utf8");
-            // Show the first 12 lines (most patch failures are at top
-            // of file, and that's where context lines are most likely
-            // to drift on imports).
-            fileSnippet = buf.split(/\r?\n/).slice(0, 12).join("\n");
-          } catch { /* ignore */ }
-        }
-        // v0.13.13 — also surface the recounted patch (what we actually
-        // tried to apply) and the fuzz-fallback failure reason. The
-        // raw patchDump is the worker's original output; the recounted
-        // version may differ in B/D and is what git/patch saw.
-        let recountedDump = "";
-        try {
-          const recounted = recountHunkHeaders(rf.patch ?? "");
-          if (recounted !== rf.patch) {
-            recountedDump = recounted.slice(0, 1500);
+            const absPath = path.isAbsolute(rw.path) ? rw.path : path.join(args.cwd, rw.path);
+            await writeFileFn(absPath, rw.content, "utf8");
+            await git("git", ["add", "--", rw.path], { cwd: args.cwd });
+            appliedPaths.push(rw.path);
+            filesTouchedThisIter.add(rw.path);
+            writtenPaths.push(rw.path);
+          } catch (writeErr) {
+            writeOk = false;
+            rf.status = "conflict";
+            rf.reason = `failed to write ${rw.path}: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`;
+            stderr(`autofix: failed to write rewrite for [${rf.blocker.category}] @ ${rw.path} — ${rf.reason}\n`);
+            // Restore any files already written in this rf.
+            for (const f of writtenPaths) {
+              await git("git", ["checkout", "--", f], { cwd: args.cwd }).catch(() => undefined);
+            }
+            break;
           }
-        } catch { /* ignore */ }
-        const recountedSection = recountedDump
-          ? `\n--- recounted patch (post-fixup, head 1500c) ---\n${recountedDump}`
-          : "";
-        const fuzzSection = fuzzReason
-          ? `\n--- patch(1) --fuzz=3 fallback also failed ---\n${fuzzReason.slice(0, 800)}`
-          : "";
-        rf.reason = `${reason}${fuzzSection}\n--- generated patch (head 1500c) ---\n${patchDump}${recountedSection}\n--- target file head 12 lines ---\n${fileSnippet}`;
-        // AF-1 — partial-apply rescue. Pre-AF-1 a single conflict
-        // killed the whole iteration via `applyFailed = true; break;`,
-        // wiping every other patch that had landed cleanly via
-        // `git reset --hard HEAD`. With 9 blockers per cycle (real
-        // case: eventbadge PR #39 — code + design + runtime), one
-        // conflict among them dropped the whole cycle to zero
-        // applied fixes and the loop stalled.
-        //
-        // Now: restore ONLY the files this conflicting patch tried to
-        // touch (back to HEAD or to whatever earlier patches in this
-        // iteration left them at — see below), mark the fix as
-        // conflict, and continue. The other patches' changes stay in
-        // the worktree and get committed in the normal flow.
-        //
-        // Bug #3: restore from the INDEX (`git checkout -- <file>`),
-        // not from HEAD. The index reflects the cumulative state of
-        // (a) handler in-place edits + `git add` and (b) earlier
-        // successful worker patches in this iteration that we just
-        // started staging incrementally. `git checkout HEAD -- <file>`
-        // would clobber both, leaving only what each handler *adds as
-        // a new file* — exactly what eventbadge#59 cycle 1 showed: the
-        // commit had only colorExtractor.js (no worker patches there)
-        // while AddressSearch.jsx (where one worker patch failed) lost
-        // every AF-5/6/9 in-place edit too. Index-restore cleanly
-        // undoes only the failed patch's worktree changes (fuzz may
-        // have partially modified) and leaves successful predecessors
-        // intact.
-        const filesToRestore = (rf.appliedFiles ?? []).filter((f) => f.length > 0);
-        if (filesToRestore.length > 0) {
-          await git(
-            "git",
-            ["checkout", "--", ...filesToRestore],
-            { cwd: args.cwd },
-          ).catch((restoreErr) => {
-            stderr(
-              `autofix: AF-1 partial-restore failed for ${filesToRestore.join(", ")} — ${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)}; subsequent fixes may see this file in a partial state\n`,
-            );
-          });
         }
-        rf.status = "conflict";
-        stderr(
-          `autofix: AF-1 — patch for blocker [${rf.blocker.category}] @ ${rf.blocker.file ?? "<unscoped>"} rejected; dropped this patch and continuing with remaining ${stillReady.length - 1 - stillReady.indexOf(rf)} fix(es) in this iteration\n`,
-        );
-        continue;
-      } finally {
-        await fs.unlink(tempPath).catch(() => undefined);
+        if (writeOk) {
+          stderr(`autofix: applied full-file rewrite for [${rf.blocker.category}] @ ${rf.blocker.file ?? "<unscoped>"}\n`);
+        }
       }
     }
 

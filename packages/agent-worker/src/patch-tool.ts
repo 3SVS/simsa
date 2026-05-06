@@ -1,38 +1,60 @@
 /**
- * Tool-use schema that forces Claude to emit a structured patch.
+ * Tool-use schema that forces Claude to emit full file rewrites.
  * Mirrors the single-tool pattern used by agent-claude's `submit_review`
  * — one tool, `tool_choice: { type: "tool", name }` — so we get reliable
  * structured output without any regex scraping of free-form text.
+ *
+ * v0.14: replaced submit_patch (unified diff) with submit_rewrite
+ * (complete file contents). LLMs cannot reliably produce correct unified
+ * diffs (off-by-N hunk headers, hallucinated context lines), but they
+ * CAN faithfully reproduce a full file with targeted edits applied.
+ * The caller writes the content directly to disk — no `git apply` needed.
  */
-export const PATCH_TOOL_NAME = "submit_patch";
+export const REWRITE_TOOL_NAME = "submit_rewrite";
 
-export const PATCH_TOOL_DESCRIPTION =
-  "Submit a unified-diff patch that fixes every blocker the council raised. Call this exactly once at the end of your analysis.";
+export const REWRITE_TOOL_DESCRIPTION =
+  "Submit complete new file contents for every file that needs changing to fix the council blockers. Call this exactly once at the end of your analysis.";
 
-export const PATCH_TOOL_INPUT_SCHEMA = {
+export const REWRITE_TOOL_INPUT_SCHEMA = {
   type: "object",
   properties: {
-    patch: {
-      type: "string",
+    rewrites: {
+      type: "array",
       description:
-        "A unified diff patch (the exact format `git apply` expects). Must start with `diff --git ` or `--- ` headers. Include full hunks with @@ line ranges. If a fix is impossible, return an empty string and explain in `summary`.",
+        "One entry per file that needs changing. Each entry replaces the ENTIRE file on disk — include every line, not just the changed parts.",
+      items: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description:
+              "Repo-relative file path, forward slashes (e.g. `src/Button.tsx`). Must be an existing file shown in the snapshots.",
+          },
+          content: {
+            type: "string",
+            description:
+              "Complete new file contents. Replaces the file wholesale — copy every unchanged line verbatim, then make targeted edits for the blockers.",
+          },
+        },
+        required: ["path", "content"],
+      },
     },
     commitMessage: {
       type: "string",
       description:
-        "Single-line commit subject (≤ 72 chars), conventional-commit style when it fits (e.g. `fix(auth): ...`). This becomes the actual git commit message.",
-    },
-    filesTouched: {
-      type: "array",
-      description:
-        "Every file path the patch modifies or creates — repo-relative, forward slashes. Used for post-apply sanity checks.",
-      items: { type: "string" },
+        "Single-line commit subject (≤ 72 chars), conventional-commit style where it fits (e.g. `fix(auth): ...`). This becomes the actual git commit message.",
     },
     summary: {
       type: "string",
       description:
-        "One-paragraph rationale: which blockers this patch addresses, which (if any) it could not and why, and any follow-up the reviewer should know about.",
+        "One-paragraph rationale: which blockers this addresses, which (if any) it could not and why, and any follow-up the reviewer should know about.",
     },
   },
-  required: ["patch", "commitMessage", "filesTouched", "summary"],
+  required: ["rewrites", "commitMessage", "summary"],
 } as const;
+
+// Backward-compat aliases so existing consumers that import the old names
+// don't break until they migrate.
+export const PATCH_TOOL_NAME = REWRITE_TOOL_NAME;
+export const PATCH_TOOL_DESCRIPTION = REWRITE_TOOL_DESCRIPTION;
+export const PATCH_TOOL_INPUT_SCHEMA = REWRITE_TOOL_INPUT_SCHEMA;

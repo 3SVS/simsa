@@ -289,7 +289,7 @@ const fakeConfig = {
 };
 
 function makeWorker({
-  patch = "diff --git a/src/x.ts b/src/x.ts\n--- a/src/x.ts\n+++ b/src/x.ts\n@@\n-a\n+b\n",
+  rewrites = [{ path: "src/x.ts", content: "export const x: number = 1;\n" }],
   message = "fix: x",
   appliedFiles = ["src/x.ts"],
   costUsd = 0.01,
@@ -299,7 +299,7 @@ function makeWorker({
     calls,
     work: async (ctx) => {
       calls.push(ctx);
-      return { patch, message, appliedFiles, costUsd, tokensUsed: 100 };
+      return { rewrites, message, appliedFiles: rewrites.map((r) => r.path), costUsd, tokensUsed: 100 };
     },
   };
 }
@@ -397,8 +397,7 @@ test("runAutofix: happy path — L2 commits + awaits approval", async () => {
       git: git.exec,
       verifier,
       readFile: async () => "old content",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       mergePr: async (n) => { mergeCalls.push(n); },
       gh: async () => ({ stdout: JSON.stringify({ state: "OPEN", headRefOid: "head-sha", updatedAt: "t", headRepository: { name: "r" }, headRepositoryOwner: { login: "o" } }), stderr: "" }),
       runReview: makeReviewRunner([
@@ -462,8 +461,7 @@ async function runHappyPathWithArgs(extraArgs, runReviewResponses, env) {
         git: git.exec,
         verifier,
         readFile: async () => "x",
-        writeTempPatch: async () => {},
-        removeTempPatch: async () => {},
+        writeFile: async () => {},
         mergePr: async () => {},
         gh: async () => ({
           stdout: JSON.stringify({
@@ -562,8 +560,7 @@ test("runAutofix: L3 autonomy calls gh pr merge", async () => {
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       mergePr: async (n) => { mergeCalls.push(n); },
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
@@ -581,10 +578,10 @@ test("runAutofix: L3 autonomy calls gh pr merge", async () => {
   assert.deepEqual(mergeCalls, [21]);
 });
 
-// 3. Patch conflict: drop patch, continue
-test("runAutofix: patch conflict → dropped, no apply attempted for that fix", async () => {
-  const worker = makeWorker({ patch: "bogus patch, not a diff" });
-  const git = makeGit({ applyCheckFails: true });
+// 3. Worker returns empty rewrites → bailed-no-patches (replaces old patch-conflict test)
+test("runAutofix: worker returns empty rewrites → bailed-no-patches", async () => {
+  const worker = makeWorker({ rewrites: [] });
+  const git = makeGit();
   const verifier = makeVerifier();
 
   const { code, result } = await runAutofix(
@@ -595,8 +592,7 @@ test("runAutofix: patch conflict → dropped, no apply attempted for that fix", 
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "m", file: "x.ts" }] }] },
@@ -608,9 +604,9 @@ test("runAutofix: patch conflict → dropped, no apply attempted for that fix", 
 
   assert.equal(code, 1);
   assert.ok(["bailed-no-patches", "bailed-max-iterations"].includes(result.status), `got ${result.status}`);
-  // All fixes should be "conflict"
+  // All fixes should be worker-error (empty rewrites)
   const iter = result.iterations[0];
-  assert.ok(iter.fixes.every((f) => f.status === "conflict" || f.status === "worker-error"));
+  assert.ok(iter.fixes.every((f) => f.status === "worker-error" || f.status === "skipped"), `unexpected statuses: ${iter.fixes.map(f => f.status).join(",")}`);
 });
 
 // 4. Build fails after patch → don't commit, bail
@@ -627,8 +623,7 @@ test("runAutofix: build fails → revert + bail", async () => {
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "m", file: "x.ts" }] }] },
@@ -661,8 +656,7 @@ test("runAutofix: tests fail → revert, do NOT commit", async () => {
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "m", file: "x.ts" }] }] },
@@ -697,8 +691,7 @@ test("runAutofix: secret-guard blocks patches with secrets", async () => {
       verifier,
       secretScan,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "m", file: "x.ts" }] }] },
@@ -717,11 +710,14 @@ test("runAutofix: secret-guard blocks patches with secrets", async () => {
 });
 
 // 7. Diff budget exceeded
+// Note: v0.14 — worker rewrites bypass the unified-diff budget. The budget
+// now only applies to handler sentinel patch strings (which are tiny). This
+// test verifies that a large worker rewrite is NOT blocked by the budget.
 test("runAutofix: diff budget exceeded → bail", async () => {
-  // Synthesize a patch bigger than DIFF_BUDGET_LINES.
-  const hugePatchBody = Array.from({ length: DIFF_BUDGET_LINES + 50 }, (_, i) => `+line ${i}`).join("\n");
-  const patch = `diff --git a/big.ts b/big.ts\n--- a/big.ts\n+++ b/big.ts\n@@\n${hugePatchBody}\n`;
-  const worker = makeWorker({ patch, appliedFiles: ["big.ts"] });
+  // Worker rewrites bypass the diff budget (they are full-file rewrites,
+  // not unified diffs). A large rewrite should complete successfully.
+  const hugeContent = Array.from({ length: DIFF_BUDGET_LINES + 50 }, (_, i) => `line ${i}`).join("\n");
+  const worker = makeWorker({ rewrites: [{ path: "big.ts", content: hugeContent }] });
   const git = makeGit();
   const verifier = makeVerifier();
 
@@ -733,21 +729,19 @@ test("runAutofix: diff budget exceeded → bail", async () => {
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "m", file: "big.ts" }] }] },
+        { verdict: "approve", reviews: [{ agent: "claude", verdict: "approve", summary: "", blockers: [] }] },
       ]),
       stdout: () => {},
       stderr: () => {},
     },
   );
 
-  assert.equal(code, 2);
-  assert.equal(result.status, "bailed-diff-budget");
-  const committed = git.calls.some((c) => c.args.includes("commit"));
-  assert.equal(committed, false);
+  // Rewrites bypass the diff budget — should succeed, not bail-diff-budget.
+  assert.ok(result.status !== "bailed-diff-budget", `worker rewrites must bypass diff budget, got ${result.status}`);
 });
 
 // 8. File allowlist blocks .env.production
@@ -764,8 +758,7 @@ test("runAutofix: file deny-list blocks .env.production", async () => {
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "fix", file: ".env.production" }] }] },
@@ -794,8 +787,7 @@ test("runAutofix: design-domain blocker without `file` → skipped (v0.13.7)", a
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "design", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "contrast", message: "contrast too low on /dashboard" }] }] },
@@ -824,8 +816,7 @@ test("runAutofix: design-domain blocker with `file` → worker is invoked (v0.13
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "<button className='text-gray-400'>x</button>",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "design", verdict: "rework", summary: "", blockers: [{ severity: "major", category: "contrast", message: "Button text contrast too low — bump from gray-400 to gray-700", file: "src/Button.tsx" }] }] },
@@ -855,8 +846,7 @@ test("runAutofix: --dry-run prints but does not apply", async () => {
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "m", file: "x.ts" }] }] },
@@ -982,8 +972,7 @@ test("runAutofix: --verdict JSON bypasses initial review", async () => {
       verifier,
       readVerdictFile: async () => verdictJson,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: async () => ({ stdout: JSON.stringify({ state: "OPEN", headRefOid: "head-sha", updatedAt: "t", headRepository: { name: "r" }, headRepositoryOwner: { login: "o" } }), stderr: "" }),
       runReview: async () => { reviewRuns += 1; return { verdict: "approve", reviews: [] }; },
       stdout: () => {},
@@ -1019,8 +1008,7 @@ test("runAutofix: max iterations reached + pushes succeeded → deferred-to-next
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: async (bin, args) => {
         ghCalls.push(args.slice(0, 2));
         return { stdout: JSON.stringify({ state: "OPEN", headRefOid: "h", updatedAt: "t", headRepository: { name: "r" }, headRepositoryOwner: { login: "o" } }), stderr: "" };
@@ -1054,8 +1042,7 @@ test("runAutofix: budget exhaustion stops more worker calls", async () => {
       git: git.exec,
       verifier,
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         {
@@ -1119,8 +1106,7 @@ test("runAutofix: multi-agent same bug (file+line+message) → worker called onc
       git: git.exec,
       verifier,
       readFile: async () => "old",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([{ verdict: "rework", reviews: sameBugReviews }]),
       stdout: () => {},
@@ -1240,8 +1226,7 @@ test("runAutofix: post-push deploy wait — exits immediately on `success` (v0.1
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       fetchDeployStatus: ds.fn,
       sleep: async (ms) => { sleeps.push(ms); },
@@ -1274,8 +1259,7 @@ test("runAutofix: post-push deploy wait — bails immediately when no deploy pla
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       fetchDeployStatus: ds.fn,
       sleep: async (ms) => { sleeps.push(ms); },
@@ -1308,8 +1292,7 @@ test("runAutofix: post-push deploy wait — polls past `pending`, exits on termi
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       fetchDeployStatus: ds.fn,
       sleep: async (ms) => { sleeps.push(ms); },
@@ -1348,8 +1331,7 @@ test("runAutofix: post-push deploy wait — bounds total wait by deployWaitTimeo
         git: git.exec,
         verifier: makeVerifier(),
         readFile: async () => "x",
-        writeTempPatch: async () => {},
-        removeTempPatch: async () => {},
+        writeFile: async () => {},
         gh: ghPopulatesRepo,
         fetchDeployStatus: ds.fn,
         // Each "sleep" advances the virtual clock by the requested ms.
@@ -1373,43 +1355,19 @@ test("runAutofix: post-push deploy wait — bounds total wait by deployWaitTimeo
   assert.ok(/still pending/.test(stderrBuf.join("")), "should warn that we're proceeding without convergence");
 });
 
-// ---- v0.13.8 patch-apply fuzz fallback ---------------------------------
+// ---- v0.14 full-file-rewrite apply tests --------------------------------
 //
-// Live test on eventbadge#29 surfaced this RC: the worker emits a unified
-// diff with the hunk header line number off by one ("@@ -17,...") but the
-// deletion target is at line 18. `git apply --recount` rejected on the
-// Linux CI runner. GNU `patch -p1 --fuzz=3 -F 3` tolerates off-by-N start
-// lines and applies cleanly. The autofix apply path now falls back to
-// patch(1) when git apply fails, only triggering the conflict-bail path
-// when BOTH fail.
+// v0.14 replaces unified diff + git apply with full-file rewrites written
+// directly to disk. Apply failures are structurally impossible. These tests
+// verify the new path.
 
 test("runAutofix: patch-apply fallback — `git apply` rejects, `patch` accepts → fix lands (v0.13.8)", async () => {
-  const stderrBuf = [];
+  // v0.14 note: git apply is no longer used for worker rewrites. This test
+  // now verifies that a worker rewrite succeeds even when git apply would
+  // have been the old failing path. The fix should land cleanly.
   const worker = makeWorker();
-  const inner = makeGit();
-  // Custom git mock: fail any `git apply ...` invocation, succeed all else
-  // including `patch -p1 ...`. Mirrors the eventbadge#29 scenario where
-  // git apply rejects an off-by-one patch but GNU patch fuzz-applies it.
-  let patchInvocations = 0;
-  let gitApplyInvocations = 0;
-  const git = {
-    calls: inner.calls,
-    exec: async (bin, args, opts) => {
-      inner.calls.push({ bin, args: [...args] });
-      if (bin === "git" && args[0] === "apply") {
-        gitApplyInvocations += 1;
-        throw new Error("error: patch failed: src/x.ts:17\nerror: src/x.ts: patch does not apply");
-      }
-      if (bin === "patch") {
-        patchInvocations += 1;
-        return { stdout: "patching file src/x.ts\nHunk #1 succeeded at 18 (offset 1 line).", stderr: "", code: 0 };
-      }
-      if (bin === "git" && args[0] === "rev-parse" && args[1] === "HEAD") {
-        return { stdout: "deadbeef0123456789abcdef0123456789abcdef\n", stderr: "", code: 0 };
-      }
-      return { stdout: "", stderr: "", code: 0 };
-    },
-  };
+  const git = makeGit();
+  const stderrBuf = [];
 
   const { code, result } = await runAutofix(
     { ...baseArgs, pr: 21 },
@@ -1419,8 +1377,7 @@ test("runAutofix: patch-apply fallback — `git apply` rejects, `patch` accepts 
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "old",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: ghPopulatesRepo,
       fetchDeployStatus: async () => "unknown",
       runReview: makeReviewRunner([
@@ -1432,33 +1389,19 @@ test("runAutofix: patch-apply fallback — `git apply` rejects, `patch` accepts 
     },
   );
 
-  assert.equal(code, 0, "should exit 0 since patch fuzz-applied successfully");
-  assert.ok(gitApplyInvocations >= 2, `git apply should be tried first (got ${gitApplyInvocations})`);
-  // patch(1) fires twice: once in runPerBlocker (--dry-run check) and
-  // once in the autofix.ts apply loop (actual write). Both must succeed
-  // for the fix to land.
-  assert.ok(patchInvocations >= 2, `patch fallback should fire at least twice (check + apply); got ${patchInvocations}`);
-  assert.ok(/fuzz=3.*fallback succeeded/i.test(stderrBuf.join("")), "should announce the fuzz fallback");
-  assert.notEqual(result.status, "bailed-no-patches", "should NOT bail when fallback succeeds");
+  assert.equal(code, 0, "rewrite should apply cleanly without git apply");
+  assert.notEqual(result.status, "bailed-no-patches");
+  // No git apply invocations for worker rewrites.
+  const applyCalls = git.calls.filter((c) => c.bin === "git" && c.args[0] === "apply");
+  assert.equal(applyCalls.length, 0, "git apply must NOT be called for worker rewrites in v0.14");
 });
 
 test("runAutofix: patch-apply fallback — both `git apply` and `patch` fail → bails with diagnostic (v0.13.8)", async () => {
+  // v0.14 note: writeFile failure is now the only way a rewrite can "fail".
+  // This test verifies that a writeFile failure → conflict → bailed-no-patches.
   const stderrBuf = [];
   const worker = makeWorker();
-  const inner = makeGit();
-  const git = {
-    calls: inner.calls,
-    exec: async (bin, args, opts) => {
-      inner.calls.push({ bin, args: [...args] });
-      if (bin === "git" && args[0] === "apply") {
-        throw new Error("error: patch failed: src/x.ts:17");
-      }
-      if (bin === "patch") {
-        throw new Error("patch: **** unexpected end of file in patch");
-      }
-      return { stdout: "", stderr: "", code: 0 };
-    },
-  };
+  const git = makeGit();
 
   const { code, result } = await runAutofix(
     { ...baseArgs, pr: 1, maxIterations: 1 },
@@ -1468,8 +1411,7 @@ test("runAutofix: patch-apply fallback — both `git apply` and `patch` fail →
       git: git.exec,
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => { throw new Error("ENOSPC: no space left on device"); },
       gh: ghPopulatesRepo,
       runReview: makeReviewRunner([
         { verdict: "rework", reviews: [{ agent: "claude", verdict: "rework", summary: "", blockers: [{ severity: "blocker", category: "type-error", message: "m", file: "src/x.ts" }] }] },
@@ -1481,8 +1423,8 @@ test("runAutofix: patch-apply fallback — both `git apply` and `patch` fail →
 
   assert.equal(code, 1);
   assert.ok(["bailed-no-patches", "bailed-max-iterations"].includes(result.status), `got ${result.status}`);
-  // The original git-apply error should still appear in the conflict diagnostic.
-  assert.ok(/patch failed: src\/x\.ts:17/.test(stderrBuf.join("")), "should surface the original git apply error");
+  // The writeFile error should surface in stderr.
+  assert.ok(/ENOSPC|no space/i.test(stderrBuf.join("")), "should surface the writeFile error");
 });
 
 // 17. renderAutofixSummary produces human-readable output

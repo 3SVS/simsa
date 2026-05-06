@@ -3,17 +3,13 @@ import assert from "node:assert/strict";
 import { runPerBlocker } from "../dist/lib/autofix-worker.js";
 
 /**
- * v0.13.19 (H1 #4) — runPerBlocker retry-with-feedback tests.
+ * v0.14 — runPerBlocker rewrite-path tests.
  *
- * When `git apply --check --recount` rejects the worker's patch (and
- * the GNU patch fuzz fallback also rejects), the autofix-worker layer
- * now calls the worker AGAIN with the rejection reason in the prompt
- * so it can correct the specific failure mode (off-by-N start line,
- * miscounted hunk header, hallucinated context).
- *
- * Live RC: eventbadge#29 burnt 3 OUTER cycles because each cycle's
- * single worker call emitted a bad patch; with retry-feedback the
- * SAME blocker can be re-attempted within a single cycle.
+ * The retry loop and git-apply validation were removed in v0.14.
+ * Workers now return full-file rewrites; the caller writes them to disk.
+ * These tests verify the new contract: single worker call, rewrite
+ * content returned in BlockerFix.rewrites, error handling for LLM
+ * failures and empty rewrites, deny-list enforcement.
  */
 
 const BLOCKER = {
@@ -24,23 +20,9 @@ const BLOCKER = {
   line: 1,
 };
 
-const VALID_PATCH = `diff --git a/src/x.ts b/src/x.ts
---- a/src/x.ts
-+++ b/src/x.ts
-@@ -1,3 +1,3 @@
--export const x = 1;
-+export const x: number = 1;
- export const y = 2;
- export const z = 3;
-`;
-
-const BAD_PATCH = `diff --git a/src/x.ts b/src/x.ts
---- a/src/x.ts
-+++ b/src/x.ts
-@@ -99,3 +99,3 @@
--line at impossible offset
-+replacement
-`;
+const VALID_REWRITES = [
+  { path: "src/x.ts", content: "export const x: number = 1;\nexport const y = 2;\nexport const z = 3;\n" },
+];
 
 function makeWorker(responses) {
   let i = 0;
@@ -57,8 +39,8 @@ function makeWorker(responses) {
   };
 }
 
-function workerOutcome({ patch = VALID_PATCH, message = "fix(x)", filesTouched = ["src/x.ts"], costUsd = 0.21, tokensUsed = 2400 } = {}) {
-  return { patch, message, appliedFiles: filesTouched, costUsd, tokensUsed };
+function workerOutcome({ rewrites = VALID_REWRITES, message = "fix(x)", costUsd = 0.21, tokensUsed = 2400 } = {}) {
+  return { rewrites, message, appliedFiles: rewrites.map((r) => r.path), costUsd, tokensUsed };
 }
 
 const baseInput = () => ({
@@ -71,187 +53,121 @@ const baseInput = () => ({
 
 const baseDeps = (overrides = {}) => ({
   worker: overrides.worker,
-  // Default git: returns success for `git apply --check --recount`.
-  git: overrides.git ?? (async () => ({ stdout: "", stderr: "" })),
   cwd: "/tmp/fake-repo",
   readFile: overrides.readFile ?? (async () => "export const x = 1;\nexport const y = 2;\nexport const z = 3;\n"),
-  writeTempPatch: overrides.writeTempPatch ?? (async () => {}),
-  removeTempPatch: overrides.removeTempPatch ?? (async () => {}),
-  stderr: () => {}, // silence retry log noise in tests
+  stderr: () => {},
   ...overrides,
 });
 
-// ---- happy path (no retry needed) ---------------------------------------
+// ---- happy path ---------------------------------------------------------
 
-test("runPerBlocker: first attempt validates → status=ready, NO retry, no workerAttempts field", async () => {
+test("runPerBlocker: worker returns rewrites → status=ready, single worker call", async () => {
   const worker = makeWorker([workerOutcome()]);
   const fix = await runPerBlocker(baseInput(), baseDeps({ worker }));
   assert.equal(fix.status, "ready");
-  assert.equal(worker.calls.length, 1, "must NOT retry when first attempt validates");
-  // Backward compat: no workerAttempts field on first-try success.
-  assert.equal(fix.workerAttempts, undefined);
+  assert.equal(worker.calls.length, 1, "must make exactly one worker call");
+  assert.ok(Array.isArray(fix.rewrites), "fix.rewrites must be an array");
+  assert.equal(fix.rewrites.length, 1);
+  assert.equal(fix.rewrites[0].path, "src/x.ts");
+  assert.ok(fix.rewrites[0].content.includes("x: number"));
+  assert.deepEqual(fix.appliedFiles, ["src/x.ts"]);
 });
 
-// ---- retry path ---------------------------------------------------------
-
-test("runPerBlocker: first attempt invalid → retry succeeds → status=ready, workerAttempts=2", async () => {
-  // git rejects the first patch (BAD_PATCH), accepts the second.
-  let gitApplyCalls = 0;
-  const git = async (bin, args) => {
-    if (bin === "git" && args[0] === "apply") {
-      gitApplyCalls += 1;
-      if (gitApplyCalls === 1) {
-        throw Object.assign(new Error("error: patch failed: src/x.ts:99"), { stderr: "patch failed at line 99" });
-      }
-      return { stdout: "", stderr: "" };
-    }
-    if (bin === "patch") {
-      // First-call fuzz fallback ALSO fails (so we go to retry path).
-      throw new Error("patch: hunk #1 ignored at 99");
-    }
-    return { stdout: "", stderr: "" };
-  };
-  const worker = makeWorker([
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: VALID_PATCH }),
-  ]);
-  const fix = await runPerBlocker(baseInput(), baseDeps({ worker, git }));
-  assert.equal(fix.status, "ready");
-  assert.equal(worker.calls.length, 2, "second attempt must fire when first fails");
-  assert.equal(fix.workerAttempts, 2);
-  // Cost should be the SUM of both attempts.
-  assert.ok(fix.costUsd > 0.4, `expected accumulated cost > 0.4 across 2 attempts, got ${fix.costUsd}`);
+test("runPerBlocker: costUsd and tokensUsed are forwarded from outcome", async () => {
+  const worker = makeWorker([workerOutcome({ costUsd: 0.42, tokensUsed: 1234 })]);
+  const fix = await runPerBlocker(baseInput(), baseDeps({ worker }));
+  assert.equal(fix.costUsd, 0.42);
+  assert.equal(fix.tokensUsed, 1234);
 });
 
-test("runPerBlocker: second attempt's prompt context contains the previous rejection", async () => {
-  let gitApplyCalls = 0;
-  const git = async (bin, args) => {
-    if (bin === "git" && args[0] === "apply") {
-      gitApplyCalls += 1;
-      if (gitApplyCalls === 1) throw new Error("patch failed: line 99");
-      return { stdout: "", stderr: "" };
-    }
-    if (bin === "patch") throw new Error("fuzz also failed");
-    return { stdout: "", stderr: "" };
-  };
-  const worker = makeWorker([
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: VALID_PATCH }),
-  ]);
-  await runPerBlocker(baseInput(), baseDeps({ worker, git }));
-  // First call: no previousAttempts.
-  assert.equal(worker.calls[0].previousAttempts, undefined);
-  // Second call: previousAttempts present with the rejected patch + reason.
-  assert.ok(Array.isArray(worker.calls[1].previousAttempts));
-  assert.equal(worker.calls[1].previousAttempts.length, 1);
-  assert.equal(worker.calls[1].previousAttempts[0].patch, BAD_PATCH);
-  assert.match(worker.calls[1].previousAttempts[0].rejectReason, /patch failed/i);
+// ---- empty rewrites (worker gave up) ------------------------------------
+
+test("runPerBlocker: worker returns empty rewrites → status=worker-error", async () => {
+  const worker = makeWorker([workerOutcome({ rewrites: [] })]);
+  const fix = await runPerBlocker(baseInput(), baseDeps({ worker }));
+  assert.equal(fix.status, "worker-error");
+  assert.match(fix.reason, /no file rewrites/i);
 });
 
-test("runPerBlocker: all attempts invalid → status=conflict, workerAttempts=3 (default 2 retries)", async () => {
-  // Always reject.
-  const git = async (bin, args) => {
-    if (bin === "git" && args[0] === "apply") throw new Error("patch failed: line 99");
-    if (bin === "patch") throw new Error("fuzz also failed");
-    return { stdout: "", stderr: "" };
-  };
-  const worker = makeWorker([
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }), // safety: should not be called
-  ]);
-  const fix = await runPerBlocker(baseInput(), baseDeps({ worker, git }));
-  assert.equal(fix.status, "conflict");
-  assert.equal(worker.calls.length, 3, "default = 2 retries → 3 total worker calls");
-  assert.equal(fix.workerAttempts, 3);
-  assert.match(fix.reason, /patch failed/i);
-});
+// ---- LLM throws ---------------------------------------------------------
 
-test("runPerBlocker: workerRetries=0 → first failure short-circuits to conflict (single worker call)", async () => {
-  const git = async (bin, args) => {
-    if (bin === "git" && args[0] === "apply") throw new Error("patch failed: line 99");
-    if (bin === "patch") throw new Error("fuzz also failed");
-    return { stdout: "", stderr: "" };
-  };
-  const worker = makeWorker([workerOutcome({ patch: BAD_PATCH })]);
-  const fix = await runPerBlocker(
-    baseInput(),
-    baseDeps({ worker, git, workerRetries: 0 }),
-  );
-  assert.equal(fix.status, "conflict");
-  assert.equal(worker.calls.length, 1, "workerRetries=0 must do exactly one worker call");
-  assert.equal(fix.workerAttempts, 1);
-});
-
-test("runPerBlocker: workerRetries clamped to hard cap of 4", async () => {
-  // Even with workerRetries=999, only 5 worker calls should fire (1 + 4 retries).
-  const git = async (bin, args) => {
-    if (bin === "git" && args[0] === "apply") throw new Error("patch failed");
-    if (bin === "patch") throw new Error("fuzz failed");
-    return { stdout: "", stderr: "" };
-  };
-  const worker = makeWorker([
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-    workerOutcome({ patch: BAD_PATCH }),
-  ]);
-  await runPerBlocker(
-    baseInput(),
-    baseDeps({ worker, git, workerRetries: 999 }),
-  );
-  assert.ok(worker.calls.length <= 5, `hard cap is 4 retries (5 calls); got ${worker.calls.length}`);
-});
-
-test("runPerBlocker: worker throws on retry → returns worker-error with accumulated cost from prior attempts", async () => {
-  const git = async (bin, args) => {
-    if (bin === "git" && args[0] === "apply") throw new Error("patch failed");
-    if (bin === "patch") throw new Error("fuzz failed");
-    return { stdout: "", stderr: "" };
-  };
+test("runPerBlocker: worker throws → status=worker-error with reason", async () => {
   const worker = {
     calls: [],
     async work(ctx) {
       this.calls.push(ctx);
-      if (this.calls.length === 1) {
-        // First call returns a (bad) patch.
-        return workerOutcome({ patch: BAD_PATCH, costUsd: 0.21 });
-      }
-      throw new Error("anthropic 500");
+      throw new Error("anthropic 500: server error");
     },
   };
-  const fix = await runPerBlocker(baseInput(), baseDeps({ worker, git }));
+  const fix = await runPerBlocker(baseInput(), baseDeps({ worker }));
   assert.equal(fix.status, "worker-error");
-  assert.match(fix.reason, /anthropic 500/);
-  // Cost from the first (failed-validate) call should still be reported.
-  assert.ok(fix.costUsd >= 0.2, `expected cost from prior attempt to surface; got ${fix.costUsd}`);
+  assert.match(fix.reason, /anthropic 500/i);
 });
 
-test("runPerBlocker: previousAttempts grows per retry (each attempt sees ALL prior rejections)", async () => {
-  const git = async (bin, args) => {
-    if (bin === "git" && args[0] === "apply") throw new Error("patch failed");
-    if (bin === "patch") throw new Error("fuzz failed");
-    return { stdout: "", stderr: "" };
+// ---- design-domain skip -------------------------------------------------
+
+test("runPerBlocker: design-domain blocker without a file → status=skipped", async () => {
+  const worker = makeWorker([workerOutcome()]);
+  const input = {
+    ...baseInput(),
+    blocker: { severity: "blocker", category: "contrast", message: "low contrast ratio" },
   };
+  const fix = await runPerBlocker(input, baseDeps({ worker }));
+  assert.equal(fix.status, "skipped");
+  assert.equal(worker.calls.length, 0, "should not call worker for file-less design blocker");
+});
+
+test("runPerBlocker: design-domain blocker WITH a file → falls through to worker", async () => {
+  const worker = makeWorker([workerOutcome()]);
+  const input = {
+    ...baseInput(),
+    blocker: { severity: "blocker", category: "contrast", message: "low contrast", file: "src/Button.tsx" },
+  };
+  const fix = await runPerBlocker(input, baseDeps({ worker }));
+  assert.equal(fix.status, "ready", "design blocker with file should be attempted");
+  assert.equal(worker.calls.length, 1);
+});
+
+// ---- deny-list ----------------------------------------------------------
+
+test("runPerBlocker: blocker file on deny-list → skipped before worker call", async () => {
+  const worker = makeWorker([workerOutcome()]);
+  const input = {
+    ...baseInput(),
+    blocker: { severity: "blocker", category: "type-error", message: "fix", file: ".env.production" },
+  };
+  const fix = await runPerBlocker(input, baseDeps({ worker }));
+  assert.equal(fix.status, "skipped");
+  assert.match(fix.reason, /deny-list/i);
+  assert.equal(worker.calls.length, 0, "should not call worker for deny-listed file");
+});
+
+test("runPerBlocker: worker rewrite targets deny-listed file → skipped", async () => {
   const worker = makeWorker([
-    workerOutcome({ patch: "patch-A" + BAD_PATCH }),
-    workerOutcome({ patch: "patch-B" + BAD_PATCH }),
-    workerOutcome({ patch: "patch-C" + BAD_PATCH }),
+    workerOutcome({ rewrites: [{ path: ".env.secret", content: "SECRET=leaked" }] }),
   ]);
-  await runPerBlocker(baseInput(), baseDeps({ worker, git }));
-  assert.equal(worker.calls.length, 3);
-  // Call 1: no history.
-  assert.equal(worker.calls[0].previousAttempts, undefined);
-  // Call 2: 1 prior.
-  assert.equal(worker.calls[1].previousAttempts.length, 1);
-  // Call 3: 2 priors (A and B both visible to the worker so it can
-  // see the trend, not just the most recent failure).
-  assert.equal(worker.calls[2].previousAttempts.length, 2);
-  assert.match(worker.calls[2].previousAttempts[0].patch, /patch-A/);
-  assert.match(worker.calls[2].previousAttempts[1].patch, /patch-B/);
+  const fix = await runPerBlocker(baseInput(), baseDeps({ worker }));
+  assert.equal(fix.status, "skipped");
+  assert.match(fix.reason, /deny-list/i);
+});
+
+// ---- file snapshot loading ----------------------------------------------
+
+test("runPerBlocker: file snapshot is passed to worker in context", async () => {
+  const worker = makeWorker([workerOutcome()]);
+  const fix = await runPerBlocker(baseInput(), baseDeps({ worker }));
+  assert.equal(fix.status, "ready");
+  assert.equal(worker.calls[0].fileSnapshots.length, 1);
+  assert.equal(worker.calls[0].fileSnapshots[0].path, "src/x.ts");
+});
+
+test("runPerBlocker: missing file → worker still called with empty snapshots", async () => {
+  const worker = makeWorker([workerOutcome()]);
+  const deps = baseDeps({
+    worker,
+    readFile: async () => { throw new Error("ENOENT"); },
+  });
+  const fix = await runPerBlocker(baseInput(), deps);
+  assert.equal(fix.status, "ready");
+  assert.equal(worker.calls[0].fileSnapshots.length, 0);
 });

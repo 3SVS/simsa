@@ -176,7 +176,7 @@ const baseArgs = {
 function makeWorker() {
   return {
     work: async () => ({
-      patch: "diff --git a/src/x.ts b/src/x.ts\n--- a/src/x.ts\n+++ b/src/x.ts\n@@\n-a\n+b\n",
+      rewrites: [{ path: "src/x.ts", content: "export const x: number = 1;\n" }],
       message: "fix: x",
       appliedFiles: ["src/x.ts"],
       costUsd: 0.01,
@@ -248,8 +248,7 @@ test("UX-1 wiring: bailed-build-failed → posts PR comment with build-failed bo
       git: makeGit(),
       verifier: makeVerifier({ buildOk: false }),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: gh.fn,
       runReview: async () => ({
         verdict: "rework",
@@ -280,8 +279,7 @@ test("UX-1 wiring: bailed-tests-failed → posts PR comment", async () => {
       git: makeGit(),
       verifier: makeVerifier({ testsOk: false }),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: gh.fn,
       runReview: async () => ({
         verdict: "rework",
@@ -308,8 +306,7 @@ test("UX-1 wiring: deferred-to-next-review → posts PR comment with no-action-n
       git: makeGit(),
       verifier: makeVerifier(),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: gh.fn,
       runReview: async () => ({
         verdict: "rework",
@@ -354,8 +351,7 @@ test("UX-1 wiring: gh pr comment failure does NOT propagate (best-effort)", asyn
       git: makeGit(),
       verifier: makeVerifier({ buildOk: false }),
       readFile: async () => "x",
-      writeTempPatch: async () => {},
-      removeTempPatch: async () => {},
+      writeFile: async () => {},
       gh: flakeyGh,
       runReview: async () => ({
         verdict: "rework",
