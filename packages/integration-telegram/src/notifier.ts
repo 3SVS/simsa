@@ -10,7 +10,12 @@ import {
   type TelegramMessage,
 } from "./client.js";
 import { formatReviewForTelegram, formatPlainSummaryForTelegram } from "./format.js";
-import { renderProgressLine, renderProgressMessage, type ProgressLine } from "./progress-format.js";
+import {
+  isNoisyTelegramStage,
+  renderProgressLine,
+  renderProgressMessage,
+  type ProgressLine,
+} from "./progress-format.js";
 
 /**
  * Default Conclave central plane URL. Duplicated from
@@ -449,6 +454,11 @@ export class TelegramNotifier implements Notifier {
 
   private async notifyProgressViaDirect(input: NotifyProgressInput): Promise<void> {
     if (!this.client || this.chatId === null) return;
+    // Task #55 — collapse noisy iter/blocker stages from the chain.
+    // Episodic JSON + CLI stdout still record everything; only the
+    // Telegram chain skips them so the per-cycle headline + terminal
+    // card remain readable.
+    if (isNoisyTelegramStage(input.stage)) return;
     const pr = input.payload?.pullNumber;
     const key = `${input.episodicId}::${pr ?? ""}`;
     const line = renderProgressLine(input);

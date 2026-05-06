@@ -220,6 +220,19 @@ export interface ProgressPayload {
    * full PR view from the Telegram card.
    */
   prUrl?: string;
+  /**
+   * Task #54 — per-iteration breakdown surfaced in the review-finished
+   * card. Renderer shows it as "사이클 N · 반복 K · 적용 X건 · ✓/✗" so
+   * the user sees the autonomy loop's actual progression instead of just
+   * the final verdict.
+   */
+  iterationHistory?: Array<{
+    iter: number;
+    applied: number;
+    verified: boolean;
+    buildOk?: boolean;
+    testsOk?: boolean;
+  }>;
 }
 
 export interface NotifyProgressInput {

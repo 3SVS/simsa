@@ -33,6 +33,27 @@ const IN_PROGRESS_STAGES: readonly ProgressStage[] = [
   "autofix-blocker-started",
 ];
 
+/**
+ * Task #55 — stages that are valuable in episodic JSON / CLI stdout but
+ * pile up as visual noise when streamed into the Telegram chain. We
+ * collapse 3 cycles × 9 blockers × 3 messages each = 81 lines into a
+ * single "🔄 Conclave is auto-fixing (N/M)" headline per cycle plus the
+ * terminal "Cycle ended" line.
+ *
+ * Tests still verify episodic emission for these stages — only the
+ * Telegram renderer skips them.
+ */
+const NOISY_TELEGRAM_STAGES: readonly ProgressStage[] = [
+  "autofix-iter-started",
+  "autofix-iter-done",
+  "autofix-blocker-started",
+  "autofix-blocker-done",
+];
+
+export function isNoisyTelegramStage(stage: ProgressStage): boolean {
+  return NOISY_TELEGRAM_STAGES.includes(stage);
+}
+
 const TERMINAL_BAIL_PREFIXES = ["bailed-", "loop-guard-trip"];
 
 function stageEmoji(stage: ProgressStage, payload?: { bailStatus?: string }): string {
@@ -220,6 +241,25 @@ export function renderProgressLine(input: NotifyProgressInput): ProgressLine {
       // UX-16 — machine-fixable bucket renders BEFORE the human bucket.
       if (machineFixableList) lines.push(`<b>🔁 다시 시도 가능 (시스템이 자동으로 처리할 수 있는 항목)</b>`, machineFixableList, ``);
       if (outstandingList) lines.push(`<b>👤 사람 검토 필요</b>`, outstandingList, ``);
+      // Task #54 — cycle/iteration progression so the user can see how
+      // the council worked through the PR. Each entry: "사이클 N · 반복
+      // K · 적용 X건 · ✓/✗". Compact — iterations cap at 6 lines.
+      const iterationHistory = (p.iterationHistory ?? []) as Array<{
+        iter: number;
+        applied: number;
+        verified: boolean;
+        buildOk?: boolean;
+        testsOk?: boolean;
+      }>;
+      if (iterationHistory.length > 0) {
+        const iterRows = iterationHistory.slice(0, 6).map((h) => {
+          const verdictGlyph = h.verified ? "✓" : "✗";
+          const buildBit = h.buildOk === undefined ? "" : h.buildOk ? " · build ✓" : " · build ✗";
+          const testBit = h.testsOk === undefined ? "" : h.testsOk ? " · tests ✓" : " · tests ✗";
+          return `  • 사이클 ${cycles} · 반복 ${h.iter} · 적용 ${h.applied}건${buildBit}${testBit} · ${verdictGlyph}`;
+        }).join("\n");
+        lines.push(`<b>📈 진행 내역</b>`, iterRows, ``);
+      }
       lines.push(`${recHeadline}`);
       return { stage: input.stage, text: lines.join("\n") };
     }

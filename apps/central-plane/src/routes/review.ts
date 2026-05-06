@@ -21,6 +21,7 @@ import {
 import { sha256Hex } from "../util.js";
 import { TelegramClient, dispatchRepositoryEvent } from "../telegram.js";
 import {
+  isNoisyTelegramStage,
   renderProgressLine,
   renderProgressMessage,
   TELEGRAM_TEXT_LIMIT_LINES,
@@ -518,6 +519,14 @@ export function createReviewRoutes(
     const install = await findInstallByTokenHash(c.env, tokenHash);
     if (!install) {
       return c.json({ error: "unknown or revoked token" }, 401);
+    }
+
+    // Task #55 — drop noisy iter/blocker stages before any Telegram
+    // fan-out. Episodic recording could remain (other consumers use it),
+    // but in this Worker the only sink is the chat thread, so we 200
+    // and exit. Returns ok:true so callers don't retry.
+    if (isNoisyTelegramStage(stage)) {
+      return c.json({ ok: true, delivered: 0, sent: 0, edited: 0, reason: "noisy_stage_skipped" });
     }
 
     const now = new Date().toISOString();

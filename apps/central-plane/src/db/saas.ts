@@ -382,6 +382,124 @@ export async function recordMeter(
     .run();
 }
 
+// --- jobs ---------------------------------------------------------------
+
+export interface SaasJob {
+  id: string;
+  userId: string;
+  repoSlug: string;
+  prNumber: number;
+  kind: "review" | "autofix";
+  status: "accepted" | "running" | "done" | "failed" | "timeout";
+  verdict: string | null;
+  blockers: number | null;
+  cycles: number | null;
+  durationMs: number | null;
+  smokeOutcome: string | null;
+  deployUrl: string | null;
+  errorMessage: string | null;
+  prdPresent: boolean;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export async function createJob(
+  env: Env,
+  input: {
+    jobId: string;
+    userId: string;
+    repoSlug: string;
+    prNumber: number;
+    kind: "review" | "autofix";
+    prdPresent: boolean;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO jobs (id, user_id, repo_slug, pr_number, kind, status, prd_present, created_at)
+     VALUES (?, ?, ?, ?, ?, 'accepted', ?, ?)`,
+  )
+    .bind(
+      input.jobId,
+      input.userId,
+      input.repoSlug,
+      input.prNumber,
+      input.kind,
+      input.prdPresent ? 1 : 0,
+      now,
+    )
+    .run();
+}
+
+export async function findJob(env: Env, jobId: string): Promise<SaasJob | null> {
+  const r = await env.DB.prepare(
+    `SELECT id, user_id, repo_slug, pr_number, kind, status, verdict, blockers, cycles,
+            duration_ms, smoke_outcome, deploy_url, error_message, prd_present,
+            created_at, completed_at
+       FROM jobs WHERE id = ?`,
+  )
+    .bind(jobId)
+    .first();
+  return r ? rowToJob(r) : null;
+}
+
+export async function completeJob(
+  env: Env,
+  input: {
+    jobId: string;
+    status: "done" | "failed" | "timeout";
+    verdict?: string;
+    blockers?: number;
+    cycles?: number;
+    durationMs?: number;
+    smokeOutcome?: string;
+    deployUrl?: string;
+    errorMessage?: string;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE jobs
+        SET status = ?, verdict = ?, blockers = ?, cycles = ?, duration_ms = ?,
+            smoke_outcome = ?, deploy_url = ?, error_message = ?, completed_at = ?
+      WHERE id = ?`,
+  )
+    .bind(
+      input.status,
+      input.verdict ?? null,
+      input.blockers ?? null,
+      input.cycles ?? null,
+      input.durationMs ?? null,
+      input.smokeOutcome ?? null,
+      input.deployUrl ?? null,
+      input.errorMessage ?? null,
+      now,
+      input.jobId,
+    )
+    .run();
+}
+
+function rowToJob(r: any): SaasJob {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    repoSlug: r.repo_slug,
+    prNumber: r.pr_number,
+    kind: r.kind === "autofix" ? "autofix" : "review",
+    status: ["accepted", "running", "done", "failed", "timeout"].includes(r.status) ? r.status : "accepted",
+    verdict: r.verdict,
+    blockers: r.blockers,
+    cycles: r.cycles,
+    durationMs: r.duration_ms,
+    smokeOutcome: r.smoke_outcome,
+    deployUrl: r.deploy_url,
+    errorMessage: r.error_message,
+    prdPresent: r.prd_present === 1,
+    createdAt: r.created_at,
+    completedAt: r.completed_at,
+  };
+}
+
 // --- helpers ------------------------------------------------------------
 
 function rowToUser(r: any): SaasUser {

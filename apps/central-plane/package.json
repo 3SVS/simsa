@@ -20,6 +20,7 @@
     "migrate:0008": "wrangler d1 execute conclave-ai --remote --file=./migrations/0008_monthly_spend.sql"
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.0.30",
     "@conclave-ai/core": "workspace:*",
     "hono": "^4.6.14"
   },

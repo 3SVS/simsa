@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import type { Env } from "./env.js";
+// v0.16.2 — Container DO class is re-exported from src/index.ts (which
+// wrangler bundles). Importing it here would force `@cloudflare/containers`
+// (which uses extensionless imports + the `cloudflare:workers` runtime
+// module) into every node --test consumer of `createApp`. Keep this module
+// dependency-free of the Workers-only chain.
 import { healthRoutes } from "./routes/health.js";
 import { registerRoutes } from "./routes/register.js";
 import { episodicRoutes } from "./routes/episodic.js";

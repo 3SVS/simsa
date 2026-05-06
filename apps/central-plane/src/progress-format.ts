@@ -76,6 +76,14 @@ export interface ProgressPayload {
   // UX-15 — preview / PR links surfaced on the terminal card.
   previewUrl?: string;
   prUrl?: string;
+  // Task #54 — per-iteration breakdown for the user-facing card.
+  iterationHistory?: Array<{
+    iter: number;
+    applied: number;
+    verified: boolean;
+    buildOk?: boolean;
+    testsOk?: boolean;
+  }>;
 }
 
 export interface ProgressLine {
@@ -94,6 +102,23 @@ const IN_PROGRESS_STAGES: readonly ProgressStage[] = [
   "autofix-iter-started",
   "autofix-blocker-started",
 ];
+
+/**
+ * Task #55 — central-plane mirror of integration-telegram's
+ * NOISY_TELEGRAM_STAGES. The Worker still records every stage in
+ * episodic JSON for replay, but skips appending these to the user-
+ * facing chat thread.
+ */
+const NOISY_TELEGRAM_STAGES: readonly ProgressStage[] = [
+  "autofix-iter-started",
+  "autofix-iter-done",
+  "autofix-blocker-started",
+  "autofix-blocker-done",
+];
+
+export function isNoisyTelegramStage(stage: ProgressStage): boolean {
+  return NOISY_TELEGRAM_STAGES.includes(stage);
+}
 
 const TERMINAL_BAIL_PREFIXES = ["bailed-", "loop-guard-trip"];
 
@@ -215,7 +240,8 @@ export function renderProgressLine(stage: ProgressStage, payload: ProgressPayloa
       const found = typeof p.totalBlockersFound === "number" ? p.totalBlockersFound : 0;
       const fixed = typeof p.blockersAutofixed === "number" ? p.blockersAutofixed : 0;
       const outstanding = typeof p.blockersOutstanding === "number" ? p.blockersOutstanding : 0;
-      const cost = typeof p.totalCostUsd === "number" ? p.totalCostUsd.toFixed(4) : "0.00";
+      // v0.16.1 — cost dropped from the user-facing card (paid SaaS).
+      // CLI stdout + episodic JSON keep cost.
       const deploy = p.deployOutcome ?? "unknown";
       const rec = p.recommendation ?? "hold";
       const machineFixable = typeof p.machineFixableCount === "number" ? p.machineFixableCount : 0;
@@ -231,7 +257,6 @@ export function renderProgressLine(stage: ProgressStage, payload: ProgressPayloa
         `사람 손 필요: ${outstanding}건`,
       ];
       if (machineFixable > 0) countsParts.push(`다시 시도 가능: ${machineFixable}건`);
-      countsParts.push(`비용: $${cost}`);
       const lines = [
         `<b>🤖 Conclave 검토 완료</b>`,
         ``,
@@ -256,6 +281,18 @@ export function renderProgressLine(stage: ProgressStage, payload: ProgressPayloa
       // These are "system can retry" items, not action-required for users.
       if (machineFixableList) lines.push(`<b>🔁 다시 시도 가능 (시스템이 자동으로 처리할 수 있는 항목)</b>`, machineFixableList, ``);
       if (outstandingList) lines.push(`<b>👤 사람 검토 필요</b>`, outstandingList, ``);
+      // Task #54 — per-iteration progression so the user sees how the
+      // council worked through the PR.
+      const iterationHistory = p.iterationHistory ?? [];
+      if (iterationHistory.length > 0) {
+        const iterRows = iterationHistory.slice(0, 6).map((h) => {
+          const verdictGlyph = h.verified ? "✓" : "✗";
+          const buildBit = h.buildOk === undefined ? "" : h.buildOk ? " · build ✓" : " · build ✗";
+          const testBit = h.testsOk === undefined ? "" : h.testsOk ? " · tests ✓" : " · tests ✗";
+          return `  • 사이클 ${cycles} · 반복 ${h.iter} · 적용 ${h.applied}건${buildBit}${testBit} · ${verdictGlyph}`;
+        }).join("\n");
+        lines.push(`<b>📈 진행 내역</b>`, iterRows, ``);
+      }
       lines.push(recHeadline);
       return { stage, text: lines.join("\n") };
     }
