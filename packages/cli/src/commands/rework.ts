@@ -51,7 +51,7 @@ Environment:
 
 Side effects (unless --dry-run):
   - \`git apply\` the worker patch on top of the current branch
-  - \`git commit\` with author "conclave-worker[bot] <noreply@conclave.ai>"
+  - \`git commit\` with author "conclave-ai-code-council[bot] <3620556+conclave-ai-code-council[bot]@users.noreply.github.com>"
   - \`git push\` (unless --no-push) — assumes current branch tracks a remote
   - Marks the episodic as "reworked" in the memory store.
 
@@ -397,18 +397,22 @@ export async function runRework(args: ReworkArgs, deps: ReworkDeps = {}): Promis
       ? `${outcome.message}\n\n${formatCycleMarker(args.reworkCycle)}`
       : outcome.message;
 
+  // v0.16.1 — use the GitHub App noreply format so deploy gates that
+  // require commit-author email→GitHub-account matching (e.g. Vercel's
+  // "Deployment Blocked: email could not be matched") accept the bot
+  // commits. See packages/cli/src/autofix-pipeline.ts for context.
   await git(
     "git",
     [
       "-c",
-      "user.name=conclave-worker[bot]",
+      "user.name=conclave-ai-code-council[bot]",
       "-c",
-      "user.email=noreply@conclave.ai",
+      "user.email=3620556+conclave-ai-code-council[bot]@users.noreply.github.com",
       "commit",
       "-m",
       commitMessage,
       "--author",
-      "conclave-worker[bot] <noreply@conclave.ai>",
+      "conclave-ai-code-council[bot] <3620556+conclave-ai-code-council[bot]@users.noreply.github.com>",
     ],
     { cwd: args.cwd },
   );
