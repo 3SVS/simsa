@@ -37,6 +37,7 @@ export default function Home() {
       <main className="mx-auto max-w-5xl px-6">
         <Hero />
         <HowItWorks />
+        <TrustedBy />
         <CouncilEvidence />
         <DemoForm />
         <Pricing />
@@ -166,6 +167,31 @@ function HowItWorks() {
             <p className="font-mono text-xs text-accent-700 mb-3">{s.n}</p>
             <h3 className="font-semibold text-neutral-900 mb-2">{s.title}</h3>
             <p className="text-sm text-neutral-600 leading-relaxed">{s.body}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// --- Trusted by -------------------------------------------------------------
+
+function TrustedBy() {
+  const logos = [
+    { name: "eventbadge", caption: "Live on production since 2026-04" },
+    { name: "golf-now", caption: "Beta integration, 2026-05" },
+    { name: "applywalmart", caption: "Pilot, 2026-04" },
+  ];
+  return (
+    <section className="py-16 border-b border-neutral-200">
+      <p className="text-xs uppercase tracking-wider text-neutral-500 mb-6 text-center">
+        Used in production by
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+        {logos.map((l) => (
+          <article key={l.name} className="text-center">
+            <p className="font-mono text-sm font-medium text-neutral-700">{l.name}</p>
+            <p className="text-xs text-neutral-500 mt-1">{l.caption}</p>
           </article>
         ))}
       </div>
