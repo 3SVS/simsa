@@ -183,8 +183,12 @@ async function runJob(payload) {
 
   // 1. Clone into a fresh dir. Use the installation token as the
   //    HTTPS auth (GitHub accepts `x-access-token:<token>` for App
-  //    installations).
+  //    installations). Also export it as GH_TOKEN so the cli
+  //    pipeline's `gh` invocations (PR fetch, comment, status check)
+  //    inherit auth without each callsite needing to wire it up.
   const workDir = await fs.mkdtemp(path.join(WORK_ROOT, `${jobId}-`));
+  process.env.GH_TOKEN = installationToken;
+  process.env.GITHUB_TOKEN = installationToken;
   try {
     const cloneUrl = `https://x-access-token:${installationToken}@github.com/${repo}.git`;
     await execFileP("git", ["clone", "--depth", "20", cloneUrl, workDir], { timeout: 90_000 });

@@ -32,7 +32,7 @@ FROM node:20-alpine AS workspace
 # git: needed by the pipeline for clone + commit + push
 # bash: many node_modules postinstall scripts assume bash
 # curl: callback to Worker uses fetch which needs system CA bundle (alpine)
-RUN apk add --no-cache git bash curl ca-certificates
+RUN apk add --no-cache git bash curl ca-certificates github-cli
 
 # pnpm at the right major version for workspace install reproducibility.
 RUN npm install -g pnpm@10
