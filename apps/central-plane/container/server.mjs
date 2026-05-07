@@ -156,8 +156,13 @@ async function runJob(payload) {
       "config", "user.email", "3620556+conclave-ai-code-council[bot]@users.noreply.github.com"
     ]);
 
-    // 4. Lazy import the pipeline so the container starts fast.
-    const pipelineUrl = new URL("file:///app/node_modules/@conclave-ai/cli/dist/autofix-pipeline.js");
+    // 4. Lazy import the pipeline. Direct monorepo path (not via
+    //    /app/node_modules/@conclave-ai/cli) — pnpm's workspace symlink
+    //    layout under .pnpm/ doesn't always expose dist at the bare
+    //    /node_modules/<pkg>/dist path inside the container. The
+    //    Dockerfile COPYs the whole `packages/` tree and `pnpm turbo`
+    //    builds cli's dist in place, so this absolute path is stable.
+    const pipelineUrl = new URL("file:///app/packages/cli/dist/autofix-pipeline.js");
     const { runAutofix } = await import(pipelineUrl.href);
 
     // 5. Build minimal AutofixArgs + AutofixDeps. Many deps default
