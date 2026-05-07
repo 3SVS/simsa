@@ -234,9 +234,38 @@ async function runJob(payload) {
     // one PR at a time so a process-wide chdir is safe here.
     process.chdir(workDir);
 
-    // 5. Build minimal AutofixArgs + AutofixDeps. Many deps default
-    //    to local-spawn implementations that work fine inside the
-    //    container.
+    // 5. Build minimal AutofixArgs + AutofixDeps.
+    //
+    // CRITICAL: defaultSpawnReview shells out to a `conclave` binary on
+    // PATH (or re-execs argv[1] if it's a conclave entry). The container
+    // image has neither — server.mjs is the entry, no global conclave
+    // bin is installed. Without this override every review subprocess
+    // ENOENTs and returns `bailed-no-patches` with verdict null, which
+    // looks identical to "council had nothing to say" downstream.
+    // Inject an in-process spawn that re-execs the cli's own bin entry.
+    const conclaveBin = "/app/packages/cli/dist/bin/conclave.js";
+    const spawnReview = async (input) => {
+      try {
+        const { stdout, stderr } = await execFileP(
+          process.execPath,
+          [conclaveBin, "review", "--pr", String(input.prNumber), "--json", "--no-notify"],
+          {
+            cwd: input.cwd,
+            maxBuffer: 20 * 1024 * 1024,
+            timeout: input.timeoutMs ?? 5 * 60 * 1000,
+            env: process.env,
+          },
+        );
+        return { stdout, stderr, code: 0 };
+      } catch (err) {
+        const e = err;
+        return {
+          stdout: e?.stdout ?? "",
+          stderr: e?.stderr ?? String(e?.message ?? err),
+          code: typeof e?.code === "number" ? e.code : 1,
+        };
+      }
+    };
     const args = {
       pr: prNumber,
       cwd: workDir,
@@ -251,8 +280,10 @@ async function runJob(payload) {
     };
     if (payload.prd) args.prd = payload.prd;
 
-    // 6. Run.
-    const { code, result } = await runAutofix(args);
+    // 6. Run. Inject our spawnReview as a dep so cli doesn't try to
+    //    shell out to a `conclave` binary that isn't on PATH inside
+    //    the container.
+    const { code, result } = await runAutofix(args, { spawnReview });
     console.log(`[job ${jobId}] runAutofix exit=${code} status=${result.status}`);
 
     // 7. Callback to Worker. Worker's /internal/job-done expects flat
@@ -260,25 +291,53 @@ async function runJob(payload) {
     //    durationMs); without repo+prNumber it 400s and the row stays
     //    in `accepted` forever. Flatten what the worker reads + keep
     //    `result` for any future deeper introspection.
-    const verdict =
+    //
+    // runAutofix has multiple result shapes:
+    //   - `{ verdict: "approve|rework|reject", reviews, ... }` (normal)
+    //   - `{ status: "approved", ... }` (fast-return when council OKs)
+    //   - `{ status: "bailed-no-patches", reason, ... }` (review fail)
+    //   - `{ status: "bailed-max-iter", ... }` (autonomy ceiling)
+    // We coerce `status` into `verdict` when verdict isn't set so the
+    // worker / PR-comment renderer always has something to show.
+    const rawVerdict =
       result && typeof result === "object" && "verdict" in result ? result.verdict : undefined;
+    const rawStatus =
+      result && typeof result === "object" && "status" in result ? result.status : undefined;
+    const verdict =
+      rawVerdict ??
+      (rawStatus === "approved"
+        ? "approve"
+        : rawStatus === "bailed-no-patches" || rawStatus === "bailed-max-iter" || rawStatus === "errored"
+          ? "rework"
+          : undefined);
     const blockers =
-      result && typeof result === "object" && Array.isArray(result.blockers)
-        ? result.blockers.length
-        : undefined;
+      result && typeof result === "object" && Array.isArray(result.remainingBlockers)
+        ? result.remainingBlockers.length
+        : result && typeof result === "object" && Array.isArray(result.blockers)
+          ? result.blockers.length
+          : undefined;
+    // Diagnostic: if neither verdict nor status came back the cli
+    // exited without producing one — ship that fact via the error
+    // channel so D1's error_message captures it (and the user sees
+    // it in the PR comment) instead of "didn't produce a verdict".
+    const noOutcome = verdict === undefined && rawStatus === undefined;
+    const diagnosticError = noOutcome
+      ? `cli returned no verdict/status. exitCode=${code}. keys=[${Object.keys(result ?? {}).join(",")}]`
+      : undefined;
     await postCallback(callbackUrl, callbackToken, {
       jobId,
       repo,
       prNumber,
-      status: "done",
+      status: noOutcome ? "errored" : "done",
       ...(verdict !== undefined ? { verdict } : {}),
       ...(blockers !== undefined ? { blockers } : {}),
+      ...(diagnosticError ? { error: diagnosticError } : {}),
       exitCode: code,
       result,
       headSha,
       durationMs: Date.now() - start,
     });
-    console.log(`[job ${jobId}] callback delivered`);
+    console.log(`[job ${jobId}] callback delivered (verdict=${verdict} status=${rawStatus})`);
   } catch (err) {
     console.error(`[job ${jobId}] failed:`, err);
     await postCallback(callbackUrl, callbackToken, {
