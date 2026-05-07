@@ -284,17 +284,31 @@ test("notifyProgress (central): network failure logged but never throws", async 
 
 test("notifyProgress: silently no-ops when no surface configured", async () => {
   // Notifier built with explicit useCentralPlane: false but no direct
-  // creds — calling notifyProgress should NOT throw.
+  // creds — calling notifyProgress should NOT throw. Task #55 — noisy
+  // stages (autofix-iter-* / autofix-blocker-*) are filtered from the
+  // chain, so probe via a non-noisy stage (review-started).
   await withEnv({ CONCLAVE_TOKEN: undefined, TELEGRAM_BOT_TOKEN: undefined, TELEGRAM_CHAT_ID: undefined }, async () => {
-    // Construction would fail in this case (constructor requires either
-    // central or direct creds). Use a stub client instead.
     const fetchFn = mockBotFetch();
     const n = new TelegramNotifier({ token: "tok", chatId: 999, fetch: fetchFn });
-    // chatId is set; this should send. We're testing that emitting
-    // unknown stage payloads doesn't crash.
-    await n.notifyProgress({ episodicId: "ep-q", stage: "autofix-iter-started", payload: { iteration: 3 } });
+    await n.notifyProgress({ episodicId: "ep-q", stage: "review-started", payload: { repo: "acme/api" } });
     assert.equal(fetchFn.calls.length, 1);
-    assert.match(fetchFn.calls[0].body.text, /Autofix iteration 3 starting/);
+    assert.match(fetchFn.calls[0].body.text, /Review starting/);
+  });
+});
+
+test("notifyProgress: Task #55 — noisy iter/blocker stages skip the chain", async () => {
+  // autofix-iter-started, autofix-iter-done, autofix-blocker-started,
+  // autofix-blocker-done are filtered before any Telegram fan-out so
+  // 3 cycles × 9 blockers worth of intermediate noise doesn't bury
+  // the per-cycle headline + terminal card.
+  await withEnv({ CONCLAVE_TOKEN: undefined, TELEGRAM_BOT_TOKEN: undefined, TELEGRAM_CHAT_ID: undefined }, async () => {
+    const fetchFn = mockBotFetch();
+    const n = new TelegramNotifier({ token: "tok", chatId: 999, fetch: fetchFn });
+    await n.notifyProgress({ episodicId: "ep-noise", stage: "autofix-iter-started", payload: { iteration: 3 } });
+    await n.notifyProgress({ episodicId: "ep-noise", stage: "autofix-iter-done", payload: { iteration: 3, fixesVerified: 2 } });
+    await n.notifyProgress({ episodicId: "ep-noise", stage: "autofix-blocker-started", payload: { blockerIndex: 1, blockerTotal: 3 } });
+    await n.notifyProgress({ episodicId: "ep-noise", stage: "autofix-blocker-done", payload: { blockerIndex: 1, blockerTotal: 3, blockerOutcome: "ready" } });
+    assert.equal(fetchFn.calls.length, 0);
   });
 });
 

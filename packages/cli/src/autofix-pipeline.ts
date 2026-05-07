@@ -45,6 +45,7 @@ import {
 } from "./lib/terminal-report.js";
 import { runSpecialHandlers } from "./lib/autofix-handlers/index.js";
 import { writeSolutionSidecar } from "./lib/solution-sidecar.js";
+import { runSmokeIfConfigured } from "./lib/smoke-runner.js";
 import { resolveKey } from "./lib/credentials.js";
 import { buildNotifiers } from "./lib/notifier-factory.js";
 import { emitProgress } from "./lib/progress-emit.js";
@@ -1483,6 +1484,16 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
     // anyIterationPushed.
     if (pushedThisRun) anyIterationPushed = true;
 
+    // v0.16.2 — closure vars for smoke-verifier signal. The smoke run
+    // happens further below after the deploy-wait poll. The values
+    // captured here flow into finalizeIteration's `notes` array so the
+    // cycle-end report can render "smoke broken: <reason>" or
+    // "ai-slop: 2 patterns found".
+    let smokeBrokenThisIter = false;
+    let smokeFailureReason = "";
+    let aiSlopHitsThisIter: Array<{ reason: string; match: string }> | undefined;
+    let smokeDiagnosisThisIter: import("@conclave-ai/failure-classifier").FailureDiagnosis | undefined;
+
     // H3 #11 — write a solution sidecar so the next review cycle can
     // attach the (blocker, patch) pairs to its EpisodicEntry. On merge,
     // recordOutcome promotes them to answer-keys with `solutionPatch`.
@@ -1568,6 +1579,52 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
             stderr(`autofix: deploy preview still pending after ${Math.round(totalMs / 60_000)}min at ${pushedSha.slice(0, 7)} — proceeding anyway\n`);
           }
         }
+
+        // v0.16.2 — post-deploy smoke verification. When the user has
+        // a `.conclave/smoke.yaml` configured, walk through Playwright
+        // steps against the live preview URL. Catches runtime
+        // regressions that pnpm build + pnpm test miss (paused
+        // backend, missing env vars, broken third-party calls).
+        // eventbadge dogfood (2026-05-07) was the smoking gun:
+        // autofix shipped a diff, build/test passed, but Supabase was
+        // paused → `TypeError: fetch failed` on every event API call.
+        // Smoke would have caught it with one `goto: /api/events/list`
+        // + `expect-status: 200`.
+        //
+        // Skipped silently when:
+        //   - no .conclave/smoke.yaml present (opt-in)
+        //   - playwright not installed
+        //   - deploy preview URL not resolvable
+        //
+        // When smoke fails, we DO NOT bail the iteration — the
+        // committed fix is real. We tag the iteration with a
+        // "smoke-broken: <reason>" note so the cycle-end report can
+        // surface it. The next review (cycle N+1) will still re-run
+        // the council; if smoke broke things, the next review's
+        // verdict reflects that.
+        if (status === "success" && repo) {
+          try {
+            const previewUrl = await fetchPreviewUrl(repo, pushedSha).catch(() => null);
+            if (previewUrl) {
+              const smokeSummary = await runSmokeIfConfigured(args.cwd, previewUrl, stdout);
+              if (smokeSummary) {
+                if (smokeSummary.outcome === "broken") {
+                  smokeBrokenThisIter = true;
+                  smokeFailureReason = smokeSummary.result.steps
+                    .find((s) => s.status === "fail")?.reason ?? "unknown";
+                }
+                if (smokeSummary.aiSlopHits && smokeSummary.aiSlopHits.length > 0) {
+                  aiSlopHitsThisIter = smokeSummary.aiSlopHits;
+                }
+                if (smokeSummary.diagnosis) {
+                  smokeDiagnosisThisIter = smokeSummary.diagnosis;
+                }
+              }
+            }
+          } catch (err) {
+            stderr(`autofix: smoke verification error (non-fatal) — ${(err as Error).message}\n`);
+          }
+        }
       }
     }
 
@@ -1575,11 +1632,25 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
       finalizeIteration(
         i,
         fixes,
-        true,
+        // verified === true means build + tests passed AND smoke didn't
+        // signal a regression. If smoke broke, we still pushed the fix
+        // (committed code is real) but we surface the regression in
+        // the note list so the cycle-end report shows the problem.
+        !smokeBrokenThisIter,
         [
           `committed:${committedFixes.length}`,
           ...(stillReadyHandlerStaged.length > 0
             ? [`handler-staged:${stillReadyHandlerStaged.length}`]
+            : []),
+          ...(smokeBrokenThisIter ? [`smoke-broken: ${smokeFailureReason.slice(0, 200)}`] : []),
+          ...(smokeDiagnosisThisIter
+            ? [
+                `diagnosis: ${smokeDiagnosisThisIter.likelyCause} (${smokeDiagnosisThisIter.category}, conf ${smokeDiagnosisThisIter.confidence.toFixed(2)})`,
+                ...smokeDiagnosisThisIter.userActions.slice(0, 2).map((a) => `action: ${a.step}`),
+              ]
+            : []),
+          ...(aiSlopHitsThisIter && aiSlopHitsThisIter.length > 0
+            ? [`ai-slop: ${aiSlopHitsThisIter.length} pattern(s) on deployed page`]
             : []),
         ],
         {

@@ -30,3 +30,27 @@ enabled = true
 # Worst-case window of inert action buttons = 10 min.
 [triggers]
 crons = ["*/10 * * * *"]
+
+# v0.16.2 — Conclave AI sandbox container.
+#
+# Runs the autofix-pipeline in an isolated Node 20 container per /saas/review
+# or /saas/autofix request. The Worker spawns one instance per PR (named
+# slug pr-<repo>-<prNumber>) so concurrent requests don't collide.
+#
+# Image is built from apps/central-plane/container/Dockerfile in CI by the
+# deploy-central-plane.yml workflow (Bae's CF API token must be set in
+# repo secrets for the workflow to push the image).
+#
+# CF Containers Paid plan required ($5/mo) — already provisioned.
+[[containers]]
+class_name = "ConclaveSandbox"
+image = "./container/Dockerfile"
+max_instances = 10
+
+[[durable_objects.bindings]]
+class_name = "ConclaveSandbox"
+name = "SANDBOX"
+
+[[migrations]]
+tag = "v1-sandbox"
+new_sqlite_classes = ["ConclaveSandbox"]

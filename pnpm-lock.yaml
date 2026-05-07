@@ -20,6 +20,9 @@ importers:
 
   apps/central-plane:
     dependencies:
+      '@cloudflare/containers':
+        specifier: ^0.0.30
+        version: 0.0.30
       '@conclave-ai/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -194,6 +197,9 @@ importers:
       '@conclave-ai/core':
         specifier: workspace:*
         version: link:../core
+      '@conclave-ai/failure-classifier':
+        specifier: workspace:*
+        version: link:../failure-classifier
       '@conclave-ai/integration-discord':
         specifier: workspace:*
         version: link:../integration-discord
@@ -233,6 +239,9 @@ importers:
       '@conclave-ai/secret-guard':
         specifier: workspace:*
         version: link:../secret-guard
+      '@conclave-ai/smoke-verifier':
+        specifier: workspace:*
+        version: link:../smoke-verifier
       '@conclave-ai/visual-review':
         specifier: workspace:*
         version: link:../visual-review
@@ -255,6 +264,16 @@ importers:
       zod:
         specifier: ^3.24.0
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/failure-classifier:
+    dependencies:
+      '@conclave-ai/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -465,6 +484,9 @@ packages:
   '@babel/runtime@7.29.2':
     resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
+
+  '@cloudflare/containers@0.0.30':
+    resolution: {integrity: sha512-i148xBgmyn/pje82ZIyuTr/Ae0BT/YWwa1/GTJcw6DxEjUHAzZLaBCiX446U9OeuJ2rBh/L/9FIzxX5iYNt1AQ==}
 
   '@cloudflare/kv-asset-handler@0.4.2':
     resolution: {integrity: sha512-SIOD2DxrRRwQ+jgzlXCqoEFiKOFqaPjhnNTGKXSRLvp1HiOvapLaFG2kEr9dYQTYe8rKrd9uvDUzmAITeNyaHQ==}
@@ -2074,6 +2096,8 @@ snapshots:
   '@babel/helper-validator-identifier@7.28.5': {}
 
   '@babel/runtime@7.29.2': {}
+
+  '@cloudflare/containers@0.0.30': {}
 
   '@cloudflare/kv-asset-handler@0.4.2': {}
 

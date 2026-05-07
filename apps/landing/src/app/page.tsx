@@ -19,6 +19,7 @@
  * (we don't have any yet — fabricating those is the worst kind of lie).
  */
 import { Logo, LogoIcon, Wordmark as WordmarkComponent } from "../components/Logo";
+import { DemoForm } from "../components/DemoForm";
 
 const CLI_ENDPOINT = process.env.NEXT_PUBLIC_API_BASE ?? "https://conclave-ai.seunghunbae.workers.dev";
 const SITE_URL = "https://conclave-ai.dev";
@@ -33,6 +34,7 @@ export default function Home() {
         <Hero />
         <HowItWorks />
         <CouncilEvidence />
+        <DemoForm />
         <Pricing />
         <FAQ />
       </main>
@@ -52,6 +54,7 @@ function TopBar() {
         </a>
         <nav className="flex items-center gap-6 text-sm text-neutral-700">
           <a href="#how" className="hover:text-accent-900">How</a>
+          <a href="#try" className="hover:text-accent-900">Try it</a>
           <a href="#pricing" className="hover:text-accent-900">Pricing</a>
           <a href="#faq" className="hover:text-accent-900">FAQ</a>
           <a

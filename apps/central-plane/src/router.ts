@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import type { Env } from "./env.js";
+// v0.16.2 — Container DO class is re-exported from src/index.ts (which
+// wrangler bundles). Importing it here would force `@cloudflare/containers`
+// (which uses extensionless imports + the `cloudflare:workers` runtime
+// module) into every node --test consumer of `createApp`. Keep this module
+// dependency-free of the Workers-only chain.
 import { healthRoutes } from "./routes/health.js";
 import { registerRoutes } from "./routes/register.js";
 import { episodicRoutes } from "./routes/episodic.js";
@@ -11,6 +16,7 @@ import { createReviewRoutes } from "./routes/review.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { createSaasAuthRoutes } from "./routes/saas-auth.js";
 import { createSaasRoutes } from "./routes/saas.js";
+import { createDemoRoutes } from "./routes/demo.js";
 import type { FetchLike } from "./github.js";
 
 /**
@@ -50,6 +56,9 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // /saas/autofix, /saas/me (saas.ts).
   app.route("/", createSaasAuthRoutes());
   app.route("/", createSaasRoutes());
+  // Tasks #51 — landing demo (no-auth, IP rate-limited). Single Claude
+  // pass with optional PRD; designed to convert landing visitors.
+  app.route("/", createDemoRoutes());
   app.onError((err, c) => {
     console.error("central-plane error:", err);
     return c.json({ error: err.message || "internal error" }, 500);

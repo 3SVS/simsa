@@ -40,4 +40,9 @@ export default {
 };
 
 export { createApp } from "./router.js";
+// v0.16.2 — wrangler discovers the Durable Object class via the main
+// entry's exports. Imported here directly (not via router.ts) so node
+// --test consumers of router.ts don't transitively pull in the Workers-
+// only `@cloudflare/containers` runtime imports.
+export { ConclaveSandbox } from "./container.js";
 export type { Env } from "./env.js";

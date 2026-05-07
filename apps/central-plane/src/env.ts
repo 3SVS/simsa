@@ -68,4 +68,32 @@ export interface Env {
   GH_APP_CLIENT_SECRET?: string;
   GH_APP_WEBHOOK_SECRET?: string;
   GH_APP_PRIVATE_KEY?: string;
+  /**
+   * v0.16.2 — Cloudflare Container binding (apps/central-plane/container/).
+   * Spawned per /saas/review + /saas/autofix request. The Worker calls
+   *   c.env.SANDBOX.idFromName(`pr-${repo}-${prNumber}`).get().fetch(...)
+   * to forward the job into a Node 20 container running runAutofix.
+   */
+  SANDBOX?: DurableObjectNamespace;
+  /**
+   * v0.16.2 — bearer token the container uses when calling back to
+   * /internal/job-done. Random per deploy. Set via `wrangler secret put
+   * INTERNAL_CALLBACK_TOKEN`. Without it /internal/job-done refuses calls.
+   */
+  INTERNAL_CALLBACK_TOKEN?: string;
+  /**
+   * v0.16.2 — LLM keys forwarded into the container as env vars on
+   * spawn. The container needs them to call the council agents +
+   * worker model. Set via `wrangler secret put`.
+   */
+  ANTHROPIC_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  /**
+   * Tasks #51 — per-deploy salt mixed into the IP hash for the
+   * /saas/demo/review rate-limit table. Rotate to invalidate all
+   * demo rate-limit rows. Optional — defaults to a fixed string when
+   * unset (still hashed, just predictable).
+   */
+  DEMO_RATE_SALT?: string;
 }

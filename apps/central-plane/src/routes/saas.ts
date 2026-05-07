@@ -25,13 +25,109 @@
 import { Hono } from "hono";
 import type { Env } from "../env.js";
 import {
+  completeJob,
+  createJob,
   findInstallationByRepoSlug,
+  findJob,
   findUserByToken,
   recordMeter,
 } from "../db/saas.js";
+import { getInstallationToken } from "../gh-app.js";
 
-const PIPELINE_PENDING_NOTE =
-  "Container worker not yet provisioned. The job is recorded; pipeline execution lands in the next deploy.";
+const SANDBOX_NOT_BOUND_NOTE =
+  "Sandbox container binding not yet provisioned on this Worker. The job is recorded; pipeline runs in the next deploy.";
+
+/**
+ * Spawn the sandbox container for a single PR + run the pipeline.
+ *
+ * Returns immediately when the container accepts the job (202). The
+ * actual work happens async; the container POSTs back to
+ * /internal/job-done when finished.
+ *
+ * On any setup error (no installation token, container binding
+ * missing, container ack timeout), the job is logged as accepted but
+ * the user gets a clear hint in the response.
+ */
+async function spawnSandbox(
+  env: Env,
+  args: {
+    jobId: string;
+    repo: string;
+    prNumber: number;
+    prd?: string;
+    autofix: boolean;
+    reworkCycle?: number;
+    publicBaseUrl: string;
+  },
+): Promise<{ accepted: boolean; reason?: string }> {
+  if (!env.SANDBOX) {
+    return { accepted: false, reason: SANDBOX_NOT_BOUND_NOTE };
+  }
+  if (!env.INTERNAL_CALLBACK_TOKEN) {
+    return {
+      accepted: false,
+      reason: "INTERNAL_CALLBACK_TOKEN secret not set — container can't authenticate the callback",
+    };
+  }
+
+  // Installation token is only valid for ~60 minutes; mint fresh per
+  // job. The container handles clone + push with this token.
+  const inst = await findInstallationByRepoSlug(env, args.repo);
+  if (!inst) {
+    return { accepted: false, reason: "GitHub App not installed on this owner" };
+  }
+  let installationToken: string;
+  try {
+    const tokenInfo = await getInstallationToken(env, inst.installationId);
+    installationToken = tokenInfo.token;
+  } catch (err) {
+    return { accepted: false, reason: `installation token mint failed: ${(err as Error).message}` };
+  }
+
+  // One container instance per PR — keeps concurrent autofix calls on
+  // the same PR ordered + isolated. CF Container DO routing handles
+  // the queue.
+  const containerName = `pr-${args.repo.replace("/", "-")}-${args.prNumber}`;
+  const id = env.SANDBOX.idFromName(containerName);
+  const stub = env.SANDBOX.get(id);
+
+  const payload = {
+    jobId: args.jobId,
+    repo: args.repo,
+    prNumber: args.prNumber,
+    installationToken,
+    autofix: args.autofix,
+    reworkCycle: args.reworkCycle ?? 0,
+    callbackUrl: `${args.publicBaseUrl.replace(/\/+$/, "")}/internal/job-done`,
+    callbackToken: env.INTERNAL_CALLBACK_TOKEN,
+    ...(args.prd ? { prd: args.prd } : {}),
+  };
+
+  // Forward LLM keys via env so the container's pipeline can call
+  // Anthropic / OpenAI / Gemini. The container reads these from
+  // process.env at runtime.
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (env.ANTHROPIC_API_KEY) headers["x-anthropic-key"] = env.ANTHROPIC_API_KEY;
+  if (env.OPENAI_API_KEY) headers["x-openai-key"] = env.OPENAI_API_KEY;
+  if (env.GEMINI_API_KEY) headers["x-gemini-key"] = env.GEMINI_API_KEY;
+
+  try {
+    const r = await stub.fetch("http://sandbox/run", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const tail = await r.text();
+      return { accepted: false, reason: `container returned ${r.status}: ${tail.slice(0, 200)}` };
+    }
+    return { accepted: true };
+  } catch (err) {
+    return { accepted: false, reason: `container fetch failed: ${(err as Error).message}` };
+  }
+}
 
 export function createSaasRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
@@ -71,13 +167,41 @@ export function createSaasRoutes(): Hono<{ Bindings: Env }> {
       quantity: 1,
       repoSlug: body.repo,
     });
+    await createJob(c.env, {
+      jobId,
+      userId: user.id,
+      repoSlug: body.repo,
+      prNumber: body.pr_number,
+      kind: "review",
+      prdPresent: Boolean(body.prd),
+    }).catch(() => undefined);
 
-    // TODO Stage 2: spawn container, kick off pipeline, deliver result.
+    const publicBaseUrl = c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
+    const spawnArgs: Parameters<typeof spawnSandbox>[1] = {
+      jobId,
+      repo: body.repo,
+      prNumber: body.pr_number,
+      autofix: false,
+      publicBaseUrl,
+    };
+    if (body.prd) spawnArgs.prd = body.prd;
+    const spawn = await spawnSandbox(c.env, spawnArgs);
+    if (!spawn.accepted) {
+      return c.json(
+        {
+          job_id: jobId,
+          status: "queued_pending_infra",
+          note: spawn.reason,
+        },
+        202,
+      );
+    }
+
     return c.json(
       {
         job_id: jobId,
         status: "accepted",
-        note: PIPELINE_PENDING_NOTE,
+        note: "Council review running in sandbox. Result delivered via PR comment + Telegram (if linked).",
       },
       202,
     );
@@ -116,16 +240,146 @@ export function createSaasRoutes(): Hono<{ Bindings: Env }> {
       quantity: 1,
       repoSlug: body.repo,
     });
+    await createJob(c.env, {
+      jobId,
+      userId: user.id,
+      repoSlug: body.repo,
+      prNumber: body.pr_number,
+      kind: "autofix",
+      prdPresent: Boolean(body.prd),
+    }).catch(() => undefined);
 
-    // TODO Stage 2: spawn container, run pipeline with autofix flag.
+    const publicBaseUrl = c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
+    const spawnArgs: Parameters<typeof spawnSandbox>[1] = {
+      jobId,
+      repo: body.repo,
+      prNumber: body.pr_number,
+      autofix: true,
+      publicBaseUrl,
+    };
+    if (body.prd) spawnArgs.prd = body.prd;
+    const spawn = await spawnSandbox(c.env, spawnArgs);
+    if (!spawn.accepted) {
+      return c.json(
+        {
+          job_id: jobId,
+          status: "queued_pending_infra",
+          note: spawn.reason,
+        },
+        202,
+      );
+    }
+
     return c.json(
       {
         job_id: jobId,
         status: "accepted",
-        note: PIPELINE_PENDING_NOTE,
+        note: "Autofix pipeline running in sandbox. Up to 3 rework cycles. Result delivered via PR comment + Telegram (if linked).",
       },
       202,
     );
+  });
+
+  // POST /internal/job-done — sandbox container's callback endpoint.
+  //
+  // Auth: Bearer <INTERNAL_CALLBACK_TOKEN> — random per deploy, never
+  // leaves the Worker except as part of the spawn payload. The
+  // container holds it for the lifetime of the job.
+  //
+  // Body: { jobId, repo, prNumber, verdict, blockers, cycles, durationMs,
+  //         error?, smokeOutcome?, deployUrl? }
+  //
+  // Side effects: writes a usage_meters row recording the completion +
+  // updates jobs table (when migration 0010 is applied). Telegram +
+  // PR-comment delivery already happens inside the pipeline running
+  // in the container, so this endpoint is purely accounting.
+  app.post("/internal/job-done", async (c) => {
+    const expected = c.env.INTERNAL_CALLBACK_TOKEN;
+    if (!expected) {
+      return c.json({ error: "callback_disabled" }, 503);
+    }
+    const auth = c.req.header("authorization") ?? c.req.header("Authorization") ?? "";
+    const m = /^Bearer\s+(.+)$/i.exec(auth);
+    if (!m || m[1] !== expected) {
+      return c.json({ error: "unauthorized" }, 401);
+    }
+
+    const body = (await c.req.json().catch(() => null)) as
+      | {
+          jobId?: string;
+          repo?: string;
+          prNumber?: number;
+          verdict?: string;
+          blockers?: number;
+          cycles?: number;
+          durationMs?: number;
+          error?: string;
+          smokeOutcome?: "ok" | "broken" | "skipped";
+          deployUrl?: string;
+        }
+      | null;
+    if (!body || !body.jobId || !body.repo || typeof body.prNumber !== "number") {
+      return c.json({ error: "invalid_request" }, 400);
+    }
+
+    const status: "done" | "failed" =
+      body.error || body.verdict === "reject" ? "failed" : "done";
+
+    const completeArgs: Parameters<typeof completeJob>[1] = {
+      jobId: body.jobId,
+      status,
+    };
+    if (body.verdict !== undefined) completeArgs.verdict = body.verdict;
+    if (body.blockers !== undefined) completeArgs.blockers = body.blockers;
+    if (body.cycles !== undefined) completeArgs.cycles = body.cycles;
+    if (body.durationMs !== undefined) completeArgs.durationMs = body.durationMs;
+    if (body.smokeOutcome !== undefined) completeArgs.smokeOutcome = body.smokeOutcome;
+    if (body.deployUrl !== undefined) completeArgs.deployUrl = body.deployUrl;
+    if (body.error !== undefined) completeArgs.errorMessage = body.error;
+
+    await completeJob(c.env, completeArgs).catch(() => undefined);
+
+    // Best-effort tally row so usage_meters has a completion signal even
+    // when the jobs row was lost (cold-start race with migration apply).
+    const job = await findJob(c.env, body.jobId);
+    if (job) {
+      await recordMeter(c.env, {
+        userId: job.userId,
+        meterName: "job.completed",
+        quantity: 1,
+        repoSlug: body.repo,
+      }).catch(() => undefined);
+    }
+
+    return c.json({ ok: true });
+  });
+
+  // GET /saas/jobs/:id — poll job status. CLI uses this so `conclave
+  // review --pr N --use-saas` can stream progress without webhooks.
+  app.get("/saas/jobs/:id", async (c) => {
+    const auth = await requireAuth(c);
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+    const { user } = auth;
+    const id = c.req.param("id");
+    const job = await findJob(c.env, id);
+    if (!job) return c.json({ error: "not_found" }, 404);
+    if (job.userId !== user.id) return c.json({ error: "forbidden" }, 403);
+    return c.json({
+      id: job.id,
+      kind: job.kind,
+      status: job.status,
+      repo: job.repoSlug,
+      pr_number: job.prNumber,
+      verdict: job.verdict,
+      blockers: job.blockers,
+      cycles: job.cycles,
+      duration_ms: job.durationMs,
+      smoke_outcome: job.smokeOutcome,
+      deploy_url: job.deployUrl,
+      error: job.errorMessage,
+      created_at: job.createdAt,
+      completed_at: job.completedAt,
+    });
   });
 
   // Convenience: GET /saas/me — returns the authenticated user. CLI uses

@@ -45,6 +45,18 @@ export interface TerminalReportPayload {
   machineFixableItems: string[];
   deployOutcome: DeployOutcome;
   recommendation: Recommendation;
+  /** Task #54 — per-iteration breakdown for the user-facing card. One
+   * entry per autofix iteration in THIS cycle: `iter` is the 1-indexed
+   * iteration number, `applied` is the count of ready patches the cycle
+   * tried to apply, `verified` is whether build+tests passed end-to-end.
+   * Renderer shows it as "사이클 N · 시도 X · 적용 Y · 검증 ✓/✗". */
+  iterationHistory: Array<{
+    iter: number;
+    applied: number;
+    verified: boolean;
+    buildOk?: boolean;
+    testsOk?: boolean;
+  }>;
 }
 
 /**
@@ -346,6 +358,16 @@ export function buildTerminalReport(input: TerminalReportInput): TerminalReportP
     machineFixableItems,
     deployOutcome: input.deployOutcome,
     recommendation,
+    iterationHistory: input.iterations.map((it) => {
+      const entry: TerminalReportPayload["iterationHistory"][number] = {
+        iter: it.index,
+        applied: it.appliedCount,
+        verified: it.verified,
+      };
+      if (it.buildOk !== undefined) entry.buildOk = it.buildOk;
+      if (it.testsOk !== undefined) entry.testsOk = it.testsOk;
+      return entry;
+    }),
   };
 }
 
