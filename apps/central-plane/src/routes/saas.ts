@@ -26,6 +26,7 @@ import { Hono } from "hono";
 import type { Env } from "../env.js";
 import {
   completeJob,
+  consumeReviewCredit,
   createJob,
   findInstallationByRepoSlug,
   findJob,
@@ -48,7 +49,7 @@ const SANDBOX_NOT_BOUND_NOTE =
  * missing, container ack timeout), the job is logged as accepted but
  * the user gets a clear hint in the response.
  */
-async function spawnSandbox(
+export async function spawnSandbox(
   env: Env,
   args: {
     jobId: string;
@@ -160,10 +161,25 @@ export function createSaasRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ error: "app_suspended" }, 403);
     }
 
+    // Credit gate. Order: byo (free) → trial (1× free) → paid_credits.
+    // 402 means the user must top up before retrying.
+    const billed = await consumeReviewCredit(c.env, user.id);
+    if (billed === null) {
+      return c.json(
+        {
+          error: "credits_exhausted",
+          error_description:
+            "Your free trial has been used and you have no paid credits left. Top up to continue.",
+          buy_credits_url: `${c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin}/billing`,
+        },
+        402,
+      );
+    }
+
     const jobId = `job_${Math.floor(Date.now()).toString(36)}_${randHex(8)}`;
     await recordMeter(c.env, {
       userId: user.id,
-      meterName: "review.requested",
+      meterName: `review.requested.${billed}`,
       quantity: 1,
       repoSlug: body.repo,
     });

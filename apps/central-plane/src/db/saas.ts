@@ -14,6 +14,8 @@ export interface SaasUser {
   tier: "free" | "solo" | "pro";
   byoAnthropic: boolean;
   dataShareOptIn: boolean;
+  trialUsed: boolean;
+  paidCredits: number;
   createdAt: string;
   lastActiveAt: string;
 }
@@ -59,7 +61,8 @@ export async function findUserByGithubId(
 ): Promise<SaasUser | null> {
   const r = await env.DB.prepare(
     `SELECT id, github_user_id, github_login, email, tier,
-            byo_anthropic, data_share_opt_in, created_at, last_active_at
+            byo_anthropic, data_share_opt_in, trial_used, paid_credits,
+            created_at, last_active_at
        FROM saas_users WHERE github_user_id = ?`,
   )
     .bind(githubUserId)
@@ -70,7 +73,8 @@ export async function findUserByGithubId(
 export async function findUserById(env: Env, id: string): Promise<SaasUser | null> {
   const r = await env.DB.prepare(
     `SELECT id, github_user_id, github_login, email, tier,
-            byo_anthropic, data_share_opt_in, created_at, last_active_at
+            byo_anthropic, data_share_opt_in, trial_used, paid_credits,
+            created_at, last_active_at
        FROM saas_users WHERE id = ?`,
   )
     .bind(id)
@@ -108,6 +112,8 @@ export async function upsertUser(
     tier: "free",
     byoAnthropic: false,
     dataShareOptIn: true,
+    trialUsed: false,
+    paidCredits: 0,
     createdAt: now,
     lastActiveAt: now,
   };
@@ -150,7 +156,7 @@ export async function findUserByToken(
   const r = await env.DB.prepare(
     `SELECT t.id AS token_id, t.revoked_at, u.id, u.github_user_id, u.github_login,
             u.email, u.tier, u.byo_anthropic, u.data_share_opt_in,
-            u.created_at, u.last_active_at
+            u.trial_used, u.paid_credits, u.created_at, u.last_active_at
        FROM saas_tokens t JOIN saas_users u ON u.id = t.user_id
       WHERE t.token_hash = ?`,
   )
@@ -165,6 +171,8 @@ export async function findUserByToken(
       tier: string;
       byo_anthropic: number;
       data_share_opt_in: number;
+      trial_used: number;
+      paid_credits: number;
       created_at: string;
       last_active_at: string;
     }>();
@@ -186,10 +194,75 @@ export async function findUserByToken(
       tier: (r.tier === "solo" || r.tier === "pro") ? r.tier : "free",
       byoAnthropic: r.byo_anthropic === 1,
       dataShareOptIn: r.data_share_opt_in === 1,
+      trialUsed: (r.trial_used ?? 0) === 1,
+      paidCredits: Number(r.paid_credits ?? 0),
       createdAt: r.created_at,
       lastActiveAt: r.last_active_at,
     },
   };
+}
+
+// --- credit gate ---------------------------------------------------------
+
+/**
+ * Try to consume a review credit for `userId`. Returns the source
+ * the credit was billed to so callers can include it in usage_meters
+ * + tell the user.
+ *
+ * Order:
+ *   1. byo_anthropic=1 → "byo" (no charge — they bring their own key)
+ *   2. trial_used=0 → mark trial used, return "trial"
+ *   3. paid_credits > 0 → decrement, return "paid"
+ *   4. otherwise → null (caller should refuse with 402)
+ *
+ * Atomicity: D1 doesn't expose serializable transactions inside a
+ * Worker, but each branch is a single UPDATE that decrements a column,
+ * so concurrent requests for the same user race only on the count
+ * rather than corrupting state. Worst case: two parallel reviews both
+ * read paid_credits=1 and both succeed (i.e., we eat one review). Real
+ * fix when usage scales: move to a dedicated balance ledger.
+ */
+export async function consumeReviewCredit(
+  env: Env,
+  userId: string,
+): Promise<"byo" | "trial" | "paid" | null> {
+  const u = await findUserById(env, userId);
+  if (!u) return null;
+  if (u.byoAnthropic) return "byo";
+  if (!u.trialUsed) {
+    await env.DB.prepare(`UPDATE saas_users SET trial_used = 1, last_active_at = ? WHERE id = ?`)
+      .bind(new Date().toISOString(), userId)
+      .run();
+    return "trial";
+  }
+  if (u.paidCredits > 0) {
+    const r = await env.DB.prepare(
+      `UPDATE saas_users SET paid_credits = paid_credits - 1, last_active_at = ?
+        WHERE id = ? AND paid_credits > 0`,
+    )
+      .bind(new Date().toISOString(), userId)
+      .run();
+    if (r.success && (r.meta?.changes ?? 0) > 0) return "paid";
+    return null;
+  }
+  return null;
+}
+
+/** Look up a user by their GitHub login (case-insensitive). Used by the
+ *  webhook auto-trigger to map `installation.account.login` → saas_users. */
+export async function findUserByGithubLogin(
+  env: Env,
+  githubLogin: string,
+): Promise<SaasUser | null> {
+  const r = await env.DB.prepare(
+    `SELECT id, github_user_id, github_login, email, tier,
+            byo_anthropic, data_share_opt_in, trial_used, paid_credits,
+            created_at, last_active_at
+       FROM saas_users WHERE github_login = ? COLLATE NOCASE`,
+  )
+    .bind(githubLogin)
+    .first();
+  return r ? rowToUser(r) : null;
 }
 
 export async function revokeToken(env: Env, tokenId: string): Promise<void> {
@@ -321,6 +394,40 @@ export async function removeInstallation(env: Env, installationId: number): Prom
   const now = new Date().toISOString();
   await env.DB.prepare(`UPDATE gh_app_installations SET removed_at = ? WHERE installation_id = ?`)
     .bind(now, installationId)
+    .run();
+}
+
+/** Look up an installation by its installation_id. Used by the
+ *  pull_request webhook to find the linked saas_user before spawning
+ *  the auto-review job. */
+export async function findInstallationById(
+  env: Env,
+  installationId: number,
+): Promise<GhAppInstallation | null> {
+  const r = await env.DB.prepare(
+    `SELECT installation_id, account_login, account_id, target_type,
+            repo_selection, selected_repo_ids, saas_user_id,
+            installed_at, suspended_at, removed_at
+       FROM gh_app_installations
+      WHERE installation_id = ? AND removed_at IS NULL`,
+  )
+    .bind(installationId)
+    .first();
+  return r ? rowToInstallation(r) : null;
+}
+
+/** Link an installation row to a saas_users row. Called after
+ *  upsertUser during the `installation: created` webhook so PR-event
+ *  triggers (which only have installation_id) can find the user. */
+export async function linkInstallationUser(
+  env: Env,
+  installationId: number,
+  saasUserId: string,
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE gh_app_installations SET saas_user_id = ? WHERE installation_id = ?`,
+  )
+    .bind(saasUserId, installationId)
     .run();
 }
 
@@ -511,6 +618,8 @@ function rowToUser(r: any): SaasUser {
     tier: (r.tier === "solo" || r.tier === "pro") ? r.tier : "free",
     byoAnthropic: r.byo_anthropic === 1,
     dataShareOptIn: r.data_share_opt_in === 1,
+    trialUsed: (r.trial_used ?? 0) === 1,
+    paidCredits: Number(r.paid_credits ?? 0),
     createdAt: r.created_at,
     lastActiveAt: r.last_active_at,
   };

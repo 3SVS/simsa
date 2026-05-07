@@ -25,10 +25,15 @@ import { Hono } from "hono";
 import type { Env } from "../env.js";
 import {
   approveDeviceCode,
+  consumeReviewCredit,
   createDeviceCode,
+  createJob,
   findDeviceCode,
+  findInstallationById,
   findUserByToken,
   issueToken,
+  linkInstallationUser,
+  recordMeter,
   removeInstallation,
   revokeToken,
   suspendInstallation,
@@ -41,6 +46,7 @@ import {
   getAuthedUser,
   verifyWebhookSignature,
 } from "../gh-app.js";
+import { spawnSandbox } from "./saas.js";
 
 export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
@@ -93,7 +99,21 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
           repoSelection,
           selectedRepoIds: ids,
         });
-        console.log(`[webhook] install ${installationId} created (${accountLogin}/${repoSelection})`);
+        // Auto-register the installer as a saas_user. This is the "no
+        // CLI required" sign-up path: clicking Install on the GH App
+        // page is the entire onboard. Trial credit is granted
+        // automatically (consumeReviewCredit's first call returns "trial").
+        if (accountLogin && accountId) {
+          const user = await upsertUser(env, {
+            githubUserId: accountId,
+            githubLogin: accountLogin,
+            email: null,
+          });
+          await linkInstallationUser(env, installationId, user.id);
+          console.log(`[webhook] install ${installationId} → user ${user.id} (${accountLogin})`);
+        } else {
+          console.log(`[webhook] install ${installationId} created (no account info)`);
+        }
       } else if (action === "deleted") {
         await removeInstallation(env, installationId);
         console.log(`[webhook] install ${installationId} deleted`);
@@ -105,12 +125,73 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: true, event, action, delivery });
     }
 
-    // pull_request events trigger the SaaS pipeline. Stage-4 wires the
-    // actual /saas/review invocation here. For now we acknowledge.
+    // pull_request events trigger the SaaS pipeline. We auto-spawn a
+    // review on opened/reopened/synchronize (the head SHA changed).
+    // Other actions (closed/labeled/etc.) are acknowledged but skipped.
     if (event === "pull_request") {
-      console.log(`[webhook] pull_request ${action} delivery=${delivery}`);
-      // TODO Stage 4: enqueue review job + spawn container
-      return c.json({ ok: true, event, action, delivery, note: "pipeline wiring pending" });
+      const reviewable = action === "opened" || action === "reopened" || action === "synchronize";
+      if (!reviewable) {
+        return c.json({ ok: true, event, action, delivery, skipped: "non_reviewable_action" });
+      }
+      const pr = (p["pull_request"] ?? {}) as Record<string, unknown>;
+      const repo = (p["repository"] ?? {}) as Record<string, unknown>;
+      const inst = (p["installation"] ?? {}) as Record<string, unknown>;
+      const title = String(pr["title"] ?? "");
+      const body = String(pr["body"] ?? "");
+      // Honor [skip conclave] in title or body — same magic word the
+      // BYO-key workflow respects, so users get one consistent escape hatch.
+      if (/\[skip conclave\]/i.test(title) || /\[skip conclave\]/i.test(body)) {
+        return c.json({ ok: true, event, action, delivery, skipped: "skip_conclave" });
+      }
+      const prNumber = Number(pr["number"]);
+      const repoSlug = String(repo["full_name"] ?? "");
+      const installationId = Number(inst["id"]);
+      if (!prNumber || !repoSlug || !installationId) {
+        return c.json({ ok: true, event, action, delivery, skipped: "missing_fields" });
+      }
+      const installRow = await findInstallationById(env, installationId);
+      if (!installRow || !installRow.saasUserId) {
+        // Race: PR event arrived before installation→user link finished.
+        // Acknowledge so GitHub doesn't retry forever; the next push to
+        // the PR will re-trigger.
+        return c.json({ ok: true, event, action, delivery, skipped: "user_not_linked" });
+      }
+      const billed = await consumeReviewCredit(env, installRow.saasUserId);
+      if (billed === null) {
+        return c.json({ ok: true, event, action, delivery, skipped: "credits_exhausted" });
+      }
+      const jobId = `job_${Math.floor(Date.now()).toString(36)}_${randHexLocal(8)}`;
+      await createJob(env, {
+        jobId,
+        userId: installRow.saasUserId,
+        repoSlug,
+        prNumber,
+        kind: "review",
+        prdPresent: false,
+      }).catch(() => undefined);
+      await recordMeter(env, {
+        userId: installRow.saasUserId,
+        meterName: `review.requested.${billed}.webhook`,
+        quantity: 1,
+        repoSlug,
+      }).catch(() => undefined);
+      const publicBaseUrl = env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
+      const spawn = await spawnSandbox(env, {
+        jobId,
+        repo: repoSlug,
+        prNumber,
+        autofix: false,
+        publicBaseUrl,
+      });
+      return c.json({
+        ok: true,
+        event,
+        action,
+        delivery,
+        jobId,
+        billed,
+        spawn: spawn.accepted ? "accepted" : (spawn.reason ?? "queued"),
+      });
     }
 
     // pull_request_review, push, etc. — ack for now.
@@ -277,4 +358,10 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function randHexLocal(n: number): string {
+  const buf = new Uint8Array(n);
+  crypto.getRandomValues(buf);
+  return [...buf].map((b) => b.toString(16).padStart(2, "0")).join("");
 }

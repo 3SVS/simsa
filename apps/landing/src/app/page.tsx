@@ -24,7 +24,11 @@ import { DemoForm } from "../components/DemoForm";
 const CLI_ENDPOINT = process.env.NEXT_PUBLIC_API_BASE ?? "https://conclave-ai.seunghunbae.workers.dev";
 const SITE_URL = "https://conclave-ai.dev";
 
-const LOGIN_URL = `${CLI_ENDPOINT}/auth/device`;
+// Primary onboarding: GitHub App install URL. Clicking sends users to
+// GitHub's repo-picker; on completion the install webhook auto-registers
+// the saas_users row and PR events thereafter trigger reviews
+// automatically. No CLI, no token, no key management required.
+const LOGIN_URL = "https://github.com/apps/conclave-ai-code-council/installations/new";
 
 export default function Home() {
   return (
@@ -97,7 +101,7 @@ function Hero() {
         </div>
 
         <p className="mt-6 text-sm text-neutral-500">
-          Open beta · BYO Anthropic key for free unlimited usage · Trial: 5 reviews/month, no card
+          Open beta · 1 free review on install · BYO Anthropic key = unlimited free · Solo $19/mo
         </p>
       </div>
     </section>
@@ -123,7 +127,7 @@ function SignInButton() {
       href={LOGIN_URL}
       className="rounded-md bg-accent-900 hover:bg-accent-700 transition-colors text-white px-5 py-3 flex items-center justify-center gap-2 font-medium"
     >
-      <span>Sign in with GitHub</span>
+      <span>Connect GitHub — install the App</span>
       <span aria-hidden="true">→</span>
     </a>
   );
