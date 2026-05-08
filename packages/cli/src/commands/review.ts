@@ -326,12 +326,8 @@ export async function review(argv: string[]): Promise<void> {
     const cached = await baselineStore.read();
     if (cached.length > 0) federatedFrequency = buildFrequencyMap(cached);
   }
-  const retrieval = await store.retrieve({
-    query: queryText,
-    repo: loaded.repo,
-    k: 8,
-    ...(federatedFrequency ? { federatedFrequency } : {}),
-  });
+  // Retrieval is built later (after domain detection) so we can pass
+  // domain as a filter — see the const retrieval = … block below.
 
   // 3. Build the efficiency gate with config-driven budget + optional Langfuse sink
   const budget = new BudgetTracker({ perPrUsd: config.budget.perPrUsd });
@@ -395,6 +391,19 @@ export async function review(argv: string[]): Promise<void> {
   // DesignAgent's branch logic (and any design-tuned config in
   // `domains.design.*`) lights up; code agents ignore the label.
   const ctxDomain: ReviewDomain = resolvedDomain === "code" ? "code" : "design";
+
+  // v0.16.6 — retrieval moved here (after domain detection) so we can
+  // filter answer-keys + failure-catalog by domain. Without this,
+  // design PRs were getting code-domain lessons as their RAG context
+  // and the design-domain memory never surfaced for the agent it was
+  // collected for.
+  const retrieval = await store.retrieve({
+    query: queryText,
+    repo: loaded.repo,
+    domain: ctxDomain,
+    k: 8,
+    ...(federatedFrequency ? { federatedFrequency } : {}),
+  });
 
   // For tier-build we may need the "code" domain config (mixed pulls
   // from BOTH). For non-mixed, fall through to the standard path.

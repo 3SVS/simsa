@@ -1,5 +1,49 @@
 import type { ReviewContext } from "@conclave-ai/core";
 
+/**
+ * v0.16.6 — RAG section builder. Pulls `ctx.answerKeys` (prior approved
+ * design patterns) + `ctx.failureCatalog` (prior rejected design
+ * patterns) into the prompt so DesignAgent learns across PRs instead
+ * of reviewing each one in isolation.
+ *
+ * Caller responsibility: hydrate ctx.answerKeys / failureCatalog with
+ * domain="design" entries before calling. The Council pipeline does
+ * this via `packages/core/src/memory/retrieval.ts`.
+ *
+ * Capped to 8 entries each side — beyond that the prompt blows past
+ * the model's effective attention budget on what's actually new.
+ */
+function buildDesignRagSection(ctx: ReviewContext): string[] {
+  const sections: string[] = [];
+  if (ctx.answerKeys && ctx.answerKeys.length > 0) {
+    sections.push(`# Prior approved design patterns (answer-keys)`);
+    sections.push(
+      `These are design decisions from past PRs that the council approved and that landed cleanly. ` +
+        `Use them as positive references — when the current PR matches one of these patterns, that's a signal toward approve. ` +
+        `When it deviates, judge whether the deviation is intentional or sloppy.`,
+    );
+    sections.push("");
+    for (const entry of ctx.answerKeys.slice(0, 8)) {
+      sections.push(`- ${entry}`);
+    }
+    sections.push("");
+  }
+  if (ctx.failureCatalog && ctx.failureCatalog.length > 0) {
+    sections.push(`# Prior rejected design patterns (failure-catalog)`);
+    sections.push(
+      `These are design issues from past PRs that the council rejected or reworked. ` +
+        `Watch for the same patterns recurring — when you see a familiar failure mode, flag it with confidence even if the current diff is small. ` +
+        `These are the project's known anti-patterns.`,
+    );
+    sections.push("");
+    for (const entry of ctx.failureCatalog.slice(0, 8)) {
+      sections.push(`- ${entry}`);
+    }
+    sections.push("");
+  }
+  return sections;
+}
+
 export const SYSTEM_PROMPT = `You are a design-specialist reviewer on a multi-agent council for Conclave AI. Your lane: visual review of before/after screenshots of a pull request's UI.
 
 (Note: this system prompt covers Mode A — vision review with screenshots. When there are no screenshots but the diff touches UI code, Mode B is used instead; see \`TEXT_UI_SYSTEM_PROMPT\`.)
@@ -117,6 +161,8 @@ export function buildUserPrompt(ctx: ReviewContext, routes: readonly string[]): 
     }
     sections.push("");
   }
+
+  sections.push(...buildDesignRagSection(ctx));
 
   sections.push(`# Instruction`);
   sections.push(
@@ -257,6 +303,8 @@ export function buildAuditPrompt(
     }
   }
 
+  sections.push(...buildDesignRagSection(ctx));
+
   sections.push(`# Instruction`);
   sections.push(
     `Audit the UI files above through the design lens in the system prompt. Call submit_review exactly once. The code agents are covering logic + security — do not duplicate them. Empty blockers + approve is fine when the batch is clean.`,
@@ -318,6 +366,8 @@ export function buildTextUIPrompt(
   sections.push(uiDiff);
   sections.push("```");
   sections.push("");
+  sections.push(...buildDesignRagSection(ctx));
+
   sections.push(`# Instruction`);
   sections.push(
     `Review the UI diff above through the design lens described in the system prompt. Call submit_review exactly once with your verdict, blockers (if any), and a one-paragraph summary. Remember: the code agents are covering logic + security — do not duplicate them.`,
