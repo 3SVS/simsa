@@ -304,7 +304,7 @@ function DemoSection() {
 
 function Pricing() {
   return (
-    <section id="pricing" className="border-b border-paper-line">
+    <section id="pricing" className="border-b border-paper-line bg-paper-dim/40">
       <div className="mx-auto max-w-page px-6 py-28">
         <SectionHeader mark="04 — pricing" title="Hard cutoffs. No surprise invoices." />
         <p className="mt-3 max-w-prose text-ink-muted">

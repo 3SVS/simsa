@@ -1,21 +1,22 @@
 "use client";
 
 /**
- * Tasks #52 — landing demo form.
+ * Tasks #52 — landing demo form (editorial refresh + PRD ingest paths).
  *
- * "Try it without signing up" funnel. Visitor pastes a PR URL or diff,
- * optionally attaches a PRD, and clicks Review. The form POSTs to
- * /saas/demo/review and renders the council's verdict + blockers
- * inline. No localStorage, no analytics — single shot.
+ * Drop zones now accept:
+ *   - .md / .markdown / .txt files (drag from desktop)
+ *   - folders (Chromium-based webkitGetAsEntry; recursively pulls every
+ *     .md file and concatenates with file path headers)
+ *   - GitHub URLs that point at a file or repo, auto-resolved to the
+ *     raw blob and fetched
  *
- * Cap: 3 reviews per IP per UTC day, enforced server-side. UI shows
- * remaining_today after each successful call so the visitor knows
- * what the limit is before signing up for unlimited.
+ * Form-side state remains simple: pr_url + diff + prd. Whatever PRD
+ * source path the visitor uses, we land in the same `prd` string, then
+ * POST to /saas/demo/review.
  *
- * The point: prove "the council finds spec-mismatch blockers a single
- * agent doesn't" inside 30 seconds, before the visitor leaves.
+ * Cap unchanged: 3 reviews per IP per UTC day, server-enforced.
  */
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 interface DemoBlocker {
   category: string;
@@ -44,13 +45,23 @@ interface DemoError {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "https://conclave-ai.seunghunbae.workers.dev";
 
+// PRD ingest budget — keep payload modest so the demo endpoint's 32KB
+// cap on the server side never trips us. We trim during ingest.
+const PRD_BYTE_CAP = 28_000;
+
 export function DemoForm() {
   const [prUrl, setPrUrl] = useState("");
   const [diff, setDiff] = useState("");
   const [prd, setPrd] = useState("");
+  const [prdGhUrl, setPrdGhUrl] = useState("");
+  const [prdSource, setPrdSource] = useState<string>("");
+  const [prdLoading, setPrdLoading] = useState(false);
+  const [prdError, setPrdError] = useState<string | null>(null);
+  const [dropping, setDropping] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<DemoResponse | null>(null);
   const [error, setError] = useState<DemoError | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,34 +93,118 @@ export function DemoForm() {
     }
   };
 
-  const verdictTone = (v: string) =>
-    v === "approve"
-      ? "bg-emerald-50 border-emerald-300 text-emerald-900"
-      : v === "reject"
-      ? "bg-rose-50 border-rose-300 text-rose-900"
-      : "bg-amber-50 border-amber-300 text-amber-900";
+  const ingestFiles = useCallback(async (files: File[]) => {
+    const mdFiles = files.filter((f) => /\.(md|markdown|txt)$/i.test(f.name));
+    if (mdFiles.length === 0) {
+      setPrdError("No .md / .markdown / .txt files in that drop. Drag a single PRD file or a folder containing one.");
+      return;
+    }
+    const blocks: string[] = [];
+    let bytes = 0;
+    for (const f of mdFiles) {
+      const text = await f.text();
+      const header = mdFiles.length > 1 ? `\n\n## ${f.name}\n\n` : "";
+      const block = header + text;
+      if (bytes + block.length > PRD_BYTE_CAP) {
+        blocks.push(`\n\n_(${mdFiles.length - blocks.length} more files trimmed — PRD cap reached)_`);
+        break;
+      }
+      blocks.push(block);
+      bytes += block.length;
+    }
+    setPrd(blocks.join("").trim());
+    setPrdSource(
+      mdFiles.length === 1
+        ? mdFiles[0]!.name
+        : `${mdFiles.length} files concatenated (${Math.round(bytes / 1024)} KB)`,
+    );
+    setPrdError(null);
+  }, []);
 
-  const sevTone = (s: string) =>
-    s === "blocker"
-      ? "text-rose-700 bg-rose-50 border-rose-200"
-      : s === "major"
-      ? "text-amber-700 bg-amber-50 border-amber-200"
-      : s === "minor"
-      ? "text-blue-700 bg-blue-50 border-blue-200"
-      : "text-neutral-600 bg-neutral-50 border-neutral-200";
+  // FileSystem entries traversal — Chromium et al. expose this via
+  // DataTransferItem.webkitGetAsEntry(). Falls back to flat .files
+  // listing on browsers that don't.
+  const ingestDataTransfer = useCallback(
+    async (dt: DataTransfer) => {
+      const items = dt.items;
+      if (items && items.length > 0 && typeof items[0]?.webkitGetAsEntry === "function") {
+        const entries: FileSystemEntry[] = [];
+        for (let i = 0; i < items.length; i++) {
+          const e = items[i]!.webkitGetAsEntry();
+          if (e) entries.push(e);
+        }
+        const collected: File[] = [];
+        await collectFilesFromEntries(entries, collected);
+        await ingestFiles(collected);
+      } else {
+        const flat: File[] = [];
+        for (let i = 0; i < dt.files.length; i++) flat.push(dt.files[i]!);
+        await ingestFiles(flat);
+      }
+    },
+    [ingestFiles],
+  );
+
+  const onDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setDropping(false);
+      setPrdError(null);
+      await ingestDataTransfer(e.dataTransfer);
+    },
+    [ingestDataTransfer],
+  );
+
+  const onFilePick = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files ? Array.from(e.target.files) : [];
+      setPrdError(null);
+      await ingestFiles(files);
+    },
+    [ingestFiles],
+  );
+
+  const fetchFromGitHub = useCallback(async () => {
+    const trimmed = prdGhUrl.trim();
+    if (!trimmed) return;
+    setPrdLoading(true);
+    setPrdError(null);
+    try {
+      const candidates = resolveGitHubMarkdownUrls(trimmed);
+      let loaded: { url: string; text: string } | null = null;
+      for (const u of candidates) {
+        try {
+          const r = await fetch(u);
+          if (r.ok) {
+            const t = await r.text();
+            if (t.trim().length > 0) {
+              loaded = { url: u, text: t.slice(0, PRD_BYTE_CAP) };
+              break;
+            }
+          }
+        } catch {
+          /* try next candidate */
+        }
+      }
+      if (!loaded) {
+        setPrdError(
+          `Couldn't fetch a PRD from that URL. Try a direct link to .conclave/prd.md, PRD.md, or docs/prd.md.`,
+        );
+        return;
+      }
+      setPrd(loaded.text);
+      const short = loaded.url.replace(/^https?:\/\/raw\.githubusercontent\.com\//, "");
+      setPrdSource(`github:${short}`);
+    } finally {
+      setPrdLoading(false);
+    }
+  }, [prdGhUrl]);
 
   return (
-    <section id="try" className="py-24 border-b border-neutral-200">
-      <h2 className="text-3xl font-bold text-neutral-900 mb-2">Try it now — no signup</h2>
-      <p className="text-neutral-500 mb-12 max-w-prose">
-        Paste a public PR URL (or a raw diff) and an optional PRD. One Claude pass with
-        the PRD-aware prompt — the same prompt the full council uses. Three reviews per
-        IP per day; sign in for unlimited and the full 3-agent council.
-      </p>
-
-      <form onSubmit={submit} className="grid gap-4 max-w-3xl">
+    <div>
+      <form onSubmit={submit} className="grid gap-6 max-w-3xl">
         <div>
-          <label className="text-sm font-medium text-neutral-700 mb-1 block">
+          <label className="block font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute mb-2">
             Public GitHub PR URL
           </label>
           <input
@@ -117,12 +212,12 @@ export function DemoForm() {
             value={prUrl}
             onChange={(e) => setPrUrl(e.target.value)}
             placeholder="https://github.com/owner/repo/pull/123"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-sm focus:border-accent-700 focus:outline-none"
+            className="w-full rounded-md border border-paper-line bg-paper px-3.5 py-2.5 font-mono text-sm focus:border-accent-900 focus:outline-none transition-colors"
           />
         </div>
 
         <details className="text-sm">
-          <summary className="cursor-pointer text-neutral-600 hover:text-neutral-900">
+          <summary className="cursor-pointer text-ink-muted hover:text-ink select-none">
             …or paste a raw diff (private PRs / local changes)
           </summary>
           <textarea
@@ -130,38 +225,115 @@ export function DemoForm() {
             onChange={(e) => setDiff(e.target.value)}
             placeholder="diff --git a/foo.ts b/foo.ts ..."
             rows={6}
-            className="mt-2 w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs focus:border-accent-700 focus:outline-none"
+            className="mt-3 w-full rounded-md border border-paper-line bg-paper px-3.5 py-2.5 font-mono text-xs focus:border-accent-900 focus:outline-none transition-colors"
           />
         </details>
 
         <div>
-          <label className="text-sm font-medium text-neutral-700 mb-1 block">
-            PRD <span className="text-neutral-400">(optional — describe what the PR is supposed to do)</span>
-          </label>
+          <div className="flex items-baseline justify-between mb-2">
+            <label className="block font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute">
+              PRD <span className="normal-case tracking-normal text-ink-ghost">(optional — describe what the PR is supposed to do)</span>
+            </label>
+            {prdSource && (
+              <span className="font-mono text-[11px] text-accent-900">
+                ↳ {prdSource}
+              </span>
+            )}
+          </div>
+
+          {/* PRD ingest tabs: drag/drop, file picker, GitHub URL fetch.
+              All three feed the same `prd` string so submit logic stays
+              identical. */}
+          <div
+            className={`rounded-md border-2 border-dashed transition-colors ${
+              dropping
+                ? "border-accent-900 bg-accent-50"
+                : "border-paper-line bg-paper-dim/40 hover:border-paper-ruleHi"
+            }`}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDropping(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDropping(true);
+            }}
+            onDragLeave={() => setDropping(false)}
+            onDrop={onDrop}
+          >
+            <div className="px-4 py-5 text-center text-sm text-ink-muted">
+              <p className="font-medium text-ink mb-1">
+                Drag & drop a <span className="font-mono text-accent-900">.md</span> file or folder
+              </p>
+              <p className="text-xs text-ink-mute">
+                Folders are walked recursively, every .md concatenated.
+              </p>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="mt-3 inline-block rounded border border-paper-ruleHi bg-paper px-3 py-1.5 text-xs hover:bg-paper-dim transition-colors"
+              >
+                or pick files…
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".md,.markdown,.txt"
+                onChange={onFilePick}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] items-stretch">
+            <input
+              type="url"
+              value={prdGhUrl}
+              onChange={(e) => setPrdGhUrl(e.target.value)}
+              placeholder="https://github.com/owner/repo/blob/main/.conclave/prd.md"
+              className="rounded-md border border-paper-line bg-paper px-3.5 py-2.5 font-mono text-xs focus:border-accent-900 focus:outline-none transition-colors"
+            />
+            <button
+              type="button"
+              onClick={fetchFromGitHub}
+              disabled={!prdGhUrl.trim() || prdLoading}
+              className="rounded-md border border-paper-ruleHi bg-paper px-4 py-2.5 text-xs font-medium hover:bg-paper-dim disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            >
+              {prdLoading ? "Fetching…" : "Fetch from GitHub"}
+            </button>
+          </div>
+
           <textarea
             value={prd}
-            onChange={(e) => setPrd(e.target.value)}
+            onChange={(e) => {
+              setPrd(e.target.value);
+              if (prdSource) setPrdSource("");
+            }}
             placeholder="Acceptance criteria, out-of-scope, non-functional requirements…"
             rows={5}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-accent-700 focus:outline-none"
+            className="mt-3 w-full rounded-md border border-paper-line bg-paper px-3.5 py-2.5 text-sm focus:border-accent-900 focus:outline-none transition-colors"
           />
-          <p className="mt-1 text-xs text-neutral-500">
-            With a PRD, agents flag spec-mismatches as first-class blockers. This is the
-            moat that single-LLM reviews miss.
+
+          {prdError && (
+            <p className="mt-2 text-xs text-flag">{prdError}</p>
+          )}
+          <p className="mt-2 text-xs text-ink-mute leading-relaxed">
+            With a PRD, agents flag spec-mismatches as first-class blockers — the moat single-LLM reviews miss.
           </p>
         </div>
 
         <button
           type="submit"
           disabled={pending || (!prUrl.trim() && !diff.trim())}
-          className="rounded-md bg-accent-900 hover:bg-accent-700 disabled:bg-neutral-300 disabled:cursor-not-allowed transition-colors text-white px-5 py-3 font-medium w-fit"
+          className="rounded-md bg-accent-900 hover:bg-accent-700 disabled:bg-ink-ghost disabled:cursor-not-allowed transition-colors text-paper px-6 py-3.5 font-medium tracking-tight w-fit shadow-plate"
         >
           {pending ? "Reviewing…" : "Review with Claude (1/3 council)"}
         </button>
       </form>
 
       {error && (
-        <div className="mt-8 rounded-md border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 max-w-3xl">
+        <div className="mt-8 rounded-md border-2 border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 max-w-3xl">
           <p className="font-semibold mb-1">{prettyErrorTitle(error)}</p>
           {error.error_description && <p className="text-rose-800">{error.error_description}</p>}
           {error.hint && <p className="mt-2 text-rose-700 text-xs">{error.hint}</p>}
@@ -174,16 +346,18 @@ export function DemoForm() {
       )}
 
       {result && (
-        <div className="mt-8 grid gap-4 max-w-3xl">
-          <div className={`rounded-md border-2 p-4 ${verdictTone(result.verdict)}`}>
+        <div className="mt-10 grid gap-4 max-w-3xl">
+          <div className={`rounded-md border-2 p-5 ${verdictTone(result.verdict)}`}>
             <div className="flex items-baseline justify-between">
-              <p className="font-mono text-xs uppercase tracking-wider opacity-70">Verdict</p>
-              <p className="text-xs opacity-70">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] opacity-70">Verdict</p>
+              <p className="text-xs opacity-70 font-mono">
                 {result.remaining_today} review{result.remaining_today === 1 ? "" : "s"} left today
               </p>
             </div>
-            <p className="text-2xl font-bold mt-1">{result.verdict.toUpperCase()}</p>
-            <p className="text-sm mt-2 leading-relaxed">{result.summary}</p>
+            <p className="font-display text-3xl font-bold mt-2 tracking-tightxx">
+              {result.verdict.toUpperCase()}
+            </p>
+            <p className="text-sm mt-3 leading-[1.6]">{result.summary}</p>
             {result.prd_aware && (
               <p className="mt-3 text-xs font-medium opacity-80">
                 ✓ PRD-aware review — spec-mismatch blockers included
@@ -192,24 +366,27 @@ export function DemoForm() {
           </div>
 
           {result.blockers.length === 0 ? (
-            <p className="text-sm text-neutral-500 italic">No blockers — clean PR.</p>
+            <p className="text-sm text-ink-muted italic">No blockers — clean PR.</p>
           ) : (
             <div className="grid gap-3">
-              <p className="text-sm font-medium text-neutral-700">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute">
                 {result.blockers.length} blocker{result.blockers.length === 1 ? "" : "s"} flagged
               </p>
               {result.blockers.map((b, i) => (
-                <article key={i} className="rounded-md border border-neutral-200 bg-white p-4">
+                <article
+                  key={i}
+                  className="rounded-md border border-paper-line bg-paper p-4 shadow-plate"
+                >
                   <div className="flex items-start justify-between gap-3">
-                    <h4 className="font-semibold text-neutral-900 text-sm">{b.title}</h4>
-                    <span className={`shrink-0 rounded border px-2 py-0.5 text-xs font-mono ${sevTone(b.severity)}`}>
+                    <h4 className="font-display font-semibold text-ink text-[15px] tracking-tight">{b.title}</h4>
+                    <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${sevTone(b.severity)}`}>
                       {b.severity}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs font-mono text-neutral-500">{b.category}</p>
-                  <p className="mt-2 text-sm text-neutral-700 leading-relaxed">{b.rationale}</p>
+                  <p className="mt-1 text-xs font-mono text-ink-mute">{b.category}</p>
+                  <p className="mt-2 text-sm text-ink-muted leading-[1.65]">{b.rationale}</p>
                   {b.file && (
-                    <p className="mt-2 text-xs font-mono text-neutral-500">
+                    <p className="mt-2 text-xs font-mono text-ink-mute">
                       {b.file}{b.line ? `:${b.line}` : ""}
                     </p>
                   )}
@@ -218,16 +395,32 @@ export function DemoForm() {
             </div>
           )}
 
-          <p className="text-xs text-neutral-500 mt-2">
+          <p className="text-xs text-ink-mute mt-3 leading-relaxed">
             This is one agent (Claude). The full council runs Claude + GPT-5 + Gemini in parallel
             and escalates disagreements — typically 3× more blockers caught.{" "}
-            <a href="#pricing" className="text-accent-700 underline">See pricing →</a>
+            <a href="#pricing" className="text-accent-900 link-anim">See pricing →</a>
           </p>
         </div>
       )}
-    </section>
+    </div>
   );
 }
+
+const verdictTone = (v: string) =>
+  v === "approve"
+    ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+    : v === "reject"
+    ? "bg-rose-50 border-rose-300 text-rose-900"
+    : "bg-amber-50 border-amber-300 text-amber-900";
+
+const sevTone = (s: string) =>
+  s === "blocker"
+    ? "text-rose-700 bg-rose-50 border-rose-200"
+    : s === "major"
+    ? "text-amber-700 bg-amber-50 border-amber-200"
+    : s === "minor"
+    ? "text-blue-700 bg-blue-50 border-blue-200"
+    : "text-ink-mute bg-paper-dim border-paper-line";
 
 function prettyErrorTitle(e: DemoError): string {
   switch (e.error) {
@@ -245,5 +438,75 @@ function prettyErrorTitle(e: DemoError): string {
       return "Network error";
     default:
       return e.error;
+  }
+}
+
+// --- GitHub URL ingest ------------------------------------------------------
+
+/**
+ * Generate raw-content URL candidates from a GitHub URL.
+ *
+ * Accepted shapes:
+ *   - https://github.com/owner/repo/blob/branch/path/to/file.md
+ *   - https://github.com/owner/repo (try common PRD locations on default branches)
+ *   - https://raw.githubusercontent.com/... (returned as-is)
+ *
+ * Returns ordered candidates — caller fetches in order, takes first
+ * 200 OK with non-empty body.
+ */
+function resolveGitHubMarkdownUrls(url: string): string[] {
+  if (/^https?:\/\/raw\.githubusercontent\.com\//.test(url)) return [url];
+  const ghBlob = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/);
+  if (ghBlob) {
+    const [, owner, repo, branch, path] = ghBlob;
+    return [`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`];
+  }
+  // Bare repo URL — probe for common PRD paths on main/master.
+  const ghRepo = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/?#]+)\/?$/);
+  if (ghRepo) {
+    const [, owner, repo] = ghRepo;
+    const cleanRepo = repo!.replace(/\.git$/, "");
+    const paths = [".conclave/prd.md", "PRD.md", "prd.md", "docs/prd.md", "docs/PRD.md", "README.md"];
+    const branches = ["main", "master"];
+    const out: string[] = [];
+    for (const branch of branches) {
+      for (const path of paths) {
+        out.push(`https://raw.githubusercontent.com/${owner}/${cleanRepo}/${branch}/${path}`);
+      }
+    }
+    return out;
+  }
+  // Last resort — try the URL verbatim. fetch() will fail and we'll
+  // surface a clear error.
+  return [url];
+}
+
+// --- FileSystemEntry recursive collect --------------------------------------
+
+async function collectFilesFromEntries(entries: FileSystemEntry[], out: File[]): Promise<void> {
+  for (const entry of entries) {
+    if (entry.isFile) {
+      const file = await new Promise<File | null>((resolve) => {
+        (entry as FileSystemFileEntry).file(
+          (f) => resolve(f),
+          () => resolve(null),
+        );
+      });
+      if (file) out.push(file);
+    } else if (entry.isDirectory) {
+      const dir = entry as FileSystemDirectoryEntry;
+      const reader = dir.createReader();
+      // readEntries returns batches — call until empty.
+      let batch: FileSystemEntry[] = [];
+      do {
+        batch = await new Promise<FileSystemEntry[]>((resolve) => {
+          reader.readEntries(
+            (es) => resolve(es),
+            () => resolve([]),
+          );
+        });
+        await collectFilesFromEntries(batch, out);
+      } while (batch.length > 0);
+    }
   }
 }
