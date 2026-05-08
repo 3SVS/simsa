@@ -194,6 +194,7 @@ async function runJob(payload) {
   // when run from anywhere but the workDir). Setting GH_REPO is
   // process-wide and matches gh CLI's standard env contract.
   process.env.GH_REPO = repo;
+
   try {
     const cloneUrl = `https://x-access-token:${installationToken}@github.com/${repo}.git`;
     await execFileP("git", ["clone", "--depth", "20", cloneUrl, workDir], { timeout: 90_000 });
@@ -218,6 +219,17 @@ async function runJob(payload) {
       "-C", workDir,
       "config", "user.email", "3620556+conclave-ai-code-council[bot]@users.noreply.github.com"
     ]);
+
+    // 3.5 Wait for deploy preview status to settle BEFORE running cli.
+    //     Vercel/Netlify/CF builds typically take 60-120s; without this
+    //     wait, cli fires fetchDeployStatus during the build window and
+    //     gets "unknown", so the council never learns that the deploy
+    //     actually failed. We poll the GH check-runs API for the head
+    //     SHA every 8s up to 120s, then proceed regardless. The cli's
+    //     own fetchDeployStatus call afterwards reads the same API and
+    //     gets the now-settled answer.
+    const deployFinal = await waitForDeployStatus(repo, headSha, installationToken, 120_000);
+    console.log(`[job ${jobId}] deploy probe settled: ${deployFinal}`);
 
     // 4. Lazy import the pipeline. Direct monorepo path (not via
     //    /app/node_modules/@conclave-ai/cli) — pnpm's workspace symlink
@@ -398,6 +410,63 @@ async function runJob(payload) {
       console.error(`[job ${jobId}] cleanup failed:`, cleanupErr);
     }
   }
+}
+
+/**
+ * Poll GH check-runs for the deploy preview's terminal status.
+ *
+ * Why: Vercel / Netlify / Cloudflare preview builds run async and
+ * usually finish 60-120s after the PR push. Conclave's review fires
+ * within seconds of webhook, so a single fetchDeployStatus call almost
+ * always sees `pending` and the council never learns that the deploy
+ * actually failed. The whole "review = deploy + code together" promise
+ * hinges on this wait.
+ *
+ * Returns the GH conclusion (`success` | `failure` | `cancelled` | etc)
+ * or `"timeout"` if the wait window expires.
+ *
+ * Cap: 120s. Beyond that we let the council decide on code alone — the
+ * Sprint 2 follow-up will be a `commit_status` webhook that re-fires
+ * the review when Vercel finishes late.
+ */
+async function waitForDeployStatus(repo, sha, token, timeoutMs = 120_000) {
+  if (!sha || !repo) return "no-sha";
+  const start = Date.now();
+  const intervalMs = 8_000;
+  // GH App installation tokens hit the same /repos/.../check-runs
+  // endpoint a user PAT does — `metadata: read` is enough.
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await fetch(
+        `https://api.github.com/repos/${repo}/commits/${sha}/check-runs?per_page=100`,
+        {
+          headers: {
+            authorization: `Bearer ${token}`,
+            accept: "application/vnd.github+json",
+            "x-github-api-version": "2022-11-28",
+            "user-agent": "conclave-ai-code-council",
+          },
+        },
+      );
+      if (r.ok) {
+        const j = await r.json();
+        const runs = Array.isArray(j?.check_runs) ? j.check_runs : [];
+        // Match any deploy-platform check (Vercel, Netlify, Cloudflare
+        // Workers/Pages, Render, etc). Names are platform-controlled
+        // so a contains-check is the most robust.
+        const deployRun = runs.find((c) =>
+          /vercel|netlify|cloudflare|deploy|preview/i.test(c?.name ?? ""),
+        );
+        if (deployRun && deployRun.status === "completed") {
+          return deployRun.conclusion ?? "completed";
+        }
+      }
+    } catch {
+      // network blip — keep polling
+    }
+    await new Promise((res) => setTimeout(res, intervalMs));
+  }
+  return "timeout";
 }
 
 async function postCallback(url, token, body) {

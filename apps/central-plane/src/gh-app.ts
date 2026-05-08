@@ -335,3 +335,90 @@ export async function postPrComment(
   const j = (await r.json()) as { id: number };
   return { id: j.id };
 }
+
+/**
+ * Create a GitHub check-run for the council verdict on a PR head sha.
+ *
+ * Why: GH PR UI has a separate "Checks" section that decides whether
+ * the merge button is green. Without our own check-run, conclave's
+ * verdict only lives in the comment thread — so a PR can show all
+ * green checks (Vercel build, CI etc) even when the council voted
+ * REWORK or REJECT, misleading the user into thinking it's mergeable.
+ *
+ * Mapping:
+ *   approve → conclusion: "success"           (green ✓)
+ *   rework  → conclusion: "action_required"   (orange — blocks merge in
+ *                                              repos with required-checks)
+ *   reject  → conclusion: "failure"           (red ✘)
+ *   errored → conclusion: "cancelled"
+ *
+ * Best-effort. Requires `checks: write` permission on the GH App.
+ */
+export async function createCouncilCheckRun(
+  env: import("./env.js").Env,
+  installationId: number,
+  repoSlug: string,
+  headSha: string,
+  args: {
+    verdict?: string;
+    blockers?: number;
+    durationMs?: number;
+    summary?: string;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ id: number } | null> {
+  let token: string;
+  try {
+    const t = await getInstallationToken(env, installationId, fetchImpl);
+    token = t.token;
+  } catch {
+    return null;
+  }
+  const v = (args.verdict ?? "").toLowerCase();
+  const conclusion =
+    v === "approve"
+      ? "success"
+      : v === "reject"
+        ? "failure"
+        : v === "rework"
+          ? "action_required"
+          : "cancelled";
+  const dur = typeof args.durationMs === "number" ? `${Math.round(args.durationMs / 1000)}s` : "";
+  const titleVerb =
+    v === "approve" ? "APPROVE" : v === "reject" ? "REJECT" : v === "rework" ? "REWORK" : "errored";
+  const blockerLine =
+    typeof args.blockers === "number" && args.blockers > 0
+      ? `${args.blockers} blocker${args.blockers === 1 ? "" : "s"} · `
+      : "";
+  const r = await fetchImpl(`https://api.github.com/repos/${repoSlug}/check-runs`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+      "user-agent": "conclave-ai-code-council",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      name: "Conclave AI Council",
+      head_sha: headSha,
+      status: "completed",
+      conclusion,
+      output: {
+        title: `Council verdict: ${titleVerb}${dur ? ` · ${dur}` : ""}`,
+        summary:
+          args.summary ??
+          (v === "approve"
+            ? "Three-agent council found no blockers. Safe to merge."
+            : v === "reject"
+              ? `${blockerLine}Council recommends not merging in current shape.`
+              : v === "rework"
+                ? `${blockerLine}Council requires changes before merge.`
+                : "Council review did not complete — check the PR comment for details."),
+      },
+    }),
+  });
+  if (!r.ok) return null;
+  const j = (await r.json()) as { id: number };
+  return { id: j.id };
+}

@@ -33,7 +33,7 @@ import {
   findUserByToken,
   recordMeter,
 } from "../db/saas.js";
-import { getInstallationToken, postPrComment } from "../gh-app.js";
+import { createCouncilCheckRun, getInstallationToken, postPrComment } from "../gh-app.js";
 
 const SANDBOX_NOT_BOUND_NOTE =
   "Sandbox container binding not yet provisioned on this Worker. The job is recorded; pipeline runs in the next deploy.";
@@ -342,6 +342,7 @@ export function createSaasRoutes(): Hono<{ Bindings: Env }> {
           error?: string;
           smokeOutcome?: "ok" | "broken" | "skipped";
           deployUrl?: string;
+          headSha?: string;
         }
       | null;
     if (!body || !body.jobId || !body.repo || typeof body.prNumber !== "number") {
@@ -399,6 +400,23 @@ export function createSaasRoutes(): Hono<{ Bindings: Env }> {
         prNumberForComment,
         commentBody,
       ).catch(() => undefined);
+      // Council verdict as a GH check-run so PR's "Checks" tab reflects
+      // the real state — not just the build/CI checks. Without this,
+      // a PR with REWORK verdict still shows green-merge-ready when
+      // Vercel + CI happen to pass.
+      if (typeof body.headSha === "string" && body.headSha.length > 0) {
+        await createCouncilCheckRun(
+          c.env,
+          inst.installationId,
+          repoForComment,
+          body.headSha,
+          {
+            ...(body.verdict !== undefined ? { verdict: body.verdict } : {}),
+            ...(body.blockers !== undefined ? { blockers: body.blockers } : {}),
+            ...(body.durationMs !== undefined ? { durationMs: body.durationMs } : {}),
+          },
+        ).catch(() => undefined);
+      }
     }
 
     return c.json({ ok: true });
