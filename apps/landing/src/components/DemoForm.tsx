@@ -212,7 +212,7 @@ export function DemoForm() {
             value={prUrl}
             onChange={(e) => setPrUrl(e.target.value)}
             placeholder="https://github.com/owner/repo/pull/123"
-            className="w-full rounded-md border border-paper-line bg-paper px-3.5 py-2.5 font-mono text-sm focus:border-accent-900 focus:outline-none transition-colors"
+            className="w-full rounded-md border border-parchment-line bg-parchment px-3.5 py-2.5 font-mono text-sm focus:border-oxblood-600 focus:outline-none transition-colors"
           />
         </div>
 
@@ -225,7 +225,7 @@ export function DemoForm() {
             onChange={(e) => setDiff(e.target.value)}
             placeholder="diff --git a/foo.ts b/foo.ts ..."
             rows={6}
-            className="mt-3 w-full rounded-md border border-paper-line bg-paper px-3.5 py-2.5 font-mono text-xs focus:border-accent-900 focus:outline-none transition-colors"
+            className="mt-3 w-full rounded-md border border-parchment-line bg-parchment px-3.5 py-2.5 font-mono text-xs focus:border-oxblood-600 focus:outline-none transition-colors"
           />
         </details>
 
@@ -235,7 +235,7 @@ export function DemoForm() {
               PRD <span className="normal-case tracking-normal text-ink-ghost">(optional — describe what the PR is supposed to do)</span>
             </label>
             {prdSource && (
-              <span className="font-mono text-[11px] text-accent-900">
+              <span className="font-mono text-[11px] text-oxblood-600">
                 ↳ {prdSource}
               </span>
             )}
@@ -247,8 +247,8 @@ export function DemoForm() {
           <div
             className={`rounded-md border-2 border-dashed transition-colors ${
               dropping
-                ? "border-accent-900 bg-accent-50"
-                : "border-paper-line bg-paper-dim/40 hover:border-paper-ruleHi"
+                ? "border-oxblood-600 bg-oxblood-50"
+                : "border-parchment-line bg-parchment-dim/40 hover:border-ink/30"
             }`}
             onDragEnter={(e) => {
               e.preventDefault();
@@ -263,7 +263,7 @@ export function DemoForm() {
           >
             <div className="px-4 py-5 text-center text-sm text-ink-muted">
               <p className="font-medium text-ink mb-1">
-                Drag & drop a <span className="font-mono text-accent-900">.md</span> file or folder
+                Drag & drop a <span className="font-mono text-oxblood-600">.md</span> file or folder
               </p>
               <p className="text-xs text-ink-mute">
                 Folders are walked recursively, every .md concatenated.
@@ -271,7 +271,7 @@ export function DemoForm() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="mt-3 inline-block rounded border border-paper-ruleHi bg-paper px-3 py-1.5 text-xs hover:bg-paper-dim transition-colors"
+                className="mt-3 inline-block rounded border border-ink/30 bg-parchment px-3 py-1.5 text-xs hover:bg-parchment-dim transition-colors"
               >
                 or pick files…
               </button>
@@ -292,13 +292,13 @@ export function DemoForm() {
               value={prdGhUrl}
               onChange={(e) => setPrdGhUrl(e.target.value)}
               placeholder="https://github.com/owner/repo/blob/main/.conclave/prd.md"
-              className="rounded-md border border-paper-line bg-paper px-3.5 py-2.5 font-mono text-xs focus:border-accent-900 focus:outline-none transition-colors"
+              className="rounded-md border border-parchment-line bg-parchment px-3.5 py-2.5 font-mono text-xs focus:border-oxblood-600 focus:outline-none transition-colors"
             />
             <button
               type="button"
               onClick={fetchFromGitHub}
               disabled={!prdGhUrl.trim() || prdLoading}
-              className="rounded-md border border-paper-ruleHi bg-paper px-4 py-2.5 text-xs font-medium hover:bg-paper-dim disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              className="rounded-md border border-ink/30 bg-parchment px-4 py-2.5 text-xs font-medium hover:bg-parchment-dim disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
             >
               {prdLoading ? "Fetching…" : "Fetch from GitHub"}
             </button>
@@ -312,7 +312,7 @@ export function DemoForm() {
             }}
             placeholder="Acceptance criteria, out-of-scope, non-functional requirements…"
             rows={5}
-            className="mt-3 w-full rounded-md border border-paper-line bg-paper px-3.5 py-2.5 text-sm focus:border-accent-900 focus:outline-none transition-colors"
+            className="mt-3 w-full rounded-md border border-parchment-line bg-parchment px-3.5 py-2.5 text-sm focus:border-oxblood-600 focus:outline-none transition-colors"
           />
 
           {prdError && (
@@ -326,7 +326,7 @@ export function DemoForm() {
         <button
           type="submit"
           disabled={pending || (!prUrl.trim() && !diff.trim())}
-          className="rounded-md bg-accent-900 hover:bg-accent-700 disabled:bg-ink-ghost disabled:cursor-not-allowed transition-colors text-paper px-6 py-3.5 font-medium tracking-tight w-fit shadow-plate"
+          className="rounded-md bg-oxblood-600 hover:bg-oxblood-500 disabled:bg-ink-ghost disabled:cursor-not-allowed transition-colors text-parchment-light px-6 py-3.5 font-medium tracking-tight w-fit shadow-plate"
         >
           {pending ? "Reviewing…" : "Review with Claude (1/3 council)"}
         </button>
@@ -375,7 +375,7 @@ export function DemoForm() {
               {result.blockers.map((b, i) => (
                 <article
                   key={i}
-                  className="rounded-md border border-paper-line bg-paper p-4 shadow-plate"
+                  className="rounded-md border border-parchment-line bg-parchment p-4 shadow-plate"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <h4 className="font-display font-semibold text-ink text-[15px] tracking-tight">{b.title}</h4>
@@ -398,7 +398,7 @@ export function DemoForm() {
           <p className="text-xs text-ink-mute mt-3 leading-relaxed">
             This is one agent (Claude). The full council runs Claude + GPT-5 + Gemini in parallel
             and escalates disagreements — typically 3× more blockers caught.{" "}
-            <a href="#pricing" className="text-accent-900 link-anim">See pricing →</a>
+            <a href="#pricing" className="text-oxblood-600 link-anim">See pricing →</a>
           </p>
         </div>
       )}
@@ -420,7 +420,7 @@ const sevTone = (s: string) =>
     ? "text-amber-700 bg-amber-50 border-amber-200"
     : s === "minor"
     ? "text-blue-700 bg-blue-50 border-blue-200"
-    : "text-ink-mute bg-paper-dim border-paper-line";
+    : "text-ink-mute bg-parchment-dim border-parchment-line";
 
 function prettyErrorTitle(e: DemoError): string {
   switch (e.error) {

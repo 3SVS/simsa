@@ -4,73 +4,107 @@
 
 :root {
   color-scheme: light;
-  --grain-opacity: 0.04;
 }
 
 html {
-  /* OpenType extras — contextual ligatures, stylistic set 01 (Geist).
-     The ss01 toggle activates Geist's slashed zero + open-aperture
-     numerals — distinctive without being decorative. */
-  font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1, "cv11" 1;
+  /* OpenType: ligatures, contextual alternates, lining figures.
+     Crimson Pro's old-style figures are the default; force lining
+     in monospace contexts (numerals, prices) for tabular reading. */
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1, "onum" 1;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: #FAFAF7;
-  color: #09090B;
-  /* Almost-imperceptible grain, applied site-wide so light areas read
-     as paper rather than a flat fill. SVG noise in a data URI keeps it
-     a single network-free declaration. */
+  background: #F4ECDC;
+  color: #1A1310;
+  /* Layered parchment texture: a coarse turbulence grain + a faint
+     vellum mottle. Keeps light areas reading as paper rather than a
+     flat fill. Both inline SVG so no network call. */
   background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.04 0 0 0 0 0.04 0 0 0 0.4 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.7'/></svg>");
-  background-size: 160px;
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='2' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0 0.05 0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>"),
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(155, 122, 48, 0.04), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, rgba(92, 17, 28, 0.03), transparent 65%);
+  background-size: 220px, 100% 100%, 100% 100%;
 }
 
-/* Editorial selection — deep ink blue against cream paper. */
+/* Selection — wax seal red on parchment. Reads as a stamp. */
 ::selection {
-  background: #0A2540;
-  color: #FAFAF7;
+  background: #5C111C;
+  color: #F4ECDC;
 }
 
-/* Hairline rule for editorial section dividers. */
-.rule {
+/* Old-style numerals for body text; lining numerals for tables / mono. */
+.lining-nums {
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+/* Drop cap — first letter of section openings. Bodoni at large size
+   pulls the eye down the column. Reserve for one paragraph per section. */
+.drop-cap::first-letter {
+  font-family: var(--font-display), Bodoni, serif;
+  font-weight: 800;
+  float: left;
+  font-size: 5.6em;
+  line-height: 0.86;
+  margin-right: 0.12em;
+  margin-top: 0.06em;
+  color: #5C111C;
+}
+
+/* Editorial gold-leaf rule — subtle metallic gradient line used as a
+   section accent. Width modulates slightly across the line so it
+   reads as a stamped element rather than a CSS hr. */
+.gold-rule {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    rgba(155, 122, 48, 0.08) 0%,
+    rgba(155, 122, 48, 0.55) 25%,
+    rgba(199, 165, 84, 0.85) 50%,
+    rgba(155, 122, 48, 0.55) 75%,
+    rgba(155, 122, 48, 0.08) 100%
+  );
+}
+
+/* Bodoni-style hair rule for section dividers. */
+.rule-thick {
   border: 0;
-  border-top: 1px solid #E4E2D9;
+  border-top: 1.5px solid #1A1310;
 }
-.rule-strong {
+.rule-thin {
   border: 0;
-  border-top: 1.5px solid #1A1817;
+  border-top: 1px solid #D9C9A6;
 }
 
-/* Subtle dotted backdrop reserved for the hero. Tighter dots + lower
-   opacity than before so the heading remains the dominant texture. */
-.bg-grid {
-  background-image: radial-gradient(rgba(10, 37, 64, 0.07) 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-
-/* Mono section marker — used at the top-left of every <section> for
-   editorial wayfinding (01 / 02 / 03 / …). */
+/* Mono section marker (used alongside Roman numerals for ops/data). */
 .section-mark {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 11px;
-  letter-spacing: 0.16em;
-  color: #71717A;
+  letter-spacing: 0.18em;
+  color: #7A685A;
   text-transform: uppercase;
 }
 
-/* Standard focus ring for any interactive element — 2px gap then 2px
-   accent line. Beats Tailwind's default boxy outline + meets WCAG. */
+/* Roman numeral marker — display serif at small size, gold leaf
+   accent below. Intended for section titles. */
+.numeral {
+  font-family: var(--font-display), Bodoni, serif;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #9B7A30;
+}
+
+/* Standard focus ring — 2px parchment gap then 2px oxblood line. */
 :where(a, button, [role="button"], input, textarea, select):focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px #FAFAF7, 0 0 0 4px #0A2540;
+  box-shadow: 0 0 0 2px #F4ECDC, 0 0 0 4px #5C111C;
   border-radius: 4px;
 }
 
-/* Underline-on-hover with offset for inline links — subtle motion
-   without bouncy transforms. */
+/* Underline-on-hover with offset — gold leaf line, animates from right. */
 .link-anim {
   position: relative;
   text-decoration: none;
@@ -82,17 +116,17 @@ body {
   right: 0;
   bottom: -2px;
   height: 1px;
-  background: currentColor;
+  background: linear-gradient(90deg, transparent, #9B7A30 20%, #9B7A30 80%, transparent);
   transform-origin: right;
   transform: scaleX(0);
-  transition: transform 240ms cubic-bezier(0.65, 0, 0.35, 1);
+  transition: transform 280ms cubic-bezier(0.65, 0, 0.35, 1);
 }
 .link-anim:hover::after {
   transform-origin: left;
   transform: scaleX(1);
 }
 
-/* Pricing card hover lift — 1px upward float, no shadow change. */
+/* Pricing card hover lift — 1px upward float. */
 .card-lift {
   transition: transform 240ms cubic-bezier(0.65, 0, 0.35, 1),
     box-shadow 240ms cubic-bezier(0.65, 0, 0.35, 1);
@@ -101,18 +135,26 @@ body {
   transform: translateY(-2px);
 }
 
-/* Marquee track — for the "Used in production by" logo strip; pauses
-   on hover so users can read it. */
-.marquee {
-  display: flex;
-  gap: 4rem;
-  width: max-content;
-  animation: ticker 32s linear infinite;
+/* Wax seal — circular stamp graphic used in the hero corner. Built
+   from radial gradients + box-shadow so no SVG asset needed. */
+.wax-seal {
+  background: radial-gradient(circle at 35% 30%, #8E2C39, #5C111C 60%, #4B0E17);
+  box-shadow:
+    inset 0 0 0 2px rgba(199, 165, 84, 0.35),
+    inset 4px 8px 16px rgba(0, 0, 0, 0.35),
+    inset -4px -6px 12px rgba(255, 215, 165, 0.18),
+    0 4px 8px rgba(40, 10, 15, 0.25);
 }
-.marquee:hover {
-  animation-play-state: paused;
+
+/* Prevent body italic from drifting too far on emphasis runs. */
+em, i {
+  font-style: italic;
+  font-family: var(--font-italic), Newsreader, Georgia, serif;
 }
-@keyframes ticker {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+
+/* Subtle dotted backdrop for hero — spacing tightened so the texture
+   reads as engraved dotwork at large scales. */
+.bg-grid {
+  background-image: radial-gradient(rgba(92, 17, 28, 0.08) 1px, transparent 1px);
+  background-size: 26px 26px;
 }

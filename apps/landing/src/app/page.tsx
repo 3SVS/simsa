@@ -1,35 +1,35 @@
 /**
- * Conclave AI — landing page (editorial dev-tool refresh).
+ * Conclave AI — landing page (judicial-conclave concept).
  *
- * Aesthetic direction: Linear/Vercel polish + light editorial weight.
- * - Bricolage Grotesque for display (distinctive 90s grotesque).
- * - Geist Sans for body (Vercel-aligned, technical, warm).
- * - JetBrains Mono for cli/labels/numerics.
- * - Newsreader Italic for sparing editorial emphasis.
- * - Single deep ink-blue accent (#0A2540) — Stripe-grade, not generic
- *   purple gradient.
- * - Cream paper bg with subtle SVG noise grain (globals.css).
- * - Editorial section markers (01 / 02 / 03 / …) in monospace.
+ * Aesthetic: 17th-century printed broadsheet meets council ballot.
+ * - Bodoni Moda for display (high-contrast didone, classical authority).
+ * - Crimson Pro serif for body (modulated old-style serif).
+ * - Newsreader Italic for pulled quotes / emphasis voice.
+ * - JetBrains Mono for cli + numerics.
+ * - Parchment cream (#F4ECDC) with vellum noise + faint gold/oxblood
+ *   radial wash (globals.css).
+ * - Oxblood (#5C111C) as the council's seal color — primary CTA, the
+ *   highlighted Solo card, verdict emphasis. Sparing — 5–8% surface.
+ * - Gold leaf (#9B7A30) for hover underlines, section rules, accent
+ *   ornaments.
+ * - Roman numerals (I–V) on section headings; mono ops marker
+ *   underneath.
+ * - Drop caps on the first paragraph of each section's body.
  *
  * Sections (top → bottom):
- *   1. Top bar
- *   2. Hero
- *   3. How it works (01)
- *   4. Council evidence (02)
- *   5. Try-it-now demo (03) — DemoForm component (unchanged)
- *   6. Pricing (04)
- *   7. FAQ (05)
- *   8. Footer
+ *   I.   Hero
+ *   II.  How it convenes
+ *   III. Council evidence
+ *   IV.  Try it now (DemoForm)
+ *   V.   Indulgences (pricing)
+ *   VI.  FAQ
+ *   Footer
  */
 import { Logo } from "../components/Logo";
 import { DemoForm } from "../components/DemoForm";
 
 const SITE_URL = "https://conclave-ai.dev";
 
-// Primary onboarding: GitHub App install URL. Clicking sends users to
-// GitHub's repo-picker; installation:created webhook auto-registers
-// the saas_users row and PR events thereafter trigger reviews
-// automatically. No CLI, no token, no key management required.
 const LOGIN_URL = "https://github.com/apps/conclave-ai-code-council/installations/new";
 
 export default function Home() {
@@ -53,14 +53,14 @@ export default function Home() {
 
 function TopBar() {
   return (
-    <header className="sticky top-0 z-50 border-b border-paper-line bg-paper/85 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 border-b border-parchment-line bg-parchment/85 backdrop-blur-sm">
       <div className="mx-auto max-w-page px-6 py-4 flex items-center justify-between">
         <a href="/" className="flex items-center gap-2.5 group">
           <Logo size={22} className="group-hover:opacity-80 transition-opacity" />
         </a>
-        <nav className="flex items-center gap-7 text-sm text-ink-subtle">
+        <nav className="flex items-center gap-7 text-[15px] text-ink-subtle">
           <a href="#how" className="link-anim hover:text-ink">How</a>
-          <a href="#try" className="link-anim hover:text-ink">Try it</a>
+          <a href="#try" className="link-anim hover:text-ink">Try</a>
           <a href="#pricing" className="link-anim hover:text-ink">Pricing</a>
           <a href="#faq" className="link-anim hover:text-ink">FAQ</a>
           <a
@@ -73,7 +73,7 @@ function TopBar() {
           </a>
           <a
             href={LOGIN_URL}
-            className="rounded-md bg-accent-900 hover:bg-accent-700 transition-colors text-paper px-3.5 py-1.5 text-xs font-medium tracking-wide"
+            className="rounded-sm bg-oxblood-600 hover:bg-oxblood-500 transition-colors text-parchment-light px-3.5 py-1.5 text-xs font-mono uppercase tracking-widetracked"
           >
             Install →
           </a>
@@ -87,41 +87,53 @@ function TopBar() {
 
 function Hero() {
   return (
-    <section className="bg-grid border-b border-paper-line">
+    <section className="bg-grid border-b border-parchment-line relative overflow-hidden">
+      {/* Wax seal in the upper-right margin — decorative, slow rotate
+          on its own keyframe so it reads as imprinted, not a clickable
+          element. */}
+      <div className="hidden lg:block absolute top-20 right-12 lg:right-20 w-28 h-28 wax-seal animate-sealPulse pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center text-parchment-light font-display text-2xl italic font-medium tracking-wider">
+          C·AI
+        </div>
+      </div>
+
       <div className="mx-auto max-w-3xl px-6 pt-24 pb-28 md:pt-32 md:pb-36 animate-rise">
-        <div className="flex items-center gap-3 mb-7">
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute">
-            v0.16 · 2026
+        <div className="flex items-center gap-3 mb-9">
+          <span className="font-mono text-[11px] uppercase tracking-widetracked text-ink-mute">
+            v0.16 · MMXXVI
           </span>
-          <span className="h-px flex-1 bg-paper-line" />
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute">
-            code review SaaS
+          <span className="h-px flex-1 bg-parchment-line" />
+          <span className="font-mono text-[11px] uppercase tracking-widetracked text-ink-mute">
+            council convened
           </span>
         </div>
-        <h1 className="font-display font-bold text-[clamp(2.5rem,6vw,4.75rem)] leading-[1.02] tracking-tightxx text-ink">
+
+        <h1 className="font-display font-medium text-[clamp(2.75rem,6.4vw,5rem)] leading-[1.02] tracking-tightxx text-ink">
           A council of AI agents
           <br />
-          reviews your PRs
+          convenes for every PR
           <br />
-          <span className="font-serif italic font-medium text-accent-900">against your PRD.</span>
+          <span className="font-italic italic font-medium text-oxblood-600">against your PRD.</span>
         </h1>
-        <p className="mt-7 text-lg md:text-xl text-ink-subtle leading-[1.55]">
-          Three frontier models — Claude, GPT-5, and Gemini — independently review every
-          pull request. Disagreement surfaces blockers no single model catches alone. When you
-          attach a PRD, agents flag spec-mismatches as first-class blockers — not just
-          code-quality.
+
+        <p className="mt-9 text-xl text-ink-subtle leading-[1.55]">
+          Three frontier models — Claude, GPT‑5, and Gemini — read your pull request
+          independently, then bring their findings to a sealed deliberation. Disagreement is
+          reconciled in a second tier. The verdict and dissents land on the PR with the
+          authority of all three.
         </p>
 
-        {/* CTA row — horizontal on md+, stacked on mobile. Sign-in is
-            the dominant primary action; the install command sits next
-            to it as a power-user lane. Both kept left-aligned inside
-            the centered narrow column. */}
-        <div className="mt-10 grid gap-4 sm:grid-cols-[auto_1fr] items-stretch">
+        <p className="mt-5 font-italic italic text-lg text-ink-muted">
+          Ex pluribus, iudicium. — Out of many, one judgement.
+        </p>
+
+        {/* CTAs — left aligned within the centered narrow column. */}
+        <div className="mt-12 grid gap-4 sm:grid-cols-[auto_1fr] items-stretch">
           <SignInButton />
           <InstallCommand />
         </div>
-        <p className="mt-6 text-xs text-ink-mute leading-relaxed">
-          Open beta · 1 free review on install · BYO Anthropic key = unlimited free · Solo $19/mo
+        <p className="mt-7 text-sm text-ink-mute">
+          Open beta · 1 free hearing on installation · BYO Anthropic key for unlimited reviews · Solo $19/mo
         </p>
       </div>
     </section>
@@ -132,12 +144,12 @@ function SignInButton() {
   return (
     <a
       href={LOGIN_URL}
-      className="block rounded-md bg-accent-900 hover:bg-accent-700 transition-colors text-paper px-5 py-3.5 text-center font-medium tracking-tight shadow-plate"
+      className="block rounded-sm bg-oxblood-600 hover:bg-oxblood-500 transition-colors text-parchment-light px-7 py-4 text-center font-display font-medium text-lg shadow-plate"
     >
-      <span>Connect GitHub</span>
-      <span aria-hidden="true" className="ml-2 inline-block transition-transform group-hover:translate-x-1">→</span>
-      <span className="block mt-1 text-[11px] font-normal text-paper/70 font-mono tracking-wider uppercase">
-        installs the app
+      <span>Convene the council</span>
+      <span aria-hidden="true" className="ml-2.5 inline-block">→</span>
+      <span className="block mt-0.5 text-[10px] font-mono tracking-widetracked uppercase opacity-75">
+        installs the github app
       </span>
     </a>
   );
@@ -145,18 +157,18 @@ function SignInButton() {
 
 function InstallCommand() {
   return (
-    <div className="mt-3 rounded-md border border-paper-line bg-ink text-paper font-mono text-[13px] overflow-hidden">
-      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/10">
-        <span className="h-2 w-2 rounded-full bg-paper/30" />
-        <span className="h-2 w-2 rounded-full bg-paper/30" />
-        <span className="h-2 w-2 rounded-full bg-paper/30" />
-        <span className="ml-2 text-[10px] tracking-[0.18em] uppercase text-paper/50">
+    <div className="rounded-sm border border-ink/15 bg-ink text-parchment font-mono text-[13px] overflow-hidden shadow-plate">
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-parchment/10">
+        <span className="h-2 w-2 rounded-full bg-parchment/30" />
+        <span className="h-2 w-2 rounded-full bg-parchment/30" />
+        <span className="h-2 w-2 rounded-full bg-parchment/30" />
+        <span className="ml-2 text-[10px] tracking-widetracked uppercase text-parchment/50">
           power-user cli
         </span>
       </div>
       <pre className="px-4 py-3 leading-relaxed">
-        <span className="text-accent-300">$</span>{" "}
-        <span className="text-paper">npm i -g @conclave-ai/cli</span>
+        <span className="text-gold">$</span>{" "}
+        <span className="text-parchment">npm i -g @conclave-ai/cli</span>
       </pre>
     </div>
   );
@@ -167,45 +179,43 @@ function InstallCommand() {
 function HowItWorks() {
   const steps = [
     {
-      n: "01",
-      title: "Install the GitHub App",
+      n: "I",
+      title: "Install the seal",
       body:
-        "One click. The Conclave AI Code Council app subscribes to your repo's pull-request events. Nothing runs in CI; the work happens in our sandbox.",
+        "One click installs the Conclave AI Code Council GitHub App. It subscribes to your repository's pull-request events; nothing runs in your CI. The work happens in our sandbox, sealed away from your build.",
     },
     {
-      n: "02",
-      title: "Drop a PRD into your repo",
+      n: "II",
+      title: "Lodge your PRD",
       body:
-        "Add .conclave/prd.md describing what the PR is supposed to do — acceptance criteria, out-of-scope, non-functional requirements. Agents read it and flag mismatches.",
+        ".conclave/prd.md describes what the change is supposed to accomplish — acceptance criteria, out-of-scope, non-functional requirements. Agents read it before deliberation and flag spec deviations as first-class blockers.",
     },
     {
-      n: "03",
-      title: "Open a PR — get a verdict",
+      n: "III",
+      title: "Receive the verdict",
       body:
-        "Three agents independently review. Disagreements escalate. Verdict + blockers land as a PR check. Solo and Pro tiers also push the verdict to Telegram.",
+        "Three agents review independently. Disagreements escalate to a second tier. The verdict — APPROVE, REWORK, or REJECT — and any dissents land on the PR as a check and a comment. Solo and Pro tiers also dispatch the result to Telegram.",
     },
   ];
   return (
-    <section id="how" className="border-b border-paper-line bg-paper-dim/40">
-      <div className="mx-auto max-w-page px-6 py-28">
-        <SectionHeader mark="01 — workflow" title="How it works" />
-        <p className="mt-3 max-w-prose text-ink-muted">
-          Three steps. No CI changes. No keys to manage on your end (unless you want to).
+    <section id="how" className="border-b border-parchment-line bg-parchment-dim/40">
+      <div className="mx-auto max-w-page px-6 py-32">
+        <SectionHeader numeral="II" mark="proceedings" title="How the council convenes" />
+        <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed">
+          Three steps. No CI changes. No keys to manage on your end (unless you wish to bring your own).
         </p>
-        <ol className="mt-14 grid gap-px md:grid-cols-3 bg-paper-line border-y border-paper-line">
-          {steps.map((s, i) => (
+        <ol className="mt-16 grid gap-px md:grid-cols-3 bg-parchment-line border-y border-ink/15">
+          {steps.map((s) => (
             <li
               key={s.n}
-              className="bg-paper px-7 py-9 group hover:bg-paper-dim transition-colors"
-              style={{ animationDelay: `${i * 80}ms` }}
+              className="bg-parchment px-8 py-10 group hover:bg-parchment-light transition-colors"
             >
-              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute mb-5">
-                {s.n}
-              </p>
-              <h3 className="font-display text-2xl font-semibold text-ink leading-snug tracking-tightx mb-3">
+              <p className="numeral text-3xl mb-2">{s.n}</p>
+              <div className="gold-rule mb-6 w-12" />
+              <h3 className="font-display text-2xl font-semibold text-ink leading-snug tracking-tightx mb-4">
                 {s.title}
               </h3>
-              <p className="text-[15px] text-ink-muted leading-[1.65]">{s.body}</p>
+              <p className="text-[16px] text-ink-muted leading-[1.7]">{s.body}</p>
             </li>
           ))}
         </ol>
@@ -218,14 +228,18 @@ function HowItWorks() {
 
 function CouncilEvidence() {
   return (
-    <section className="border-b border-paper-line">
-      <div className="mx-auto max-w-page px-6 py-28">
-        <SectionHeader mark="02 — moat data" title={<>Why a council, <span className="font-serif italic font-medium">not Claude alone</span></>} />
-        <p className="mt-3 max-w-prose text-ink-muted">
-          From our own dogfood (15 synthetic-bug PRs across 5 vibe-coder Next.js templates).
-          Honest numbers; no marketing math.
+    <section className="border-b border-parchment-line">
+      <div className="mx-auto max-w-page px-6 py-32">
+        <SectionHeader
+          numeral="III"
+          mark="evidence"
+          title={<>Why a council, <span className="font-italic italic">not Claude alone</span></>}
+        />
+        <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed drop-cap">
+          From our own dogfood — fifteen synthetic-bug pull requests across five vibe-coder
+          Next.js templates. Honest figures; no apology, no marketing arithmetic.
         </p>
-        <div className="mt-14 grid gap-x-10 gap-y-12 md:grid-cols-3">
+        <div className="mt-20 grid gap-x-12 gap-y-14 md:grid-cols-3">
           <Stat
             label="Catch rate"
             value="100%"
@@ -234,21 +248,23 @@ function CouncilEvidence() {
           <Stat
             label="Blockers per PR"
             value="10.93"
-            sub="vs 3.80 Claude alone — 3× deeper findings, including issues lost on a single model"
+            sub="vs 3.80 Claude alone — three times deeper findings, including issues lost on a single model"
           />
           <Stat
             label="Spec-mismatch flags"
             value="9.0"
             unit="/PR"
-            sub="(Claude alone + PRD): blocker categories that no plain code review surfaces"
+            sub="(Claude alone, with PRD attached) — blocker categories that no plain code review surfaces"
           />
         </div>
-        <p className="mt-16 max-w-prose text-[15px] text-ink-subtle leading-[1.65]">
-          The moat isn&rsquo;t {`"smarter than Claude"`} —{" "}
-          <span className="font-serif italic">it&rsquo;s multi-agent depth + PRD-aware spec compliance.</span>{" "}
-          Three models reading your PR and PRD together catch scope creep, route mismatches, and
-          forgotten acceptance criteria that one model alone misses.
-        </p>
+        <div className="mt-20 max-w-prose">
+          <p className="font-italic italic text-2xl text-ink-subtle leading-snug">
+            The moat is not “smarter than Claude.” It is multi-agent depth and PRD-aware spec
+            compliance — three models reading your change and your spec together catch scope
+            creep, route mismatches, and forgotten acceptance criteria a single model alone
+            misses.
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -266,15 +282,16 @@ function Stat({
   sub: string;
 }) {
   return (
-    <article className="border-t border-paper-ruleHi pt-6">
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute mb-3">
+    <article>
+      <div className="rule-thick mb-5" />
+      <p className="font-mono text-[11px] uppercase tracking-widetracked text-ink-mute mb-3">
         {label}
       </p>
-      <p className="font-display font-bold text-[clamp(3.5rem,7vw,5.5rem)] leading-none tracking-tightxx text-ink">
+      <p className="font-display font-medium text-[clamp(3.75rem,7vw,5.75rem)] leading-none tracking-tightxx text-ink">
         {value}
-        {unit ? <span className="text-ink-mute font-mono text-[0.4em] align-baseline ml-1">{unit}</span> : null}
+        {unit ? <span className="text-ink-mute font-mono text-[0.36em] align-baseline ml-1.5">{unit}</span> : null}
       </p>
-      <p className="mt-5 text-sm text-ink-muted leading-relaxed max-w-[34ch]">{sub}</p>
+      <p className="mt-6 text-[15px] text-ink-muted leading-relaxed max-w-[34ch]">{sub}</p>
     </article>
   );
 }
@@ -283,15 +300,16 @@ function Stat({
 
 function DemoSection() {
   return (
-    <section id="try" className="border-b border-paper-line bg-paper-dim/40">
-      <div className="mx-auto max-w-page px-6 py-28">
-        <SectionHeader mark="03 — try it" title="Run a council pass on a public PR" />
-        <p className="mt-3 max-w-prose text-ink-muted">
-          Paste a public PR URL or a raw diff. Optional PRD. One Claude pass with the PRD-aware
-          prompt — same prompt the full council uses. Three runs per IP per UTC day; install the
-          GitHub App for unlimited.
+    <section id="try" className="border-b border-parchment-line bg-parchment-dim/40">
+      <div className="mx-auto max-w-page px-6 py-32">
+        <SectionHeader numeral="IV" mark="hearing" title="Lodge a public PR for an opening hearing" />
+        <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed">
+          Paste a public pull request URL or a raw diff. Optionally attach a PRD by drag-drop,
+          file picker, or a GitHub URL. One Claude pass with the PRD-aware prompt — the same
+          prompt the full council uses. Three opening hearings per IP per UTC day; install the
+          App for the full three-agent council.
         </p>
-        <div className="mt-12">
+        <div className="mt-14">
           <DemoForm />
         </div>
       </div>
@@ -303,60 +321,61 @@ function DemoSection() {
 
 function Pricing() {
   return (
-    <section id="pricing" className="border-b border-paper-line">
-      <div className="mx-auto max-w-page px-6 py-28">
-        <SectionHeader mark="04 — pricing" title="Hard cutoffs. No surprise invoices." />
-        <p className="mt-3 max-w-prose text-ink-muted">
-          Booster top-ups instead of overage bills. BYO Anthropic key for free unlimited usage.
+    <section id="pricing" className="border-b border-parchment-line">
+      <div className="mx-auto max-w-page px-6 py-32">
+        <SectionHeader numeral="V" mark="indulgences" title="Indulgences" />
+        <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed">
+          Hard cutoffs, no surprise invoices. Booster top-ups instead of overage bills. Bring
+          your own Anthropic key for free unlimited usage.
         </p>
-        <div className="mt-14 grid gap-6 md:grid-cols-3">
+        <div className="mt-16 grid gap-7 md:grid-cols-3">
           <PriceCard
-            tier="Free (BYO key)"
-            price="$0"
+            tier="Free"
             sub="bring your own Anthropic key"
+            price="$0"
             features={[
               "Unlimited reviews + autofix",
               "PR comment delivery",
               "Anonymous failure-pattern sharing",
               "All council features",
             ]}
-            cta="Connect GitHub"
+            cta="Convene the council"
             ctaHref={LOGIN_URL}
           />
           <PriceCard
             tier="Solo"
-            price="$19"
             sub="per month"
+            price="$19"
             highlight
             features={[
               "30 reviews / month",
               "10 autofix cycles / month",
               "Council + PRD layer",
-              "Telegram alerts (premium)",
+              "Telegram dispatches (premium)",
               "$5 booster: +5 reviews",
             ]}
-            cta="Start with Solo"
+            cta="Choose Solo"
             ctaHref={LOGIN_URL}
           />
           <PriceCard
             tier="Pro"
-            price="$49"
             sub="per month"
+            price="$49"
             features={[
               "80 reviews / month",
               "30 autofix cycles / month",
-              "Telegram alerts + priority sandbox",
+              "Telegram dispatches + priority sandbox",
               "Private mode (no data sharing)",
               "$5 booster",
             ]}
-            cta="Start with Pro"
+            cta="Choose Pro"
             ctaHref={LOGIN_URL}
           />
         </div>
-        <p className="mt-10 max-w-prose text-xs text-ink-mute leading-relaxed">
-          1 free review the moment you install the GitHub App — no card. After that, BYO key for
-          free unlimited usage, or upgrade to Solo / Pro for Telegram alerts and priority delivery.
-          Stripe metering ships once moat data accumulates from real usage.
+        <p className="mt-12 max-w-prose text-sm text-ink-mute leading-relaxed">
+          One free hearing the moment you install the GitHub App — no card. Thereafter, bring
+          your own key for unlimited free, or choose Solo / Pro for premium dispatches and
+          priority. Stripe metering ships once moat data accumulates from real usage.
         </p>
       </div>
     </section>
@@ -382,49 +401,50 @@ function PriceCard({
 }) {
   return (
     <article
-      className={`relative card-lift rounded-md p-7 flex flex-col ${
+      className={`relative card-lift rounded-sm p-8 flex flex-col ${
         highlight
-          ? "bg-paper border-2 border-paper-ruleHi shadow-plateHi"
-          : "bg-paper border border-paper-line shadow-plate"
+          ? "bg-parchment-light shadow-seal"
+          : "bg-parchment border border-parchment-line shadow-plate"
       }`}
     >
       {highlight ? (
-        <span className="absolute -top-3 left-7 font-mono text-[10px] uppercase tracking-[0.22em] bg-accent-900 text-paper px-2 py-1 rounded">
-          most popular
+        <span className="absolute -top-3 left-8 font-mono text-[10px] uppercase tracking-widetracked bg-oxblood-600 text-parchment-light px-3 py-1 rounded-sm">
+          recommended
         </span>
       ) : null}
       <p
-        className={`text-sm font-semibold ${
-          highlight ? "text-accent-900" : "text-ink-subtle"
+        className={`font-display text-xl font-medium tracking-tight ${
+          highlight ? "text-oxblood-600" : "text-ink-subtle"
         }`}
       >
         {tier}
       </p>
-      <p className="mt-4 flex items-baseline gap-2">
-        <span className="font-display font-bold text-[3rem] leading-none tracking-tightxx text-ink">
+      <p className="mt-5 flex items-baseline gap-2.5">
+        <span className="font-display font-medium text-[3.25rem] leading-none tracking-tightxx text-ink lining-nums">
           {price}
         </span>
-        <span className="text-sm text-ink-mute">{sub}</span>
+        <span className="text-sm text-ink-mute italic">{sub}</span>
       </p>
-      <ul className="mt-7 space-y-2.5 text-[14px] text-ink-subtle flex-1">
+      <div className={`mt-7 mb-7 ${highlight ? "gold-rule" : "rule-thin"}`} />
+      <ul className="space-y-3 text-[15px] text-ink-subtle flex-1 leading-relaxed">
         {features.map((f) => (
           <li key={f} className="flex gap-3">
             <span
-              className={`mt-1 h-1 w-3 flex-none ${
-                highlight ? "bg-accent-900" : "bg-ink-ghost"
+              className={`mt-2 h-1 w-3 flex-none ${
+                highlight ? "bg-oxblood-600" : "bg-ink-ghost"
               }`}
               aria-hidden="true"
             />
-            <span className="leading-snug">{f}</span>
+            <span>{f}</span>
           </li>
         ))}
       </ul>
       <a
         href={ctaHref}
-        className={`mt-8 block text-center rounded-md px-4 py-2.5 text-sm font-medium tracking-tight transition-colors ${
+        className={`mt-9 block text-center rounded-sm px-4 py-3 text-[15px] font-display font-medium tracking-tight transition-colors ${
           highlight
-            ? "bg-accent-900 text-paper hover:bg-accent-700"
-            : "border border-paper-ruleHi text-ink hover:bg-paper-dim"
+            ? "bg-oxblood-600 text-parchment-light hover:bg-oxblood-500"
+            : "border border-ink/30 text-ink hover:bg-parchment-dim"
         }`}
       >
         {cta}
@@ -440,35 +460,35 @@ function FAQ() {
     {
       q: "How is this different from Claude Code or Cursor?",
       a:
-        "Those are IDE assistants. Conclave AI runs at the PR layer with three independent agents and reads your PRD. Different layer, different value: catches what single-agent review misses + flags spec deviations no plain code review can produce.",
+        "Those are IDE assistants. Conclave AI sits at the pull-request layer with three independent agents and reads your PRD. A different layer; a different value: catches what single-agent review misses, and flags spec deviations no plain code review can produce.",
     },
     {
-      q: "What does Conclave AI see from my repo?",
+      q: "What does the council see from my repo?",
       a:
-        "Only the diff and the files referenced in blockers — same as a human reviewer would. Code never leaves our sandbox. Federated learning shares only anonymized signals (kind/category/severity hash, day-bucket, sha256). See docs/federated-sync.md.",
+        "Only the diff and the files referenced in blockers — the same surface a human reviewer touches. Code never leaves our sandbox. Federated learning shares only anonymised signals (kind, category, severity hash, day-bucket, sha256). See docs/federated-sync.md.",
     },
     {
-      q: "Do I have to install anything in CI?",
+      q: "Do I need to install anything in CI?",
       a:
-        "No. The GitHub App receives webhooks; review and autofix run in our Cloudflare Containers sandbox. Your CI stays untouched.",
+        "No. The GitHub App receives webhooks; review and autofix run inside our Cloudflare Containers sandbox. Your CI stays untouched.",
     },
     {
-      q: "Can I bring my own Anthropic key?",
+      q: "May I bring my own Anthropic key?",
       a:
-        "Yes — the free tier is BYO-key with unlimited usage. You opt into anonymous failure-pattern sharing in exchange. The trade is honest: we get data for the federated catalog; you get unlimited free reviews.",
+        "Yes — the free tier is BYO-key with unlimited usage. You opt into anonymous failure-pattern sharing in exchange. The trade is honest: we receive data to make the federated catalog smarter; you receive unlimited free reviews.",
     },
   ];
   return (
-    <section id="faq" className="border-b border-paper-line bg-paper-dim/40">
-      <div className="mx-auto max-w-page px-6 py-28">
-        <SectionHeader mark="05 — questions" title="FAQ" />
-        <dl className="mt-14 divide-y divide-paper-line border-y border-paper-line">
+    <section id="faq" className="border-b border-parchment-line bg-parchment-dim/40">
+      <div className="mx-auto max-w-page px-6 py-32">
+        <SectionHeader numeral="VI" mark="questions" title="Disquisitions" />
+        <dl className="mt-16 divide-y divide-ink/15 border-y border-ink/15">
           {items.map((item) => (
-            <div key={item.q} className="py-7 grid gap-x-10 md:grid-cols-12">
-              <dt className="md:col-span-5 font-display text-xl font-semibold text-ink leading-snug tracking-tightx">
+            <div key={item.q} className="py-9 grid gap-x-10 md:grid-cols-12">
+              <dt className="md:col-span-5 font-display text-2xl font-medium text-ink leading-snug tracking-tightx">
                 {item.q}
               </dt>
-              <dd className="md:col-span-7 mt-3 md:mt-1 text-[15px] text-ink-muted leading-[1.65] max-w-prose">
+              <dd className="md:col-span-7 mt-3 md:mt-1 text-[16px] text-ink-muted leading-[1.7] max-w-prose">
                 {item.a}
               </dd>
             </div>
@@ -483,29 +503,30 @@ function FAQ() {
 
 function Footer() {
   return (
-    <footer className="bg-paper">
-      <div className="mx-auto max-w-page px-6 pt-20 pb-12 grid gap-10 md:grid-cols-12 text-sm">
+    <footer className="bg-parchment">
+      <div className="mx-auto max-w-page px-6 pt-20 pb-12 grid gap-10 md:grid-cols-12 text-[15px]">
         <div className="md:col-span-5">
           <Logo size={22} />
-          <p className="mt-4 text-ink-muted max-w-xs leading-relaxed">
-            Multi-agent code review against your PRD. Open beta on Cloudflare Workers + Containers.
+          <p className="mt-5 text-ink-muted max-w-xs leading-relaxed">
+            A council of agents convened for every pull request — running on Cloudflare Workers and
+            Containers. Open beta.
           </p>
-          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-mute">
-            v0.16 · {new Date().getFullYear()}
+          <p className="mt-5 numeral text-base">
+            v0.16 · MMXXVI
           </p>
         </div>
-        <nav className="md:col-span-3 space-y-2.5 text-ink-muted">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute mb-3">
-            Product
+        <nav className="md:col-span-3 space-y-3 text-ink-muted">
+          <p className="font-mono text-[11px] uppercase tracking-widetracked text-ink-mute mb-4">
+            Order
           </p>
           <a href="#how" className="block link-anim hover:text-ink">How it works</a>
           <a href="#try" className="block link-anim hover:text-ink">Try it</a>
-          <a href="#pricing" className="block link-anim hover:text-ink">Pricing</a>
-          <a href="#faq" className="block link-anim hover:text-ink">FAQ</a>
+          <a href="#pricing" className="block link-anim hover:text-ink">Indulgences</a>
+          <a href="#faq" className="block link-anim hover:text-ink">Disquisitions</a>
         </nav>
-        <nav className="md:col-span-4 space-y-2.5 text-ink-muted">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute mb-3">
-            Resources
+        <nav className="md:col-span-4 space-y-3 text-ink-muted">
+          <p className="font-mono text-[11px] uppercase tracking-widetracked text-ink-mute mb-4">
+            Archives
           </p>
           <a
             href="https://github.com/seunghunbae-3svs/conclave-ai"
@@ -513,7 +534,7 @@ function Footer() {
             target="_blank"
             rel="noreferrer"
           >
-            GitHub repo
+            GitHub repository
           </a>
           <a
             href="https://github.com/apps/conclave-ai-code-council"
@@ -521,16 +542,16 @@ function Footer() {
             target="_blank"
             rel="noreferrer"
           >
-            Install GitHub App
+            Install the GitHub App
           </a>
           <a href="mailto:hi@conclave-ai.dev" className="block link-anim hover:text-ink">
             hi@conclave-ai.dev
           </a>
         </nav>
       </div>
-      <div className="border-t border-paper-line">
+      <div className="border-t border-parchment-line">
         <div className="mx-auto max-w-page px-6 py-6 flex items-center justify-between text-xs text-ink-mute">
-          <span>© {new Date().getFullYear()} 3SVS. All rights reserved.</span>
+          <span className="italic">© {new Date().getFullYear()} 3SVS · Sealed in Seoul.</span>
           <span className="font-mono tracking-wider">{SITE_URL.replace(/^https?:\/\//, "")}</span>
         </div>
       </div>
@@ -541,16 +562,22 @@ function Footer() {
 // --- Shared ----------------------------------------------------------------
 
 function SectionHeader({
+  numeral,
   mark,
   title,
 }: {
+  numeral: string;
   mark: string;
   title: React.ReactNode;
 }) {
   return (
     <div>
-      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-mute">{mark}</p>
-      <h2 className="mt-3 font-display font-bold text-[clamp(2rem,4.5vw,3.25rem)] leading-[1.05] tracking-tightxx text-ink">
+      <div className="flex items-baseline gap-4 mb-3">
+        <p className="numeral text-3xl">{numeral}</p>
+        <span className="gold-rule flex-1 max-w-[100px]" />
+        <p className="font-mono text-[11px] uppercase tracking-widetracked text-ink-mute">{mark}</p>
+      </div>
+      <h2 className="font-display font-medium text-[clamp(2.25rem,5vw,3.75rem)] leading-[1.05] tracking-tightxx text-ink">
         {title}
       </h2>
     </div>

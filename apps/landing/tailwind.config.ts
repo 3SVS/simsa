@@ -5,88 +5,105 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Warm cream paper. Used as the dominant page background to
-        // step away from the generic pure-white "AI tool" look without
-        // sacrificing serious-dev-tool restraint.
-        paper: {
-          DEFAULT: "#FAFAF7",
-          dim: "#F1F0EA",
-          line: "#E4E2D9",
-          ruleHi: "#1A1817",
+        // Parchment / vellum tones — warm yellow-cream that reads as
+        // 17th-century printed page rather than modern AI-tool white.
+        // Adjusted from generic #FAFAF7 to something with actual aged
+        // character.
+        parchment: {
+          DEFAULT: "#F4ECDC",
+          light: "#F9F3E5",
+          dim: "#EADFC6",
+          line: "#D9C9A6",
+          rule: "#B6A37C",
         },
-        // Near-black ink for text. Slight warm undertone matches the
-        // paper bg; pure #000 looks overconfident on cream.
+        // Ink — deep warm brown-black, not pure ink. Reads as
+        // nib-and-iron-gall on paper.
         ink: {
-          DEFAULT: "#09090B",
-          subtle: "#27272A",
-          muted: "#52525B",
-          mute: "#71717A",
-          ghost: "#A1A1AA",
+          DEFAULT: "#1A1310",
+          subtle: "#2E251F",
+          muted: "#5A4A3D",
+          mute: "#7A685A",
+          ghost: "#A89784",
         },
-        // Single deep accent — Stripe-grade ink blue. Applied as a
-        // dominant 5–10% color (links, highlight underlines, the
-        // primary CTA, focus rings) rather than spread thin.
-        accent: {
-          50: "#EEF2F7",
-          100: "#D9E2EE",
-          200: "#B0C0D5",
-          300: "#7E94B3",
-          400: "#4F6B8E",
-          500: "#27466E",
-          600: "#163255",
-          700: "#0E2547",
-          800: "#0A1E3C",
-          900: "#0A2540",
-          950: "#05132B",
+        // Oxblood / burgundy — the council's seal color. Reserved for
+        // primary CTA, the highlighted Solo card border, verdict
+        // emphasis. Sparing use, 5–8% surface coverage.
+        oxblood: {
+          50: "#F5E5E7",
+          100: "#E9C9CD",
+          200: "#D49097",
+          300: "#B45661",
+          400: "#8E2C39",
+          500: "#751B27",
+          600: "#5C111C",
+          700: "#4B0E17",
+          800: "#3D0C12",
+          900: "#2A080D",
         },
-        // Used sparingly for risk/reject affordances + ribbon labels.
+        // Gold leaf — metallic accent. Used for hover underlines,
+        // section-mark dots, decorative rules. Olive-warm gold, not
+        // shiny.
+        gold: {
+          DEFAULT: "#9B7A30",
+          subtle: "#C7A554",
+          dim: "#D9BD75",
+          line: "#7B5F23",
+        },
+        // Used sparingly for risk/reject affordances.
         flag: {
           DEFAULT: "#A85410",
-          subtle: "#F2E8DA",
+          subtle: "#F0E1C8",
         },
       },
       fontFamily: {
-        // Display headings — Bricolage Grotesque. Variable axes give us
-        // optical-size + width adjustments at large sizes.
-        display: ["var(--font-display)", "Bricolage Grotesque", "Georgia", "serif"],
-        // Body — Geist (Vercel). Distinctive, technical, but warmer
-        // than Inter; pairs with Bricolage's 90s grotesque attitude.
-        sans: ["var(--font-sans)", "Geist", "system-ui", "-apple-system", "sans-serif"],
-        // Monospace — JetBrains Mono. Used for cli commands, version
-        // markers, "001" section labels, code-style accents.
+        // Display — Bodoni Moda. High-contrast didone with sharp serifs
+        // + dramatic stroke modulation. Reads as classical broadsheet
+        // headline at 4–7rem; clamps gracefully thanks to optical-size axis.
+        display: ["var(--font-display)", "Bodoni Moda", "Didot", "Times New Roman", "serif"],
+        // Body — Crimson Pro. Modulated old-style serif designed for
+        // long reading on screen. Pairs with Bodoni's high-contrast
+        // display without competing.
+        sans: ["var(--font-serif-body)", "Crimson Pro", "Crimson Text", "Georgia", "serif"],
+        // Italic emphasis — Newsreader Italic. Rounder, slightly less
+        // formal than Crimson — used as voice shifts in pulled quotes.
+        italic: ["var(--font-italic)", "Newsreader", "Georgia", "serif"],
+        // Mono — JetBrains Mono. Kept for cli + numerics. Some
+        // judicial UIs use Courier as concession to mechanical
+        // typewriter; JBM reads cleaner on display and the council
+        // metaphor is digital-modern, not 1950s-archive.
         mono: ["var(--font-mono)", "JetBrains Mono", "ui-monospace", "Menlo", "monospace"],
-        // Serif italic — Newsreader Italic. Used for editorial
-        // emphasis (one or two pulled quotes), not body.
-        serif: ["var(--font-serif)", "Newsreader", "Georgia", "serif"],
       },
       letterSpacing: {
-        tightx: "-0.022em",
-        tightxx: "-0.034em",
+        tightx: "-0.014em",
+        tightxx: "-0.022em",
+        widetracked: "0.18em",
       },
       maxWidth: {
         prose: "62ch",
         page: "1180px",
       },
       boxShadow: {
-        // Crisp 1px outer keylines for cards. Softer than CSS default
-        // shadow; reads as a printed plate edge rather than a popup.
-        plate: "0 0 0 1px #E4E2D9, 0 1px 2px rgba(15,15,15,0.04)",
-        plateHi: "0 0 0 1.5px #1A1817, 0 12px 28px -16px rgba(15,15,15,0.18)",
-        ring: "0 0 0 2px #FAFAF7, 0 0 0 4px #0A2540",
+        // Hairline plate edge — feels like an aged paper insert on
+        // the page rather than a modal popup.
+        plate: "0 0 0 1px #D9C9A6, 0 1px 2px rgba(40,30,20,0.05)",
+        plateHi: "0 0 0 2px #5C111C, 0 16px 32px -18px rgba(60,15,20,0.22)",
+        ring: "0 0 0 2px #F4ECDC, 0 0 0 4px #5C111C",
+        // Wax-seal style emboss for the highlight pricing card.
+        seal: "inset 0 0 0 1px #C7A554, 0 0 0 2px #5C111C, 0 22px 40px -22px rgba(60,15,20,0.30)",
       },
       keyframes: {
         rise: {
-          from: { opacity: "0", transform: "translateY(8px)" },
+          from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
-        ticker: {
-          from: { transform: "translateX(0)" },
-          to: { transform: "translateX(-50%)" },
+        sealPulse: {
+          "0%, 100%": { transform: "rotate(-2deg) scale(1)" },
+          "50%": { transform: "rotate(-2deg) scale(1.04)" },
         },
       },
       animation: {
         rise: "rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both",
-        ticker: "ticker 32s linear infinite",
+        sealPulse: "sealPulse 5s ease-in-out infinite",
       },
     },
   },
