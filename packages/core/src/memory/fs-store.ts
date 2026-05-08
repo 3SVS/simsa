@@ -12,6 +12,10 @@ import {
 } from "./schema.js";
 import type { MemoryReadQuery, MemoryRetrieval, MemoryStore } from "./store.js";
 import { retrieve } from "./retrieval.js";
+import {
+  BUNDLED_DESIGN_ANSWER_KEYS,
+  BUNDLED_DESIGN_FAILURES,
+} from "./bundled-design-seeds.js";
 import { hashAnswerKey, hashFailure } from "../federated/redact.js";
 import { rerankByFrequency } from "../federated/frequency.js";
 
@@ -141,6 +145,13 @@ export class FileSystemMemoryStore implements MemoryStore {
         if (parsed.success) out.push(parsed.data);
       }
     }
+    // v0.16.7 — append bundled default seeds when the requested domain
+    // includes 'design'. Bundled entries have no `repo` so the
+    // queryRepo boost in retrieval prefers user-written entries when
+    // both match (bundled is a fallback, not a competitor).
+    if (!domain || domain === "design") {
+      out.push(...BUNDLED_DESIGN_ANSWER_KEYS);
+    }
     return out;
   }
 
@@ -156,6 +167,10 @@ export class FileSystemMemoryStore implements MemoryStore {
         const parsed = FailureEntrySchema.safeParse(JSON.parse(raw));
         if (parsed.success) out.push(parsed.data);
       }
+    }
+    // v0.16.7 — same fallback for design failure catalog. See above.
+    if (!domain || domain === "design") {
+      out.push(...BUNDLED_DESIGN_FAILURES);
     }
     return out;
   }
