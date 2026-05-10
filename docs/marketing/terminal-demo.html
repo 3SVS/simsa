@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Conclave AI — terminal demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!--
+    Self-playing terminal demo. Open in browser → screen-record the
+    .terminal block → use as Twitter/Threads/LinkedIn attachment.
+
+    On Windows: Win+G (Xbox Game Bar) → red record dot. Or install
+    "ScreenToGif" from microsoft.com/store → point at this window's
+    terminal area → record → export as GIF.
+
+    Total run time: ~28s. Loops automatically (5s pause before restart).
+
+    Click anywhere to restart immediately if you want a clean take.
+  -->
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #1a1310;
+      font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+    .terminal {
+      width: 100%;
+      max-width: 920px;
+      height: 540px;
+      background: #14100D;
+      border: 1px solid #3D2E26;
+      border-radius: 10px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #1F1814;
+      border-bottom: 1px solid #3D2E26;
+      flex-shrink: 0;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #5C463A;
+    }
+    .dot.red    { background: #C75050; }
+    .dot.yellow { background: #C7A554; }
+    .dot.green  { background: #6CAA70; }
+    .title {
+      flex: 1;
+      text-align: center;
+      color: #7A685A;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+    .body {
+      flex: 1;
+      padding: 18px 20px;
+      color: #E8DCC4;
+      font-size: 14px;
+      line-height: 1.55;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .prompt    { color: #9B7A30; }
+    .cmd       { color: #E8DCC4; }
+    .dim       { color: #7A685A; }
+    .ok        { color: #6CAA70; }
+    .warn      { color: #C7A554; }
+    .err       { color: #C75050; }
+    .accent    { color: #C7A554; }
+    .info      { color: #88AABB; }
+    .bold      { color: #FBF6E9; font-weight: 500; }
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 16px;
+      background: #E8DCC4;
+      vertical-align: text-bottom;
+      animation: blink 1s steps(1, end) infinite;
+      margin-left: 1px;
+    }
+    @keyframes blink {
+      50% { background: transparent; }
+    }
+    .out-line {
+      animation: fadeIn 200ms ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(2px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="terminal" id="term" onclick="restart()">
+    <div class="titlebar">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+      <span class="title">conclave-ai · zsh — 102×32</span>
+    </div>
+    <div class="body" id="body"></div>
+  </div>
+
+  <script>
+    /**
+     * Hand-scripted terminal demo. Each step is either:
+     *   ["type", text, options]    — types prompt + cmd one char at a time
+     *   ["out", html, delay]        — emits a line of output after delay
+     *   ["wait", ms]                — pauses
+     *
+     * Total length tuned to ~28s — fits Twitter video preview window
+     * and is short enough that LinkedIn won't truncate.
+     */
+    const SCRIPT = [
+      ["type", { prompt: "$", cmd: "conclave whoami" }],
+      ["wait", 250],
+      ["out", '<span class="bold">seunghunbae-3svs</span> <span class="dim">(free · BYO Anthropic key)</span>', 60],
+      ["wait", 600],
+
+      ["type", { prompt: "$", cmd: "conclave review --pr 142 --use-saas" }],
+      ["wait", 200],
+      ["out", '<span class="dim">conclave review: PR #142 — apps/api: refund flow + profile bio</span>', 50],
+      ["out", '<span class="dim">conclave review: tier-1 agents:</span> [<span class="info">claude</span>, <span class="info">openai</span>, <span class="info">gemini</span>]', 50],
+      ["wait", 400],
+      ["out", '<span class="warn">⏳ council convening</span> <span class="dim">…</span>', 50],
+      ["wait", 1500],
+      ["out", '<span class="ok">✓</span> <span class="info">claude</span>    <span class="dim">→</span> <span class="warn">REWORK</span> <span class="dim">·</span> 4 blockers <span class="dim">· 64s · $0.011</span>', 60],
+      ["wait", 800],
+      ["out", '<span class="ok">✓</span> <span class="info">openai</span>    <span class="dim">→</span> <span class="warn">REWORK</span> <span class="dim">·</span> 3 blockers <span class="dim">(2 overlap with claude)</span>', 60],
+      ["wait", 700],
+      ["out", '<span class="ok">✓</span> <span class="info">gemini</span>    <span class="dim">→</span> <span class="warn">REWORK</span> <span class="dim">·</span> 5 blockers <span class="dim">(1 unique:</span> <span class="accent">spec-mismatch</span><span class="dim">)</span>', 60],
+      ["wait", 600],
+      ["out", "", 0],
+      ["out", '<span class="warn">⏳ deliberation (round 1)</span> <span class="dim">…</span>', 50],
+      ["wait", 1500],
+      ["out", '<span class="bold">⚖  CONSENSUS:</span> <span class="warn">REWORK</span> <span class="dim">· 4 blockers (deduplicated)</span>', 60],
+      ["wait", 200],
+      ["out", "", 0],
+      ["out", '<span class="dim">  1.</span> <span class="accent">[spec-mismatch]</span> · <span class="warn">blocker</span> <span class="dim">/billing/refund not in PRD §3</span>', 60],
+      ["out", '<span class="dim">  2.</span> <span class="accent">[security]</span>      · <span class="warn">blocker</span> <span class="dim">dangerouslySetInnerHTML on user bio</span>', 60],
+      ["out", '<span class="dim">  3.</span> <span class="accent">[a11y]</span>          · <span class="warn">major</span>   <span class="dim">icon-only close button missing aria-label</span>', 60],
+      ["out", '<span class="dim">  4.</span> <span class="accent">[testing]</span>       · <span class="warn">major</span>   <span class="dim">/billing/refund has no integration test</span>', 60],
+      ["wait", 600],
+      ["out", "", 0],
+      ["out", '<span class="bold">Verdict:</span> <span class="warn">REWORK</span> <span class="dim">· 187s · $0.024</span>', 60],
+      ["out", '<span class="ok">→</span> <span class="dim">Comment posted to PR #142</span>', 60],
+      ["out", '<span class="ok">→</span> <span class="dim">Telegram dispatch sent</span>', 60],
+      ["out", '<span class="ok">→</span> <span class="dim">Run</span> <span class="accent">conclave autofix --pr 142 --use-saas</span> <span class="dim">to auto-fix</span>', 60],
+      ["wait", 800],
+
+      ["type", { prompt: "$", cmd: "" }],
+      ["wait", 1500],
+    ];
+
+    const body = document.getElementById("body");
+    let timers = [];
+
+    function clear() {
+      body.innerHTML = "";
+      timers.forEach(clearTimeout);
+      timers = [];
+    }
+
+    function restart() {
+      clear();
+      run();
+    }
+
+    function appendLine(html) {
+      const div = document.createElement("div");
+      div.className = "out-line";
+      div.innerHTML = html || "&nbsp;";
+      body.appendChild(div);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function typeInto(el, text, charDelay, done) {
+      let i = 0;
+      function tick() {
+        if (i >= text.length) { done(); return; }
+        el.appendChild(document.createTextNode(text[i]));
+        i += 1;
+        timers.push(setTimeout(tick, charDelay));
+      }
+      tick();
+    }
+
+    function step(idx) {
+      if (idx >= SCRIPT.length) {
+        // pause then loop
+        timers.push(setTimeout(restart, 5000));
+        return;
+      }
+      const s = SCRIPT[idx];
+      const [op, arg, extra] = s;
+      if (op === "type") {
+        const line = document.createElement("div");
+        line.className = "out-line";
+        line.innerHTML =
+          `<span class="prompt">${arg.prompt}</span> ` +
+          `<span class="cmd"></span><span class="cursor"></span>`;
+        body.appendChild(line);
+        body.scrollTop = body.scrollHeight;
+        const cmdSpan = line.querySelector(".cmd");
+        const cursor = line.querySelector(".cursor");
+        const charDelay = arg.cmd.length > 20 ? 35 : 60;
+        if (arg.cmd.length === 0) {
+          // bare prompt — leave the cursor blinking
+          timers.push(setTimeout(() => step(idx + 1), 0));
+          return;
+        }
+        typeInto(cmdSpan, arg.cmd, charDelay, () => {
+          cursor.remove();
+          timers.push(setTimeout(() => step(idx + 1), 200));
+        });
+      } else if (op === "out") {
+        appendLine(arg);
+        timers.push(setTimeout(() => step(idx + 1), extra ?? 80));
+      } else if (op === "wait") {
+        timers.push(setTimeout(() => step(idx + 1), arg));
+      }
+    }
+
+    function run() {
+      step(0);
+    }
+
+    run();
+  </script>
+</body>
+</html>
