@@ -37,7 +37,8 @@ enabled = true
 # 05:00 UTC Sundays — source-discovery (Sprint E1: scan GitHub for new design-pattern repos)
 # 06:00 UTC daily   — oss-pr-miner (Sprint E2: extract patterns from popular OSS bugfix PRs)
 # 07:00 UTC Mondays — changelog-monitor (Sprint E3: track new releases of React/Next.js/Tailwind/TS/shadcn-ui/Storybook)
-crons = ["*/10 * * * *", "*/5 * * * *", "0 3 * * *", "0 */6 * * *", "0 4 * * *", "0 5 * * 0", "0 6 * * *", "0 7 * * 1"]
+# 08:00 UTC Mondays — agent-spawner (Sprint E5 shadow: detect new domains in classified-as-other feedback, propose new agent persona)
+crons = ["*/10 * * * *", "*/5 * * * *", "0 3 * * *", "0 */6 * * *", "0 4 * * *", "0 5 * * 0", "0 6 * * *", "0 7 * * 1", "0 8 * * 1"]
 
 # v0.16.2 — Conclave AI sandbox container.
 #

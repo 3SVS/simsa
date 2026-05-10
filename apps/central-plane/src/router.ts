@@ -25,6 +25,7 @@ import { createSourceCandidatesRoutes } from "./routes/source-candidates.js";
 import { createOssPatternsRoutes } from "./routes/oss-patterns.js";
 import { createSpecUpdatesRoutes } from "./routes/spec-updates.js";
 import { createPromptVariantsRoutes } from "./routes/prompt-variants.js";
+import { createSpawnedAgentsRoutes } from "./routes/spawned-agents.js";
 import type { FetchLike } from "./github.js";
 
 /**
@@ -100,6 +101,11 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // POST /admin/prompt-variants/:id/status. A/B routing wiring with
   // agents lands in a follow-up sprint once Sprint D telemetry matures.
   app.route("/", createPromptVariantsRoutes());
+  // v0.16.17 — Sprint E5 (shadow scaffold): agent self-spawning.
+  // GET /admin/spawned-agents, POST /admin/spawned-agents/:id/status,
+  // POST /admin/run-agent-spawner. Weekly cron also runs the spawner.
+  // Spawned agents start in 'shadow' (no user-visible verdict impact).
+  app.route("/", createSpawnedAgentsRoutes());
   app.onError((err, c) => {
     console.error("central-plane error:", err);
     return c.json({ error: err.message || "internal error" }, 500);

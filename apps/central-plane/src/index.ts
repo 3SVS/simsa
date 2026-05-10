@@ -9,6 +9,7 @@ import { promoteSeedsPass } from "./seed-promoter.js";
 import { runSourceDiscovery } from "./source-discovery.js";
 import { runOssPrMiner } from "./oss-pr-miner.js";
 import { runChangelogMonitor } from "./changelog-monitor.js";
+import { runAgentSpawner } from "./agent-spawner.js";
 
 const app = createApp();
 
@@ -153,6 +154,21 @@ export default {
         );
       } catch (err) {
         console.error("[changelog-monitor] crashed:", err);
+      }
+      return;
+    }
+    if (event.cron === "0 8 * * 1") {
+      try {
+        const result = await runAgentSpawner(env);
+        console.log(
+          JSON.stringify({
+            cron: "agent-spawner",
+            cronExpression: event.cron,
+            ...result,
+          }),
+        );
+      } catch (err) {
+        console.error("[agent-spawner] crashed:", err);
       }
       return;
     }
