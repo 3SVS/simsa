@@ -88,29 +88,17 @@ const STRUCTURED_DATA = {
     "A council of three frontier AI agents (Claude, GPT-5, Gemini) reviews every PR independently, then deliberates against your PRD to surface spec mismatches a single model misses.",
   url: SITE_URL,
   image: `${SITE_URL}/opengraph-image`,
-  offers: [
-    {
-      "@type": "Offer",
-      name: "Free (BYO Anthropic key)",
-      price: "0",
-      priceCurrency: "USD",
-      description: "Unlimited reviews + autofix; bring your own API key.",
-    },
-    {
-      "@type": "Offer",
-      name: "Solo",
-      price: "19",
-      priceCurrency: "USD",
-      description: "30 reviews + 10 autofix cycles per month; Telegram dispatches.",
-    },
-    {
-      "@type": "Offer",
-      name: "Pro",
-      price: "49",
-      priceCurrency: "USD",
-      description: "80 reviews + 30 autofix cycles per month; priority sandbox; private mode.",
-    },
-  ],
+  // v0.14.5 — keep only the free tier in structured data so Google's
+  // SoftwareApplication rich-result surfaces "Free" not the paid tiers.
+  // Pricing is still on the landing page; we just don't broadcast the
+  // dollar figures into search snippets while pricing is in beta and
+  // may change.
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+    description: "Free with bring-your-own Anthropic API key. Open beta.",
+  },
   publisher: {
     "@type": "Organization",
     name: "3SVS",
