@@ -219,6 +219,8 @@ Hard cutoffs (no surprise overage bills). $5 booster top-ups for one-off bursts.
 | `/admin/learning-stats` + `metrics.rag` per review | ✅ shipped (v0.16.11 / Sprint D) |
 | GitHub Trending source-discovery crawler | ✅ shipped (v0.16.12 / Sprint E1) |
 | OSS bugfix-PR pattern miner | ✅ shipped (v0.16.13 / Sprint E2) |
+| Changelog/spec monitor (React/Next.js/Tailwind/TS/shadcn-ui/Storybook releases) | ✅ shipped (v0.16.14 / Sprint E3) |
+| Prompt-variant A/B framework (data model + CRUD) | 🟡 scaffold (v0.16.15 / Sprint E4 — agent wiring follows once Sprint D telemetry matures) |
 | `/saas/review` + `/saas/autofix` endpoints | 🟡 stub (container wiring next) |
 | Cloudflare Containers worker | 🟡 in progress |
 | Stripe metering + paid tiers | ⏳ deferred until moat data accumulates from real usage |

@@ -24,6 +24,7 @@ import { createLearningStatsRoutes } from "./routes/learning-stats.js";
 import { createSourceCandidatesRoutes } from "./routes/source-candidates.js";
 import { createOssPatternsRoutes } from "./routes/oss-patterns.js";
 import { createSpecUpdatesRoutes } from "./routes/spec-updates.js";
+import { createPromptVariantsRoutes } from "./routes/prompt-variants.js";
 import type { FetchLike } from "./github.js";
 
 /**
@@ -94,6 +95,11 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // + POST /admin/run-changelog-monitor. Weekly cron tracks new versions of
   // React/Next.js/Tailwind/TS/shadcn-ui/Storybook for new patterns + deprecations.
   app.route("/", createSpecUpdatesRoutes());
+  // v0.16.15 — Sprint E4 (scaffold): prompt-variant CRUD admin surface.
+  // POST /admin/prompt-variants, GET /admin/prompt-variants,
+  // POST /admin/prompt-variants/:id/status. A/B routing wiring with
+  // agents lands in a follow-up sprint once Sprint D telemetry matures.
+  app.route("/", createPromptVariantsRoutes());
   app.onError((err, c) => {
     console.error("central-plane error:", err);
     return c.json({ error: err.message || "internal error" }, 500);
