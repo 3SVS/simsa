@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/failure-classifier",
-  "version": "0.16.2",
+  "version": "0.16.3",
   "description": "Conclave AI failure classifier — pattern-match runtime regressions (Supabase paused, env vars missing, DB migration not applied, API quota, etc.) to actionable user guidance.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",
