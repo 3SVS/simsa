@@ -236,28 +236,169 @@ H2 has to be live first or this just feeds noise.
 
 ---
 
-## H4 — Ecosystem
+## H4 — Pre-1.0 cleanup (5 items)
 
-Not before product-market fit.
+Source: `docs/pre-1.0-surface-audit.md` action items. Each item is
+independently shippable in roughly 5-40 LOC. None of them is the
+actual 1.0 gate (the gate is accumulated outcome data + container
+validation against real traffic), but they remove the rough edges a
+new BYO user sees on the way in.
 
-16. **Multi-user tenancy** — install isolation, per-user billing,
-    dashboard.
-17. **Template marketplace** — `conclave init --template react-fullstack`
-    style.
-18. **VS Code / Cursor MCP integration polish** (`conclave mcp-server`
-    exists; needs IDE-inline review delivery).
-19. **Public dashboard** — review history, merge patterns, category
-    trends.
-20. **Fine-tune layer** for heavy users — answer-keys feed a fine-tune;
-    council cost halves; opt-in.
+16. **CLAUDE.md command count** — header still says "17 commands";
+    actual is 22 commands as of v0.16.2. One-line edit.
+17. **`migrate` deprecation notice** — print a one-line "deprecated
+    since 1.0; will be removed in 2.x" warning when the command runs.
+    ~5 LOC in `packages/cli/src/commands/migrate.ts`.
+18. **`sync` de-emphasize in `--help`** — `federated.autoPull` is now
+    default true, so manual sync is power-user-only. Drop from the
+    prominent HELP list; keep accepting the command.
+19. **`conclave review --json` schema as public contract** — document
+    the JSON output shape (including the `metrics.rag` field from
+    Sprint D) in `docs/getting-started.md` so consumers can pin it.
+    ~40 LOC of docs.
+20. **`version: 1` schema commitment + `--dev` gate convention** —
+    note in `docs/configuration.md` that the v1 config parser stays
+    around for one minor cycle after v2 lands. Document the canonical
+    `--dev` flag convention for future internal-only commands.
 
 ---
 
-## Sprint sequencing (target)
+## H5 — Orchestrator template (DX multiplier, 1 item)
 
-- **Week 1-2**: H1 (all 5 items). ✅ DONE 2026-04-27.
-- **Week 3-4**: H1.5 A → B → C → run audit on eventbadge once.
-- **Month 2**: H2 #6, #7, #8 (review quality is the substrate
-  self-evolve eats).
-- **Month 3-4**: H3 #11, #12 (autofix → answer-key, stall → catalog).
-- Beyond: H3 #13-15, then H4 by demand.
+21. **`@conclave-ai/orchestrator-template` package** — reusable GitHub
+    Actions YAML that a user's repo wires in once. Original
+    `solo-cto-agent` port promise from ARCHITECTURE.md §Monorepo Layout.
+    With this in place, a user runs `npx @conclave-ai/orchestrator-template
+    install` (or equivalent) and their `.github/workflows/` has conclave
+    wired without copy-pasting from this repo's own dev-loop. Currently
+    the only wired workflows are this repo's own `dev-loop.yml` and
+    `release.yml`, so users have nothing to install — copy-paste is the
+    de-facto onboarding step, and that's the friction this fixes.
+
+---
+
+## H6 — Agent SDK migration (council capability uplift, 2 items)
+
+Decisions #8 and #9 were intentionally diverged on 2026-04-19 because
+one-shot review didn't need the agent-SDK weight (see
+`docs/decision-status.md`). The reopen trigger is exactly this
+horizon: when a council agent starts wanting **mid-review tool use** —
+fetch external context, query a spec by ID, look up federated baseline
+entries mid-deliberation — the SDK abstractions stop being overhead
+and start carrying their own weight.
+
+22. **agent-claude → `@anthropic-ai/claude-agent-sdk`** — moves
+    `agent-claude` from one-shot `submit_review` to a loop-capable
+    reviewer. Enables MCP server calls mid-review (the council can
+    "investigate" an unclear PR by pulling related files from the repo
+    via filesystem MCP instead of relying purely on diff + RAG hits).
+    Trade-off: ~3.9 MB added bundle weight and the loop's safety
+    surface (anti-infinite, anti-tool-spam guards already in
+    `core/guards.ts` are the foundation).
+23. **agent-openai → `@openai/agents` v0.8.x** — same shape change for
+    the OpenAI side. Unlocks structured tool workflows + computer-use
+    when those become useful for review (e.g., screenshot-driven design
+    review). The base SDK doesn't expose these cleanly; the agents SDK
+    is the path.
+
+Both migrations preserve the public `Agent` interface in `core/agent.ts`
+— callers don't change. Internal implementation switches from "one
+structured-output call" to "loop until done."
+
+---
+
+## H7 — Pluggable expansion (trigger-based, ~10 items)
+
+Ship only when a user requests an agent or platform outside the current
+set, OR a use case lands that needs one. Each item is independently
+shippable; the order below is rough first-request probability. Decision
+#32 already designates these as deferred-pending-trigger.
+
+**Agents** — mirror `packages/agent-claude` shape.
+
+24. **agent-qwen** — Alibaba Qwen series. Strong multilingual +
+    Chinese code corpus. Likely first request from Asian users.
+25. **agent-bedrock** — AWS Bedrock surface for org-mandated
+    AWS-only-LLM policies (enterprise BYO).
+26. **agent-vertex** — Google Cloud Vertex for the same reason on GCP.
+27. **agent-cheetah** — Triton-hosted self-hosted option mentioned in
+    decision #28.
+
+**Platforms** — mirror `packages/platform-railway` shape.
+
+28. **platform-fly** — Fly.io deploy-status adapter.
+29. **platform-replit** — Replit deploy-status adapter.
+30. **platform-vertex-deploy** — Google Cloud Run / App Engine.
+31. **platform-docker-local** — local Docker Compose detection for the
+    self-hoster path.
+
+**SCM** — first one is the largest unlock; bitbucket + gitea are
+incremental once the gitlab adapter exists.
+
+32. **scm-gitlab** — GitLab webhook + MR adapter.
+33. **scm-bitbucket** — Bitbucket pipeline adapter.
+34. **scm-gitea** — self-hosted Gitea adapter.
+
+---
+
+## H8 — Ecosystem (post-PMF, demand-driven)
+
+Build only after the SaaS path has paying users and per-PR economics
+are validated against revenue. Today these would dilute focus.
+
+35. **Multi-user tenancy polish** — install isolation, per-user billing
+    seat, organization seats + RBAC, audit log. Partial today (each
+    install maps to one user); needs to become first-class.
+36. **Template marketplace** — `conclave init --template react-fullstack`
+    style. Curated templates with PRD + answer-keys + failure-catalog
+    pre-seeded for common app shapes (Next.js commerce, ai-chatbot,
+    monorepo, etc.).
+37. **Public dashboard** — public-facing review history, merge patterns,
+    category trends per repo. Opt-in marketing surface; doubles as
+    social proof for new visitors.
+38. **Fine-tune layer for heavy users** — when a user's answer-keys
+    cross a threshold (~500 entries), offer a fine-tuned router model.
+    Council cost halves; opt-in. Genuinely earned by power users with
+    enough RLHF substrate to make a fine-tune worth it.
+
+---
+
+## Superseded / archived (intentionally not building)
+
+Items present in `ARCHITECTURE.md` (2026-04-19 lock) that the operating
+model has since routed around. Listed here so a future reader doesn't
+re-prioritize them by accident. These are *archived*, not *invalidated*
+— if a future trigger condition fires, the original intent is the right
+starting point.
+
+| Item | Original intent | Current substitute | Reopen trigger |
+|---|---|---|---|
+| `apps/vscode-extension` | Native IDE integration | MCP stdio (`conclave mcp-server`) — Cursor, Claude Desktop, Windsurf already consume it directly. | MCP becomes second-class on a hot IDE; bespoke extension delivers materially better UX than the stdio path. |
+| `apps/web-dashboard` | Cost / trace visualization | Admin endpoints (`/admin/install-summary`, `/admin/learning-stats`) + self-hosted Langfuse cover the operator view. User-facing surface is the marketing landing. | SaaS has enough users that an in-product dashboard converts churn-risk users back to retention; a marketing page is no longer enough. |
+| Mastra graph orchestration | Multi-agent graph runtime | `Council.deliberate()` + `TieredCouncil` is hand-rolled and ~150 LOC — lighter than the Mastra dependency. The "Mastra" label is retained in ARCHITECTURE.md as historical context only. | Council shape grows to a real DAG with conditional branches, parallel substages, and rollback paths that hand-rolled control flow can't express cleanly. |
+| Semantic rules (`semantic/rules.json`) + Procedural playbooks promotion | Nightly Haiku compress → weekly semantic → monthly procedural | Episodic → answer-keys / failure-catalog direct write is producing usable RAG hits without the mid-tier compression layer. Intermediate layers added latency without lifting retrieval quality in dogfood. | Retrieval quality plateaus past ~10k entries and the cause is signal dilution rather than corpus quality. |
+
+---
+
+## Sprint sequencing (target — updated 2026-05-11)
+
+- ~~Week 1-2~~: H1 (all 5 items). ✅ DONE 2026-04-27.
+- ~~Week 3-4~~: H1.5 A / B / C. ✅ DONE 2026-04-28.
+- ~~Month 2~~: H2 #6-#10. ✅ DONE 2026-04-28.
+- ~~Month 3-4~~: H3 #11-#15. ✅ DONE 2026-04-28.
+- **Now (2026-05)**: H4 cleanup. Each item ~30 minutes, independently
+  revertable. Ship as small commits, not a single sweep.
+- **After LS approval + first external installer + a few weeks of
+  outcome data**: H5 orchestrator-template. The trigger for this is
+  Bae or a third party actually trying to wire conclave into a new
+  repo and hitting copy-paste friction.
+- **Mid-2026, when a council agent starts wanting mid-review tool
+  use**: H6 Agent SDK migration. The trigger is real, not arbitrary —
+  wait for it. Premature migration adds 3.9 MB of bundle and a loop
+  surface for zero feature lift.
+- **2027 demand-driven**: H7 individual agent / platform / SCM
+  packages as users request them. Don't build any of these
+  speculatively.
+- **2027+ post-PMF**: H8 Ecosystem once paying users + per-PR
+  economics make the multi-tenancy / marketplace / fine-tune builds
+  pay for themselves.
