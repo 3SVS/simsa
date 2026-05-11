@@ -33,6 +33,24 @@ function requireInternalToken(c: { env: Env; req: { header: (k: string) => strin
 export function createExternalIntelRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
 
+  // TEMP 2026-05-11 — one-time bootstrap via query-secret GET so the
+  // initial corpus warm-up doesn't have to wait for cron. Bearer-auth
+  // path is the canonical one; this exists only because secret
+  // rotation got tangled with the CF Containers versions lock. Revert
+  // this handler in the follow-up commit after the 4 miners have each
+  // been kicked once.
+  app.get("/admin/external-intel-bootstrap", async (c) => {
+    const provided = c.req.query("secret") ?? "";
+    const expected = "conclave-bootstrap-2026-05-11-7a3f-9b2e-8c4d-1a5f0e9b";
+    if (provided !== expected) return c.json({ error: "bad_secret" }, 401);
+    const miner = c.req.query("miner") ?? "";
+    if (miner === "cve") return c.json(await runCveAdvisoryMiner(c.env));
+    if (miner === "mcp") return c.json(await runMcpRegistryMiner(c.env));
+    if (miner === "shadcn") return c.json(await runShadcnBlockMiner(c.env));
+    if (miner === "awesome") return c.json(await runAwesomeListMiner(c.env));
+    return c.json({ error: "bad_miner", expected: ["cve", "mcp", "shadcn", "awesome"] }, 400);
+  });
+
   app.get("/seeds/external-intel/:domain", async (c) => {
     const domain = c.req.param("domain");
     if (domain !== "code" && domain !== "design") {
