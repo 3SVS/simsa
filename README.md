@@ -36,7 +36,7 @@ We dogfooded 15 synthetic-bug PRs across 5 vibe-coder Next.js templates (Vercel 
 
 Same catch rate **but 3× the depth** — and the depth matters: the extra blockers are usually missing tests, edge-case handling, and security gaps that a single agent considered "minor enough to skip."
 
-<sub>Numbers are from an internal dogfooding run (n=15 PRs, 5 Next.js templates). Raw scoring data is not yet open-sourced; reproduction protocol planned alongside a separate `conclave-benchmarks` repo. Treat as an indicative ratio, not a peer-reviewed benchmark.</sub>
+<sub>Numbers are from an internal dogfooding run (n=15 PRs, 5 Next.js templates). Reproduction protocol + scoring rubric live in [`benchmarks/`](benchmarks/) (skeleton — raw per-run results pending a redaction pass before split-out into a standalone `conclave-benchmarks` repo). Treat as an indicative ratio, not a peer-reviewed benchmark.</sub>
 
 ### The PRD layer is the moat
 
