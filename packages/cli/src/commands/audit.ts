@@ -36,15 +36,8 @@ import { DesignAgent } from "@conclave-ai/agent-design";
 import { OpenAIAgent } from "@conclave-ai/agent-openai";
 import { GeminiAgent } from "@conclave-ai/agent-gemini";
 import { loadConfig, resolveMemoryRoot } from "../lib/config.js";
-import { fetchExternalReferences } from "../lib/external-references.js";
-import { fetchPromotedSeeds } from "../lib/promoted-seeds.js";
-import { fetchOssPatterns } from "../lib/oss-patterns.js";
-import { fetchSpecUpdates } from "../lib/spec-updates.js";
-import {
-  FileSystemMemoryStore,
-  formatAnswerKeyForPrompt,
-  formatFailureForPrompt,
-} from "@conclave-ai/core";
+import { FileSystemMemoryStore } from "@conclave-ai/core";
+import { loadAuditRagContext, formatAuditRagTelemetry } from "../lib/audit-rag.js";
 import { loadProjectContext, loadDesignContext } from "../lib/project-context.js";
 import {
   discoverAuditFiles,
@@ -471,55 +464,11 @@ export async function audit(argv: string[]): Promise<void> {
   const ctxDomain: "code" | "design" = resolvedDomain === "design" ? "design" : "code";
   const memoryRoot = resolveMemoryRoot(config, cwd);
   const memoryStore = new FileSystemMemoryStore({ root: memoryRoot });
-  const auditRetrieval = await memoryStore
-    .retrieve({
-      query: `audit domain=${ctxDomain} repo=${repo}`,
-      repo,
-      domain: ctxDomain,
-      k: 8,
-    })
-    .catch(() => ({ answerKeys: [], failures: [], rules: [] } as Awaited<ReturnType<FileSystemMemoryStore["retrieve"]>>));
-  const localAnswerKeys = auditRetrieval.answerKeys.map(formatAnswerKeyForPrompt);
-  const localFailures = auditRetrieval.failures.map(formatFailureForPrompt);
-  // v0.16.8 — Phase 4 external curated references (best-effort).
-  const externalRefs = await fetchExternalReferences(ctxDomain).catch(() => ({
-    answerKeys: [] as string[],
-    failureCatalog: [] as string[],
-  }));
-  // v0.16.10 — Sprint C promoted seeds (community-user-derived).
-  const promotedSeeds = await fetchPromotedSeeds(ctxDomain).catch(() => ({
-    answerKeys: [] as string[],
-    failureCatalog: [] as string[],
-  }));
-  // v0.16.13 — Sprint E2 OSS PR patterns.
-  const ossPatterns = await fetchOssPatterns(ctxDomain).catch(() => ({
-    answerKeys: [] as string[],
-    failureCatalog: [] as string[],
-  }));
-  // v0.16.14 — Sprint E3 spec-updates.
-  const specUpdates = await fetchSpecUpdates(ctxDomain).catch(() => ({
-    answerKeys: [] as string[],
-    failureCatalog: [] as string[],
-  }));
-  const auditAnswerKeys = [
-    ...localAnswerKeys,
-    ...promotedSeeds.answerKeys,
-    ...specUpdates.answerKeys,
-    ...ossPatterns.answerKeys,
-    ...externalRefs.answerKeys,
-  ];
-  const auditFailures = [
-    ...localFailures,
-    ...promotedSeeds.failureCatalog,
-    ...specUpdates.failureCatalog,
-    ...ossPatterns.failureCatalog,
-    ...externalRefs.failureCatalog,
-  ];
-  if (auditAnswerKeys.length > 0 || auditFailures.length > 0) {
-    process.stderr.write(
-      `conclave audit: RAG context — ${auditAnswerKeys.length} answer-key(s) (${promotedSeeds.answerKeys.length} promoted, ${specUpdates.answerKeys.length} spec, ${ossPatterns.answerKeys.length} oss, ${externalRefs.answerKeys.length} external) + ${auditFailures.length} failure(s) (${promotedSeeds.failureCatalog.length} promoted, ${specUpdates.failureCatalog.length} spec, ${ossPatterns.failureCatalog.length} oss, ${externalRefs.failureCatalog.length} external) from ${ctxDomain} domain\n`,
-    );
-  }
+  const ragContext = await loadAuditRagContext({ memoryStore, repo, domain: ctxDomain });
+  const auditAnswerKeys = ragContext.answerKeys;
+  const auditFailures = ragContext.failureCatalog;
+  const ragTelemetry = formatAuditRagTelemetry(ctxDomain, ragContext);
+  if (ragTelemetry) process.stderr.write(ragTelemetry);
 
   // v0.6.4 — auto-inject project + design context so audit findings can
   // be judged against the repo's stated purpose, not just against
@@ -665,16 +614,16 @@ export async function audit(argv: string[]): Promise<void> {
     // we logged to stderr earlier so machine-readable + human-readable
     // outputs agree.
     ragInjection: {
-      answerKeysLocal: localAnswerKeys.length,
-      answerKeysPromoted: promotedSeeds.answerKeys.length,
-      answerKeysExternal: externalRefs.answerKeys.length,
-      answerKeysOssPatterns: ossPatterns.answerKeys.length,
-      answerKeysSpecUpdates: specUpdates.answerKeys.length,
-      failureCatalogLocal: localFailures.length,
-      failureCatalogPromoted: promotedSeeds.failureCatalog.length,
-      failureCatalogExternal: externalRefs.failureCatalog.length,
-      failureCatalogOssPatterns: ossPatterns.failureCatalog.length,
-      failureCatalogSpecUpdates: specUpdates.failureCatalog.length,
+      answerKeysLocal: ragContext.sources.local.answerKeys,
+      answerKeysPromoted: ragContext.sources.promoted.answerKeys,
+      answerKeysExternal: ragContext.sources.external.answerKeys,
+      answerKeysOssPatterns: ragContext.sources.ossPatterns.answerKeys,
+      answerKeysSpecUpdates: ragContext.sources.specUpdates.answerKeys,
+      failureCatalogLocal: ragContext.sources.local.failures,
+      failureCatalogPromoted: ragContext.sources.promoted.failureCatalog,
+      failureCatalogExternal: ragContext.sources.external.failureCatalog,
+      failureCatalogOssPatterns: ragContext.sources.ossPatterns.failureCatalog,
+      failureCatalogSpecUpdates: ragContext.sources.specUpdates.failureCatalog,
     },
   };
 
