@@ -54,18 +54,23 @@ export default function Home() {
 function TopBar() {
   return (
     <header className="sticky top-0 z-50 border-b border-parchment-line bg-parchment/85 backdrop-blur-sm">
-      <div className="mx-auto max-w-page px-6 py-4 flex items-center justify-between">
-        <a href="/" className="flex items-center gap-2.5 group">
+      <div className="mx-auto max-w-page px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3">
+        <a href="/" className="flex items-center gap-2.5 group flex-shrink-0">
           <Logo size={22} className="group-hover:opacity-80 transition-opacity" />
         </a>
-        <nav className="flex items-center gap-7 text-[15px] text-ink-subtle">
-          <a href="#how" className="link-anim hover:text-ink">How</a>
-          <a href="#try" className="link-anim hover:text-ink">Try</a>
-          <a href="#pricing" className="link-anim hover:text-ink">Pricing</a>
-          <a href="#faq" className="link-anim hover:text-ink">FAQ</a>
+        {/* v0.14.5 — mobile cleanup. Below md (768px), the 4 anchor
+            links + GitHub + Install were colliding / wrapping with
+            the logo. Hide anchors on mobile (users scroll the page
+            naturally instead) and keep just the Install CTA. The
+            `flex-wrap` + `gap` fallback would have been ugly. */}
+        <nav className="flex items-center gap-5 lg:gap-7 text-[15px] text-ink-subtle">
+          <a href="#how" className="link-anim hover:text-ink hidden md:inline">How</a>
+          <a href="#try" className="link-anim hover:text-ink hidden md:inline">Try</a>
+          <a href="#pricing" className="link-anim hover:text-ink hidden md:inline">Pricing</a>
+          <a href="#faq" className="link-anim hover:text-ink hidden md:inline">FAQ</a>
           <a
             href="https://github.com/seunghunbae-3svs/conclave-ai"
-            className="link-anim hover:text-ink hidden sm:inline"
+            className="link-anim hover:text-ink hidden lg:inline"
             target="_blank"
             rel="noreferrer"
           >
@@ -73,9 +78,9 @@ function TopBar() {
           </a>
           <a
             href={LOGIN_URL}
-            className="rounded-sm bg-oxblood-600 hover:bg-oxblood-500 transition-colors text-parchment-light px-3.5 py-1.5 text-xs font-mono uppercase tracking-widetracked"
+            className="rounded-sm bg-oxblood-600 hover:bg-oxblood-500 transition-colors text-parchment-light px-3 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-mono uppercase tracking-widetracked whitespace-nowrap"
           >
-            Install →
+            Install <span aria-hidden="true">→</span>
           </a>
         </nav>
       </div>
@@ -202,7 +207,7 @@ function HowItWorks() {
   ];
   return (
     <section id="how" className="border-b border-parchment-line bg-parchment-dim/40">
-      <div className="mx-auto max-w-page px-6 py-32">
+      <div className="mx-auto max-w-page px-4 sm:px-6 py-20 sm:py-28 md:py-32">
         <SectionHeader numeral="II" mark="proceedings" title="How the council convenes" />
         <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed">
           Three steps. No CI changes. No keys to manage on your end (unless you wish to bring your own).
@@ -232,7 +237,7 @@ function HowItWorks() {
 function CouncilEvidence() {
   return (
     <section className="border-b border-parchment-line">
-      <div className="mx-auto max-w-page px-6 py-32">
+      <div className="mx-auto max-w-page px-4 sm:px-6 py-20 sm:py-28 md:py-32">
         <SectionHeader
           numeral="III"
           mark="evidence"
@@ -304,7 +309,7 @@ function Stat({
 function DemoSection() {
   return (
     <section id="try" className="border-b border-parchment-line bg-parchment-dim/40">
-      <div className="mx-auto max-w-page px-6 py-32">
+      <div className="mx-auto max-w-page px-4 sm:px-6 py-20 sm:py-28 md:py-32">
         <SectionHeader numeral="IV" mark="hearing" title="Lodge a public PR for an opening hearing" />
         <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed">
           Paste a public pull request URL or a raw diff. Optionally attach a PRD by drag-drop,
@@ -325,7 +330,7 @@ function DemoSection() {
 function Pricing() {
   return (
     <section id="pricing" className="border-b border-parchment-line">
-      <div className="mx-auto max-w-page px-6 py-32">
+      <div className="mx-auto max-w-page px-4 sm:px-6 py-20 sm:py-28 md:py-32">
         <SectionHeader numeral="V" mark="indulgences" title="Indulgences" />
         <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed">
           Hard cutoffs, no surprise invoices. Booster top-ups instead of overage bills. Bring
@@ -483,7 +488,7 @@ function FAQ() {
   ];
   return (
     <section id="faq" className="border-b border-parchment-line bg-parchment-dim/40">
-      <div className="mx-auto max-w-page px-6 py-32">
+      <div className="mx-auto max-w-page px-4 sm:px-6 py-20 sm:py-28 md:py-32">
         <SectionHeader numeral="VI" mark="questions" title="Disquisitions" />
         <dl className="mt-16 divide-y divide-ink/15 border-y border-ink/15">
           {items.map((item) => (
