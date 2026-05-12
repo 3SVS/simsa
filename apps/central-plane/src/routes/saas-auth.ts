@@ -349,6 +349,17 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
   // Browser hits this after the user clicks "Authorize" on GitHub's
   // OAuth confirm screen. Code → user access token → user identity →
   // upsert saas_users + approve the matching Device Flow session.
+  //
+  // 2026-05-12: also accept the trailing-slash variant. The first
+  // external install configured the App's Callback URL with a stray
+  // `/` at the end, and Hono's path matcher is strict so the request
+  // hit the default 404 envelope. Cheap to alias both forms — the
+  // handler body is identical.
+  app.get("/auth/github/callback/", async (c) => {
+    const params = c.req.query();
+    const qs = new URLSearchParams(params).toString();
+    return c.redirect("/auth/github/callback" + (qs ? "?" + qs : ""), 301);
+  });
   app.get("/auth/github/callback", async (c) => {
     const code = c.req.query("code");
     const state = c.req.query("state"); // we set this to the user_code
