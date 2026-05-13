@@ -27,7 +27,7 @@ const execFileP = promisify(execFile);
 const DEFAULT_WORKER_HEALTH = "https://conclave-ai.seunghunbae.workers.dev/healthz";
 const DEFAULT_WORKER_BASE = "https://conclave-ai.seunghunbae.workers.dev";
 const DEFAULT_NPM_REGISTRY = "https://registry.npmjs.org/@conclave-ai/cli/latest";
-const EXPECTED_REUSABLE_REPO = "seunghunbae-3svs/conclave-ai";
+const EXPECTED_REUSABLE_REPO = "3SVS/conclave-ai";
 const EXPECTED_REUSABLE_TAG = "v0.4";
 const HTTP_TIMEOUT_MS = 8_000;
 

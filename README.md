@@ -71,7 +71,7 @@ Install the [GitHub App](https://github.com/apps/conclave-ai-code-council) on yo
 ### As a self-hoster
 
 ```bash
-git clone https://github.com/seunghunbae-3svs/conclave-ai
+git clone https://github.com/3SVS/conclave-ai
 cd conclave-ai && pnpm install && pnpm build
 # Configure your own ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY
 node packages/cli/dist/bin/conclave.js review --pr 42

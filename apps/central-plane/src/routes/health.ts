@@ -14,7 +14,7 @@ export const healthRoutes = new Hono<{ Bindings: Env }>();
 healthRoutes.get("/", (c) => {
   return c.json({
     service: "conclave-ai-central-plane",
-    docs: "https://github.com/seunghunbae-3svs/conclave-ai",
+    docs: "https://github.com/3SVS/conclave-ai",
     install_app: "https://github.com/apps/conclave-ai-code-council",
     health: "/healthz",
   });

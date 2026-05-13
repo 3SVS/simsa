@@ -6,7 +6,7 @@ PR is easiest to accept when it matches the conventions here.
 ## Local setup
 
 ```bash
-git clone https://github.com/seunghunbae-3svs/conclave-ai
+git clone https://github.com/3SVS/conclave-ai
 cd conclave-ai
 pnpm install
 pnpm build

@@ -53,7 +53,7 @@ attendees). Next.js frontend, Supabase backend, deployed on Vercel.
 **Intentional patterns:**
 
 - `.github/workflows/review.yml` calls our OWN reusable workflow at
-  `seunghunbae-3svs/conclave-ai/.github/workflows/review.yml@v0.4`.
+  `3SVS/conclave-ai/.github/workflows/review.yml@v0.4`.
   The `cli-version: latest` input is a reusable-workflow parameter,
   NOT a GitHub Actions `uses: foo@latest` pin. Do not flag it.
 - All user-facing strings go through `t()` for i18n. Hardcoded strings

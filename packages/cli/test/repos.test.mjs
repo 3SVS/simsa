@@ -43,7 +43,7 @@ async function withScratchConfigHome(fn) {
 // ---- 1. slug validation ---------------------------------------------------
 
 test("isValidSlug: accepts owner/name", async () => {
-  assert.equal(isValidSlug("seunghunbae-3svs/conclave-ai"), true);
+  assert.equal(isValidSlug("3SVS/conclave-ai"), true);
   assert.equal(isValidSlug("ab/cd"), true);
 });
 

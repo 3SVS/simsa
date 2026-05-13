@@ -182,7 +182,7 @@ export function createSaasRoutes(): Hono<{ Bindings: Env }> {
           error_description:
             "Your free trial has been used. Buy a $3 first-PR pass, add your own Anthropic key for unlimited free, or DM @baessi1 on Threads.",
           buy_credits_url: `${publicBaseUrl}/billing`,
-          byo_setup_url: "https://github.com/seunghunbae-3svs/conclave-ai#byo",
+          byo_setup_url: "https://github.com/3SVS/conclave-ai#byo",
         },
         402,
       );
@@ -522,7 +522,7 @@ function renderResultComment(args: {
       ``,
       `Reason: \`${args.error.slice(0, 400)}\``,
       ``,
-      `Try pushing again. If it keeps happening, this is on us — please [open an issue](https://github.com/seunghunbae-3svs/conclave-ai/issues/new).`,
+      `Try pushing again. If it keeps happening, this is on us — please [open an issue](https://github.com/3SVS/conclave-ai/issues/new).`,
     ].join("\n");
   }
   const v = (args.verdict ?? "").toLowerCase();
