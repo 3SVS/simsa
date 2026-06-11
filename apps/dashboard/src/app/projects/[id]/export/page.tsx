@@ -25,6 +25,7 @@ import {
 import { downloadBuildPackZip } from "@/lib/zip-utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
+import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -533,7 +534,7 @@ export default function ExportPage() {
           />
 
           {/* ── Past outcomes ── */}
-          {outcomes.length > 0 && <OutcomeHistory outcomes={outcomes} />}
+          {outcomes.length > 0 && <OutcomeHistory outcomes={outcomes} projectId={id} />}
         </>
       )}
     </div>
@@ -610,7 +611,13 @@ function OutcomeRecorder({
   );
 }
 
-function OutcomeHistory({ outcomes }: { outcomes: (BuilderPackOutcome | RemoteOutcome)[] }) {
+function OutcomeHistory({
+  outcomes,
+  projectId,
+}: {
+  outcomes: (BuilderPackOutcome | RemoteOutcome)[];
+  projectId: string;
+}) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <h2 className="text-sm font-semibold text-gray-800 mb-3">이전 기록</h2>
@@ -623,10 +630,20 @@ function OutcomeHistory({ outcomes }: { outcomes: (BuilderPackOutcome | RemoteOu
             <span className={`flex-shrink-0 font-medium ${oc.outcome === "worked" ? "text-green-600" : oc.outcome === "partial" ? "text-amber-600" : oc.outcome === "failed" ? "text-red-600" : "text-gray-400"}`}>
               {OUTCOME_LABEL[oc.outcome]}
             </span>
-            {oc.note && <span className="text-gray-400 truncate">{oc.note}</span>}
+            {oc.note && <span className="text-gray-400 truncate flex-1">{oc.note}</span>}
+            <Link
+              href={`/projects/${projectId}/checks`}
+              title="제품 설명서 기준으로 다시 확인합니다. 아직 GitHub 코드 확인은 아니에요."
+              className="flex-shrink-0 text-indigo-500 hover:text-indigo-700 font-medium"
+            >
+              다시 확인
+            </Link>
           </div>
         ))}
       </div>
+      <p className="text-xs text-gray-400 mt-3">
+        &ldquo;다시 확인&rdquo;은 제품 설명서 기준의 사전 점검입니다. 아직 GitHub 코드 확인은 아니에요.
+      </p>
     </div>
   );
 }

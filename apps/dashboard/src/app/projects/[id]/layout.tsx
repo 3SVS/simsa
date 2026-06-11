@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { key: "checks", href: "checks" },
   { key: "fixes", href: "fixes" },
   { key: "export", href: "export" },
+  { key: "settings", href: "settings" },
 ] as const;
 
 export default async function ProjectLayout({

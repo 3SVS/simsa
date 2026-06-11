@@ -18,6 +18,16 @@ ENVIRONMENT = "production"
 # yet configured — /oauth/device/* endpoints will return 503 until this is real.
 GITHUB_CLIENT_ID = "Ov23ctqhuNRdhunT36Y9"
 
+# Stage 9 — Workspace GitHub OAuth (Web Application Flow).
+# Register a NEW OAuth App at https://github.com/settings/developers
+# Callback URL: https://conclave-ai.seunghunbae.workers.dev/workspace/github/oauth/callback
+# Leave as REPLACE_WITH_* until registered — endpoints return 503 gracefully.
+# Client SECRET must be set via: wrangler secret put WORKSPACE_GH_CLIENT_SECRET
+WORKSPACE_GH_CLIENT_ID = "REPLACE_WITH_WORKSPACE_GITHUB_OAUTH_CLIENT_ID"
+WORKSPACE_GH_REDIRECT_URI = "https://conclave-ai.seunghunbae.workers.dev/workspace/github/oauth/callback"
+WORKSPACE_GH_SCOPES = "read:user public_repo"
+WORKSPACE_GH_DASHBOARD_URL = "https://dashboard.conclave-ai.dev"
+
 # Observability. Logs retained 3 days on free tier, sufficient for v0.4-alpha.
 [observability]
 enabled = true

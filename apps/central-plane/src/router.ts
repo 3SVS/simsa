@@ -30,6 +30,7 @@ import { createSpawnedAgentsRoutes } from "./routes/spawned-agents.js";
 import { createBillingRoutes } from "./routes/billing.js";
 import { createLemonsqueezyWebhookRoutes } from "./routes/lemonsqueezy-webhook.js";
 import { createWorkspaceRoutes } from "./routes/workspace.js";
+import { createWorkspaceGitHubRoutes } from "./routes/workspace-github.js";
 import type { FetchLike } from "./github.js";
 
 /**
@@ -126,6 +127,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // Workspace generation — free beta, no auth, CORS-enabled for dashboard.
   // POST /workspace/idea-to-spec-draft
   app.route("/", createWorkspaceRoutes());
+  // Stage 9 — Workspace GitHub OAuth + project-repo connections.
+  app.route("/", createWorkspaceGitHubRoutes(fetchImpl));
   app.onError((err, c) => {
     console.error("central-plane error:", err);
     return c.json({ error: err.message || "internal error" }, 500);

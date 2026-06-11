@@ -97,6 +97,27 @@ export interface Env {
    */
   DEMO_RATE_SALT?: string;
   /**
+   * Stage 9 — Workspace GitHub OAuth (Web Application Flow).
+   * Separate from the existing GitHub App (GH_APP_*) credentials.
+   *
+   * Register a GitHub OAuth App at https://github.com/settings/developers
+   * with callback URL: https://conclave-ai.seunghunbae.workers.dev/workspace/github/oauth/callback
+   *
+   * Set via wrangler.toml [vars] (client ID is public):
+   *   WORKSPACE_GH_CLIENT_ID = "..."
+   *   WORKSPACE_GH_REDIRECT_URI = "..."  (defaults to workers.dev/callback if unset)
+   *   WORKSPACE_GH_SCOPES = "read:user public_repo"  (optional, has default)
+   *   WORKSPACE_GH_DASHBOARD_URL = "https://dashboard.conclave-ai.dev"  (optional)
+   *
+   * Set via `wrangler secret put` (client secret must NOT be in wrangler.toml):
+   *   WORKSPACE_GH_CLIENT_SECRET = "..."
+   */
+  WORKSPACE_GH_CLIENT_ID?: string;
+  WORKSPACE_GH_CLIENT_SECRET?: string;
+  WORKSPACE_GH_REDIRECT_URI?: string;
+  WORKSPACE_GH_SCOPES?: string;
+  WORKSPACE_GH_DASHBOARD_URL?: string;
+  /**
    * Stage 4 — hourly request cap for POST /workspace/idea-to-spec-draft.
    * Parsed as integer; defaults to 20 when unset or non-numeric.
    * Set via wrangler.toml [vars] or `wrangler secret put`.
