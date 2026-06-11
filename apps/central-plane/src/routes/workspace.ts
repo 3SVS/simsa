@@ -31,6 +31,12 @@ import {
   generateBuilderPack,
   type WorkspaceExportBuilderPackRequest,
 } from "../workspace/export.js";
+import {
+  saveOutcome,
+  listOutcomes,
+  isValidOutcome,
+  isValidTarget,
+} from "../workspace/outcomes.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -400,6 +406,63 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     });
 
     return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json", ...headers } });
+  });
+
+  // ── POST /workspace/builder-pack-outcomes ────────────────────────────────────
+  // Save the result of sending a builder pack to Claude Code / Codex.
+  app.post("/workspace/builder-pack-outcomes", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
+
+    let body: unknown;
+    try { body = await c.req.json(); } catch {
+      return new Response(JSON.stringify({ ok: false, error: "invalid_json" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    const b = body as Record<string, unknown>;
+    if (!b["projectId"] || typeof b["projectId"] !== "string") {
+      return new Response(JSON.stringify({ ok: false, error: "projectId_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+    if (!isValidTarget(b["target"])) {
+      return new Response(JSON.stringify({ ok: false, error: "target_invalid: claude_code | codex | both" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+    if (!isValidOutcome(b["outcome"])) {
+      return new Response(JSON.stringify({ ok: false, error: "outcome_invalid: worked | partial | failed | not_checked" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    const selectedItemIds = Array.isArray(b["selectedItemIds"])
+      ? (b["selectedItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
+      : [];
+
+    try {
+      const outcome = await saveOutcome(c.env, {
+        projectId: b["projectId"],
+        userKey: typeof b["userKey"] === "string" ? b["userKey"] : "",
+        target: b["target"],
+        selectedItemIds,
+        outcome: b["outcome"],
+        note: typeof b["note"] === "string" ? b["note"] : undefined,
+      });
+      return new Response(JSON.stringify({ ok: true, outcome }), { status: 200, headers: { "content-type": "application/json", ...headers } });
+    } catch (err) {
+      console.error("[workspace/outcomes] save failed:", err);
+      return new Response(JSON.stringify({ ok: false, error: "save_failed" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
+    }
+  });
+
+  // ── GET /workspace/projects/:id/builder-pack-outcomes ────────────────────────
+  app.get("/workspace/projects/:id/builder-pack-outcomes", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
+    const projectId = c.req.param("id");
+
+    try {
+      const outcomes = await listOutcomes(c.env, projectId, 50);
+      return new Response(JSON.stringify({ ok: true, outcomes }), { status: 200, headers: { "content-type": "application/json", ...headers } });
+    } catch (err) {
+      console.error("[workspace/outcomes] list failed:", err);
+      return new Response(JSON.stringify({ ok: false, error: "list_failed" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
+    }
   });
 
   return app;

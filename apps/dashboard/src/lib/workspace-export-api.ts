@@ -59,3 +59,66 @@ export async function callExportBuilderPackApi(
     return { ok: false, error: "network", message: String(err) };
   }
 }
+
+// ─── Builder pack outcomes API ────────────────────────────────────────────────
+
+export type OutcomeStatus = "worked" | "partial" | "failed" | "not_checked";
+
+export type RemoteOutcome = {
+  id: string;
+  projectId: string;
+  target: ExportTarget;
+  selectedItemIds: string[];
+  outcome: OutcomeStatus;
+  note?: string;
+  createdAt: string;
+};
+
+export type SaveOutcomeInput = {
+  projectId: string;
+  userKey?: string;
+  target: ExportTarget;
+  selectedItemIds: string[];
+  outcome: OutcomeStatus;
+  note?: string;
+};
+
+export type SaveOutcomeResult =
+  | { ok: true; outcome: RemoteOutcome }
+  | { ok: false; error: "network" | "server"; message: string };
+
+export type ListOutcomesResult =
+  | { ok: true; outcomes: RemoteOutcome[] }
+  | { ok: false; error: "network" | "server"; message: string };
+
+export async function callSaveOutcomeApi(
+  input: SaveOutcomeInput,
+): Promise<SaveOutcomeResult> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/builder-pack-outcomes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
+    return (await resp.json()) as SaveOutcomeResult;
+  } catch (err) {
+    return { ok: false, error: "network", message: String(err) };
+  }
+}
+
+export async function callListOutcomesApi(
+  projectId: string,
+): Promise<ListOutcomesResult> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/builder-pack-outcomes`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
+    return (await resp.json()) as ListOutcomesResult;
+  } catch (err) {
+    return { ok: false, error: "network", message: String(err) };
+  }
+}
