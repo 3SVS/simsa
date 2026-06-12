@@ -1079,6 +1079,56 @@ export default function AdminCreditsPage() {
         </div>
       </SectionCard>
 
+      {/* Stage 32: Internal Actual Debit Test Run Guide */}
+      <SectionCard title="내부 Actual Debit 테스트 실행 가이드 (Stage 32)">
+        <div className="space-y-3">
+          <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3">
+            <p className="text-xs font-bold text-red-700">⚠ 테스트 종료 후 ENABLE_ACTUAL_CREDIT_DEBITS를 반드시 false로 되돌리세요.</p>
+            <p className="text-xs text-red-600 mt-1">flag를 켠 상태로 두면 allowlist에 등록된 모든 사용자에게 실제 credit이 차감됩니다.</p>
+          </div>
+          <div className="space-y-1 text-xs text-gray-700">
+            <p className="font-semibold text-gray-800 mb-2">테스트 절차:</p>
+            <ol className="list-decimal list-inside space-y-1.5 pl-1">
+              <li>
+                <span className="font-medium">ACTUAL_DEBIT_ALLOWED_USER_KEYS에 내부 userKey 등록</span>
+                <p className="text-gray-500 pl-5 mt-0.5">예: <code className="bg-gray-100 px-1 rounded">ACTUAL_DEBIT_ALLOWED_USER_KEYS = &quot;gh:yourtestaccount&quot;</code></p>
+              </li>
+              <li>
+                <span className="font-medium">ENABLE_ACTUAL_CREDIT_DEBITS=true 설정 후 wrangler deploy</span>
+                <p className="text-gray-500 pl-5 mt-0.5">wrangler.toml 수정 → deploy</p>
+              </li>
+              <li>
+                <span className="font-medium">ENABLE_CREDIT_BLOCKING=false 유지 (기본 테스트 모드)</span>
+                <p className="text-gray-500 pl-5 mt-0.5">잔액 부족 시에도 실행 차단하지 않음</p>
+              </li>
+              <li>
+                <span className="font-medium">아래 &quot;수동 크레딧 지급&quot;으로 review credit 지급</span>
+                <p className="text-gray-500 pl-5 mt-0.5">userKey=내부계정, type=review, amount=5 권장</p>
+              </li>
+              <li>
+                <span className="font-medium">PR review 실행 (월 5회 allowance 소진 후)</span>
+                <p className="text-gray-500 pl-5 mt-0.5">allowance 소진 전에는 credit이 차감되지 않음</p>
+              </li>
+              <li>
+                <span className="font-medium">아래 &quot;장부 조회&quot;에서 ledger status=applied 확인</span>
+              </li>
+              <li>
+                <span className="font-medium">아래 &quot;잔액 조회&quot;에서 balance 감소 확인</span>
+              </li>
+              <li>
+                <span className="font-medium text-red-600">테스트 후 ENABLE_ACTUAL_CREDIT_DEBITS를 false로 복구 후 재배포</span>
+              </li>
+            </ol>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <p className="text-xs text-amber-700 font-medium">failed pending 또는 duplicate failed 발생 시:</p>
+            <p className="text-xs text-amber-600 mt-1">
+              같은 Idempotency-Key 재시도 대신, 새 PR review를 실행하여 새 Idempotency-Key를 생성해야 합니다.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
       {/* Rollout checklist */}
       <SectionCard title="프로덕션 활성화 체크리스트 (Stage 29)">
         <div className="space-y-3">

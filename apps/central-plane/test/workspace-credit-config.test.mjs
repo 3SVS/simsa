@@ -40,6 +40,8 @@
  *  93–109. Stage 31 limited rollout: allowlist parsing, isActualDebitAllowedForUser,
  *          checkCreditEnforcement allowlist guard, config endpoint limitedRollout,
  *          rollout checklist actual-debit-allowlist-configured check
+ *  111–115. Stage 32 internal test run: rollout checklist internal-actual-debit-test-run,
+ *           productionEnableCriteria includes Stage 32 entry
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -1503,5 +1505,60 @@ describe("Stage 31 — rollout checklist actual-debit-allowlist-configured", () 
     const check = body.requiredChecks.find(c => c.id === "actual-debit-allowlist-configured");
     assert.ok(check, "check must exist");
     assert.equal(check.status, "passed");
+  });
+});
+
+// ─── Tests: Stage 32 — internal actual debit test run checklist ───────────────
+
+describe("Stage 32 — rollout checklist internal-actual-debit-test-run", () => {
+  it("111 — requiredChecks includes internal-actual-debit-test-run item", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    const check = body.requiredChecks.find(c => c.id === "internal-actual-debit-test-run");
+    assert.ok(check, "internal-actual-debit-test-run check must exist in requiredChecks");
+    assert.equal(typeof check.label, "string", "label must be a string");
+    assert.equal(typeof check.description, "string", "description must be a string");
+  });
+
+  it("112 — internal-actual-debit-test-run status is always manual", async () => {
+    const env = makeEnv({ actualDebits: "true", allowedUserKeys: "gh:tester" });
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    const check = body.requiredChecks.find(c => c.id === "internal-actual-debit-test-run");
+    assert.ok(check, "check must exist");
+    assert.equal(check.status, "manual",
+      "this is a procedural check that cannot be auto-detected");
+  });
+
+  it("113 — productionEnableCriteria includes Stage 32 test run requirement", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.ok(Array.isArray(body.productionEnableCriteria), "productionEnableCriteria must be an array");
+    const hasStage32Entry = body.productionEnableCriteria.some(
+      s => typeof s === "string" && s.includes("test run")
+    );
+    assert.ok(hasStage32Entry, "productionEnableCriteria must mention internal test run requirement");
+  });
+
+  it("114 — rollout checklist has at least 9 required checks (including Stage 32)", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.ok(body.requiredChecks.length >= 9,
+      `expected ≥9 requiredChecks, got ${body.requiredChecks.length}`);
+  });
+
+  it("115 — internal-actual-debit-test-run description mentions flag rollback", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    const check = body.requiredChecks.find(c => c.id === "internal-actual-debit-test-run");
+    assert.ok(check, "check must exist");
+    assert.ok(
+      check.description.includes("false"),
+      "description must mention restoring flag to false after test"
+    );
   });
 });

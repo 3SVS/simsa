@@ -563,6 +563,13 @@ export function createWorkspaceAdminCreditsRoutes(): Hono<{ Bindings: Env }> {
         description:
           "ACTUAL_DEBIT_ALLOWED_USER_KEYS에 허용된 userKey가 최소 1개 이상 설정되어야 합니다. 비어 있으면 actualDebitsEnabled=true여도 실제 차감이 수행되지 않습니다.",
       },
+      {
+        id: "internal-actual-debit-test-run",
+        label: "내부 userKey actual debit 테스트 실행",
+        status: "manual" as const,
+        description:
+          "허용된 내부 userKey로 actual debit flag를 켜고 allowance/debit/ledger/balance 흐름을 검증해야 합니다. 테스트 후 ENABLE_ACTUAL_CREDIT_DEBITS를 반드시 false로 복구하세요.",
+      },
     ];
 
     const recommendedScenarios = [
@@ -598,6 +605,7 @@ export function createWorkspaceAdminCreditsRoutes(): Hono<{ Bindings: Env }> {
       "status=pending 장부 항목 장기 잔류 모니터링 방법 수립",
       "오래된 pending ledger를 /admin/credits/pending 에서 조회하고 mark-failed로 수동 정리할 수 있어야 한다",
       "ACTUAL_DEBIT_ALLOWED_USER_KEYS에 테스트 대상 userKey 등록 후 ENABLE_ACTUAL_CREDIT_DEBITS 활성화",
+      "내부 userKey actual debit test run이 성공해야 한다 (Stage 32 검증 문서 참고)",
     ];
 
     return c.json({
