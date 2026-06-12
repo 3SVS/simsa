@@ -1,8 +1,9 @@
 /**
  * workspace-credit-config.test.mjs
  *
- * Stage 24–27: credit-config.ts + debitCredits() + checkCreditEnforcement() + config endpoint
+ * Stage 24–29: credit-config.ts + debitCredits() + checkCreditEnforcement() + config endpoint
  *              + idempotency (Stage 26) + idempotency key validation + SHA-256 sourceEventId (Stage 27)
+ *              + reservation-first debit (Stage 28) + rollout checklist endpoint (Stage 29)
  *
  * Tests:
  *  01. getCreditExecutionConfig: both flags false when env unset
@@ -33,6 +34,7 @@
  *  63–65. duplicate handling: applied/failed duplicate, no balance change on failed
  *  66–68. grant default status, checkCreditEnforcement ledgerStatus propagation
  *  69–70. concurrent same sourceEventId: single balance debit + single ledger entry
+ *  71–78. GET /admin/credits/rollout-checklist: structure, safeForProductionDefault, auth
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -934,5 +936,96 @@ describe("Stage 28 — reservation-first debit: ledger status lifecycle", () => 
       debitCredits(env, { userKey: "u1", creditType: "review", amount: 1, reason: "b", sourceEventId }),
     ]);
     assert.equal(env.DB._writeCount.ledger, 1, "unique index must allow only one ledger INSERT");
+  });
+});
+
+// ─── Tests: Stage 29 — GET /admin/credits/rollout-checklist ──────────────────
+
+describe("Stage 29 — GET /admin/credits/rollout-checklist", () => {
+  it("71 — returns ok:true with valid admin key (both flags false)", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+  });
+
+  it("72 — safeForProductionDefault=true when both flags false", async () => {
+    const env = makeEnv({ actualDebits: "false", blocking: "false" });
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.equal(body.productionSafety.actualDebitsEnabled, false);
+    assert.equal(body.productionSafety.blockingEnabled, false);
+    assert.equal(body.productionSafety.safeForProductionDefault, true);
+  });
+
+  it("73 — safeForProductionDefault=false when actualDebitsEnabled=true", async () => {
+    const env = makeEnv({ actualDebits: "true", blocking: "false" });
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.equal(body.productionSafety.actualDebitsEnabled, true);
+    assert.equal(body.productionSafety.safeForProductionDefault, false);
+  });
+
+  it("74 — safeForProductionDefault=false when blockingEnabled=true", async () => {
+    const env = makeEnv({ actualDebits: "false", blocking: "true" });
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.equal(body.productionSafety.blockingEnabled, true);
+    assert.equal(body.productionSafety.safeForProductionDefault, false);
+  });
+
+  it("75 — requiredChecks is non-empty array; each item has id, label, status, description", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.ok(Array.isArray(body.requiredChecks), "requiredChecks must be array");
+    assert.ok(body.requiredChecks.length > 0, "requiredChecks must be non-empty");
+    for (const check of body.requiredChecks) {
+      assert.ok(typeof check.id === "string", "check.id must be string");
+      assert.ok(typeof check.label === "string", "check.label must be string");
+      assert.ok(typeof check.description === "string", "check.description must be string");
+      assert.ok(["manual", "passed", "warning", "blocked"].includes(check.status), `check.status must be valid: ${check.status}`);
+    }
+  });
+
+  it("76 — recommendedScenarios includes safe-mode, debits-only, full-enforcement", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.ok(Array.isArray(body.recommendedScenarios), "recommendedScenarios must be array");
+    const ids = body.recommendedScenarios.map(s => s.id);
+    assert.ok(ids.includes("safe-mode"), "must include safe-mode scenario");
+    assert.ok(ids.includes("debits-only"), "must include debits-only scenario");
+    assert.ok(ids.includes("full-enforcement"), "must include full-enforcement scenario");
+    for (const s of body.recommendedScenarios) {
+      assert.ok(typeof s.label === "string", "scenario.label must be string");
+      assert.ok(typeof s.expectedOutcome === "string", "scenario.expectedOutcome must be string");
+      assert.ok(typeof s.flags.actualDebitsEnabled === "boolean", "flags.actualDebitsEnabled must be boolean");
+      assert.ok(typeof s.flags.blockingEnabled === "boolean", "flags.blockingEnabled must be boolean");
+    }
+  });
+
+  it("77 — productionEnableCriteria is non-empty array of strings", async () => {
+    const env = makeEnv();
+    const res = await req(env, "GET", "/admin/credits/rollout-checklist", null);
+    const body = await res.json();
+    assert.ok(Array.isArray(body.productionEnableCriteria), "productionEnableCriteria must be array");
+    assert.ok(body.productionEnableCriteria.length > 0, "productionEnableCriteria must be non-empty");
+    for (const c of body.productionEnableCriteria) {
+      assert.ok(typeof c === "string", "each criterion must be string");
+    }
+  });
+
+  it("78 — returns 401 on bad admin key", async () => {
+    const env = makeEnv();
+    const app = createApp();
+    const res = await app.fetch(
+      new Request("http://localhost/admin/credits/rollout-checklist", {
+        headers: { "x-admin-key": "wrong-key" },
+      }),
+      env,
+    );
+    assert.equal(res.status, 401);
   });
 });

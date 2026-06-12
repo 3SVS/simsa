@@ -400,5 +400,113 @@ export function createWorkspaceAdminCreditsRoutes(): Hono<{ Bindings: Env }> {
     }
   });
 
+  /**
+   * GET /admin/credits/rollout-checklist
+   * Returns a structured checklist for verifying credit system readiness before production enablement.
+   * Read-only — never activates production debits.
+   */
+  app.get("/admin/credits/rollout-checklist", async (c) => {
+    const guard = authGuard(c.env, c.req.header("x-admin-key") ?? "");
+    if (!guard.ok) {
+      return c.json(
+        { ok: false, error: guard.status === 503 ? "disabled" : "unauthorized" },
+        guard.status,
+      );
+    }
+
+    const config = getCreditExecutionConfig(c.env);
+    const safeForProductionDefault = !config.actualDebitsEnabled && !config.blockingEnabled;
+
+    const requiredChecks = [
+      {
+        id: "feature-flags-off",
+        label: "Feature flags: 두 flag 모두 false",
+        status: safeForProductionDefault ? ("passed" as const) : ("warning" as const),
+        description:
+          "ENABLE_ACTUAL_CREDIT_DEBITS 및 ENABLE_CREDIT_BLOCKING이 wrangler.toml에서 \"false\" 상태여야 합니다.",
+      },
+      {
+        id: "migration-applied",
+        label: "Migration 0037 배포됨",
+        status: "manual" as const,
+        description:
+          "workspace_credit_ledger 테이블의 status 컬럼이 D1에 존재하는지 확인 (pnpm migrate:apply --remote 실행 여부).",
+      },
+      {
+        id: "dry-run-preview",
+        label: "Dry-run preview 정상 동작",
+        status: "manual" as const,
+        description:
+          "GET /admin/credits/preview?range=7d 호출 시 ok:true, actualDebitsEnabled:false 반환 확인.",
+      },
+      {
+        id: "idempotency-key-validation",
+        label: "Idempotency key 검증 통과",
+        status: "manual" as const,
+        description:
+          "POST /workspace/github/review 호출 시 Idempotency-Key 헤더 없으면 자동 생성, 잘못된 형식이면 400 반환 확인.",
+      },
+      {
+        id: "duplicate-debit-blocked",
+        label: "중복 차감 방지 확인",
+        status: "manual" as const,
+        description:
+          "같은 Idempotency-Key로 PR review를 두 번 요청하면 두 번째는 duplicate:true 반환 (잔액 변경 없음) 확인.",
+      },
+      {
+        id: "pending-ledger-review",
+        label: "Pending 상태 장부 점검",
+        status: "manual" as const,
+        description:
+          "GET /admin/credits/ledger?userKey=... 에서 status=pending인 항목이 오래 유지되는 경우 중간 실패 가능성이 있습니다.",
+      },
+    ];
+
+    const recommendedScenarios = [
+      {
+        id: "safe-mode",
+        label: "안전 모드 (현행 기본값)",
+        flags: { actualDebitsEnabled: false, blockingEnabled: false },
+        expectedOutcome:
+          "모든 PR review 실행 허용. 크레딧 차감 및 차단 없음. 장부 기록은 grant 한정.",
+      },
+      {
+        id: "debits-only",
+        label: "차감만 활성 (비차단 과금)",
+        flags: { actualDebitsEnabled: true, blockingEnabled: false },
+        expectedOutcome:
+          "PR review 실행 허용. 크레딧 차감됨. 잔액 부족 시에도 실행 허용 (차단 없음).",
+      },
+      {
+        id: "full-enforcement",
+        label: "차감 + 차단 (완전 적용)",
+        flags: { actualDebitsEnabled: true, blockingEnabled: true },
+        expectedOutcome:
+          "PR review 실행 허용. 크레딧 차감됨. 잔액 부족 시 HTTP 402 반환 및 실행 차단.",
+      },
+    ];
+
+    const productionEnableCriteria = [
+      "모든 requiredChecks의 manual 항목을 운영자가 수동으로 확인했습니까?",
+      "ENABLE_ACTUAL_CREDIT_DEBITS를 \"true\"로 변경하기 전 wrangler deploy로 배포 완료 여부 확인",
+      "첫 번째 실제 debit 후 /admin/credits/ledger 에서 status=applied인 항목 확인",
+      "잔액 부족 사용자에게 수동으로 크레딧 지급 (POST /admin/credits/grant) 할 준비 완료",
+      "ENABLE_CREDIT_BLOCKING은 ENABLE_ACTUAL_CREDIT_DEBITS 활성 + 크레딧 충전 UX 완성 후에만 활성화",
+      "status=pending 장부 항목 장기 잔류 모니터링 방법 수립",
+    ];
+
+    return c.json({
+      ok: true as const,
+      productionSafety: {
+        actualDebitsEnabled: config.actualDebitsEnabled,
+        blockingEnabled: config.blockingEnabled,
+        safeForProductionDefault,
+      },
+      requiredChecks,
+      recommendedScenarios,
+      productionEnableCriteria,
+    });
+  });
+
   return app;
 }

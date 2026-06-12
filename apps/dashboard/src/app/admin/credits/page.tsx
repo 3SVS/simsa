@@ -7,6 +7,7 @@ import {
   fetchCreditPreview,
   fetchMonthlyCreditPreview,
   fetchCreditConfig,
+  fetchRolloutChecklist,
   grantCredits,
   type CreditBalance,
   type CreditType,
@@ -17,6 +18,8 @@ import {
   type CreditLedgerPreviewEntry,
   type MonthlyCreditPreviewResult,
   type CreditExecutionConfigResult,
+  type AdminCreditRolloutChecklistResponse,
+  type RolloutCheck,
 } from "@/lib/workspace-admin-credits-api";
 
 const RANGE_LABELS: Record<UsageRange, string> = {
@@ -194,6 +197,96 @@ function LedgerPreviewTable({ entries }: { entries: CreditLedgerPreviewEntry[] }
         ))}
       </tbody>
     </table>
+  );
+}
+
+const CHECK_STATUS_STYLES: Record<string, string> = {
+  passed: "bg-green-100 text-green-700",
+  warning: "bg-amber-100 text-amber-700",
+  manual: "bg-gray-100 text-gray-600",
+  blocked: "bg-red-100 text-red-700",
+};
+
+const CHECK_STATUS_LABELS: Record<string, string> = {
+  passed: "통과",
+  warning: "주의",
+  manual: "수동 확인",
+  blocked: "차단됨",
+};
+
+function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistResponse }) {
+  const { productionSafety, requiredChecks, recommendedScenarios, productionEnableCriteria } = data;
+
+  return (
+    <div className="space-y-4">
+      {/* Production safety banner */}
+      <div
+        className={`rounded-lg px-4 py-3 ${productionSafety.safeForProductionDefault ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}
+      >
+        <p className={`text-sm font-medium ${productionSafety.safeForProductionDefault ? "text-green-700" : "text-red-700"}`}>
+          {productionSafety.safeForProductionDefault
+            ? "프로덕션 기본 안전 상태 — 두 flag 모두 비활성"
+            : "경고: 프로덕션 flag 활성 상태 — 실제 차감/차단 가능"}
+        </p>
+        <div className="flex gap-4 mt-1 text-xs">
+          <span className={productionSafety.actualDebitsEnabled ? "text-red-600 font-medium" : "text-gray-500"}>
+            ACTUAL_DEBITS: {productionSafety.actualDebitsEnabled ? "true (활성)" : "false (비활성)"}
+          </span>
+          <span className={productionSafety.blockingEnabled ? "text-red-600 font-medium" : "text-gray-500"}>
+            BLOCKING: {productionSafety.blockingEnabled ? "true (활성)" : "false (비활성)"}
+          </span>
+        </div>
+      </div>
+
+      {/* Required checks */}
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">필수 확인 항목</p>
+        <div className="space-y-2">
+          {requiredChecks.map((check: RolloutCheck) => (
+            <div key={check.id} className="flex gap-3 items-start">
+              <span className={`text-xs px-2 py-0.5 rounded shrink-0 mt-0.5 ${CHECK_STATUS_STYLES[check.status] ?? "bg-gray-100 text-gray-600"}`}>
+                {CHECK_STATUS_LABELS[check.status] ?? check.status}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">{check.label}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{check.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Recommended scenarios */}
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">권장 시나리오</p>
+        <div className="space-y-2">
+          {recommendedScenarios.map((s) => (
+            <div key={s.id} className="border border-gray-200 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-medium text-gray-700">{s.label}</span>
+                <span className="text-xs text-gray-400">
+                  debits={String(s.flags.actualDebitsEnabled)} · blocking={String(s.flags.blockingEnabled)}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">{s.expectedOutcome}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Production enable criteria */}
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">프로덕션 활성화 전 확인 기준</p>
+        <ul className="space-y-1">
+          {productionEnableCriteria.map((criterion, i) => (
+            <li key={i} className="flex gap-2 text-xs text-gray-600">
+              <span className="text-gray-400 shrink-0">{i + 1}.</span>
+              <span>{criterion}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -393,6 +486,9 @@ export default function AdminCreditsPage() {
   // Stage 24: credit config
   const [creditConfig, setCreditConfig] = useState<CreditExecutionConfigResult | null>(null);
 
+  // Stage 29: rollout checklist
+  const [rolloutChecklist, setRolloutChecklist] = useState<AdminCreditRolloutChecklistResponse | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [grantSuccess, setGrantSuccess] = useState<string | null>(null);
@@ -403,6 +499,7 @@ export default function AdminCreditsPage() {
     setPreview(null);
     setMonthlyPreview(null);
     setCreditConfig(null);
+    setRolloutChecklist(null);
     setError(null);
     setGrantSuccess(null);
   }
@@ -540,6 +637,23 @@ export default function AdminCreditsPage() {
       );
       setGrantAmount("");
       setGrantReason("");
+    } catch (e) {
+      handleKeyError(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleFetchRolloutChecklist() {
+    if (!adminKey.trim()) {
+      setError("Admin key를 입력해주세요.");
+      return;
+    }
+    setLoading(true);
+    clearState();
+    try {
+      const result = await fetchRolloutChecklist(adminKey.trim());
+      setRolloutChecklist(result);
     } catch (e) {
       handleKeyError(e);
     } finally {
@@ -775,6 +889,23 @@ export default function AdminCreditsPage() {
             </button>
           </div>
           {monthlyPreview && <MonthlyPreviewSection data={monthlyPreview} />}
+        </div>
+      </SectionCard>
+
+      {/* Rollout checklist */}
+      <SectionCard title="프로덕션 활성화 체크리스트 (Stage 29)">
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            실제 credit 차감/차단을 활성화하기 전 필수 확인 항목 및 운영 가이드입니다. 현재 flag 상태를 자동 감지합니다.
+          </p>
+          <button
+            onClick={handleFetchRolloutChecklist}
+            disabled={loading}
+            className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 disabled:opacity-50 whitespace-nowrap"
+          >
+            체크리스트 조회
+          </button>
+          {rolloutChecklist && <RolloutChecklistSection data={rolloutChecklist} />}
         </div>
       </SectionCard>
 

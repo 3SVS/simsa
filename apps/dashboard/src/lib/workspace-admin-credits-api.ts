@@ -162,6 +162,35 @@ export type CreditExecutionConfigResult = {
   };
 };
 
+// Stage 29: rollout checklist types
+export type RolloutCheckStatus = "manual" | "passed" | "warning" | "blocked";
+
+export type RolloutCheck = {
+  id: string;
+  label: string;
+  status: RolloutCheckStatus;
+  description: string;
+};
+
+export type RolloutScenario = {
+  id: string;
+  label: string;
+  flags: { actualDebitsEnabled: boolean; blockingEnabled: boolean };
+  expectedOutcome: string;
+};
+
+export type AdminCreditRolloutChecklistResponse = {
+  ok: true;
+  productionSafety: {
+    actualDebitsEnabled: boolean;
+    blockingEnabled: boolean;
+    safeForProductionDefault: boolean;
+  };
+  requiredChecks: RolloutCheck[];
+  recommendedScenarios: RolloutScenario[];
+  productionEnableCriteria: string[];
+};
+
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 function headers(adminKey: string) {
@@ -243,6 +272,19 @@ export async function fetchCreditConfig(adminKey: string): Promise<CreditExecuti
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<CreditExecutionConfigResult>;
+}
+
+export async function fetchRolloutChecklist(
+  adminKey: string,
+): Promise<AdminCreditRolloutChecklistResponse> {
+  const res = await fetch(`${BASE_URL}/admin/credits/rollout-checklist`, {
+    headers: headers(adminKey),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<AdminCreditRolloutChecklistResponse>;
 }
 
 export async function fetchMonthlyCreditPreview(
