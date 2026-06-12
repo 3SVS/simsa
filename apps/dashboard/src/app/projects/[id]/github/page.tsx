@@ -28,6 +28,7 @@ import {
   type ListedComment,
   type LatestPostedCommentSummary,
   type PrReviewComparisonResponse,
+  type CreditEnforcementDryRun,
 } from "@/lib/workspace-github-api";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
@@ -49,6 +50,8 @@ export default function GitHubPage() {
   // Review state: keyed by prNumber
   const [reviewRuns, setReviewRuns] = useState<Record<number, ReviewRun>>({});
   const [reviewPhase, setReviewPhase] = useState<Record<number, "idle" | "running" | "done" | "error">>({});
+  // Credit dry-run result: keyed by prNumber (populated after each review run)
+  const [creditDryRunByPr, setCreditDryRunByPr] = useState<Record<number, CreditEnforcementDryRun>>({});
   // Comparison data: keyed by prNumber (loaded by ComparisonPanel, used by PRCommentPanel)
   const [comparisonDataByPr, setComparisonDataByPr] = useState<Record<number, PrReviewComparisonResponse>>({});
 
@@ -165,6 +168,9 @@ export default function GitHubPage() {
     if (res.ok) {
       setReviewRuns((prev) => ({ ...prev, [lp.number]: res.run }));
       setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
+      if (res.creditDryRun) {
+        setCreditDryRunByPr((prev) => ({ ...prev, [lp.number]: res.creditDryRun! }));
+      }
     } else {
       setReviewPhase((prev) => ({ ...prev, [lp.number]: "error" }));
     }
@@ -397,6 +403,9 @@ export default function GitHubPage() {
                         {phase === "done" && run && (
                           <>
                             <ReviewResultPanel run={run} onRerun={() => handleStartReview(lp)} />
+                            {creditDryRunByPr[lp.number] && (
+                              <CreditDryRunBanner dryRun={creditDryRunByPr[lp.number]!} />
+                            )}
                             <div className="mt-4 pt-4 border-t border-gray-100">
                               <ComparisonPanel
                                 projectId={id}
@@ -1209,6 +1218,27 @@ function ReviewResultPanel({ run, onRerun }: { run: ReviewRun; onRerun: () => vo
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Credit Dry-Run Banner ────────────────────────────────────────────────────
+
+function CreditDryRunBanner({ dryRun }: { dryRun: CreditEnforcementDryRun }) {
+  if (dryRun.billingStatus === "included" || dryRun.billingStatus === "ignored") return null;
+
+  const isWouldBlock = dryRun.wouldBlock;
+  const borderColor = isWouldBlock
+    ? "border-amber-200 bg-amber-50"
+    : "border-blue-100 bg-blue-50";
+  const textColor = isWouldBlock ? "text-amber-700" : "text-blue-700";
+  const labelColor = isWouldBlock ? "text-amber-600" : "text-blue-600";
+
+  return (
+    <div className={`mt-3 border rounded-xl px-4 py-3 ${borderColor}`}>
+      <p className={`text-xs font-semibold mb-1 ${textColor}`}>예상 credit 확인</p>
+      <p className={`text-xs ${labelColor}`}>{dryRun.message}</p>
+      <p className="text-xs text-gray-400 mt-1">실제 차감 없음 · 실행은 허용됨</p>
     </div>
   );
 }

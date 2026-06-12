@@ -10,6 +10,7 @@ import {
   type CreditType,
   type LedgerEntry,
   type PreviewResult,
+  type EnforcementPreview,
   type UsageRange,
 } from "@/lib/workspace-admin-credits-api";
 
@@ -120,12 +121,27 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
   );
 }
 
+function EnforcementSummaryBanner({ ep }: { ep: EnforcementPreview }) {
+  return (
+    <div className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+      <span className="text-amber-700 font-medium text-sm">Dry-run — 실제 차감 없음</span>
+      <span className="text-xs text-amber-600">
+        차감 시 credit 부족 예상: <strong>{ep.wouldBlockCount}</strong> / {ep.checkedEventCount}건
+      </span>
+    </div>
+  );
+}
+
 function PreviewTable({ preview }: { preview: PreviewResult }) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-        <span className="text-amber-700 font-medium text-sm">⚠ Dry-run 미리보기 — 실제 차감 없음 (actualDebitsEnabled: false)</span>
-      </div>
+      {preview.enforcementPreview ? (
+        <EnforcementSummaryBanner ep={preview.enforcementPreview} />
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+          <span className="text-amber-700 font-medium text-sm">⚠ Dry-run 미리보기 — 실제 차감 없음 (actualDebitsEnabled: false)</span>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="예상 차감 크레딧" value={preview.totalEstimatedCredits} />
         <StatCard label="과금 후보 이벤트" value={preview.previewEntries.length} />
@@ -139,8 +155,9 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
               <th className="text-left py-1 text-gray-500 font-medium">사용자</th>
               <th className="text-left py-1 text-gray-500 font-medium">이벤트 유형</th>
               <th className="text-left py-1 text-gray-500 font-medium">크레딧 유형</th>
+              <th className="text-right py-1 text-gray-500 font-medium">잔액</th>
               <th className="text-right py-1 text-gray-500 font-medium">예상 차감</th>
-              <th className="text-left py-1 text-gray-500 font-medium pl-3">사유</th>
+              <th className="text-left py-1 text-gray-500 font-medium pl-3">부족 여부</th>
             </tr>
           </thead>
           <tbody>
@@ -149,10 +166,19 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
                 <td className="py-1 font-mono text-xs">{e.userKey}</td>
                 <td className="py-1 text-xs text-gray-600">{e.eventType}</td>
                 <td className="py-1">{CREDIT_TYPE_LABELS[e.creditType] ?? e.creditType}</td>
+                <td className="py-1 text-right font-mono text-gray-500">
+                  {e.currentBalance ?? "—"}
+                </td>
                 <td className="py-1 text-right font-mono font-bold text-amber-700">
                   {e.estimatedAmount}
                 </td>
-                <td className="py-1 pl-3 text-gray-500 text-xs max-w-xs truncate">{e.reason}</td>
+                <td className="py-1 pl-3">
+                  {e.wouldBlockIfEnforced === true ? (
+                    <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">credit 부족 예상</span>
+                  ) : e.wouldBlockIfEnforced === false ? (
+                    <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">credit 충분</span>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>

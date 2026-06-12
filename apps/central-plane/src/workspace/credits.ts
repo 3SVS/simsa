@@ -222,6 +222,8 @@ export type PreviewEntry = {
   eventType: string;
   creditType: CreditType;
   estimatedAmount: number;
+  currentBalance?: number;
+  wouldBlockIfEnforced?: boolean;
   reason: string;
   createdAt: string;
 };
@@ -260,6 +262,7 @@ export async function previewCreditDebitFromUsageEvents(
   const result = await stmt.all<UsageEventForPreview>();
   const rows = result.results ?? [];
 
+  // Build candidate entries first
   const entries: PreviewEntry[] = [];
   for (const row of rows) {
     const rule = getBillingRule(row.event_type);
@@ -275,6 +278,31 @@ export async function previewCreditDebitFromUsageEvents(
       reason: `${rule.label} × ${row.count}회 예상`,
       createdAt: row.sample_created_at,
     });
+  }
+
+  // Annotate with current balances — collect unique (userKey, creditType) pairs
+  const pairs = new Map<string, { userKey: string; creditType: CreditType }>();
+  for (const e of entries) {
+    const key = `${e.userKey}:${e.creditType}`;
+    if (!pairs.has(key)) pairs.set(key, { userKey: e.userKey, creditType: e.creditType });
+  }
+
+  const balanceMap = new Map<string, number>();
+  await Promise.all(
+    Array.from(pairs.values()).map(async ({ userKey, creditType }) => {
+      try {
+        const bal = await getCreditBalance(env, userKey, creditType);
+        balanceMap.set(`${userKey}:${creditType}`, bal?.balance ?? 0);
+      } catch {
+        balanceMap.set(`${userKey}:${creditType}`, 0);
+      }
+    }),
+  );
+
+  for (const e of entries) {
+    const currentBalance = balanceMap.get(`${e.userKey}:${e.creditType}`) ?? 0;
+    e.currentBalance = currentBalance;
+    e.wouldBlockIfEnforced = currentBalance < e.estimatedAmount;
   }
 
   return entries.sort((a, b) => b.estimatedAmount - a.estimatedAmount);

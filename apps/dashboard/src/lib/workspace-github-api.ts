@@ -265,8 +265,20 @@ export type ReviewRun = {
   updatedAt?: string;
 };
 
+export type CreditEnforcementDryRun = {
+  actualDebitsEnabled: false;
+  wouldBlock: boolean;
+  billingStatus: string;
+  eventType: string;
+  creditType?: string;
+  requiredCredits: number;
+  currentBalance: number;
+  remainingAfter: number;
+  message: string;
+};
+
 export type StartReviewResponse =
-  | { ok: true; run: ReviewRun; warnings?: string[] }
+  | { ok: true; run: ReviewRun; creditDryRun?: CreditEnforcementDryRun; warnings?: string[] }
   | { ok: false; error: string };
 
 export type GetReviewResponse =

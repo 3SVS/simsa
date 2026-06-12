@@ -53,8 +53,16 @@ export type PreviewEntry = {
   eventType: string;
   creditType: CreditType;
   estimatedAmount: number;
+  currentBalance?: number;
+  wouldBlockIfEnforced?: boolean;
   reason: string;
   createdAt: string;
+};
+
+export type EnforcementPreview = {
+  actualDebitsEnabled: false;
+  wouldBlockCount: number;
+  checkedEventCount: number;
 };
 
 export type PreviewResult = {
@@ -63,6 +71,7 @@ export type PreviewResult = {
   range: UsageRange;
   totalEstimatedCredits: number;
   previewEntries: PreviewEntry[];
+  enforcementPreview?: EnforcementPreview;
 };
 
 // ─── API helpers ──────────────────────────────────────────────────────────────

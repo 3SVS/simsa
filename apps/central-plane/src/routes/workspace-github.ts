@@ -55,6 +55,8 @@ import {
 } from "../workspace/pr-comment.js";
 import type { CommentResultItem, ComparisonDataForComment } from "../workspace/pr-comment.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
+import { checkCreditEnforcementDryRun } from "../workspace/credit-enforcement.js";
+import type { CreditEnforcementDryRun } from "../workspace/credit-enforcement.js";
 import {
   getNotificationSettings,
   insertNotificationRecord,
@@ -611,6 +613,18 @@ export function createWorkspaceGitHubRoutes(
       return json({ ok: false, error: "no_matching_items" }, 400, origin);
     }
 
+    // 5b. Credit enforcement dry-run (non-blocking — wouldBlock=true does NOT stop execution)
+    let creditDryRun: CreditEnforcementDryRun | undefined;
+    try {
+      creditDryRun = await checkCreditEnforcementDryRun({
+        env: c.env,
+        userKey,
+        eventType: "workspace_pr_review_run",
+      });
+    } catch (err) {
+      console.warn("[workspace/pr-review] credit dry-run failed (non-fatal):", err);
+    }
+
     // 6. Insert run as running
     const run = await insertReviewRun(c.env, {
       projectId, userKey,
@@ -750,6 +764,7 @@ export function createWorkspaceGitHubRoutes(
         createdAt: run.createdAt,
         updatedAt: new Date().toISOString(),
       },
+      creditDryRun,
       warnings: warnings.length ? warnings : undefined,
     }, 200, origin);
   });

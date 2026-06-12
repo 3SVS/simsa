@@ -161,6 +161,7 @@ export function createWorkspaceAdminCreditsRoutes(): Hono<{ Bindings: Env }> {
     try {
       const previewEntries = await previewCreditDebitFromUsageEvents(c.env, { range, userKey });
       const totalEstimatedCredits = previewEntries.reduce((s, e) => s + e.estimatedAmount, 0);
+      const wouldBlockCount = previewEntries.filter((e) => e.wouldBlockIfEnforced).length;
 
       return c.json({
         ok: true,
@@ -168,6 +169,11 @@ export function createWorkspaceAdminCreditsRoutes(): Hono<{ Bindings: Env }> {
         range,
         totalEstimatedCredits,
         previewEntries,
+        enforcementPreview: {
+          actualDebitsEnabled: false,
+          wouldBlockCount,
+          checkedEventCount: previewEntries.length,
+        },
       });
     } catch (err) {
       console.error("[admin/credits/preview] failed:", err);
