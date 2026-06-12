@@ -136,6 +136,42 @@ export async function getLatestTwoPrReviewRuns(
   return [latest, previous];
 }
 
+export async function getReviewRunById(
+  env: Env,
+  runId: string,
+): Promise<DbReviewRun | null> {
+  const row = await env.DB.prepare(
+    `SELECT id, project_id, user_key, repo_full_name, pr_number, linked_pr_id,
+            selected_item_ids_json, status, result_json, error_message, created_at, updated_at
+     FROM workspace_pr_review_runs
+     WHERE id = ?`,
+  )
+    .bind(runId)
+    .first<{
+      id: string; project_id: string; user_key: string; repo_full_name: string;
+      pr_number: number; linked_pr_id: string | null;
+      selected_item_ids_json: string; status: string;
+      result_json: string | null; error_message: string | null;
+      created_at: string; updated_at: string;
+    }>();
+
+  if (!row) return null;
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    userKey: row.user_key,
+    repoFullName: row.repo_full_name,
+    prNumber: row.pr_number,
+    linkedPrId: row.linked_pr_id ?? undefined,
+    selectedItemIds: (() => { try { return JSON.parse(row.selected_item_ids_json) as string[]; } catch { return []; } })(),
+    status: row.status as ReviewRunStatus,
+    resultJson: row.result_json ?? undefined,
+    errorMessage: row.error_message ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export async function listPRReviewRuns(
   env: Env,
   projectId: string,

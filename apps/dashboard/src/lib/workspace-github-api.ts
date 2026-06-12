@@ -692,6 +692,53 @@ export type ProjectReviewHistoryResponse =
   | { ok: true; runs: ProjectReviewHistoryItem[] }
   | { ok: false; error: string };
 
+// ─── PR Review Run Detail ─────────────────────────────────────────────────────
+
+export type PRReviewRunDetail = {
+  id: string;
+  status: "queued" | "running" | "passed" | "failed" | "inconclusive" | "error";
+  createdAt: string;
+  updatedAt: string;
+  selectedItemIds: string[];
+  selectedItemCount: number;
+  errorMessage?: string;
+  summary: {
+    passed: number;
+    failed: number;
+    inconclusive: number;
+    needsDecision: number;
+  };
+  results: ReviewResultItem[];
+};
+
+export type PRReviewRunDetailResponse =
+  | {
+      ok: true;
+      projectId: string;
+      repoFullName: string;
+      prNumber: number;
+      run: PRReviewRunDetail;
+    }
+  | { ok: false; error: string };
+
+export async function getReviewRunDetail(
+  projectId: string,
+  runId: string,
+  userKey: string,
+): Promise<PRReviewRunDetailResponse> {
+  try {
+    const params = new URLSearchParams({ userKey });
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/github/review/runs/${encodeURIComponent(runId)}?${params}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
+    return (await resp.json()) as PRReviewRunDetailResponse;
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 export async function listPRReviewHistory(
   projectId: string,
   prNumber: number,

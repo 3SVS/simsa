@@ -190,7 +190,7 @@ export default function ReviewHistoryPage() {
                       {run.selectedItemCount}개 항목
                     </span>
                     <Link
-                      href={`/projects/${id}/github`}
+                      href={`/projects/${id}/github/history/${run.id}`}
                       className="text-xs text-indigo-500 hover:text-indigo-700"
                     >
                       상세 보기 →

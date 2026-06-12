@@ -36,7 +36,7 @@ import {
 import { upsertProjectPR, getLinkedPRs } from "../workspace/pr-db.js";
 import {
   insertReviewRun, updateReviewRun, getLatestReviewRun, getLatestTwoPrReviewRuns,
-  listPRReviewRuns, listProjectReviewRuns,
+  listPRReviewRuns, listProjectReviewRuns, getReviewRunById,
 } from "../workspace/pr-review-db.js";
 import {
   compareRunResults, buildRunSummary, parseRunResults,
@@ -1541,6 +1541,147 @@ export function createWorkspaceGitHubRoutes(
         updatedAt: new Date().toISOString(),
       },
     }, 200, origin);
+  });
+
+  // ── GET /workspace/projects/:id/github/review/runs/:runId ───────────────
+  // Project-level run lookup — no prNumber required in URL.
+  // Validates that the run belongs to this project (projectId check only).
+  // Used by /history/:runId dashboard route where prNumber isn't in the URL.
+  app.get("/workspace/projects/:id/github/review/runs/:runId", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const projectId = c.req.param("id");
+    const runId = c.req.param("runId");
+    if (!runId) return json({ ok: false, error: "run_id_required" }, 400, origin);
+
+    const userKey = c.req.query("userKey");
+    if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    try {
+      const run = await getReviewRunById(c.env, runId);
+      if (!run) return json({ ok: false, error: "run_not_found" }, 404, origin);
+
+      // Validate ownership at project level
+      if (run.projectId !== projectId) {
+        return json({ ok: false, error: "run_not_found" }, 404, origin);
+      }
+
+      let summary: { passed: number; failed: number; inconclusive: number; needsDecision: number } = {
+        passed: 0, failed: 0, inconclusive: 0, needsDecision: 0,
+      };
+      let results: unknown[] = [];
+      if (run.resultJson) {
+        try {
+          const parsed = JSON.parse(run.resultJson) as {
+            summary?: { passed?: number; failed?: number; inconclusive?: number; needsDecision?: number };
+            results?: unknown[];
+          };
+          if (parsed.summary) {
+            summary = {
+              passed: Number(parsed.summary.passed ?? 0),
+              failed: Number(parsed.summary.failed ?? 0),
+              inconclusive: Number(parsed.summary.inconclusive ?? 0),
+              needsDecision: Number(parsed.summary.needsDecision ?? 0),
+            };
+          }
+          if (Array.isArray(parsed.results)) results = parsed.results;
+        } catch { /* malformed JSON — return empty results */ }
+      }
+
+      return json({
+        ok: true,
+        projectId,
+        repoFullName: run.repoFullName,
+        prNumber: run.prNumber,
+        run: {
+          id: run.id,
+          status: run.status,
+          createdAt: run.createdAt,
+          updatedAt: run.updatedAt,
+          selectedItemIds: run.selectedItemIds,
+          selectedItemCount: run.selectedItemIds.length,
+          errorMessage: run.errorMessage ?? undefined,
+          summary,
+          results,
+        },
+      }, 200, origin);
+    } catch (err) {
+      console.error("[workspace/github/review/runs/:runId GET] failed:", err);
+      return json({ ok: false, error: "fetch_failed" }, 500, origin);
+    }
+  });
+
+  // ── GET /workspace/projects/:id/github/pulls/:number/review/runs/:runId ──
+  // Fetch a single review run by ID. Validates that the run belongs to this
+  // project/repo/PR — returns 404 on mismatch so run IDs can't be guessed across projects.
+  app.get("/workspace/projects/:id/github/pulls/:number/review/runs/:runId", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const projectId = c.req.param("id");
+    const prNumber = parseInt(c.req.param("number"), 10);
+    const runId = c.req.param("runId");
+
+    if (isNaN(prNumber) || prNumber < 1) {
+      return json({ ok: false, error: "invalid_pr_number" }, 400, origin);
+    }
+    if (!runId) return json({ ok: false, error: "run_id_required" }, 400, origin);
+
+    const userKey = c.req.query("userKey");
+    if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const repo = await getProjectRepo(c.env, projectId).catch(() => null);
+    if (!repo) return json({ ok: false, error: "no_repo_linked" }, 404, origin);
+
+    try {
+      const run = await getReviewRunById(c.env, runId);
+      if (!run) return json({ ok: false, error: "run_not_found" }, 404, origin);
+
+      // Validate ownership — prevent cross-project/PR snooping
+      if (run.projectId !== projectId || run.repoFullName !== repo.repoFullName || run.prNumber !== prNumber) {
+        return json({ ok: false, error: "run_not_found" }, 404, origin);
+      }
+
+      let summary: { passed: number; failed: number; inconclusive: number; needsDecision: number } = {
+        passed: 0, failed: 0, inconclusive: 0, needsDecision: 0,
+      };
+      let results: unknown[] = [];
+      if (run.resultJson) {
+        try {
+          const parsed = JSON.parse(run.resultJson) as {
+            summary?: { passed?: number; failed?: number; inconclusive?: number; needsDecision?: number };
+            results?: unknown[];
+          };
+          if (parsed.summary) {
+            summary = {
+              passed: Number(parsed.summary.passed ?? 0),
+              failed: Number(parsed.summary.failed ?? 0),
+              inconclusive: Number(parsed.summary.inconclusive ?? 0),
+              needsDecision: Number(parsed.summary.needsDecision ?? 0),
+            };
+          }
+          if (Array.isArray(parsed.results)) results = parsed.results;
+        } catch { /* malformed JSON — return empty results */ }
+      }
+
+      return json({
+        ok: true,
+        projectId,
+        repoFullName: run.repoFullName,
+        prNumber: run.prNumber,
+        run: {
+          id: run.id,
+          status: run.status,
+          createdAt: run.createdAt,
+          updatedAt: run.updatedAt,
+          selectedItemIds: run.selectedItemIds,
+          selectedItemCount: run.selectedItemIds.length,
+          errorMessage: run.errorMessage ?? undefined,
+          summary,
+          results,
+        },
+      }, 200, origin);
+    } catch (err) {
+      console.error("[workspace/github/pulls/review/runs/:runId GET] failed:", err);
+      return json({ ok: false, error: "fetch_failed" }, 500, origin);
+    }
   });
 
   // ── GET /workspace/projects/:id/github/pulls/:number/review/history ──────
