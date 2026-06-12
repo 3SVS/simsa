@@ -4,10 +4,11 @@
  * Client for admin credit ledger endpoints.
  * Admin key is entered at query time — never stored.
  *
- * GET  /admin/credits?userKey=...        — list balances
- * POST /admin/credits/grant             — manual grant
- * GET  /admin/credits/ledger?userKey=.. — ledger entries
- * GET  /admin/credits/preview?range=..  — dry-run preview
+ * GET  /admin/credits?userKey=...                   — list balances
+ * POST /admin/credits/grant                         — manual grant
+ * GET  /admin/credits/ledger?userKey=..             — ledger entries
+ * GET  /admin/credits/preview?range=..              — dry-run preview
+ * GET  /admin/credits/monthly-preview?month=YYYY-MM — monthly breakdown
  */
 
 const BASE_URL =
@@ -53,6 +54,7 @@ export type PreviewEntry = {
   eventType: string;
   creditType: CreditType;
   estimatedAmount: number;
+  rawEventCount?: number;
   currentBalance?: number;
   wouldBlockIfEnforced?: boolean;
   allowance?: {
@@ -63,6 +65,37 @@ export type PreviewEntry = {
   };
   reason: string;
   createdAt: string;
+};
+
+// Stage 23: preview-only ledger entry — direction is "preview_debit", never written to D1
+export type CreditLedgerPreviewEntry = {
+  id: string;
+  userKey: string;
+  projectId?: string;
+  eventType: string;
+  creditType: CreditType;
+  amount: number;
+  direction: "preview_debit";
+  reason: string;
+  allowance?: {
+    periodKey: string;
+    includedRuns: number;
+    usedBeforeThisEvent: number;
+    coveredByAllowance: boolean;
+  };
+  balance: {
+    currentBalance: number;
+    wouldHaveRemainingBalance: number;
+    wouldBlockIfEnforced: boolean;
+  };
+  createdAt: string;
+};
+
+export type AllowanceSummary = {
+  enabled: true;
+  rule: string;
+  totalCoveredByAllowance: number;
+  totalBillableAfterAllowance: number;
 };
 
 export type EnforcementPreview = {
@@ -76,8 +109,43 @@ export type PreviewResult = {
   actualDebitsEnabled: false;
   range: UsageRange;
   totalEstimatedCredits: number;
+  allowanceSummary?: AllowanceSummary;
   previewEntries: PreviewEntry[];
   enforcementPreview?: EnforcementPreview;
+  enforcementSummary?: EnforcementPreview;
+  ledgerPreview?: CreditLedgerPreviewEntry[];
+};
+
+// Stage 23: monthly breakdown types
+export type MonthlyUserSummary = {
+  userKey: string;
+  totalPrReviewRuns: number;
+  coveredByAllowance: number;
+  billableRuns: number;
+  estimatedReviewCredits: number;
+  currentReviewBalance: number;
+  wouldBlockCount: number;
+};
+
+export type MonthlyProjectSummary = {
+  projectId: string;
+  totalPrReviewRuns: number;
+  billableRuns: number;
+  estimatedReviewCredits: number;
+};
+
+export type MonthlyCreditPreviewResult = {
+  ok: true;
+  actualDebitsEnabled: false;
+  month: string;
+  userKey?: string;
+  allowanceRule: {
+    eventType: string;
+    includedRuns: number;
+    creditType: string;
+  };
+  users: MonthlyUserSummary[];
+  projects: MonthlyProjectSummary[];
 };
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -150,4 +218,22 @@ export async function fetchCreditPreview(
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<PreviewResult>;
+}
+
+export async function fetchMonthlyCreditPreview(
+  adminKey: string,
+  month?: string,
+  userKey?: string,
+): Promise<MonthlyCreditPreviewResult> {
+  const params = new URLSearchParams();
+  if (month) params.set("month", month);
+  if (userKey) params.set("userKey", userKey);
+  const res = await fetch(`${BASE_URL}/admin/credits/monthly-preview?${params}`, {
+    headers: headers(adminKey),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<MonthlyCreditPreviewResult>;
 }

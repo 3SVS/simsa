@@ -5,6 +5,7 @@ import {
   fetchCreditBalances,
   fetchCreditLedger,
   fetchCreditPreview,
+  fetchMonthlyCreditPreview,
   grantCredits,
   type CreditBalance,
   type CreditType,
@@ -12,6 +13,8 @@ import {
   type PreviewResult,
   type EnforcementPreview,
   type UsageRange,
+  type CreditLedgerPreviewEntry,
+  type MonthlyCreditPreviewResult,
 } from "@/lib/workspace-admin-credits-api";
 
 const RANGE_LABELS: Record<UsageRange, string> = {
@@ -31,6 +34,7 @@ const DIRECTION_LABELS: Record<string, string> = {
   debit: "차감",
   adjustment: "조정",
   preview: "미리보기",
+  preview_debit: "예상 차감",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -132,6 +136,43 @@ function EnforcementSummaryBanner({ ep }: { ep: EnforcementPreview }) {
   );
 }
 
+function LedgerPreviewTable({ entries }: { entries: CreditLedgerPreviewEntry[] }) {
+  if (entries.length === 0)
+    return <p className="text-sm text-gray-500">billable 예상 항목 없음.</p>;
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b">
+          <th className="text-left py-1 text-gray-500 font-medium">사용자</th>
+          <th className="text-left py-1 text-gray-500 font-medium">이벤트</th>
+          <th className="text-right py-1 text-gray-500 font-medium">예상 차감</th>
+          <th className="text-right py-1 text-gray-500 font-medium">현재 잔액</th>
+          <th className="text-right py-1 text-gray-500 font-medium">차감 후 잔액</th>
+          <th className="text-left py-1 text-gray-500 font-medium pl-3">차단 여부</th>
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map((e) => (
+          <tr key={e.id} className="border-b last:border-0">
+            <td className="py-1 font-mono text-xs">{e.userKey}</td>
+            <td className="py-1 text-xs text-gray-600">{e.eventType}</td>
+            <td className="py-1 text-right font-mono font-bold text-amber-700">{e.amount}</td>
+            <td className="py-1 text-right font-mono text-gray-500">{e.balance.currentBalance}</td>
+            <td className="py-1 text-right font-mono">{e.balance.wouldHaveRemainingBalance}</td>
+            <td className="py-1 pl-3">
+              {e.balance.wouldBlockIfEnforced ? (
+                <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">credit 부족 예상</span>
+              ) : (
+                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">충분</span>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function PreviewTable({ preview }: { preview: PreviewResult }) {
   return (
     <div className="space-y-3">
@@ -139,13 +180,23 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
         <EnforcementSummaryBanner ep={preview.enforcementPreview} />
       ) : (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-          <span className="text-amber-700 font-medium text-sm">⚠ Dry-run 미리보기 — 실제 차감 없음 (actualDebitsEnabled: false)</span>
+          <span className="text-amber-700 font-medium text-sm">Dry-run 미리보기 — 실제 차감 없음 (actualDebitsEnabled: false)</span>
         </div>
       )}
+
+      {preview.allowanceSummary && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-xs text-blue-700 flex gap-6">
+          <span>무료 커버: <strong>{preview.allowanceSummary.totalCoveredByAllowance}</strong>회</span>
+          <span>과금 후보: <strong>{preview.allowanceSummary.totalBillableAfterAllowance}</strong>회</span>
+          <span className="text-blue-500">{preview.allowanceSummary.rule}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="예상 차감 크레딧" value={preview.totalEstimatedCredits} />
         <StatCard label="과금 후보 이벤트" value={preview.previewEntries.length} />
       </div>
+
       {preview.previewEntries.length === 0 ? (
         <p className="text-sm text-gray-500">과금 후보 이벤트 없음.</p>
       ) : (
@@ -200,6 +251,96 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
           </tbody>
         </table>
       )}
+
+      {preview.ledgerPreview && preview.ledgerPreview.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-gray-600 mb-2">Ledger 미리보기 (실제 차감 없음)</h4>
+          <LedgerPreviewTable entries={preview.ledgerPreview} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MonthlyPreviewSection({ data }: { data: MonthlyCreditPreviewResult }) {
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <p className="text-sm font-semibold text-blue-800">
+          이 화면은 월 무료 제공량과 credit 차감을 시뮬레이션합니다. 실제 credit은 차감되지 않습니다.
+        </p>
+        <p className="text-xs text-blue-600 mt-0.5">
+          {data.month} · 무료 {data.allowanceRule.includedRuns}회/user · actualDebitsEnabled: false
+        </p>
+      </div>
+
+      {/* Per-user table */}
+      <div>
+        <h4 className="text-xs font-semibold text-gray-600 mb-2">사용자별 (월 allowance 적용 후)</h4>
+        {data.users.length === 0 ? (
+          <p className="text-sm text-gray-500">이 달에 PR 코드 확인 이벤트가 없습니다.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-1 text-gray-500 font-medium">userKey</th>
+                <th className="text-right py-1 text-gray-500 font-medium">PR 확인 수</th>
+                <th className="text-right py-1 text-gray-500 font-medium">무료 커버</th>
+                <th className="text-right py-1 text-gray-500 font-medium">credit 후보</th>
+                <th className="text-right py-1 text-gray-500 font-medium">예상 review credit</th>
+                <th className="text-right py-1 text-gray-500 font-medium">현재 잔액</th>
+                <th className="text-right py-1 text-gray-500 font-medium">차단됐을 실행</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.users.map((u) => (
+                <tr key={u.userKey} className="border-b last:border-0 hover:bg-gray-50">
+                  <td className="py-1 font-mono text-xs">{u.userKey}</td>
+                  <td className="py-1 text-right">{u.totalPrReviewRuns}</td>
+                  <td className="py-1 text-right text-green-700">{u.coveredByAllowance}</td>
+                  <td className="py-1 text-right text-amber-700">{u.billableRuns}</td>
+                  <td className="py-1 text-right font-bold text-amber-700">{u.estimatedReviewCredits}</td>
+                  <td className="py-1 text-right font-mono text-gray-500">{u.currentReviewBalance}</td>
+                  <td className="py-1 text-right">
+                    {u.wouldBlockCount > 0 ? (
+                      <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{u.wouldBlockCount}회</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">0</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Per-project table */}
+      {data.projects.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-gray-600 mb-2">프로젝트별 (user allowance 적용 후 비례 추정)</h4>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-1 text-gray-500 font-medium">projectId</th>
+                <th className="text-right py-1 text-gray-500 font-medium">PR 확인 수</th>
+                <th className="text-right py-1 text-gray-500 font-medium">credit 후보 (추정)</th>
+                <th className="text-right py-1 text-gray-500 font-medium">예상 review credit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.projects.map((p) => (
+                <tr key={p.projectId} className="border-b last:border-0 hover:bg-gray-50">
+                  <td className="py-1 font-mono text-xs">{p.projectId}</td>
+                  <td className="py-1 text-right">{p.totalPrReviewRuns}</td>
+                  <td className="py-1 text-right text-amber-700">{p.billableRuns}</td>
+                  <td className="py-1 text-right font-bold text-amber-700">{p.estimatedReviewCredits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -220,6 +361,11 @@ export default function AdminCreditsPage() {
   const [grantReason, setGrantReason] = useState("");
   const [grantUserKey, setGrantUserKey] = useState("");
 
+  // Monthly preview state
+  const [monthInput, setMonthInput] = useState("");
+  const [monthlyUserKey, setMonthlyUserKey] = useState("");
+  const [monthlyPreview, setMonthlyPreview] = useState<MonthlyCreditPreviewResult | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [grantSuccess, setGrantSuccess] = useState<string | null>(null);
@@ -228,6 +374,7 @@ export default function AdminCreditsPage() {
     setBalances(null);
     setLedger(null);
     setPreview(null);
+    setMonthlyPreview(null);
     setError(null);
     setGrantSuccess(null);
   }
@@ -291,6 +438,27 @@ export default function AdminCreditsPage() {
         userKey.trim() || undefined,
       );
       setPreview(result);
+    } catch (e) {
+      handleKeyError(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleMonthlyPreview() {
+    if (!adminKey.trim()) {
+      setError("Admin key를 입력해주세요.");
+      return;
+    }
+    setLoading(true);
+    clearState();
+    try {
+      const result = await fetchMonthlyCreditPreview(
+        adminKey.trim(),
+        monthInput.trim() || undefined,
+        monthlyUserKey.trim() || undefined,
+      );
+      setMonthlyPreview(result);
     } catch (e) {
       handleKeyError(e);
     } finally {
@@ -494,11 +662,44 @@ export default function AdminCreditsPage() {
         </div>
       </SectionCard>
 
+      {/* Monthly credit preview */}
+      <SectionCard title="월별 Credit 미리보기">
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            특정 달의 PR 확인 횟수, 무료 제공량 적용 후 예상 credit 부담을 사용자/프로젝트별로 확인합니다.
+          </p>
+          <div className="flex gap-2 items-center flex-wrap">
+            <input
+              type="text"
+              placeholder="월 (예: 2026-06, 기본값: 이번 달)"
+              value={monthInput}
+              onChange={(e) => setMonthInput(e.target.value)}
+              className="w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              placeholder="userKey 필터 (선택)"
+              value={monthlyUserKey}
+              onChange={(e) => setMonthlyUserKey(e.target.value)}
+              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleMonthlyPreview}
+              disabled={loading}
+              className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
+            >
+              월별 조회
+            </button>
+          </div>
+          {monthlyPreview && <MonthlyPreviewSection data={monthlyPreview} />}
+        </div>
+      </SectionCard>
+
       {/* Free allowance policy notice */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
         <p className="text-sm font-medium text-blue-700 mb-1">무료 허용 정책 (현행)</p>
         <ul className="text-xs text-blue-600 space-y-0.5 list-disc list-inside">
-          <li>PR 코드 확인 (workspace_pr_review_run) — 과금 후보 (1 크레딧/회)</li>
+          <li>PR 코드 확인 (workspace_pr_review_run) — 월 5회 무료 후 과금 후보 (1 크레딧/회)</li>
           <li>제품 설명서 생성, 확인, 패키지 내보내기 — 무료 포함</li>
           <li>PR 코멘트, Telegram 알림 — 무료 포함</li>
           <li>실제 과금은 미구현 (actualDebitsEnabled: false 고정)</li>

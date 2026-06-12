@@ -223,6 +223,7 @@ export type PreviewEntry = {
   eventType: string;
   creditType: CreditType;
   estimatedAmount: number;
+  rawEventCount?: number;
   currentBalance?: number;
   wouldBlockIfEnforced?: boolean;
   allowance?: {
@@ -232,6 +233,32 @@ export type PreviewEntry = {
     coveredByAllowance: boolean;
   };
   reason: string;
+  createdAt: string;
+};
+
+// Preview-only ledger entry — never written to workspace_credit_ledger.
+// direction "preview_debit" distinguishes it from real ledger entries.
+export type CreditLedgerPreviewEntry = {
+  id: string;
+  userKey: string;
+  projectId?: string;
+  sourceEventId?: string;
+  eventType: string;
+  creditType: CreditType;
+  amount: number;
+  direction: "preview_debit";
+  reason: string;
+  allowance?: {
+    periodKey: string;
+    includedRuns: number;
+    usedBeforeThisEvent: number;
+    coveredByAllowance: boolean;
+  };
+  balance: {
+    currentBalance: number;
+    wouldHaveRemainingBalance: number;
+    wouldBlockIfEnforced: boolean;
+  };
   createdAt: string;
 };
 
@@ -280,6 +307,7 @@ export async function previewCreditDebitFromUsageEvents(
       eventType: row.event_type,
       creditType: rule.creditType as CreditType,
       estimatedAmount: rule.creditCost * row.count, // may be revised by allowance below
+      rawEventCount: row.count,
       reason: `${rule.label} × ${row.count}회 예상`,
       createdAt: row.sample_created_at,
     });
@@ -363,4 +391,43 @@ export async function previewCreditDebitFromUsageEvents(
   }
 
   return entries.sort((a, b) => b.estimatedAmount - a.estimatedAmount);
+}
+
+// ─── Ledger preview (no DB writes) ────────────────────────────────────────────
+
+export function buildLedgerPreview(entries: PreviewEntry[]): CreditLedgerPreviewEntry[] {
+  const billable = entries.filter((e) => e.estimatedAmount > 0);
+
+  // Track running balance per (userKey, creditType) to simulate sequential debits
+  const runningBalance = new Map<string, number>();
+
+  return billable.map((e, i) => {
+    const balKey = `${e.userKey}:${e.creditType}`;
+    if (!runningBalance.has(balKey)) {
+      runningBalance.set(balKey, e.currentBalance ?? 0);
+    }
+    const current = runningBalance.get(balKey) ?? 0;
+    const remaining = Math.max(0, current - e.estimatedAmount);
+    const wouldBlock = current < e.estimatedAmount;
+    runningBalance.set(balKey, remaining);
+
+    const result: CreditLedgerPreviewEntry = {
+      id: `wclp_${i}`,
+      userKey: e.userKey,
+      ...(e.projectId ? { projectId: e.projectId } : {}),
+      eventType: e.eventType,
+      creditType: e.creditType,
+      amount: e.estimatedAmount,
+      direction: "preview_debit",
+      reason: e.reason,
+      ...(e.allowance ? { allowance: e.allowance } : {}),
+      balance: {
+        currentBalance: current,
+        wouldHaveRemainingBalance: remaining,
+        wouldBlockIfEnforced: wouldBlock,
+      },
+      createdAt: e.createdAt,
+    };
+    return result;
+  });
 }

@@ -36,6 +36,8 @@ export default function AdminUsagePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Stage 23: link to credits page rendered below header
+
   async function handleLoad() {
     if (!adminKey.trim()) {
       setError("Admin key를 입력해주세요.");
@@ -71,7 +73,15 @@ export default function AdminUsagePage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin — 사용 현황</h1>
+        <div className="flex items-start justify-between mb-2">
+          <h1 className="text-2xl font-bold text-gray-900">Admin — 사용 현황</h1>
+          <a
+            href="/admin/credits"
+            className="text-xs text-blue-600 hover:underline whitespace-nowrap mt-1"
+          >
+            credit 미리보기 보기 →
+          </a>
+        </div>
         <p className="text-sm text-gray-500 mb-6">
           워크스페이스 기능 사용 이벤트 집계 및 예상 credit dry-run입니다.
         </p>
