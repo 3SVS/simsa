@@ -8,6 +8,7 @@
 import type { CheckableItem, ProductSpecForCheck, CheckResultItem } from "./check.js";
 import type { PullRequestMeta, PullRequestFile } from "./github-pr.js";
 import { buildDiffSummary } from "./github-pr.js";
+import type { FetchLike } from "../github.js";
 
 export type { CheckResultItem };
 
@@ -93,12 +94,17 @@ ${diffSummary}
 
 // ─── Anthropic call ───────────────────────────────────────────────────────────
 
-async function callAnthropic(apiKey: string, prompt: string, timeoutMs = 25000): Promise<string> {
+async function callAnthropic(
+  apiKey: string,
+  prompt: string,
+  timeoutMs = 25000,
+  fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
+): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let resp: Response;
   try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
+    resp = await fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
       signal: ctrl.signal,
       headers: {
@@ -264,6 +270,7 @@ export function deriveRunStatus(
 export async function reviewPRAgainstItems(
   req: PRReviewRequest,
   anthropicApiKey: string | undefined,
+  fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
 ): Promise<PRReviewResponse> {
   if (!req.items?.length) {
     return {
@@ -283,7 +290,7 @@ export async function reviewPRAgainstItems(
   const prompt = buildReviewPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt);
+    rawText = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl);
   } catch (err) {
     console.error("[workspace/pr-review] LLM call failed:", err);
     return buildMockFallback(req);

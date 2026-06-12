@@ -14,6 +14,15 @@ import {
   type GitHubRepo,
   type LinkedRepo,
 } from "@/lib/workspace-github-api";
+import {
+  fetchNotificationSettings,
+  saveNotificationSettings,
+  testNotification,
+  fetchNotifications,
+  type NotifyPolicy,
+  type NotificationSettings,
+  type NotificationRecord,
+} from "@/lib/workspace-notifications-api";
 
 export default function SettingsPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,7 +37,71 @@ export default function SettingsPage() {
   const [linkPhase, setLinkPhase] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [repoSearch, setRepoSearch] = useState("");
 
+  // Telegram notification state
+  const [tgSettings, setTgSettings] = useState<NotificationSettings | null>(null);
+  const [tgEnabled, setTgEnabled] = useState(false);
+  const [tgChatId, setTgChatId] = useState("");
+  const [tgPolicy, setTgPolicy] = useState<NotifyPolicy>("problems_only");
+  const [tgEnabledToggle, setTgEnabledToggle] = useState(true);
+  const [tgSavePhase, setTgSavePhase] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const [tgTestPhase, setTgTestPhase] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [tgTestError, setTgTestError] = useState("");
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [notifPhase, setNotifPhase] = useState<"idle" | "loading" | "done">("idle");
+
   const userKey = getUserKey();
+
+  // Load Telegram settings on mount
+  const loadTgSettings = useCallback(async () => {
+    const res = await fetchNotificationSettings(userKey);
+    if (res.ok) {
+      setTgEnabled(res.telegramEnabled);
+      if (res.settings) {
+        setTgSettings(res.settings);
+        setTgChatId(res.settings.chatId);
+        setTgPolicy(res.settings.notifyPolicy);
+        setTgEnabledToggle(res.settings.enabled);
+      }
+    }
+  }, [userKey]);
+
+  const loadNotifications = useCallback(async () => {
+    setNotifPhase("loading");
+    const res = await fetchNotifications(userKey);
+    if (res.ok) setNotifications(res.notifications);
+    setNotifPhase("done");
+  }, [userKey]);
+
+  async function handleSaveTgSettings() {
+    if (!tgChatId.trim()) return;
+    setTgSavePhase("saving");
+    const res = await saveNotificationSettings({
+      userKey,
+      chatId: tgChatId.trim(),
+      enabled: tgEnabledToggle,
+      notifyPolicy: tgPolicy,
+    });
+    if (res.ok) {
+      setTgSettings(res.settings);
+      setTgSavePhase("done");
+      void loadNotifications();
+    } else {
+      setTgSavePhase("error");
+    }
+  }
+
+  async function handleTestNotification() {
+    setTgTestPhase("sending");
+    setTgTestError("");
+    const res = await testNotification(userKey);
+    if (res.ok) {
+      setTgTestPhase("sent");
+      void loadNotifications();
+    } else {
+      setTgTestPhase("error");
+      setTgTestError(res.message ?? res.error ?? "전송 실패");
+    }
+  }
 
   // Load connection status + linked repo on mount
   const loadStatus = useCallback(async () => {
@@ -50,7 +123,11 @@ export default function SettingsPage() {
     }
   }, [id, userKey]);
 
-  useEffect(() => { loadStatus(); }, [loadStatus]);
+  useEffect(() => {
+    loadStatus();
+    loadTgSettings();
+    loadNotifications();
+  }, [loadStatus, loadTgSettings, loadNotifications]);
 
   async function loadRepos() {
     setReposPhase("loading");
@@ -248,12 +325,145 @@ export default function SettingsPage() {
         </p>
       )}
 
-      {/* Stage note: what comes next */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-500 space-y-1">
-        <p className="font-medium text-gray-600 mb-2">다음 단계에서 이어질 기능</p>
-        <p>• 연결된 저장소의 Pull Request 목록 보기</p>
-        <p>• Conclave가 PR을 자동으로 검토하는 기능</p>
-        <p>• 지금은 저장소만 연결하고, PR 검토는 아직 시작되지 않아요.</p>
+      {/* ─── Telegram 알림 섹션 ──────────────────────────────────────────── */}
+      <div className="mt-10">
+        <h2 className="text-lg font-bold text-gray-900 mb-1">Telegram 알림</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Telegram에서 알림을 받으려면 Conclave 봇과 대화를 시작한 뒤, 받을 채팅 ID를 입력해주세요.
+        </p>
+
+        {!tgEnabled && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700 mb-4">
+            서버에 Telegram 봇 토큰이 설정되지 않았어요. 관리자에게 문의해주세요.
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">채팅 ID</label>
+            <input
+              type="text"
+              value={tgChatId}
+              onChange={(e) => setTgChatId(e.target.value)}
+              placeholder="예: 123456789"
+              disabled={!tgEnabled}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:opacity-50"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Telegram 봇(@userinfobot)에게 메시지를 보내면 채팅 ID를 확인할 수 있어요.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">알림 정책</label>
+            <select
+              value={tgPolicy}
+              onChange={(e) => setTgPolicy(e.target.value as NotifyPolicy)}
+              disabled={!tgEnabled}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:opacity-50"
+            >
+              <option value="problems_only">문제가 있을 때만 알림</option>
+              <option value="always">항상 알림</option>
+              <option value="disabled">끄기</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="tg-enabled"
+              checked={tgEnabledToggle}
+              onChange={(e) => setTgEnabledToggle(e.target.checked)}
+              disabled={!tgEnabled}
+              className="rounded border-gray-300 disabled:opacity-50"
+            />
+            <label htmlFor="tg-enabled" className="text-sm text-gray-700">알림 켜기</label>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={handleSaveTgSettings}
+              disabled={!tgEnabled || !tgChatId.trim() || tgSavePhase === "saving"}
+              className="bg-indigo-600 text-white text-sm font-medium px-4 py-2 rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+            >
+              {tgSavePhase === "saving" ? "저장 중..." : "저장"}
+            </button>
+            {tgSettings && (
+              <button
+                onClick={handleTestNotification}
+                disabled={!tgEnabled || tgTestPhase === "sending"}
+                className="border border-gray-200 text-sm text-gray-700 px-4 py-2 rounded-xl hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              >
+                {tgTestPhase === "sending" ? "보내는 중..." : "테스트 메시지 보내기"}
+              </button>
+            )}
+          </div>
+
+          {tgSavePhase === "done" && (
+            <p className="text-xs text-green-600">✓ 저장됐어요.</p>
+          )}
+          {tgSavePhase === "error" && (
+            <p className="text-xs text-red-600">저장에 실패했습니다. 잠시 후 다시 시도해주세요.</p>
+          )}
+          {tgTestPhase === "sent" && (
+            <p className="text-xs text-green-600">✓ 테스트 메시지를 보냈어요. Telegram을 확인해주세요.</p>
+          )}
+          {tgTestPhase === "error" && (
+            <p className="text-xs text-red-600">{tgTestError || "전송에 실패했어요. 채팅 ID가 맞는지 확인해주세요."}</p>
+          )}
+        </div>
+      </div>
+
+      {/* ─── 알림 이력 ──────────────────────────────────────────────────── */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-bold text-gray-800">알림 이력</h2>
+          <button
+            onClick={loadNotifications}
+            className="text-xs text-indigo-600 hover:underline"
+          >
+            새로고침
+          </button>
+        </div>
+
+        {notifPhase === "loading" && (
+          <p className="text-xs text-gray-400">불러오는 중...</p>
+        )}
+
+        {notifPhase === "done" && notifications.length === 0 && (
+          <p className="text-xs text-gray-400">아직 알림 이력이 없어요.</p>
+        )}
+
+        {notifPhase === "done" && notifications.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="divide-y divide-gray-50">
+              {notifications.map((n) => (
+                <div key={n.id} className="px-4 py-3 flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {n.status === "sent" && <span className="text-green-500 text-xs font-semibold">전송됨</span>}
+                    {n.status === "skipped" && <span className="text-gray-400 text-xs">건너뜀</span>}
+                    {n.status === "error" && <span className="text-red-500 text-xs font-semibold">실패</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-600 truncate">
+                      {n.eventType === "pr_review_complete" ? "PR 확인 완료 알림" : n.eventType}
+                      {n.destinationPreview ? ` · ${n.destinationPreview}` : ""}
+                    </p>
+                    {n.messagePreview && (
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{n.messagePreview}</p>
+                    )}
+                    {n.errorMessage && (
+                      <p className="text-xs text-red-400 truncate mt-0.5">{n.errorMessage}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 flex-shrink-0">
+                    {new Date(n.createdAt).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

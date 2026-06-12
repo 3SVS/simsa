@@ -31,6 +31,7 @@ import { createBillingRoutes } from "./routes/billing.js";
 import { createLemonsqueezyWebhookRoutes } from "./routes/lemonsqueezy-webhook.js";
 import { createWorkspaceRoutes } from "./routes/workspace.js";
 import { createWorkspaceGitHubRoutes } from "./routes/workspace-github.js";
+import { createWorkspaceNotificationRoutes } from "./routes/workspace-notifications.js";
 import type { FetchLike } from "./github.js";
 
 /**
@@ -129,6 +130,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceRoutes());
   // Stage 9 — Workspace GitHub OAuth + project-repo connections.
   app.route("/", createWorkspaceGitHubRoutes(fetchImpl));
+  // Stage 17 — Telegram notification settings + history.
+  app.route("/", createWorkspaceNotificationRoutes(fetchImpl));
   app.onError((err, c) => {
     console.error("central-plane error:", err);
     return c.json({ error: err.message || "internal error" }, 500);

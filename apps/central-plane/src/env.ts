@@ -118,6 +118,12 @@ export interface Env {
   WORKSPACE_GH_SCOPES?: string;
   WORKSPACE_GH_DASHBOARD_URL?: string;
   /**
+   * Stage 17 — base URL of the dashboard. Used when building Telegram notification
+   * message links. Defaults to https://dashboard.conclave-ai.dev when unset.
+   * Set via wrangler.toml [vars] or `wrangler secret put DASHBOARD_BASE_URL`.
+   */
+  DASHBOARD_BASE_URL?: string;
+  /**
    * Stage 4 — hourly request cap for POST /workspace/idea-to-spec-draft.
    * Parsed as integer; defaults to 20 when unset or non-numeric.
    * Set via wrangler.toml [vars] or `wrangler secret put`.

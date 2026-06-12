@@ -55,6 +55,14 @@ import {
 } from "../workspace/pr-comment.js";
 import type { CommentResultItem, ComparisonDataForComment } from "../workspace/pr-comment.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
+import {
+  getNotificationSettings,
+  insertNotificationRecord,
+} from "../workspace/notification-db.js";
+import {
+  buildPrReviewTelegramMessage,
+  sendWorkspaceTelegramMessage,
+} from "../workspace/telegram-notify.js";
 
 // ─── CORS helpers (shared with workspace.ts) ──────────────────────────────────
 
@@ -639,6 +647,7 @@ export function createWorkspaceGitHubRoutes(
           prFiles: prFilesResult.files,
         },
         c.env.ANTHROPIC_API_KEY,
+        fetchImpl,
       );
       if (reviewResult.warnings?.length) warnings.push(...reviewResult.warnings);
     } catch (err) {
@@ -653,6 +662,71 @@ export function createWorkspaceGitHubRoutes(
       status: finalStatus,
       resultJson: JSON.stringify(reviewResult),
     });
+
+    // 10. Telegram notification (non-blocking: failure must not fail the review response)
+    await (async () => {
+      try {
+        const settings = await getNotificationSettings(c.env, userKey, "telegram").catch(() => null);
+        if (!settings || !settings.enabled || settings.notifyPolicy === "disabled") return;
+
+        const hasProblems =
+          reviewResult.summary.failed > 0 ||
+          reviewResult.summary.inconclusive > 0 ||
+          reviewResult.summary.needsDecision > 0;
+
+        if (settings.notifyPolicy === "problems_only" && !hasProblems) {
+          await insertNotificationRecord(c.env, {
+            userKey,
+            projectId,
+            channel: "telegram",
+            eventType: "pr_review_complete",
+            status: "skipped",
+            destinationPreview: `chat:${settings.chatId}`,
+          });
+          return;
+        }
+
+        const problematicItems = reviewResult.results
+          .filter((r) => r.status !== "passed")
+          .map((r) => ({ title: r.title, status: r.status }));
+
+        const dashboardBase = c.env.DASHBOARD_BASE_URL ?? DEFAULT_DASHBOARD_URL;
+        const message = buildPrReviewTelegramMessage({
+          repoFullName: repo.repoFullName,
+          prNumber,
+          summary: reviewResult.summary,
+          problematicItems,
+          dashboardUrl: `${dashboardBase}/projects/${projectId}/github`,
+        });
+
+        const sendResult = await sendWorkspaceTelegramMessage(c.env, settings.chatId, message, fetchImpl);
+
+        await insertNotificationRecord(c.env, {
+          userKey,
+          projectId,
+          channel: "telegram",
+          eventType: "pr_review_complete",
+          status: sendResult.ok ? "sent" : "error",
+          destinationPreview: `chat:${settings.chatId}`,
+          messagePreview: message.slice(0, 100),
+          errorMessage: sendResult.ok ? undefined : sendResult.error,
+        });
+
+        await insertUsageEvent(c.env, {
+          userKey,
+          projectId,
+          eventType: sendResult.ok
+            ? "workspace_telegram_notification_sent"
+            : "workspace_telegram_notification_error",
+        });
+
+        if (!sendResult.ok) {
+          warnings.push("telegram_notification_failed");
+        }
+      } catch (err) {
+        console.warn("[workspace/pr-review] telegram notification failed:", err);
+      }
+    })();
 
     return json({
       ok: true,
