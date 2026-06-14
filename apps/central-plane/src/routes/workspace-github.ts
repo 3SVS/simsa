@@ -39,6 +39,7 @@ import {
   listPRReviewRuns, listProjectReviewRuns, getReviewRunById,
 } from "../workspace/pr-review-db.js";
 import { loadPRReviewRunForAction } from "../workspace/pr-review-run-loader.js";
+import { normalizeSelectedItemIds } from "../workspace/selected-items.js";
 import {
   compareRunResults, buildRunSummary, parseRunResults, compareSpecificReviewRuns,
   type SpecificRunComparison,
@@ -562,9 +563,10 @@ export function createWorkspaceGitHubRoutes(
     const userKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
 
-    const bodySelectedIds = Array.isArray(b["selectedItemIds"])
-      ? (b["selectedItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
-      : undefined;
+    // Stage 40: normalize hand-picked selectedItemIds (dedupe, trim, drop
+    // empties, cap). Returns undefined when not an array → falls back to
+    // source run / linked PR selection downstream.
+    const bodySelectedIds = normalizeSelectedItemIds(b["selectedItemIds"]);
     const rerunOfReviewRunId = typeof b["rerunOfReviewRunId"] === "string" ? b["rerunOfReviewRunId"] : undefined;
 
     // 1. Get linked repo

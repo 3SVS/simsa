@@ -16,6 +16,13 @@ import {
   type FixBriefResult,
   type SpecificRunComparison,
 } from "@/lib/workspace-github-api";
+import {
+  recommendedRerunItemIds,
+  allRerunItemIds,
+  nonPassedRerunItemIds,
+  canRerun,
+  formatSelectedCountMessage,
+} from "@/lib/rerun-selection";
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -382,10 +389,11 @@ const STATUS_KO: Record<string, string> = {
   passed: "통과", failed: "안 맞음", inconclusive: "확인 부족", needs_decision: "결정 필요",
 };
 
-function ComparisonPanel({ cmp, newRunId, projectId }: {
+function ComparisonPanel({ cmp, newRunId, projectId, selectedCount }: {
   cmp: SpecificRunComparison;
   newRunId: string;
   projectId: string;
+  selectedCount?: number;
 }) {
   if (!cmp.comparable) {
     return (
@@ -399,6 +407,9 @@ function ComparisonPanel({ cmp, newRunId, projectId }: {
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-800">이전/새 결과 비교</p>
+          {typeof selectedCount === "number" && selectedCount > 0 && (
+            <p className="text-xs text-indigo-600 mt-0.5">{formatSelectedCountMessage(selectedCount)}</p>
+          )}
           <p className="text-xs text-gray-400 mt-0.5">{cmp.summaryText}</p>
         </div>
         <Link
@@ -467,22 +478,73 @@ function ComparisonPanel({ cmp, newRunId, projectId }: {
   );
 }
 
+function RerunItemRow({ item, checked, onToggle }: {
+  item: ReviewResultItem;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const cfg = STATUS_CFG[item.status] ?? STATUS_CFG["error"];
+  const evidence = Array.isArray(item.evidence) && item.evidence.length > 0 ? item.evidence[0] : "";
+  return (
+    <label className="flex items-start gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        className="mt-1 rounded border-gray-300 flex-shrink-0"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] font-medium border rounded-full px-1.5 py-0.5 flex-shrink-0 ${cfg.badge}`}>
+            {item.userLabel ?? cfg.label}
+          </span>
+          <span className="text-xs font-medium text-gray-800 truncate">{item.title}</span>
+        </div>
+        {evidence && <p className="text-[11px] text-gray-400 mt-0.5 truncate">{evidence}</p>}
+        {item.status !== "passed" && item.nextAction && (
+          <p className="text-[11px] text-indigo-500 mt-0.5 truncate">다음: {item.nextAction}</p>
+        )}
+      </div>
+    </label>
+  );
+}
+
 function RerunPanel({
-  projectId, prNumber, runId, selectedItemIds, userKey,
-}: { projectId: string; prNumber: number; runId: string; selectedItemIds: string[]; userKey: string }) {
+  projectId, prNumber, runId, results, userKey,
+}: { projectId: string; prNumber: number; runId: string; results: ReviewResultItem[]; userKey: string }) {
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [newRunId, setNewRunId] = useState<string | null>(null);
   const [comparison, setComparison] = useState<SpecificRunComparison | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [submittedCount, setSubmittedCount] = useState(0);
+  // Default selection: 안 맞음 / 확인 부족 / 결정 필요 (통과 제외).
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(recommendedRerunItemIds(results)),
+  );
+
+  const toggle = useCallback((itemId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }, []);
+
+  const applyPreset = useCallback((ids: string[]) => setSelected(new Set(ids)), []);
 
   const run = useCallback(async () => {
+    const ids = [...selected];
+    if (!canRerun(ids.length)) return;
     setPhase("running");
     setErrorMsg("");
+    setSubmittedCount(ids.length);
     const idempotencyKey = crypto.randomUUID();
+    // body selectedItemIds takes priority over the source run's selection.
     const res = await startPRReview(projectId, prNumber, {
       userKey,
       rerunOfReviewRunId: runId,
-      selectedItemIds,
+      selectedItemIds: ids,
       idempotencyKey,
     });
     if (!res.ok) {
@@ -493,18 +555,7 @@ function RerunPanel({
     setNewRunId(res.run.id);
     if (res.comparisonToSourceRun) setComparison(res.comparisonToSourceRun);
     setPhase("done");
-  }, [projectId, prNumber, runId, selectedItemIds, userKey]);
-
-  if (phase === "idle") {
-    return (
-      <button
-        onClick={run}
-        className="w-full border border-gray-200 bg-white text-gray-700 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
-      >
-        이 기준으로 다시 확인하기
-      </button>
-    );
-  }
+  }, [projectId, prNumber, runId, selected, userKey]);
 
   if (phase === "running") {
     return (
@@ -526,23 +577,88 @@ function RerunPanel({
     );
   }
 
-  // done
+  if (phase === "done") {
+    return (
+      <div className="space-y-3">
+        {comparison && newRunId && (
+          <ComparisonPanel cmp={comparison} newRunId={newRunId} projectId={projectId} selectedCount={submittedCount} />
+        )}
+        {newRunId && !comparison && (
+          <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center justify-between">
+            <span>{formatSelectedCountMessage(submittedCount)}</span>
+            <Link
+              href={`/projects/${projectId}/github/history/${newRunId}`}
+              className="text-xs text-green-600 underline ml-2"
+            >
+              새 기록 보기 →
+            </Link>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // idle — item picker
+  const selectedCount = selected.size;
+  const enabled = canRerun(selectedCount);
   return (
-    <div className="space-y-3">
-      {comparison && newRunId && (
-        <ComparisonPanel cmp={comparison} newRunId={newRunId} projectId={projectId} />
-      )}
-      {newRunId && !comparison && (
-        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center justify-between">
-          <span>확인이 완료됐어요.</span>
-          <Link
-            href={`/projects/${projectId}/github/history/${newRunId}`}
-            className="text-xs text-green-600 underline ml-2"
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+        <p className="text-sm font-semibold text-gray-800">다시 확인할 항목</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          남은 문제만 골라 다시 확인할 수 있어요. 기본으로 통과하지 않은 항목이 선택돼 있어요.
+        </p>
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          <button
+            onClick={() => applyPreset(recommendedRerunItemIds(results))}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
           >
-            새 기록 보기 →
-          </Link>
+            추천 선택
+          </button>
+          <button
+            onClick={() => applyPreset(allRerunItemIds(results))}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
+          >
+            전체 선택
+          </button>
+          <button
+            onClick={() => applyPreset(nonPassedRerunItemIds(results))}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
+          >
+            통과 제외
+          </button>
+          <button
+            onClick={() => applyPreset([])}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
+          >
+            모두 해제
+          </button>
         </div>
-      )}
+      </div>
+
+      <div className="divide-y divide-gray-100 bg-white max-h-72 overflow-y-auto">
+        {results.map((item) => (
+          <RerunItemRow
+            key={item.itemId}
+            item={item}
+            checked={selected.has(item.itemId)}
+            onToggle={() => toggle(item.itemId)}
+          />
+        ))}
+      </div>
+
+      <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
+        {!enabled && (
+          <p className="text-xs text-amber-600">다시 확인할 항목을 하나 이상 선택해주세요.</p>
+        )}
+        <button
+          onClick={run}
+          disabled={!enabled}
+          className="w-full bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          선택한 항목 다시 확인하기{enabled ? ` (${selectedCount}개)` : ""}
+        </button>
+      </div>
     </div>
   );
 }
@@ -700,15 +816,20 @@ export default function RunDetailPage() {
         </div>
       )}
 
-      {/* ── Re-run (run-specific) ── */}
+      {/* ── Re-run (run-specific, selectable items) ── */}
       {hasResults && userKey && (
-        <RerunPanel
-          projectId={id}
-          prNumber={prNumber}
-          runId={runId}
-          selectedItemIds={run.selectedItemIds}
-          userKey={userKey}
-        />
+        <>
+          <p className="text-xs text-gray-500 -mb-2">
+            이 기록에서 문제가 남은 항목만 골라 다시 확인할 수 있어요.
+          </p>
+          <RerunPanel
+            projectId={id}
+            prNumber={prNumber}
+            runId={runId}
+            results={run.results}
+            userKey={userKey}
+          />
+        </>
       )}
 
       {/* ── Run-specific Fix Pack ── */}
