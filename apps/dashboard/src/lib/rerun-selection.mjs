@@ -48,6 +48,21 @@ export function nonPassedRerunItemIds(items) {
 }
 
 /**
+ * Toggle one item in the shared selection, returning a new array that stays
+ * de-duplicated and ordered to match `items` (Stage 43 shared selection).
+ * @param {readonly RerunSelectableItem[]} items
+ * @param {readonly string[]} selectedItemIds
+ * @param {string} itemId
+ * @returns {string[]}
+ */
+export function toggleItemSelection(items, selectedItemIds, itemId) {
+  const set = new Set(selectedItemIds);
+  if (set.has(itemId)) set.delete(itemId);
+  else set.add(itemId);
+  return items.filter((i) => set.has(i.itemId)).map((i) => i.itemId);
+}
+
+/**
  * Re-run is allowed only when at least one item is selected.
  * @param {number} selectedCount
  * @returns {boolean}

@@ -20,6 +20,7 @@ import {
   recommendedRerunItemIds,
   allRerunItemIds,
   nonPassedRerunItemIds,
+  toggleItemSelection,
   canRerun,
   formatSelectedCountMessage,
 } from "@/lib/rerun-selection.mjs";
@@ -120,7 +121,7 @@ function FixPackPanel({
   prNumber: number;
   runId: string;
   userKey: string;
-  selectedItemIds?: string[];
+  selectedItemIds: string[];
   autoOpen?: boolean;
 }) {
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -130,14 +131,18 @@ function FixPackPanel({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const autoFiredRef = useRef(false);
 
+  const selectedCount = selectedItemIds.length;
+  const enabled = selectedCount > 0;
+
   const generate = useCallback(async () => {
+    if (selectedItemIds.length === 0) return;
     setPhase("loading");
     const ext = loadExtendedProjectData(projectId);
     const res = await generatePRFixBrief(projectId, prNumber, {
       userKey,
       reviewRunId: runId,
-      // 남은 문제(안 맞음/확인 부족/결정 필요)만 — 서버 기본값과 동일하지만 명시 전달.
-      selectedItemIds: selectedItemIds && selectedItemIds.length > 0 ? selectedItemIds : undefined,
+      // Stage 43: 공유 selectedItemIds 사용 (run detail의 선택 패널과 동일).
+      selectedItemIds,
       productSpec: ext?.productSpec,
       items: undefined,
     });
@@ -146,23 +151,24 @@ function FixPackPanel({
     setPhase("done");
   }, [projectId, prNumber, runId, userKey, selectedItemIds]);
 
-  // Stage 42: when arrived via "남은 문제 Fix Pack" (?action=fix-pack), scroll the
-  // panel into view and auto-generate once.
+  // Stage 42/43: when arrived via "남은 문제 Fix Pack" (?action=fix-pack), scroll
+  // into view and auto-generate once — using the shared selection.
   useEffect(() => {
-    if (!autoOpen || autoFiredRef.current) return;
+    if (!autoOpen || autoFiredRef.current || selectedItemIds.length === 0) return;
     autoFiredRef.current = true;
     containerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     void generate();
-  }, [autoOpen, generate]);
+  }, [autoOpen, generate, selectedItemIds.length]);
 
   if (phase === "idle") {
     return (
       <div ref={containerRef}>
         <button
           onClick={generate}
-          className="w-full bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-800 transition-colors"
+          disabled={!enabled}
+          className="w-full bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          선택한 항목으로 수정 지시서 만들기
+          선택한 항목으로 Fix Pack 만들기{enabled ? ` (${selectedCount}개)` : ""}
         </button>
       </div>
     );
@@ -269,8 +275,8 @@ type CommentPreview = {
 };
 
 function CommentPanel({
-  projectId, prNumber, runId, userKey, rerunOfReviewRunId,
-}: { projectId: string; prNumber: number; runId: string; userKey: string; rerunOfReviewRunId?: string }) {
+  projectId, prNumber, runId, userKey, rerunOfReviewRunId, selectedItemIds,
+}: { projectId: string; prNumber: number; runId: string; userKey: string; rerunOfReviewRunId?: string; selectedItemIds: string[] }) {
   const [phase, setPhase] = useState<"idle" | "previewing" | "ready" | "posting" | "posted" | "error">("idle");
   const [preview, setPreview] = useState<CommentPreview | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -278,30 +284,35 @@ function CommentPanel({
   const [copied, setCopied] = useState(false);
   const [includeRerunComparison, setIncludeRerunComparison] = useState(Boolean(rerunOfReviewRunId));
 
+  // Stage 43: 공유 selectedItemIds 전달 (비어 있으면 서버가 run 선택으로 fallback).
+  const sharedSelected = selectedItemIds.length > 0 ? selectedItemIds : undefined;
+
   const generatePreview = useCallback(async () => {
     setPhase("previewing");
     setWarnings([]);
     const res = await previewPRComment(projectId, prNumber, {
       userKey, reviewRunId: runId,
+      selectedItemIds: sharedSelected,
       includeRerunComparison: includeRerunComparison && Boolean(rerunOfReviewRunId),
     });
     if (!res.ok) { setPhase("error"); return; }
     setPreview(res.comment as CommentPreview);
     setWarnings(res.warnings ?? []);
     setPhase("ready");
-  }, [projectId, prNumber, runId, userKey, includeRerunComparison, rerunOfReviewRunId]);
+  }, [projectId, prNumber, runId, userKey, sharedSelected, includeRerunComparison, rerunOfReviewRunId]);
 
   const post = useCallback(async () => {
     if (!preview) return;
     setPhase("posting");
     const res = await postPRComment(projectId, prNumber, {
       userKey, reviewRunId: runId, mode: "new",
+      selectedItemIds: sharedSelected,
       includeRerunComparison: includeRerunComparison && Boolean(rerunOfReviewRunId),
     });
     if (!res.ok) { setPhase("ready"); return; }
     setPostResult({ url: (res as { comment?: { githubCommentUrl?: string } }).comment?.githubCommentUrl });
     setPhase("posted");
-  }, [projectId, prNumber, runId, userKey, preview, includeRerunComparison, rerunOfReviewRunId]);
+  }, [projectId, prNumber, runId, userKey, preview, sharedSelected, includeRerunComparison, rerunOfReviewRunId]);
 
   const copyBody = () => {
     if (!preview) return;
@@ -326,7 +337,7 @@ function CommentPanel({
           onClick={generatePreview}
           className="w-full bg-white border border-gray-200 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
         >
-          이 기록으로 PR comment 작성하기
+          선택한 항목으로 PR comment 작성하기
         </button>
       </div>
     );
@@ -538,42 +549,99 @@ function RerunItemRow({ item, checked, onToggle }: {
   );
 }
 
+// ─── Shared item selection panel (Stage 43) ──────────────────────────────────
+// One picker; RerunPanel / FixPackPanel / CommentPanel all consume its result.
+
+function ReviewItemSelectionPanel({
+  items, selectedItemIds, onChange,
+}: {
+  items: ReviewResultItem[];
+  selectedItemIds: string[];
+  onChange: (selectedItemIds: string[]) => void;
+}) {
+  const selectedSet = new Set(selectedItemIds);
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+        <p className="text-sm font-semibold text-gray-800">이번에 다룰 항목</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          여기서 고른 항목이 다시 확인 · Fix Pack · PR comment에 함께 쓰여요. 기본은 통과하지 않은 항목이에요.
+        </p>
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          <button
+            onClick={() => onChange(recommendedRerunItemIds(items))}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
+          >
+            추천 선택
+          </button>
+          <button
+            onClick={() => onChange(allRerunItemIds(items))}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
+          >
+            전체 선택
+          </button>
+          <button
+            onClick={() => onChange(nonPassedRerunItemIds(items))}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
+          >
+            통과 제외
+          </button>
+          <button
+            onClick={() => onChange([])}
+            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
+          >
+            모두 해제
+          </button>
+        </div>
+      </div>
+
+      <div className="divide-y divide-gray-100 bg-white max-h-72 overflow-y-auto">
+        {items.map((item) => (
+          <RerunItemRow
+            key={item.itemId}
+            item={item}
+            checked={selectedSet.has(item.itemId)}
+            onToggle={() => onChange(toggleItemSelection(items, selectedItemIds, item.itemId))}
+          />
+        ))}
+      </div>
+
+      <div className="border-t border-gray-100 bg-gray-50 px-4 py-2.5">
+        {selectedItemIds.length > 0 ? (
+          <p className="text-xs text-indigo-600">이번에 다룰 항목: {selectedItemIds.length}개 선택됨</p>
+        ) : (
+          <p className="text-xs text-amber-600">
+            항목을 하나 이상 선택하면 다시 확인, Fix Pack, PR comment를 만들 수 있어요.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RerunPanel({
-  projectId, prNumber, runId, results, userKey,
-}: { projectId: string; prNumber: number; runId: string; results: ReviewResultItem[]; userKey: string }) {
+  projectId, prNumber, runId, userKey, selectedItemIds,
+}: { projectId: string; prNumber: number; runId: string; userKey: string; selectedItemIds: string[] }) {
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [newRunId, setNewRunId] = useState<string | null>(null);
   const [comparison, setComparison] = useState<SpecificRunComparison | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [submittedCount, setSubmittedCount] = useState(0);
-  // Default selection: 안 맞음 / 확인 부족 / 결정 필요 (통과 제외).
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(recommendedRerunItemIds(results)),
-  );
 
-  const toggle = useCallback((itemId: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemId)) next.delete(itemId);
-      else next.add(itemId);
-      return next;
-    });
-  }, []);
-
-  const applyPreset = useCallback((ids: string[]) => setSelected(new Set(ids)), []);
+  const selectedCount = selectedItemIds.length;
+  const enabled = canRerun(selectedCount);
 
   const run = useCallback(async () => {
-    const ids = [...selected];
-    if (!canRerun(ids.length)) return;
+    if (!canRerun(selectedItemIds.length)) return;
     setPhase("running");
     setErrorMsg("");
-    setSubmittedCount(ids.length);
+    setSubmittedCount(selectedItemIds.length);
     const idempotencyKey = crypto.randomUUID();
     // body selectedItemIds takes priority over the source run's selection.
     const res = await startPRReview(projectId, prNumber, {
       userKey,
       rerunOfReviewRunId: runId,
-      selectedItemIds: ids,
+      selectedItemIds,
       idempotencyKey,
     });
     if (!res.ok) {
@@ -584,7 +652,7 @@ function RerunPanel({
     setNewRunId(res.run.id);
     if (res.comparisonToSourceRun) setComparison(res.comparisonToSourceRun);
     setPhase("done");
-  }, [projectId, prNumber, runId, selected, userKey]);
+  }, [projectId, prNumber, runId, selectedItemIds, userKey]);
 
   if (phase === "running") {
     return (
@@ -627,68 +695,15 @@ function RerunPanel({
     );
   }
 
-  // idle — item picker
-  const selectedCount = selected.size;
-  const enabled = canRerun(selectedCount);
+  // idle — button only; selection lives in ReviewItemSelectionPanel
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-        <p className="text-sm font-semibold text-gray-800">다시 확인할 항목</p>
-        <p className="text-xs text-gray-400 mt-0.5">
-          남은 문제만 골라 다시 확인할 수 있어요. 기본으로 통과하지 않은 항목이 선택돼 있어요.
-        </p>
-        <div className="flex flex-wrap gap-1.5 mt-2.5">
-          <button
-            onClick={() => applyPreset(recommendedRerunItemIds(results))}
-            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
-          >
-            추천 선택
-          </button>
-          <button
-            onClick={() => applyPreset(allRerunItemIds(results))}
-            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
-          >
-            전체 선택
-          </button>
-          <button
-            onClick={() => applyPreset(nonPassedRerunItemIds(results))}
-            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
-          >
-            통과 제외
-          </button>
-          <button
-            onClick={() => applyPreset([])}
-            className="text-[11px] border border-gray-200 bg-white text-gray-600 rounded-lg px-2 py-1 hover:bg-gray-100"
-          >
-            모두 해제
-          </button>
-        </div>
-      </div>
-
-      <div className="divide-y divide-gray-100 bg-white max-h-72 overflow-y-auto">
-        {results.map((item) => (
-          <RerunItemRow
-            key={item.itemId}
-            item={item}
-            checked={selected.has(item.itemId)}
-            onToggle={() => toggle(item.itemId)}
-          />
-        ))}
-      </div>
-
-      <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
-        {!enabled && (
-          <p className="text-xs text-amber-600">다시 확인할 항목을 하나 이상 선택해주세요.</p>
-        )}
-        <button
-          onClick={run}
-          disabled={!enabled}
-          className="w-full bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          선택한 항목 다시 확인하기{enabled ? ` (${selectedCount}개)` : ""}
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={run}
+      disabled={!enabled}
+      className="w-full bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+    >
+      선택한 항목 다시 확인하기{enabled ? ` (${selectedCount}개)` : ""}
+    </button>
   );
 }
 
@@ -708,6 +723,8 @@ export default function RunDetailPage() {
   // Stage 42: arrived from the history list "남은 문제 Fix Pack" quick action.
   // Read on the client to avoid a useSearchParams Suspense boundary.
   const [fixPackRequested, setFixPackRequested] = useState(false);
+  // Stage 43: one shared item selection for re-run / Fix Pack / PR comment.
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   useEffect(() => {
     setFixPackRequested(new URLSearchParams(window.location.search).get("action") === "fix-pack");
@@ -724,6 +741,8 @@ export default function RunDetailPage() {
         return;
       }
       setDetail({ repoFullName: res.repoFullName, prNumber: res.prNumber, run: res.run });
+      // Default shared selection: 안 맞음 / 확인 부족 / 결정 필요.
+      setSelectedItemIds(recommendedRerunItemIds(res.run.results));
       setPhase("done");
     }
     load();
@@ -852,43 +871,46 @@ export default function RunDetailPage() {
         </div>
       )}
 
-      {/* ── Re-run (run-specific, selectable items) ── */}
+      {/* ── Shared item selection (Stage 43) — drives re-run / Fix Pack / comment ── */}
       {hasResults && userKey && (
         <>
-          <p className="text-xs text-gray-500 -mb-2">
-            이 기록에서 문제가 남은 항목만 골라 다시 확인할 수 있어요.
-          </p>
+          <ReviewItemSelectionPanel
+            items={run.results}
+            selectedItemIds={selectedItemIds}
+            onChange={setSelectedItemIds}
+          />
+
+          {/* Re-run */}
           <RerunPanel
             projectId={id}
             prNumber={prNumber}
             runId={runId}
-            results={run.results}
             userKey={userKey}
+            selectedItemIds={selectedItemIds}
+          />
+
+          {/* Fix Pack (남은 문제 중심, ?action=fix-pack 자동 열림) */}
+          {actionNeeded > 0 && (
+            <FixPackPanel
+              projectId={id}
+              prNumber={prNumber}
+              runId={runId}
+              userKey={userKey}
+              selectedItemIds={selectedItemIds}
+              autoOpen={fixPackRequested}
+            />
+          )}
+
+          {/* PR comment */}
+          <CommentPanel
+            projectId={id}
+            prNumber={prNumber}
+            runId={runId}
+            userKey={userKey}
+            rerunOfReviewRunId={run.rerunOfReviewRunId}
+            selectedItemIds={selectedItemIds}
           />
         </>
-      )}
-
-      {/* ── Run-specific Fix Pack (남은 문제 중심) ── */}
-      {actionNeeded > 0 && userKey && (
-        <FixPackPanel
-          projectId={id}
-          prNumber={prNumber}
-          runId={runId}
-          userKey={userKey}
-          selectedItemIds={recommendedRerunItemIds(run.results)}
-          autoOpen={fixPackRequested}
-        />
-      )}
-
-      {/* ── Run-specific Comment ── */}
-      {hasResults && userKey && (
-        <CommentPanel
-          projectId={id}
-          prNumber={prNumber}
-          runId={runId}
-          userKey={userKey}
-          rerunOfReviewRunId={run.rerunOfReviewRunId}
-        />
       )}
 
       {/* ── Item results ── */}

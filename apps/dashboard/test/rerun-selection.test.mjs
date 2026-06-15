@@ -10,6 +10,7 @@ import {
   recommendedRerunItemIds,
   allRerunItemIds,
   nonPassedRerunItemIds,
+  toggleItemSelection,
   canRerun,
   formatSelectedCountMessage,
   quickRerunDisabledMessage,
@@ -135,4 +136,38 @@ test("quick Fix Pack uses the same recommended set as re-run (failed/inconclusiv
   ]);
   assert.deepEqual(ids, ["b", "c"]);
   assert.equal(canRerun(ids.length), true);
+});
+
+// ─── Stage 43: shared selection toggle ───────────────────────────────────────
+
+const ITEMS43 = [
+  { itemId: "a", status: "passed" },
+  { itemId: "b", status: "failed" },
+  { itemId: "c", status: "inconclusive" },
+];
+
+test("toggleItemSelection adds an item, preserving items order", () => {
+  // start with ["c"], add "a" → ordered ["a","c"] (items order: a,b,c)
+  assert.deepEqual(toggleItemSelection(ITEMS43, ["c"], "a"), ["a", "c"]);
+});
+
+test("toggleItemSelection removes an item when already selected", () => {
+  assert.deepEqual(toggleItemSelection(ITEMS43, ["b", "c"], "b"), ["c"]);
+});
+
+test("toggleItemSelection stays deduped", () => {
+  // toggling "a" off from a set that had it once → removed
+  assert.deepEqual(toggleItemSelection(ITEMS43, ["a", "b"], "a"), ["b"]);
+});
+
+test("shared selection: clearing disables both re-run and Fix Pack (same predicate)", () => {
+  // ReviewItemSelectionPanel "모두 해제" → [] → canRerun false → both buttons disabled
+  const cleared = [];
+  assert.equal(canRerun(cleared.length), false);
+  // Fix Pack uses selectedCount > 0, identical to canRerun's contract
+  assert.equal(cleared.length > 0, false);
+});
+
+test("shared selection default equals recommended (failed/inconclusive/needs_decision)", () => {
+  assert.deepEqual(recommendedRerunItemIds(ITEMS43), ["b", "c"]);
 });

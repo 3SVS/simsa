@@ -15,6 +15,13 @@ export function allRerunItemIds(items: readonly RerunSelectableItem[]): string[]
 /** 통과 제외 — 통과(passed)만 빼고 전부. */
 export function nonPassedRerunItemIds(items: readonly RerunSelectableItem[]): string[];
 
+/** Toggle one item in the shared selection; result stays deduped + ordered like `items` (Stage 43). */
+export function toggleItemSelection(
+  items: readonly RerunSelectableItem[],
+  selectedItemIds: readonly string[],
+  itemId: string,
+): string[];
+
 /** Re-run is allowed only when at least one item is selected. */
 export function canRerun(selectedCount: number): boolean;
 
