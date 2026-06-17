@@ -10,10 +10,12 @@ import {
   pickComparisonSourceRunId,
   canPostComparisonToComment,
   buildComparisonCommentInput,
+  getReviewStatusLabel,
+  buildStatusTransitionLabel,
 } from "../src/lib/review-run-comparison.mjs";
 
 function item(itemId, status, title = itemId) {
-  return { itemId, title, status, reason: "" };
+  return { itemId, title, status, reason: "", evidence: [`${itemId} 근거`], nextAction: `${itemId} 조치` };
 }
 
 // ─── source selection precedence ─────────────────────────────────────────────
@@ -173,4 +175,79 @@ test("buildComparisonCommentInput: forces includeRerunComparison false when no l
     includeRerunComparison: true, comparisonAvailable: false,
   });
   assert.equal(input.includeRerunComparison, false);
+});
+
+// ─── Stage 48: status labels + transitions ───────────────────────────────────
+
+test("getReviewStatusLabel maps each status to Korean", () => {
+  assert.equal(getReviewStatusLabel("passed"), "통과");
+  assert.equal(getReviewStatusLabel("failed"), "안 맞음");
+  assert.equal(getReviewStatusLabel("inconclusive"), "확인 부족");
+  assert.equal(getReviewStatusLabel("needs_decision"), "결정 필요");
+});
+
+test("buildStatusTransitionLabel returns 안 맞음 → 통과", () => {
+  assert.equal(buildStatusTransitionLabel("failed", "passed"), "안 맞음 → 통과");
+});
+
+test("buildStatusTransitionLabel handles current-only item (새 항목)", () => {
+  assert.equal(buildStatusTransitionLabel(undefined, "failed"), "새 항목 → 안 맞음");
+});
+
+test("compareReviewRunResults returns sourceStatus/currentStatus per item", () => {
+  const cmp = compareReviewRunResults({
+    sourceResults: [item("a", "failed")],
+    currentResults: [item("a", "passed")],
+  });
+  const it = cmp.improved[0];
+  assert.equal(it.sourceStatus, "failed");
+  assert.equal(it.currentStatus, "passed");
+  assert.equal(it.currentEvidence, "a 근거");
+  assert.equal(it.currentNextAction, "a 조치");
+});
+
+test("improved item includes transition failed → passed", () => {
+  const cmp = compareReviewRunResults({
+    sourceResults: [item("a", "failed")],
+    currentResults: [item("a", "passed")],
+  });
+  assert.equal(cmp.improved[0].transitionLabel, "안 맞음 → 통과");
+  assert.equal(cmp.improved[0].direction, "improved");
+});
+
+test("newlyProblematic item includes transition passed → failed", () => {
+  const cmp = compareReviewRunResults({
+    sourceResults: [item("a", "passed")],
+    currentResults: [item("a", "failed")],
+  });
+  assert.equal(cmp.newlyProblematic[0].transitionLabel, "통과 → 안 맞음");
+  assert.equal(cmp.newlyProblematic[0].direction, "worsened");
+});
+
+test("unchanged item includes transition passed → passed", () => {
+  const cmp = compareReviewRunResults({
+    sourceResults: [item("a", "passed")],
+    currentResults: [item("a", "passed")],
+  });
+  assert.equal(cmp.unchanged[0].transitionLabel, "통과 → 통과");
+  assert.equal(cmp.unchanged[0].direction, "unchanged");
+});
+
+test("still_open item keeps the same non-passed status with still_open direction", () => {
+  const cmp = compareReviewRunResults({
+    sourceResults: [item("a", "failed")],
+    currentResults: [item("a", "failed")],
+  });
+  assert.equal(cmp.stillOpen[0].transitionLabel, "안 맞음 → 안 맞음");
+  assert.equal(cmp.stillOpen[0].direction, "still_open");
+});
+
+test("current-only item: sourceStatus undefined, label uses 새 항목", () => {
+  const cmp = compareReviewRunResults({
+    sourceResults: [item("a", "failed")],
+    currentResults: [item("a", "failed"), item("new1", "needs_decision")],
+  });
+  const newItem = cmp.stillOpen.find((i) => i.itemId === "new1");
+  assert.equal(newItem.sourceStatus, undefined);
+  assert.equal(newItem.transitionLabel, "새 항목 → 결정 필요");
 });

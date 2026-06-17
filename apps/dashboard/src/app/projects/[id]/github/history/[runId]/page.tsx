@@ -35,7 +35,7 @@ import {
   pickComparisonSourceRunId,
   buildComparisonCommentInput,
 } from "@/lib/review-run-comparison.mjs";
-import type { ReviewRunComparison } from "@/lib/review-run-comparison.mjs";
+import type { ReviewRunComparison, ReviewRunComparisonItem } from "@/lib/review-run-comparison.mjs";
 
 // Stage 44: localStorage, guarded for SSR / private-mode / blocked storage.
 function getReviewSelectionStorage(): StorageLike | null {
@@ -585,7 +585,7 @@ type AutoCompareState =
   | {
       phase: "done";
       sourceId: string;
-      comparison: ReviewRunComparison<ReviewResultItem>;
+      comparison: ReviewRunComparison;
       sourceCreatedAt: string;
       currentCreatedAt: string;
     };
@@ -597,22 +597,50 @@ const AUTO_COMPARE_ERROR_KO: Record<string, string> = {
   current_empty: "현재 확인 기록의 결과가 비어 있어요.",
 };
 
-function AutoCompareGroup({ title, color, items }: {
+// Stage 48: status-transition pill — 이전 상태 → 현재 상태.
+function TransitionPill({ item }: { item: ReviewRunComparisonItem }) {
+  const sourceColor = item.sourceStatus ? (CMP_STATUS_COLORS[item.sourceStatus] ?? "text-gray-500") : "text-gray-400";
+  const currentColor = item.currentStatus ? (CMP_STATUS_COLORS[item.currentStatus] ?? "text-gray-500") : "text-gray-500";
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] border border-gray-200 rounded-full px-2 py-0.5 bg-white">
+      <span className={sourceColor}>
+        {item.sourceStatus ? (STATUS_KO[item.sourceStatus] ?? item.sourceStatus) : "새 항목"}
+      </span>
+      <span className="text-gray-300">→</span>
+      <span className={`${currentColor} font-medium`}>
+        {item.currentStatus ? (STATUS_KO[item.currentStatus] ?? item.currentStatus) : ""}
+      </span>
+    </span>
+  );
+}
+
+function AutoCompareGroup({ title, description, color, items }: {
   title: string;
+  description: string;
   color: string;
-  items: ReviewResultItem[];
+  items: ReviewRunComparisonItem[];
 }) {
   if (items.length === 0) return null;
   return (
     <div className="px-4 py-3">
-      <p className={`text-xs font-medium mb-2 ${color}`}>{title} ({items.length}개)</p>
-      {items.map((item) => (
-        <div key={item.itemId} className="text-xs text-gray-600 mb-1.5">
-          <span className="font-medium">{item.title}</span>
-          <span className="text-gray-400 mx-1">·</span>
-          <span className={CMP_STATUS_COLORS[item.status] ?? ""}>{STATUS_KO[item.status] ?? item.status}</span>
-        </div>
-      ))}
+      <p className={`text-xs font-medium ${color}`}>{title} ({items.length}개)</p>
+      <p className="text-[11px] text-gray-400 mb-2">{description}</p>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div key={item.itemId}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-medium text-gray-800">{item.title}</span>
+              <TransitionPill item={item} />
+            </div>
+            {item.currentEvidence && (
+              <p className="text-[11px] text-gray-400 mt-0.5 truncate">현재 근거: {item.currentEvidence}</p>
+            )}
+            {item.currentNextAction && (
+              <p className="text-[11px] text-indigo-500 mt-0.5 truncate">다음 조치: {item.currentNextAction}</p>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -660,10 +688,26 @@ function AutoComparisonPanel({ state, hasLineage, onSendToComment }: {
         </div>
       </div>
       <div className="divide-y divide-gray-100 bg-white">
-        <AutoCompareGroup title="좋아진 항목" color="text-green-700" items={cmp.improved} />
-        <AutoCompareGroup title="새로 생긴 문제" color="text-red-700" items={cmp.newlyProblematic} />
-        <AutoCompareGroup title="아직 남은 항목" color="text-yellow-700" items={cmp.stillOpen} />
-        <AutoCompareGroup title="변화 없음" color="text-gray-500" items={cmp.unchanged} />
+        <AutoCompareGroup
+          title="좋아진 항목" color="text-green-700"
+          description="이전보다 상태가 좋아진 항목입니다."
+          items={cmp.improved}
+        />
+        <AutoCompareGroup
+          title="새로 생긴 문제" color="text-red-700"
+          description="이전보다 나빠졌거나 새로 문제가 생긴 항목입니다."
+          items={cmp.newlyProblematic}
+        />
+        <AutoCompareGroup
+          title="아직 남은 항목" color="text-yellow-700"
+          description="문제가 계속 남아 있는 항목입니다."
+          items={cmp.stillOpen}
+        />
+        <AutoCompareGroup
+          title="변화 없음" color="text-gray-500"
+          description="상태가 그대로인 항목입니다."
+          items={cmp.unchanged}
+        />
       </div>
 
       {/* Stage 46: post this comparison to a PR comment (lineage runs only) */}

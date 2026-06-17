@@ -3,19 +3,35 @@
  */
 export type ReviewRunItemStatus = "passed" | "failed" | "inconclusive" | "needs_decision";
 
-/** Structural subset — anything with itemId + title + status fits. */
+/** Structural subset — itemId + title + status; evidence/nextAction optional (Stage 48). */
 export type ReviewRunItem = {
   itemId: string;
   title: string;
   status: ReviewRunItemStatus;
+  evidence?: string[];
+  nextAction?: string;
 };
 
-export type ReviewRunComparison<T extends ReviewRunItem = ReviewRunItem> = {
+/** Stage 48: a transition-aware comparison item (이전 상태 → 현재 상태). */
+export type ReviewRunComparisonItem = {
+  itemId: string;
+  title: string;
+  sourceStatus?: ReviewRunItemStatus;
+  currentStatus?: ReviewRunItemStatus;
+  sourceEvidence?: string;
+  currentEvidence?: string;
+  sourceNextAction?: string;
+  currentNextAction?: string;
+  transitionLabel: string;
+  direction: "improved" | "worsened" | "unchanged" | "still_open";
+};
+
+export type ReviewRunComparison = {
   comparable: boolean;
-  improved: T[];
-  stillOpen: T[];
-  newlyProblematic: T[];
-  unchanged: T[];
+  improved: ReviewRunComparisonItem[];
+  stillOpen: ReviewRunComparisonItem[];
+  newlyProblematic: ReviewRunComparisonItem[];
+  unchanged: ReviewRunComparisonItem[];
   summary: {
     improved: number;
     stillOpen: number;
@@ -24,6 +40,15 @@ export type ReviewRunComparison<T extends ReviewRunItem = ReviewRunItem> = {
   };
   reason?: "missing_source_results" | "missing_current_results";
 };
+
+/** Korean label for a review status (Stage 48). */
+export function getReviewStatusLabel(status: ReviewRunItemStatus | string | undefined): string;
+
+/** "이전 상태 → 현재 상태" label; missing source → "새 항목 → 현재 상태" (Stage 48). */
+export function buildStatusTransitionLabel(
+  sourceStatus: ReviewRunItemStatus | string | undefined,
+  currentStatus: ReviewRunItemStatus | string | undefined,
+): string;
 
 /**
  * Pick which run to compare against: query `fromRunId` > rerun lineage; self ignored.
@@ -56,9 +81,10 @@ export function buildComparisonCommentInput(args: {
 
 /**
  * Classify item-level changes between a source run and the current run.
- * Groups hold the CURRENT item; comparable=false when either side has no results.
+ * Groups hold transition-aware ReviewRunComparisonItem entries (이전 상태 → 현재 상태).
+ * comparable=false when either side has no results.
  */
-export function compareReviewRunResults<T extends ReviewRunItem>(args: {
-  sourceResults: T[];
-  currentResults: T[];
-}): ReviewRunComparison<T>;
+export function compareReviewRunResults(args: {
+  sourceResults: ReviewRunItem[];
+  currentResults: ReviewRunItem[];
+}): ReviewRunComparison;
