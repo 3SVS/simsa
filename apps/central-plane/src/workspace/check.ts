@@ -25,6 +25,50 @@ export type ProductSpecForCheck = {
   openQuestions: string[];
 };
 
+/**
+ * Coerce an untrusted/partial product spec (from an HTTP body or a D1 row that may
+ * predate the current shape) into a complete ProductSpecForCheck. The review/check
+ * heuristics call `.some()` / `.length` on the array fields, so a missing field would
+ * throw an opaque "Cannot read properties of undefined (reading 'some')". Default every
+ * field instead of trusting an `as` cast at the boundary.
+ */
+export function normalizeProductSpec(raw: unknown): ProductSpecForCheck {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const strArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  return {
+    productName: str(s["productName"]),
+    oneLine: str(s["oneLine"]),
+    targetUsers: strArr(s["targetUsers"]),
+    problem: str(s["problem"]),
+    included: strArr(s["included"]),
+    excluded: strArr(s["excluded"]),
+    userFlow: strArr(s["userFlow"]),
+    decisions: strArr(s["decisions"]),
+    openQuestions: strArr(s["openQuestions"]),
+  };
+}
+
+/**
+ * Coerce an untrusted/partial items array into CheckableItem[]. `criteria` is read with
+ * `.length` by the heuristics, so it must always be an array; drop entries without an id.
+ */
+export function normalizeCheckableItems(raw: unknown): CheckableItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .map((x) => ({
+      id: typeof x["id"] === "string" ? x["id"] : "",
+      title: typeof x["title"] === "string" ? x["title"] : "",
+      status: typeof x["status"] === "string" ? x["status"] : "not_started",
+      criteria: Array.isArray(x["criteria"])
+        ? x["criteria"].filter((c): c is string => typeof c === "string")
+        : [],
+    }))
+    .filter((x) => x.id.length > 0);
+}
+
 export type CheckItemStatus = "passed" | "failed" | "inconclusive" | "needs_decision";
 
 export type CheckResultItem = {

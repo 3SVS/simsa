@@ -48,6 +48,7 @@ import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
 import { getProject } from "../workspace/db.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
+import { normalizeProductSpec, normalizeCheckableItems } from "../workspace/check.js";
 import { generatePRFixBrief } from "../workspace/pr-fix-brief.js";
 import type { FixBriefItem, FixBriefTarget } from "../workspace/pr-fix-brief.js";
 import {
@@ -629,13 +630,15 @@ export function createWorkspaceGitHubRoutes(
     const bodySpec = b["productSpec"];
 
     if (Array.isArray(bodyItems) && bodyItems.length > 0 && bodySpec && typeof bodySpec === "object") {
-      items = bodyItems as CheckableItem[];
-      productSpec = bodySpec as ProductSpecForCheck;
+      // Normalize at the boundary — a partial spec (missing array fields) would otherwise
+      // crash the review heuristics with an opaque "reading 'some'" error.
+      items = normalizeCheckableItems(bodyItems);
+      productSpec = normalizeProductSpec(bodySpec);
     } else {
       const dbProj = await getProject(c.env, projectId).catch(() => null);
       if (!dbProj) return json({ ok: false, error: "project_not_found" }, 404, origin);
-      items = (Array.isArray(dbProj.items) ? dbProj.items : []) as CheckableItem[];
-      productSpec = (dbProj.productSpec ?? {}) as ProductSpecForCheck;
+      items = normalizeCheckableItems(dbProj.items);
+      productSpec = normalizeProductSpec(dbProj.productSpec);
     }
 
     // Filter to selectedItemIds only
