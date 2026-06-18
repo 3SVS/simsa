@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { LanguageToggle } from "@/components/LanguageToggle";
 import { loadLocalProjects, getUserKey } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 
@@ -24,22 +23,12 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState("");
-  const [accountOpen, setAccountOpen] = useState(false);
-  const acctRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
     } catch {}
     setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
-  }, []);
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (acctRef.current && !acctRef.current.contains(e.target as Node)) setAccountOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
   function toggleCollapse() {
@@ -153,24 +142,15 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* Account + plan (bottom) */}
-      <div ref={acctRef} className="relative border-t border-gray-100 p-2">
-        {accountOpen && (
-          <div className="absolute bottom-full left-2 right-2 mb-1 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
-            <div className="flex items-center justify-between px-1.5 py-1.5">
-              <span className="text-xs text-gray-500">{t.lang.label}</span>
-              <LanguageToggle />
-            </div>
-          </div>
-        )}
-        <button onClick={() => setAccountOpen((o) => !o)} className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-gray-50">
+      {/* Profile + plan (bottom) */}
+      <div className="border-t border-gray-100 p-2">
+        <div className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5">
           <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">{initial}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-medium text-gray-900">{t.account.workspace}</span>
             <span className="block truncate text-[11px] text-gray-400">{t.account.plan}</span>
           </span>
-          <span className="text-gray-300">⋯</span>
-        </button>
+        </div>
       </div>
     </aside>
   );

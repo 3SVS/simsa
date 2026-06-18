@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { AppSidebar } from "@/components/AppSidebar";
+import { LanguageToggle } from "@/components/LanguageToggle";
 
 // A distinctive grotesk (not Inter/system) is the single biggest signal that a UI
 // was designed, not AI-defaulted. Geist Sans for text, Geist Mono for code/identifiers.
@@ -23,7 +24,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* App shell: slim left sidebar (like an AI-platform workspace) + spacious main */}
           <div className="flex min-h-screen">
             <AppSidebar />
-            <main className="min-w-0 flex-1">{children}</main>
+            <main className="relative min-w-0 flex-1">
+              <div className="absolute right-4 top-3 z-20">
+                <LanguageToggle />
+              </div>
+              {children}
+            </main>
           </div>
         </I18nProvider>
       </body>
