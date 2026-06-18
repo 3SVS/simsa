@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { WorkspaceClient } from "./client.js";
+import { WorkspaceClient, stderrAudit } from "./client.js";
 import { buildServer } from "./server.js";
 
-export { WorkspaceClient } from "./client.js";
-export { buildServer } from "./server.js";
+export { WorkspaceClient, stderrAudit } from "./client.js";
+export { buildServer, TOOL_META } from "./server.js";
 export type { ServerOptions } from "./server.js";
 
 const DEFAULT_BASE_URL = "https://conclave-ai.seunghunbae.workers.dev";
@@ -13,10 +13,11 @@ const HELP = `conclave-mcp-workspace — Conclave acceptance/PR-review workflow 
 
 Configure via environment, then launch from an MCP client (Claude Code, Cursor, …):
 
-  CONCLAVE_USER_KEY                 (required) your workspace user key (uk_…)
-  CONCLAVE_CENTRAL_PLANE_URL        (optional) default ${DEFAULT_BASE_URL}
-  CONCLAVE_MCP_ENABLE_POST_COMMENT  (optional) "true" to expose the write tool
-                                    post_pr_comment (disabled by default)
+  CONCLAVE_USER_KEY               (required) your workspace user key (uk_…)
+  CONCLAVE_API_BASE_URL           (optional) central-plane URL; default ${DEFAULT_BASE_URL}
+  CONCLAVE_ENABLE_PR_COMMENT_POST (optional) "true" to expose the write tool
+                                  post_pr_comment (disabled by default)
+  CONCLAVE_AUDIT_LOG              (optional) "false" to silence the stderr audit log
 
 Example MCP client config:
   {
@@ -28,8 +29,17 @@ Example MCP client config:
     }
   }
 
-The GitHub token never leaves central-plane; this server only calls Conclave's API.
+Never put a raw GitHub token here — Conclave uses your connected GitHub account
+through central-plane; the token never leaves central-plane.
 `;
+
+function envFlag(...names: string[]): boolean {
+  for (const n of names) {
+    const v = process.env[n];
+    if (v !== undefined) return v.trim().toLowerCase() === "true";
+  }
+  return false;
+}
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   if (argv.includes("--help") || argv.includes("-h")) {
@@ -43,10 +53,15 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     process.exitCode = 1;
     return;
   }
-  const baseUrl = process.env.CONCLAVE_CENTRAL_PLANE_URL?.trim() || DEFAULT_BASE_URL;
-  const enablePostComment = (process.env.CONCLAVE_MCP_ENABLE_POST_COMMENT ?? "").toLowerCase() === "true";
+  // Accept the documented names, with back-compat aliases from Stage 61.
+  const baseUrl =
+    process.env.CONCLAVE_API_BASE_URL?.trim() ||
+    process.env.CONCLAVE_CENTRAL_PLANE_URL?.trim() ||
+    DEFAULT_BASE_URL;
+  const enablePostComment = envFlag("CONCLAVE_ENABLE_PR_COMMENT_POST", "CONCLAVE_MCP_ENABLE_POST_COMMENT");
+  const auditOff = (process.env.CONCLAVE_AUDIT_LOG ?? "").trim().toLowerCase() === "false";
 
-  const client = new WorkspaceClient({ baseUrl, userKey });
+  const client = new WorkspaceClient({ baseUrl, userKey, audit: auditOff ? () => {} : stderrAudit });
   const server = buildServer({ client, enablePostComment });
   const transport = new StdioServerTransport();
   await server.connect(transport);

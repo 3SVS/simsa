@@ -58,3 +58,7 @@ Stage 7: 기존 Conclave review/autofix job과 연결
 ## 현재 할 일
 
 처음에는 `.conclave/current-task.md`가 Stage 0으로 설정되어 있습니다. Claude Code에게 먼저 탐색과 계획만 시키세요.
+
+## MCP — AI 코딩 에이전트에서 직접 호출
+
+`@conclave-ai/mcp-workspace` ([`packages/mcp-workspace`](packages/mcp-workspace/README.md))는 Conclave의 acceptance/PR-review 워크플로를 **MCP 도구(stdio)**로 노출합니다. Claude Code / Cursor / Codex-like 에이전트가 코딩 환경을 떠나지 않고 PR 확인·Fix 지시서·비교·코멘트 미리보기를 호출할 수 있습니다. 설정·과금 의미·안전 모델은 패키지 README와 `conclave-builder-pack/out/stage-62-mcp-packaging-billing-docs.md` 참고. (raw GitHub 토큰 불필요 — 연결된 계정을 central-plane 통해 사용.)
