@@ -89,3 +89,22 @@
 
 ## test/build (pass 2b)
 - dashboard 77/77, parity 10/10, typecheck 53/53, lint green.
+
+---
+
+# pass 2c — github page main flow
+
+커밋: `ec99ec5`.
+
+## 변경 화면
+- `/projects/:id/github` **메인 흐름**(가장 많이 보는 부분): 연결 상태/no-repo/repo info, "Load pull requests", PR 목록(open pulls/empty/locale 날짜), 항목 선택("Choose the acceptance items…"/N selected/Save link/Linked), 연결된 PR 목록, review 상태(Not reviewed / Reviewing… / review failed) → EN/KO. 브랜드 .card/.btn, indigo→brand, accent-brand 체크박스.
+
+## 추가 i18n
+- `github` 네임스페이스 확장(checkingConnection/connectRepoFirst/loadPulls/openPulls/noPulls/selectItemsForPr/saveLink/linked/notReviewedYet/reviewing/reviewFailed 등). parity 통과.
+
+## ★ 남은 화면 (pass 2d — 마지막)
+- `/projects/:id/github` **깊은 패널**: ReviewResultPanel(결과 라벨/설명), ComparisonPanel(Improved/Still open/New issue/Unchanged + 전환), PRCommentPanel(preview/post/list), FixBriefPanel(Fix instructions/copy/download), **CreditDryRunBanner**(credit/dry-run 메시지 ~15개, "Credit charging is disabled during beta").
+- `/projects/:id/github/history/:runId` run detail(1253줄/149): 선택 picker/비교/comment shortcut/status transition.
+
+## test/build (pass 2c)
+- dashboard 77/77, parity 10/10, typecheck 53/53, lint green.
