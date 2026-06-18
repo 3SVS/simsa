@@ -38,7 +38,7 @@ import type { ItemStatus } from "@/lib/labels";
 
 export default function GitHubPage() {
   const { id } = useParams<{ id: string }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const project = getLocalProject(id) ?? getProject(id);
   const userKey = getUserKey();
 
@@ -207,21 +207,18 @@ export default function GitHubPage() {
 
       {/* Loading */}
       {loadPhase === "loading" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
-          <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mx-auto mb-2" />
-          <p className="text-sm text-gray-400">연결 상태를 확인하는 중...</p>
+        <div className="card p-6 text-center">
+          <div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+          <p className="text-sm text-gray-400">{t.github.checkingConnection}</p>
         </div>
       )}
 
       {/* No repo */}
       {loadPhase === "no_repo" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-sm text-gray-600 mb-4">먼저 GitHub 저장소를 연결해주세요.</p>
-          <Link
-            href={`/projects/${id}/settings`}
-            className="inline-block bg-gray-900 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-800 transition-colors"
-          >
-            저장소 연결하러 가기
+        <div className="card p-8 text-center">
+          <p className="mb-4 text-sm text-gray-600">{t.github.connectRepoFirst}</p>
+          <Link href={`/projects/${id}/settings`} className="btn btn-md btn-primary">
+            {t.github.goConnectRepo}
           </Link>
         </div>
       )}
@@ -230,62 +227,56 @@ export default function GitHubPage() {
       {loadPhase === "ready" && repo && (
         <>
           {/* Repo info */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between">
+          <div className="card flex items-center justify-between p-4">
             <div>
-              <p className="text-xs text-gray-400 mb-0.5">연결된 저장소</p>
+              <p className="mb-0.5 text-xs text-gray-400">{t.github.connectedRepo}</p>
               <a
                 href={repo.htmlUrl ?? `https://github.com/${repo.fullName}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-medium text-indigo-600 hover:underline"
+                className="font-mono text-sm font-medium text-brand-700 hover:underline"
               >
                 {repo.fullName}
               </a>
-              {repo.defaultBranch && <span className="text-xs text-gray-400 ml-2">→ {repo.defaultBranch}</span>}
+              {repo.defaultBranch && <span className="ml-2 text-xs text-gray-400">→ {repo.defaultBranch}</span>}
             </div>
-            <button
-              onClick={handleLoadPulls}
-              disabled={pullsPhase === "loading"}
-              className="text-sm px-4 py-2 rounded-lg font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-            >
-              {pullsPhase === "loading" ? "불러오는 중..." : "PR 목록 불러오기"}
+            <button onClick={handleLoadPulls} disabled={pullsPhase === "loading"} className="btn btn-md btn-secondary">
+              {pullsPhase === "loading" ? t.common.loading : t.github.loadPulls}
             </button>
           </div>
 
           {/* PR list */}
           {pullsPhase === "error" && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-              PR 목록을 불러오지 못했습니다: {pullsError.includes("not_connected") ? "GitHub 계정을 먼저 연결해주세요." : pullsError}
+            <div className="callout callout-error">
+              {t.github.pullsLoadError} {pullsError.includes("not_connected") ? t.github.errorNotConnected : ""}
             </div>
           )}
 
           {pullsPhase === "done" && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <p className="text-sm font-semibold text-gray-700 px-5 py-4 border-b border-gray-100">
-                열려 있는 PR {pulls.length}개
+            <div className="card overflow-hidden">
+              <p className="border-b border-gray-100 px-5 py-4 text-sm font-semibold text-gray-700">
+                {pulls.length} {t.github.openPulls}
               </p>
               {pulls.length === 0 ? (
-                <p className="text-sm text-gray-500 px-5 py-6 text-center">
-                  열려 있는 PR이 없어요. GitHub에서 PR을 만든 뒤 다시 확인해주세요.
-                </p>
+                <p className="px-5 py-6 text-center text-sm text-gray-500">{t.github.noPulls}</p>
               ) : (
                 <div className="divide-y divide-gray-50">
                   {pulls.map((pull) => (
                     <button
                       key={pull.number}
                       onClick={() => selectPR(pull)}
-                      className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors ${selectedPR?.number === pull.number ? "bg-indigo-50 border-l-2 border-indigo-500" : ""}`}
+                      className={`w-full px-5 py-4 text-left transition-colors hover:bg-gray-50 ${selectedPR?.number === pull.number ? "border-l-2 border-brand-500 bg-brand-50" : ""}`}
                     >
                       <div className="flex items-start gap-3">
-                        <span className="text-xs text-gray-400 font-mono mt-0.5 flex-shrink-0">#{pull.number}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{pull.title}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
+                        <span className="mt-0.5 flex-shrink-0 font-mono text-xs text-gray-400">#{pull.number}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-800">{pull.title}</p>
+                          <p className="mt-0.5 font-mono text-xs text-gray-400">
                             {pull.headBranch} → {pull.baseBranch}
-                            {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString("ko-KR")}`}
+                            {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}`}
                           </p>
                         </div>
-                        <span className="text-xs text-green-600 bg-green-50 border border-green-200 rounded-full px-2 py-0.5 flex-shrink-0">open</span>
+                        <span className="flex-shrink-0 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-600">open</span>
                       </div>
                     </button>
                   ))}
@@ -296,24 +287,21 @@ export default function GitHubPage() {
 
           {/* Item selection for selected PR */}
           {selectedPR && (
-            <div className="bg-white rounded-xl border border-indigo-200 p-5">
-              <p className="text-sm font-semibold text-gray-800 mb-1">
+            <div className="rounded-lg border border-brand-200 bg-white p-5">
+              <p className="mb-1 text-sm font-semibold text-gray-800">
                 PR #{selectedPR.number}: {selectedPR.title}
               </p>
-              <p className="text-xs text-gray-400 mb-4">
-                이 PR과 관련된 항목을 선택하세요. ({selectedItemIds.size}개 선택됨)
+              <p className="mb-4 text-xs text-gray-400">
+                {t.github.selectItemsForPr} ({selectedItemIds.size} {t.github.selected})
               </p>
-              <div className="space-y-1 max-h-56 overflow-y-auto mb-4">
+              <div className="mb-4 max-h-56 space-y-1 overflow-y-auto">
                 {allItems.map((item) => (
-                  <label
-                    key={item.id}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                  >
+                  <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-50">
                     <input
                       type="checkbox"
                       checked={selectedItemIds.has(item.id)}
                       onChange={() => toggleItem(item.id)}
-                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
+                      className="h-4 w-4 flex-shrink-0 cursor-pointer rounded accent-brand-600"
                     />
                     <span className="flex-1 text-sm text-gray-700">{item.title}</span>
                     <StatusBadge status={item.checkStatus} />
@@ -321,30 +309,23 @@ export default function GitHubPage() {
                 ))}
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={handleLink}
-                  disabled={selectedItemIds.size === 0 || linkPhase === "saving"}
-                  className="text-sm px-4 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-                >
-                  {linkPhase === "saving" ? "저장 중..." : "연결 저장"}
+                <button onClick={handleLink} disabled={selectedItemIds.size === 0 || linkPhase === "saving"} className="btn btn-md btn-primary">
+                  {linkPhase === "saving" ? t.telegram.saving : t.github.saveLink}
                 </button>
-                <button
-                  onClick={() => { setSelectedPR(null); setSelectedItemIds(new Set()); }}
-                  className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                  취소
+                <button onClick={() => { setSelectedPR(null); setSelectedItemIds(new Set()); }} className="text-sm text-gray-500 hover:text-gray-700">
+                  {t.common.cancel}
                 </button>
-                {linkPhase === "done" && <span className="text-sm text-green-600">✓ 연결됐어요.</span>}
-                {linkPhase === "error" && <span className="text-sm text-red-500">저장 실패. 다시 시도해주세요.</span>}
+                {linkPhase === "done" && <span className="text-sm text-green-600">✓ {t.github.linked}</span>}
+                {linkPhase === "error" && <span className="text-sm text-red-500">{t.github.linkSaveError}</span>}
               </div>
             </div>
           )}
 
           {/* Linked PRs list */}
           {linkedPulls.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200">
-              <p className="text-sm font-semibold text-gray-700 px-5 py-4 border-b border-gray-100">
-                연결된 PR {linkedPulls.length}개
+            <div className="card">
+              <p className="border-b border-gray-100 px-5 py-4 text-sm font-semibold text-gray-700">
+                {linkedPulls.length} {t.github.linkedPulls}
               </p>
               <div className="divide-y divide-gray-50">
                 {linkedPulls.map((lp) => {
@@ -382,22 +363,17 @@ export default function GitHubPage() {
                       <div className="ml-6">
                         {phase === "idle" && (
                           <div className="space-y-2">
-                            <p className="text-xs text-gray-400">
-                              아직 실제 코드를 확인하지 않았어요. 버튼을 누르면 이 PR의 변경 내용을 기준으로 확인합니다.
-                            </p>
-                            <button
-                              onClick={() => handleStartReview(lp)}
-                              className="text-sm px-4 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                            >
-                              PR 코드 확인하기
+                            <p className="text-xs text-gray-400">{t.github.notReviewedYet}</p>
+                            <button onClick={() => handleStartReview(lp)} className="btn btn-md btn-primary">
+                              {t.github.runReviewBtn}
                             </button>
                           </div>
                         )}
 
                         {phase === "running" && (
                           <div className="flex items-center gap-2 text-sm text-gray-500">
-                            <div className="w-4 h-4 border-2 border-gray-300 border-t-indigo-600 rounded-full animate-spin flex-shrink-0" />
-                            확인 실행 중... (PR 변경 내용을 분석하고 있어요)
+                            <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-brand-600" />
+                            {t.github.reviewing}
                           </div>
                         )}
 
@@ -406,13 +382,10 @@ export default function GitHubPage() {
                             {creditDryRunByPr[lp.number] && (creditDryRunByPr[lp.number] as CreditEnforcementResult).blocked ? (
                               <CreditDryRunBanner dryRun={creditDryRunByPr[lp.number]!} projectId={id} />
                             ) : (
-                              <p className="text-xs text-red-600">확인 실패. 잠시 후 다시 시도해주세요.</p>
+                              <p className="text-xs text-red-600">{t.github.reviewFailed}</p>
                             )}
-                            <button
-                              onClick={() => handleStartReview(lp)}
-                              className="text-sm px-3 py-1.5 rounded-lg font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
-                            >
-                              다시 시도
+                            <button onClick={() => handleStartReview(lp)} className="btn btn-sm btn-secondary">
+                              {t.common.retry}
                             </button>
                           </div>
                         )}

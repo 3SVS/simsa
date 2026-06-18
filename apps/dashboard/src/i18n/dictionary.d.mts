@@ -232,6 +232,23 @@ export type Dictionary = {
     errorNotConnected: string;
     errorInvalidName: string;
     reposLoadError: string;
+    checkingConnection: string;
+    connectRepoFirst: string;
+    goConnectRepo: string;
+    loadPulls: string;
+    pullsLoadError: string;
+    openPulls: string;
+    noPulls: string;
+    selectItemsForPr: string;
+    selected: string;
+    saveLink: string;
+    linked: string;
+    linkSaveError: string;
+    linkedPulls: string;
+    notReviewedYet: string;
+    runReviewBtn: string;
+    reviewing: string;
+    reviewFailed: string;
   };
   review: { resultsTitle: string; basisNote: string };
   history: {
