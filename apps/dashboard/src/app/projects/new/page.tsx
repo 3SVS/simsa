@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { callWorkspaceApi } from "@/lib/workspace-api";
 import { ACCEPTANCE_CRITERIA } from "@/lib/mock-generators";
 import {
@@ -18,17 +17,20 @@ import type {
   WorkspaceRequirementItem,
 } from "@/lib/workspace-types";
 import { StatusBadge } from "@/components/StatusBadge";
+import { useI18n } from "@/i18n/I18nProvider";
+import type { Dictionary } from "@/i18n/dictionary.mjs";
 
 const EXAMPLE_IDEAS = [
-  "회의 녹음 파일을 올리면 자동으로 요약하고, 할 일을 뽑아서 Linear로 보내주는 앱",
-  "사진을 올리면 AI가 쇼핑몰 상품 설명을 자동으로 써주는 도구",
-  "고객 문의 내용을 분석해서 자주 묻는 질문을 자동으로 정리해주는 서비스",
+  "An app that summarizes meeting recordings and sends the action items to Linear",
+  "A tool where uploading a photo auto-writes the e-commerce product description",
+  "A service that analyzes customer questions and organizes the FAQ automatically",
 ];
 
 type Step = 1 | 2 | 3 | 4;
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [ideaText, setIdeaText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -109,12 +111,10 @@ export default function NewProjectPage() {
         priority: "must" as const,
       })),
     });
-    // Save full productSpec + item criteria for checks/fixes pages
     saveExtendedProjectData(id, {
       productSpec: spec.productSpec,
       itemCriteria: Object.fromEntries(spec.items.map((i) => [i.id, i.criteria ?? []])),
     });
-    // Background DB sync — best-effort, never blocks navigation
     saveProjectToDb({
       id,
       userKey: getUserKey(),
@@ -130,51 +130,33 @@ export default function NewProjectPage() {
   const progressWidth = { 1: "25%", 2: "50%", 3: "75%", 4: "100%" }[step];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/projects" className="text-sm text-gray-400 hover:text-gray-700">
-            ← 목록
-          </Link>
-          <span className="text-gray-200">|</span>
-          <span className="text-sm font-medium text-gray-900">새 프로젝트</span>
-        </div>
-        <span className="text-xs text-indigo-600 font-medium bg-indigo-50 px-2.5 py-1 rounded-full">
-          제품 설명서 만들기 · 무료 베타
-        </span>
-      </header>
-
-      <div className="h-1 bg-gray-100">
-        <div className="h-1 bg-indigo-500 transition-all duration-500" style={{ width: progressWidth }} />
+    <div className="flex flex-col">
+      <div className="h-0.5 bg-gray-100">
+        <div className="h-0.5 bg-brand-600 transition-all duration-500" style={{ width: progressWidth }} />
       </div>
 
-      <main className="flex-1 flex justify-center px-4 py-10">
+      <main className="flex flex-1 justify-center px-4 py-12">
         <div className="w-full max-w-2xl">
-
-          {/* ── Step 1: 아이디어 입력 ─────────────────────────────── */}
+          {/* Step 1: idea */}
           {step === 1 && (
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                어떤 제품을 만들고 싶으신가요?
-              </h1>
-              <p className="text-sm text-gray-500 mb-8">
-                완성된 문장이 아니어도 괜찮습니다. 아이디어를 자유롭게 적어주세요.
-              </p>
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.np.step1Title}</h1>
+              <p className="mb-8 mt-2 text-sm text-gray-500">{t.np.step1Sub}</p>
               <textarea
                 value={ideaText}
                 onChange={(e) => setIdeaText(e.target.value)}
-                placeholder="예) 회의 녹음 파일을 올리면 자동으로 요약하고 할 일을 정리해주는 앱"
+                placeholder={t.np.ideaPlaceholder}
                 rows={5}
-                className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none bg-white"
+                className="input resize-none rounded-lg"
               />
-              <div className="mt-4 mb-8">
-                <p className="text-xs text-gray-400 mb-2">예시로 시작하기</p>
+              <div className="mb-8 mt-4">
+                <p className="mb-2 text-xs text-gray-400">{t.np.examplesLabel}</p>
                 <div className="flex flex-col gap-2">
                   {EXAMPLE_IDEAS.map((ex, i) => (
                     <button
                       key={i}
                       onClick={() => setIdeaText(ex)}
-                      className="text-left text-sm text-gray-600 bg-white border border-gray-200 rounded-lg px-4 py-2.5 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+                      className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-left text-sm text-gray-600 transition-all hover:border-brand-300 hover:bg-brand-50"
                     >
                       {ex}
                     </button>
@@ -184,95 +166,74 @@ export default function NewProjectPage() {
               <button
                 onClick={handleGenerateUnderstanding}
                 disabled={!ideaText.trim() || isLoading}
-                className="w-full bg-indigo-600 text-white text-sm font-medium py-3.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="btn btn-primary w-full py-3"
               >
-                {isLoading ? "Conclave가 이해하는 중..." : "제품 설명서 만들기 →"}
+                {isLoading ? t.np.reading : `${t.np.generateSpec} →`}
               </button>
-              {rateLimitMsg && (
-                <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
-                  {rateLimitMsg}
-                </div>
-              )}
-              <p className="text-center text-xs text-gray-400 mt-3">
-                제품 설명서 만들기는 무료 베타입니다
-              </p>
+              {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
+              <p className="mt-3 text-center text-xs text-gray-400">{t.np.freeBeta}</p>
             </div>
           )}
 
-          {/* ── Step 2: 이해한 내용 ───────────────────────────────── */}
+          {/* Step 2: understanding */}
           {step === 2 && result && (
             <div>
-              <div className="flex items-center gap-2 mb-6">
-                <span className="text-xs font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
-                  Conclave
-                </span>
-                <span className="text-sm text-gray-500">이해한 내용</span>
+              <div className="mb-6 flex items-center gap-2">
+                <span className="rounded bg-brand-50 px-2 py-0.5 font-mono text-xs text-brand-700">Conclave</span>
+                <span className="text-sm text-gray-500">{t.np.understood}</span>
                 {isFallback && (
-                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
-                    임시 초안
+                  <span className="rounded border border-amber-100 bg-amber-50 px-2 py-0.5 text-xs text-amber-600">
+                    {t.np.draftTag}
                   </span>
                 )}
               </div>
 
-              {isFallback && (
-                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5 text-xs text-amber-700">
-                  지금은 임시 초안으로 보여드리고 있어요. 다시 시도하면 더 맞춤형으로 만들 수 있습니다.
-                </div>
-              )}
+              {isFallback && <div className="callout mb-5 border-amber-100 bg-amber-50 text-xs text-amber-700">{t.np.draftNote}</div>}
 
-              <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                <p className="text-sm text-gray-800 leading-relaxed mb-5">{result.understood.summary}</p>
+              <div className="card mb-6 p-6">
+                <p className="mb-5 text-sm leading-relaxed text-gray-800">{result.understood.summary}</p>
                 <div className="mb-4">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">주요 사용자</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.mainUsers}</p>
                   <ul className="space-y-1">
                     {result.understood.targetUsers.map((u, i) => (
                       <li key={i} className="flex gap-2 text-sm text-gray-700">
-                        <span className="text-indigo-400 mt-0.5">•</span>{u}
+                        <span className="mt-0.5 text-brand-400">•</span>{u}
                       </li>
                     ))}
                   </ul>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">주요 흐름</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.mainFlow}</p>
                   <ol className="space-y-1">
                     {result.understood.mainFlow.map((f, i) => (
                       <li key={i} className="flex gap-2 text-sm text-gray-700">
-                        <span className="text-gray-300 w-4 flex-shrink-0">{i + 1}.</span>{f}
+                        <span className="w-4 flex-shrink-0 font-mono text-gray-300">{i + 1}.</span>{f}
                       </li>
                     ))}
                   </ol>
                 </div>
               </div>
 
-              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-8 text-sm text-amber-800">
-                이 내용이 맞지 않으면{" "}
-                <button onClick={() => setStep(1)} className="underline font-medium">아이디어를 수정</button>
-                하세요.
-              </div>
-
-              <button
-                onClick={() => setStep(3)}
-                className="w-full bg-indigo-600 text-white text-sm font-medium py-3.5 rounded-xl hover:bg-indigo-700 transition-colors"
-              >
-                맞습니다. 질문에 답하기 →
+              <button onClick={() => setStep(3)} className="btn btn-primary w-full py-3">
+                {t.np.confirmAnswer} →
+              </button>
+              <button onClick={() => setStep(1)} className="mt-3 w-full text-center text-xs text-gray-400 underline hover:text-gray-600">
+                {t.np.editIdea}
               </button>
             </div>
           )}
 
-          {/* ── Step 3: 질문 ──────────────────────────────────────── */}
+          {/* Step 3: questions */}
           {step === 3 && (
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-1">
-                더 정확한 제품 설명서를 위해 몇 가지 여쭤볼게요
-              </h2>
-              <p className="text-sm text-gray-500 mb-8">
-                모르는 항목은 &quot;나중에 정하기&quot;를 선택하세요.
-              </p>
+              <h2 className="text-xl font-semibold tracking-tight text-gray-900">{t.np.step3Title}</h2>
+              <p className="mb-8 mt-1 text-sm text-gray-500">{t.np.step3Sub}</p>
 
-              <div className="space-y-4 mb-8">
+              <div className="mb-8 space-y-4">
                 {questions.map((q, i) => (
                   <ApiQuestionCard
                     key={q.id}
+                    t={t}
                     question={q}
                     index={i}
                     total={questions.length}
@@ -282,39 +243,21 @@ export default function NewProjectPage() {
                 ))}
               </div>
 
-              {rateLimitMsg && (
-                <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
-                  {rateLimitMsg}
-                </div>
-              )}
+              {rateLimitMsg && <div className="callout mb-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
               <div className="flex gap-3">
-                <button
-                  onClick={() => setStep(2)}
-                  className="flex-1 bg-white text-gray-600 border border-gray-200 text-sm font-medium py-3.5 rounded-xl hover:bg-gray-50 transition-colors"
-                >
-                  ← 이전
+                <button onClick={() => setStep(2)} className="btn btn-secondary flex-1 py-3">
+                  ← {t.np.back}
                 </button>
-                <button
-                  onClick={handleGenerateSpec}
-                  disabled={isGeneratingSpec}
-                  className="flex-[2] bg-indigo-600 text-white text-sm font-medium py-3.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-                >
-                  {isGeneratingSpec
-                    ? "제품 설명서 만드는 중..."
-                    : `제품 설명서 만들기 (${answeredCount}/${questions.length} 답변) →`}
+                <button onClick={handleGenerateSpec} disabled={isGeneratingSpec} className="btn btn-primary flex-[2] py-3">
+                  {isGeneratingSpec ? t.np.generating : `${t.np.generateSpec} (${answeredCount}/${questions.length}) →`}
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── Step 4: 결과 ──────────────────────────────────────── */}
+          {/* Step 4: result */}
           {step === 4 && (specResult ?? result) && (
-            <SpecPreview
-              data={(specResult ?? result)!}
-              isFallback={isFallback}
-              onBack={() => setStep(3)}
-              onSave={handleSave}
-            />
+            <SpecPreview t={t} data={(specResult ?? result)!} isFallback={isFallback} onBack={() => setStep(3)} onSave={handleSave} />
           )}
         </div>
       </main>
@@ -325,12 +268,14 @@ export default function NewProjectPage() {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ApiQuestionCard({
+  t,
   question,
   index,
   total,
   answer,
   onAnswer,
 }: {
+  t: Dictionary;
   question: WorkspaceQuestion;
   index: number;
   total: number;
@@ -338,28 +283,26 @@ function ApiQuestionCard({
   onAnswer: (v: string) => void;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs font-mono text-gray-400">{index + 1} / {total}</span>
-        {answer && answer !== "defer" && (
-          <span className="text-xs text-green-600 font-medium">✓ 답변 완료</span>
-        )}
-        {answer === "defer" && <span className="text-xs text-gray-400">나중에 정하기</span>}
+    <div className="card p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="font-mono text-xs text-gray-400">{index + 1} / {total}</span>
+        {answer && answer !== "defer" && <span className="text-xs font-medium text-green-600">✓ {t.np.answered}</span>}
+        {answer === "defer" && <span className="text-xs text-gray-400">{t.np.decideLater}</span>}
       </div>
-      <p className="text-base font-medium text-gray-900 mb-4 leading-snug">{question.question}</p>
-      <div className="bg-indigo-50 rounded-lg px-4 py-3 mb-5">
-        <p className="text-xs font-semibold text-indigo-700 mb-0.5">추천: {question.recommendation}</p>
-        <p className="text-xs text-indigo-600 leading-relaxed">{question.reason}</p>
+      <p className="mb-4 text-base font-medium leading-snug text-gray-900">{question.question}</p>
+      <div className="mb-5 rounded-lg bg-brand-50 px-4 py-3">
+        <p className="mb-0.5 text-xs font-semibold text-brand-700">{t.np.recommended}: {question.recommendation}</p>
+        <p className="text-xs leading-relaxed text-brand-600">{question.reason}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {question.options.map((opt, i) => (
           <button
             key={i}
             onClick={() => onAnswer(opt)}
-            className={`text-sm px-4 py-2 rounded-lg border transition-all ${
+            className={`rounded-lg border px-4 py-2 text-sm transition-all ${
               answer === opt
-                ? "bg-indigo-600 text-white border-indigo-600"
-                : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50"
+                ? "border-brand-600 bg-brand-600 text-white"
+                : "border-gray-200 bg-white text-gray-700 hover:border-brand-300 hover:bg-brand-50"
             }`}
           >
             {opt}
@@ -368,25 +311,21 @@ function ApiQuestionCard({
         {question.allowLater && (
           <button
             onClick={() => onAnswer("defer")}
-            className={`text-sm px-4 py-2 rounded-lg border transition-all ${
-              answer === "defer"
-                ? "bg-gray-200 text-gray-700 border-gray-300"
-                : "bg-white text-gray-400 border-gray-200 hover:bg-gray-50"
+            className={`rounded-lg border px-4 py-2 text-sm transition-all ${
+              answer === "defer" ? "border-gray-300 bg-gray-200 text-gray-700" : "border-gray-200 bg-white text-gray-400 hover:bg-gray-50"
             }`}
           >
-            나중에 정하기
+            {t.np.decideLater}
           </button>
         )}
         {question.allowCustom && (
           <button
             onClick={() => onAnswer("custom")}
-            className={`text-sm px-4 py-2 rounded-lg border transition-all ${
-              answer === "custom"
-                ? "bg-gray-800 text-white border-gray-800"
-                : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+            className={`rounded-lg border px-4 py-2 text-sm transition-all ${
+              answer === "custom" ? "border-gray-800 bg-gray-800 text-white" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
             }`}
           >
-            직접 입력
+            {t.np.customInput}
           </button>
         )}
       </div>
@@ -394,8 +333,8 @@ function ApiQuestionCard({
         <input
           autoFocus
           type="text"
-          placeholder="직접 입력하세요"
-          className="mt-3 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          placeholder={t.np.typeYourOwn}
+          className="input mt-3"
           onBlur={(e) => e.target.value && onAnswer(e.target.value)}
         />
       )}
@@ -404,11 +343,13 @@ function ApiQuestionCard({
 }
 
 function SpecPreview({
+  t,
   data,
   isFallback,
   onBack,
   onSave,
 }: {
+  t: Dictionary;
   data: IdeaToSpecDraftResponse;
   isFallback: boolean;
   onBack: () => void;
@@ -417,30 +358,24 @@ function SpecPreview({
   const { productSpec, items } = data;
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">제품 설명서 초안이 완성됐습니다</h2>
-      <p className="text-sm text-gray-500 mb-6">
-        저장하면 프로젝트 페이지에서 언제든 확인할 수 있습니다.
-      </p>
+      <h2 className="text-xl font-semibold tracking-tight text-gray-900">{t.np.specReady}</h2>
+      <p className="mb-6 mt-1 text-sm text-gray-500">{t.np.saveNote}</p>
 
-      {isFallback && (
-        <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5 text-xs text-amber-700">
-          지금은 임시 초안으로 보여드리고 있어요. 저장 후 언제든 수정할 수 있습니다.
-        </div>
-      )}
+      {isFallback && <div className="callout mb-5 border-amber-100 bg-amber-50 text-xs text-amber-700">{t.np.draftNote}</div>}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-0.5">{productSpec.productName}</h3>
-        <p className="text-sm text-gray-500 mb-5">{productSpec.oneLine}</p>
+      <div className="card mb-6 p-6">
+        <h3 className="mb-0.5 text-lg font-semibold text-gray-900">{productSpec.productName}</h3>
+        <p className="mb-5 text-sm text-gray-500">{productSpec.oneLine}</p>
 
-        <SpecRow label="누가 쓰는 제품" value={productSpec.targetUsers.join(", ")} />
-        <SpecRow label="해결하려는 문제" value={productSpec.problem} />
+        <SpecRow label={t.np.whoFor} value={productSpec.targetUsers.join(", ")} />
+        <SpecRow label={t.np.problem} value={productSpec.problem} />
 
         <div className="mt-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">이번 버전에 포함</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.included}</p>
           <ul className="space-y-1">
             {productSpec.included.map((item, i) => (
               <li key={i} className="flex gap-2 text-sm text-gray-700">
-                <span className="text-green-500 mt-0.5">•</span> {item}
+                <span className="mt-0.5 text-green-500">•</span> {item}
               </li>
             ))}
           </ul>
@@ -448,7 +383,7 @@ function SpecPreview({
 
         {productSpec.excluded.length > 0 && (
           <div className="mt-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">이번 버전에서 제외</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.excluded}</p>
             <ul className="space-y-1">
               {productSpec.excluded.map((item, i) => (
                 <li key={i} className="flex gap-2 text-sm text-gray-500">
@@ -460,8 +395,8 @@ function SpecPreview({
         )}
 
         {productSpec.openQuestions.length > 0 && (
-          <div className="mt-4 bg-slate-50 rounded-lg p-4">
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">아직 결정 필요</p>
+          <div className="mt-4 rounded-lg bg-slate-50 p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">{t.np.openDecisions}</p>
             <ul className="space-y-1">
               {productSpec.openQuestions.map((d, i) => (
                 <li key={i} className="flex gap-2 text-sm text-slate-700">
@@ -474,7 +409,7 @@ function SpecPreview({
       </div>
 
       <div className="mb-8">
-        <p className="text-sm font-semibold text-gray-700 mb-3">꼭 들어가야 할 것 ({items.length}개)</p>
+        <p className="mb-3 text-sm font-semibold text-gray-700">{t.np.mustHaves} ({items.length})</p>
         <div className="space-y-2">
           {items.map((item) => (
             <RequirementRow key={item.id} item={item} />
@@ -483,17 +418,11 @@ function SpecPreview({
       </div>
 
       <div className="flex gap-3">
-        <button
-          onClick={onBack}
-          className="flex-1 bg-white text-gray-600 border border-gray-200 text-sm font-medium py-3.5 rounded-xl hover:bg-gray-50 transition-colors"
-        >
-          ← 질문 수정
+        <button onClick={onBack} className="btn btn-secondary flex-1 py-3">
+          ← {t.np.editQuestions}
         </button>
-        <button
-          onClick={onSave}
-          className="flex-[2] bg-indigo-600 text-white text-sm font-medium py-3.5 rounded-xl hover:bg-indigo-700 transition-colors"
-        >
-          저장하고 프로젝트 시작하기 →
+        <button onClick={onSave} className="btn btn-primary flex-[2] py-3">
+          {t.np.saveAndStart} →
         </button>
       </div>
     </div>
@@ -503,9 +432,9 @@ function SpecPreview({
 function RequirementRow({ item }: { item: WorkspaceRequirementItem }) {
   const criteriaList = item.criteria.length > 0 ? item.criteria : (ACCEPTANCE_CRITERIA[item.id] ?? []);
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-start gap-3 mb-2">
-        <p className="text-sm font-medium text-gray-800 flex-1">{item.title}</p>
+    <div className="card p-4">
+      <div className="mb-2 flex items-start gap-3">
+        <p className="flex-1 text-sm font-medium text-gray-800">{item.title}</p>
         <StatusBadge status={item.status} />
       </div>
       {criteriaList.length > 0 && (
@@ -524,7 +453,7 @@ function RequirementRow({ item }: { item: WorkspaceRequirementItem }) {
 function SpecRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="mb-3">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+      <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</p>
       <p className="text-sm text-gray-700">{value}</p>
     </div>
   );
