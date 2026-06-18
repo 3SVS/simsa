@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="bg-white text-gray-900 antialiased">
+      <body className="bg-[#faf8f3] text-gray-900 antialiased">
         <I18nProvider>
           {/* App shell: slim left sidebar (like an AI-platform workspace) + spacious main */}
           <div className="flex min-h-screen">

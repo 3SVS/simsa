@@ -59,7 +59,7 @@ export function AppSidebar() {
         <Link href="/projects" className="group flex items-center gap-2.5 px-1.5">
           <span
             aria-hidden
-            className="h-3 w-3 rounded-full border-[1.5px] border-brand-600 transition-colors group-hover:bg-brand-600"
+            className="h-3 w-3 rounded-full border-[1.5px] border-gold-500 transition-colors group-hover:bg-gold-500"
           />
           <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">
             {t.brand.wordmark}
