@@ -137,3 +137,30 @@
 
 ## 배포 / 검증
 - (배포 후 채움) Vercel 재배포 → github 깊은 패널 + run detail EN 본문 + EN/KO 토글 + locale 날짜 라이브 확인.
+
+---
+
+# pass 2e~2h — 남은 전 화면 i18n (dashboard 인터페이스 100% 완료)
+
+커밋: `4954b15`(credits+export) · `faa5e39`(admin usage+credits) · `9f6c964`(QuestionCard+helper) · `0a15b93`(rate-limit toast).
+
+Bae 지시("이어서 잡아" → admin "전체 전환")로 베타 사용자 화면을 넘어 **dashboard 인터페이스 전체**를 EN/KO 토글로 마감.
+
+## 변경 화면 / 네임스페이스
+- **2e** `/projects/:id/credits`(creditsPage) + `/projects/:id/export`(exportPage) — 잔액/충전요청/이력, target·scope 피커·항목선택·결과·사용법·파일브라우저·결과기록·이력. blue→brand(indigo→옥스블러드), 이모지(✓/⚠) 제거.
+- **2f** `/admin/usage`(adminUsage) + `/admin/credits`(adminCredits, 174 keys) — 운영자 콘솔. 한글 라벨맵→`(t, value)` 헬퍼, blue→indigo, 이모지 제거. (admin/credits는 서브에이전트로 변환 후 typecheck/parity/grep 직접 검증.)
+- **2g** `QuestionCard`(New Project, np 네임스페이스 재사용) + run detail 재확인 메시지·history 재확인 tooltip — 순수 `.mjs` 헬퍼(formatSelectedCountMessage/quickRerunDisabledMessage)가 만들던 렌더 한글을 dict로 이동(runDetail.rerunDoneCount, history.rerunDisabledNoResults), 헬퍼는 순수 유지·미사용 import 제거.
+- **2h** New Project + checks의 rate-limit 토스트 — 라이브러리가 돌려주던 한글 `message` 대신 공용 `common.rateLimited` 키를 호출부에서 사용.
+
+## ★ 결과: 렌더되는 dashboard 인터페이스 한글 = 0
+남은 한글은 모두 **비렌더**: ① KO dictionary(의도) ② 코드 주석 ③ 파일명 sanitize 정규식 `[가-힣]`(기능) ④ 데드코드(labels.ts 한글 라벨맵·`MockUserBadge`(미사용)·review-run-comparison.mjs STATUS_KO/buildStatusTransitionLabel(대시보드 미렌더)) ⑤ `mock-generators.ts` 데모/오프라인-폴백 제품 콘텐츠(=생성 콘텐츠 known-issue, 실 backend는 영어 기본) ⑥ backend 생성 summaryText(대시보드 범위 밖).
+
+## test / typecheck / build (pass 2e~2h)
+- dashboard 77/77, i18n parity 10/10, typecheck clean, build green(16 routes), lint clean(기존 export/page useEffect 경고만).
+
+## 누적 i18n 네임스페이스 (Stage 63 전체)
+brand·lang·nav·account·status·comparison·projects·actions·fix·common(+rateLimited)·overview·idea·np·spec·items·priority·fixesScreen·checks·runStatus·credit·creditsPage·exportPage·adminUsage·adminCredits·review·comment·fixBrief·runDetail·telegram·github·history·errors.
+
+## 남은 후속(선택)
+- Vercel 재배포 + 라이브 EN/KO 토글 육안 검증(토큰 필요).
+- (선택) 데드코드 정리(labels.ts 한글맵·MockUserBadge 제거), mock-generators 영문화(데모 콘텐츠).
