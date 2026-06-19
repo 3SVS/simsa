@@ -26,6 +26,9 @@ import { downloadBuildPackZip } from "@/lib/zip-utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
 import Link from "next/link";
+import { useI18n } from "@/i18n/I18nProvider";
+import { statusLabel } from "@/i18n/dictionary.mjs";
+import type { Dictionary } from "@/i18n/dictionary.mjs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,40 +42,42 @@ type StatusFilter = "all" | "failed" | "inconclusive" | "needs_decision" | "pass
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TARGET_OPTIONS: { value: ExportTarget; label: string; desc: string }[] = [
-  { value: "claude_code", label: "Claude Code용", desc: "Claude Code 지시서 포함" },
-  { value: "codex", label: "Codex용", desc: "Codex 지시서 포함" },
-  { value: "both", label: "둘 다", desc: "두 지시서 모두 포함" },
+const TARGET_VALUES: ExportTarget[] = ["claude_code", "codex", "both"];
+
+const OUTCOME_OPTIONS: { value: OutcomeStatus; activeColor: string }[] = [
+  { value: "worked", activeColor: "bg-green-600 text-white border-transparent" },
+  { value: "partial", activeColor: "bg-amber-500 text-white border-transparent" },
+  { value: "failed", activeColor: "bg-red-600 text-white border-transparent" },
+  { value: "not_checked", activeColor: "bg-gray-500 text-white border-transparent" },
 ];
 
-const OUTCOME_OPTIONS: { value: OutcomeStatus; label: string; activeColor: string }[] = [
-  { value: "worked", label: "잘 됨", activeColor: "bg-green-600 text-white border-transparent" },
-  { value: "partial", label: "일부만 됨", activeColor: "bg-amber-500 text-white border-transparent" },
-  { value: "failed", label: "안 됨", activeColor: "bg-red-600 text-white border-transparent" },
-  { value: "not_checked", label: "아직 확인 전", activeColor: "bg-gray-500 text-white border-transparent" },
+const STATUS_FILTER_VALUES: StatusFilter[] = [
+  "all", "failed", "inconclusive", "needs_decision", "passed", "not_started",
 ];
 
-const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "failed", label: "안 맞음" },
-  { value: "inconclusive", label: "확인 부족" },
-  { value: "needs_decision", label: "결정 필요" },
-  { value: "passed", label: "통과" },
-  { value: "not_started", label: "시작 전" },
-];
-
-const OUTCOME_LABEL: Record<OutcomeStatus, string> = {
-  worked: "잘 됨",
-  partial: "일부만 됨",
-  failed: "안 됨",
-  not_checked: "아직 확인 전",
-};
-
+// Display names; brand product names are not translated.
 const TARGET_LABEL: Record<ExportTarget, string> = {
   claude_code: "Claude Code",
   codex: "Codex",
   both: "Claude Code + Codex",
 };
+
+function targetOptionLabel(t: Dictionary, v: ExportTarget): string {
+  if (v === "claude_code") return t.exportPage.targetClaude;
+  if (v === "codex") return t.exportPage.targetCodex;
+  return t.exportPage.targetBoth;
+}
+
+function outcomeLabel(t: Dictionary, v: OutcomeStatus): string {
+  if (v === "worked") return t.exportPage.outcomeWorked;
+  if (v === "partial") return t.exportPage.outcomePartial;
+  if (v === "failed") return t.exportPage.outcomeFailed;
+  return t.exportPage.outcomeNotChecked;
+}
+
+function filterLabel(t: Dictionary, v: StatusFilter): string {
+  return v === "all" ? t.exportPage.filterAll : statusLabel(t, v);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -115,6 +120,7 @@ function formatDate(iso: string): string {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ExportPage() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const project = getLocalProject(id) ?? getProject(id);
 
@@ -327,7 +333,7 @@ export default function ExportPage() {
     setOutcomeStatus(null);
   }
 
-  if (!project) return <p className="text-sm text-gray-400">프로젝트를 찾을 수 없습니다.</p>;
+  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
 
   const currentFile = result?.bundle.files.find((f) => f.path === selectedFile);
 
@@ -335,34 +341,32 @@ export default function ExportPage() {
     <div className="max-w-5xl space-y-5">
       {/* ── Header ── */}
       <div>
-        <h1 className="text-xl font-bold text-gray-900 mb-1">개발 AI에게 넘길 만들기 패키지</h1>
-        <p className="text-sm text-gray-500">
-          제품 설명서, 확인 결과, 고쳐야 할 항목을 Claude Code 또는 Codex에 바로 넘길 수 있는 파일로 만듭니다.
-        </p>
+        <h1 className="text-xl font-bold text-gray-900 mb-1">{t.exportPage.title}</h1>
+        <p className="text-sm text-gray-500">{t.exportPage.intro}</p>
       </div>
 
       {/* ── Config: target + selection mode ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">개발 AI 선택</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t.exportPage.chooseAi}</p>
             <div className="flex gap-2">
-              {TARGET_OPTIONS.map((opt) => (
-                <button key={opt.value} onClick={() => handleTargetChange(opt.value)}
+              {TARGET_VALUES.map((value) => (
+                <button key={value} onClick={() => handleTargetChange(value)}
                   disabled={phase === "loading"}
-                  className={`flex-1 text-sm px-3 py-2 rounded-lg border font-medium transition-all disabled:opacity-50 ${target === opt.value ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300"}`}>
-                  {opt.label}
+                  className={`flex-1 text-sm px-3 py-2 rounded-lg border font-medium transition-all disabled:opacity-50 ${target === value ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300"}`}>
+                  {targetOptionLabel(t, value)}
                 </button>
               ))}
             </div>
           </div>
           <div className="flex-1">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">포함 범위</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t.exportPage.scope}</p>
             <div className="flex gap-2">
               {(["all", "selected"] as const).map((mode) => (
                 <button key={mode} onClick={() => setSelectionMode(mode)}
                   className={`flex-1 text-sm px-3 py-2 rounded-lg border font-medium transition-all ${selectionMode === mode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300"}`}>
-                  {mode === "all" ? "전체 항목 포함" : "선택한 항목만"}
+                  {mode === "all" ? t.exportPage.scopeAll : t.exportPage.scopeSelected}
                 </button>
               ))}
             </div>
@@ -375,26 +379,30 @@ export default function ExportPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-semibold text-gray-700">
-              포함할 항목 선택
-              <span className="ml-2 text-xs font-normal text-gray-400">{selectedIds.size}개 선택됨 / 전체 {allItems.length}개</span>
+              {t.exportPage.selectTitle}
+              <span className="ml-2 text-xs font-normal text-gray-400">
+                {t.exportPage.selectedOfTotal
+                  .replace("{sel}", String(selectedIds.size))
+                  .replace("{total}", String(allItems.length))}
+              </span>
             </p>
             <button onClick={handleRecommend} disabled={problemItemCount === 0}
               className="text-xs px-3 py-1.5 rounded-lg font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-              먼저 고쳐야 할 항목 추천 선택 ({Math.min(problemItemCount, 3)}개)
+              {t.exportPage.recommend.replace("{n}", String(Math.min(problemItemCount, 3)))}
             </button>
           </div>
           {problemItemCount > 0 && (
-            <p className="text-xs text-gray-400 mb-3">처음에는 전체 제품보다 고쳐야 할 항목 1~3개만 개발 AI에게 넘기는 것을 추천합니다.</p>
+            <p className="text-xs text-gray-400 mb-3">{t.exportPage.recommendHint}</p>
           )}
           {/* Status filter */}
           <div className="flex gap-1.5 flex-wrap mb-3">
-            {STATUS_FILTER_OPTIONS.map((opt) => {
-              const count = opt.value === "all" ? allItems.length : allItems.filter((i) => i.checkStatus === opt.value).length;
-              if (opt.value !== "all" && count === 0) return null;
+            {STATUS_FILTER_VALUES.map((value) => {
+              const count = value === "all" ? allItems.length : allItems.filter((i) => i.checkStatus === value).length;
+              if (value !== "all" && count === 0) return null;
               return (
-                <button key={opt.value} onClick={() => setStatusFilter(opt.value)}
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${statusFilter === opt.value ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
-                  {opt.label} ({count})
+                <button key={value} onClick={() => setStatusFilter(value)}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${statusFilter === value ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+                  {filterLabel(t, value)} ({count})
                 </button>
               );
             })}
@@ -410,13 +418,13 @@ export default function ExportPage() {
               </label>
             ))}
             {filteredItems.length === 0 && (
-              <p className="text-xs text-gray-400 py-4 text-center">해당 상태의 항목이 없습니다.</p>
+              <p className="text-xs text-gray-400 py-4 text-center">{t.exportPage.noItemsForStatus}</p>
             )}
           </div>
           <div className="mt-4 flex items-center justify-end">
             <button onClick={handleGenerate} disabled={phase === "loading"}
               className="text-sm px-4 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-              {phase === "loading" ? "생성 중..." : "패키지 생성"}
+              {phase === "loading" ? t.exportPage.generating : t.exportPage.generate}
             </button>
           </div>
         </div>
@@ -426,13 +434,13 @@ export default function ExportPage() {
       {phase === "loading" && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
           <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-400">만들기 패키지를 생성하는 중입니다...</p>
+          <p className="text-sm text-gray-400">{t.exportPage.generatingPack}</p>
         </div>
       )}
       {phase === "error" && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 flex items-center justify-between">
-          <span>생성 중 오류가 발생했습니다.</span>
-          <button onClick={handleGenerate} className="text-xs underline ml-4">다시 시도</button>
+          <span>{t.exportPage.generateError}</span>
+          <button onClick={handleGenerate} className="text-xs underline ml-4">{t.exportPage.retry}</button>
         </div>
       )}
 
@@ -442,49 +450,51 @@ export default function ExportPage() {
           {/* Summary bar */}
           <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-4 flex-wrap text-sm">
-              <span className="font-medium text-indigo-900">{result.summary.fileCount}개 파일 생성 완료</span>
+              <span className="font-medium text-indigo-900">{t.exportPage.filesGenerated.replace("{n}", String(result.summary.fileCount))}</span>
               <span className="text-xs text-indigo-600">
-                포함 항목: {result.summary.selectedItems}개
-                {result.summary.selectedItems < result.summary.totalItems ? ` (전체 ${result.summary.totalItems}개 중)` : " (전체)"}
+                {t.exportPage.includedItems.replace("{n}", String(result.summary.selectedItems))}
+                {result.summary.selectedItems < result.summary.totalItems
+                  ? t.exportPage.ofTotal.replace("{total}", String(result.summary.totalItems))
+                  : t.exportPage.ofTotalAll}
               </span>
               {result.bundle.files.some((f) => f.path.endsWith("CLAUDE_CODE_PROMPT.md")) && (
-                <span className="text-xs bg-white text-indigo-600 border border-indigo-200 rounded-full px-2 py-0.5">Claude Code 지시서 ✓</span>
+                <span className="text-xs bg-white text-indigo-600 border border-indigo-200 rounded-full px-2 py-0.5">{t.exportPage.claudeInstr}</span>
               )}
               {result.bundle.files.some((f) => f.path.endsWith("CODEX_PROMPT.md")) && (
-                <span className="text-xs bg-white text-indigo-600 border border-indigo-200 rounded-full px-2 py-0.5">Codex 지시서 ✓</span>
+                <span className="text-xs bg-white text-indigo-600 border border-indigo-200 rounded-full px-2 py-0.5">{t.exportPage.codexInstr}</span>
               )}
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={handleZipDownload} disabled={isZipping}
                 className="text-xs px-3 py-1.5 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors">
-                {isZipping ? "압축 중..." : "zip으로 다운로드"}
+                {isZipping ? t.exportPage.zipping : t.exportPage.downloadZip}
               </button>
               <button onClick={handleCopyAll}
                 className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition-colors">
-                {copiedPath === "__all__" ? "복사됨 ✓" : "전체 복사"}
+                {copiedPath === "__all__" ? t.exportPage.copiedAll : t.exportPage.copyAll}
               </button>
               <button onClick={() => downloadMarkdownBundle(result.bundle.files, project.name)}
                 className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors">
-                MD 묶음
+                {t.exportPage.mdBundle}
               </button>
             </div>
           </div>
 
           {/* Step-by-step guide */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">사용 방법</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t.exportPage.howToTitle}</p>
             <ol className="space-y-2 text-sm text-gray-600">
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">1.</span><span><strong>zip 다운로드</strong>를 클릭해서 패키지를 내려받으세요.</span></li>
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">2.</span><span>Claude Code 또는 Codex <strong>작업 폴더</strong>에 압축을 푸세요.</span></li>
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">3.</span><span><strong>CLAUDE_CODE_PROMPT.md</strong> 또는 <strong>CODEX_PROMPT.md</strong> 내용을 붙여넣으세요.</span></li>
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">4.</span><span>개발 AI가 작업한 뒤, <strong>아래 결과 기록</strong> 섹션에 어떻게 됐는지 남겨주세요.</span></li>
+              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">1.</span><span>{t.exportPage.step1}</span></li>
+              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">2.</span><span>{t.exportPage.step2}</span></li>
+              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">3.</span><span>{t.exportPage.step3}</span></li>
+              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">4.</span><span>{t.exportPage.step4}</span></li>
             </ol>
           </div>
 
           {/* File browser */}
           <div className="flex gap-4 h-[500px]">
             <div className="w-48 flex-shrink-0 bg-white rounded-xl border border-gray-200 overflow-y-auto">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 border-b border-gray-100">파일 목록</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 border-b border-gray-100">{t.exportPage.fileList}</p>
               <ul className="py-1">
                 {result.bundle.files.map((f) => (
                   <li key={f.path}>
@@ -503,14 +513,14 @@ export default function ExportPage() {
                     <span className="text-xs font-mono text-gray-500">{currentFile.path}</span>
                     <button onClick={() => handleCopy(currentFile.path, currentFile.content)}
                       className="text-xs px-3 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
-                      {copiedPath === currentFile.path ? "복사됨 ✓" : "복사"}
+                      {copiedPath === currentFile.path ? t.exportPage.copied : t.exportPage.copy}
                     </button>
                   </div>
                   <pre className="flex-1 overflow-auto p-4 text-xs text-gray-700 font-mono leading-relaxed whitespace-pre-wrap">{currentFile.content}</pre>
                 </>
               ) : (
                 <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-gray-400">파일을 선택하세요.</p>
+                  <p className="text-sm text-gray-400">{t.exportPage.selectFile}</p>
                 </div>
               )}
             </div>
@@ -564,16 +574,17 @@ function OutcomeRecorder({
   onNoteChange: (n: string) => void;
   onSave: () => void;
 }) {
+  const { t } = useI18n();
   const isSaved = savePhase === "saved_remote" || savePhase === "saved_local";
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h2 className="text-sm font-semibold text-gray-800 mb-1">개발 AI에 넘긴 뒤 결과 기록하기</h2>
+      <h2 className="text-sm font-semibold text-gray-800 mb-1">{t.exportPage.recordTitle}</h2>
       <div className="flex items-start gap-4 mb-4 text-xs text-gray-500">
-        <span>대상: <strong>{TARGET_LABEL[target]}</strong></span>
-        <span>포함 항목: <strong>{selectedItemCount}개</strong></span>
+        <span>{t.exportPage.target} <strong>{TARGET_LABEL[target]}</strong></span>
+        <span><strong>{t.exportPage.outcomeItems.replace("{n}", String(selectedItemCount))}</strong></span>
         {selectedItemTitles.length > 0 && (
           <span className="truncate hidden sm:inline">
-            ({selectedItemTitles.slice(0, 2).join(", ")}{selectedItemTitles.length > 2 ? " 외" : ""})
+            ({selectedItemTitles.slice(0, 2).join(", ")}{selectedItemTitles.length > 2 ? t.exportPage.andMore : ""})
           </span>
         )}
       </div>
@@ -581,8 +592,8 @@ function OutcomeRecorder({
       {isSaved ? (
         <p className={`text-sm rounded-lg px-4 py-3 border ${savePhase === "saved_remote" ? "text-green-700 bg-green-50 border-green-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}>
           {savePhase === "saved_remote"
-            ? "✓ 결과 기록이 저장됐어요."
-            : "⚠ 연결 문제로 이 기기에만 임시 저장됐어요."}
+            ? t.exportPage.savedRemote
+            : t.exportPage.savedLocal}
         </p>
       ) : (
         <>
@@ -590,20 +601,20 @@ function OutcomeRecorder({
             {OUTCOME_OPTIONS.map((opt) => (
               <button key={opt.value} onClick={() => onStatusChange(opt.value)}
                 className={`text-sm px-4 py-2 rounded-lg border font-medium transition-all ${outcomeStatus === opt.value ? opt.activeColor : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
-                {opt.label}
+                {outcomeLabel(t, opt.value)}
               </button>
             ))}
           </div>
           <textarea
             value={outcomeNote}
             onChange={(e) => onNoteChange(e.target.value)}
-            placeholder="어떤 점이 잘 됐나요? 어떤 점이 안 됐나요? (선택사항)"
+            placeholder={t.exportPage.notePlaceholder}
             rows={2}
             className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
           />
           <button onClick={onSave} disabled={!outcomeStatus || savePhase === "saving"}
             className="text-sm px-4 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            {savePhase === "saving" ? "저장 중..." : "기록하기"}
+            {savePhase === "saving" ? t.exportPage.saving : t.exportPage.save}
           </button>
         </>
       )}
@@ -618,32 +629,31 @@ function OutcomeHistory({
   outcomes: (BuilderPackOutcome | RemoteOutcome)[];
   projectId: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h2 className="text-sm font-semibold text-gray-800 mb-3">이전 기록</h2>
+      <h2 className="text-sm font-semibold text-gray-800 mb-3">{t.exportPage.historyTitle}</h2>
       <div className="space-y-2">
         {outcomes.slice(0, 10).map((oc) => (
           <div key={oc.id} className="flex items-start gap-3 text-xs text-gray-600 py-2 border-b border-gray-50 last:border-0">
             <span className="text-gray-400 flex-shrink-0 w-32">{formatDate(oc.createdAt)}</span>
             <span className="flex-shrink-0">{TARGET_LABEL[oc.target]}</span>
-            <span className="flex-shrink-0 text-gray-400">{oc.selectedItemIds.length}개 항목</span>
+            <span className="flex-shrink-0 text-gray-400">{t.exportPage.itemsCount.replace("{n}", String(oc.selectedItemIds.length))}</span>
             <span className={`flex-shrink-0 font-medium ${oc.outcome === "worked" ? "text-green-600" : oc.outcome === "partial" ? "text-amber-600" : oc.outcome === "failed" ? "text-red-600" : "text-gray-400"}`}>
-              {OUTCOME_LABEL[oc.outcome]}
+              {outcomeLabel(t, oc.outcome)}
             </span>
             {oc.note && <span className="text-gray-400 truncate flex-1">{oc.note}</span>}
             <Link
               href={`/projects/${projectId}/checks`}
-              title="제품 설명서 기준으로 다시 확인합니다. 아직 GitHub 코드 확인은 아니에요."
+              title={t.exportPage.recheckTooltip}
               className="flex-shrink-0 text-indigo-500 hover:text-indigo-700 font-medium"
             >
-              다시 확인
+              {t.exportPage.recheck}
             </Link>
           </div>
         ))}
       </div>
-      <p className="text-xs text-gray-400 mt-3">
-        &ldquo;다시 확인&rdquo;은 제품 설명서 기준의 사전 점검입니다. 아직 GitHub 코드 확인은 아니에요.
-      </p>
+      <p className="text-xs text-gray-400 mt-3">{t.exportPage.historyNote}</p>
     </div>
   );
 }

@@ -12,12 +12,8 @@ import {
   type TopUpRequest,
   type CreditType,
 } from "@/lib/workspace-credits-api";
-
-const STATUS_LABELS: Record<string, string> = {
-  requested: "요청됨",
-  fulfilled: "지급됨",
-  rejected: "거절됨",
-};
+import { useI18n } from "@/i18n/I18nProvider";
+import type { Dictionary } from "@/i18n/dictionary.mjs";
 
 const STATUS_COLORS: Record<string, string> = {
   requested: "text-amber-600 bg-amber-50 border-amber-200",
@@ -25,15 +21,24 @@ const STATUS_COLORS: Record<string, string> = {
   rejected: "text-red-600 bg-red-50 border-red-200",
 };
 
+function statusLabel(t: Dictionary, status: string): string {
+  if (status === "requested") return t.creditsPage.statusRequested;
+  if (status === "fulfilled") return t.creditsPage.statusFulfilled;
+  if (status === "rejected") return t.creditsPage.statusRejected;
+  return status;
+}
+
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
   return (
     <span className={`inline-block px-2 py-0.5 text-xs rounded border ${STATUS_COLORS[status] ?? "text-gray-500 bg-gray-50 border-gray-200"}`}>
-      {STATUS_LABELS[status] ?? status}
+      {statusLabel(t, status)}
     </span>
   );
 }
 
 export default function CreditsPage() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const userKey = getUserKey();
 
@@ -58,10 +63,10 @@ export default function CreditsPage() {
       setCredits(data);
       setCreditsPhase("done");
     } catch (e) {
-      setCreditsError(e instanceof Error ? e.message : "알 수 없는 오류");
+      setCreditsError(e instanceof Error ? e.message : t.creditsPage.unknownError);
       setCreditsPhase("error");
     }
-  }, [userKey]);
+  }, [userKey, t]);
 
   const loadRequests = useCallback(async () => {
     if (!userKey) return;
@@ -99,7 +104,7 @@ export default function CreditsPage() {
       await Promise.all([loadCredits(), loadRequests()]);
       setSubmitPhase("idle");
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : "요청 실패");
+      setSubmitError(e instanceof Error ? e.message : t.creditsPage.requestFailed);
       setSubmitPhase("error");
     }
   };
@@ -112,25 +117,22 @@ export default function CreditsPage() {
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       {/* Back link */}
       <div className="flex items-center gap-2">
-        <Link href={`/projects/${id}/github`} className="text-sm text-blue-600 hover:underline">
-          ← PR 확인으로 돌아가기
+        <Link href={`/projects/${id}/github`} className="text-sm text-indigo-600 hover:underline">
+          {t.creditsPage.back}
         </Link>
       </div>
 
-      <h1 className="text-2xl font-bold text-gray-900">Credit</h1>
-      <p className="text-sm text-gray-500">
-        Review credit 잔액과 이번 달 무료 제공량을 확인하고, 충전 요청을 보낼 수 있어요.
-        현재는 관리자가 확인 후 수동으로 지급합니다.
-      </p>
+      <h1 className="text-2xl font-bold text-gray-900">{t.creditsPage.title}</h1>
+      <p className="text-sm text-gray-500">{t.creditsPage.intro}</p>
 
       {/* Balance section */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-700 text-sm">Credit 잔액</h2>
+          <h2 className="font-semibold text-gray-700 text-sm">{t.creditsPage.balanceTitle}</h2>
         </div>
         <div className="p-5">
           {creditsPhase === "loading" && (
-            <p className="text-sm text-gray-400">불러오는 중…</p>
+            <p className="text-sm text-gray-400">{t.creditsPage.loading}</p>
           )}
           {creditsPhase === "error" && (
             <p className="text-sm text-red-500">{creditsError}</p>
@@ -138,37 +140,41 @@ export default function CreditsPage() {
           {creditsPhase === "done" && credits && (
             <div className="space-y-4">
               <div className="flex items-baseline gap-3">
-                <span className="text-4xl font-bold text-blue-700">{reviewBalance}</span>
-                <span className="text-sm text-gray-500">Review credit</span>
+                <span className="text-4xl font-bold text-indigo-700">{reviewBalance}</span>
+                <span className="text-sm text-gray-500">{t.creditsPage.reviewCredit}</span>
               </div>
 
               {allowance && (
                 <div className="bg-gray-50 rounded-lg p-4 space-y-1.5 text-sm">
                   <div className="flex justify-between text-gray-600">
-                    <span>이번 달 무료 제공량</span>
+                    <span>{t.creditsPage.freeThisMonth}</span>
                     <span className="font-medium">
-                      {allowance.usedThisPeriod} / {allowance.includedRuns}회 사용
+                      {t.creditsPage.usedOfRuns
+                        .replace("{used}", String(allowance.usedThisPeriod))
+                        .replace("{included}", String(allowance.includedRuns))}
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-blue-500 h-2 rounded-full transition-all"
+                      className="bg-indigo-500 h-2 rounded-full transition-all"
                       style={{ width: `${Math.min(100, (allowance.usedThisPeriod / allowance.includedRuns) * 100)}%` }}
                     />
                   </div>
                   <p className="text-gray-500">
                     {allowance.remainingIncludedRuns > 0
-                      ? `남은 무료 횟수: ${allowance.remainingIncludedRuns}회 (${allowance.periodKey})`
-                      : `이번 달 무료 제공량 모두 사용 (${allowance.periodKey})`}
+                      ? t.creditsPage.remainingRuns
+                          .replace("{n}", String(allowance.remainingIncludedRuns))
+                          .replace("{period}", allowance.periodKey)
+                      : t.creditsPage.noRemainingRuns.replace("{period}", allowance.periodKey)}
                   </p>
                 </div>
               )}
 
               {credits.actualDebitsEnabled && (
-                <p className="text-xs text-blue-600">
+                <p className="text-xs text-indigo-600">
                   {credits.actualDebitAllowedForUser
-                    ? "현재 계정은 실제 credit 차감 대상입니다."
-                    : "현재 계정은 dry-run 모드로 동작합니다. 실제 차감이 없어요."}
+                    ? t.creditsPage.actualDebitOn
+                    : t.creditsPage.dryRunMode}
                 </p>
               )}
             </div>
@@ -179,29 +185,27 @@ export default function CreditsPage() {
       {/* Top-up request form */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="bg-gray-50 px-5 py-3 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-700 text-sm">Credit 충전 요청</h2>
+          <h2 className="font-semibold text-gray-700 text-sm">{t.creditsPage.topUpTitle}</h2>
         </div>
         <div className="p-5">
           {reviewBalance === 0 && creditsPhase === "done" && (
             <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg px-4 py-3">
-              <p className="text-sm text-amber-700 font-medium">Credit이 부족해요</p>
-              <p className="text-xs text-amber-600 mt-0.5">
-                무료 제공량을 모두 사용하셨거나 잔액이 없습니다. 충전 요청을 보내주세요.
-              </p>
+              <p className="text-sm text-amber-700 font-medium">{t.creditsPage.lowBalanceTitle}</p>
+              <p className="text-xs text-amber-600 mt-0.5">{t.creditsPage.lowBalanceDesc}</p>
             </div>
           )}
 
           {openRequests >= 3 ? (
-            <div className="border border-blue-200 bg-blue-50 rounded-lg px-4 py-3">
-              <p className="text-sm text-blue-700">
-                이미 {openRequests}개의 충전 요청이 처리 대기 중이에요. 완료 후 새 요청을 보낼 수 있어요.
+            <div className="border border-indigo-200 bg-indigo-50 rounded-lg px-4 py-3">
+              <p className="text-sm text-indigo-700">
+                {t.creditsPage.pendingRequests.replace("{n}", String(openRequests))}
               </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">
-                  요청 금액 (1–100 Review credit)
+                  {t.creditsPage.amountLabel}
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -213,19 +217,19 @@ export default function CreditsPage() {
                     className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm"
                     required
                   />
-                  <span className="text-sm text-gray-500">Review credit</span>
+                  <span className="text-sm text-gray-500">{t.creditsPage.reviewCredit}</span>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm text-gray-600 mb-1">
-                  메모 (선택)
+                  {t.creditsPage.noteLabel}
                 </label>
                 <textarea
                   value={formNote}
                   onChange={(e) => setFormNote(e.target.value)}
                   rows={2}
-                  placeholder="용도나 요청 배경을 적어주세요 (선택사항)"
+                  placeholder={t.creditsPage.notePlaceholder}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none"
                   maxLength={300}
                 />
@@ -238,9 +242,9 @@ export default function CreditsPage() {
               <button
                 type="submit"
                 disabled={submitPhase === "submitting"}
-                className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
               >
-                {submitPhase === "submitting" ? "요청 중…" : "충전 요청 보내기"}
+                {submitPhase === "submitting" ? t.creditsPage.submitting : t.creditsPage.submit}
               </button>
             </form>
           )}
@@ -250,20 +254,20 @@ export default function CreditsPage() {
       {/* Request history */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="bg-gray-50 px-5 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-700 text-sm">최근 충전 요청 현황</h2>
+          <h2 className="font-semibold text-gray-700 text-sm">{t.creditsPage.historyTitle}</h2>
           <button
             onClick={loadRequests}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs text-indigo-600 hover:underline"
           >
-            새로고침
+            {t.creditsPage.refresh}
           </button>
         </div>
         <div className="p-5">
           {requestsPhase === "loading" && (
-            <p className="text-sm text-gray-400">불러오는 중…</p>
+            <p className="text-sm text-gray-400">{t.creditsPage.loading}</p>
           )}
           {requestsPhase === "done" && requests.length === 0 && (
-            <p className="text-sm text-gray-400">충전 요청 내역이 없어요.</p>
+            <p className="text-sm text-gray-400">{t.creditsPage.noRequests}</p>
           )}
           {requestsPhase === "done" && requests.length > 0 && (
             <div className="space-y-3">
@@ -274,10 +278,10 @@ export default function CreditsPage() {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-blue-700">
+                      <span className="font-mono text-sm font-semibold text-indigo-700">
                         +{req.requestedAmount}
                       </span>
-                      <span className="text-xs text-gray-500">Review credit</span>
+                      <span className="text-xs text-gray-500">{t.creditsPage.reviewCredit}</span>
                     </div>
                     <StatusBadge status={req.status} />
                   </div>
@@ -285,11 +289,11 @@ export default function CreditsPage() {
                     <p className="text-xs text-gray-500 mt-1">{req.note}</p>
                   )}
                   {req.adminNote && (
-                    <p className="text-xs text-blue-600 mt-1">관리자 메모: {req.adminNote}</p>
+                    <p className="text-xs text-indigo-600 mt-1">{t.creditsPage.adminNote} {req.adminNote}</p>
                   )}
                   <p className="text-xs text-gray-400 mt-1">
                     {req.createdAt.slice(0, 10)}
-                    {req.resolvedAt && ` → ${req.resolvedAt.slice(0, 10)} 처리`}
+                    {req.resolvedAt && ` → ${req.resolvedAt.slice(0, 10)} ${t.creditsPage.resolved}`}
                   </p>
                 </div>
               ))}
@@ -299,10 +303,7 @@ export default function CreditsPage() {
       </div>
 
       {/* Footer note */}
-      <p className="text-xs text-gray-400 text-center">
-        Credit 충전 요청 후 관리자가 확인하면 지급됩니다.
-        현재는 결제 없이 관리자가 수동으로 처리합니다.
-      </p>
+      <p className="text-xs text-gray-400 text-center">{t.creditsPage.footer}</p>
     </div>
   );
 }
