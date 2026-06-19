@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/i18n/I18nProvider";
+import type { Dictionary } from "@/i18n/dictionary.mjs";
 import {
   fetchCreditBalances,
   fetchCreditLedger,
@@ -30,30 +32,47 @@ import {
   type AdminTopUpRequest,
 } from "@/lib/workspace-admin-credits-api";
 
-const RANGE_LABELS: Record<UsageRange, string> = {
-  "24h": "최근 24시간",
-  "7d": "최근 7일",
-  "30d": "최근 30일",
-};
+function rangeLabel(t: Dictionary, v: UsageRange): string {
+  if (v === "24h") return t.adminCredits.range24h;
+  if (v === "7d") return t.adminCredits.range7d;
+  return t.adminCredits.range30d;
+}
 
-const CREDIT_TYPE_LABELS: Record<CreditType, string> = {
-  review: "리뷰 크레딧",
-  fix: "Fix 크레딧",
-  workspace: "워크스페이스 크레딧",
-};
+function creditTypeLabel(t: Dictionary, v: CreditType): string {
+  if (v === "review") return t.adminCredits.creditTypeReview;
+  if (v === "fix") return t.adminCredits.creditTypeFix;
+  return t.adminCredits.creditTypeWorkspace;
+}
 
-const DIRECTION_LABELS: Record<string, string> = {
-  grant: "지급",
-  debit: "차감",
-  adjustment: "조정",
-  preview: "미리보기",
-  preview_debit: "예상 차감",
-};
+function directionLabel(t: Dictionary, v: string): string {
+  if (v === "grant") return t.adminCredits.directionGrant;
+  if (v === "debit") return t.adminCredits.directionDebit;
+  if (v === "adjustment") return t.adminCredits.directionAdjustment;
+  if (v === "preview") return t.adminCredits.directionPreview;
+  if (v === "preview_debit") return t.adminCredits.directionPreviewDebit;
+  return v;
+}
 
-const STATUS_LABELS: Record<string, string> = {
-  applied: "적용됨",
-  failed: "실패",
-  pending: "대기 중",
+function statusLabelText(t: Dictionary, v: string | null | undefined): string {
+  if (v === "applied") return t.adminCredits.statusApplied;
+  if (v === "failed") return t.adminCredits.statusFailed;
+  if (v === "pending") return t.adminCredits.statusPending;
+  return v ?? "—";
+}
+
+function checkStatusLabel(t: Dictionary, v: string): string {
+  if (v === "passed") return t.adminCredits.checkPassed;
+  if (v === "warning") return t.adminCredits.checkWarning;
+  if (v === "manual") return t.adminCredits.checkManual;
+  if (v === "blocked") return t.adminCredits.checkBlocked;
+  return v;
+}
+
+const CHECK_STATUS_STYLES: Record<string, string> = {
+  passed: "bg-green-100 text-green-700",
+  warning: "bg-amber-100 text-amber-700",
+  manual: "bg-gray-100 text-gray-600",
+  blocked: "bg-red-100 text-red-700",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -79,22 +98,23 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 }
 
 function BalanceTable({ balances }: { balances: CreditBalance[] }) {
+  const { t } = useI18n();
   if (balances.length === 0)
-    return <p className="text-sm text-gray-500">잔액 없음.</p>;
+    return <p className="text-sm text-gray-500">{t.adminCredits.noBalance}</p>;
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b">
-          <th className="text-left py-1 text-gray-500 font-medium">크레딧 유형</th>
-          <th className="text-right py-1 text-gray-500 font-medium">잔액</th>
-          <th className="text-right py-1 text-gray-500 font-medium">마지막 업데이트</th>
+          <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colCreditType}</th>
+          <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colBalance}</th>
+          <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colLastUpdated}</th>
         </tr>
       </thead>
       <tbody>
         {balances.map((b) => (
           <tr key={b.creditType} className="border-b last:border-0">
-            <td className="py-1">{CREDIT_TYPE_LABELS[b.creditType] ?? b.creditType}</td>
-            <td className="py-1 text-right font-mono font-bold text-blue-700">{b.balance}</td>
+            <td className="py-1">{creditTypeLabel(t, b.creditType)}</td>
+            <td className="py-1 text-right font-mono font-bold text-indigo-700">{b.balance}</td>
             <td className="py-1 text-right text-gray-400">{b.updatedAt.slice(0, 10)}</td>
           </tr>
         ))}
@@ -104,24 +124,25 @@ function BalanceTable({ balances }: { balances: CreditBalance[] }) {
 }
 
 function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
+  const { t } = useI18n();
   if (entries.length === 0)
-    return <p className="text-sm text-gray-500">장부 내역 없음.</p>;
+    return <p className="text-sm text-gray-500">{t.adminCredits.noLedger}</p>;
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b">
-          <th className="text-left py-1 text-gray-500 font-medium">유형</th>
-          <th className="text-left py-1 text-gray-500 font-medium">방향</th>
-          <th className="text-left py-1 text-gray-500 font-medium">상태</th>
-          <th className="text-right py-1 text-gray-500 font-medium">금액</th>
-          <th className="text-left py-1 text-gray-500 font-medium pl-3">사유</th>
-          <th className="text-right py-1 text-gray-500 font-medium">날짜</th>
+          <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colType}</th>
+          <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colDirection}</th>
+          <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colStatus}</th>
+          <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colAmount}</th>
+          <th className="text-left py-1 text-gray-500 font-medium pl-3">{t.adminCredits.colReason}</th>
+          <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colDate}</th>
         </tr>
       </thead>
       <tbody>
         {entries.map((e) => (
           <tr key={e.id} className="border-b last:border-0">
-            <td className="py-1">{CREDIT_TYPE_LABELS[e.creditType] ?? e.creditType}</td>
+            <td className="py-1">{creditTypeLabel(t, e.creditType)}</td>
             <td className="py-1">
               <span
                 className={
@@ -132,7 +153,7 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
                     : "text-gray-500"
                 }
               >
-                {DIRECTION_LABELS[e.direction] ?? e.direction}
+                {directionLabel(t, e.direction)}
               </span>
             </td>
             <td className="py-1">
@@ -147,7 +168,7 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
                     : "text-gray-400"
                 }
               >
-                {STATUS_LABELS[e.status] ?? e.status ?? "—"}
+                {statusLabelText(t, e.status)}
               </span>
             </td>
             <td className="py-1 text-right font-mono">{e.amount}</td>
@@ -161,29 +182,31 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
 }
 
 function EnforcementSummaryBanner({ ep }: { ep: EnforcementPreview }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-      <span className="text-amber-700 font-medium text-sm">Dry-run — 실제 차감 없음</span>
+      <span className="text-amber-700 font-medium text-sm">{t.adminCredits.dryRunNoDebit}</span>
       <span className="text-xs text-amber-600">
-        차감 시 credit 부족 예상: <strong>{ep.wouldBlockCount}</strong> / {ep.checkedEventCount}건
+        {t.adminCredits.estInsufficientPrefix}<strong>{ep.wouldBlockCount}</strong>{t.adminCredits.estInsufficientSuffix.replace("{n}", String(ep.checkedEventCount))}
       </span>
     </div>
   );
 }
 
 function LedgerPreviewTable({ entries }: { entries: CreditLedgerPreviewEntry[] }) {
+  const { t } = useI18n();
   if (entries.length === 0)
-    return <p className="text-sm text-gray-500">billable 예상 항목 없음.</p>;
+    return <p className="text-sm text-gray-500">{t.adminCredits.noBillablePreview}</p>;
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b">
-          <th className="text-left py-1 text-gray-500 font-medium">사용자</th>
-          <th className="text-left py-1 text-gray-500 font-medium">이벤트</th>
-          <th className="text-right py-1 text-gray-500 font-medium">예상 차감</th>
-          <th className="text-right py-1 text-gray-500 font-medium">현재 잔액</th>
-          <th className="text-right py-1 text-gray-500 font-medium">차감 후 잔액</th>
-          <th className="text-left py-1 text-gray-500 font-medium pl-3">차단 여부</th>
+          <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colUser}</th>
+          <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colEvent}</th>
+          <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colEstDebit}</th>
+          <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colCurrentBalance}</th>
+          <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colBalanceAfterDebit}</th>
+          <th className="text-left py-1 text-gray-500 font-medium pl-3">{t.adminCredits.colBlocked}</th>
         </tr>
       </thead>
       <tbody>
@@ -196,9 +219,9 @@ function LedgerPreviewTable({ entries }: { entries: CreditLedgerPreviewEntry[] }
             <td className="py-1 text-right font-mono">{e.balance.wouldHaveRemainingBalance}</td>
             <td className="py-1 pl-3">
               {e.balance.wouldBlockIfEnforced ? (
-                <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">credit 부족 예상</span>
+                <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{t.adminCredits.creditShortfallExpected}</span>
               ) : (
-                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">충분</span>
+                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{t.adminCredits.sufficient}</span>
               )}
             </td>
           </tr>
@@ -221,17 +244,18 @@ function PendingCleanupTable({
   onMarkFailed: (id: string) => void;
   loading: boolean;
 }) {
+  const { t } = useI18n();
   if (entries.length === 0)
-    return <p className="text-sm text-green-700 font-medium">오래된 pending 항목 없음 ✓</p>;
+    return <p className="text-sm text-green-700 font-medium">{t.adminCredits.noOldPending}</p>;
   return (
     <div className="space-y-3">
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-700">
-        이 작업은 balance를 변경하지 않습니다. pending 상태를 failed로 표시해 운영상 정리하는 작업입니다.
+        {t.adminCredits.pendingNoBalanceChange}
       </div>
       <div className="flex gap-2 items-center">
         <input
           type="text"
-          placeholder="Admin 정리 사유 (예: Worker timeout cleanup)"
+          placeholder={t.adminCredits.adminReasonPlaceholder}
           value={adminReason}
           onChange={(e) => onAdminReasonChange(e.target.value)}
           className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
@@ -243,10 +267,10 @@ function PendingCleanupTable({
             <tr className="border-b">
               <th className="text-left py-1 text-gray-500 font-medium">ID</th>
               <th className="text-left py-1 text-gray-500 font-medium">userKey</th>
-              <th className="text-right py-1 text-gray-500 font-medium">금액</th>
-              <th className="text-right py-1 text-gray-500 font-medium">경과(분)</th>
+              <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colAmount}</th>
+              <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colAgeMinutes}</th>
               <th className="text-left py-1 text-gray-500 font-medium pl-2">sourceEventId</th>
-              <th className="text-left py-1 text-gray-500 font-medium pl-2">생성일시</th>
+              <th className="text-left py-1 text-gray-500 font-medium pl-2">{t.adminCredits.colCreatedAt}</th>
               <th className="py-1" />
             </tr>
           </thead>
@@ -258,7 +282,7 @@ function PendingCleanupTable({
                 <td className="py-1 text-right font-mono font-bold text-amber-700">{e.amount}</td>
                 <td className="py-1 text-right">
                   <span className={`text-xs px-1.5 py-0.5 rounded ${e.ageMinutes >= 60 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-                    {e.ageMinutes}분
+                    {t.adminCredits.ageMinutesSuffix.replace("{n}", String(e.ageMinutes))}
                   </span>
                 </td>
                 <td className="py-1 pl-2 font-mono text-xs text-gray-500 max-w-xs truncate">{e.sourceEventId ?? "—"}</td>
@@ -269,7 +293,7 @@ function PendingCleanupTable({
                     disabled={loading}
                     className="bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700 disabled:opacity-50"
                   >
-                    failed 처리
+                    {t.adminCredits.markFailed}
                   </button>
                 </td>
               </tr>
@@ -281,21 +305,8 @@ function PendingCleanupTable({
   );
 }
 
-const CHECK_STATUS_STYLES: Record<string, string> = {
-  passed: "bg-green-100 text-green-700",
-  warning: "bg-amber-100 text-amber-700",
-  manual: "bg-gray-100 text-gray-600",
-  blocked: "bg-red-100 text-red-700",
-};
-
-const CHECK_STATUS_LABELS: Record<string, string> = {
-  passed: "통과",
-  warning: "주의",
-  manual: "수동 확인",
-  blocked: "차단됨",
-};
-
 function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistResponse }) {
+  const { t } = useI18n();
   const { productionSafety, requiredChecks, recommendedScenarios, productionEnableCriteria } = data;
 
   return (
@@ -306,27 +317,27 @@ function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistRe
       >
         <p className={`text-sm font-medium ${productionSafety.safeForProductionDefault ? "text-green-700" : "text-red-700"}`}>
           {productionSafety.safeForProductionDefault
-            ? "프로덕션 기본 안전 상태 — 두 flag 모두 비활성"
-            : "경고: 프로덕션 flag 활성 상태 — 실제 차감/차단 가능"}
+            ? t.adminCredits.prodSafeDefault
+            : t.adminCredits.prodWarningFlagsActive}
         </p>
         <div className="flex gap-4 mt-1 text-xs">
           <span className={productionSafety.actualDebitsEnabled ? "text-red-600 font-medium" : "text-gray-500"}>
-            ACTUAL_DEBITS: {productionSafety.actualDebitsEnabled ? "true (활성)" : "false (비활성)"}
+            ACTUAL_DEBITS: {productionSafety.actualDebitsEnabled ? t.adminCredits.flagActive : t.adminCredits.flagInactive}
           </span>
           <span className={productionSafety.blockingEnabled ? "text-red-600 font-medium" : "text-gray-500"}>
-            BLOCKING: {productionSafety.blockingEnabled ? "true (활성)" : "false (비활성)"}
+            BLOCKING: {productionSafety.blockingEnabled ? t.adminCredits.flagActive : t.adminCredits.flagInactive}
           </span>
         </div>
       </div>
 
       {/* Required checks */}
       <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">필수 확인 항목</p>
+        <p className="text-xs font-medium text-gray-500 mb-2">{t.adminCredits.requiredChecksTitle}</p>
         <div className="space-y-2">
           {requiredChecks.map((check: RolloutCheck) => (
             <div key={check.id} className="flex gap-3 items-start">
               <span className={`text-xs px-2 py-0.5 rounded shrink-0 mt-0.5 ${CHECK_STATUS_STYLES[check.status] ?? "bg-gray-100 text-gray-600"}`}>
-                {CHECK_STATUS_LABELS[check.status] ?? check.status}
+                {checkStatusLabel(t, check.status)}
               </span>
               <div>
                 <p className="text-sm font-medium text-gray-700">{check.label}</p>
@@ -339,7 +350,7 @@ function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistRe
 
       {/* Recommended scenarios */}
       <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">권장 시나리오</p>
+        <p className="text-xs font-medium text-gray-500 mb-2">{t.adminCredits.recommendedScenariosTitle}</p>
         <div className="space-y-2">
           {recommendedScenarios.map((s) => (
             <div key={s.id} className="border border-gray-200 rounded-lg px-3 py-2">
@@ -357,7 +368,7 @@ function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistRe
 
       {/* Production enable criteria */}
       <div>
-        <p className="text-xs font-medium text-gray-500 mb-2">프로덕션 활성화 전 확인 기준</p>
+        <p className="text-xs font-medium text-gray-500 mb-2">{t.adminCredits.prodEnableCriteriaTitle}</p>
         <ul className="space-y-1">
           {productionEnableCriteria.map((criterion, i) => (
             <li key={i} className="flex gap-2 text-xs text-gray-600">
@@ -372,42 +383,43 @@ function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistRe
 }
 
 function PreviewTable({ preview }: { preview: PreviewResult }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-3">
       {preview.enforcementPreview ? (
         <EnforcementSummaryBanner ep={preview.enforcementPreview} />
       ) : (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-          <span className="text-amber-700 font-medium text-sm">Dry-run 미리보기 — 실제 차감 없음 (actualDebitsEnabled: false)</span>
+          <span className="text-amber-700 font-medium text-sm">{t.adminCredits.dryRunPreviewNoDebit}</span>
         </div>
       )}
 
       {preview.allowanceSummary && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-xs text-blue-700 flex gap-6">
-          <span>무료 커버: <strong>{preview.allowanceSummary.totalCoveredByAllowance}</strong>회</span>
-          <span>과금 후보: <strong>{preview.allowanceSummary.totalBillableAfterAllowance}</strong>회</span>
-          <span className="text-blue-500">{preview.allowanceSummary.rule}</span>
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2 text-xs text-indigo-700 flex gap-6">
+          <span>{t.adminCredits.allowanceFreeCover}<strong>{preview.allowanceSummary.totalCoveredByAllowance}</strong>{t.adminCredits.allowanceFreeCoverSuffix.replace("{n}", "")}</span>
+          <span>{t.adminCredits.allowanceBillableCandidate}<strong>{preview.allowanceSummary.totalBillableAfterAllowance}</strong>{t.adminCredits.allowanceBillableCandidateSuffix.replace("{n}", "")}</span>
+          <span className="text-indigo-500">{preview.allowanceSummary.rule}</span>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="예상 차감 크레딧" value={preview.totalEstimatedCredits} />
-        <StatCard label="과금 후보 이벤트" value={preview.previewEntries.length} />
+        <StatCard label={t.adminCredits.estDebitCredits} value={preview.totalEstimatedCredits} />
+        <StatCard label={t.adminCredits.billableCandidateEvents} value={preview.previewEntries.length} />
       </div>
 
       {preview.previewEntries.length === 0 ? (
-        <p className="text-sm text-gray-500">과금 후보 이벤트 없음.</p>
+        <p className="text-sm text-gray-500">{t.adminCredits.noBillableEvents}</p>
       ) : (
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b">
-              <th className="text-left py-1 text-gray-500 font-medium">사용자</th>
-              <th className="text-left py-1 text-gray-500 font-medium">이벤트 유형</th>
-              <th className="text-left py-1 text-gray-500 font-medium">크레딧 유형</th>
-              <th className="text-right py-1 text-gray-500 font-medium">잔액</th>
-              <th className="text-right py-1 text-gray-500 font-medium">예상 차감</th>
-              <th className="text-left py-1 text-gray-500 font-medium pl-3">무료 제공량</th>
-              <th className="text-left py-1 text-gray-500 font-medium pl-3">부족 여부</th>
+              <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colUser}</th>
+              <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colEventType}</th>
+              <th className="text-left py-1 text-gray-500 font-medium">{t.adminCredits.colCreditType}</th>
+              <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colBalance}</th>
+              <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colEstDebit}</th>
+              <th className="text-left py-1 text-gray-500 font-medium pl-3">{t.adminCredits.colFreeAllowance}</th>
+              <th className="text-left py-1 text-gray-500 font-medium pl-3">{t.adminCredits.colShortfall}</th>
             </tr>
           </thead>
           <tbody>
@@ -415,7 +427,7 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
               <tr key={i} className="border-b last:border-0">
                 <td className="py-1 font-mono text-xs">{e.userKey}</td>
                 <td className="py-1 text-xs text-gray-600">{e.eventType}</td>
-                <td className="py-1">{CREDIT_TYPE_LABELS[e.creditType] ?? e.creditType}</td>
+                <td className="py-1">{creditTypeLabel(t, e.creditType)}</td>
                 <td className="py-1 text-right font-mono text-gray-500">
                   {e.currentBalance ?? "—"}
                 </td>
@@ -426,11 +438,11 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
                   {e.allowance ? (
                     e.allowance.coveredByAllowance ? (
                       <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                        무료 ({e.allowance.periodKey})
+                        {t.adminCredits.allowanceFree} ({e.allowance.periodKey})
                       </span>
                     ) : (
                       <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                        초과 ({e.allowance.usedBeforeThisEvent}/{e.allowance.includedRuns})
+                        {t.adminCredits.allowanceOver} ({e.allowance.usedBeforeThisEvent}/{e.allowance.includedRuns})
                       </span>
                     )
                   ) : (
@@ -439,9 +451,9 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
                 </td>
                 <td className="py-1 pl-3">
                   {e.wouldBlockIfEnforced === true ? (
-                    <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">credit 부족 예상</span>
+                    <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{t.adminCredits.creditShortfallExpectedShort}</span>
                   ) : e.wouldBlockIfEnforced === false ? (
-                    <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">credit 충분</span>
+                    <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{t.adminCredits.creditSufficient}</span>
                   ) : null}
                 </td>
               </tr>
@@ -452,7 +464,7 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
 
       {preview.ledgerPreview && preview.ledgerPreview.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-gray-600 mb-2">Ledger 미리보기 (실제 차감 없음)</h4>
+          <h4 className="text-xs font-semibold text-gray-600 mb-2">{t.adminCredits.ledgerPreviewTitle}</h4>
           <LedgerPreviewTable entries={preview.ledgerPreview} />
         </div>
       )}
@@ -461,33 +473,34 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
 }
 
 function MonthlyPreviewSection({ data }: { data: MonthlyCreditPreviewResult }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-4">
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-        <p className="text-sm font-semibold text-blue-800">
-          이 화면은 월 무료 제공량과 credit 차감을 시뮬레이션합니다. 실제 credit은 차감되지 않습니다.
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
+        <p className="text-sm font-semibold text-indigo-800">
+          {t.adminCredits.monthlySimNotice}
         </p>
-        <p className="text-xs text-blue-600 mt-0.5">
-          {data.month} · 무료 {data.allowanceRule.includedRuns}회/user · actualDebitsEnabled: false
+        <p className="text-xs text-indigo-600 mt-0.5">
+          {data.month} · {t.adminCredits.monthlyFreePerUser.replace("{n}", String(data.allowanceRule.includedRuns))} · actualDebitsEnabled: false
         </p>
       </div>
 
       {/* Per-user table */}
       <div>
-        <h4 className="text-xs font-semibold text-gray-600 mb-2">사용자별 (월 allowance 적용 후)</h4>
+        <h4 className="text-xs font-semibold text-gray-600 mb-2">{t.adminCredits.perUserTitle}</h4>
         {data.users.length === 0 ? (
-          <p className="text-sm text-gray-500">이 달에 PR 코드 확인 이벤트가 없습니다.</p>
+          <p className="text-sm text-gray-500">{t.adminCredits.noPrReviewEvents}</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
                 <th className="text-left py-1 text-gray-500 font-medium">userKey</th>
-                <th className="text-right py-1 text-gray-500 font-medium">PR 확인 수</th>
-                <th className="text-right py-1 text-gray-500 font-medium">무료 커버</th>
-                <th className="text-right py-1 text-gray-500 font-medium">credit 후보</th>
-                <th className="text-right py-1 text-gray-500 font-medium">예상 review credit</th>
-                <th className="text-right py-1 text-gray-500 font-medium">현재 잔액</th>
-                <th className="text-right py-1 text-gray-500 font-medium">차단됐을 실행</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colPrReviewCount}</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colFreeCover}</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colCreditCandidate}</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colEstReviewCredit}</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colCurrentBalance}</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colWouldBlockRuns}</th>
               </tr>
             </thead>
             <tbody>
@@ -501,7 +514,7 @@ function MonthlyPreviewSection({ data }: { data: MonthlyCreditPreviewResult }) {
                   <td className="py-1 text-right font-mono text-gray-500">{u.currentReviewBalance}</td>
                   <td className="py-1 text-right">
                     {u.wouldBlockCount > 0 ? (
-                      <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{u.wouldBlockCount}회</span>
+                      <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{t.adminCredits.countSuffix.replace("{n}", String(u.wouldBlockCount))}</span>
                     ) : (
                       <span className="text-xs text-gray-400">0</span>
                     )}
@@ -516,14 +529,14 @@ function MonthlyPreviewSection({ data }: { data: MonthlyCreditPreviewResult }) {
       {/* Per-project table */}
       {data.projects.length > 0 && (
         <div>
-          <h4 className="text-xs font-semibold text-gray-600 mb-2">프로젝트별 (user allowance 적용 후 비례 추정)</h4>
+          <h4 className="text-xs font-semibold text-gray-600 mb-2">{t.adminCredits.perProjectTitle}</h4>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
                 <th className="text-left py-1 text-gray-500 font-medium">projectId</th>
-                <th className="text-right py-1 text-gray-500 font-medium">PR 확인 수</th>
-                <th className="text-right py-1 text-gray-500 font-medium">credit 후보 (추정)</th>
-                <th className="text-right py-1 text-gray-500 font-medium">예상 review credit</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colPrReviewCount}</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colCreditCandidateEst}</th>
+                <th className="text-right py-1 text-gray-500 font-medium">{t.adminCredits.colEstReviewCredit}</th>
               </tr>
             </thead>
             <tbody>
@@ -546,6 +559,7 @@ function MonthlyPreviewSection({ data }: { data: MonthlyCreditPreviewResult }) {
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminCreditsPage() {
+  const { t } = useI18n();
   const [adminKey, setAdminKey] = useState("");
   const [userKey, setUserKey] = useState("");
   const [range, setRange] = useState<UsageRange>("7d");
@@ -603,7 +617,7 @@ export default function AdminCreditsPage() {
 
   async function handleFetchConfig() {
     if (!adminKey.trim()) {
-      setError("Admin key를 입력해주세요.");
+      setError(t.adminCredits.errAdminKeyRequired);
       return;
     }
     setLoading(true);
@@ -621,9 +635,9 @@ export default function AdminCreditsPage() {
   function handleKeyError(e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "disabled") {
-      setError("서버에 ADMIN_USAGE_STATS_KEY가 설정되지 않았습니다.");
+      setError(t.adminCredits.errDisabled);
     } else if (msg === "unauthorized") {
-      setError("Admin key가 올바르지 않습니다.");
+      setError(t.adminCredits.errUnauthorized);
     } else {
       setError(msg);
     }
@@ -631,7 +645,7 @@ export default function AdminCreditsPage() {
 
   async function handleFetchBalances() {
     if (!adminKey.trim() || !userKey.trim()) {
-      setError("Admin key와 userKey를 입력해주세요.");
+      setError(t.adminCredits.errAdminKeyAndUserKeyRequired);
       return;
     }
     setLoading(true);
@@ -648,7 +662,7 @@ export default function AdminCreditsPage() {
 
   async function handleFetchLedger() {
     if (!adminKey.trim() || !userKey.trim()) {
-      setError("Admin key와 userKey를 입력해주세요.");
+      setError(t.adminCredits.errAdminKeyAndUserKeyRequired);
       return;
     }
     setLoading(true);
@@ -665,7 +679,7 @@ export default function AdminCreditsPage() {
 
   async function handlePreview() {
     if (!adminKey.trim()) {
-      setError("Admin key를 입력해주세요.");
+      setError(t.adminCredits.errAdminKeyRequired);
       return;
     }
     setLoading(true);
@@ -686,7 +700,7 @@ export default function AdminCreditsPage() {
 
   async function handleMonthlyPreview() {
     if (!adminKey.trim()) {
-      setError("Admin key를 입력해주세요.");
+      setError(t.adminCredits.errAdminKeyRequired);
       return;
     }
     setLoading(true);
@@ -711,11 +725,11 @@ export default function AdminCreditsPage() {
     const reason = grantReason.trim();
     const amount = parseInt(grantAmount, 10);
 
-    if (!key) { setError("Admin key를 입력해주세요."); return; }
-    if (!uk) { setError("지급 대상 userKey를 입력해주세요."); return; }
-    if (!reason) { setError("지급 사유를 입력해주세요."); return; }
+    if (!key) { setError(t.adminCredits.errAdminKeyRequired); return; }
+    if (!uk) { setError(t.adminCredits.errGrantUserKeyRequired); return; }
+    if (!reason) { setError(t.adminCredits.errGrantReasonRequired); return; }
     if (!Number.isInteger(amount) || amount <= 0) {
-      setError("금액은 1 이상의 정수여야 합니다.");
+      setError(t.adminCredits.errAmountPositiveInteger);
       return;
     }
 
@@ -730,7 +744,10 @@ export default function AdminCreditsPage() {
         reason,
       });
       setGrantSuccess(
-        `지급 완료: ${uk} → ${CREDIT_TYPE_LABELS[result.balance.creditType]} ${result.balance.balance}개 (잔액)`,
+        t.adminCredits.grantSuccess
+          .replace("{user}", uk)
+          .replace("{type}", creditTypeLabel(t, result.balance.creditType))
+          .replace("{amount}", String(result.balance.balance)),
       );
       setGrantAmount("");
       setGrantReason("");
@@ -742,7 +759,7 @@ export default function AdminCreditsPage() {
   }
 
   async function handleFetchPendingLedger() {
-    if (!adminKey.trim()) { setError("Admin key를 입력해주세요."); return; }
+    if (!adminKey.trim()) { setError(t.adminCredits.errAdminKeyRequired); return; }
     setLoading(true);
     clearState();
     try {
@@ -759,14 +776,14 @@ export default function AdminCreditsPage() {
   }
 
   async function handleMarkFailed(entryId: string) {
-    if (!adminKey.trim()) { setError("Admin key를 입력해주세요."); return; }
+    if (!adminKey.trim()) { setError(t.adminCredits.errAdminKeyRequired); return; }
     const reason = pendingAdminReason.trim() || "manual admin cleanup";
     setLoading(true);
     setError(null);
     setMarkFailedSuccess(null);
     try {
       await markPendingFailed(adminKey.trim(), entryId, reason);
-      setMarkFailedSuccess(`failed 처리됨: ${entryId}`);
+      setMarkFailedSuccess(t.adminCredits.markFailedSuccess.replace("{id}", entryId));
       // Re-fetch to show updated state
       const minutes = parseInt(pendingMinutes, 10);
       const updated = await fetchPendingLedger(adminKey.trim(), {
@@ -781,7 +798,7 @@ export default function AdminCreditsPage() {
   }
 
   async function handleFetchTopUpRequests() {
-    if (!adminKey.trim()) { setError("Admin key를 입력해주세요."); return; }
+    if (!adminKey.trim()) { setError(t.adminCredits.errAdminKeyRequired); return; }
     setLoading(true);
     setError(null);
     setTopUpActionSuccess(null);
@@ -796,13 +813,18 @@ export default function AdminCreditsPage() {
   }
 
   async function handleFulfillTopUp(id: string) {
-    if (!adminKey.trim()) { setError("Admin key를 입력해주세요."); return; }
+    if (!adminKey.trim()) { setError(t.adminCredits.errAdminKeyRequired); return; }
     setLoading(true);
     setError(null);
     try {
       const adminNote = topUpAdminNotes[id]?.trim();
       const result = await fulfillAdminTopUpRequest(adminKey.trim(), id, adminNote);
-      setTopUpActionSuccess(`지급 완료: ${result.request.userKey} +${result.request.requestedAmount} → 잔액 ${result.newBalance}`);
+      setTopUpActionSuccess(
+        t.adminCredits.topUpFulfillSuccess
+          .replace("{user}", result.request.userKey)
+          .replace("{amount}", String(result.request.requestedAmount))
+          .replace("{balance}", String(result.newBalance)),
+      );
       const updated = await fetchAdminTopUpRequests(adminKey.trim(), topUpStatusFilter || undefined);
       setTopUpRequests(updated);
     } catch (e) {
@@ -813,13 +835,13 @@ export default function AdminCreditsPage() {
   }
 
   async function handleRejectTopUp(id: string) {
-    if (!adminKey.trim()) { setError("Admin key를 입력해주세요."); return; }
+    if (!adminKey.trim()) { setError(t.adminCredits.errAdminKeyRequired); return; }
     setLoading(true);
     setError(null);
     try {
       const adminNote = topUpAdminNotes[id]?.trim();
       await rejectAdminTopUpRequest(adminKey.trim(), id, adminNote);
-      setTopUpActionSuccess(`거절 처리됨: ${id}`);
+      setTopUpActionSuccess(t.adminCredits.topUpRejectSuccess.replace("{id}", id));
       const updated = await fetchAdminTopUpRequests(adminKey.trim(), topUpStatusFilter || undefined);
       setTopUpRequests(updated);
     } catch (e) {
@@ -831,7 +853,7 @@ export default function AdminCreditsPage() {
 
   async function handleFetchRolloutChecklist() {
     if (!adminKey.trim()) {
-      setError("Admin key를 입력해주세요.");
+      setError(t.adminCredits.errAdminKeyRequired);
       return;
     }
     setLoading(true);
@@ -849,34 +871,34 @@ export default function AdminCreditsPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Credit 관리</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{t.adminCredits.pageTitle}</h1>
         <p className="text-sm text-gray-500 mt-1">
-          운영자 전용 — 잔액 조회, 수동 지급, 장부 확인, Dry-run 미리보기
+          {t.adminCredits.pageIntro}
         </p>
       </div>
 
       {/* Auth */}
-      <SectionCard title="Admin Key">
+      <SectionCard title={t.adminCredits.adminKeySection}>
         <div className="flex gap-2">
           <input
             type="password"
-            placeholder="ADMIN_USAGE_STATS_KEY 입력"
+            placeholder={t.adminCredits.adminKeyPlaceholder}
             value={adminKey}
             onChange={(e) => setAdminKey(e.target.value)}
-            className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
       </SectionCard>
 
       {/* Stage 24/31: Credit Execution Config */}
-      <SectionCard title="Credit 실행 설정 (Stage 24/31)">
+      <SectionCard title={t.adminCredits.creditConfigSection}>
         <div className="space-y-3">
           <button
             onClick={handleFetchConfig}
             disabled={loading}
             className="border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
           >
-            설정 확인
+            {t.adminCredits.checkConfig}
           </button>
           {creditConfig && (
             <div className="mt-2 space-y-2">
@@ -894,32 +916,32 @@ export default function AdminCreditsPage() {
               </div>
               {/* Stage 31: limited rollout allowlist */}
               {creditConfig.limitedRollout !== undefined && (
-                <div className={`text-xs font-mono px-2 py-1 rounded ${creditConfig.limitedRollout.allowedUserKeyCount > 0 ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
+                <div className={`text-xs font-mono px-2 py-1 rounded ${creditConfig.limitedRollout.allowedUserKeyCount > 0 ? "bg-indigo-50 text-indigo-700" : "bg-gray-100 text-gray-600"}`}>
                   <div>
                     ACTUAL_DEBIT_ALLOWED_USER_KEYS: {creditConfig.envFlags.ACTUAL_DEBIT_ALLOWED_USER_KEYS ?? "(unset)"}
-                    {" "}→ {creditConfig.limitedRollout.allowedUserKeyCount}명 등록
+                    {" "}→ {t.adminCredits.rolloutRegistered.replace("{n}", String(creditConfig.limitedRollout.allowedUserKeyCount))}
                   </div>
                   {creditConfig.limitedRollout.allowedUserKeysPreview.length > 0 && (
-                    <div className="mt-1 text-blue-600">
-                      미리보기: {creditConfig.limitedRollout.allowedUserKeysPreview.join(", ")}
+                    <div className="mt-1 text-indigo-600">
+                      {t.adminCredits.rolloutPreview}{creditConfig.limitedRollout.allowedUserKeysPreview.join(", ")}
                       {creditConfig.limitedRollout.allowedUserKeyCount > 5 ? " ..." : ""}
                     </div>
                   )}
                   {creditConfig.limitedRollout.enabled ? (
-                    <div className="mt-1 text-blue-700 font-semibold">제한적 actual debit 활성 (allowlist 한정)</div>
+                    <div className="mt-1 text-indigo-700 font-semibold">{t.adminCredits.rolloutLimitedActive}</div>
                   ) : creditConfig.actualDebitsEnabled && creditConfig.limitedRollout.allowedUserKeyCount === 0 ? (
-                    <div className="mt-1 text-amber-600 font-semibold">경고: actualDebitsEnabled=true지만 allowlist가 비어 있어 실제 차감 없음</div>
+                    <div className="mt-1 text-amber-600 font-semibold">{t.adminCredits.rolloutWarningEmptyAllowlist}</div>
                   ) : null}
                 </div>
               )}
               {!creditConfig.actualDebitsEnabled && (
-                <p className="text-xs text-gray-500">현재 dry-run 모드: 실제 차감 없음, 실행 차단 없음</p>
+                <p className="text-xs text-gray-500">{t.adminCredits.configDryRunMode}</p>
               )}
               {creditConfig.actualDebitsEnabled && !creditConfig.blockingEnabled && (
-                <p className="text-xs text-amber-600">실제 차감 활성 · 차단 비활성: credit이 차감되지만 실행은 차단되지 않음</p>
+                <p className="text-xs text-amber-600">{t.adminCredits.configDebitNoBlock}</p>
               )}
               {creditConfig.actualDebitsEnabled && creditConfig.blockingEnabled && (
-                <p className="text-xs text-red-600 font-medium">실제 차감 + 차단 모두 활성: credit 부족 시 HTTP 402 반환</p>
+                <p className="text-xs text-red-600 font-medium">{t.adminCredits.configDebitAndBlock}</p>
               )}
             </div>
           )}
@@ -938,31 +960,31 @@ export default function AdminCreditsPage() {
       )}
 
       {/* Balance + Ledger lookup */}
-      <SectionCard title="잔액 · 장부 조회">
+      <SectionCard title={t.adminCredits.balanceLedgerSection}>
         <div className="space-y-3">
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="userKey (예: gh:octocat)"
+              placeholder={t.adminCredits.userKeyPlaceholder}
               value={userKey}
               onChange={(e) => setUserKey(e.target.value)}
-              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <div className="flex gap-2">
             <button
               onClick={handleFetchBalances}
               disabled={loading}
-              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
             >
-              잔액 조회
+              {t.adminCredits.fetchBalance}
             </button>
             <button
               onClick={handleFetchLedger}
               disabled={loading}
               className="border border-gray-300 px-4 py-2 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
             >
-              장부 조회
+              {t.adminCredits.fetchLedger}
             </button>
           </div>
           {balances !== null && (
@@ -973,7 +995,7 @@ export default function AdminCreditsPage() {
           )}
           {ledger !== null && (
             <div className="pt-2">
-              <p className="text-xs text-gray-400 mb-2">userKey: {userKey} — 최근 50건</p>
+              <p className="text-xs text-gray-400 mb-2">userKey: {userKey} — {t.adminCredits.recentEntries.replace("{n}", "50")}</p>
               <LedgerTable entries={ledger} />
             </div>
           )}
@@ -981,83 +1003,83 @@ export default function AdminCreditsPage() {
       </SectionCard>
 
       {/* Manual grant */}
-      <SectionCard title="수동 크레딧 지급">
+      <SectionCard title={t.adminCredits.manualGrantSection}>
         <div className="space-y-3">
           <div className="flex gap-2 flex-wrap">
             <input
               type="text"
-              placeholder="지급 대상 userKey"
+              placeholder={t.adminCredits.grantUserKeyPlaceholder}
               value={grantUserKey}
               onChange={(e) => setGrantUserKey(e.target.value)}
-              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <select
               value={grantType}
               onChange={(e) => setGrantType(e.target.value as CreditType)}
-              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="review">리뷰 크레딧</option>
-              <option value="fix">Fix 크레딧</option>
-              <option value="workspace">워크스페이스 크레딧</option>
+              <option value="review">{t.adminCredits.creditTypeReview}</option>
+              <option value="fix">{t.adminCredits.creditTypeFix}</option>
+              <option value="workspace">{t.adminCredits.creditTypeWorkspace}</option>
             </select>
             <input
               type="number"
               min="1"
               step="1"
-              placeholder="금액"
+              placeholder={t.adminCredits.amountPlaceholder}
               value={grantAmount}
               onChange={(e) => setGrantAmount(e.target.value)}
-              className="w-24 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-24 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="지급 사유 (예: 베타 환영 지급)"
+              placeholder={t.adminCredits.grantReasonPlaceholder}
               value={grantReason}
               onChange={(e) => setGrantReason(e.target.value)}
-              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
               onClick={handleGrant}
               disabled={loading}
               className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
             >
-              지급
+              {t.adminCredits.grant}
             </button>
           </div>
           <p className="text-xs text-gray-400">
-            ※ 지급은 실제로 잔액 테이블에 기록됩니다. 취소 불가.
+            {t.adminCredits.grantNotice}
           </p>
         </div>
       </SectionCard>
 
       {/* Dry-run preview */}
-      <SectionCard title="Dry-run 차감 미리보기">
+      <SectionCard title={t.adminCredits.dryRunPreviewSection}>
         <div className="space-y-3">
           <div className="flex gap-2 items-center flex-wrap">
             <select
               value={range}
               onChange={(e) => setRange(e.target.value as UsageRange)}
-              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {(["24h", "7d", "30d"] as UsageRange[]).map((r) => (
-                <option key={r} value={r}>{RANGE_LABELS[r]}</option>
+                <option key={r} value={r}>{rangeLabel(t, r)}</option>
               ))}
             </select>
             <input
               type="text"
-              placeholder="userKey 필터 (선택)"
+              placeholder={t.adminCredits.userKeyFilterOptional}
               value={userKey}
               onChange={(e) => setUserKey(e.target.value)}
-              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
               onClick={handlePreview}
               disabled={loading}
               className="bg-amber-600 text-white px-4 py-2 rounded text-sm hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
             >
-              미리보기
+              {t.adminCredits.preview}
             </button>
           </div>
           {preview && <PreviewTable preview={preview} />}
@@ -1065,32 +1087,32 @@ export default function AdminCreditsPage() {
       </SectionCard>
 
       {/* Monthly credit preview */}
-      <SectionCard title="월별 Credit 미리보기">
+      <SectionCard title={t.adminCredits.monthlyPreviewSection}>
         <div className="space-y-3">
           <p className="text-xs text-gray-500">
-            특정 달의 PR 확인 횟수, 무료 제공량 적용 후 예상 credit 부담을 사용자/프로젝트별로 확인합니다.
+            {t.adminCredits.monthlyPreviewIntro}
           </p>
           <div className="flex gap-2 items-center flex-wrap">
             <input
               type="text"
-              placeholder="월 (예: 2026-06, 기본값: 이번 달)"
+              placeholder={t.adminCredits.monthPlaceholder}
               value={monthInput}
               onChange={(e) => setMonthInput(e.target.value)}
-              className="w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <input
               type="text"
-              placeholder="userKey 필터 (선택)"
+              placeholder={t.adminCredits.userKeyFilterOptional}
               value={monthlyUserKey}
               onChange={(e) => setMonthlyUserKey(e.target.value)}
-              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
               onClick={handleMonthlyPreview}
               disabled={loading}
               className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
             >
-              월별 조회
+              {t.adminCredits.monthlyLookup}
             </button>
           </div>
           {monthlyPreview && <MonthlyPreviewSection data={monthlyPreview} />}
@@ -1098,29 +1120,28 @@ export default function AdminCreditsPage() {
       </SectionCard>
 
       {/* Pending ledger cleanup */}
-      <SectionCard title="Pending Ledger 수동 정리 (Stage 30)">
+      <SectionCard title={t.adminCredits.pendingCleanupSection}>
         <div className="space-y-3">
           <p className="text-xs text-gray-500">
-            오래된 status=pending debit 항목을 조회하고, balance 변경 없이 failed로 수동 정리합니다.
-            pending 상태가 오래 유지되면 Worker 중간 실패(timeout 등) 가능성이 있습니다.
+            {t.adminCredits.pendingCleanupIntro}
           </p>
           <div className="flex gap-2 items-center flex-wrap">
-            <label className="text-sm text-gray-600 whitespace-nowrap">기준 시간(분):</label>
+            <label className="text-sm text-gray-600 whitespace-nowrap">{t.adminCredits.thresholdMinutesLabel}</label>
             <select
               value={pendingMinutes}
               onChange={(e) => setPendingMinutes(e.target.value)}
               className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
             >
-              <option value="15">15분 이상</option>
-              <option value="30">30분 이상</option>
-              <option value="60">60분 이상</option>
+              <option value="15">{t.adminCredits.threshold15}</option>
+              <option value="30">{t.adminCredits.threshold30}</option>
+              <option value="60">{t.adminCredits.threshold60}</option>
             </select>
             <button
               onClick={handleFetchPendingLedger}
               disabled={loading}
               className="bg-amber-600 text-white px-4 py-2 rounded text-sm hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
             >
-              Pending 조회
+              {t.adminCredits.fetchPending}
             </button>
           </div>
           {markFailedSuccess && (
@@ -1141,60 +1162,60 @@ export default function AdminCreditsPage() {
       </SectionCard>
 
       {/* Stage 32: Internal Actual Debit Test Run Guide */}
-      <SectionCard title="내부 Actual Debit 테스트 실행 가이드 (Stage 32)">
+      <SectionCard title={t.adminCredits.testRunGuideSection}>
         <div className="space-y-3">
           <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3">
-            <p className="text-xs font-bold text-red-700">⚠ 테스트 종료 후 ENABLE_ACTUAL_CREDIT_DEBITS를 반드시 false로 되돌리세요.</p>
-            <p className="text-xs text-red-600 mt-1">flag를 켠 상태로 두면 allowlist에 등록된 모든 사용자에게 실제 credit이 차감됩니다.</p>
+            <p className="text-xs font-bold text-red-700">{t.adminCredits.testRunWarningTitle}</p>
+            <p className="text-xs text-red-600 mt-1">{t.adminCredits.testRunWarningDesc}</p>
           </div>
           <div className="space-y-1 text-xs text-gray-700">
-            <p className="font-semibold text-gray-800 mb-2">테스트 절차:</p>
+            <p className="font-semibold text-gray-800 mb-2">{t.adminCredits.testProcedureTitle}</p>
             <ol className="list-decimal list-inside space-y-1.5 pl-1">
               <li>
-                <span className="font-medium">ACTUAL_DEBIT_ALLOWED_USER_KEYS에 내부 userKey 등록</span>
-                <p className="text-gray-500 pl-5 mt-0.5">예: <code className="bg-gray-100 px-1 rounded">ACTUAL_DEBIT_ALLOWED_USER_KEYS = &quot;gh:yourtestaccount&quot;</code></p>
+                <span className="font-medium">{t.adminCredits.testStep1}</span>
+                <p className="text-gray-500 pl-5 mt-0.5">{t.adminCredits.testStep1Detail}<code className="bg-gray-100 px-1 rounded">ACTUAL_DEBIT_ALLOWED_USER_KEYS = &quot;gh:yourtestaccount&quot;</code></p>
               </li>
               <li>
-                <span className="font-medium">ENABLE_ACTUAL_CREDIT_DEBITS=true 설정 후 wrangler deploy</span>
-                <p className="text-gray-500 pl-5 mt-0.5">wrangler.toml 수정 → deploy</p>
+                <span className="font-medium">{t.adminCredits.testStep2}</span>
+                <p className="text-gray-500 pl-5 mt-0.5">{t.adminCredits.testStep2Detail}</p>
               </li>
               <li>
-                <span className="font-medium">ENABLE_CREDIT_BLOCKING=false 유지 (기본 테스트 모드)</span>
-                <p className="text-gray-500 pl-5 mt-0.5">잔액 부족 시에도 실행 차단하지 않음</p>
+                <span className="font-medium">{t.adminCredits.testStep3}</span>
+                <p className="text-gray-500 pl-5 mt-0.5">{t.adminCredits.testStep3Detail}</p>
               </li>
               <li>
-                <span className="font-medium">아래 &quot;수동 크레딧 지급&quot;으로 review credit 지급</span>
-                <p className="text-gray-500 pl-5 mt-0.5">userKey=내부계정, type=review, amount=5 권장</p>
+                <span className="font-medium">{t.adminCredits.testStep4}</span>
+                <p className="text-gray-500 pl-5 mt-0.5">{t.adminCredits.testStep4Detail}</p>
               </li>
               <li>
-                <span className="font-medium">PR review 실행 (월 5회 allowance 소진 후)</span>
-                <p className="text-gray-500 pl-5 mt-0.5">allowance 소진 전에는 credit이 차감되지 않음</p>
+                <span className="font-medium">{t.adminCredits.testStep5}</span>
+                <p className="text-gray-500 pl-5 mt-0.5">{t.adminCredits.testStep5Detail}</p>
               </li>
               <li>
-                <span className="font-medium">아래 &quot;장부 조회&quot;에서 ledger status=applied 확인</span>
+                <span className="font-medium">{t.adminCredits.testStep6}</span>
               </li>
               <li>
-                <span className="font-medium">아래 &quot;잔액 조회&quot;에서 balance 감소 확인</span>
+                <span className="font-medium">{t.adminCredits.testStep7}</span>
               </li>
               <li>
-                <span className="font-medium text-red-600">테스트 후 ENABLE_ACTUAL_CREDIT_DEBITS를 false로 복구 후 재배포</span>
+                <span className="font-medium text-red-600">{t.adminCredits.testStep8}</span>
               </li>
             </ol>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            <p className="text-xs text-amber-700 font-medium">failed pending 또는 duplicate failed 발생 시:</p>
+            <p className="text-xs text-amber-700 font-medium">{t.adminCredits.testRunDuplicateTitle}</p>
             <p className="text-xs text-amber-600 mt-1">
-              같은 Idempotency-Key 재시도 대신, 새 PR review를 실행하여 새 Idempotency-Key를 생성해야 합니다.
+              {t.adminCredits.testRunDuplicateDesc}
             </p>
           </div>
         </div>
       </SectionCard>
 
       {/* Stage 33: Top-up request management */}
-      <SectionCard title="Credit 충전 요청 관리 (Stage 33)">
+      <SectionCard title={t.adminCredits.topUpSection}>
         <div className="space-y-3">
           <p className="text-xs text-gray-500">
-            사용자가 보낸 credit 충전 요청을 확인하고 수동으로 지급(fulfill)하거나 거절합니다.
+            {t.adminCredits.topUpIntro}
           </p>
           <div className="flex gap-2 items-center">
             <select
@@ -1202,17 +1223,17 @@ export default function AdminCreditsPage() {
               onChange={(e) => setTopUpStatusFilter(e.target.value)}
               className="border border-gray-300 rounded px-2 py-1.5 text-sm"
             >
-              <option value="requested">요청됨 (requested)</option>
-              <option value="fulfilled">지급됨 (fulfilled)</option>
-              <option value="rejected">거절됨 (rejected)</option>
-              <option value="">전체</option>
+              <option value="requested">{t.adminCredits.topUpFilterRequested}</option>
+              <option value="fulfilled">{t.adminCredits.topUpFilterFulfilled}</option>
+              <option value="rejected">{t.adminCredits.topUpFilterRejected}</option>
+              <option value="">{t.adminCredits.topUpFilterAll}</option>
             </select>
             <button
               onClick={handleFetchTopUpRequests}
               disabled={loading}
-              className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
             >
-              요청 목록 조회
+              {t.adminCredits.fetchTopUpList}
             </button>
           </div>
           {topUpActionSuccess && (
@@ -1222,7 +1243,7 @@ export default function AdminCreditsPage() {
           )}
           {topUpRequests !== null && (
             topUpRequests.length === 0 ? (
-              <p className="text-sm text-gray-500">해당 조건의 충전 요청이 없어요.</p>
+              <p className="text-sm text-gray-500">{t.adminCredits.noTopUpRequests}</p>
             ) : (
               <div className="space-y-3 mt-2">
                 {topUpRequests.map((req) => (
@@ -1231,7 +1252,7 @@ export default function AdminCreditsPage() {
                       <div>
                         <div className="flex items-center gap-2 text-sm">
                           <span className="font-mono text-gray-700">{req.userKey}</span>
-                          <span className="font-bold text-blue-700">+{req.requestedAmount}</span>
+                          <span className="font-bold text-indigo-700">+{req.requestedAmount}</span>
                           <span className="text-gray-500 text-xs">{req.creditType}</span>
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${
                             req.status === "requested"
@@ -1240,18 +1261,18 @@ export default function AdminCreditsPage() {
                               ? "text-green-700 bg-green-50 border-green-200"
                               : "text-red-600 bg-red-50 border-red-200"
                           }`}>
-                            {req.status === "requested" ? "요청됨" : req.status === "fulfilled" ? "지급됨" : "거절됨"}
+                            {req.status === "requested" ? t.adminCredits.topUpStatusRequested : req.status === "fulfilled" ? t.adminCredits.topUpStatusFulfilled : t.adminCredits.topUpStatusRejected}
                           </span>
                         </div>
                         {req.note && (
-                          <p className="text-xs text-gray-500 mt-1">메모: {req.note}</p>
+                          <p className="text-xs text-gray-500 mt-1">{t.adminCredits.topUpNoteLabel}{req.note}</p>
                         )}
                         {req.adminNote && (
-                          <p className="text-xs text-blue-600 mt-0.5">관리자 메모: {req.adminNote}</p>
+                          <p className="text-xs text-indigo-600 mt-0.5">{t.adminCredits.topUpAdminNoteLabel}{req.adminNote}</p>
                         )}
                         <p className="text-xs text-gray-400 mt-1">
-                          요청일: {req.createdAt.slice(0, 10)}
-                          {req.resolvedAt && ` · 처리일: ${req.resolvedAt.slice(0, 10)}`}
+                          {t.adminCredits.topUpRequestedAt}{req.createdAt.slice(0, 10)}
+                          {req.resolvedAt && `${t.adminCredits.topUpResolvedAt}${req.resolvedAt.slice(0, 10)}`}
                         </p>
                       </div>
                     </div>
@@ -1259,7 +1280,7 @@ export default function AdminCreditsPage() {
                       <div className="mt-2 flex gap-2 items-center">
                         <input
                           type="text"
-                          placeholder="관리자 메모 (선택)"
+                          placeholder={t.adminCredits.adminNotePlaceholder}
                           value={topUpAdminNotes[req.id] ?? ""}
                           onChange={(e) => setTopUpAdminNotes((prev) => ({ ...prev, [req.id]: e.target.value }))}
                           className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs"
@@ -1269,14 +1290,14 @@ export default function AdminCreditsPage() {
                           disabled={loading}
                           className="bg-green-600 text-white px-3 py-1.5 rounded text-xs hover:bg-green-700 disabled:opacity-50"
                         >
-                          지급
+                          {t.adminCredits.grant}
                         </button>
                         <button
                           onClick={() => handleRejectTopUp(req.id)}
                           disabled={loading}
                           className="bg-red-500 text-white px-3 py-1.5 rounded text-xs hover:bg-red-600 disabled:opacity-50"
                         >
-                          거절
+                          {t.adminCredits.reject}
                         </button>
                       </div>
                     )}
@@ -1289,35 +1310,35 @@ export default function AdminCreditsPage() {
       </SectionCard>
 
       {/* Rollout checklist */}
-      <SectionCard title="프로덕션 활성화 체크리스트 (Stage 29)">
+      <SectionCard title={t.adminCredits.rolloutChecklistSection}>
         <div className="space-y-3">
           <p className="text-xs text-gray-500">
-            실제 credit 차감/차단을 활성화하기 전 필수 확인 항목 및 운영 가이드입니다. 현재 flag 상태를 자동 감지합니다.
+            {t.adminCredits.rolloutChecklistIntro}
           </p>
           <button
             onClick={handleFetchRolloutChecklist}
             disabled={loading}
             className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 disabled:opacity-50 whitespace-nowrap"
           >
-            체크리스트 조회
+            {t.adminCredits.fetchChecklist}
           </button>
           {rolloutChecklist && <RolloutChecklistSection data={rolloutChecklist} />}
         </div>
       </SectionCard>
 
       {/* Free allowance policy notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-        <p className="text-sm font-medium text-blue-700 mb-1">무료 허용 정책 (현행)</p>
-        <ul className="text-xs text-blue-600 space-y-0.5 list-disc list-inside">
-          <li>PR 코드 확인 (workspace_pr_review_run) — 월 5회 무료 후 과금 후보 (1 크레딧/회)</li>
-          <li>제품 설명서 생성, 확인, 패키지 내보내기 — 무료 포함</li>
-          <li>PR 코멘트, Telegram 알림 — 무료 포함</li>
-          <li>실제 과금은 미구현 (actualDebitsEnabled: false 고정)</li>
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-indigo-700 mb-1">{t.adminCredits.allowanceNoticeTitle}</p>
+        <ul className="text-xs text-indigo-600 space-y-0.5 list-disc list-inside">
+          <li>{t.adminCredits.allowanceNotice1}</li>
+          <li>{t.adminCredits.allowanceNotice2}</li>
+          <li>{t.adminCredits.allowanceNotice3}</li>
+          <li>{t.adminCredits.allowanceNotice4}</li>
         </ul>
       </div>
 
       {loading && (
-        <div className="text-sm text-gray-500 text-center py-2">로딩 중...</div>
+        <div className="text-sm text-gray-500 text-center py-2">{t.adminCredits.loading}</div>
       )}
     </div>
   );

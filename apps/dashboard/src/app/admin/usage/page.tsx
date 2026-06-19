@@ -8,28 +8,31 @@ import {
   type DryRunBillingByEventRow,
   type BillingStatus,
 } from "@/lib/workspace-admin-api";
+import { useI18n } from "@/i18n/I18nProvider";
+import type { Dictionary } from "@/i18n/dictionary.mjs";
 
-const RANGE_LABELS: Record<UsageRange, string> = {
-  "24h": "최근 24시간",
-  "7d": "최근 7일",
-  "30d": "최근 30일",
-};
+function rangeLabel(t: Dictionary, r: UsageRange): string {
+  if (r === "24h") return t.adminUsage.range24h;
+  if (r === "7d") return t.adminUsage.range7d;
+  return t.adminUsage.range30d;
+}
 
-const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
-  billable_candidate: "과금 후보",
-  included: "무료/포함",
-  future_billable: "향후 과금 예정",
-  ignored: "집계 제외",
-};
+function billingStatusLabel(t: Dictionary, s: BillingStatus): string {
+  if (s === "billable_candidate") return t.adminUsage.statusBillable;
+  if (s === "included") return t.adminUsage.statusIncluded;
+  if (s === "future_billable") return t.adminUsage.statusFutureBillable;
+  return t.adminUsage.statusIgnored;
+}
 
 const BILLING_STATUS_COLORS: Record<BillingStatus, string> = {
   billable_candidate: "bg-amber-100 text-amber-700",
   included: "bg-green-100 text-green-700",
-  future_billable: "bg-blue-100 text-blue-700",
+  future_billable: "bg-indigo-100 text-indigo-700",
   ignored: "bg-gray-100 text-gray-500",
 };
 
 export default function AdminUsagePage() {
+  const { t } = useI18n();
   const [adminKey, setAdminKey] = useState("");
   const [range, setRange] = useState<UsageRange>("7d");
   const [stats, setStats] = useState<UsageStatsResponse | null>(null);
@@ -40,7 +43,7 @@ export default function AdminUsagePage() {
 
   async function handleLoad() {
     if (!adminKey.trim()) {
-      setError("Admin key를 입력해주세요.");
+      setError(t.adminUsage.errKeyRequired);
       return;
     }
     setLoading(true);
@@ -50,9 +53,9 @@ export default function AdminUsagePage() {
       const result = await fetchUsageStats(adminKey.trim(), range);
       if (!result.ok) {
         if (result.error === "disabled") {
-          setError("서버에 ADMIN_USAGE_STATS_KEY가 설정되지 않았습니다.");
+          setError(t.adminUsage.errDisabled);
         } else if (result.error === "unauthorized") {
-          setError("Admin key가 올바르지 않습니다.");
+          setError(t.adminUsage.errUnauthorized);
         } else {
           setError(result.message ?? result.error);
         }
@@ -60,7 +63,7 @@ export default function AdminUsagePage() {
         setStats(result);
       }
     } catch {
-      setError("요청에 실패했습니다. 네트워크를 확인해주세요.");
+      setError(t.adminUsage.errRequest);
     } finally {
       setLoading(false);
     }
@@ -74,49 +77,49 @@ export default function AdminUsagePage() {
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-start justify-between mb-2">
-          <h1 className="text-2xl font-bold text-gray-900">Admin — 사용 현황</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t.adminUsage.title}</h1>
           <a
             href="/admin/credits"
-            className="text-xs text-blue-600 hover:underline whitespace-nowrap mt-1"
+            className="text-xs text-indigo-600 hover:underline whitespace-nowrap mt-1"
           >
-            credit 미리보기 보기 →
+            {t.adminUsage.viewCreditPreview}
           </a>
         </div>
         <p className="text-sm text-gray-500 mb-6">
-          워크스페이스 기능 사용 이벤트 집계 및 예상 credit dry-run입니다.
+          {t.adminUsage.intro}
         </p>
 
         {/* Auth + range selector */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Admin Key</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t.adminUsage.adminKey}</label>
             <input
               type="password"
               value={adminKey}
               onChange={(e) => setAdminKey(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleLoad()}
-              placeholder="ADMIN_USAGE_STATS_KEY 입력"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={t.adminUsage.adminKeyPlaceholder}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">기간</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t.adminUsage.range}</label>
             <select
               value={range}
               onChange={(e) => setRange(e.target.value as UsageRange)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {(["24h", "7d", "30d"] as UsageRange[]).map((r) => (
-                <option key={r} value={r}>{RANGE_LABELS[r]}</option>
+                <option key={r} value={r}>{rangeLabel(t, r)}</option>
               ))}
             </select>
           </div>
           <button
             onClick={handleLoad}
             disabled={loading}
-            className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? "로딩 중..." : "조회"}
+            {loading ? t.adminUsage.loading : t.adminUsage.load}
           </button>
         </div>
 
@@ -129,20 +132,22 @@ export default function AdminUsagePage() {
         {stats && (
           <>
             <p className="text-xs text-gray-400 mb-4">
-              기준: {RANGE_LABELS[stats.range]} ({stats.cutoff.slice(0, 10)} ~)
+              {t.adminUsage.basis
+                .replace("{range}", rangeLabel(t, stats.range))
+                .replace("{cutoff}", stats.cutoff.slice(0, 10))}
             </p>
 
             {/* Summary cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-              <SummaryCard label="총 이벤트" value={stats.summary.totalEvents.toLocaleString()} />
-              <SummaryCard label="활성 사용자" value={stats.summary.activeUsers.toLocaleString()} />
+              <SummaryCard label={t.adminUsage.totalEvents} value={stats.summary.totalEvents.toLocaleString()} />
+              <SummaryCard label={t.adminUsage.activeUsers} value={stats.summary.activeUsers.toLocaleString()} />
               <SummaryCard
-                label="Telegram 실패율"
+                label={t.adminUsage.telegramErrorRate}
                 value={`${stats.summary.telegramErrorRate.toFixed(1)}%`}
                 highlight={stats.summary.telegramErrorRate > 10}
               />
               <SummaryCard
-                label="LLM 폴백률"
+                label={t.adminUsage.llmFallbackRate}
                 value={`${stats.summary.llmFallbackRate.toFixed(1)}%`}
                 highlight={stats.summary.llmFallbackRate > 30}
               />
@@ -153,11 +158,10 @@ export default function AdminUsagePage() {
               <div className="mb-6">
                 {/* Dry-run notice */}
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-start gap-3">
-                  <span className="text-amber-500 text-lg leading-none">⚠</span>
                   <div>
-                    <p className="text-sm font-semibold text-amber-800">예상 credit 사용량 — dry-run</p>
+                    <p className="text-sm font-semibold text-amber-800">{t.adminUsage.dryRunTitle}</p>
                     <p className="text-xs text-amber-700 mt-0.5">
-                      이 값은 dry-run 계산입니다. 실제 차감 없음 (actualChargesEnabled: false)
+                      {t.adminUsage.dryRunDesc}
                     </p>
                   </div>
                 </div>
@@ -165,14 +169,14 @@ export default function AdminUsagePage() {
                 {/* Credit summary cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
                   <SummaryCard
-                    label="총 예상 credit"
+                    label={t.adminUsage.totalEstimatedCredits}
                     value={billing.totalEstimatedCredits.toLocaleString()}
                     accent
                   />
                   {billing.byCreditType.map((r) => (
                     <SummaryCard
                       key={r.creditType}
-                      label={`${r.creditType} credit`}
+                      label={`${r.creditType} ${t.adminUsage.creditSuffix}`}
                       value={r.estimatedCredits.toLocaleString()}
                     />
                   ))}
@@ -182,8 +186,8 @@ export default function AdminUsagePage() {
                 {billableRows.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
                     <div className="px-5 py-4 border-b border-gray-100">
-                      <h2 className="font-semibold text-gray-800">과금 후보 이벤트</h2>
-                      <p className="text-xs text-gray-400 mt-0.5">billing 활성화 시 credit이 차감될 이벤트</p>
+                      <h2 className="font-semibold text-gray-800">{t.adminUsage.billableTitle}</h2>
+                      <p className="text-xs text-gray-400 mt-0.5">{t.adminUsage.billableDesc}</p>
                     </div>
                     <BillingEventTable rows={billableRows} />
                   </div>
@@ -193,7 +197,7 @@ export default function AdminUsagePage() {
                 {includedRows.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
                     <div className="px-5 py-4 border-b border-gray-100">
-                      <h2 className="font-semibold text-gray-800">무료/포함 이벤트</h2>
+                      <h2 className="font-semibold text-gray-800">{t.adminUsage.includedTitle}</h2>
                     </div>
                     <BillingEventTable rows={includedRows} />
                   </div>
@@ -203,13 +207,13 @@ export default function AdminUsagePage() {
                 {billing.topUsersByEstimatedCredits.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
                     <div className="px-5 py-4 border-b border-gray-100">
-                      <h2 className="font-semibold text-gray-800">사용자별 예상 credit</h2>
+                      <h2 className="font-semibold text-gray-800">{t.adminUsage.topUsersCredits}</h2>
                     </div>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gray-50 text-gray-500 text-xs">
                           <th className="text-left px-5 py-2 font-medium">User Key</th>
-                          <th className="text-right px-5 py-2 font-medium">예상 credit</th>
+                          <th className="text-right px-5 py-2 font-medium">{t.adminUsage.estimatedCredit}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -232,13 +236,13 @@ export default function AdminUsagePage() {
                 {billing.topProjectsByEstimatedCredits.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
                     <div className="px-5 py-4 border-b border-gray-100">
-                      <h2 className="font-semibold text-gray-800">프로젝트별 예상 credit</h2>
+                      <h2 className="font-semibold text-gray-800">{t.adminUsage.topProjectsCredits}</h2>
                     </div>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gray-50 text-gray-500 text-xs">
                           <th className="text-left px-5 py-2 font-medium">Project ID</th>
-                          <th className="text-right px-5 py-2 font-medium">예상 credit</th>
+                          <th className="text-right px-5 py-2 font-medium">{t.adminUsage.estimatedCredit}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -262,17 +266,17 @@ export default function AdminUsagePage() {
             {/* Event type breakdown */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
               <div className="px-5 py-4 border-b border-gray-100">
-                <h2 className="font-semibold text-gray-800">기능별 이벤트</h2>
+                <h2 className="font-semibold text-gray-800">{t.adminUsage.byEventTitle}</h2>
               </div>
               {stats.byEventType.length === 0 ? (
-                <p className="px-5 py-4 text-sm text-gray-400">이 기간에 이벤트가 없습니다.</p>
+                <p className="px-5 py-4 text-sm text-gray-400">{t.adminUsage.noEvents}</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs">
-                      <th className="text-left px-5 py-2 font-medium">기능</th>
-                      <th className="text-left px-5 py-2 font-medium text-gray-400">이벤트 타입</th>
-                      <th className="text-right px-5 py-2 font-medium">횟수</th>
+                      <th className="text-left px-5 py-2 font-medium">{t.adminUsage.colFeature}</th>
+                      <th className="text-left px-5 py-2 font-medium text-gray-400">{t.adminUsage.colEventType}</th>
+                      <th className="text-right px-5 py-2 font-medium">{t.adminUsage.colCount}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -294,13 +298,13 @@ export default function AdminUsagePage() {
             {stats.dailyActivity.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
                 <div className="px-5 py-4 border-b border-gray-100">
-                  <h2 className="font-semibold text-gray-800">일별 이벤트</h2>
+                  <h2 className="font-semibold text-gray-800">{t.adminUsage.dailyTitle}</h2>
                 </div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs">
-                      <th className="text-left px-5 py-2 font-medium">날짜</th>
-                      <th className="text-right px-5 py-2 font-medium">이벤트</th>
+                      <th className="text-left px-5 py-2 font-medium">{t.adminUsage.colDate}</th>
+                      <th className="text-right px-5 py-2 font-medium">{t.adminUsage.colEvents}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -321,13 +325,13 @@ export default function AdminUsagePage() {
             {stats.topUsers.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100">
-                  <h2 className="font-semibold text-gray-800">활성 사용자 Top 10</h2>
+                  <h2 className="font-semibold text-gray-800">{t.adminUsage.topUsersTitle}</h2>
                 </div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs">
                       <th className="text-left px-5 py-2 font-medium">User Key</th>
-                      <th className="text-right px-5 py-2 font-medium">이벤트</th>
+                      <th className="text-right px-5 py-2 font-medium">{t.adminUsage.colEvents}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -353,15 +357,16 @@ export default function AdminUsagePage() {
 }
 
 function BillingEventTable({ rows }: { rows: DryRunBillingByEventRow[] }) {
+  const { t } = useI18n();
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="bg-gray-50 text-gray-500 text-xs">
-          <th className="text-left px-5 py-2 font-medium">기능</th>
-          <th className="text-left px-5 py-2 font-medium">상태</th>
-          <th className="text-right px-5 py-2 font-medium">횟수</th>
-          <th className="text-right px-5 py-2 font-medium">단가</th>
-          <th className="text-right px-5 py-2 font-medium">예상 credit</th>
+          <th className="text-left px-5 py-2 font-medium">{t.adminUsage.colFeature}</th>
+          <th className="text-left px-5 py-2 font-medium">{t.adminUsage.colStatus}</th>
+          <th className="text-right px-5 py-2 font-medium">{t.adminUsage.colCount}</th>
+          <th className="text-right px-5 py-2 font-medium">{t.adminUsage.colUnitPrice}</th>
+          <th className="text-right px-5 py-2 font-medium">{t.adminUsage.estimatedCredit}</th>
         </tr>
       </thead>
       <tbody>
@@ -370,7 +375,7 @@ function BillingEventTable({ rows }: { rows: DryRunBillingByEventRow[] }) {
             <td className="px-5 py-3 text-gray-900">{row.label}</td>
             <td className="px-5 py-3">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${BILLING_STATUS_COLORS[row.billingStatus]}`}>
-                {BILLING_STATUS_LABELS[row.billingStatus]}
+                {billingStatusLabel(t, row.billingStatus)}
               </span>
             </td>
             <td className="px-5 py-3 text-right text-gray-700">{row.count.toLocaleString()}</td>
