@@ -863,6 +863,14 @@ export type Dictionary = {
     noBlockerItems: string;
     oldBenchmarkBlockers: string;
     evidence: string;
+    matrixTitle: string;
+    matrixDesc: string;
+    differentResults: string;
+    matrixItemsCompared: string;
+    matrixDisagreements: string;
+    matrixUnavailable: string;
+    matrixUnavailableBody: string;
+    missingResult: string;
   };
   errors: { generic: string; loadFailed: string };
 };

@@ -12,6 +12,7 @@ import {
   resolveBenchmarkPrTarget,
   buildBenchmarkPrCommentMarkdown,
 } from "@/lib/agent-benchmark-comment.mjs";
+import { buildBenchmarkMatrix } from "@/lib/agent-benchmark-matrix.mjs";
 import type {
   AgentCandidate,
   CandidateMode,
@@ -78,6 +79,18 @@ const ITEM_BADGE: Record<string, string> = {
   needs_decision: "border-slate-200 bg-slate-50 text-slate-700",
   inconclusive: "border-yellow-200 bg-yellow-50 text-yellow-700",
 };
+
+const MATRIX_BADGE: Record<string, string> = {
+  passed: "border-green-200 bg-green-50 text-green-700",
+  failed: "border-red-200 bg-red-50 text-red-700",
+  needs_decision: "border-slate-200 bg-slate-50 text-slate-700",
+  inconclusive: "border-yellow-200 bg-yellow-50 text-yellow-700",
+  missing: "border-gray-200 bg-gray-50 text-gray-400",
+};
+
+function matrixStatusLabel(t: Dictionary, status: string): string {
+  return status === "missing" ? t.benchmark.missingResult : statusLabel(t, status);
+}
 
 export default function BenchmarkDetailPage() {
   const { id, benchmarkId } = useParams<{ id: string; benchmarkId: string }>();
@@ -152,6 +165,10 @@ export default function BenchmarkDetailPage() {
   // Stage 68: item-level blockers (undefined for older benchmarks → count-based fallback).
   const itemBlockers = result.remainingBlockers;
   const candidateLabelById = (cid: string) => candidates.find((c) => c.id === cid)?.label ?? cid;
+  // Stage 69: candidate × acceptance-item matrix (null for older benchmarks).
+  const matrix = result.itemOutcomesByCandidate
+    ? buildBenchmarkMatrix({ candidates, itemOutcomesByCandidate: result.itemOutcomesByCandidate })
+    : null;
 
   const rationaleLines = (result.recommendation?.rationale ?? [])
     .filter((r) => r.code !== "no_clear_winner")
@@ -452,6 +469,68 @@ export default function BenchmarkDetailPage() {
             <p className="mt-2 text-xs text-gray-400">{t.benchmark.noRemainingBlockers}</p>
           )}
           <p className="mt-2 text-[11px] text-gray-400">{t.benchmark.oldBenchmarkBlockers}</p>
+        </section>
+      )}
+
+      {/* Acceptance item matrix (Stage 69) */}
+      {matrix ? (
+        <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-100 px-5 py-3">
+            <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.matrixTitle}</h3>
+            <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.matrixDesc}</p>
+            <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-gray-400">
+              <span>{t.benchmark.matrixItemsCompared.replace("{n}", String(matrix.itemsCompared))}</span>
+              {matrix.disagreementCount > 0 && (
+                <span className="text-amber-600">{t.benchmark.matrixDisagreements.replace("{n}", String(matrix.disagreementCount))}</span>
+              )}
+            </div>
+          </div>
+          {matrix.rows.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
+                    <th className="px-4 py-2 text-left font-medium" />
+                    {candidates.map((c) => (
+                      <th key={c.id} className="px-4 py-2 text-left font-medium">
+                        <span className="block text-gray-600">{c.label}</span>
+                        <span className="block font-normal normal-case text-gray-300">{modeLabel(t, c.mode)} · {sourceLabel(t, c.source)}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.rows.map((row) => (
+                    <tr key={row.itemId} className={`border-t border-gray-100 ${row.hasDisagreement ? "bg-amber-50/40" : ""}`}>
+                      <td className="px-4 py-2.5">
+                        <span className="text-gray-800">{row.title}</span>
+                        {row.hasDisagreement && (
+                          <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                            {t.benchmark.differentResults}
+                          </span>
+                        )}
+                      </td>
+                      {candidates.map((c) => {
+                        const s = row.statusesByCandidate[c.id] ?? "missing";
+                        return (
+                          <td key={c.id} className="px-4 py-2.5">
+                            <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-medium ${MATRIX_BADGE[s] ?? MATRIX_BADGE.missing}`}>
+                              {matrixStatusLabel(t, s)}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-4">
+          <p className="text-sm font-medium text-gray-700">{t.benchmark.matrixUnavailable}</p>
+          <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.matrixUnavailableBody}</p>
         </section>
       )}
 
