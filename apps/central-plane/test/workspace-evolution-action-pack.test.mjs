@@ -99,6 +99,12 @@ function makeDb({
               if (exp) { exp.status = status; exp.updated_at = now; }
               return { meta: { changes: 1 } };
             }
+            if (sql.includes("UPDATE workspace_agent_experiment_candidates") && sql.includes("SET outcome")) {
+              const [outcome, outcome_note, status, decided_at, , id] = args;
+              const cand = candidates.find((c) => c.id === id);
+              if (cand) { cand.outcome = outcome; cand.outcome_note = outcome_note; cand.status = status; cand.decided_at = decided_at; }
+              return { meta: { changes: 1 } };
+            }
             if (sql.includes("UPDATE workspace_agent_experiment_candidates")) {
               const [pr, runId, benchId, status, now, id] = args;
               const cand = candidates.find((c) => c.id === id);
@@ -763,4 +769,144 @@ test("GET impact: response contains no userKey/token even with full data", async
   assert.ok(!flat.includes(USER), "must not include the userKey value");
   assert.ok(!/uk_/.test(flat), "must not include any uk_ token");
   assert.ok(!/userKey/i.test(flat), "must not even mention userKey");
+});
+
+// ─── Stage 80: GET evolution-impact-summary ──────────────────────────────────
+
+const summaryPath = (eid) =>
+  `/workspace/projects/${PROJECT}/agent-experiments/${eid}/evolution-impact-summary`;
+
+test("GET summary: missing userKey → 400", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  const res = await req(env, "GET", summaryPath(eid));
+  assert.equal(res.status, 400);
+  assert.equal(res.json.error, "userKey_required");
+});
+
+test("GET summary: unknown experiment → 404", async () => {
+  const env = makeEnv();
+  const res = await req(env, "GET", `${summaryPath("wexp_missing")}?userKey=${USER}`);
+  assert.equal(res.status, 404);
+});
+
+test("GET summary: other user → 403", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  const res = await req(env, "GET", `${summaryPath(eid)}?userKey=uk_intruder`);
+  assert.equal(res.status, 403);
+});
+
+test("GET summary: no saved action packs → no_followups + no_saved_action_packs", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  const res = await req(env, "GET", `${summaryPath(eid)}?userKey=${USER}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.json.summary.actionPackCount, 0);
+  assert.equal(res.json.summary.followedPackCount, 0);
+  assert.equal(res.json.summary.overallVerdict, "no_followups");
+  assert.ok(res.json.summary.reasons.includes("no_saved_action_packs"));
+});
+
+test("GET summary: saved packs but no follow-ups → no_followups + no_followups reason", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "POST", path(eid), { userKey: USER });
+  const res = await req(env, "GET", `${summaryPath(eid)}?userKey=${USER}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.json.summary.actionPackCount, 2);
+  assert.equal(res.json.summary.followedPackCount, 0);
+  assert.equal(res.json.summary.overallVerdict, "no_followups");
+  assert.ok(res.json.summary.reasons.includes("no_followups"));
+});
+
+test("GET summary: mostly_improved when more packs improved than regressed", async () => {
+  // Set up an experiment with a real benchmark so before snapshots exist.
+  const runs = new Map([
+    ["wprr_a", makeRun("wprr_a", {
+      summary: { passed: 3, failed: 1 },
+      results: [
+        { itemId: "i1", title: "A", status: "passed" },
+        { itemId: "i2", title: "B", status: "passed" },
+        { itemId: "i3", title: "C", status: "passed" },
+        { itemId: "i4", title: "D", status: "failed" },
+      ],
+    })],
+    ["wprr_b", makeRun("wprr_b", {
+      summary: { passed: 2, failed: 2 },
+      results: [
+        { itemId: "i1", title: "A", status: "passed" },
+        { itemId: "i2", title: "B", status: "passed" },
+        { itemId: "i3", title: "C", status: "failed" },
+        { itemId: "i4", title: "D", status: "failed" },
+      ],
+    })],
+    ["wprr_fu_good", makeRun("wprr_fu_good", {
+      summary: { passed: 4 },
+      results: [
+        { itemId: "i1", title: "A", status: "passed" },
+        { itemId: "i2", title: "B", status: "passed" },
+        { itemId: "i3", title: "C", status: "passed" },
+        { itemId: "i4", title: "D", status: "passed" },
+      ],
+    })],
+  ]);
+  const env = makeEnv({ runs });
+  const { eid, cands } = await createExp(env);
+  await link(env, eid, cands[0].id, "wprr_a");
+  await link(env, eid, cands[1].id, "wprr_b");
+  await req(env, "POST", `/workspace/projects/${PROJECT}/agent-experiments/${eid}/benchmark`, { userKey: USER });
+  await req(env, "POST", `/workspace/projects/${PROJECT}/agent-experiments/${eid}/decision`, {
+    userKey: USER, selectedCandidateId: "a", decisionStatus: "selected",
+    candidateOutcomes: [{ candidateId: "a", outcome: "selected" }],
+  });
+
+  // Pack 1: link a follow-up that improves outcome.
+  const p1 = await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "PATCH", followupPath(eid, p1.json.actionPack.id), {
+    userKey: USER, status: "reviewed", reviewRunId: "wprr_fu_good",
+  });
+  // Pack 2: link a follow-up that does the same (still improved).
+  const p2 = await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "PATCH", followupPath(eid, p2.json.actionPack.id), {
+    userKey: USER, status: "reviewed", reviewRunId: "wprr_fu_good",
+  });
+
+  const res = await req(env, "GET", `${summaryPath(eid)}?userKey=${USER}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.json.summary.actionPackCount, 2);
+  assert.equal(res.json.summary.followedPackCount, 2);
+  assert.equal(res.json.summary.verdictCounts.improved, 2);
+  assert.equal(res.json.summary.overallVerdict, "mostly_improved");
+  assert.ok(res.json.summary.reasons.includes("more_improved_than_regressed"));
+});
+
+test("GET summary: recommendedAction breakdown surfaces every action", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  // 3 saved packs from the same experiment without follow-ups (server-built
+  // pack will be create_benchmark since no benchmark exists).
+  await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "POST", path(eid), { userKey: USER });
+  const res = await req(env, "GET", `${summaryPath(eid)}?userKey=${USER}`);
+  assert.equal(res.status, 200);
+  const counts = res.json.summary.recommendedActionCounts;
+  assert.equal(counts.create_benchmark, 2);
+  assert.equal(res.json.summary.recommendedActionVerdicts[0].recommendedAction, "create_benchmark");
+  assert.equal(res.json.summary.recommendedActionVerdicts[0].inconclusive, 2);
+});
+
+test("GET summary: no userKey/token leakage in response with real data", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "PATCH", followupPath(eid, env._db._actionPacks[0].id), {
+    userKey: USER, status: "copied",
+  });
+  const res = await req(env, "GET", `${summaryPath(eid)}?userKey=${USER}`);
+  const flat = JSON.stringify(res.json);
+  assert.ok(!flat.includes(USER));
+  assert.ok(!/uk_/.test(flat));
+  assert.ok(!/userKey/i.test(flat));
 });

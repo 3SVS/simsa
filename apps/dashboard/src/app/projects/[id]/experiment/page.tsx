@@ -30,6 +30,7 @@ import {
   getEvolutionActionPack,
   patchEvolutionActionPackFollowup,
   getEvolutionActionPackImpact,
+  getEvolutionImpactSummary,
   type SavedExperimentListItem,
   type SavedExperiment,
   type ExperimentCandidate,
@@ -38,6 +39,7 @@ import {
   type SavedEvolutionActionPackListItem,
   type ActionPackFollowupStatus,
   type EvolutionImpactComparison,
+  type EvolutionImpactSummary,
 } from "@/lib/workspace-experiment-api";
 import {
   FOLLOWUP_STATUSES,
@@ -52,6 +54,13 @@ import {
   formatRate,
   isImpactEmpty,
 } from "@/lib/evolution-impact.mjs";
+import {
+  summaryVerdictLabelKey,
+  summaryReasonLabelKey,
+  formatAverageDeltaPercent,
+  formatAverageDeltaCount,
+  summaryHasNoFollowups,
+} from "@/lib/evolution-impact-summary.mjs";
 import { listProjectReviewHistory, type ProjectReviewHistoryItem } from "@/lib/workspace-github-api";
 import { getSavedBenchmark } from "@/lib/workspace-benchmark-api";
 import { gradeLabelKey, actionLabelKey, reasonLabelKey } from "@/lib/outcome-labels.mjs";
@@ -751,6 +760,10 @@ function OutcomeQualitySection({
   const [impact, setImpact] = useState<EvolutionImpactComparison | null>(null);
   const [impactPhase, setImpactPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
+  // Stage 80: experiment-level impact summary (auto-loaded with the section).
+  const [summary, setSummary] = useState<EvolutionImpactSummary | null>(null);
+  const [summaryPhase, setSummaryPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
+
   // Reset the generated pack whenever the scorecard changes (new experiment / decision).
   useEffect(() => {
     setPack(null);
@@ -763,6 +776,8 @@ function OutcomeQualitySection({
     setSaveError(null);
     setImpact(null);
     setImpactPhase("idle");
+    setSummary(null);
+    setSummaryPhase("idle");
   }, [scorecard]);
 
   // Load saved action packs whenever the experiment changes.
@@ -777,6 +792,28 @@ function OutcomeQualitySection({
       cancelled = true;
     };
   }, [projectId, experiment.id, userKey]);
+
+  // Stage 80: auto-load the experiment-level summary whenever saved packs
+  // change (initial mount, after Save, after follow-up Save). One round trip
+  // per material change — no polling.
+  useEffect(() => {
+    if (!userKey) return;
+    let cancelled = false;
+    setSummaryPhase("loading");
+    getEvolutionImpactSummary(projectId, experiment.id, userKey).then((res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        setSummary(res.summary);
+        setSummaryPhase("ready");
+      } else {
+        setSummary(null);
+        setSummaryPhase("error");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, experiment.id, userKey, savedPacks]);
 
   // Sync follow-up form with the opened pack's snapshot.
   useEffect(() => {
@@ -1116,6 +1153,141 @@ function OutcomeQualitySection({
                 ))}
               </div>
             )}
+
+            {/* Stage 80: experiment-level Evolution impact summary */}
+            <div className="mt-4 rounded-lg border border-gray-100 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{t.evolution.summaryTitle}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">{t.evolution.summaryDesc}</p>
+                </div>
+                {summary && (
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                      summary.overallVerdict === "mostly_improved"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : summary.overallVerdict === "regressed"
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : summary.overallVerdict === "mixed"
+                            ? "border-gray-200 bg-gray-50 text-gray-700"
+                            : summary.overallVerdict === "mostly_inconclusive"
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : "border-gray-200 bg-white text-gray-500"
+                    }`}
+                  >
+                    {t.evolution[summaryVerdictLabelKey(summary.overallVerdict) as keyof typeof t.evolution]}
+                  </span>
+                )}
+              </div>
+
+              {summaryPhase === "loading" && (
+                <p className="mt-2 text-xs text-gray-400">{t.outcome.loading}</p>
+              )}
+
+              {summaryPhase === "ready" && summary && (
+                <>
+                  {summaryHasNoFollowups(summary) ? (
+                    <p className="mt-2 text-xs text-gray-500">
+                      {summary.actionPackCount === 0
+                        ? t.evolution.summaryEmptyPacks
+                        : t.evolution.summaryEmptyFollowups}
+                    </p>
+                  ) : (
+                    <>
+                      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                        <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
+                          <dt className="text-gray-400">{t.evolution.summaryActionPacks}</dt>
+                          <dd className="font-semibold text-gray-800">{summary.actionPackCount}</dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
+                          <dt className="text-gray-400">{t.evolution.summaryFollowedPacks}</dt>
+                          <dd className="font-semibold text-gray-800">{summary.followedPackCount}</dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
+                          <dt className="text-gray-400">{t.evolution.summaryImprovedPacks}</dt>
+                          <dd className="font-semibold text-emerald-700">{summary.verdictCounts.improved}</dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
+                          <dt className="text-gray-400">{t.evolution.summaryRegressedPacks}</dt>
+                          <dd className="font-semibold text-red-700">{summary.verdictCounts.regressed}</dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
+                          <dt className="text-gray-400">{t.evolution.summaryUnchangedPacks}</dt>
+                          <dd className="font-semibold text-gray-700">{summary.verdictCounts.unchanged}</dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
+                          <dt className="text-gray-400">{t.evolution.summaryInconclusivePacks}</dt>
+                          <dd className="font-semibold text-amber-700">{summary.verdictCounts.inconclusive}</dd>
+                        </div>
+                      </dl>
+
+                      <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">{t.evolution.summaryAverageChange}</p>
+                        <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] sm:grid-cols-4">
+                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactPassRate}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaPercent(summary.averageDelta.passRateDelta)}</dd></div>
+                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactCritical}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.criticalIssueDelta)}</dd></div>
+                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactNotVerified}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.notVerifiedDelta)}</dd></div>
+                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactBlockers}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.blockerDelta)}</dd></div>
+                        </dl>
+                      </div>
+
+                      {summary.recommendedActionVerdicts.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.summaryActionBreakdown}</p>
+                          <ul className="mt-1 space-y-1 text-xs">
+                            {summary.recommendedActionVerdicts.map((r) => (
+                              <li
+                                key={r.recommendedAction}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-100 bg-white px-2 py-1"
+                              >
+                                <span className="font-mono text-[11px] text-gray-600">{r.recommendedAction}</span>
+                                <span className="text-[11px] text-gray-500">
+                                  {r.total} · <span className="text-emerald-700">↑{r.improved}</span> · <span className="text-red-700">↓{r.regressed}</span> · <span className="text-gray-500">={r.unchanged}</span> · <span className="text-amber-700">?{r.inconclusive}</span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {summary.reasons.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.summaryReasonsLabel}</p>
+                      <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
+                        {summary.reasons.map((r) => (
+                          <li key={r} className="flex gap-1.5">
+                            <span className="text-gray-300">•</span>
+                            <span>{t.evolution[summaryReasonLabelKey(r) as keyof typeof t.evolution]}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {summary.limitations.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.summaryLimitationsLabel}</p>
+                      <ul className="mt-1 flex flex-wrap gap-1.5">
+                        {summary.limitations.map((l) => (
+                          <li
+                            key={l}
+                            className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-mono text-gray-500"
+                          >
+                            {l}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {summaryPhase === "error" && (
+                <p className="mt-2 text-xs text-red-600">{t.errors.loadFailed}</p>
+              )}
+            </div>
 
             {/* Stage 77: saved action packs list */}
             <div className="mt-4 border-t border-gray-100 pt-3">

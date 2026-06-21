@@ -408,6 +408,72 @@ export async function getEvolutionActionPackImpact(
   }
 }
 
+// Stage 80 — experiment-level Evolution Impact Summary.
+export type EvolutionImpactSummaryOverallVerdict =
+  | "mostly_improved"
+  | "mixed"
+  | "mostly_inconclusive"
+  | "no_followups"
+  | "regressed";
+
+export type EvolutionImpactSummaryVerdictCounts = {
+  improved: number;
+  regressed: number;
+  unchanged: number;
+  inconclusive: number;
+};
+
+export type EvolutionImpactSummaryRecommendedActionVerdict = {
+  recommendedAction: string;
+  total: number;
+  improved: number;
+  regressed: number;
+  unchanged: number;
+  inconclusive: number;
+};
+
+export type EvolutionImpactSummaryAverageDelta = {
+  passRateDelta: number | null;
+  criticalIssueDelta: number | null;
+  notVerifiedDelta: number | null;
+  blockerDelta: number | null;
+};
+
+export type EvolutionImpactSummary = {
+  projectId: string;
+  experimentId: string;
+  actionPackCount: number;
+  followedPackCount: number;
+  verdictCounts: EvolutionImpactSummaryVerdictCounts;
+  recommendedActionCounts: Record<string, number>;
+  recommendedActionVerdicts: EvolutionImpactSummaryRecommendedActionVerdict[];
+  averageDelta: EvolutionImpactSummaryAverageDelta;
+  overallVerdict: EvolutionImpactSummaryOverallVerdict;
+  reasons: string[];
+  limitations: string[];
+};
+
+type GetImpactSummaryResponse =
+  | { ok: true; summary: EvolutionImpactSummary }
+  | { ok: false; error: string };
+
+export async function getEvolutionImpactSummary(
+  projectId: string,
+  experimentId: string,
+  userKey: string,
+): Promise<GetImpactSummaryResponse> {
+  try {
+    const params = new URLSearchParams({ userKey });
+    const resp = await fetch(
+      `${base(projectId)}/${encodeURIComponent(experimentId)}/evolution-impact-summary?${params}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    return (await resp.json()) as GetImpactSummaryResponse;
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 export type ActionPackFollowupInput = {
   userKey: string;
   status: ActionPackFollowupStatus;
