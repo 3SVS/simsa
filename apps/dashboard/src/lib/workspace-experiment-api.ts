@@ -546,6 +546,60 @@ export async function getProjectEvolutionLearning(
   }
 }
 
+// Stage 82 — project-level Evolution Timeline.
+export type ProjectTimelineEventType =
+  | "experiment_created"
+  | "benchmark_created"
+  | "decision_recorded"
+  | "action_pack_saved"
+  | "followup_recorded"
+  | "impact_improved"
+  | "impact_regressed"
+  | "impact_inconclusive"
+  | "impact_unchanged";
+
+export type ProjectEvolutionTimelineEvent = {
+  id: string;
+  type: ProjectTimelineEventType;
+  occurredAt: string;
+  experimentId?: string;
+  benchmarkId?: string;
+  actionPackId?: string;
+  title: string;
+  summary: string;
+  status?: string;
+  recommendedAction?: string;
+  verdict?: string;
+  href?: string;
+};
+
+export type ProjectEvolutionTimeline = {
+  projectId: string;
+  eventCount: number;
+  events: ProjectEvolutionTimelineEvent[];
+  limitations: string[];
+};
+
+type GetTimelineResponse =
+  | { ok: true; timeline: ProjectEvolutionTimeline }
+  | { ok: false; error: string };
+
+export async function getProjectEvolutionTimeline(
+  projectId: string,
+  userKey: string,
+): Promise<GetTimelineResponse> {
+  try {
+    const params = new URLSearchParams({ userKey });
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/evolution-timeline?${params}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    return (await resp.json()) as GetTimelineResponse;
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 export type ActionPackFollowupInput = {
   userKey: string;
   status: ActionPackFollowupStatus;

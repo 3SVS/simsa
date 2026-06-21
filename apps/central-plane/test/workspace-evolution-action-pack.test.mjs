@@ -1091,3 +1091,163 @@ test("GET learning: response contains no userKey/token even with real data", asy
   assert.ok(!/uk_/.test(flat));
   assert.ok(!/userKey/i.test(flat));
 });
+
+// ─── Stage 82: GET project evolution-timeline ───────────────────────────────
+
+const timelinePath = (proj = PROJECT) => `/workspace/projects/${proj}/evolution-timeline`;
+
+test("GET timeline: missing userKey → 400", async () => {
+  const env = makeEnv();
+  const res = await req(env, "GET", timelinePath());
+  assert.equal(res.status, 400);
+  assert.equal(res.json.error, "userKey_required");
+});
+
+test("GET timeline: empty project → eventCount 0, no events, no limitations", async () => {
+  const env = makeEnv();
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.json.timeline.eventCount, 0);
+  assert.deepEqual(res.json.timeline.events, []);
+  assert.deepEqual(res.json.timeline.limitations, []);
+});
+
+test("GET timeline: experiment_created event surfaces with href", async () => {
+  const env = makeEnv();
+  await createExp(env);
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  assert.equal(res.status, 200);
+  const e = res.json.timeline.events.find((ev) => ev.type === "experiment_created");
+  assert.ok(e);
+  assert.equal(e.title, "Experiment created");
+  assert.ok(e.href.startsWith(`/projects/${PROJECT}/experiment?experiment=`));
+});
+
+test("GET timeline: action_pack_saved event for each saved pack", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "POST", path(eid), { userKey: USER });
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  const packs = res.json.timeline.events.filter((ev) => ev.type === "action_pack_saved");
+  assert.equal(packs.length, 2);
+  assert.equal(packs[0].experimentId, eid);
+  assert.equal(packs[0].recommendedAction, "create_benchmark");
+});
+
+test("GET timeline: followup_recorded event when followedAt is stamped", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  const created = await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "PATCH", followupPath(eid, created.json.actionPack.id), {
+    userKey: USER, status: "copied",
+  });
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  const e = res.json.timeline.events.find((ev) => ev.type === "followup_recorded");
+  assert.ok(e);
+  assert.equal(e.actionPackId, created.json.actionPack.id);
+  assert.equal(e.status, "copied");
+});
+
+test("GET timeline: impact_improved end-to-end with benchmark + review-run follow-up", async () => {
+  const runs = new Map([
+    ["wprr_a", makeRun("wprr_a", {
+      summary: { passed: 3, failed: 1 },
+      results: [
+        { itemId: "i1", title: "A", status: "passed" },
+        { itemId: "i2", title: "B", status: "passed" },
+        { itemId: "i3", title: "C", status: "passed" },
+        { itemId: "i4", title: "D", status: "failed" },
+      ],
+    })],
+    ["wprr_b", makeRun("wprr_b", {
+      summary: { passed: 2, failed: 2 },
+      results: [
+        { itemId: "i1", title: "A", status: "passed" },
+        { itemId: "i2", title: "B", status: "passed" },
+        { itemId: "i3", title: "C", status: "failed" },
+        { itemId: "i4", title: "D", status: "failed" },
+      ],
+    })],
+    ["wprr_fu_good", makeRun("wprr_fu_good", {
+      summary: { passed: 4 },
+      results: [
+        { itemId: "i1", title: "A", status: "passed" },
+        { itemId: "i2", title: "B", status: "passed" },
+        { itemId: "i3", title: "C", status: "passed" },
+        { itemId: "i4", title: "D", status: "passed" },
+      ],
+    })],
+  ]);
+  const env = makeEnv({ runs });
+  const { eid, cands } = await createExp(env);
+  await link(env, eid, cands[0].id, "wprr_a");
+  await link(env, eid, cands[1].id, "wprr_b");
+  await req(env, "POST", `/workspace/projects/${PROJECT}/agent-experiments/${eid}/benchmark`, { userKey: USER });
+  await req(env, "POST", `/workspace/projects/${PROJECT}/agent-experiments/${eid}/decision`, {
+    userKey: USER, selectedCandidateId: "a", decisionStatus: "selected",
+    candidateOutcomes: [{ candidateId: "a", outcome: "selected" }],
+  });
+  const created = await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "PATCH", followupPath(eid, created.json.actionPack.id), {
+    userKey: USER, status: "reviewed", reviewRunId: "wprr_fu_good",
+  });
+
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  assert.equal(res.status, 200);
+  // All five event types fire: experiment_created, benchmark_created,
+  // decision_recorded, action_pack_saved, followup_recorded, impact_improved.
+  const types = new Set(res.json.timeline.events.map((e) => e.type));
+  assert.ok(types.has("experiment_created"));
+  assert.ok(types.has("benchmark_created"));
+  assert.ok(types.has("decision_recorded"));
+  assert.ok(types.has("action_pack_saved"));
+  assert.ok(types.has("followup_recorded"));
+  assert.ok(types.has("impact_improved"));
+  const impactEvent = res.json.timeline.events.find((e) => e.type === "impact_improved");
+  assert.equal(impactEvent.verdict, "improved");
+});
+
+test("GET timeline: events sorted by occurredAt DESC", async () => {
+  const env = makeEnv();
+  const a = await createExp(env);
+  const b = await createExp(env);
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  const ids = res.json.timeline.events
+    .filter((e) => e.type === "experiment_created")
+    .map((e) => e.experimentId);
+  // Most-recent experiment first. Since createExp uses Date.now() under the
+  // hood, the second one is newer.
+  assert.equal(ids[0], b.eid);
+  assert.equal(ids[1], a.eid);
+});
+
+test("GET timeline: other user's experiments excluded (cross-tenant isolation)", async () => {
+  const env = makeEnv();
+  await createExp(env);
+  await req(env, "POST", `/workspace/projects/${PROJECT}/agent-experiments`, {
+    userKey: "uk_other",
+    title: "Other", templateId: "multi_agent_split",
+    candidates: [
+      { id: "a", label: "A", mode: "multi_agent", role: "builder", suggestedAgent: "claude_code" },
+      { id: "b", label: "B", mode: "multi_agent", role: "builder", suggestedAgent: "codex" },
+    ],
+  });
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  const expEvents = res.json.timeline.events.filter((e) => e.type === "experiment_created");
+  assert.equal(expEvents.length, 1);
+});
+
+test("GET timeline: response contains no userKey/token", async () => {
+  const env = makeEnv();
+  const { eid } = await createExp(env);
+  await req(env, "POST", path(eid), { userKey: USER });
+  await req(env, "PATCH", followupPath(eid, env._db._actionPacks[0].id), {
+    userKey: USER, status: "copied",
+  });
+  const res = await req(env, "GET", `${timelinePath()}?userKey=${USER}`);
+  const flat = JSON.stringify(res.json);
+  assert.ok(!flat.includes(USER));
+  assert.ok(!/uk_/.test(flat));
+  assert.ok(!/userKey/i.test(flat));
+});

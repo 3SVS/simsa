@@ -11,8 +11,11 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { statusLabel } from "@/i18n/dictionary.mjs";
 import {
   getProjectEvolutionLearning,
+  getProjectEvolutionTimeline,
   type ProjectEvolutionLearningSignals,
   type ProjectLearningSignal,
+  type ProjectEvolutionTimeline,
+  type ProjectEvolutionTimelineEvent,
 } from "@/lib/workspace-experiment-api";
 import {
   topSignalLabelKey,
@@ -21,6 +24,11 @@ import {
   formatAverageDeltaCount,
   learningHasNoData,
 } from "@/lib/project-evolution-learning.mjs";
+import {
+  timelineEventLabelKey,
+  timelineLimitationLabelKey,
+  timelineHasNoEvents,
+} from "@/lib/project-evolution-timeline.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 
 export default function ProjectOverviewPage() {
@@ -102,6 +110,14 @@ export default function ProjectOverviewPage() {
           <h2 className="section-title">{t.evolution.learningTitle}</h2>
         </div>
         <EvolutionLearningCard projectId={id} t={t} />
+      </section>
+
+      {/* Stage 82: project-level Evolution Timeline */}
+      <section className="mb-8">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="section-title">{t.evolution.timelineTitle}</h2>
+        </div>
+        <EvolutionTimelineCard projectId={id} t={t} />
       </section>
     </div>
   );
@@ -292,6 +308,144 @@ function TopSignalText({ signal, t }: { signal: ProjectLearningSignal; t: Dictio
       </span>
     </>
   );
+}
+
+function EvolutionTimelineCard({ projectId, t }: { projectId: string; t: Dictionary }) {
+  const [timeline, setTimeline] = useState<ProjectEvolutionTimeline | null>(null);
+  const [phase, setPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [userKey, setUserKey] = useState<string>("");
+
+  useEffect(() => {
+    setUserKey(getUserKey());
+  }, []);
+
+  useEffect(() => {
+    if (!userKey) return;
+    let cancelled = false;
+    setPhase("loading");
+    getProjectEvolutionTimeline(projectId, userKey).then((res) => {
+      if (cancelled) return;
+      if (res.ok) {
+        setTimeline(res.timeline);
+        setPhase("ready");
+      } else {
+        setTimeline(null);
+        setPhase("error");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, userKey]);
+
+  if (phase === "loading") {
+    return <p className="card p-5 text-xs text-gray-400">{t.outcome.loading}</p>;
+  }
+  if (phase === "error") {
+    return <p className="card p-5 text-xs text-red-600">{t.errors.loadFailed}</p>;
+  }
+  if (!timeline) {
+    return <p className="card p-5 text-xs text-gray-400">{t.evolution.timelineEmpty}</p>;
+  }
+
+  return (
+    <div className="card p-5">
+      <p className="text-xs text-gray-500">{t.evolution.timelineDesc}</p>
+
+      {timelineHasNoEvents(timeline) ? (
+        <p className="mt-3 text-xs text-gray-500">{t.evolution.timelineEmpty}</p>
+      ) : (
+        <ol className="mt-3 space-y-2">
+          {timeline.events.map((ev) => (
+            <TimelineEventRow key={ev.id} event={ev} t={t} />
+          ))}
+        </ol>
+      )}
+
+      {timeline.limitations.length > 0 && (
+        <div className="mt-3">
+          <ul className="flex flex-wrap gap-1.5">
+            {timeline.limitations.map((l) => (
+              <li
+                key={l}
+                className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+              >
+                {t.evolution[timelineLimitationLabelKey(l) as keyof typeof t.evolution] ?? l}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineEventRow({
+  event,
+  t,
+}: {
+  event: ProjectEvolutionTimelineEvent;
+  t: Dictionary;
+}) {
+  const labelKey = timelineEventLabelKey(event.type);
+  const label = t.evolution[labelKey as keyof typeof t.evolution];
+  const chipClass = badgeClassForEventType(event.type);
+  return (
+    <li className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-gray-100 bg-white px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${chipClass}`}>
+            {label}
+          </span>
+          {event.status && (
+            <span className="text-[10px] font-mono text-gray-500">{event.status}</span>
+          )}
+          {event.recommendedAction && (
+            <span className="text-[10px] font-mono text-gray-500">{event.recommendedAction}</span>
+          )}
+        </div>
+        {event.summary && (
+          <p className="mt-1 truncate text-xs text-gray-700">{event.summary}</p>
+        )}
+        <p className="mt-0.5 text-[10px] text-gray-400">
+          {new Date(event.occurredAt).toLocaleString()}
+        </p>
+      </div>
+      {event.href && (
+        <Link
+          href={event.href}
+          className="rounded-lg border border-gray-200 px-3 py-1 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50"
+        >
+          {t.evolution.timelineOpen}
+        </Link>
+      )}
+    </li>
+  );
+}
+
+function badgeClassForEventType(type: string): string {
+  switch (type) {
+    case "impact_improved":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "impact_regressed":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "impact_unchanged":
+      return "border-gray-200 bg-gray-50 text-gray-700";
+    case "impact_inconclusive":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "decision_recorded":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    case "benchmark_created":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "experiment_created":
+      return "border-slate-200 bg-slate-50 text-slate-700";
+    case "action_pack_saved":
+      return "border-purple-200 bg-purple-50 text-purple-700";
+    case "followup_recorded":
+      return "border-teal-200 bg-teal-50 text-teal-700";
+    default:
+      return "border-gray-200 bg-white text-gray-500";
+  }
 }
 
 function StatusDot({ status }: { status: string }) {

@@ -57,12 +57,18 @@ import {
   snapshotFromBenchmark,
   snapshotFromReviewRun,
 } from "../workspace/evolution-impact.js";
-import type { EvolutionImpactSnapshot } from "../workspace/evolution-impact.js";
+import type { EvolutionImpactComparison, EvolutionImpactSnapshot } from "../workspace/evolution-impact.js";
 import { buildEvolutionImpactSummary } from "../workspace/evolution-impact-summary.js";
 import {
   buildProjectEvolutionLearning,
   type ProjectLearningEntry,
 } from "../workspace/project-evolution-learning.js";
+import {
+  buildProjectEvolutionTimeline,
+  type TimelineExperimentInput,
+  type TimelineBenchmarkInput,
+  type TimelineActionPackInput,
+} from "../workspace/project-evolution-timeline.js";
 
 const DECISION_STATUSES = ["undecided", "selected", "needs_fix", "no_clear_winner"];
 const CANDIDATE_OUTCOMES = ["selected", "rejected", "needs_fix", "undecided"];
@@ -1067,6 +1073,110 @@ export function createWorkspaceExperimentRoutes(): Hono<{ Bindings: Env }> {
     } catch (err) {
       console.error("[workspace/projects/:id/evolution-learning GET] failed:", err);
       return c.json({ ok: false, error: "learning_failed" }, 500);
+    }
+  });
+
+  // ── Stage 82: project-level Evolution Timeline ──────────────────────────────
+  // Walks owned experiments + their benchmarks + their action packs (with
+  // follow-ups) and reuses Stage 79 loadImpactForActionPack to compute the
+  // verdict for impact events. Pure deterministic output, on-demand only —
+  // no D1 persistence, no LLM, no subjective summaries.
+  app.get("/workspace/projects/:id/evolution-timeline", async (c) => {
+    const projectId = c.req.param("id");
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) return c.json({ ok: false, error: "userKey_required" }, 400);
+
+    try {
+      const list = await listExperiments(c.env, projectId, { limit: 50 });
+      const experiments: TimelineExperimentInput[] = [];
+      const actionPacks: TimelineActionPackInput[] = [];
+      const benchmarkIds = new Set<string>();
+
+      for (const item of list) {
+        const exp = await getExperimentById(c.env, item.id);
+        if (!exp || exp.projectId !== projectId || exp.userKey !== userKey) continue;
+        experiments.push({
+          id: exp.id,
+          title: exp.title,
+          templateId: exp.templateId,
+          status: exp.status,
+          createdAt: exp.createdAt,
+          decisionStatus: exp.decisionStatus,
+          selectedCandidateId: exp.selectedCandidateId,
+          decidedAt: exp.decidedAt,
+        });
+
+        const cands = await listExperimentCandidates(c.env, item.id).catch(() => []);
+        for (const cc of cands) {
+          if (cc.benchmarkId) benchmarkIds.add(cc.benchmarkId);
+        }
+        const experimentLinkedBenchmarkId = cands.find((cc) => cc.benchmarkId)?.benchmarkId;
+
+        const packs = await listEvolutionActionPacks(c.env, {
+          projectId,
+          experimentId: item.id,
+        });
+        for (const p of packs) {
+          const row = await getEvolutionActionPackById(c.env, p.id);
+          if (
+            !row ||
+            row.projectId !== projectId ||
+            row.userKey !== userKey ||
+            row.experimentId !== item.id
+          ) {
+            continue;
+          }
+          // Only compute impact for packs that actually have a follow-up
+          // recorded — saves a benchmark/review-run lookup per pack and
+          // avoids surfacing impact events for fresh-unused packs.
+          const hasFollowupSignal =
+            row.followup.status !== "not_started" ||
+            row.followup.reviewRunId !== undefined ||
+            row.followup.benchmarkId !== undefined ||
+            row.followup.pullRequestNumber !== undefined;
+          let impact = null as EvolutionImpactComparison | null;
+          if (hasFollowupSignal) {
+            impact = await loadImpactForActionPack(c.env, row, {
+              projectId,
+              experimentId: item.id,
+              userKey,
+              experimentLinkedBenchmarkId,
+            });
+          }
+          actionPacks.push({
+            id: row.id,
+            experimentId: row.experimentId,
+            recommendedAction: row.recommendedAction,
+            title: row.title,
+            createdAt: row.createdAt,
+            followup: row.followup,
+            impact,
+          });
+        }
+      }
+
+      const benchmarks: TimelineBenchmarkInput[] = [];
+      for (const bid of benchmarkIds) {
+        const benchRow = await getAgentBenchmarkById(c.env, bid).catch(() => null);
+        if (!benchRow || benchRow.projectId !== projectId || benchRow.userKey !== userKey) continue;
+        benchmarks.push({
+          id: benchRow.id,
+          title: benchRow.title,
+          createdAt: benchRow.createdAt,
+          sourceExperimentId: benchRow.sourceExperimentId,
+        });
+      }
+
+      const timeline = buildProjectEvolutionTimeline({
+        projectId,
+        experiments,
+        benchmarks,
+        actionPacks,
+      });
+      return c.json({ ok: true, timeline });
+    } catch (err) {
+      console.error("[workspace/projects/:id/evolution-timeline GET] failed:", err);
+      return c.json({ ok: false, error: "timeline_failed" }, 500);
     }
   });
 
