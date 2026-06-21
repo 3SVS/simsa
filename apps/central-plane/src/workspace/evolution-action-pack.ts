@@ -20,6 +20,7 @@ import type {
   BenchmarkItemBlocker,
 } from "./agent-benchmark.js";
 import type { ExperimentOutcomeScorecard } from "./experiment-outcome-scorecard.js";
+import { BRAND } from "./brand.js";
 
 export type EvolutionAction =
   | "accept"
@@ -140,7 +141,10 @@ export type EvolutionActionPackMeta = {
  * server-saved packs deterministic regardless of caller locale.
  */
 export const DEFAULT_EVOLUTION_STRINGS: EvolutionStrings = {
-  packHeading: "Conclave Evolution Action Pack",
+  // Heading sourced from BRAND (Stage 84) so a future rebrand touches one
+  // file; saved pack_json rows from before this change keep their own
+  // baked-in heading (immutable artifact policy).
+  packHeading: BRAND.actionPackHeading,
   experimentLabel: "Experiment",
   recommendedAction: "Recommended action",
   targetCandidate: "Target candidate",
