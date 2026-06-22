@@ -15,6 +15,9 @@ build/
 .env.local
 .env.*.local
 
+# Vercel (project link + local auth artifacts — never commit)
+.vercel
+
 # Logs
 *.log
 npm-debug.log*
