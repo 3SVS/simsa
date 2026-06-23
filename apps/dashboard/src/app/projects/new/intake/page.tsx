@@ -4,7 +4,7 @@
 // One front door with multiple starting points. Deterministic local preview
 // only — no backend, no model call, no external fetch. Future stages wire real
 // per-type analysis behind the same model.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   WORKSPACE_INTAKE_TYPES,
   INTAKE_META,
@@ -67,6 +67,7 @@ import type {
   WorkflowRecordListItem,
 } from "@/lib/workspace-agent-workflow-api";
 import { getUserKey } from "@/lib/workflow-store";
+import { buildBenchmarkHandoffPreview } from "@/lib/intake-benchmark-handoff.mjs";
 
 export default function IntakePage() {
   const [type, setType] = useState<WorkspaceIntakeType | null>(null);
@@ -91,6 +92,24 @@ export default function IntakePage() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   const meta = type ? INTAKE_META[type] : null;
+
+  // Stage 113 — deterministic benchmark handoff preview from the opened saved
+  // record. Preview/linkage only — not executed or persisted.
+  const handoff = useMemo(
+    () =>
+      openRecord
+        ? buildBenchmarkHandoffPreview({
+            workflowRecordId: openRecord.id,
+            title: openRecord.title,
+            sourceSummary: openRecord.sourceSummary,
+            agentRunPlan: openRecord.agentRunPlan,
+            evidencePlan: openRecord.evidencePlan,
+            acceptanceMap: openRecord.acceptanceMap,
+            stagePlan: openRecord.stagePlan,
+          })
+        : null,
+    [openRecord],
+  );
 
   function resetPreviews() {
     setDraft(null);
@@ -893,6 +912,100 @@ export default function IntakePage() {
                 Read-only snapshot of a saved plan. No agent execution or evidence
                 collection happened.
               </p>
+
+              {/* Stage 113 — benchmark handoff preview from the saved record */}
+              {handoff && (
+                <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                    Benchmark Handoff Preview · confidence: {handoff.confidence}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-500">{handoff.summary}</p>
+
+                  <p className="mt-3 text-sm font-medium text-gray-900">
+                    Benchmark goal
+                  </p>
+                  <p className="mt-1 text-sm text-gray-700">{handoff.benchmarkGoal}</p>
+
+                  <p className="mt-4 text-sm font-medium text-gray-900">
+                    Candidate agents
+                  </p>
+                  <div className="mt-1 space-y-2">
+                    {handoff.agentCandidates.map((c) => (
+                      <div
+                        key={c.label}
+                        className="rounded-md border border-gray-100 bg-gray-50 p-3"
+                      >
+                        <p className="text-sm font-medium text-gray-800">{c.label}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {c.stageNumbers.length > 0 &&
+                            `Stages: ${c.stageNumbers.join(", ")}`}
+                          {c.taskIds.length > 0 && ` · Tasks: ${c.taskIds.join(", ")}`}
+                        </p>
+                        {c.expectedEvidence.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {c.expectedEvidence.map((e) => (
+                              <span
+                                key={e}
+                                className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-600"
+                              >
+                                {e}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="mt-4 text-sm font-medium text-gray-900">
+                    Acceptance targets
+                  </p>
+                  <div className="mt-1 space-y-2">
+                    {handoff.acceptanceTargets.map((t) => (
+                      <div
+                        key={t.acceptanceItemTitle}
+                        className="rounded-md border border-gray-100 bg-gray-50 p-3"
+                      >
+                        <p className="text-sm font-medium text-gray-800">
+                          {t.acceptanceItemTitle}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Area: {t.area.replace(/_/g, " ")}
+                          {t.stageNumbers.length > 0 &&
+                            ` · Stages: ${t.stageNumbers.join(", ")}`}
+                        </p>
+                        {t.evidenceTypes.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {t.evidenceTypes.map((e) => (
+                              <span
+                                key={e}
+                                className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-600"
+                              >
+                                {e}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs text-gray-600">
+                          {t.decisionCriteria.map((d) => (
+                            <li key={d}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+
+                  <StageDetail
+                    label="Comparison questions"
+                    items={handoff.comparisonQuestions}
+                  />
+                  <StageDetail label="Not included yet" items={handoff.notIncludedYet} />
+
+                  <p className="mt-4 text-xs text-gray-400">
+                    Preview only — benchmark handoff is not executed or persisted.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
