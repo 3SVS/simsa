@@ -5,8 +5,8 @@ import {
   buildIntakeStagePlan,
   STAGE_STATUS_LABELS,
   STAGE_KIND_LABELS,
-} from "../src/lib/intake-stage-plan.mjs";
-import { WORKSPACE_INTAKE_TYPES } from "../src/lib/intake.mjs";
+} from "../src/intake-stage-plan.mjs";
+import { WORKSPACE_INTAKE_TYPES } from "../src/intake.mjs";
 
 function assertPlan(plan) {
   assert.ok(plan.title.length > 0);

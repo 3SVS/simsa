@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildProductUrlIntakePreview,
   SAMPLE_PRODUCT_URL,
-} from "../src/lib/intake-url.mjs";
+} from "../src/intake-url.mjs";
 
 test("normalizes a bare domain", () => {
   const p = buildProductUrlIntakePreview("example.com");

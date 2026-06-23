@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import {
   buildIntakeAcceptanceMap,
   NEXT_STEP_LABELS,
-} from "../src/lib/intake-acceptance-map.mjs";
-import { WORKSPACE_INTAKE_TYPES } from "../src/lib/intake.mjs";
+} from "../src/intake-acceptance-map.mjs";
+import { WORKSPACE_INTAKE_TYPES } from "../src/intake.mjs";
 
 const NEXT_STEPS = new Set(Object.keys(NEXT_STEP_LABELS));
 

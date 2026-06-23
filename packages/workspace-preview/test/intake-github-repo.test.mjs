@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildGitHubRepoIntakePreview,
   SAMPLE_GITHUB_REPO,
-} from "../src/lib/intake-github-repo.mjs";
+} from "../src/intake-github-repo.mjs";
 
 test("parses owner/repo", () => {
   const p = buildGitHubRepoIntakePreview("acme/widget");

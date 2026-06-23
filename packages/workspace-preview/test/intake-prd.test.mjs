@@ -1,7 +1,7 @@
 // Stage 102 — PRD/spec intake preview tests. Pure/deterministic; no backend.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildPrdIntakePreview, SAMPLE_PRD } from "../src/lib/intake-prd.mjs";
+import { buildPrdIntakePreview, SAMPLE_PRD } from "../src/intake-prd.mjs";
 
 test("empty/minimal input returns a fallback preview", () => {
   const p = buildPrdIntakePreview("   ");

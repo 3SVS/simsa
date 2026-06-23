@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildAiBuiltAppRecoveryPreview,
   SAMPLE_AI_BUILT_APP,
-} from "../src/lib/intake-ai-built-app.mjs";
+} from "../src/intake-ai-built-app.mjs";
 
 test("fallback for empty/minimal input", () => {
   const p = buildAiBuiltAppRecoveryPreview("   ");

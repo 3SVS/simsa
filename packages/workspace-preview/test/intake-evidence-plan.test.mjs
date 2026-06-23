@@ -5,8 +5,8 @@ import {
   buildIntakeEvidencePlan,
   EVIDENCE_STATUS_LABELS,
   EVIDENCE_TYPE_LABELS,
-} from "../src/lib/intake-evidence-plan.mjs";
-import { WORKSPACE_INTAKE_TYPES } from "../src/lib/intake.mjs";
+} from "../src/intake-evidence-plan.mjs";
+import { WORKSPACE_INTAKE_TYPES } from "../src/intake.mjs";
 
 const FORBIDDEN = ["verified", "passed", "complete", "completed", "production_ready", "accepted"];
 

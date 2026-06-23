@@ -7,9 +7,9 @@ import {
   AGENT_TOOL_LABELS,
   AGENT_STATUS_LABELS,
   AGENT_DECISION_LABELS,
-} from "../src/lib/intake-agent-run-plan.mjs";
-import { buildIntakeStagePlan } from "../src/lib/intake-stage-plan.mjs";
-import { WORKSPACE_INTAKE_TYPES } from "../src/lib/intake.mjs";
+} from "../src/intake-agent-run-plan.mjs";
+import { buildIntakeStagePlan } from "../src/intake-stage-plan.mjs";
+import { WORKSPACE_INTAKE_TYPES } from "../src/intake.mjs";
 
 const FORBIDDEN = ["passed", "complete", "completed", "verified", "production_ready", "ready"];
 

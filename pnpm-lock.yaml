@@ -42,6 +42,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@conclave-ai/workspace-preview':
+        specifier: workspace:*
+        version: link:../../packages/workspace-preview
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
@@ -435,6 +438,9 @@ importers:
 
   packages/mcp-workspace:
     dependencies:
+      '@conclave-ai/workspace-preview':
+        specifier: workspace:*
+        version: link:../workspace-preview
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)

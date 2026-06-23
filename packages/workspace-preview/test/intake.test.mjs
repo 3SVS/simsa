@@ -8,7 +8,7 @@ import {
   INTAKE_META,
   isWorkspaceIntakeType,
   buildIntakeDraft,
-} from "../src/lib/intake.mjs";
+} from "../src/intake.mjs";
 
 test("there are 6 unique intake types", () => {
   assert.equal(WORKSPACE_INTAKE_TYPES.length, 6);
