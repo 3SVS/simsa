@@ -90,6 +90,7 @@ import { buildDecisionOutcomeLinkPreview } from "@/lib/intake-decision-outcome-l
 import { buildEvolutionActionPackPreview } from "@/lib/intake-evolution-action-preview.mjs";
 import { buildAcceptanceGraphDerivedView } from "@/lib/acceptance-graph-derived.mjs";
 import { buildRecurringBlockerDetectionView } from "@/lib/recurring-blocker-detection.mjs";
+import { buildAgentToolRecommendationMemoryView } from "@/lib/agent-tool-recommendation-memory.mjs";
 
 export default function IntakePage() {
   const [type, setType] = useState<WorkspaceIntakeType | null>(null);
@@ -216,6 +217,23 @@ export default function IntakePage() {
           })
         : null,
     [openRecord, graphView, outcomeLink, actionPack],
+  );
+
+  // Stage 128 — per-workflow agent/tool recommendation memory. Derived only —
+  // tool fit is evidence alignment, not executed performance.
+  const toolMemory = useMemo(
+    () =>
+      openRecord
+        ? buildAgentToolRecommendationMemoryView({
+            workflowRecordId: openRecord.id,
+            title: openRecord.title,
+            sourceSummary: openRecord.sourceSummary,
+            agentRunPlan: openRecord.agentRunPlan,
+            evidencePlan: openRecord.evidencePlan,
+            recurringBlockerDetectionView: blockerView ?? undefined,
+          })
+        : null,
+    [openRecord, blockerView],
   );
 
   function resetPreviews() {
@@ -1614,6 +1632,84 @@ export default function IntakePage() {
 
                   <p className="mt-4 text-xs text-gray-400">
                     Derived preview only — blocker signals are not verified defects.
+                  </p>
+                </div>
+              )}
+
+              {/* Stage 128 — agent/tool recommendation memory from the saved record */}
+              {toolMemory && (
+                <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                    Agent / Tool Recommendation Memory · confidence: {toolMemory.confidence}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-500">{toolMemory.summary}</p>
+
+                  {toolMemory.items.length === 0 ? (
+                    <p className="mt-3 text-sm text-gray-500">
+                      No agent/tool recommendation memory detected yet. This saved
+                      workflow does not contain enough role/tool task structure to
+                      derive a memory signal.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mt-3 text-sm text-gray-700">
+                        Top pairing:{" "}
+                        {toolMemory.topRole}/{toolMemory.topTool?.replace(/_/g, " ")} ·
+                        Evidence fit — strong {toolMemory.evidenceFitSummary.strong} ·
+                        partial {toolMemory.evidenceFitSummary.partial} · weak{" "}
+                        {toolMemory.evidenceFitSummary.weak} · unknown{" "}
+                        {toolMemory.evidenceFitSummary.unknown}
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {toolMemory.items.map((it) => (
+                          <div
+                            key={it.id}
+                            className="rounded-md border border-gray-100 bg-gray-50 p-3"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium text-gray-800">
+                                {it.role} / {it.recommendedTool.replace(/_/g, " ")}
+                              </span>
+                              <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
+                                fit: {it.toolFit}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {it.stageNumbers.length > 0 &&
+                                `Stages: ${it.stageNumbers.join(", ")}`}
+                              {it.taskIds.length > 0 && ` · Tasks: ${it.taskIds.join(", ")}`}
+                              {it.blockerTypes.length > 0 &&
+                                ` · Blockers: ${it.blockerTypes
+                                  .map((b) => b.replace(/_/g, " "))
+                                  .join(", ")}`}
+                            </p>
+                            {it.expectedEvidenceTypes.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {it.expectedEvidenceTypes.map((e) => (
+                                  <span
+                                    key={e}
+                                    className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-600"
+                                  >
+                                    {e.replace(/_/g, " ")}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <p className="mt-1.5 text-sm text-gray-600">{it.memoryNote}</p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {it.suggestedFutureUse}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <StageDetail label="Not included yet" items={toolMemory.notIncludedYet} />
+
+                  <p className="mt-4 text-xs text-gray-400">
+                    Derived preview only — tool fit is not based on executed
+                    performance.
                   </p>
                 </div>
               )}
