@@ -68,6 +68,7 @@ import type {
 } from "@/lib/workspace-agent-workflow-api";
 import { getUserKey } from "@/lib/workflow-store";
 import { buildBenchmarkHandoffPreview } from "@/lib/intake-benchmark-handoff.mjs";
+import { buildDecisionOutcomeLinkPreview } from "@/lib/intake-decision-outcome-link.mjs";
 
 export default function IntakePage() {
   const [type, setType] = useState<WorkspaceIntakeType | null>(null);
@@ -109,6 +110,25 @@ export default function IntakePage() {
           })
         : null,
     [openRecord],
+  );
+
+  // Stage 114 — deterministic decision / outcome link preview from the opened
+  // saved record + its handoff. Preview only — no decision/scorecard/action pack.
+  const outcomeLink = useMemo(
+    () =>
+      openRecord
+        ? buildDecisionOutcomeLinkPreview({
+            workflowRecordId: openRecord.id,
+            title: openRecord.title,
+            sourceSummary: openRecord.sourceSummary,
+            acceptanceMap: openRecord.acceptanceMap,
+            stagePlan: openRecord.stagePlan,
+            agentRunPlan: openRecord.agentRunPlan,
+            evidencePlan: openRecord.evidencePlan,
+            benchmarkHandoffPreview: handoff ?? undefined,
+          })
+        : null,
+    [openRecord, handoff],
   );
 
   function resetPreviews() {
@@ -1003,6 +1023,102 @@ export default function IntakePage() {
 
                   <p className="mt-4 text-xs text-gray-400">
                     Preview only — benchmark handoff is not executed or persisted.
+                  </p>
+                </div>
+              )}
+
+              {/* Stage 114 — decision / outcome link preview from the saved record */}
+              {outcomeLink && (
+                <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                    Decision / Outcome Link Preview · confidence: {outcomeLink.confidence}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-500">{outcomeLink.summary}</p>
+
+                  <p className="mt-3 text-sm font-medium text-gray-900">
+                    Recommended decision candidate
+                  </p>
+                  <p className="mt-1 text-sm text-gray-700">
+                    {
+                      outcomeLink.decisionCandidates.find(
+                        (c) => c.type === outcomeLink.recommendedDecisionCandidate,
+                      )?.label
+                    }
+                  </p>
+
+                  <p className="mt-4 text-sm font-medium text-gray-900">
+                    Decision candidates
+                  </p>
+                  <div className="mt-1 space-y-2">
+                    {outcomeLink.decisionCandidates.map((c) => (
+                      <div
+                        key={c.type}
+                        className={`rounded-md border p-3 ${
+                          c.type === outcomeLink.recommendedDecisionCandidate
+                            ? "border-brand-300 bg-brand-50"
+                            : "border-gray-100 bg-gray-50"
+                        }`}
+                      >
+                        <p className="text-sm font-medium text-gray-800">{c.label}</p>
+                        <p className="mt-0.5 text-sm text-gray-600">{c.rationale}</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {c.relatedAcceptanceItems.length > 0 &&
+                            `Items: ${c.relatedAcceptanceItems.join("; ")}`}
+                          {c.relatedStageNumbers.length > 0 &&
+                            ` · Stages: ${c.relatedStageNumbers.join(", ")}`}
+                        </p>
+                        {c.requiredEvidence.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {c.requiredEvidence.map((e) => (
+                              <span
+                                key={e}
+                                className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-600"
+                              >
+                                {e}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {c.blockingQuestions.length > 0 && (
+                          <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs text-gray-600">
+                            {c.blockingQuestions.map((q) => (
+                              <li key={q}>{q}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="mt-4 text-sm font-medium text-gray-900">
+                    Outcome scorecard signals
+                  </p>
+                  <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
+                    {(
+                      [
+                        ["evidenceCompleteness", "Evidence completeness"],
+                        ["acceptanceCoverage", "Acceptance coverage"],
+                        ["unresolvedRisk", "Unresolved risk"],
+                        ["releaseReadiness", "Release readiness"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <div key={key}>
+                        <dt className="text-xs text-gray-400">{label}</dt>
+                        <dd className="text-sm text-gray-700">
+                          {outcomeLink.outcomeScorecardSignals[key]}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+
+                  <StageDetail
+                    label="Future outcome links"
+                    items={outcomeLink.futureOutcomeLinks}
+                  />
+                  <StageDetail label="Not included yet" items={outcomeLink.notIncludedYet} />
+
+                  <p className="mt-4 text-xs text-gray-400">
+                    Preview only — no decision, scorecard, or action pack is created.
                   </p>
                 </div>
               )}
