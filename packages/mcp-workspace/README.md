@@ -285,18 +285,83 @@ returns ok, and the audit log does not leak the userKey. Neither smoke prints se
 
 ## Troubleshooting
 
-- **`dist/index.js not found`** → run the build first.
-- **Server starts with only 9 tools** → expected **Basic-only** behavior (no
-  `CONCLAVE_USER_KEY`).
-- **Connected tools missing** → expected in Basic-only mode; set `CONCLAVE_USER_KEY`
-  only if you intend to use connected tools.
-- **`post_pr_comment` missing** → expected unless `CONCLAVE_ENABLE_PR_COMMENT_POST=true`.
-- **`smoke failed`** → run `pnpm install` and the build first.
-- **`CONCLAVE_USER_KEY is required` (older builds)** → no longer required; the current
-  server starts in Basic-only mode when it is unset.
-- **`not_connected` / empty repos (connected mode)** → connect GitHub once in the
-  Simsa dashboard for this user key.
+Run these diagnostics first (all local, no credentials, no network):
+
+```bash
+pnpm --filter @conclave-ai/mcp-workspace build
+pnpm --filter @conclave-ai/mcp-workspace smoke:basic
+pnpm --filter @conclave-ai/mcp-workspace smoke:basic:stdio
+pnpm --filter @conclave-ai/mcp-workspace qa:basic-tools
+pnpm --filter @conclave-ai/mcp-workspace print:claude-desktop-basic-config
+```
+
+### `dist/index.js` not found
+**Likely cause:** the package was not built. **Check:** `ls
+packages/mcp-workspace/dist/index.js`. **Fix:** `pnpm --filter
+@conclave-ai/mcp-workspace build`. **Safety:** don't hand-edit `dist/`; rebuild.
+
+### `smoke:basic` (or `smoke:basic:stdio`) fails
+**Check:** rerun after `build`. **Fix:** build first, then re-run; for the stdio smoke
+also confirm your Node version and the local absolute path. **Do not** attempt host
+config (or GUI dogfood) until the smokes pass. **Safety:** don't add credentials to
+"make it work" — Basic-only needs none.
+
+### Host (e.g. Claude Desktop) cannot see `simsa-basic`
+**Likely cause:** wrong absolute path · build not run · app not restarted · config
+saved in the wrong/inactive file · invalid JSON. **Fix:** regenerate with
+`print:claude-desktop-basic-config`, rebuild, **restart** the host, open a **new**
+chat. **Safety:** the helper never writes the host file — paste it yourself and
+validate the JSON.
+
+### Server shows only 9 tools
+**Expected** in Basic-only mode (empty `env`). To get connected tools, intentionally
+set `CONCLAVE_USER_KEY`.
+
+### Connected tools / `run_pr_review` appear in Basic-only mode — **blocker**
+**Likely cause:** `CONCLAVE_USER_KEY` (or another connected-mode var) is set. **Fix:**
+remove `env` from the local MCP config and restart. **Safety:** if it persists with
+empty `env`, **stop and report** — do not publish.
+
+### `post_pr_comment` appears unexpectedly
+Should appear **only** in connected mode with `CONCLAVE_ENABLE_PR_COMMENT_POST=true`,
+and still requires `confirm:true`. In Basic-only it must be absent.
+
+### A tool call returns `missing_input` / `invalid_type`
+**Likely cause:** empty input or an unsupported `type`. **Fix:** provide a safe
+product-idea summary and a `type` of `idea` (or `prd` / `product_url` / `github_repo` /
+`pull_request` / `ai_built_app`). This is a safe validation response, not a crash.
+
+### Snapshot tools return a sparse/empty preview
+**Fix:** call `preview_acceptance_map`, `preview_stage_plan`, `preview_agent_run_plan`,
+`preview_evidence_plan` first, then pass their previews into the
+graph/blocker/memory/template tools.
+
+### Handoff link omits `title`/`summary`
+**By design** when the input matches a secret/token/authorization/private-key pattern.
+**Fix:** use a safe summary without secret-like patterns; don't force secrets into a
+handoff URL.
+
+### Handoff link "doesn't do anything"
+**Expected.** It only opens the Simsa Web App with safe query context — it does not
+save workflows, create an account, start a session, or trigger payment.
+
+### "How do I `npm install` it?" / "Is payment required?"
+The package is **not published** — use the local absolute-path config only. MCP Basic
+requires **no payment**; the payment provider is **TBD** (Korea-compatible first), and
+**Stripe is not assumed**.
+
+### Host asks for credentials
+Basic-only mode requires **no credentials**. If prompted, check the host config and
+remove `env` entries, then restart.
+
+### Connected-mode (only when `CONCLAVE_USER_KEY` is set)
+- **`not_connected` / empty repos** → connect GitHub once in the Simsa dashboard for
+  this user key.
 - **`forbidden` from `get_project`** → that project belongs to a different user key.
-- **HTTP 401/403 (connected mode)** → wrong/expired user key, or GitHub not connected.
-- Audit lines on stderr are expected in connected mode; set `CONCLAVE_AUDIT_LOG=false`
-  to silence them.
+- **HTTP 401/403** → wrong/expired user key, or GitHub not connected.
+- Audit lines on stderr are expected; set `CONCLAVE_AUDIT_LOG=false` to silence them.
+
+> **Safety:** Don't paste real tokens into prompts or config. Don't set
+> `CONCLAVE_USER_KEY` unless intentionally testing connected mode. Don't enable
+> `post_pr_comment` during Basic dogfood. Don't publish the package. Don't assume
+> Stripe/payment support. Don't use private customer code as test input.
