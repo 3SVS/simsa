@@ -77,4 +77,22 @@ export type McpTemplateSignalsInput = {
 export function previewAgentToolMemory(input: McpAgentToolMemoryInput): McpPreviewResult;
 export function previewTemplateSignals(input: McpTemplateSignalsInput): McpPreviewResult;
 
+export type McpHandoffInput = {
+  intent?: string;
+  intakeType?: string;
+  title?: string;
+  safeSummary?: string;
+  previewKind?: string;
+  previewId?: string;
+  baseUrl?: string;
+};
+
+export type McpHandoffResult = McpPreviewBoundary & {
+  ok: true;
+  kind: "web_app_handoff_link";
+  handoff: import("@conclave-ai/workspace-preview/web-app-handoff-link").WebAppHandoffLink;
+};
+
+export function createWebAppHandoffLink(input?: McpHandoffInput): McpHandoffResult;
+
 export const MCP_BASIC_PREVIEW_BOUNDARY: McpPreviewBoundary;

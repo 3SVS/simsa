@@ -10,6 +10,7 @@ import {
   previewRecurringBlockers,
   previewAgentToolMemory,
   previewTemplateSignals,
+  createWebAppHandoffLink,
 } from "../src/mcp-basic-preview-tools.mjs";
 import {
   buildIntakeAcceptanceMap,
@@ -209,4 +210,41 @@ test("memory/template wrappers are deterministic", () => {
   const a = previewTemplateSignals(snapshot("github_repo", "acme/web-app"));
   const b = previewTemplateSignals(snapshot("github_repo", "acme/web-app"));
   assert.deepEqual(a, b);
+});
+
+// ── Stage 139 — Web App handoff link wrapper ─────────────────────────────────
+
+test("createWebAppHandoffLink returns ok/kind/handoff/boundary", () => {
+  const r = createWebAppHandoffLink({ intent: "save_workflow", intakeType: "idea", previewKind: "acceptance_map" });
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, "web_app_handoff_link");
+  assert.ok(r.handoff.url.startsWith("https://app.trysimsa.com/projects/new/intake?"));
+  assert.equal(r.handoff.query.source, "mcp_basic");
+  assert.equal(r.handoff.query.intent, "save_workflow");
+  assertBoundary(r);
+});
+
+test("handoff wrapper: missing input → safe default link", () => {
+  const r = createWebAppHandoffLink();
+  assert.equal(r.ok, true);
+  assert.equal(r.handoff.query.source, "mcp_basic");
+  assert.equal(r.handoff.query.intent, "new_intake");
+  assertBoundary(r);
+});
+
+test("handoff wrapper: sensitive fields are omitted (preserves omittedFields/warnings)", () => {
+  const r = createWebAppHandoffLink({ title: "sk-ABCDEFGHIJKLMNOP" });
+  assert.ok(r.handoff.omittedFields.includes("title"));
+  assert.ok(r.handoff.warnings.length >= 1);
+  assert.equal(r.handoff.query.title, undefined);
+});
+
+test("handoff wrapper: no Stripe/payment in url/query (boundary requiresPayment ok)", () => {
+  const r = createWebAppHandoffLink({ intent: "unlock_advanced", title: "Plan" });
+  const blob = (r.handoff.url + JSON.stringify(r.handoff.query)).toLowerCase();
+  assert.ok(!blob.includes("stripe"));
+  assert.ok(!blob.includes("payment"));
+  assert.equal(r.requiresPayment, false);
+  assert.equal(r.handoff.boundary.assumesPaymentProvider, false);
+  assert.equal(r.handoff.boundary.createsPersistence, false);
 });

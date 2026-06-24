@@ -14,6 +14,7 @@ import {
   buildRecurringBlockerDetectionView,
   buildAgentToolRecommendationMemoryView,
   buildTemplateEffectivenessSignalsView,
+  buildWebAppHandoffLink,
 } from "@conclave-ai/workspace-preview";
 
 const BOUNDARY = {
@@ -154,6 +155,22 @@ export function previewTemplateSignals(input) {
     evolutionActionPreview: i.evolutionActionPreview,
   });
   return { ok: true, kind: "template_signals", preview, ...BOUNDARY };
+}
+
+/** Build a safe-context handoff link back to the Simsa Web App. */
+export function createWebAppHandoffLink(input) {
+  const i = asObj(input);
+  const handoff = buildWebAppHandoffLink({
+    baseUrl: str(i.baseUrl) || undefined,
+    intent: str(i.intent) || undefined,
+    intakeType: str(i.intakeType) || undefined,
+    source: "mcp_basic",
+    title: str(i.title) || undefined,
+    safeSummary: str(i.safeSummary) || undefined,
+    previewKind: str(i.previewKind) || undefined,
+    previewId: str(i.previewId) || undefined,
+  });
+  return { ok: true, kind: "web_app_handoff_link", handoff, ...BOUNDARY };
 }
 
 export { BOUNDARY as MCP_BASIC_PREVIEW_BOUNDARY };

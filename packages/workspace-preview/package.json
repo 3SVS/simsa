@@ -79,6 +79,10 @@
     "./template-effectiveness-signals": {
       "types": "./src/template-effectiveness-signals.d.mts",
       "import": "./src/template-effectiveness-signals.mjs"
+    },
+    "./web-app-handoff-link": {
+      "types": "./src/web-app-handoff-link.d.mts",
+      "import": "./src/web-app-handoff-link.mjs"
     }
   },
   "files": [
