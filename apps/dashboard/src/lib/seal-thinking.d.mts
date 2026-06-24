@@ -25,6 +25,18 @@ export type SealThinkingConfig = {
   a11y: SealThinkingA11y;
 };
 
+export type SealThinkingLoadingDictionary = {
+  mappingAcceptance?: string;
+  buildingStagePlan?: string;
+  planningEvidence?: string;
+  checkingHandoffSafety?: string;
+  preparingPreview?: string;
+  finalizingReview?: string;
+};
+
 export const SEAL_THINKING_VARIANTS: SealThinkingVariant[];
 export const DEFAULT_SEAL_LABEL: string;
 export function resolveSealThinking(input?: SealThinkingInput): SealThinkingConfig;
+export function getDefaultSealThinkingSteps(
+  loadingDictionary?: SealThinkingLoadingDictionary | Record<string, unknown>,
+): string[];

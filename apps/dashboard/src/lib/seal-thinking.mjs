@@ -29,8 +29,9 @@ export function resolveSealThinking(input = {}) {
     ? i.stepLabels.map((s) => str(s).trim()).filter(Boolean)
     : [];
   const labelProp = str(i.label).trim();
-  // Stage 161 renders the current (first) label only; cycling is deferred to later stages.
-  const label = steps.length ? steps[0] : labelProp || DEFAULT_SEAL_LABEL;
+  // Precedence (Stage 162): explicit label → first stepLabel → default. Cycling of
+  // step labels over time is deferred to a later stage.
+  const label = labelProp || (steps.length ? steps[0] : DEFAULT_SEAL_LABEL);
 
   const dots = Array.from({ length: dotCount }, (_, index) => ({
     index,
@@ -46,4 +47,25 @@ export function resolveSealThinking(input = {}) {
     showVisibleLabel: variant === "panel",
     a11y: { role: "status", ariaLive: "polite", ariaBusy: true },
   };
+}
+
+// Ordered acceptance-workflow step labels, in the order a review progresses. Accepts
+// the `loading` dictionary object (so this stays decoupled from the i18n module) and
+// drops any missing/blank entries. Used to feed `stepLabels` into SimsaSealThinking.
+const DEFAULT_STEP_KEYS = [
+  "mappingAcceptance",
+  "buildingStagePlan",
+  "planningEvidence",
+  "checkingHandoffSafety",
+  "preparingPreview",
+  "finalizingReview",
+];
+
+/**
+ * @param {Record<string, unknown>} [loadingDictionary]
+ * @returns {string[]}
+ */
+export function getDefaultSealThinkingSteps(loadingDictionary) {
+  const d = loadingDictionary && typeof loadingDictionary === "object" ? loadingDictionary : {};
+  return DEFAULT_STEP_KEYS.map((k) => str(d[k]).trim()).filter(Boolean);
 }

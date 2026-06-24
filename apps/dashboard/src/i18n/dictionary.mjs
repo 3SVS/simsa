@@ -1323,6 +1323,15 @@ const EN = {
       containsSecretsFalse: "No secrets",
     },
   },
+  // Stage 162 — thinking/loading status copy for the SimsaSealThinking motion.
+  loading: {
+    mappingAcceptance: "Mapping acceptance criteria…",
+    buildingStagePlan: "Building stage plan…",
+    planningEvidence: "Planning evidence…",
+    checkingHandoffSafety: "Checking handoff safety…",
+    preparingPreview: "Preparing preview…",
+    finalizingReview: "Finalizing review…",
+  },
 };
 
 const KO = {
@@ -2624,6 +2633,15 @@ const KO = {
       createsPersistenceFalse: "데이터 영속 없음",
       containsSecretsFalse: "비밀정보 없음",
     },
+  },
+  // Stage 162 — thinking/loading status copy for the SimsaSealThinking motion.
+  loading: {
+    mappingAcceptance: "수용 기준을 매핑하는 중…",
+    buildingStagePlan: "단계 계획을 구성하는 중…",
+    planningEvidence: "검증 증거를 준비하는 중…",
+    checkingHandoffSafety: "핸드오프 안전성을 확인하는 중…",
+    preparingPreview: "미리보기를 준비하는 중…",
+    finalizingReview: "리뷰를 마무리하는 중…",
   },
 };
 
