@@ -86,3 +86,52 @@
     @apply mt-0.5 text-xs text-gray-500;
   }
 }
+
+/* Stage 161 — Simsa wax-seal thinking/loading motion.
+   Burgundy seal pulse + rim sweep + sequential evidence dots. Calm + restrained.
+   All motion is disabled under prefers-reduced-motion (static seal/dots/text remain). */
+@keyframes simsa-seal-pulse {
+  0%, 100% { transform: scale(1); }
+  45% { transform: scale(0.94); }
+  60% { transform: scale(1.01); }
+}
+@keyframes simsa-seal-rim-sweep {
+  0% { opacity: 0; transform: rotate(0deg); }
+  35% { opacity: 0.5; }
+  100% { opacity: 0; transform: rotate(360deg); }
+}
+@keyframes simsa-evidence-dot {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+.simsa-seal-motion {
+  animation: simsa-seal-pulse 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  will-change: transform;
+}
+.simsa-seal-rim {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    theme("colors.brand.300") 40deg,
+    transparent 90deg
+  );
+  animation: simsa-seal-rim-sweep 3s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  mask: radial-gradient(closest-side, transparent 62%, #000 64%);
+  -webkit-mask: radial-gradient(closest-side, transparent 62%, #000 64%);
+}
+.simsa-evidence-dot {
+  animation: simsa-evidence-dot 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .simsa-seal-motion,
+  .simsa-seal-rim,
+  .simsa-evidence-dot {
+    animation: none;
+  }
+  /* Reduced motion: dots read as gently present, not flashing. */
+  .simsa-evidence-dot {
+    opacity: 0.6;
+  }
+}

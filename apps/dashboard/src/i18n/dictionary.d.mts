@@ -1264,6 +1264,16 @@ export type Dictionary = {
       containsSecretsFalse: string;
     };
   };
+  loading: {
+    mappingAcceptance: string;
+    buildingStagePlan: string;
+    planningEvidence: string;
+    checkingHandoffSafety: string;
+    preparingPreview: string;
+    finalizingReview: string;
+    saving: string;
+    refreshing: string;
+  };
 };
 
 export const LOCALES: Locale[];

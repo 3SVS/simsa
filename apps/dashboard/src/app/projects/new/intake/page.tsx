@@ -6,6 +6,8 @@
 // per-type analysis behind the same model.
 import { useMemo, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { SimsaSealThinking } from "@/components/SimsaSealThinking";
+import { getDefaultSealThinkingSteps } from "@/lib/seal-thinking.mjs";
 import {
   WORKSPACE_INTAKE_TYPES,
   INTAKE_META,
@@ -97,6 +99,8 @@ import { buildTemplateEffectivenessSignalsView } from "@/lib/template-effectiven
 export default function IntakePage() {
   // Stage 159 — dictionary-first i18n for the MCP handoff/intake destination.
   const { t: tr } = useI18n();
+  // Stage 163 — localized thinking-step labels for genuinely-async waits.
+  const loadingSteps = getDefaultSealThinkingSteps(tr.loading);
   const [type, setType] = useState<WorkspaceIntakeType | null>(null);
   const [rawInput, setRawInput] = useState("");
   const [draft, setDraft] = useState<WorkspaceIntakeDraft | null>(null);
@@ -1025,9 +1029,16 @@ export default function IntakePage() {
                 type="button"
                 onClick={saveWorkflow}
                 disabled={saving}
-                className="btn btn-primary btn-md"
+                className="btn btn-primary btn-md inline-flex items-center gap-2"
               >
-                {saving ? "Saving…" : "Save workflow plan"}
+                {saving ? (
+                  <>
+                    <SimsaSealThinking variant="compact" label={tr.loading.saving} />
+                    <span>{tr.loading.saving}</span>
+                  </>
+                ) : (
+                  <span>Save workflow plan</span>
+                )}
               </button>
             </div>
 
@@ -1080,9 +1091,16 @@ export default function IntakePage() {
                 type="button"
                 onClick={() => refreshSavedList()}
                 disabled={listLoading}
-                className="btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm inline-flex items-center gap-1.5"
               >
-                {listLoading ? "Loading…" : "Refresh"}
+                {listLoading ? (
+                  <>
+                    <SimsaSealThinking variant="compact" label={tr.loading.refreshing} />
+                    <span>{tr.loading.refreshing}</span>
+                  </>
+                ) : (
+                  <span>Refresh</span>
+                )}
               </button>
             </div>
           </div>
@@ -1170,8 +1188,14 @@ export default function IntakePage() {
             </ul>
           )}
 
+          {/* Stage 163 — real async wait (fetching a saved record): truthful thinking panel. */}
           {detailLoading && (
-            <p className="mt-3 text-sm text-gray-500">Loading workflow…</p>
+            <SimsaSealThinking
+              variant="panel"
+              stepLabels={loadingSteps}
+              label={tr.loading.preparingPreview}
+              className="mt-3"
+            />
           )}
 
           {openRecord && (
