@@ -27,6 +27,7 @@
     "smoke": "node scripts/smoke.mjs",
     "smoke:basic": "node scripts/smoke-basic.mjs",
     "smoke:basic:stdio": "node scripts/smoke-basic-stdio.mjs",
+    "qa:basic-tools": "node scripts/qa-basic-tools.mjs",
     "print:claude-desktop-basic-config": "node scripts/print-claude-desktop-basic-config.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.mjs",
