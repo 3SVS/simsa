@@ -163,6 +163,11 @@ and an evidence template live in
 `conclave-builder-pack/out/stage-154-claude-desktop-dogfood-evidence-intake.md`. Keep
 `env` empty, don't paste real tokens or private code, and don't publish the package.
 
+Claude Desktop app-side evidence is tracked separately in
+`conclave-builder-pack/out/stage-155-claude-desktop-app-evidence-record.md`. Until that
+record shows app-side tool discovery and calls, treat Claude Desktop status as
+**prepared/pending, not passed**.
+
 ---
 
 ## Config examples (connected mode)
