@@ -21,7 +21,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-basic-tools.mjs",
     "dev": "tsc -p tsconfig.json --watch",
     "start": "node dist/index.js",
     "smoke": "node scripts/smoke.mjs",

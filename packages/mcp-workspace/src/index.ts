@@ -4,7 +4,14 @@ import { WorkspaceClient, stderrAudit } from "./client.js";
 import { buildServer } from "./server.js";
 
 export { WorkspaceClient, stderrAudit } from "./client.js";
-export { buildServer, TOOL_META } from "./server.js";
+export {
+  buildServer,
+  TOOL_META,
+  BASIC_TOOL_META,
+  BASIC_PREVIEW_TOOL_NAMES,
+  runBasicPreviewTool,
+  getMcpToolRegistrationPlan,
+} from "./server.js";
 export type { ServerOptions } from "./server.js";
 
 const DEFAULT_BASE_URL = "https://conclave-ai.seunghunbae.workers.dev";
@@ -48,11 +55,21 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   }
 
   const userKey = process.env.CONCLAVE_USER_KEY?.trim();
+  const transport = new StdioServerTransport();
+
+  // Basic-only mode: no CONCLAVE_USER_KEY → start anyway, exposing only the free
+  // local preview tools. No client is built, so no connected/network/gated tool
+  // is registered. This is NOT a fatal error.
   if (!userKey) {
-    process.stderr.write("conclave-mcp-workspace: CONCLAVE_USER_KEY is required.\n");
-    process.exitCode = 1;
+    const server = buildServer({});
+    await server.connect(transport);
+    process.stderr.write(
+      "conclave-mcp-workspace: ready on stdio in Basic-only mode " +
+        "(no CONCLAVE_USER_KEY — local preview tools only; set CONCLAVE_USER_KEY to enable connected tools).\n",
+    );
     return;
   }
+
   // Accept the documented names, with back-compat aliases from Stage 61.
   const baseUrl =
     process.env.CONCLAVE_API_BASE_URL?.trim() ||
@@ -63,7 +80,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 
   const client = new WorkspaceClient({ baseUrl, userKey, audit: auditOff ? () => {} : stderrAudit });
   const server = buildServer({ client, enablePostComment });
-  const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write(
     `conclave-mcp-workspace: ready on stdio (base=${baseUrl}, post_pr_comment=${enablePostComment ? "on" : "off"})\n`,
