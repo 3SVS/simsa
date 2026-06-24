@@ -1,0 +1,96 @@
+{
+  "name": "@conclave-ai/workspace-preview",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pure deterministic preview helpers for Simsa workspace planning, shared by the dashboard and MCP Basic. No React/Next/browser/network/env/mutation/hosted-execution/payment/secrets.",
+  "license": "FSL-1.1-Apache-2.0",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "types": "./src/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.mts",
+      "import": "./src/index.mjs"
+    },
+    "./safety": {
+      "types": "./src/safety.d.mts",
+      "import": "./src/safety.mjs"
+    },
+    "./intake": {
+      "types": "./src/intake.d.mts",
+      "import": "./src/intake.mjs"
+    },
+    "./intake-prd": {
+      "types": "./src/intake-prd.d.mts",
+      "import": "./src/intake-prd.mjs"
+    },
+    "./intake-url": {
+      "types": "./src/intake-url.d.mts",
+      "import": "./src/intake-url.mjs"
+    },
+    "./intake-github-repo": {
+      "types": "./src/intake-github-repo.d.mts",
+      "import": "./src/intake-github-repo.mjs"
+    },
+    "./intake-ai-built-app": {
+      "types": "./src/intake-ai-built-app.d.mts",
+      "import": "./src/intake-ai-built-app.mjs"
+    },
+    "./intake-acceptance-map": {
+      "types": "./src/intake-acceptance-map.d.mts",
+      "import": "./src/intake-acceptance-map.mjs"
+    },
+    "./intake-stage-plan": {
+      "types": "./src/intake-stage-plan.d.mts",
+      "import": "./src/intake-stage-plan.mjs"
+    },
+    "./intake-agent-run-plan": {
+      "types": "./src/intake-agent-run-plan.d.mts",
+      "import": "./src/intake-agent-run-plan.mjs"
+    },
+    "./intake-evidence-plan": {
+      "types": "./src/intake-evidence-plan.d.mts",
+      "import": "./src/intake-evidence-plan.mjs"
+    },
+    "./acceptance-graph-derived": {
+      "types": "./src/acceptance-graph-derived.d.mts",
+      "import": "./src/acceptance-graph-derived.mjs"
+    },
+    "./recurring-blocker-detection": {
+      "types": "./src/recurring-blocker-detection.d.mts",
+      "import": "./src/recurring-blocker-detection.mjs"
+    },
+    "./intake-benchmark-handoff": {
+      "types": "./src/intake-benchmark-handoff.d.mts",
+      "import": "./src/intake-benchmark-handoff.mjs"
+    },
+    "./intake-decision-outcome-link": {
+      "types": "./src/intake-decision-outcome-link.d.mts",
+      "import": "./src/intake-decision-outcome-link.mjs"
+    },
+    "./intake-evolution-action-preview": {
+      "types": "./src/intake-evolution-action-preview.d.mts",
+      "import": "./src/intake-evolution-action-preview.mjs"
+    },
+    "./agent-tool-recommendation-memory": {
+      "types": "./src/agent-tool-recommendation-memory.d.mts",
+      "import": "./src/agent-tool-recommendation-memory.mjs"
+    },
+    "./template-effectiveness-signals": {
+      "types": "./src/template-effectiveness-signals.d.mts",
+      "import": "./src/template-effectiveness-signals.mjs"
+    },
+    "./web-app-handoff-link": {
+      "types": "./src/web-app-handoff-link.d.mts",
+      "import": "./src/web-app-handoff-link.mjs"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "clean": "rm -rf .tsbuildinfo"
+  }
+}
