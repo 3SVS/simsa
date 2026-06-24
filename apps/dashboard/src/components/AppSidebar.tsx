@@ -70,7 +70,7 @@ export function AppSidebar() {
         </button>
         <Link href="/projects/new" aria-label={t.nav.newProject} className="mb-2 grid h-8 w-8 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">＋</Link>
         <Link href="/projects" aria-label={t.nav.allProjects} className="grid h-8 w-8 place-items-center rounded-md text-gray-500 hover:bg-gray-50">▦</Link>
-        <span className="mt-auto grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">{initial}</span>
+        <Link href="/account" aria-label={t.account.openLabel} className="mt-auto grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700">{initial}</Link>
       </aside>
     );
   }
@@ -142,15 +142,15 @@ export function AppSidebar() {
         )}
       </nav>
 
-      {/* Profile + plan (bottom) */}
+      {/* Profile + plan (bottom) — links to local account settings */}
       <div className="border-t border-gray-100 p-2">
-        <div className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5">
+        <Link href="/account" aria-label={t.account.openLabel} className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-gray-50">
           <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">{initial}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-medium text-gray-900">{t.account.workspace}</span>
             <span className="block truncate text-[11px] text-gray-400">{t.account.plan}</span>
           </span>
-        </div>
+        </Link>
       </div>
     </aside>
   );

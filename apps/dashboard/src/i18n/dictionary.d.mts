@@ -42,7 +42,49 @@ export type Dictionary = {
     allProjects: string;
     noProjects: string;
   };
-  account: { workspace: string; plan: string; settings: string };
+  account: {
+    workspace: string;
+    plan: string;
+    settings: string;
+    title: string;
+    subtitle: string;
+    openLabel: string;
+    sections: {
+      profile: string;
+      preferences: string;
+      connectedAccounts: string;
+      data: string;
+      workspace: string;
+    };
+    profile: {
+      displayName: string;
+      displayNamePlaceholder: string;
+      storedLocally: string;
+      emailRequiresSignIn: string;
+    };
+    preferences: { language: string; languageHelp: string };
+    connectedAccounts: {
+      github: string;
+      githubStatus: string;
+      vercel: string;
+      vercelStatus: string;
+      readFirst: string;
+    };
+    data: {
+      projectExports: string;
+      accountExportPlanned: string;
+      importPlanned: string;
+      deleteAccount: string;
+      deleteRequiresSignIn: string;
+    };
+    workspaceInfo: {
+      current: string;
+      localScoped: string;
+      teamPlanned: string;
+      invitePlanned: string;
+    };
+    badges: { local: string; planned: string; requiresSignIn: string; readOnly: string };
+  };
   status: Record<StatusKey, StatusEntry>;
   comparison: {
     improved: string;
