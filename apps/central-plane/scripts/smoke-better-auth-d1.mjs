@@ -9,7 +9,8 @@
  * i.e. sign-up + sign-in succeed and write real rows.
  *
  * What this is NOT (the Stage 218 scope guard — keep the route UNWIRED):
- *   - It does NOT import or touch `createBetterAuthSpike` or the `/api/auth/*` route.
+ *   - It exercises the helper directly; it does NOT import the `/api/auth/*` route
+ *     (the wired route is covered separately by smoke:auth-route-d1).
  *     The deployed Worker (src/index.ts → router) never references this file; wrangler
  *     bundles only `src/index.ts`, and `scripts/` is dev-only + unpackaged.
  *   - It does NOT mutate the real local D1 under `.wrangler/` or any shared state.
@@ -174,7 +175,7 @@ if (isMain) {
         console.error("SMOKE FAILED");
         process.exit(1);
       }
-      console.log("SMOKE OK — helper + better-auth + local D1 sign-up/sign-in verified (route stays unwired).");
+      console.log("SMOKE OK — helper + better-auth + local D1 sign-up/sign-in verified (helper-level; route covered by smoke:auth-route-d1).");
       process.exit(0);
     })
     .catch((err) => {

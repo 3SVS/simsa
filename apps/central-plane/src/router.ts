@@ -151,9 +151,11 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceExperimentRoutes());
   // Stage 112 — Persisted Agent Workflow Records (intake snapshot save/list/read).
   app.route("/", createWorkspaceAgentWorkflowRoutes());
-  // Stage 209 — Better Auth LOCAL-ONLY spike route (/api/auth/*), gated by
-  // AUTH_ENABLED. Default off → 503 auth_disabled in production. No OAuth, no
-  // CORS, no dashboard UI; runtime D1 binding deferred (see auth-spike.ts).
+  // Stage 209 / 221 — Better Auth LOCAL-ONLY route (/api/auth/*), gated by
+  // AUTH_ENABLED. Default off → 503 auth_disabled in production. The D1-backed
+  // runtime is constructed per-request ONLY behind AUTH_ENABLED + secret + env.DB
+  // gates (local only); production stays dormant. No OAuth, no CORS, no dashboard
+  // UI; no production migration/deploy (see auth-spike.ts + docs/stage-220 memo).
   app.route("/", createAuthSpikeRoutes());
   app.onError((err, c) => {
     console.error("central-plane error:", err);

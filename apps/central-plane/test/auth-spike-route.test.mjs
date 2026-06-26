@@ -1,12 +1,12 @@
 /**
  * auth-spike-route.test.mjs
  *
- * Stage 209 — Better Auth LOCAL-ONLY route (/api/auth/*). Verifies the route is
- * disabled by default (503 auth_disabled), reports auth_not_configured when the
- * flag is on but no local secret is present, never leaks the secret, and mounts
- * safely inside the real router. Imports the built output (dist), matching the
- * repo test convention. The route is exercised through createApp() so the actual
- * router mount is covered.
+ * Stage 209 / 221 — Better Auth LOCAL-ONLY route (/api/auth/*). Verifies the gated
+ * runtime ladder: disabled by default (503 auth_disabled), auth_not_configured when
+ * the flag is on but no local secret, auth_db_unavailable when flag+secret but no D1
+ * binding, and the ready path (flag+secret+DB) reaches the Better Auth handler. Never
+ * leaks the secret, and mounts safely inside the real router. Imports the built output
+ * (dist); the route is exercised through createApp() so the actual router mount is covered.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -45,7 +45,17 @@ test("/api/auth/* returns auth_not_configured when flag on but no local secret",
   assert.equal((await res.json()).error, "auth_not_configured");
 });
 
-test("disabled/not-configured responses never echo the secret value", async () => {
+test("/api/auth/* returns auth_db_unavailable when flag + secret present but no D1 binding", async () => {
+  const app = createApp();
+  // env WITHOUT a DB binding — a DB-backed handler cannot be built, so the route must
+  // return an explicit safe error rather than attempt a handler or leak a 500.
+  const req = new Request("http://localhost/api/auth/ok");
+  const res = await app.fetch(req, { ENVIRONMENT: "test", AUTH_ENABLED: "true", BETTER_AUTH_SECRET: "x" });
+  assert.equal(res.status, 503);
+  assert.equal((await res.json()).error, "auth_db_unavailable");
+});
+
+test("disabled/not-configured/db-unavailable responses never echo the secret value", async () => {
   const app = createApp();
   const secret = "super-secret-route-probe-value";
   // flag off, secret present (shouldn't matter — still auth_disabled)

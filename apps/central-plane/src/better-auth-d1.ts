@@ -6,12 +6,14 @@
  * (separately-approved) wiring stage will use to give Better Auth a D1-backed
  * `database` config.
  *
- * Intentionally NOT wired into the route or `createBetterAuthSpike` yet:
+ * Stage 221 wires this helper into the gated local route runtime
+ * (`createBetterAuthRuntime`), but it stays import-time-inert and production-dormant:
  *   - nothing runs at import time (the dialect is only constructed when called),
  *   - no DB access happens here (the D1 binding is only read lazily by Kysely
  *     inside a request, never at construction),
  *   - no secret / production env required,
- *   - the `/api/auth/*` route stays stateless + disabled-by-default (Stage 209).
+ *   - the `/api/auth/*` route is built ONLY behind AUTH_ENABLED + secret + env.DB
+ *     gates and stays disabled-by-default (503 auth_disabled) in production.
  *
  * Better Auth accepts a Kysely `Dialect` via its `database` option as
  * `{ dialect, type }`; for D1 the type is "sqlite" (D1 is SQLite-compatible).

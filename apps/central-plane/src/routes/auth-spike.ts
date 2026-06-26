@@ -1,45 +1,50 @@
 /**
- * Stage 209 — Better Auth LOCAL-ONLY route wiring.
+ * Stage 209 / 221 — Better Auth LOCAL-ONLY route wiring (gated D1 runtime).
  *
- * Mounts `/api/auth/*` for the local Better Auth spike, behind the AUTH_ENABLED
- * flag. It is production-safe by construction:
+ * Mounts `/api/auth/*` for the local Better Auth runtime, behind strict gates. It is
+ * production-safe by construction — the default (and therefore production) path never
+ * constructs a DB-backed handler:
  *
- *   - AUTH_ENABLED unset/!= "true"  → 503 { error: "auth_disabled" }  (the default,
- *     and therefore the production behaviour — the route exists but never activates).
- *   - AUTH_ENABLED === "true" but no local secret / runtime not ready
- *                                   → 503 { error: "auth_not_configured" }
- *   - AUTH_ENABLED === "true" AND a local secret present
- *                                   → delegate to the Better Auth handler.
+ *   - AUTH_ENABLED unset/!= "true"  → 503 { error: "auth_disabled" }  (the default).
+ *   - AUTH_ENABLED === "true" but no local secret
+ *                                   → 503 { error: "auth_not_configured" }.
+ *   - AUTH_ENABLED === "true" + secret but no D1 binding (`env.DB`)
+ *                                   → 503 { error: "auth_db_unavailable" }.
+ *   - AUTH_ENABLED === "true" + secret + D1 binding
+ *                                   → build a D1-backed Better Auth runtime via
+ *                                     createBetterAuthRuntime(env) and delegate.
  *
- * It never reads back, echoes, or logs the secret/token/user/session/DB. It adds
- * no OAuth provider, no CORS, no dashboard UI. The Better Auth instance is built
- * only via createBetterAuthSpike(env) (which returns null on the production/test
- * path), so the live auth surface activates only when AUTH_ENABLED is explicitly
- * set with a local secret.
+ * It never reads back, echoes, or logs the secret/token/user/session/DB. It adds no
+ * OAuth provider, no CORS, no dashboard UI. The runtime is constructed per-request
+ * (lazy — no DB access until a handler runs) and ONLY when every gate is satisfied,
+ * so this route stays dormant in production (AUTH_ENABLED is unset there).
  *
- * Note: runtime D1 binding is intentionally deferred (the spike instance is
- * stateless — no `database` option). The 0047 migration draft prepares the
- * identity tables for a separately-approved D1-wiring stage; until then the
- * enabled path delegates to a stateless handler and any DB-backed flow is not
- * provisioned. See createBetterAuthSpike().
+ * Local-only: the 0047 schema is applied to LOCAL D1 only. Production migration,
+ * secret provisioning, cookie/CORS topology, and deploy remain SEPARATELY gated.
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
-import { getAuthSpikeConfig } from "../auth-spike-config.js";
-import { createBetterAuthSpike } from "../better-auth-spike.js";
+import { resolveAuthRuntimeGate, createBetterAuthRuntime } from "../better-auth-spike.js";
 
 export function createAuthSpikeRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
 
   app.all("/api/auth/*", async (c) => {
-    const cfg = getAuthSpikeConfig(c.env);
-    if (!cfg.enabled) {
+    const gate = resolveAuthRuntimeGate(c.env);
+    if (gate === "disabled") {
       return c.json({ error: "auth_disabled" }, 503);
     }
-    const auth = createBetterAuthSpike(c.env);
+    if (gate === "not_configured") {
+      // Flag on but no local secret. Never reveal more than this secret-free signal.
+      return c.json({ error: "auth_not_configured" }, 503);
+    }
+    if (gate === "db_unavailable") {
+      // Flag + secret present but no D1 binding — cannot back a handler. Safe explicit error.
+      return c.json({ error: "auth_db_unavailable" }, 503);
+    }
+    const auth = createBetterAuthRuntime(c.env);
     if (!auth) {
-      // Flag on but runtime not ready (e.g. no local secret). Never reveal why
-      // beyond this minimal, secret-free signal.
+      // Defensive: gate said ready but construction returned null. Stay safe, never 500-leak.
       return c.json({ error: "auth_not_configured" }, 503);
     }
     return auth.handler(c.req.raw);
