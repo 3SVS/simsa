@@ -108,6 +108,54 @@ test("Stage 227: topology env present but AUTH_ENABLED absent → still 503 auth
   assert.equal((await res.json()).error, "auth_disabled");
 });
 
+test("Stage 241: sign-up is blocked (403 signup_disabled) by default fail-closed policy", async () => {
+  const app = createApp();
+  // All runtime gates satisfied (flag + secret + DB), but AUTH_SIGNUP_MODE unset → disabled.
+  const res = await fetchApp(
+    app,
+    "/api/auth/sign-up/email",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "x@example.test", password: "pw", name: "x" }) },
+    makeEnv({ AUTH_ENABLED: "true", BETTER_AUTH_SECRET: "x" }),
+  );
+  assert.equal(res.status, 403);
+  assert.equal((await res.json()).error, "signup_disabled");
+});
+
+test("Stage 241: invite_only also blocks public sign-up (403)", async () => {
+  const app = createApp();
+  const res = await fetchApp(
+    app,
+    "/api/auth/sign-up/email",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "x@example.test", password: "pw", name: "x" }) },
+    makeEnv({ AUTH_ENABLED: "true", BETTER_AUTH_SECRET: "x", AUTH_SIGNUP_MODE: "invite_only" }),
+  );
+  assert.equal(res.status, 403);
+  assert.equal((await res.json()).error, "signup_disabled");
+});
+
+test("Stage 241: AUTH_SIGNUP_MODE=open lets sign-up reach the handler (not 403 signup_disabled)", async () => {
+  const app = createApp();
+  // With mode open the guard does not short-circuit; the request reaches the Better Auth handler
+  // (a bare {} DB makes the handler error, but the point is the guard did NOT block it).
+  const res = await fetchApp(
+    app,
+    "/api/auth/sign-up/email",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "x@example.test", password: "pw", name: "x" }) },
+    makeEnv({ AUTH_ENABLED: "true", BETTER_AUTH_SECRET: "x", AUTH_SIGNUP_MODE: "open" }),
+  );
+  assert.notEqual(res.status, 403);
+});
+
+test("Stage 241: the guard never blocks sign-in / session / sign-out (not sign-up paths)", async () => {
+  const app = createApp();
+  const env = makeEnv({ AUTH_ENABLED: "true", BETTER_AUTH_SECRET: "x" }); // signup disabled by default
+  for (const path of ["/api/auth/sign-in/email", "/api/auth/get-session", "/api/auth/sign-out"]) {
+    const res = await fetchApp(app, path, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }, env);
+    const body = await res.json().catch(() => ({}));
+    assert.notEqual(body.error, "signup_disabled", `${path} must not be blocked by the sign-up guard`);
+  }
+});
+
 test("/api/auth/* does not collide with the existing /auth/github/callback surface", async () => {
   const app = createApp();
   // The saas-auth callback lives at /auth/github/callback (no /api prefix). A

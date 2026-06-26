@@ -21,10 +21,15 @@
  *
  * Local-only: the 0047 schema is applied to LOCAL D1 only. Production migration,
  * secret provisioning, cookie/CORS topology, and deploy remain SEPARATELY gated.
+ *
+ * Stage 241 — sign-up exposure guard: once the gates pass, a public `POST /api/auth/sign-up/*`
+ * request is blocked (403 signup_disabled) unless AUTH_SIGNUP_MODE === "open" (fail-closed
+ * default). Sign-in / session / sign-out are never blocked by this guard.
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
 import { resolveAuthRuntimeGate, createBetterAuthRuntime } from "../better-auth-spike.js";
+import { resolveSignupMode, isSignupPath, isSignupBlocked } from "../auth-signup-policy.js";
 
 export function createAuthSpikeRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
@@ -41,6 +46,11 @@ export function createAuthSpikeRoutes(): Hono<{ Bindings: Env }> {
     if (gate === "db_unavailable") {
       // Flag + secret present but no D1 binding — cannot back a handler. Safe explicit error.
       return c.json({ error: "auth_db_unavailable" }, 503);
+    }
+    // Sign-up exposure guard (Stage 241): block public sign-up unless explicitly opened.
+    // Applies ONLY to sign-up paths — sign-in / session / sign-out pass through untouched.
+    if (c.req.method === "POST" && isSignupPath(new URL(c.req.url).pathname) && isSignupBlocked(resolveSignupMode(c.env))) {
+      return c.json({ error: "signup_disabled" }, 403);
     }
     const auth = createBetterAuthRuntime(c.env);
     if (!auth) {

@@ -13,6 +13,7 @@ import {
   displayInitial,
   DISPLAY_NAME_MAX,
 } from "@/lib/account-preferences.mjs";
+import { getAuthSession, signOutAuth, resolveAuthStatus } from "@/lib/auth-client.mjs";
 
 function Badge({ children, tone = "gray" }: { children: React.ReactNode; tone?: "gray" | "gold" | "muted" }) {
   const cls =
@@ -29,11 +30,39 @@ export default function AccountPage() {
   const a = t.account;
   const [displayName, setDisplayName] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  // Controlled auth preview (Stage 241): read-only session status + sign-out. No sign-up UI,
+  // no forced auth gate; local projects / userKey are untouched.
+  const [authSession, setAuthSession] = useState<unknown>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
     setDisplayName(readDisplayName(typeof window !== "undefined" ? window.localStorage : null, ""));
     setHydrated(true);
+    let active = true;
+    getAuthSession()
+      .then((s) => {
+        if (active) setAuthSession(s);
+      })
+      .finally(() => {
+        if (active) setAuthLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  async function onSignOut() {
+    setAuthError(false);
+    const ok = await signOutAuth();
+    if (ok) {
+      setAuthSession(null);
+    } else {
+      setAuthError(true);
+    }
+  }
+
+  const authStatus = resolveAuthStatus({ loading: authLoading, error: authError, session: authSession });
 
   function onChange(v: string) {
     setDisplayName(v);
@@ -83,6 +112,33 @@ export default function AccountPage() {
           <LanguageToggle />
         </div>
         <p className="mt-2 text-xs text-gray-400">{a.preferences.languageHelp}</p>
+      </section>
+
+      {/* Authentication (controlled preview) */}
+      <section className="card mt-6 p-5">
+        <div className="flex items-center justify-between">
+          <p className="section-title">{a.auth.heading}</p>
+          <Badge tone="muted">{a.badges.requiresSignIn}</Badge>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">{a.auth.controlledPreview}</p>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-sm text-gray-700">{a.auth.statusLabel}</span>
+          <span className="text-sm text-gray-900">
+            {authStatus.status === "loading" && a.auth.loading}
+            {authStatus.status === "signed_out" && a.auth.signedOut}
+            {authStatus.status === "error" && a.auth.signedOut}
+            {authStatus.status === "signed_in" && `${a.auth.signedInAs} ${authStatus.email}`}
+          </span>
+        </div>
+        {authStatus.status === "signed_in" && (
+          <div className="mt-3">
+            <button type="button" onClick={onSignOut} className="btn btn-secondary btn-sm">
+              {a.auth.signOut}
+            </button>
+            {authError && <p className="mt-1 text-xs text-red-500">{a.auth.signOutError}</p>}
+          </div>
+        )}
+        <p className="mt-2 text-xs text-gray-400">{a.auth.keepsLocal}</p>
       </section>
 
       {/* Connected accounts */}

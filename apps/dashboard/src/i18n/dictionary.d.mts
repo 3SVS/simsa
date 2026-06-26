@@ -83,6 +83,17 @@ export type Dictionary = {
       teamPlanned: string;
       invitePlanned: string;
     };
+    auth: {
+      heading: string;
+      controlledPreview: string;
+      statusLabel: string;
+      loading: string;
+      signedOut: string;
+      signedInAs: string;
+      signOut: string;
+      signOutError: string;
+      keepsLocal: string;
+    };
     badges: { local: string; planned: string; requiresSignIn: string; readOnly: string };
   };
   status: Record<StatusKey, StatusEntry>;

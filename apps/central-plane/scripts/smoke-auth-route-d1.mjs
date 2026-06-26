@@ -85,7 +85,9 @@ export async function runAuthRouteD1Smoke() {
     record("0047 schema applied to fresh local D1", applied >= 4, `${applied} statements`);
 
     const app = createApp();
-    const gatedEnv = { ENVIRONMENT: "test", AUTH_ENABLED: "true", BETTER_AUTH_SECRET: LOCAL_SMOKE_SECRET, DB: db };
+    // AUTH_SIGNUP_MODE: "open" — the Stage 241 guard defaults to fail-closed "disabled"; this
+    // smoke exercises the sign-up flow, so it explicitly opts sign-up open (local only).
+    const gatedEnv = { ENVIRONMENT: "test", AUTH_ENABLED: "true", BETTER_AUTH_SECRET: LOCAL_SMOKE_SECRET, AUTH_SIGNUP_MODE: "open", DB: db };
 
     // Gate 1 — default disabled (no AUTH_ENABLED): must NOT activate.
     const disabled = await app.fetch(new Request(`${ORIGIN}/api/auth/ok`), { ENVIRONMENT: "test", DB: db });

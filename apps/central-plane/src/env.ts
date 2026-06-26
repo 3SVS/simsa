@@ -204,4 +204,13 @@ export interface Env {
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_BASE_URL?: string;
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
+  /**
+   * Stage 241 — auth sign-up exposure guard. Controls whether the public
+   * `POST /api/auth/sign-up/*` endpoint is allowed, INDEPENDENTLY of AUTH_ENABLED.
+   * Fail-closed: default (unset / unknown) = "disabled" → sign-up is blocked (403
+   * signup_disabled) even when auth is enabled. Sign-in / session / sign-out are never
+   * affected by this flag. Values: "open" (allow sign-up) · "invite_only" (block public
+   * sign-up; invite enforcement is deferred to a later stage) · "disabled" (block).
+   */
+  AUTH_SIGNUP_MODE?: string;
 }
