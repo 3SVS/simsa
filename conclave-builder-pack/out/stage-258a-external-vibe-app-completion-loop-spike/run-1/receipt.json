@@ -1,0 +1,66 @@
+{
+  "receiptType": "external_completion_loop",
+  "run": "run-1",
+  "target": "https://golf-nngxsj9ap-seunghunbae-3svs-projects.vercel.app/",
+  "intentAnchor": "A golfer should be able to open the app, understand that it helps check current golf course conditions, and start a core flow for checking whether a course or round is playable now.",
+  "browserEvidence": {
+    "loaded": "https://golf-nngxsj9ap-seunghunbae-3svs-projects.vercel.app/",
+    "loadStatus": 200,
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "primaryCtaFound": false,
+    "detectedInputs": [
+      {
+        "type": "text",
+        "placeholder": "골프장 검색 (이름, 지역)"
+      }
+    ],
+    "clickedText": null,
+    "clickedSelector": null,
+    "routeAfterClick": null,
+    "routeChanged": false,
+    "consoleErrors": [
+      "Failed to load resource: net::ERR_NAME_NOT_RESOLVED",
+      "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+    ],
+    "networkFailures": [
+      "GET https://njcheczfpeszcqrbhrlf.supabase.co/rest/v1/golf_courses?select=*&is_active=eq.true&order=name.asc (net::ERR_NAME_NOT_RESOLVED)",
+      "GET https://njcheczfpeszcqrbhrlf.supabase.co/rest/v1/golf_courses?select=*&is_active=eq.true&order=name.asc (net::ERR_NAME_NOT_RESOLVED)"
+    ],
+    "screenshots": [
+      "screenshots/before.png"
+    ],
+    "timestamp": "2026-06-27T19:05:49.548Z"
+  },
+  "aiOpinion": {
+    "label": "AI Opinion (interpretation, not a measured fact)",
+    "intentAnchor": "A golfer should be able to open the app, understand that it helps check current golf course conditions, and start a core flow for checking whether a course or round is playable now.",
+    "likelyIntentMismatch": false,
+    "likelyImplementationChoice": false,
+    "whyThisMayBlockCompletion": [
+      "2 network request(s) failed (a required backend host appears unreachable), which alone blocks the intended flow regardless of UI.",
+      "Console reported 2 error(s) during the flow.",
+      "No primary CTA button/link matched the intent, but an intent-relevant input (e.g. a search field) was detected — the flow may be input-driven rather than CTA-driven."
+    ],
+    "suggestedSeverity": "high",
+    "recommendedFixDirection": "Restore the failing backend/data requests (a required API host appears unreachable); the homepage cannot render its content or onboarding entry point until those requests succeed."
+  },
+  "notVerified": [
+    "Primary intent CTA — none matched (an intent-relevant input was detected instead).",
+    "Next-screen usability — no visual/interaction oracle in this spike."
+  ],
+  "skipped": [],
+  "userDecisionNeeded": [],
+  "decision": "Needs Fix",
+  "decisionReasons": [
+    "2 backend/network request(s) failed while loading the page (e.g. a required API host is unreachable); a user cannot complete the intended flow against a broken data dependency."
+  ],
+  "limitations": [
+    "Single core flow only (homepage → primary intent CTA/input → next screen).",
+    "No visual oracle: the spike confirms navigation/console/network facts but does NOT judge whether the next screen is genuinely usable.",
+    "Does not log in, does not click destructive/forbidden actions, does not bypass auth.",
+    "Not a claim that all bugs are found or that the product is complete."
+  ]
+}

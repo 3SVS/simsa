@@ -1,0 +1,34 @@
+{
+  "urlLoaded": "https://golf-nngxsj9ap-seunghunbae-3svs-projects.vercel.app/",
+  "loadStatus": 200,
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "primaryCtaFound": false,
+  "detectedInputs": [
+    {
+      "type": "text",
+      "placeholder": "골프장 검색 (이름, 지역)"
+    }
+  ],
+  "clicked": false,
+  "clickedText": null,
+  "clickedSelector": null,
+  "routeBeforeClick": "https://golf-nngxsj9ap-seunghunbae-3svs-projects.vercel.app/",
+  "routeAfterClick": null,
+  "routeChanged": false,
+  "consoleErrors": [
+    "Failed to load resource: net::ERR_NAME_NOT_RESOLVED",
+    "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+  ],
+  "networkFailures": [
+    "GET https://njcheczfpeszcqrbhrlf.supabase.co/rest/v1/golf_courses?select=*&is_active=eq.true&order=name.asc (net::ERR_NAME_NOT_RESOLVED)",
+    "GET https://njcheczfpeszcqrbhrlf.supabase.co/rest/v1/golf_courses?select=*&is_active=eq.true&order=name.asc (net::ERR_NAME_NOT_RESOLVED)"
+  ],
+  "skipped": [],
+  "screenshots": [
+    "screenshots/before.png"
+  ],
+  "timestamp": "2026-06-27T19:05:49.548Z"
+}

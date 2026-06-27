@@ -1,0 +1,34 @@
+{
+  "targetUrl": "https://golf-nngxsj9ap-seunghunbae-3svs-projects.vercel.app/",
+  "targetUrlAsProvided": "https://https://golf-nngxsj9ap-seunghunbae-3svs-projects.vercel.app/",
+  "targetUrlNote": "As-provided value had a doubled https:// scheme; normalized to a single scheme.",
+  "repoUrl": "https://github.com/seunghunbae-3svs/golf-now",
+  "localRepoPath": "C:\\Users\\seung\\.conclave\\golf-now",
+  "targetOwnership": "Authorized by Bae / Seunghun Bae for safe QA testing. Separate golf-now app — NOT Simsa, NOT app.trysimsa.com, NOT the central-plane Worker.",
+  "intentAnchor": "A golfer should be able to open the app, understand that it helps check current golf course conditions, and start a core flow for checking whether a course or round is playable now.",
+  "coreFlow": [
+    "open homepage",
+    "identify the primary CTA or primary input related to checking golf course/current playability conditions",
+    "click the primary CTA or interact with the primary input if safe",
+    "observe whether the app advances to a usable next screen, search/result state, course-condition view, or clear next step"
+  ],
+  "forbiddenActions": [
+    "payment",
+    "delete",
+    "send email",
+    "invite external users",
+    "publish",
+    "deploy",
+    "destructive data mutation",
+    "production data mutation",
+    "account creation with real personal data"
+  ],
+  "testAccount": {
+    "required": false
+  },
+  "repoContext": {
+    "usedReadOnly": true,
+    "note": "Read-only inspection of localRepoPath to ground the Fix Brief (no golf-now code modified).",
+    "finding": "golf-now reads its backend from process.env.NEXT_PUBLIC_SUPABASE_URL (see src/lib/supabase/*). The deployed app's browser requests to its Supabase REST host fail with ERR_NAME_NOT_RESOLVED, i.e. the configured Supabase host does not resolve (paused/deleted project or stale deploy env)."
+  }
+}

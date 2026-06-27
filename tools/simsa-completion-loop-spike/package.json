@@ -1,0 +1,14 @@
+{
+  "name": "simsa-completion-loop-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stage 258A LOCAL/DEV-ONLY spike: external vibe-app completion loop (Playwright). NOT a workspace package; not wired into CI or production.",
+  "scripts": {
+    "spike": "node spike.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.60.0"
+  }
+}
