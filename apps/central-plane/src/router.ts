@@ -38,6 +38,7 @@ import { createWorkspaceCreditsRoutes } from "./routes/workspace-credits.js";
 import { createWorkspaceBenchmarkRoutes } from "./routes/workspace-benchmark.js";
 import { createWorkspaceExperimentRoutes } from "./routes/workspace-experiment.js";
 import { createWorkspaceAgentWorkflowRoutes } from "./routes/workspace-agent-workflow.js";
+import { createWorkspaceMembershipRoutes } from "./routes/workspace-membership.js";
 import { createAuthSpikeRoutes } from "./routes/auth-spike.js";
 import type { FetchLike } from "./github.js";
 
@@ -151,6 +152,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceExperimentRoutes());
   // Stage 112 — Persisted Agent Workflow Records (intake snapshot save/list/read).
   app.route("/", createWorkspaceAgentWorkflowRoutes());
+  // Stage 254 — read-only auth-user ↔ workspace bridge (GET /workspace/membership/me).
+  app.route("/", createWorkspaceMembershipRoutes());
   // Stage 209 / 221 — Better Auth LOCAL-ONLY route (/api/auth/*), gated by
   // AUTH_ENABLED. Default off → 503 auth_disabled in production. The D1-backed
   // runtime is constructed per-request ONLY behind AUTH_ENABLED + secret + env.DB
