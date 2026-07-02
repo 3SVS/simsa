@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import {
   DEFAULT_LOCALE,
   getDictionary,
-  readStoredLocale,
+  detectInitialLocale,
   writeStoredLocale,
 } from "@/i18n/dictionary.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
@@ -23,8 +23,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 
   useEffect(() => {
-    const stored = readStoredLocale(typeof window !== "undefined" ? window.localStorage : null);
-    if (stored !== locale) setLocaleState(stored);
+    // Explicit choice wins; first-time Korean browsers start in Korean.
+    const initial = detectInitialLocale(
+      typeof window !== "undefined" ? window.localStorage : null,
+      typeof navigator !== "undefined" ? navigator.language : null
+    );
+    if (initial !== locale) setLocaleState(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -488,6 +488,7 @@ export default function ExportPage() {
               <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">2.</span><span>{t.exportPage.step2}</span></li>
               <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">3.</span><span>{t.exportPage.step3}</span></li>
               <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">4.</span><span>{t.exportPage.step4}</span></li>
+              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">5.</span><span>{t.exportPage.step5}</span></li>
             </ol>
           </div>
 

@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { loadLocalProjects, getUserKey } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
+import { buildBetaFeedbackMailto } from "@/lib/beta-feedback.mjs";
+
+const MOCK_IDS = new Set(MOCK_PROJECTS.map((p) => p.id));
 
 const COLLAPSE_KEY = "conclave:sidebar-collapsed";
 
@@ -23,6 +26,7 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     try {
@@ -55,11 +59,14 @@ export function AppSidebar() {
       active ? "bg-gray-100 font-medium text-gray-900" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
     }`;
 
+  // "Code repository" (settings) leads the Review group — it is the entry point
+  // of the review loop. Operator screens live under a collapsed Advanced group.
   const groups = [
     { label: t.nav.groupPlan, items: [["", t.nav.overview], ["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items]] },
-    { label: t.nav.groupReview, items: [["github", t.nav.github], ["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks], ["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] },
+    { label: t.nav.groupReview, items: [["settings", t.nav.settings], ["github", t.nav.github], ["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks]] },
     { label: t.nav.groupDeliver, items: [["fixes", t.nav.fixes], ["export", t.nav.export]] },
   ] as const;
+  const advancedItems = [["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] as const;
 
   // ── Collapsed rail ──────────────────────────────────────────────────────────
   if (collapsed) {
@@ -117,9 +124,30 @@ export function AppSidebar() {
                 </ul>
               </div>
             ))}
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="flex w-full items-center justify-between px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-300 hover:text-gray-500"
+              >
+                {t.nav.groupAdvanced}
+                <span aria-hidden>{showAdvanced ? "−" : "+"}</span>
+              </button>
+              {showAdvanced && (
+                <ul className="space-y-0.5">
+                  {advancedItems.map(([slug, label]) => {
+                    const href = `${base}/${slug}`;
+                    return (
+                      <li key={slug}>
+                        <Link href={href} className={itemClass(pathname === href)}>{label}</Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
             <div className="mt-2 border-t border-gray-100 pt-2">
               <Link href={`${base}/sources`} className={itemClass(pathname === `${base}/sources`)}>{t.nav.sources}</Link>
-              <Link href={`${base}/settings`} className={itemClass(pathname === `${base}/settings`)}>{t.nav.settings}</Link>
             </div>
           </>
         ) : (
@@ -134,7 +162,14 @@ export function AppSidebar() {
             <ul className="space-y-0.5">
               {filtered.map((p) => (
                 <li key={p.id}>
-                  <Link href={`/projects/${p.id}`} className={itemClass(pathname.startsWith(`/projects/${p.id}`))}>{p.name}</Link>
+                  <Link href={`/projects/${p.id}`} className={itemClass(pathname.startsWith(`/projects/${p.id}`))}>
+                    {p.name}
+                    {MOCK_IDS.has(p.id) && (
+                      <span className="ml-1.5 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-px text-[9px] font-medium text-gray-400">
+                        {t.projects.exampleBadge}
+                      </span>
+                    )}
+                  </Link>
                 </li>
               ))}
               {filtered.length === 0 && <li className="px-2.5 py-2 text-xs text-gray-400">{t.nav.noProjects}</li>}
@@ -145,6 +180,12 @@ export function AppSidebar() {
 
       {/* Profile + plan (bottom) — links to local account settings */}
       <div className="border-t border-gray-100 p-2">
+        <a
+          href={buildBetaFeedbackMailto({ route: pathname, section: "Dashboard" })}
+          className="mb-1 block rounded-md px-2.5 py-1.5 text-[12px] text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+        >
+          {t.nav.feedback}
+        </a>
         <Link href="/account" aria-label={t.account.openLabel} className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-gray-50">
           <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">{initial}</span>
           <span className="min-w-0 flex-1">

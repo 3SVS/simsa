@@ -112,13 +112,14 @@ async function loadComparisonForComment(
   projectId: string,
   repoFullName: string,
   prNumber: number,
+  locale: "en" | "ko" = "ko",
 ): Promise<{ data: ComparisonDataForComment | null; warning?: string }> {
   try {
     const [latest, previous] = await getLatestTwoPrReviewRuns(env, projectId, repoFullName, prNumber);
     if (!latest || !previous) return { data: null, warning: "not_enough_runs" };
     const latestResults = parseRunResults(latest.resultJson);
     const previousResults = parseRunResults(previous.resultJson);
-    const comparison = compareRunResults(previousResults, latestResults);
+    const comparison = compareRunResults(previousResults, latestResults, locale);
     const latestSummary = buildRunSummary(latest);
     const previousSummary = buildRunSummary(previous);
     return {
@@ -1175,6 +1176,8 @@ export function createWorkspaceGitHubRoutes(
     const includeComparison = b["includeComparison"] === true;
     const includeRerunComparison = b["includeRerunComparison"] === true;
     const reviewRunId = typeof b["reviewRunId"] === "string" ? b["reviewRunId"] : undefined;
+    // Comment body language — optional, "en" | "ko", defaults to "ko".
+    const locale: "en" | "ko" = b["locale"] === "en" ? "en" : "ko";
 
     // 1. Get linked repo
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
@@ -1250,6 +1253,7 @@ export function createWorkspaceGitHubRoutes(
             rerunComparisonData = compareSpecificReviewRuns(
               { id: loadedRerunOfReviewRunId, results: sourceResults },
               { id: reviewRunId, results: reviewResults as Array<{ itemId: string; title: string; status: "passed" | "failed" | "inconclusive" | "needs_decision"; reason: string }> },
+              locale,
             );
             if (!rerunComparisonData.comparable) warnings.push("rerun_comparison_not_available");
           }
@@ -1263,7 +1267,7 @@ export function createWorkspaceGitHubRoutes(
     // 5b. Load latest-two comparison (only when rerun comparison NOT active)
     let comparisonData: ComparisonDataForComment | undefined;
     if (includeComparison && !reviewRunId && !includeRerunComparison) {
-      const comp = await loadComparisonForComment(c.env, projectId, repo.repoFullName, prNumber);
+      const comp = await loadComparisonForComment(c.env, projectId, repo.repoFullName, prNumber, locale);
       if (comp.warning === "not_enough_runs") warnings.push("not_enough_runs");
       else if (comp.data) comparisonData = comp.data;
     }
@@ -1281,6 +1285,7 @@ export function createWorkspaceGitHubRoutes(
       runTimestamp,
       includeRerunComparison,
       rerunComparisonData,
+      locale,
     });
     if (truncated) warnings.push("코멘트가 너무 길어 일부 내용이 잘렸습니다.");
     if (includeComparison && !reviewRunId && comparisonData && !comparisonIncluded && !includeRerunComparison) warnings.push("비교 섹션이 너무 길어 생략됐습니다.");
@@ -1321,6 +1326,8 @@ export function createWorkspaceGitHubRoutes(
     const reviewRunId = typeof b["reviewRunId"] === "string" ? b["reviewRunId"] : undefined;
     // mode: "new" = always create new comment, "update_latest" = update most recent posted comment
     const mode: "new" | "update_latest" = b["mode"] === "update_latest" ? "update_latest" : "new";
+    // Comment body language — optional, "en" | "ko", defaults to "ko".
+    const locale: "en" | "ko" = b["locale"] === "en" ? "en" : "ko";
 
     // 1. Get linked repo
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
@@ -1406,6 +1413,7 @@ export function createWorkspaceGitHubRoutes(
             postRerunComparisonData = compareSpecificReviewRuns(
               { id: postLoadedRerunOfReviewRunId, results: sourceResults },
               { id: reviewRunId, results: reviewResults as Array<{ itemId: string; title: string; status: "passed" | "failed" | "inconclusive" | "needs_decision"; reason: string }> },
+              locale,
             );
           }
         } catch { /* ignore — build without rerun comparison */ }
@@ -1413,7 +1421,7 @@ export function createWorkspaceGitHubRoutes(
 
       let comparisonData: ComparisonDataForComment | undefined;
       if (includeComparison && !reviewRunId && !includeRerunComparison) {
-        const comp = await loadComparisonForComment(c.env, projectId, repo.repoFullName, prNumber);
+        const comp = await loadComparisonForComment(c.env, projectId, repo.repoFullName, prNumber, locale);
         if (comp.data) comparisonData = comp.data;
       }
       const { body: built } = buildCommentBody({
@@ -1424,6 +1432,7 @@ export function createWorkspaceGitHubRoutes(
         runTimestamp,
         includeRerunComparison,
         rerunComparisonData: postRerunComparisonData,
+        locale,
       });
       commentBody = built;
     }
@@ -1691,6 +1700,8 @@ export function createWorkspaceGitHubRoutes(
       : undefined;
     const includeFixBrief = b["includeFixBrief"] === true;
     const includeComparison = b["includeComparison"] === true;
+    // Comment body language — optional, "en" | "ko", defaults to "ko".
+    const locale: "en" | "ko" = b["locale"] === "en" ? "en" : "ko";
 
     // 1. Get existing comment record
     const existingComment = await getPrCommentById(c.env, commentId).catch(() => null);
@@ -1755,12 +1766,13 @@ export function createWorkspaceGitHubRoutes(
       };
       let comparisonData: ComparisonDataForComment | undefined;
       if (includeComparison) {
-        const comp = await loadComparisonForComment(c.env, projectId, repo.repoFullName, prNumber);
+        const comp = await loadComparisonForComment(c.env, projectId, repo.repoFullName, prNumber, locale);
         if (comp.data) comparisonData = comp.data;
       }
       const { body: built } = buildCommentBody({
         repoFullName: repo.repoFullName, prNumber, prTitle, selectedItems, summary,
         includeFixBrief, includeComparison, comparisonData,
+        locale,
       });
       commentBody = built;
     }

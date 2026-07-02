@@ -267,6 +267,7 @@ export default function ChecksPage() {
               )}
 
               <p className="text-xs text-gray-400">{t.review.basisNote}</p>
+              <p className="text-xs text-gray-400">{t.review.verifyLiveNote}</p>
             </div>
 
             {/* Per-item results (compact) */}

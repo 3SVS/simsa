@@ -11,6 +11,9 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Language for generated change-description strings. Defaults to "ko". */
+export type ReviewCompareLocale = "en" | "ko";
+
 export type ReviewResultItem = {
   itemId: string;
   title: string;
@@ -100,26 +103,52 @@ const STATUS_SCORE: Record<string, number> = {
   failed: 0,
 };
 
-const STATUS_KO: Record<string, string> = {
-  passed: "통과",
-  failed: "안 맞음",
-  inconclusive: "확인 부족",
-  needs_decision: "결정 필요",
+// Status labels per locale. EN terms align with the dashboard:
+// passed = "Passed", failed = "Issue found", inconclusive = "Not verified",
+// needs_decision = "Needs decision".
+const STATUS_LABELS: Record<ReviewCompareLocale, Record<string, string>> = {
+  ko: {
+    passed: "통과",
+    failed: "안 맞음",
+    inconclusive: "확인 부족",
+    needs_decision: "결정 필요",
+  },
+  en: {
+    passed: "Passed",
+    failed: "Issue found",
+    inconclusive: "Not verified",
+    needs_decision: "Needs decision",
+  },
 };
 
 function scoreOf(status: string): number {
   return STATUS_SCORE[status] ?? 0;
 }
 
-function label(status: string): string {
-  return STATUS_KO[status] ?? status;
+function label(status: string, locale: ReviewCompareLocale): string {
+  return STATUS_LABELS[locale][status] ?? status;
 }
 
 // ─── Change description ───────────────────────────────────────────────────────
 
-function describeImprovement(from: string, to: string): string {
+function describeImprovement(from: string, to: string, locale: ReviewCompareLocale): string {
+  if (locale === "en") {
+    if (to === "passed") {
+      return `Improved from ${label(from, locale)} to Passed.`;
+    }
+    if (from === "failed" && to === "needs_decision") {
+      return `Moved from Issue found to Needs decision. The technical review is done, but a decision is needed.`;
+    }
+    if (from === "inconclusive" && to === "needs_decision") {
+      return `Clarified from Not verified to Needs decision.`;
+    }
+    if (from === "failed" && to === "inconclusive") {
+      return `Partially improved from Issue found to Not verified.`;
+    }
+    return `Improved from ${label(from, locale)} to ${label(to, locale)}.`;
+  }
   if (to === "passed") {
-    return `${label(from)}에서 통과로 개선됐어요.`;
+    return `${label(from, locale)}에서 통과로 개선됐어요.`;
   }
   if (from === "failed" && to === "needs_decision") {
     return `안 맞음에서 결정 필요로 전환됐어요. 기술 검토는 됐지만 결정이 필요해요.`;
@@ -130,17 +159,26 @@ function describeImprovement(from: string, to: string): string {
   if (from === "failed" && to === "inconclusive") {
     return `안 맞음에서 확인 부족으로 일부 개선됐어요.`;
   }
-  return `${label(from)}에서 ${label(to)}으로 개선됐어요.`;
+  return `${label(from, locale)}에서 ${label(to, locale)}으로 개선됐어요.`;
 }
 
-function describeRegression(from: string, to: string): string {
+function describeRegression(from: string, to: string, locale: ReviewCompareLocale): string {
+  if (locale === "en") {
+    if (from === "passed") {
+      return `Was Passed but changed to ${label(to, locale)}. This change introduced a problem.`;
+    }
+    if (from === "needs_decision" && to === "failed") {
+      return `Worsened from Needs decision to Issue found.`;
+    }
+    return `Worsened from ${label(from, locale)} to ${label(to, locale)}.`;
+  }
   if (from === "passed") {
-    return `통과였지만 ${label(to)}으로 바뀌었어요. 이번 변경에서 문제가 생겼어요.`;
+    return `통과였지만 ${label(to, locale)}으로 바뀌었어요. 이번 변경에서 문제가 생겼어요.`;
   }
   if (from === "needs_decision" && to === "failed") {
     return `결정 필요에서 안 맞음으로 악화됐어요.`;
   }
-  return `${label(from)}에서 ${label(to)}으로 악화됐어요.`;
+  return `${label(from, locale)}에서 ${label(to, locale)}으로 악화됐어요.`;
 }
 
 // ─── Run summary helper ───────────────────────────────────────────────────────
@@ -188,6 +226,7 @@ export function buildRunSummary(run: {
 export function compareRunResults(
   previousResults: ReviewResultItem[],
   latestResults: ReviewResultItem[],
+  locale: ReviewCompareLocale = "ko",
 ): ComparisonResult {
   const previousMap = new Map(previousResults.map((r) => [r.itemId, r]));
   const latestMap = new Map(latestResults.map((r) => [r.itemId, r]));
@@ -226,7 +265,7 @@ export function compareRunResults(
         title: latest.title,
         from: prev.status,
         to: latest.status,
-        reason: describeImprovement(prev.status, latest.status),
+        reason: describeImprovement(prev.status, latest.status, locale),
       });
     } else if (latestScore < prevScore) {
       newlyProblematic.push({
@@ -234,7 +273,7 @@ export function compareRunResults(
         title: latest.title,
         from: prev.status,
         to: latest.status,
-        reason: describeRegression(prev.status, latest.status),
+        reason: describeRegression(prev.status, latest.status, locale),
         nextAction: latest.nextAction,
       });
     } else {
@@ -249,14 +288,21 @@ export function compareRunResults(
 
   // Build summary text
   const parts: string[] = [];
-  if (improved.length > 0) parts.push(`좋아진 항목 ${improved.length}개`);
-  if (newlyProblematic.length > 0) parts.push(`새로 생긴 문제 ${newlyProblematic.length}개`);
-  if (stillOpen.length > 0) parts.push(`아직 남은 항목 ${stillOpen.length}개`);
-  if (unchanged.length > 0) parts.push(`변화 없음 ${unchanged.length}개`);
+  if (locale === "en") {
+    if (improved.length > 0) parts.push(`${improved.length} improved`);
+    if (newlyProblematic.length > 0) parts.push(`${newlyProblematic.length} newly problematic`);
+    if (stillOpen.length > 0) parts.push(`${stillOpen.length} still open`);
+    if (unchanged.length > 0) parts.push(`${unchanged.length} unchanged`);
+  } else {
+    if (improved.length > 0) parts.push(`좋아진 항목 ${improved.length}개`);
+    if (newlyProblematic.length > 0) parts.push(`새로 생긴 문제 ${newlyProblematic.length}개`);
+    if (stillOpen.length > 0) parts.push(`아직 남은 항목 ${stillOpen.length}개`);
+    if (unchanged.length > 0) parts.push(`변화 없음 ${unchanged.length}개`);
+  }
 
   const summaryText = parts.length > 0
     ? parts.join(", ") + "."
-    : "모든 항목이 변화 없어요.";
+    : locale === "en" ? "No items changed." : "모든 항목이 변화 없어요.";
 
   return { improved, stillOpen, newlyProblematic, unchanged, summaryText };
 }
@@ -281,6 +327,7 @@ export type SpecificRunComparison = {
 export function compareSpecificReviewRuns(
   source: { id: string; results: ReviewResultItem[] },
   newRun: { id: string; results: ReviewResultItem[] },
+  locale: ReviewCompareLocale = "ko",
 ): SpecificRunComparison {
   if (source.results.length === 0 || newRun.results.length === 0) {
     return {
@@ -291,10 +338,10 @@ export function compareSpecificReviewRuns(
       stillOpen: [],
       newlyProblematic: [],
       unchanged: [],
-      summaryText: "비교할 결과가 없어요.",
+      summaryText: locale === "en" ? "No results to compare." : "비교할 결과가 없어요.",
     };
   }
-  const cmp = compareRunResults(source.results, newRun.results);
+  const cmp = compareRunResults(source.results, newRun.results, locale);
   return { comparable: true, sourceRunId: source.id, newRunId: newRun.id, ...cmp };
 }
 

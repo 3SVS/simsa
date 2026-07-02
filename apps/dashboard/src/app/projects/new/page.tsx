@@ -19,12 +19,6 @@ import { UnderstoodCard, SpecDraftBody } from "@/components/SpecDraftView";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 
-const EXAMPLE_IDEAS = [
-  "An app that summarizes meeting recordings and sends the action items to Linear",
-  "A tool where uploading a photo auto-writes the e-commerce product description",
-  "A service that analyzes customer questions and organizes the FAQ automatically",
-];
-
 type Step = 1 | 2 | 3 | 4;
 
 export default function NewProjectPage() {
@@ -151,7 +145,7 @@ export default function NewProjectPage() {
               <div className="mb-8 mt-4">
                 <p className="mb-2 text-xs text-gray-400">{t.np.examplesLabel}</p>
                 <div className="flex flex-col gap-2">
-                  {EXAMPLE_IDEAS.map((ex, i) => (
+                  {t.np.examples.map((ex, i) => (
                     <button
                       key={i}
                       onClick={() => setIdeaText(ex)}
@@ -178,7 +172,7 @@ export default function NewProjectPage() {
           {step === 2 && result && (
             <div>
               <div className="mb-6 flex items-center gap-2">
-                <span className="rounded bg-brand-50 px-2 py-0.5 font-mono text-xs text-brand-700">Conclave</span>
+                <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">{t.brand.wordmark}</span>
                 <span className="text-sm text-gray-500">{t.np.understood}</span>
                 {isFallback && (
                   <span className="rounded border border-amber-100 bg-amber-50 px-2 py-0.5 text-xs text-amber-600">

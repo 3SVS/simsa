@@ -133,6 +133,31 @@ describe("compareRunResults", () => {
     assert.ok(newItem, "new failed item should appear in stillOpen");
   });
 
+  it('locale "en" produces English reason text and summaryText with no Korean', () => {
+    const prevEn = [
+      { itemId: "i1", title: "Login", status: "failed", reason: "r" },
+      { itemId: "i3", title: "Payments", status: "needs_decision", reason: "r" },
+    ];
+    const latestEn = [
+      { itemId: "i1", title: "Login", status: "passed", reason: "r" },
+      { itemId: "i3", title: "Payments", status: "failed", reason: "r" },
+    ];
+    const result = compareRunResults(prevEn, latestEn, "en");
+    assert.equal(result.improved[0].reason, "Improved from Issue found to Passed.");
+    assert.equal(result.newlyProblematic[0].reason, "Worsened from Needs decision to Issue found.");
+    assert.ok(result.summaryText.includes("1 improved"));
+    assert.ok(!/[가-힣]/.test(JSON.stringify(result)), "EN comparison output must contain no Korean");
+  });
+
+  it('locale defaults to "ko" when omitted (backward compat)', () => {
+    const prev = [{ itemId: "x", title: "X", status: "failed", reason: "r" }];
+    const latest = [{ itemId: "x", title: "X", status: "passed", reason: "r" }];
+    const def = compareRunResults(prev, latest);
+    const ko = compareRunResults(prev, latest, "ko");
+    assert.equal(def.improved[0].reason, ko.improved[0].reason);
+    assert.ok(def.improved[0].reason.includes("통과"));
+  });
+
   it("does not call any LLM — is purely deterministic", () => {
     // If compareRunResults depended on an LLM it would need async and external calls.
     // Verify it's synchronous and returns immediately.

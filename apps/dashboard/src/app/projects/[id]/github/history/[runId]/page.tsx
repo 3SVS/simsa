@@ -325,7 +325,7 @@ function CommentPanel({
   comparisonDisplayOnly?: boolean;   // a comparison is on screen but fromRunId-only (no lineage)
   triggerComparisonComment?: number; // Stage 46: AutoComparisonPanel "send to comment" nonce
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [phase, setPhase] = useState<"idle" | "previewing" | "ready" | "posting" | "posted" | "error">("idle");
   const [preview, setPreview] = useState<CommentPreview | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -341,15 +341,18 @@ function CommentPanel({
     setPhase("previewing");
     setWarnings([]);
     const wantRerun = override?.includeRerunComparison ?? includeRerunComparison;
-    const res = await previewPRComment(projectId, prNumber, buildComparisonCommentInput({
-      userKey, reviewRunId: runId, selectedItemIds: sharedSelected,
-      includeRerunComparison: wantRerun, comparisonAvailable,
-    }));
+    const res = await previewPRComment(projectId, prNumber, {
+      ...buildComparisonCommentInput({
+        userKey, reviewRunId: runId, selectedItemIds: sharedSelected,
+        includeRerunComparison: wantRerun, comparisonAvailable,
+      }),
+      locale,
+    });
     if (!res.ok) { setPhase("error"); return; }
     setPreview(res.comment as CommentPreview);
     setWarnings(res.warnings ?? []);
     setPhase("ready");
-  }, [projectId, prNumber, runId, userKey, sharedSelected, includeRerunComparison, comparisonAvailable]);
+  }, [projectId, prNumber, runId, userKey, sharedSelected, includeRerunComparison, comparisonAvailable, locale]);
 
   const post = useCallback(async () => {
     if (!preview) return;
@@ -360,11 +363,12 @@ function CommentPanel({
         includeRerunComparison, comparisonAvailable,
       }),
       mode: "new",
+      locale,
     });
     if (!res.ok) { setPhase("ready"); return; }
     setPostResult({ url: (res as { comment?: { githubCommentUrl?: string } }).comment?.githubCommentUrl });
     setPhase("posted");
-  }, [projectId, prNumber, runId, userKey, preview, sharedSelected, includeRerunComparison, comparisonAvailable]);
+  }, [projectId, prNumber, runId, userKey, preview, sharedSelected, includeRerunComparison, comparisonAvailable, locale]);
 
   // Stage 46: AutoComparisonPanel "Post this comparison as a PR comment" — check the
   // box and auto-generate a preview (the Page scrolls this panel into view).

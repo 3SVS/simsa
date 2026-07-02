@@ -10,6 +10,8 @@ import {
   PREVIEW_LANGUAGE_ITEMS,
   BETA_SAFETY_NOTES,
   EMPTY_STATES,
+  BETA_ONBOARDING_COPY,
+  getBetaOnboardingCopy,
 } from "../src/lib/beta-onboarding.mjs";
 
 // Positive completion claims that must not appear in onboarding/legend copy.
@@ -84,4 +86,41 @@ test("no copy encourages sharing secrets/tokens", () => {
   // Must not invite including secrets/tokens (only the discourage note mentions them).
   assert.ok(!/include (your )?(secret|token)/.test(all));
   assert.ok(!/paste (your )?(secret|token)/.test(all));
+});
+
+// Non-developer copy pass — localized copy object.
+
+test("en copy object mirrors the canonical constants", () => {
+  const en = getBetaOnboardingCopy("en");
+  assert.equal(en.heading, ONBOARDING_HEADING);
+  assert.equal(en.intro, ONBOARDING_INTRO);
+  assert.deepEqual(en.steps, ONBOARDING_STEPS);
+  assert.equal(en.safetyLine, ONBOARDING_SAFETY_LINE);
+  assert.deepEqual(en.previewLanguageItems, PREVIEW_LANGUAGE_ITEMS);
+  assert.deepEqual(en.safetyNotes, BETA_SAFETY_NOTES);
+  assert.deepEqual(en.emptyStates, EMPTY_STATES);
+});
+
+test("ko copy has the same shape as en (nothing missing)", () => {
+  const en = BETA_ONBOARDING_COPY.en;
+  const ko = BETA_ONBOARDING_COPY.ko;
+  assert.deepEqual(Object.keys(ko).sort(), Object.keys(en).sort());
+  assert.equal(ko.steps.length, en.steps.length);
+  assert.equal(ko.previewLanguageItems.length, en.previewLanguageItems.length);
+  assert.deepEqual(Object.keys(ko.safetyNotes).sort(), Object.keys(en.safetyNotes).sort());
+  assert.deepEqual(Object.keys(ko.emptyStates).sort(), Object.keys(en.emptyStates).sort());
+  for (const v of [ko.heading, ko.intro, ko.safetyLine, ...ko.steps, ...Object.values(ko.safetyNotes), ...Object.values(ko.emptyStates)]) {
+    assert.ok(typeof v === "string" && v.length > 0);
+  }
+});
+
+test("ko safety line keeps the no-execution / no-final-decision semantics", () => {
+  const s = BETA_ONBOARDING_COPY.ko.safetyLine;
+  assert.match(s, /하지 않습니다/);
+  assert.match(s, /최종 결정/);
+});
+
+test("getBetaOnboardingCopy falls back to en for unknown locales", () => {
+  assert.equal(getBetaOnboardingCopy("fr").heading, ONBOARDING_HEADING);
+  assert.equal(getBetaOnboardingCopy(undefined).heading, ONBOARDING_HEADING);
 });

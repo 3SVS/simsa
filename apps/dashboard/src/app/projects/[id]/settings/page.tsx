@@ -268,6 +268,25 @@ export default function SettingsPage() {
               {t.github.switchAccountLogout}
             </a>
           </p>
+
+          {/* First-timer guide — the review loop's hardest prerequisite is getting
+              AI-built code into a public GitHub repo; don't assume it. */}
+          <div className="mx-auto mt-6 max-w-md rounded-md border border-gray-100 bg-gray-50/60 px-4 py-3 text-left">
+            <p className="mb-1 text-xs font-semibold text-gray-600">{t.github.firstTimeTitle}</p>
+            <p className="mb-2 text-xs text-gray-500">{t.github.firstTimeIntro}</p>
+            <p className="mb-2 text-xs text-gray-500">
+              1. {t.github.firstTimeNoAccount}{" "}
+              <a
+                href="https://github.com/join"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-gray-700"
+              >
+                {t.github.firstTimeNoAccountLink}
+              </a>
+            </p>
+            <p className="text-xs text-gray-500">2. {t.github.firstTimePlatform}</p>
+          </div>
         </div>
       )}
 
@@ -381,7 +400,7 @@ export default function SettingsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{repo.fullName}</p>
                       <p className="text-xs text-gray-400">
-                        {repo.defaultBranch} · {repo.private ? "private" : "public"}
+                        {repo.defaultBranch} · {repo.private ? t.github.statePrivate : t.github.statePublic}
                       </p>
                     </div>
                     {linkedRepo?.fullName === repo.fullName && (
@@ -461,7 +480,7 @@ export default function SettingsPage() {
               type="text"
               value={tgChatId}
               onChange={(e) => setTgChatId(e.target.value)}
-              placeholder="e.g. 123456789"
+              placeholder={t.telegram.chatIdPlaceholder}
               disabled={!tgEnabled}
               className="input disabled:opacity-50"
             />

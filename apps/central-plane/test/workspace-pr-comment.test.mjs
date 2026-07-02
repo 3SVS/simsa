@@ -30,6 +30,15 @@ const ITEMS_MIXED = [
 ];
 const SUMMARY_MIXED = { failed: 1, inconclusive: 1, needsDecision: 1, passed: 1 };
 
+// English-data variant for locale "en" tests (item text is data, not labels —
+// the no-Korean assertion needs the data itself to be Korean-free).
+const ITEMS_MIXED_EN = [
+  { itemId: "i1", title: "Login", status: "failed", userLabel: "Issue found", reason: "JWT missing", evidence: ["src/auth.ts"], nextAction: "Add JWT" },
+  { itemId: "i2", title: "Notifications", status: "inconclusive", userLabel: "Not verified", reason: "Implementation unclear", evidence: [], nextAction: "Check notification files" },
+  { itemId: "i3", title: "Payments", status: "needs_decision", userLabel: "Needs decision", reason: "Gateway undecided", evidence: [], nextAction: "Pick a payment gateway" },
+  { itemId: "i4", title: "Dashboard", status: "passed", userLabel: "Passed", reason: "Implemented", evidence: ["src/dash.ts"], nextAction: "" },
+];
+
 // ─── D1 mock ──────────────────────────────────────────────────────────────────
 
 function makeDb(extra = {}) {
@@ -159,10 +168,10 @@ function seedRepo(env, projectId = "proj1") {
   });
 }
 
-function seedReviewRun(env, withResults = true) {
+function seedReviewRun(env, withResults = true, items = ITEMS_MIXED) {
   const id = "wprr_test01";
   const resultData = withResults
-    ? JSON.stringify({ results: ITEMS_MIXED, summary: SUMMARY_MIXED })
+    ? JSON.stringify({ results: items, summary: SUMMARY_MIXED })
     : null;
   env.DB._reviewRuns.set(id, {
     id, project_id: "proj1", user_key: "user123",
@@ -228,6 +237,102 @@ describe("buildCommentBody", () => {
     assert.ok(truncated, "should be truncated");
     assert.ok(body.length <= 60100, "should not exceed limit + small overhead");
     assert.ok(body.includes("잘렸습니다"), "should include truncation notice");
+  });
+});
+
+// ─── Locale (Stage: EN/KO comment body) ──────────────────────────────────────
+
+describe("buildCommentBody locale", () => {
+  it("defaults to Korean when locale is absent", () => {
+    const { body } = buildCommentBody({
+      repoFullName: MOCK_REPO, prNumber: PR_NUMBER, prTitle: MOCK_PR_TITLE,
+      selectedItems: ITEMS_MIXED, summary: SUMMARY_MIXED,
+    });
+    assert.ok(body.includes("PR 확인 결과"));
+    assert.ok(body.includes("고쳐야 할 항목"));
+    assert.ok(body.includes("❌ 안 맞음"));
+  });
+
+  it('locale "ko" matches the default output', () => {
+    const opts = {
+      repoFullName: MOCK_REPO, prNumber: PR_NUMBER, prTitle: MOCK_PR_TITLE,
+      selectedItems: ITEMS_MIXED, summary: SUMMARY_MIXED, runTimestamp: "2026-06-12T00:00:00Z",
+    };
+    const def = buildCommentBody(opts);
+    const ko = buildCommentBody({ ...opts, locale: "ko" });
+    assert.equal(ko.body, def.body);
+  });
+
+  it('locale "en" produces English labels and no Korean characters', () => {
+    const { body } = buildCommentBody({
+      repoFullName: MOCK_REPO, prNumber: PR_NUMBER, prTitle: MOCK_PR_TITLE,
+      selectedItems: ITEMS_MIXED_EN, summary: SUMMARY_MIXED,
+      runTimestamp: "2026-06-12T00:00:00Z",
+      locale: "en",
+    });
+    assert.ok(body.includes("PR review results"));
+    assert.ok(body.includes("| Result | Count |"));
+    assert.ok(body.includes("❌ Issue found"));
+    assert.ok(body.includes("⚠️ Not verified"));
+    assert.ok(body.includes("🟣 Needs decision"));
+    assert.ok(body.includes("✅ Passed"));
+    assert.ok(body.includes("### Items to fix (3)"));
+    assert.ok(body.includes("**Reason:**"));
+    assert.ok(body.includes("It does not cover the entire repository or the deployed service as a whole."));
+    assert.ok(body.includes("About this comment"));
+    assert.ok(!/[가-힣]/.test(body), `EN body must contain no Korean, got: ${body.match(/[^\n]*[가-힣][^\n]*/)?.[0]}`);
+  });
+
+  it('locale "en" keeps markdown structure identical to ko (same heading/table shape)', () => {
+    const opts = {
+      repoFullName: MOCK_REPO, prNumber: PR_NUMBER, prTitle: MOCK_PR_TITLE,
+      selectedItems: ITEMS_MIXED_EN, summary: SUMMARY_MIXED,
+    };
+    const en = buildCommentBody({ ...opts, locale: "en" }).body;
+    const ko = buildCommentBody({ ...opts, locale: "ko" }).body;
+    const shape = (s) => s.split("\n").map((line) => line.replace(/[^#|>\-`*_<]/g, "").trim()).join("\n");
+    assert.equal(shape(en), shape(ko));
+  });
+
+  it('locale "en" localizes comparison and rerun comparison sections', () => {
+    const comparisonData = {
+      previousSummary: { passed: 0, failed: 2, inconclusive: 1, needsDecision: 0 },
+      latestSummary: { passed: 2, failed: 0, inconclusive: 1, needsDecision: 0 },
+      improved: [{ itemId: "i1", title: "Login", from: "failed", to: "passed", reason: "Improved from Issue found to Passed." }],
+      stillOpen: [{ itemId: "i2", title: "Notifications", status: "inconclusive", reason: "Still unclear" }],
+      newlyProblematic: [],
+    };
+    const comp = buildCommentBody({
+      repoFullName: MOCK_REPO, prNumber: PR_NUMBER, prTitle: MOCK_PR_TITLE,
+      selectedItems: ITEMS_MIXED_EN, summary: SUMMARY_MIXED,
+      includeComparison: true, comparisonData,
+      locale: "en",
+    });
+    assert.ok(comp.comparisonIncluded);
+    assert.ok(comp.body.includes("## Previous vs latest comparison"));
+    assert.ok(comp.body.includes("### Improved items (1)"));
+    assert.ok(comp.body.includes("- Issue found: 2 → 0"));
+    assert.ok(!/[가-힣]/.test(comp.body));
+
+    const rerunComparisonData = {
+      comparable: true, sourceRunId: "wprr_src", newRunId: "wprr_new",
+      improved: [{ itemId: "i1", title: "Login", from: "failed", to: "passed", reason: "Improved from Issue found to Passed." }],
+      stillOpen: [{ itemId: "i2", title: "Notifications", status: "inconclusive", reason: "Still unclear", from: "inconclusive", nextAction: "Check notification files" }],
+      newlyProblematic: [],
+      unchanged: [{ itemId: "i4", title: "Dashboard", status: "passed", from: "passed" }],
+      summaryText: "1 improved, 1 still open, 1 unchanged.",
+    };
+    const rerun = buildCommentBody({
+      repoFullName: MOCK_REPO, prNumber: PR_NUMBER, prTitle: MOCK_PR_TITLE,
+      selectedItems: ITEMS_MIXED_EN, summary: SUMMARY_MIXED,
+      includeRerunComparison: true, rerunComparisonData,
+      locale: "en",
+    });
+    assert.ok(rerun.rerunComparisonIncluded);
+    assert.ok(rerun.body.includes("## Re-review comparison"));
+    assert.ok(rerun.body.includes("- Login: Issue found → Passed"));
+    assert.ok(rerun.body.includes("  - Next action: Check notification files"));
+    assert.ok(!/[가-힣]/.test(rerun.body));
   });
 });
 
@@ -355,6 +460,48 @@ describe("POST /workspace/projects/:id/github/pulls/:number/comment/preview", ()
     assert.equal(data.error, "no_review_run");
   });
 
+  it('accepts locale "en" and produces an English body with no Korean', async () => {
+    const env = await makeEnvWithToken();
+    seedRepo(env);
+    seedReviewRun(env, true, ITEMS_MIXED_EN);
+
+    const app = createApp();
+    const req = makeRequest("POST", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comment/preview`, {
+      userKey: "user123",
+      locale: "en",
+    });
+    const resp = await app.fetch(req, env);
+    const data = await resp.json();
+    assert.equal(data.ok, true, JSON.stringify(data));
+    assert.ok(data.comment.body.includes("It does not cover the entire repository or the deployed service as a whole."));
+    assert.ok(data.comment.body.includes("Items to fix"));
+    assert.ok(!/[가-힣]/.test(data.comment.body), "EN preview body must contain no Korean");
+  });
+
+  it("defaults to Korean when locale is omitted or not en/ko", async () => {
+    const env = await makeEnvWithToken();
+    seedRepo(env);
+    seedReviewRun(env);
+
+    const app = createApp();
+    // omitted
+    const respDefault = await app.fetch(makeRequest("POST", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comment/preview`, {
+      userKey: "user123",
+    }), env);
+    const dataDefault = await respDefault.json();
+    assert.ok(dataDefault.ok);
+    assert.ok(dataDefault.comment.body.includes("전체 저장소나 배포된 서비스 전체를 확인한 것은 아닙니다"));
+
+    // unknown value falls back to ko (still accepted — no 400)
+    const respBad = await app.fetch(makeRequest("POST", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comment/preview`, {
+      userKey: "user123",
+      locale: "fr",
+    }), env);
+    const dataBad = await respBad.json();
+    assert.ok(dataBad.ok);
+    assert.ok(dataBad.comment.body.includes("전체 저장소나 배포된 서비스 전체를 확인한 것은 아닙니다"));
+  });
+
   it("excludes passed items from summary", async () => {
     const env = await makeEnvWithToken();
     seedRepo(env);
@@ -397,6 +544,33 @@ describe("POST /workspace/projects/:id/github/pulls/:number/comment", () => {
     assert.equal(data.ok, true, JSON.stringify(data));
     assert.equal(data.comment.status, "posted");
     assert.ok(data.comment.githubCommentUrl.includes("issuecomment-12345"));
+  });
+
+  it('posts an English body to GitHub when locale "en"', async () => {
+    const env = await makeEnvWithToken();
+    seedRepo(env);
+    seedReviewRun(env, true, ITEMS_MIXED_EN);
+
+    let postedBody = null;
+    const mockFetch = async (url, init) => {
+      if (url.includes("/comments")) {
+        postedBody = JSON.parse(init.body).body;
+        return new Response(JSON.stringify({ id: 777, html_url: "https://github.com/myorg/myapp/issues/7#issuecomment-777" }), { status: 201 });
+      }
+      return new Response("not found", { status: 404 });
+    };
+
+    const app = createApp({ fetch: mockFetch });
+    const req = makeRequest("POST", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comment`, {
+      userKey: "user123",
+      locale: "en",
+    });
+    const resp = await app.fetch(req, env);
+    const data = await resp.json();
+    assert.equal(data.ok, true, JSON.stringify(data));
+    assert.ok(typeof postedBody === "string");
+    assert.ok(postedBody.includes("PR review results"));
+    assert.ok(!/[가-힣]/.test(postedBody), "posted EN body must contain no Korean");
   });
 
   it("403 from GitHub → returns github_scope_required error", async () => {

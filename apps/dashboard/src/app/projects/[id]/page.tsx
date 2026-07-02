@@ -8,7 +8,7 @@ import { getLocalProject, getUserKey } from "@/lib/workflow-store";
 import { StatCard } from "@/components/StatCard";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { useI18n } from "@/i18n/I18nProvider";
-import { statusLabel } from "@/i18n/dictionary.mjs";
+import { statusLabel, enumStatusLabel, enumActionLabel, enumLimitationLabel } from "@/i18n/dictionary.mjs";
 import {
   getProjectEvolutionLearning,
   getProjectEvolutionTimeline,
@@ -54,11 +54,36 @@ export default function ProjectOverviewPage() {
   const project = getLocalProject(id) ?? getProject(id);
   if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
   const stats = getProjectStats(project);
+  const hasReviewActivity =
+    stats.passed + stats.failed + stats.inconclusive + stats.needsDecision > 0;
 
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{project.name}</h1>
       <p className="mb-6 mt-1 text-sm text-gray-500">{project.description}</p>
+
+      {/* Getting-started card for projects with no review activity yet — one
+          obvious next path instead of seven empty analytics sections. */}
+      {!hasReviewActivity && (
+        <div className="card mb-8 p-5">
+          <p className="text-sm font-semibold text-gray-900">{t.overview.gettingStartedTitle}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{t.overview.gettingStartedIntro}</p>
+          <ol className="mt-3 space-y-2 text-sm text-gray-700">
+            <li className="flex gap-2">
+              <span className="font-semibold text-brand-700">1.</span>
+              <Link href={`/projects/${id}/spec`} className="hover:underline">{t.overview.gsStep1}</Link>
+            </li>
+            <li className="flex gap-2">
+              <span className="font-semibold text-brand-700">2.</span>
+              <Link href={`/projects/${id}/settings`} className="hover:underline">{t.overview.gsStep2}</Link>
+            </li>
+            <li className="flex gap-2">
+              <span className="font-semibold text-brand-700">3.</span>
+              <Link href={`/projects/${id}/github`} className="hover:underline">{t.overview.gsStep3}</Link>
+            </li>
+          </ol>
+        </div>
+      )}
 
       {/* Stage 183 — Plan Map ("Where are we?") read-only entry */}
       <Link
@@ -134,21 +159,25 @@ export default function ProjectOverviewPage() {
         </div>
       </section>
 
-      {/* Stage 81: project-level Evolution Learning Signals */}
-      <section className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title">{t.evolution.learningTitle}</h2>
-        </div>
-        <EvolutionLearningCard projectId={id} t={t} />
-      </section>
+      {/* Stage 81/82: evolution analytics — only once there is review activity;
+          they are meaningless (and intimidating) on a fresh project. */}
+      {hasReviewActivity && (
+        <>
+          <section className="mb-8">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="section-title">{t.evolution.learningTitle}</h2>
+            </div>
+            <EvolutionLearningCard projectId={id} t={t} />
+          </section>
 
-      {/* Stage 82: project-level Evolution Timeline */}
-      <section className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title">{t.evolution.timelineTitle}</h2>
-        </div>
-        <EvolutionTimelineCard projectId={id} t={t} />
-      </section>
+          <section className="mb-8">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="section-title">{t.evolution.timelineTitle}</h2>
+            </div>
+            <EvolutionTimelineCard projectId={id} t={t} />
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -382,7 +411,7 @@ function EvolutionLearningCard({ projectId, t }: { projectId: string; t: Diction
                     key={r.recommendedAction}
                     className="grid grid-cols-3 items-center gap-2 rounded-md border border-gray-100 bg-white px-2 py-1"
                   >
-                    <span className="font-mono text-[11px] text-gray-600">{r.recommendedAction}</span>
+                    <span className="text-[11px] text-gray-600">{enumActionLabel(t, r.recommendedAction)}</span>
                     <span className="text-[11px] text-gray-500">
                       {r.comparable}/{r.total} · <span className="text-emerald-700">↑{r.improved}</span> · <span className="text-red-700">↓{r.regressed}</span> · <span className="text-amber-700">?{r.inconclusive}</span>
                     </span>
@@ -418,9 +447,9 @@ function EvolutionLearningCard({ projectId, t }: { projectId: string; t: Diction
             {learning.limitations.map((l) => (
               <li
                 key={l}
-                className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-mono text-gray-500"
+                className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500"
               >
-                {l}
+                {enumLimitationLabel(t, l)}
               </li>
             ))}
           </ul>
@@ -442,7 +471,7 @@ function TopSignalText({ signal, t }: { signal: ProjectLearningSignal; t: Dictio
     return (
       <>
         <span className="font-semibold text-gray-700">{t.evolution.learningEarlySignal}</span>
-        <span className="font-mono text-[11px] text-gray-700">{signal.recommendedAction}</span>
+        <span className="text-[11px] font-medium text-gray-700">{enumActionLabel(t, signal.recommendedAction)}</span>
         <span className="text-emerald-700">{label}</span>
         <span className="text-gray-400">
           ({signal.improved}/{signal.totalComparable})
@@ -454,7 +483,7 @@ function TopSignalText({ signal, t }: { signal: ProjectLearningSignal; t: Dictio
   return (
     <>
       <span className="font-semibold text-gray-700">{t.evolution.learningEarlySignal}</span>
-      <span className="font-mono text-[11px] text-gray-700">{signal.recommendedAction}</span>
+      <span className="text-[11px] font-medium text-gray-700">{enumActionLabel(t, signal.recommendedAction)}</span>
       <span className="text-red-700">{label}</span>
       <span className="text-gray-400">
         ({signal.regressed}/{signal.totalComparable})
@@ -551,10 +580,10 @@ function TimelineEventRow({
             {label}
           </span>
           {event.status && (
-            <span className="text-[10px] font-mono text-gray-500">{event.status}</span>
+            <span className="text-[10px] text-gray-500">{enumStatusLabel(t, event.status)}</span>
           )}
           {event.recommendedAction && (
-            <span className="text-[10px] font-mono text-gray-500">{event.recommendedAction}</span>
+            <span className="text-[10px] text-gray-500">{enumActionLabel(t, event.recommendedAction)}</span>
           )}
         </div>
         {event.summary && (

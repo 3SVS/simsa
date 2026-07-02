@@ -278,7 +278,7 @@ export default function GitHubPage() {
                             {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}`}
                           </p>
                         </div>
-                        <span className="flex-shrink-0 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-600">open</span>
+                        <span className="flex-shrink-0 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-600">{t.github.stateOpen}</span>
                       </div>
                     </button>
                   ))}
@@ -312,7 +312,7 @@ export default function GitHubPage() {
               </div>
               <div className="flex items-center gap-3">
                 <button onClick={handleLink} disabled={selectedItemIds.size === 0 || linkPhase === "saving"} className="btn btn-md btn-primary">
-                  {linkPhase === "saving" ? t.telegram.saving : t.github.saveLink}
+                  {linkPhase === "saving" ? t.github.saving : t.github.saveLink}
                 </button>
                 <button onClick={() => { setSelectedPR(null); setSelectedItemIds(new Set()); }} className="text-sm text-gray-500 hover:text-gray-700">
                   {t.common.cancel}
@@ -343,7 +343,7 @@ export default function GitHubPage() {
                           <p className="text-xs text-gray-400 mt-0.5">{lp.repoFullName}</p>
                         </div>
                         <span className={`text-xs rounded-full px-2 py-0.5 flex-shrink-0 ${lp.state === "open" ? "text-green-600 bg-green-50 border border-green-200" : "text-gray-500 bg-gray-100 border border-gray-200"}`}>
-                          {lp.state}
+                          {lp.state === "open" ? t.github.stateOpen : lp.state === "closed" ? t.github.stateClosed : lp.state}
                         </span>
                       </div>
 
@@ -614,7 +614,7 @@ function PRCommentPanel({
   userKey: string;
   comparisonData?: PrReviewComparisonResponse | null;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const comparable = comparisonData?.ok === true && comparisonData.comparable === true;
   const allResults = run.results ?? [];
   const fixable = allResults.filter(
@@ -658,6 +658,7 @@ function PRCommentPanel({
       userKey,
       selectedItemIds: Array.from(selectedIds),
       includeComparison,
+      locale,
     });
     if (res.ok) {
       setPreviewBody(res.comment.body);
@@ -678,6 +679,7 @@ function PRCommentPanel({
       body: previewBody ?? undefined,
       includeComparison,
       mode,
+      locale,
     });
     if (res.ok) {
       setPostedUrl(res.comment.githubCommentUrl);
@@ -764,6 +766,11 @@ function PRCommentPanel({
       )}
 
       {/* Item selection */}
+      <p className="mb-1 text-xs text-gray-400">
+        {t.exportPage.selectedOfTotal
+          .replace("{sel}", String(selectedIds.size))
+          .replace("{total}", String(allResults.length))}
+      </p>
       <div className="space-y-1">
         {allResults.map((r) => (
           <label
@@ -995,6 +1002,11 @@ function FixBriefPanel({
       </div>
 
       {/* Item checkboxes */}
+      <p className="mb-1 text-xs text-gray-400">
+        {t.exportPage.selectedOfTotal
+          .replace("{sel}", String(selectedIds.size))
+          .replace("{total}", String(fixableItems.length))}
+      </p>
       <div className="space-y-1">
         {fixableItems.map((r) => (
           <label
@@ -1022,7 +1034,7 @@ function FixBriefPanel({
           onChange={(e) => setTarget(e.target.value as FixBriefTarget)}
           className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
         >
-          <option value="both">Claude Code + Codex</option>
+          <option value="both">{t.fixBrief.targetBoth}</option>
           <option value="claude_code">{t.fixBrief.targetClaude}</option>
           <option value="codex">{t.fixBrief.targetCodex}</option>
         </select>
@@ -1143,6 +1155,7 @@ function ReviewResultPanel({ run, onRerun }: { run: ReviewRun; onRerun: () => vo
 
       {/* Disclaimer */}
       <p className="text-xs text-gray-400">{t.review.basisNote}</p>
+      <p className="text-xs text-gray-400">{t.review.verifyLiveNote}</p>
 
       {/* Error */}
       {run.status === "error" && run.errorMessage && (

@@ -20,3 +20,25 @@ export const EMPTY_STATES: {
   noSavedRecords: string;
   noOpenedRecord: string;
 };
+
+export type BetaOnboardingCopy = {
+  heading: string;
+  intro: string;
+  steps: string[];
+  safetyLine: string;
+  previewLanguageItems: PreviewLanguageItem[];
+  safetyNotes: {
+    beforeInput: string;
+    savedScope: string;
+    savedRetention: string;
+    feedback: string;
+  };
+  emptyStates: {
+    beforeInput: string;
+    noSavedRecords: string;
+    noOpenedRecord: string;
+  };
+};
+
+export const BETA_ONBOARDING_COPY: Record<"en" | "ko", BetaOnboardingCopy>;
+export function getBetaOnboardingCopy(locale: string): BetaOnboardingCopy;

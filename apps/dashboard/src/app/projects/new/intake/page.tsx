@@ -4,7 +4,7 @@
 // One front door with multiple starting points. Deterministic local preview
 // only — no backend, no model call, no external fetch. Future stages wire real
 // per-type analysis behind the same model.
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 import { getDefaultStampThinkingSteps } from "@/lib/stamp-thinking.mjs";
@@ -73,21 +73,8 @@ import type {
 } from "@/lib/workspace-agent-workflow-api";
 import { getUserKey } from "@/lib/workflow-store";
 import { buildBetaFeedbackMailto } from "@/lib/beta-feedback.mjs";
-import {
-  ONBOARDING_HEADING,
-  ONBOARDING_INTRO,
-  ONBOARDING_STEPS,
-  ONBOARDING_SAFETY_LINE,
-  PREVIEW_LANGUAGE_ITEMS,
-  BETA_SAFETY_NOTES,
-  EMPTY_STATES,
-} from "@/lib/beta-onboarding.mjs";
-import {
-  BETA_USAGE_BOUNDARY_HEADING,
-  BETA_USAGE_BOUNDARY_ITEMS,
-  BETA_USAGE_NOT_ACTIVE_COPY,
-  SAVED_WORKFLOW_USAGE_NOTE,
-} from "@/lib/beta-usage-boundary.mjs";
+import { getBetaOnboardingCopy } from "@/lib/beta-onboarding.mjs";
+import { getBetaUsageBoundaryCopy } from "@/lib/beta-usage-boundary.mjs";
 import { buildBenchmarkHandoffPreview } from "@/lib/intake-benchmark-handoff.mjs";
 import { buildDecisionOutcomeLinkPreview } from "@/lib/intake-decision-outcome-link.mjs";
 import { buildEvolutionActionPackPreview } from "@/lib/intake-evolution-action-preview.mjs";
@@ -98,9 +85,20 @@ import { buildTemplateEffectivenessSignalsView } from "@/lib/template-effectiven
 
 export default function IntakePage() {
   // Stage 159 — dictionary-first i18n for the MCP handoff/intake destination.
-  const { t: tr } = useI18n();
+  const { t: tr, locale } = useI18n();
+  // Non-developer copy pass — locale-aware onboarding/usage-boundary copy.
+  const ob = getBetaOnboardingCopy(locale);
+  const ub = getBetaUsageBoundaryCopy(locale);
   // Stage 163 — localized thinking-step labels for genuinely-async waits.
   const loadingSteps = getDefaultStampThinkingSteps(tr.loading);
+  // Non-developer copy pass — plain-language strings for this page.
+  const ic = tr.intake.page;
+  const statusText = (status: string) =>
+    status === "archived" ? ic.statusArchived : status === "planned" ? ic.statusPlanned : status;
+  const intakeTypeText = (value: string) => {
+    const known = WORKSPACE_INTAKE_TYPES.find((x) => x === value);
+    return known ? (tr.intake.startPoints[known]?.label ?? value.replace(/_/g, " ")) : value.replace(/_/g, " ");
+  };
   const [type, setType] = useState<WorkspaceIntakeType | null>(null);
   const [rawInput, setRawInput] = useState("");
   const [draft, setDraft] = useState<WorkspaceIntakeDraft | null>(null);
@@ -336,29 +334,29 @@ export default function IntakePage() {
     setManageMsg(null);
     const res = await patchWorkflowRecordStatus(id, getUserKey(), status);
     if (res.ok) {
-      setManageMsg(status === "archived" ? "Workflow archived." : "Workflow restored.");
+      setManageMsg(status === "archived" ? ic.workflowArchived : ic.workflowRestored);
       if (openRecord?.id === id) setOpenRecord(res.record);
       await refreshSavedList();
     } else {
-      setManageMsg(`Could not update: ${res.error}`);
+      setManageMsg(`${ic.couldNotUpdate} ${res.error}`);
     }
     setManageBusyId(null);
   }
 
   // Stage 118 — explicit delete (with confirmation), then refresh the list.
   async function removeRecord(id: string) {
-    if (typeof window !== "undefined" && !window.confirm("Delete this saved workflow plan? This cannot be undone.")) {
+    if (typeof window !== "undefined" && !window.confirm(ic.confirmDelete)) {
       return;
     }
     setManageBusyId(id);
     setManageMsg(null);
     const res = await deleteWorkflowRecord(id, getUserKey());
     if (res.ok) {
-      setManageMsg("Workflow deleted.");
+      setManageMsg(ic.workflowDeleted);
       if (openRecord?.id === id) setOpenRecord(null);
       await refreshSavedList();
     } else {
-      setManageMsg(`Could not delete: ${res.error}`);
+      setManageMsg(`${ic.couldNotDelete} ${res.error}`);
     }
     setManageBusyId(null);
   }
@@ -402,15 +400,15 @@ export default function IntakePage() {
         {/* Stage 119 — page-level beta feedback CTA */}
         <p className="mt-2 text-xs text-gray-400">
           <FeedbackLink label={tr.intake.handoff.feedbackLabel} context={{ section: "Intake workflow" }} />{" "}
-          — {BETA_SAFETY_NOTES.feedback}
+          — {ob.safetyNotes.feedback}
         </p>
 
         {/* Stage 120 — preview-only onboarding panel */}
         <div className="card mt-6 p-5">
-          <p className="text-sm font-semibold text-gray-900">{ONBOARDING_HEADING}</p>
-          <p className="mt-1 text-sm text-gray-500">{ONBOARDING_INTRO}</p>
+          <p className="text-sm font-semibold text-gray-900">{ob.heading}</p>
+          <p className="mt-1 text-sm text-gray-500">{ob.intro}</p>
           <ol className="mt-3 space-y-1">
-            {ONBOARDING_STEPS.map((step, i) => (
+            {ob.steps.map((step, i) => (
               <li key={step} className="flex gap-2 text-sm text-gray-700">
                 <span className="text-gray-400">{i + 1}.</span>
                 <span>{step}</span>
@@ -418,13 +416,13 @@ export default function IntakePage() {
             ))}
           </ol>
           <p className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-            {ONBOARDING_SAFETY_LINE}
+            {ob.safetyLine}
           </p>
 
           {/* Stage 120 — preview language legend */}
           <p className="mt-4 text-xs font-medium text-gray-500">{tr.intake.handoff.previewLanguageLabel}</p>
           <dl className="mt-1 space-y-1">
-            {PREVIEW_LANGUAGE_ITEMS.map((item) => (
+            {ob.previewLanguageItems.map((item) => (
               <div key={item.term} className="text-xs text-gray-600">
                 <dt className="inline font-medium text-gray-700">{item.term}</dt>
                 <dd className="inline"> — {item.meaning}</dd>
@@ -436,15 +434,15 @@ export default function IntakePage() {
         {/* Stage 122 — beta usage / cost boundary panel */}
         <div className="card mt-6 p-5">
           <p className="text-sm font-semibold text-gray-900">
-            {BETA_USAGE_BOUNDARY_HEADING}
+            {ub.heading}
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
-            {BETA_USAGE_BOUNDARY_ITEMS.map((item) => (
+            {ub.items.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
           <p className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-            {BETA_USAGE_NOT_ACTIVE_COPY}
+            {ub.notActive}
           </p>
         </div>
 
@@ -477,7 +475,7 @@ export default function IntakePage() {
 
         {/* Stage 120 — empty state before a starting point is picked */}
         {!meta && (
-          <p className="mt-4 text-sm text-gray-500">{EMPTY_STATES.beforeInput}</p>
+          <p className="mt-4 text-sm text-gray-500">{ob.emptyStates.beforeInput}</p>
         )}
 
         {/* Step 2 — paste what you have */}
@@ -489,7 +487,7 @@ export default function IntakePage() {
             <p className="text-xs text-gray-400">{meta.inputHint}</p>
             {/* Stage 120 — before-input beta safety note */}
             <p className="mb-2 mt-1 text-xs text-amber-600">
-              {BETA_SAFETY_NOTES.beforeInput}
+              {ob.safetyNotes.beforeInput}
             </p>
             <textarea
               value={rawInput}
@@ -508,7 +506,7 @@ export default function IntakePage() {
                 disabled={!rawInput.trim()}
                 className="btn btn-primary btn-md"
               >
-                Create intake draft
+                {ic.createDraftButton}
               </button>
               {type === "product_url" && (
                 <button
@@ -519,7 +517,7 @@ export default function IntakePage() {
                   }}
                   className="btn btn-secondary btn-md"
                 >
-                  Use example URL
+                  {ic.useExampleUrl}
                 </button>
               )}
               {type === "github_repo" && (
@@ -531,7 +529,7 @@ export default function IntakePage() {
                   }}
                   className="btn btn-secondary btn-md"
                 >
-                  Use example repo
+                  {ic.useExampleRepo}
                 </button>
               )}
               {type === "ai_built_app" && (
@@ -543,7 +541,7 @@ export default function IntakePage() {
                   }}
                   className="btn btn-secondary btn-md"
                 >
-                  Use example app
+                  {ic.useExampleApp}
                 </button>
               )}
               {type === "prd" && (
@@ -555,7 +553,7 @@ export default function IntakePage() {
                   }}
                   className="btn btn-secondary btn-md"
                 >
-                  Use example PRD
+                  {ic.useExamplePrd}
                 </button>
               )}
             </div>
@@ -566,7 +564,7 @@ export default function IntakePage() {
         {draft && (
           <div className="card mt-8 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Intake draft (preview)
+              {ic.draftTitle}
             </p>
             <h2 className="mt-1 text-base font-semibold text-gray-900">
               {draft.title}
@@ -574,7 +572,7 @@ export default function IntakePage() {
             <p className="mt-1 text-sm text-gray-500">{draft.sourceSummary}</p>
 
             <p className="mt-5 text-sm font-medium text-gray-900">
-              Simsa will turn this into:
+              {ic.draftWillTurnInto}
             </p>
             <ul className="mt-2 space-y-1">
               {draft.expectedOutputs.map((out) => (
@@ -588,7 +586,7 @@ export default function IntakePage() {
             </ul>
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — staged analysis arrives in later stages.
+              {ic.draftPreviewNote}
             </p>
           </div>
         )}
@@ -597,18 +595,21 @@ export default function IntakePage() {
         {prdPreview && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              PRD / spec preview · confidence: {prdPreview.confidence}
+              {ic.prdTitle}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {prdPreview.confidence}
+            </TechDetails>
 
             <p className="mt-3 text-sm font-medium text-gray-900">
-              Product intent
+              {ic.productIntent}
             </p>
             <p className="mt-1 text-sm text-gray-600">
               {prdPreview.productIntent}
             </p>
 
             <p className="mt-4 text-sm font-medium text-gray-900">
-              Likely users
+              {ic.likelyUsers}
             </p>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {prdPreview.likelyUsers.map((u) => (
@@ -621,16 +622,15 @@ export default function IntakePage() {
               ))}
             </div>
 
-            <PrdList title="Candidate user flows" items={prdPreview.candidateUserFlows} />
+            <PrdList title={ic.candidateUserFlows} items={prdPreview.candidateUserFlows} />
             <PrdList
-              title="Candidate acceptance items"
+              title={ic.candidateAcceptanceItems}
               items={prdPreview.candidateAcceptanceItems}
             />
-            <PrdList title="Missing questions" items={prdPreview.missingQuestions} />
+            <PrdList title={ic.missingQuestions} items={prdPreview.missingQuestions} />
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — deterministic PRD parsing. Full staged analysis
-              arrives in later stages.
+              {ic.prdPreviewNote}
             </p>
           </div>
         )}
@@ -639,39 +639,42 @@ export default function IntakePage() {
         {urlPreview && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Product URL preview · confidence: {urlPreview.confidence}
+              {ic.urlTitle}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {urlPreview.confidence}
+            </TechDetails>
 
             <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               <div>
-                <dt className="text-xs text-gray-400">Normalized URL</dt>
+                <dt className="text-xs text-gray-400">{ic.normalizedUrl}</dt>
                 <dd className="break-all text-sm text-gray-700">
                   {urlPreview.normalizedUrl || "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">Domain</dt>
+                <dt className="text-xs text-gray-400">{ic.domain}</dt>
                 <dd className="text-sm text-gray-700">{urlPreview.domain}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">Surface type</dt>
+                <dt className="text-xs text-gray-400">{ic.surfaceType}</dt>
                 <dd className="text-sm text-gray-700">{urlPreview.pathType}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">Likely surface</dt>
+                <dt className="text-xs text-gray-400">{ic.likelySurface}</dt>
                 <dd className="text-sm text-gray-700">{urlPreview.likelySurface}</dd>
               </div>
             </dl>
 
-            <PrdList title="Review focus areas" items={urlPreview.reviewFocusAreas} />
+            <PrdList title={ic.reviewFocusAreas} items={urlPreview.reviewFocusAreas} />
             <PrdList
-              title="Candidate acceptance items"
+              title={ic.candidateAcceptanceItems}
               items={urlPreview.candidateAcceptanceItems}
             />
-            <PrdList title="Missing questions" items={urlPreview.missingQuestions} />
+            <PrdList title={ic.missingQuestions} items={urlPreview.missingQuestions} />
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — no live crawl or external fetch.
+              {ic.urlPreviewNote}
             </p>
           </div>
         )}
@@ -680,43 +683,46 @@ export default function IntakePage() {
         {repoPreview && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              GitHub repo preview · confidence: {repoPreview.confidence}
+              {ic.repoTitle}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {repoPreview.confidence}
+            </TechDetails>
 
             <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               <div>
-                <dt className="text-xs text-gray-400">Normalized repo</dt>
+                <dt className="text-xs text-gray-400">{ic.normalizedRepo}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.normalizedRepo}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">Owner</dt>
+                <dt className="text-xs text-gray-400">{ic.owner}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.owner}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">Repository</dt>
+                <dt className="text-xs text-gray-400">{ic.repository}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.repo}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">Likely repo type</dt>
+                <dt className="text-xs text-gray-400">{ic.likelyRepoType}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.likelyRepoType}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-xs text-gray-400">Repo URL</dt>
+                <dt className="text-xs text-gray-400">{ic.repoUrl}</dt>
                 <dd className="break-all text-sm text-gray-700">
                   {repoPreview.repoUrl || "—"}
                 </dd>
               </div>
             </dl>
 
-            <PrdList title="Review focus areas" items={repoPreview.reviewFocusAreas} />
+            <PrdList title={ic.reviewFocusAreas} items={repoPreview.reviewFocusAreas} />
             <PrdList
-              title="Candidate acceptance items"
+              title={ic.candidateAcceptanceItems}
               items={repoPreview.candidateAcceptanceItems}
             />
-            <PrdList title="Missing questions" items={repoPreview.missingQuestions} />
+            <PrdList title={ic.missingQuestions} items={repoPreview.missingQuestions} />
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — no GitHub API, clone, or remote file fetch.
+              {ic.repoPreviewNote}
             </p>
           </div>
         )}
@@ -725,54 +731,57 @@ export default function IntakePage() {
         {appPreview && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Existing app recovery preview · confidence: {appPreview.confidence}
+              {ic.appTitle}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {appPreview.confidence}
+            </TechDetails>
 
             <p className="mt-3 text-sm font-medium text-gray-900">
-              Current state summary
+              {ic.currentStateSummary}
             </p>
             <p className="mt-1 text-sm text-gray-600">
               {appPreview.currentStateSummary}
             </p>
 
             <p className="mt-4 text-sm font-medium text-gray-900">
-              Likely product surface
+              {ic.likelyProductSurface}
             </p>
             <p className="mt-1 text-sm text-gray-700">
               {appPreview.likelyProductSurface}
             </p>
 
             <p className="mt-4 text-sm font-medium text-gray-900">
-              Recommended next action
+              {ic.recommendedNextAction}
             </p>
             <p className="mt-1 text-sm text-gray-700">
               {appPreview.recommendedNextAction.replace(/_/g, " ")}
             </p>
 
-            <PrdList title="Recovery focus areas" items={appPreview.recoveryFocusAreas} />
+            <PrdList title={ic.recoveryFocusAreas} items={appPreview.recoveryFocusAreas} />
             <PrdList
-              title="Candidate acceptance items"
+              title={ic.candidateAcceptanceItems}
               items={appPreview.candidateAcceptanceItems}
             />
-            <PrdList title="Likely risks" items={appPreview.likelyRisks} />
+            <PrdList title={ic.likelyRisks} items={appPreview.likelyRisks} />
 
             <p className="mt-4 text-sm font-medium text-gray-900">
-              Fix vs rebuild signals
+              {ic.fixVsRebuildSignals}
             </p>
             <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <FixRebuild title="Likely keep" items={appPreview.fixVsRebuildSignals.likelyKeep} />
-              <FixRebuild title="Likely fix" items={appPreview.fixVsRebuildSignals.likelyFix} />
-              <FixRebuild title="Likely rebuild" items={appPreview.fixVsRebuildSignals.likelyRebuild} />
+              <FixRebuild title={ic.likelyKeep} items={appPreview.fixVsRebuildSignals.likelyKeep} />
+              <FixRebuild title={ic.likelyFix} items={appPreview.fixVsRebuildSignals.likelyFix} />
+              <FixRebuild title={ic.likelyRebuild} items={appPreview.fixVsRebuildSignals.likelyRebuild} />
               <FixRebuild
-                title="Needs verification"
+                title={ic.needsVerification}
                 items={appPreview.fixVsRebuildSignals.needsVerification}
               />
             </div>
 
-            <PrdList title="Missing questions" items={appPreview.missingQuestions} />
+            <PrdList title={ic.missingQuestions} items={appPreview.missingQuestions} />
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — no live inspection, repo scan, or external fetch.
+              {ic.appPreviewNote}
             </p>
           </div>
         )}
@@ -781,17 +790,19 @@ export default function IntakePage() {
         {acceptanceMap && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Acceptance Map · confidence: {acceptanceMap.confidence}
+              {ic.acceptanceMapTitle}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {acceptanceMap.confidence}
+            </TechDetails>
             <p className="mt-2 text-sm text-gray-500">
-              Simsa organizes your input into candidate acceptance areas,
-              questions, and next steps.
+              {ic.acceptanceMapIntro}
             </p>
 
-            <p className="mt-4 text-sm font-medium text-gray-900">Summary</p>
+            <p className="mt-4 text-sm font-medium text-gray-900">{ic.summaryLabel}</p>
             <p className="mt-1 text-sm text-gray-600">{acceptanceMap.summary}</p>
 
-            <p className="mt-4 text-sm font-medium text-gray-900">Areas</p>
+            <p className="mt-4 text-sm font-medium text-gray-900">{ic.areasLabel}</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {acceptanceMap.areas.map((a) => (
                 <span
@@ -804,7 +815,7 @@ export default function IntakePage() {
             </div>
 
             <p className="mt-4 text-sm font-medium text-gray-900">
-              Acceptance items
+              {ic.acceptanceItemsLabel}
             </p>
             <ul className="mt-1 space-y-1">
               {acceptanceMap.items.map((it) => (
@@ -820,17 +831,17 @@ export default function IntakePage() {
               ))}
             </ul>
 
-            <PrdList title="Missing questions" items={acceptanceMap.missingQuestions} />
+            <PrdList title={ic.missingQuestions} items={acceptanceMap.missingQuestions} />
 
             <p className="mt-4 text-sm font-medium text-gray-900">
-              Recommended next step
+              {ic.recommendedNextStep}
             </p>
             <p className="mt-1 text-sm text-gray-700">
               {NEXT_STEP_LABELS[acceptanceMap.recommendedNextStep]}
             </p>
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — acceptance map is deterministic and not yet saved.
+              {ic.acceptanceMapNote}
             </p>
           </div>
         )}
@@ -839,13 +850,16 @@ export default function IntakePage() {
         {stagePlan && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Stage Plan · confidence: {stagePlan.confidence}
+              {ic.stagePlanTitle}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {stagePlan.confidence}
+            </TechDetails>
             <p className="mt-2 text-sm text-gray-500">
-              Simsa turns the acceptance map into an ordered review workflow.
+              {ic.stagePlanIntro}
             </p>
             <p className="mt-3 text-sm text-gray-700">
-              Recommended start: stage {stagePlan.recommendedStartStage}
+              {ic.recommendedStartStage} {stagePlan.recommendedStartStage}
             </p>
 
             <div className="mt-3 space-y-2">
@@ -860,7 +874,7 @@ export default function IntakePage() {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold text-gray-900">
-                      Stage {s.number}: {s.title}
+                      {ic.stageWord} {s.number}: {s.title}
                     </span>
                     <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
                       {STAGE_KIND_LABELS[s.kind]}
@@ -870,9 +884,9 @@ export default function IntakePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-gray-600">{s.goal}</p>
-                  <StageDetail label="Candidate checks" items={s.candidateChecks} />
-                  <StageDetail label="Evidence to collect" items={s.evidenceToCollect} />
-                  <StageDetail label="Exit criteria" items={s.exitCriteria} />
+                  <StageDetail label={ic.candidateChecks} items={s.candidateChecks} />
+                  <StageDetail label={ic.evidenceToCollect} items={s.evidenceToCollect} />
+                  <StageDetail label={ic.exitCriteria} items={s.exitCriteria} />
                 </div>
               ))}
             </div>
@@ -889,7 +903,7 @@ export default function IntakePage() {
             </div>
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — stage plan is deterministic and not yet saved.
+              {ic.stagePlanNote}
             </p>
           </div>
         )}
@@ -898,15 +912,17 @@ export default function IntakePage() {
         {agentRunPlan && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Agent Run Plan · confidence: {agentRunPlan.confidence}
+              {ic.agentRunPlanTitle}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {agentRunPlan.confidence}
+            </TechDetails>
             <p className="mt-2 text-sm text-gray-500">
-              Simsa turns the stage plan into role-based work for builders,
-              reviewers, fixers, and verifiers.
+              {ic.agentRunPlanIntro}
             </p>
             <p className="mt-3 text-sm text-gray-700">
-              Primary role: {AGENT_ROLE_LABELS[agentRunPlan.primaryRole]} ·
-              Recommended first: {agentRunPlan.recommendedFirstTaskId}
+              {ic.primaryRole} {AGENT_ROLE_LABELS[agentRunPlan.primaryRole]} ·{" "}
+              {ic.recommendedFirst} {agentRunPlan.recommendedFirstTaskId}
             </p>
 
             <div className="mt-3 space-y-2">
@@ -921,7 +937,7 @@ export default function IntakePage() {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold text-gray-900">
-                      Stage {t.stageNumber}: {t.stageTitle}
+                      {ic.stageWord} {t.stageNumber}: {t.stageTitle}
                     </span>
                     <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
                       {AGENT_ROLE_LABELS[t.role]}
@@ -932,19 +948,18 @@ export default function IntakePage() {
                   </div>
                   <p className="mt-1 text-sm text-gray-600">{t.task}</p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Recommended tool: {AGENT_TOOL_LABELS[t.recommendedTool]} ·
-                    Next decision: {AGENT_DECISION_LABELS[t.nextDecision]}
+                    {ic.recommendedTool} {AGENT_TOOL_LABELS[t.recommendedTool]} ·{" "}
+                    {ic.nextDecision} {AGENT_DECISION_LABELS[t.nextDecision]}
                   </p>
-                  <StageDetail label="Inputs" items={t.inputs} />
-                  <StageDetail label="Acceptance items" items={t.acceptanceItems} />
-                  <StageDetail label="Expected evidence" items={t.expectedEvidence} />
+                  <StageDetail label={ic.inputsLabel} items={t.inputs} />
+                  <StageDetail label={ic.acceptanceItemsLabel} items={t.acceptanceItems} />
+                  <StageDetail label={ic.expectedEvidence} items={t.expectedEvidence} />
                 </div>
               ))}
             </div>
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — Agent Run Plan is deterministic and not yet executed
-              or saved.
+              {ic.agentRunPlanNote}
             </p>
           </div>
         )}
@@ -953,12 +968,14 @@ export default function IntakePage() {
         {evidencePlan && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Evidence Plan · overall: {EVIDENCE_STATUS_LABELS[evidencePlan.overallEvidenceStatus]} ·
-              confidence: {evidencePlan.confidence}
+              {ic.evidencePlanTitle} · {ic.overallLabel}{" "}
+              {EVIDENCE_STATUS_LABELS[evidencePlan.overallEvidenceStatus]}
             </p>
+            <TechDetails summary={ic.techDetails}>
+              {ic.techConfidence}: {evidencePlan.confidence}
+            </TechDetails>
             <p className="mt-2 text-sm text-gray-500">
-              Simsa shows what evidence would be needed before deciding whether to
-              accept, fix, rerun, or defer the work.
+              {ic.evidencePlanIntro}
             </p>
 
             <div className="mt-3 space-y-2">
@@ -973,11 +990,11 @@ export default function IntakePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    Area: {e.relatedArea.replace(/_/g, " ")}
+                    {ic.areaLabel}: {e.relatedArea.replace(/_/g, " ")}
                     {e.relatedStageNumbers.length > 0 &&
-                      ` · Stages: ${e.relatedStageNumbers.join(", ")}`}
-                    {e.relatedTaskIds.length > 0 && ` · Tasks: ${e.relatedTaskIds.join(", ")}`}
-                    {` · Decision impact: ${AGENT_DECISION_LABELS[e.decisionImpact]}`}
+                      ` · ${ic.stagesLabel}: ${e.relatedStageNumbers.join(", ")}`}
+                    {e.relatedTaskIds.length > 0 && ` · ${ic.tasksLabel}: ${e.relatedTaskIds.join(", ")}`}
+                    {` · ${ic.decisionImpact}: ${AGENT_DECISION_LABELS[e.decisionImpact]}`}
                   </p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {e.evidenceTypes.map((t) => (
@@ -995,17 +1012,17 @@ export default function IntakePage() {
             </div>
 
             <StageDetail
-              label="Missing evidence questions"
+              label={ic.missingEvidenceQuestions}
               items={evidencePlan.missingEvidenceQuestions}
             />
 
             <p className="mt-4 text-xs text-gray-400">
-              Preview only — evidence is expected, not collected or verified.
+              {ic.evidencePlanNote}
             </p>
             {/* Stage 119 — preview-section feedback CTA */}
             <p className="mt-2">
               <FeedbackLink
-                label="Feedback on this preview"
+                label={ic.feedbackPreview}
                 context={{ intakeType: type ?? undefined, section: "Evidence Plan" }}
               />
             </p>
@@ -1016,12 +1033,10 @@ export default function IntakePage() {
         {evidencePlan && (
           <div className="card mt-6 p-5">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Save workflow plan
+              {ic.saveTitle}
             </p>
             <p className="mt-2 text-sm text-gray-500">
-              Save this workflow snapshot (acceptance map, stage plan, agent run
-              plan, evidence plan) so you can list and reopen it later. This is a
-              saved plan — not an agent run, executed task, or verified result.
+              {ic.saveIntro}
             </p>
 
             <div className="mt-3 flex items-center gap-2">
@@ -1037,22 +1052,22 @@ export default function IntakePage() {
                     <span>{tr.loading.saving}</span>
                   </>
                 ) : (
-                  <span>Save workflow plan</span>
+                  <span>{ic.saveButton}</span>
                 )}
               </button>
             </div>
 
             {saveError && (
-              <p className="mt-3 text-sm text-red-600">Could not save: {saveError}</p>
+              <p className="mt-3 text-sm text-red-600">{ic.couldNotSave} {saveError}</p>
             )}
 
             {savedRecord && (
               <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50 p-3">
                 <p className="text-sm font-medium text-gray-900">
-                  Saved workflow plan
+                  {ic.savedHeading}
                 </p>
                 <p className="mt-1 text-xs text-gray-600">
-                  ID: {savedRecord.id} · Status: {savedRecord.status} · Created:{" "}
+                  {ic.idLabel} {savedRecord.id} · {ic.statusLabel} {statusText(savedRecord.status)} · {ic.createdLabel}{" "}
                   {savedRecord.createdAt}
                 </p>
                 <button
@@ -1060,14 +1075,13 @@ export default function IntakePage() {
                   onClick={() => openSavedRecord(savedRecord.id)}
                   className="btn btn-secondary btn-sm mt-2"
                 >
-                  Reopen saved workflow
+                  {ic.reopenButton}
                 </button>
               </div>
             )}
 
             <p className="mt-4 text-xs text-gray-400">
-              Saving is optional — the preview works without it. No agent
-              execution, evidence upload, decision, or benchmark is created.
+              {ic.saveOptionalNote}
             </p>
           </div>
         )}
@@ -1076,7 +1090,7 @@ export default function IntakePage() {
         <div className="card mt-6 p-5">
           <div className="flex items-center justify-between">
             <p className="text-xs uppercase tracking-wide text-gray-400">
-              Saved workflow plans
+              {ic.savedListTitle}
             </p>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -1085,7 +1099,7 @@ export default function IntakePage() {
                   checked={showArchived}
                   onChange={toggleShowArchived}
                 />
-                Show archived
+                {ic.showArchived}
               </label>
               <button
                 type="button"
@@ -1099,16 +1113,16 @@ export default function IntakePage() {
                     <span>{tr.loading.refreshing}</span>
                   </>
                 ) : (
-                  <span>Refresh</span>
+                  <span>{ic.refreshButton}</span>
                 )}
               </button>
             </div>
           </div>
 
           {/* Stage 120/122 — beta tenant-scope + retention + usage-boundary notes */}
-          <p className="mt-2 text-xs text-gray-400">{SAVED_WORKFLOW_USAGE_NOTE}</p>
-          <p className="mt-1 text-xs text-gray-400">{BETA_SAFETY_NOTES.savedScope}</p>
-          <p className="mt-1 text-xs text-gray-400">{BETA_SAFETY_NOTES.savedRetention}</p>
+          <p className="mt-2 text-xs text-gray-400">{ub.savedWorkflowNote}</p>
+          <p className="mt-1 text-xs text-gray-400">{ob.safetyNotes.savedScope}</p>
+          <p className="mt-1 text-xs text-gray-400">{ob.safetyNotes.savedRetention}</p>
 
           {manageMsg && (
             <p className="mt-2 text-xs text-gray-500">{manageMsg}</p>
@@ -1116,14 +1130,14 @@ export default function IntakePage() {
 
           {savedList === null && (
             <p className="mt-3 text-sm text-gray-500">
-              Refresh to load previously saved workflow plans.
+              {ic.refreshHint}
             </p>
           )}
           {savedList !== null && savedList.length === 0 && (
-            <p className="mt-3 text-sm text-gray-500">{EMPTY_STATES.noSavedRecords}</p>
+            <p className="mt-3 text-sm text-gray-500">{ob.emptyStates.noSavedRecords}</p>
           )}
           {savedList !== null && savedList.length > 0 && !openRecord && !detailLoading && (
-            <p className="mt-3 text-xs text-gray-400">{EMPTY_STATES.noOpenedRecord}</p>
+            <p className="mt-3 text-xs text-gray-400">{ob.emptyStates.noOpenedRecord}</p>
           )}
           {savedList !== null && savedList.length > 0 && (
             <ul className="mt-3 space-y-2">
@@ -1137,15 +1151,15 @@ export default function IntakePage() {
                       {r.title}
                     </span>
                     <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
-                      {r.intakeType.replace(/_/g, " ")}
+                      {intakeTypeText(r.intakeType)}
                     </span>
                     <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
-                      {r.status}
+                      {statusText(r.status)}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">{r.sourceSummary}</p>
                   <p className="mt-1 text-xs text-gray-400">
-                    {r.id} · created {r.createdAt} · updated {r.updatedAt}
+                    {r.id} · {ic.listCreated} {r.createdAt} · {ic.listUpdated} {r.updatedAt}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
@@ -1153,7 +1167,7 @@ export default function IntakePage() {
                       onClick={() => openSavedRecord(r.id)}
                       className="btn btn-secondary btn-sm"
                     >
-                      Open
+                      {ic.openButton}
                     </button>
                     {r.status === "archived" ? (
                       <button
@@ -1162,7 +1176,7 @@ export default function IntakePage() {
                         disabled={manageBusyId === r.id}
                         className="btn btn-secondary btn-sm"
                       >
-                        {manageBusyId === r.id ? "…" : "Restore"}
+                        {manageBusyId === r.id ? "…" : ic.restoreButton}
                       </button>
                     ) : (
                       <button
@@ -1171,7 +1185,7 @@ export default function IntakePage() {
                         disabled={manageBusyId === r.id}
                         className="btn btn-secondary btn-sm"
                       >
-                        {manageBusyId === r.id ? "…" : "Archive"}
+                        {manageBusyId === r.id ? "…" : ic.archiveButton}
                       </button>
                     )}
                     <button
@@ -1180,7 +1194,7 @@ export default function IntakePage() {
                       disabled={manageBusyId === r.id}
                       className="btn btn-secondary btn-sm text-red-600"
                     >
-                      {manageBusyId === r.id ? "…" : "Delete"}
+                      {manageBusyId === r.id ? "…" : ic.deleteButton}
                     </button>
                   </div>
                 </li>
@@ -1209,39 +1223,43 @@ export default function IntakePage() {
                   onClick={() => setOpenRecord(null)}
                   className="btn btn-secondary btn-sm"
                 >
-                  Close
+                  {ic.closeButton}
                 </button>
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                {openRecord.intakeType.replace(/_/g, " ")} · {openRecord.status} ·{" "}
+                {intakeTypeText(openRecord.intakeType)} · {statusText(openRecord.status)} ·{" "}
                 {openRecord.id}
               </p>
               <p className="mt-2 text-sm text-gray-600">
                 {openRecord.sourceSummary}
               </p>
-              <p className="mt-3 text-xs font-medium text-gray-500">
-                Saved snapshot (read-only JSON)
-              </p>
-              <pre className="mt-1 max-h-80 overflow-auto rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-700">
-                {JSON.stringify(
-                  {
-                    acceptanceMap: openRecord.acceptanceMap,
-                    stagePlan: openRecord.stagePlan,
-                    agentRunPlan: openRecord.agentRunPlan,
-                    evidencePlan: openRecord.evidencePlan,
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-gray-500">
+                  {ic.techDetails}
+                </summary>
+                <p className="mt-2 text-xs font-medium text-gray-500">
+                  {ic.savedSnapshotLabel}
+                </p>
+                <pre className="mt-1 max-h-80 overflow-auto rounded-md border border-gray-200 bg-white p-3 text-xs text-gray-700">
+                  {JSON.stringify(
+                    {
+                      acceptanceMap: openRecord.acceptanceMap,
+                      stagePlan: openRecord.stagePlan,
+                      agentRunPlan: openRecord.agentRunPlan,
+                      evidencePlan: openRecord.evidencePlan,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
               <p className="mt-2 text-xs text-gray-400">
-                Read-only snapshot of a saved plan. No agent execution or evidence
-                collection happened.
+                {ic.savedSnapshotNote}
               </p>
               {/* Stage 119 — saved-workflow feedback CTA */}
               <p className="mt-2">
                 <FeedbackLink
-                  label="Send feedback on this saved workflow"
+                  label={ic.feedbackSaved}
                   context={{
                     intakeType: openRecord.intakeType,
                     workflowRecordId: openRecord.id,
@@ -1254,17 +1272,20 @@ export default function IntakePage() {
               {handoff && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Benchmark Handoff Preview · confidence: {handoff.confidence}
+                    {ic.handoffTitle}
                   </p>
+                  <TechDetails summary={ic.techDetails}>
+                    {ic.techConfidence}: {handoff.confidence}
+                  </TechDetails>
                   <p className="mt-2 text-sm text-gray-500">{handoff.summary}</p>
 
                   <p className="mt-3 text-sm font-medium text-gray-900">
-                    Benchmark goal
+                    {ic.benchmarkGoal}
                   </p>
                   <p className="mt-1 text-sm text-gray-700">{handoff.benchmarkGoal}</p>
 
                   <p className="mt-4 text-sm font-medium text-gray-900">
-                    Candidate agents
+                    {ic.candidateAgents}
                   </p>
                   <div className="mt-1 space-y-2">
                     {handoff.agentCandidates.map((c) => (
@@ -1275,8 +1296,8 @@ export default function IntakePage() {
                         <p className="text-sm font-medium text-gray-800">{c.label}</p>
                         <p className="mt-0.5 text-xs text-gray-500">
                           {c.stageNumbers.length > 0 &&
-                            `Stages: ${c.stageNumbers.join(", ")}`}
-                          {c.taskIds.length > 0 && ` · Tasks: ${c.taskIds.join(", ")}`}
+                            `${ic.stagesLabel}: ${c.stageNumbers.join(", ")}`}
+                          {c.taskIds.length > 0 && ` · ${ic.tasksLabel}: ${c.taskIds.join(", ")}`}
                         </p>
                         {c.expectedEvidence.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -1295,7 +1316,7 @@ export default function IntakePage() {
                   </div>
 
                   <p className="mt-4 text-sm font-medium text-gray-900">
-                    Acceptance targets
+                    {ic.acceptanceTargets}
                   </p>
                   <div className="mt-1 space-y-2">
                     {handoff.acceptanceTargets.map((t) => (
@@ -1307,9 +1328,9 @@ export default function IntakePage() {
                           {t.acceptanceItemTitle}
                         </p>
                         <p className="mt-0.5 text-xs text-gray-500">
-                          Area: {t.area.replace(/_/g, " ")}
+                          {ic.areaLabel}: {t.area.replace(/_/g, " ")}
                           {t.stageNumbers.length > 0 &&
-                            ` · Stages: ${t.stageNumbers.join(", ")}`}
+                            ` · ${ic.stagesLabel}: ${t.stageNumbers.join(", ")}`}
                         </p>
                         {t.evidenceTypes.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -1333,13 +1354,13 @@ export default function IntakePage() {
                   </div>
 
                   <StageDetail
-                    label="Comparison questions"
+                    label={ic.comparisonQuestions}
                     items={handoff.comparisonQuestions}
                   />
-                  <StageDetail label="Not included yet" items={handoff.notIncludedYet} />
+                  <StageDetail label={ic.notIncludedYet} items={handoff.notIncludedYet} />
 
                   <p className="mt-4 text-xs text-gray-400">
-                    Preview only — benchmark handoff is not executed or persisted.
+                    {ic.handoffNote}
                   </p>
                 </div>
               )}
@@ -1348,12 +1369,15 @@ export default function IntakePage() {
               {outcomeLink && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Decision / Outcome Link Preview · confidence: {outcomeLink.confidence}
+                    {ic.outcomeTitle}
                   </p>
+                  <TechDetails summary={ic.techDetails}>
+                    {ic.techConfidence}: {outcomeLink.confidence}
+                  </TechDetails>
                   <p className="mt-2 text-sm text-gray-500">{outcomeLink.summary}</p>
 
                   <p className="mt-3 text-sm font-medium text-gray-900">
-                    Recommended decision candidate
+                    {ic.recommendedDecision}
                   </p>
                   <p className="mt-1 text-sm text-gray-700">
                     {
@@ -1364,7 +1388,7 @@ export default function IntakePage() {
                   </p>
 
                   <p className="mt-4 text-sm font-medium text-gray-900">
-                    Decision candidates
+                    {ic.decisionCandidates}
                   </p>
                   <div className="mt-1 space-y-2">
                     {outcomeLink.decisionCandidates.map((c) => (
@@ -1380,9 +1404,9 @@ export default function IntakePage() {
                         <p className="mt-0.5 text-sm text-gray-600">{c.rationale}</p>
                         <p className="mt-1 text-xs text-gray-500">
                           {c.relatedAcceptanceItems.length > 0 &&
-                            `Items: ${c.relatedAcceptanceItems.join("; ")}`}
+                            `${ic.itemsLabel}: ${c.relatedAcceptanceItems.join("; ")}`}
                           {c.relatedStageNumbers.length > 0 &&
-                            ` · Stages: ${c.relatedStageNumbers.join(", ")}`}
+                            ` · ${ic.stagesLabel}: ${c.relatedStageNumbers.join(", ")}`}
                         </p>
                         {c.requiredEvidence.length > 0 && (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -1408,15 +1432,15 @@ export default function IntakePage() {
                   </div>
 
                   <p className="mt-4 text-sm font-medium text-gray-900">
-                    Outcome scorecard signals
+                    {ic.outcomeScorecardSignals}
                   </p>
                   <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
                     {(
                       [
-                        ["evidenceCompleteness", "Evidence completeness"],
-                        ["acceptanceCoverage", "Acceptance coverage"],
-                        ["unresolvedRisk", "Unresolved risk"],
-                        ["releaseReadiness", "Release readiness"],
+                        ["evidenceCompleteness", ic.evidenceCompleteness],
+                        ["acceptanceCoverage", ic.acceptanceCoverage],
+                        ["unresolvedRisk", ic.unresolvedRisk],
+                        ["releaseReadiness", ic.releaseReadiness],
                       ] as const
                     ).map(([key, label]) => (
                       <div key={key}>
@@ -1429,13 +1453,13 @@ export default function IntakePage() {
                   </dl>
 
                   <StageDetail
-                    label="Future outcome links"
+                    label={ic.futureOutcomeLinks}
                     items={outcomeLink.futureOutcomeLinks}
                   />
-                  <StageDetail label="Not included yet" items={outcomeLink.notIncludedYet} />
+                  <StageDetail label={ic.notIncludedYet} items={outcomeLink.notIncludedYet} />
 
                   <p className="mt-4 text-xs text-gray-400">
-                    Preview only — no decision, scorecard, or action pack is created.
+                    {ic.outcomeNote}
                   </p>
                 </div>
               )}
@@ -1444,19 +1468,22 @@ export default function IntakePage() {
               {actionPack && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Evolution Action Pack Preview · confidence: {actionPack.confidence}
+                    {ic.actionPackTitle}
                   </p>
+                  <TechDetails summary={ic.techDetails}>
+                    {ic.techConfidence}: {actionPack.confidence}
+                  </TechDetails>
                   <p className="mt-2 text-sm text-gray-500">{actionPack.summary}</p>
 
                   <p className="mt-3 text-sm font-medium text-gray-900">
-                    Recommended focus
+                    {ic.recommendedFocus}
                   </p>
                   <p className="mt-1 text-sm text-gray-700">
                     {actionPack.recommendedFocus.replace(/_/g, " ")}
                   </p>
 
                   <p className="mt-4 text-sm font-medium text-gray-900">
-                    Suggested actions
+                    {ic.suggestedActions}
                   </p>
                   <div className="mt-1 space-y-2">
                     {actionPack.actions.map((a) => (
@@ -1483,11 +1510,11 @@ export default function IntakePage() {
                         <p className="mt-1 text-sm text-gray-600">{a.rationale}</p>
                         <p className="mt-1 text-xs text-gray-500">
                           {a.sourceSignals.length > 0 &&
-                            `Signals: ${a.sourceSignals.join("; ")}`}
+                            `${ic.signalsLabel}: ${a.sourceSignals.join("; ")}`}
                           {a.relatedAcceptanceItems.length > 0 &&
-                            ` · Items: ${a.relatedAcceptanceItems.join("; ")}`}
+                            ` · ${ic.itemsLabel}: ${a.relatedAcceptanceItems.join("; ")}`}
                           {a.relatedStageNumbers.length > 0 &&
-                            ` · Stages: ${a.relatedStageNumbers.join(", ")}`}
+                            ` · ${ic.stagesLabel}: ${a.relatedStageNumbers.join(", ")}`}
                         </p>
                         <p className="mt-1.5 text-sm text-gray-700">
                           {a.suggestedInstruction}
@@ -1509,14 +1536,13 @@ export default function IntakePage() {
                   </div>
 
                   <StageDetail
-                    label="Follow-up questions"
+                    label={ic.followUpQuestions}
                     items={actionPack.followUpQuestions}
                   />
-                  <StageDetail label="Not included yet" items={actionPack.notIncludedYet} />
+                  <StageDetail label={ic.notIncludedYet} items={actionPack.notIncludedYet} />
 
                   <p className="mt-4 text-xs text-gray-400">
-                    Preview only — no action pack, fix, rerun, or evidence
-                    collection is created.
+                    {ic.actionPackNote}
                   </p>
                 </div>
               )}
@@ -1525,21 +1551,24 @@ export default function IntakePage() {
               {graphView && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Acceptance Graph Derived View · confidence: {graphView.confidence}
+                    {ic.graphTitle}
                   </p>
+                  <TechDetails summary={ic.techDetails}>
+                    {ic.techConfidence}: {graphView.confidence}
+                  </TechDetails>
                   <p className="mt-2 text-sm text-gray-500">{graphView.summary}</p>
 
-                  <p className="mt-3 text-sm font-medium text-gray-900">Signal summary</p>
+                  <p className="mt-3 text-sm font-medium text-gray-900">{ic.signalSummary}</p>
                   <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
                     {(
                       [
-                        ["acceptanceItemCount", "Acceptance items"],
-                        ["stageCount", "Stages"],
-                        ["agentTaskCount", "Agent tasks"],
-                        ["evidenceExpectationCount", "Evidence expectations"],
-                        ["notVerifiedCount", "Not verified"],
-                        ["decisionCandidateCount", "Decision candidates"],
-                        ["actionPreviewCount", "Action previews"],
+                        ["acceptanceItemCount", ic.graphCounts.acceptanceItemCount],
+                        ["stageCount", ic.graphCounts.stageCount],
+                        ["agentTaskCount", ic.graphCounts.agentTaskCount],
+                        ["evidenceExpectationCount", ic.graphCounts.evidenceExpectationCount],
+                        ["notVerifiedCount", ic.graphCounts.notVerifiedCount],
+                        ["decisionCandidateCount", ic.graphCounts.decisionCandidateCount],
+                        ["actionPreviewCount", ic.graphCounts.actionPreviewCount],
                       ] as const
                     ).map(([key, label]) => (
                       <div key={key}>
@@ -1554,7 +1583,7 @@ export default function IntakePage() {
                   {graphView.signalSummary.topAcceptanceAreas.length > 0 && (
                     <>
                       <p className="mt-4 text-sm font-medium text-gray-900">
-                        Top acceptance areas
+                        {ic.topAcceptanceAreas}
                       </p>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {graphView.signalSummary.topAcceptanceAreas.map((a) => (
@@ -1572,7 +1601,7 @@ export default function IntakePage() {
                   {graphView.signalSummary.topEvidenceTypes.length > 0 && (
                     <>
                       <p className="mt-4 text-sm font-medium text-gray-900">
-                        Top evidence types
+                        {ic.topEvidenceTypes}
                       </p>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {graphView.signalSummary.topEvidenceTypes.map((e) => (
@@ -1588,8 +1617,8 @@ export default function IntakePage() {
                   )}
 
                   <p className="mt-4 text-xs text-gray-500">
-                    {graphView.nodes.length} nodes · {graphView.edges.length} edges
-                    (sample below)
+                    {ic.graphNodes}: {graphView.nodes.length} · {ic.graphEdges}:{" "}
+                    {graphView.edges.length} — {ic.graphSampleBelow}
                   </p>
                   <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
                     {graphView.nodes.slice(0, 6).map((n) => (
@@ -1607,11 +1636,10 @@ export default function IntakePage() {
                     ))}
                   </ul>
 
-                  <StageDetail label="Not included yet" items={graphView.notIncludedYet} />
+                  <StageDetail label={ic.notIncludedYet} items={graphView.notIncludedYet} />
 
                   <p className="mt-4 text-xs text-gray-400">
-                    Derived preview only — no graph database or model training is
-                    created.
+                    {ic.graphNote}
                   </p>
                 </div>
               )}
@@ -1620,20 +1648,21 @@ export default function IntakePage() {
               {blockerView && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Recurring Blocker Signals · confidence: {blockerView.confidence}
+                    {ic.blockersTitle}
                   </p>
+                  <TechDetails summary={ic.techDetails}>
+                    {ic.techConfidence}: {blockerView.confidence}
+                  </TechDetails>
                   <p className="mt-2 text-sm text-gray-500">{blockerView.summary}</p>
 
                   {blockerView.blockers.length === 0 ? (
                     <p className="mt-3 text-sm text-gray-500">
-                      No recurring blocker signals detected yet. This does not mean
-                      the workflow is verified — only that this saved workflow does
-                      not contain repeated blocker patterns.
+                      {ic.blockersEmpty}
                     </p>
                   ) : (
                     <>
                       <p className="mt-3 text-sm text-gray-700">
-                        Top blocker type:{" "}
+                        {ic.topBlockerType}{" "}
                         {blockerView.topBlockerType?.replace(/_/g, " ")}
                       </p>
                       <div className="mt-3 space-y-2">
@@ -1656,17 +1685,17 @@ export default function IntakePage() {
                             <p className="mt-1 text-sm text-gray-600">{b.summary}</p>
                             <p className="mt-1 text-xs text-gray-500">
                               {b.sourceSignals.length > 0 &&
-                                `Signals: ${b.sourceSignals.join("; ")}`}
+                                `${ic.signalsLabel}: ${b.sourceSignals.join("; ")}`}
                               {b.relatedAcceptanceAreas.length > 0 &&
-                                ` · Areas: ${b.relatedAcceptanceAreas
+                                ` · ${ic.areasLabel}: ${b.relatedAcceptanceAreas
                                   .map((a) => a.replace(/_/g, " "))
                                   .join(", ")}`}
                               {b.relatedEvidenceTypes.length > 0 &&
-                                ` · Evidence: ${b.relatedEvidenceTypes
+                                ` · ${ic.evidenceLabel}: ${b.relatedEvidenceTypes
                                   .map((e) => e.replace(/_/g, " "))
                                   .join(", ")}`}
                               {b.relatedStageNumbers.length > 0 &&
-                                ` · Stages: ${b.relatedStageNumbers.join(", ")}`}
+                                ` · ${ic.stagesLabel}: ${b.relatedStageNumbers.join(", ")}`}
                             </p>
                             <p className="mt-1.5 text-sm text-gray-700">
                               {b.suggestedNextAction}
@@ -1677,10 +1706,10 @@ export default function IntakePage() {
                     </>
                   )}
 
-                  <StageDetail label="Not included yet" items={blockerView.notIncludedYet} />
+                  <StageDetail label={ic.notIncludedYet} items={blockerView.notIncludedYet} />
 
                   <p className="mt-4 text-xs text-gray-400">
-                    Derived preview only — blocker signals are not verified defects.
+                    {ic.blockersNote}
                   </p>
                 </div>
               )}
@@ -1689,24 +1718,25 @@ export default function IntakePage() {
               {toolMemory && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Agent / Tool Recommendation Memory · confidence: {toolMemory.confidence}
+                    {ic.toolMemoryTitle}
                   </p>
+                  <TechDetails summary={ic.techDetails}>
+                    {ic.techConfidence}: {toolMemory.confidence}
+                  </TechDetails>
                   <p className="mt-2 text-sm text-gray-500">{toolMemory.summary}</p>
 
                   {toolMemory.items.length === 0 ? (
                     <p className="mt-3 text-sm text-gray-500">
-                      No agent/tool recommendation memory detected yet. This saved
-                      workflow does not contain enough role/tool task structure to
-                      derive a memory signal.
+                      {ic.toolMemoryEmpty}
                     </p>
                   ) : (
                     <>
                       <p className="mt-3 text-sm text-gray-700">
-                        Top pairing:{" "}
-                        {toolMemory.topRole}/{toolMemory.topTool?.replace(/_/g, " ")} ·
-                        Evidence fit — strong {toolMemory.evidenceFitSummary.strong} ·
-                        partial {toolMemory.evidenceFitSummary.partial} · weak{" "}
-                        {toolMemory.evidenceFitSummary.weak} · unknown{" "}
+                        {ic.topPairing}{" "}
+                        {toolMemory.topRole}/{toolMemory.topTool?.replace(/_/g, " ")} ·{" "}
+                        {ic.evidenceFit} — {ic.strongWord} {toolMemory.evidenceFitSummary.strong} ·{" "}
+                        {ic.partialWord} {toolMemory.evidenceFitSummary.partial} · {ic.weakWord}{" "}
+                        {toolMemory.evidenceFitSummary.weak} · {ic.unknownWord}{" "}
                         {toolMemory.evidenceFitSummary.unknown}
                       </p>
                       <div className="mt-3 space-y-2">
@@ -1720,15 +1750,15 @@ export default function IntakePage() {
                                 {it.role} / {it.recommendedTool.replace(/_/g, " ")}
                               </span>
                               <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
-                                fit: {it.toolFit}
+                                {ic.fitLabel}: {it.toolFit}
                               </span>
                             </div>
                             <p className="mt-1 text-xs text-gray-500">
                               {it.stageNumbers.length > 0 &&
-                                `Stages: ${it.stageNumbers.join(", ")}`}
-                              {it.taskIds.length > 0 && ` · Tasks: ${it.taskIds.join(", ")}`}
+                                `${ic.stagesLabel}: ${it.stageNumbers.join(", ")}`}
+                              {it.taskIds.length > 0 && ` · ${ic.tasksLabel}: ${it.taskIds.join(", ")}`}
                               {it.blockerTypes.length > 0 &&
-                                ` · Blockers: ${it.blockerTypes
+                                ` · ${ic.blockersLabel}: ${it.blockerTypes
                                   .map((b) => b.replace(/_/g, " "))
                                   .join(", ")}`}
                             </p>
@@ -1754,11 +1784,10 @@ export default function IntakePage() {
                     </>
                   )}
 
-                  <StageDetail label="Not included yet" items={toolMemory.notIncludedYet} />
+                  <StageDetail label={ic.notIncludedYet} items={toolMemory.notIncludedYet} />
 
                   <p className="mt-4 text-xs text-gray-400">
-                    Derived preview only — tool fit is not based on executed
-                    performance.
+                    {ic.toolMemoryNote}
                   </p>
                 </div>
               )}
@@ -1767,28 +1796,29 @@ export default function IntakePage() {
               {templateSignals && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
                   <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Template Effectiveness Signals · confidence: {templateSignals.confidence}
+                    {ic.templateSignalsTitle}
                   </p>
+                  <TechDetails summary={ic.techDetails}>
+                    {ic.techConfidence}: {templateSignals.confidence}
+                  </TechDetails>
                   <p className="mt-2 text-sm text-gray-500">{templateSignals.summary}</p>
 
                   {templateSignals.signals.length === 0 ? (
                     <p className="mt-3 text-sm text-gray-500">
-                      No template effectiveness signals detected yet. This saved
-                      workflow does not contain enough repeated structure to derive
-                      template signals.
+                      {ic.templateSignalsEmpty}
                     </p>
                   ) : (
                     <>
                       <p className="mt-3 text-sm text-gray-700">
-                        Quality — strong {templateSignals.qualityCounts.strong_alignment} ·
-                        partial {templateSignals.qualityCounts.partial_alignment} ·
-                        needs refinement {templateSignals.qualityCounts.needs_refinement} ·
-                        under-specified {templateSignals.qualityCounts.under_specified} ·
-                        unknown {templateSignals.qualityCounts.unknown}
+                        {ic.qualityLabel} — {ic.strongWord} {templateSignals.qualityCounts.strong_alignment} ·{" "}
+                        {ic.partialWord} {templateSignals.qualityCounts.partial_alignment} ·{" "}
+                        {ic.needsRefinementWord} {templateSignals.qualityCounts.needs_refinement} ·{" "}
+                        {ic.underSpecifiedWord} {templateSignals.qualityCounts.under_specified} ·{" "}
+                        {ic.unknownWord} {templateSignals.qualityCounts.unknown}
                       </p>
                       {templateSignals.topNeedsRefinement.length > 0 && (
                         <p className="mt-1 text-xs text-gray-500">
-                          Top needs refinement:{" "}
+                          {ic.topNeedsRefinement}{" "}
                           {templateSignals.topNeedsRefinement.join("; ")}
                         </p>
                       )}
@@ -1812,21 +1842,21 @@ export default function IntakePage() {
                             <p className="mt-1 text-sm text-gray-600">{s.summary}</p>
                             <p className="mt-1 text-xs text-gray-500">
                               {s.supportingSignals.length > 0 &&
-                                `Signals: ${s.supportingSignals.join("; ")}`}
+                                `${ic.signalsLabel}: ${s.supportingSignals.join("; ")}`}
                               {s.blockerTypes.length > 0 &&
-                                ` · Blockers: ${s.blockerTypes
+                                ` · ${ic.blockersLabel}: ${s.blockerTypes
                                   .map((b) => b.replace(/_/g, " "))
                                   .join(", ")}`}
                               {s.relatedAcceptanceAreas.length > 0 &&
-                                ` · Areas: ${s.relatedAcceptanceAreas
+                                ` · ${ic.areasLabel}: ${s.relatedAcceptanceAreas
                                   .map((a) => a.replace(/_/g, " "))
                                   .join(", ")}`}
                               {s.relatedEvidenceTypes.length > 0 &&
-                                ` · Evidence: ${s.relatedEvidenceTypes
+                                ` · ${ic.evidenceLabel}: ${s.relatedEvidenceTypes
                                   .map((e) => e.replace(/_/g, " "))
                                   .join(", ")}`}
                               {s.relatedStageNumbers.length > 0 &&
-                                ` · Stages: ${s.relatedStageNumbers.join(", ")}`}
+                                ` · ${ic.stagesLabel}: ${s.relatedStageNumbers.join(", ")}`}
                             </p>
                             <p className="mt-1.5 text-sm text-gray-700">
                               {s.suggestedTemplateImprovement}
@@ -1837,11 +1867,10 @@ export default function IntakePage() {
                     </>
                   )}
 
-                  <StageDetail label="Not included yet" items={templateSignals.notIncludedYet} />
+                  <StageDetail label={ic.notIncludedYet} items={templateSignals.notIncludedYet} />
 
                   <p className="mt-4 text-xs text-gray-400">
-                    Derived preview only — template effectiveness is not
-                    statistically validated.
+                    {ic.templateSignalsNote}
                   </p>
                 </div>
               )}
@@ -1876,6 +1905,17 @@ function FeedbackLink({
     >
       {label}
     </a>
+  );
+}
+
+// Non-developer copy pass — collapsed technical internals (confidence scores,
+// raw JSON). Localized summary is passed in by the caller.
+function TechDetails({ summary, children }: { summary: string; children: ReactNode }) {
+  return (
+    <details className="mt-1">
+      <summary className="cursor-pointer text-xs text-gray-400">{summary}</summary>
+      <p className="mt-1 text-xs text-gray-400">{children}</p>
+    </details>
   );
 }
 

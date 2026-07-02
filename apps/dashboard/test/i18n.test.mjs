@@ -9,6 +9,10 @@ import {
   getDictionary,
   statusLabel,
   statusDescription,
+  enumStatusLabel,
+  enumActionLabel,
+  enumLimitationLabel,
+  detectInitialLocale,
   readStoredLocale,
   writeStoredLocale,
   LOCALE_STORAGE_KEY,
@@ -92,6 +96,32 @@ describe("i18n dictionary", () => {
     assert.equal(statusLabel(getDictionary("en"), "weird_status"), "weird_status");
   });
 
+  it("enum label helpers localize known server tokens in both locales", () => {
+    const en = getDictionary("en");
+    const ko = getDictionary("ko");
+    assert.equal(enumActionLabel(en, "fix_selected"), "Fix selected items");
+    assert.equal(enumActionLabel(ko, "fix_selected"), "선택 항목 수정");
+    assert.equal(enumStatusLabel(en, "pr_linked"), "Code linked");
+    assert.equal(enumStatusLabel(ko, "pr_linked"), "코드 연결됨");
+    assert.equal(enumLimitationLabel(en, "timeline_truncated"), "Showing recent events only");
+    assert.equal(enumLimitationLabel(ko, "timeline_truncated"), "최근 이벤트만 표시");
+  });
+
+  it("enum label helpers fall back to the raw token for unknown values", () => {
+    const en = getDictionary("en");
+    assert.equal(enumActionLabel(en, "brand_new_action"), "brand_new_action");
+    assert.equal(enumStatusLabel(en, "brand_new_status"), "brand_new_status");
+    assert.equal(enumLimitationLabel(en, "brand_new_limitation"), "brand_new_limitation");
+  });
+
+  it("enumLabels action/status/limitation key sets match between locales", () => {
+    const en = getDictionary("en").enumLabels;
+    const ko = getDictionary("ko").enumLabels;
+    for (const group of ["action", "status", "limitation"]) {
+      assert.deepEqual(Object.keys(ko[group]).sort(), Object.keys(en[group]).sort(), `enumLabels.${group} keys differ`);
+    }
+  });
+
   it("readStoredLocale / writeStoredLocale round-trip via a StorageLike", () => {
     const store = new Map();
     const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
@@ -101,6 +131,31 @@ describe("i18n dictionary", () => {
     assert.equal(readStoredLocale(storage), "ko");
     writeStoredLocale(storage, "bogus"); // normalized
     assert.equal(readStoredLocale(storage), "en");
+  });
+
+  it("detectInitialLocale: stored choice wins, else Korean browsers get ko", () => {
+    const store = new Map();
+    const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+    // No stored choice → browser language decides.
+    assert.equal(detectInitialLocale(storage, "ko-KR"), "ko");
+    assert.equal(detectInitialLocale(storage, "ko"), "ko");
+    assert.equal(detectInitialLocale(storage, "en-US"), "en");
+    assert.equal(detectInitialLocale(storage, "fr-FR"), "en");
+    assert.equal(detectInitialLocale(storage, null), "en");
+    // Explicit stored choice overrides the browser language.
+    store.set(LOCALE_STORAGE_KEY, "en");
+    assert.equal(detectInitialLocale(storage, "ko-KR"), "en");
+    store.set(LOCALE_STORAGE_KEY, "ko");
+    assert.equal(detectInitialLocale(storage, "en-US"), "ko");
+    // Garbage stored value falls back to browser detection.
+    store.set(LOCALE_STORAGE_KEY, "bogus");
+    assert.equal(detectInitialLocale(storage, "ko-KR"), "ko");
+  });
+
+  it("detectInitialLocale never throws on broken storage", () => {
+    const throwing = { getItem: () => { throw new Error("x"); }, setItem: () => {} };
+    assert.equal(detectInitialLocale(throwing, "ko-KR"), "ko");
+    assert.equal(detectInitialLocale(null, "en-US"), "en");
   });
 
   it("storage helpers never throw on null/throwing storage", () => {

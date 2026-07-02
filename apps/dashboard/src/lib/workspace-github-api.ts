@@ -588,6 +588,7 @@ export async function previewPRComment(
     includeComparison?: boolean;
     includeRerunComparison?: boolean;
     reviewRunId?: string;
+    locale?: "en" | "ko";
   },
 ): Promise<PreviewCommentResponse> {
   try {
@@ -619,6 +620,7 @@ export async function postPRComment(
     includeRerunComparison?: boolean;
     mode?: "new" | "update_latest";
     reviewRunId?: string;
+    locale?: "en" | "ko";
   },
 ): Promise<PostCommentResponse> {
   try {
@@ -648,6 +650,7 @@ export async function updatePRComment(
     body?: string;
     includeFixBrief?: boolean;
     includeComparison?: boolean;
+    locale?: "en" | "ko";
   },
 ): Promise<UpdateCommentResponse> {
   try {

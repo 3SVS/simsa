@@ -1427,7 +1427,7 @@ function OutcomeQualitySection({
                         type="text"
                         value={followupRunId}
                         onChange={(e) => setFollowupRunId(e.target.value)}
-                        placeholder="wprr_…"
+                        placeholder={t.experiment.runIdPlaceholder}
                         className="mt-0.5 block w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-mono text-gray-700"
                       />
                     </label>
@@ -1437,7 +1437,7 @@ function OutcomeQualitySection({
                         type="text"
                         value={followupBenchId}
                         onChange={(e) => setFollowupBenchId(e.target.value)}
-                        placeholder="wab_…"
+                        placeholder={t.experiment.benchmarkIdPlaceholder}
                         className="mt-0.5 block w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-mono text-gray-700"
                       />
                     </label>
