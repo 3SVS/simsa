@@ -21,9 +21,12 @@
  *   - /internal/* endpoints require Bearer INTERNAL_CALLBACK_TOKEN (mirrors
  *     /internal/job-done in saas.ts).
  *
- * Graceful degradation: when the INSPECTOR DO binding or the callback token is
- * absent, the queued row is still created and the response carries
- * dispatched:false — the stuck sweep (stuck-cleanup.ts) fails it after 30 min.
+ * Graceful degradation: when the INSPECTOR DO binding / callback token is
+ * absent or the container refuses the job (e.g. still provisioning), the row is
+ * created, immediately marked failed (fail-fast — nothing consumes queued rows
+ * later), and the response carries dispatched:false + note so the caller can
+ * retry right away. The stuck sweep (stuck-cleanup.ts) remains a backstop for
+ * runs that dispatched but died silently.
  */
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
@@ -223,6 +226,20 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       publicBaseUrl,
     });
 
+    // Fail fast when the dispatch didn't take: nothing ever picks a queued row
+    // up later (dispatch is fire-once), so leaving it 'queued' would wedge the
+    // one-active-run guard for 30 min until the stuck sweep. A failed row is
+    // honest and lets the user retry immediately (live finding, Stage 263.1).
+    let status = run.status;
+    if (!dispatch.dispatched) {
+      try {
+        await markVisualCheckFailed(c.env, run.id, dispatch.note ?? "dispatch_failed");
+        status = "failed";
+      } catch (err) {
+        console.error("[visual-check-runs POST run] fail-fast mark failed:", err);
+      }
+    }
+
     return c.json(
       {
         ok: true,
@@ -233,7 +250,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
           intent: run.intent,
           decision: run.decision,
           works: run.works,
-          status: run.status,
+          status,
           executor: run.executor,
           createdAt: run.createdAt,
         },

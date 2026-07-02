@@ -266,22 +266,26 @@ test("run: intent over 1000 chars → 400 invalid_intent; default Korean intent 
 
 // ─── queue row + dispatch ─────────────────────────────────────────────────────
 
-test("run: INSPECTOR absent → row created (queued/container) + dispatched:false inspector_unavailable", async () => {
+test("run: INSPECTOR absent → row created then FAIL-FAST (dispatched:false, retry not wedged)", async () => {
   const env = makeEnv(); // no inspector binding
   const r = await req(env, "POST", RUN_PATH, { userKey: USER });
   assert.equal(r.status, 202);
   assert.equal(r.json.ok, true);
   assert.equal(r.json.dispatched, false);
   assert.equal(r.json.note, "inspector_unavailable");
-  assert.equal(r.json.check.status, "queued");
+  // Stage 263.1 (live finding): undispatched rows are failed immediately —
+  // nothing consumes 'queued' later, and a queued row wedges the 409 guard.
+  assert.equal(r.json.check.status, "failed");
   assert.equal(r.json.check.executor, "container");
-  assert.equal(r.json.check.decision, "Not Judged");
 
   const row = env.DB._checks.find((c) => c.id === r.json.check.id);
-  assert.ok(row, "queued row must be persisted");
-  assert.equal(row.status, "queued");
+  assert.ok(row, "row must be persisted");
+  assert.equal(row.status, "failed");
   assert.equal(row.executor, "container");
-  assert.equal(row.report_json, "{}");
+
+  // and the user can retry immediately (no run_already_active wedge)
+  const retry = await req(env, "POST", RUN_PATH, { userKey: USER });
+  assert.equal(retry.status, 202);
 });
 
 test("run: INSPECTOR bound but callback token missing → row created + dispatched:false", async () => {
@@ -293,6 +297,7 @@ test("run: INSPECTOR bound but callback token missing → row created + dispatch
   assert.equal(r.json.note, "callback_token_missing");
   assert.equal(recorder.calls.length, 0, "must not dispatch without the callback token");
   assert.equal(env.DB._checks.length, 1);
+  assert.equal(env.DB._checks[0].status, "failed"); // fail-fast, no wedge
 });
 
 test("run: INSPECTOR present → dispatched:true, DO named vc-<runId>, payload carries job contract", async () => {
@@ -317,18 +322,21 @@ test("run: INSPECTOR present → dispatched:true, DO named vc-<runId>, payload c
   assert.ok(payload.baseUrl.startsWith("http"), "baseUrl for evidence uploads");
 });
 
-test("run: container dispatch failure → row stays queued, dispatched:false with note", async () => {
+test("run: container dispatch failure → row failed immediately, dispatched:false with note", async () => {
   const recorder = { names: [], calls: [] };
   const env = makeEnv({ inspector: makeInspector(recorder, { status: 500 }) });
   const r = await req(env, "POST", RUN_PATH, { userKey: USER });
   assert.equal(r.status, 202);
   assert.equal(r.json.dispatched, false);
   assert.match(r.json.note, /container returned 500/);
-  assert.equal(env.DB._checks[0].status, "queued"); // stuck sweep will fail it later
+  assert.equal(env.DB._checks[0].status, "failed"); // fail-fast (Stage 263.1)
+  assert.equal(r.json.check.status, "failed");
 });
 
 test("run: concurrency guard — active queued|running run → 409 run_already_active", async () => {
-  const env = makeEnv();
+  // Successful dispatch (inspector present) keeps the row queued → guard active.
+  const recorder = { names: [], calls: [] };
+  const env = makeEnv({ inspector: makeInspector(recorder) });
   const first = await req(env, "POST", RUN_PATH, { userKey: USER });
   assert.equal(first.status, 202);
 
@@ -367,7 +375,7 @@ test("internal running: 503 when token unset, 401 on wrong bearer", async () => 
 });
 
 test("internal running: queued → running; unknown runId 404", async () => {
-  const env = makeEnv();
+  const env = makeEnv({ inspector: makeInspector({ names: [], calls: [] }) }); // dispatched → stays queued
   const created = await req(env, "POST", RUN_PATH, { userKey: USER });
   const runId = created.json.check.id;
 
@@ -417,7 +425,7 @@ test("internal done: ok:true updates row (status/decision/works/report/prompt)",
 });
 
 test("internal done: ok:false stores truncated error → status failed", async () => {
-  const env = makeEnv();
+  const env = makeEnv({ inspector: makeInspector({ names: [], calls: [] }) }); // dispatched → stays queued
   const created = await req(env, "POST", RUN_PATH, { userKey: USER });
   const runId = created.json.check.id;
 
