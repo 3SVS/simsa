@@ -26,8 +26,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
+  buildRepairPrContent,
   coerceResult,
   extractHeaderEnv,
+  redactSecret,
+  validateRepairPayload,
   validateRunPayload,
 } from "./coerce-result.mjs";
 
@@ -65,6 +68,36 @@ const server = createServer(async (req, res) => {
   } catch (err) {
     res.writeHead(400, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "invalid JSON body", detail: err.message }));
+    return;
+  }
+
+  // Stage 268 — job-type switch. A `simsa_repair` job (visual-check repair
+  // loop) reuses this same container + /run endpoint but takes a different
+  // payload (user OAuth token + agent fix prompt, no PR yet) and a different
+  // execution path (repair branch + draft PR instead of runAutofix).
+  if (payload.jobType === "simsa_repair") {
+    const repairValidation = validateRepairPayload(payload);
+    if (!repairValidation.ok) {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: `missing fields: ${repairValidation.missing.join(", ")}` }));
+      return;
+    }
+    res.writeHead(202, { "content-type": "application/json" });
+    res.end(JSON.stringify({ jobId: payload.jobId, status: "accepted" }));
+
+    inFlightJobs.set(payload.jobId, payload);
+    runRepairJob(payload)
+      .catch(async (err) => {
+        console.error(`[repair ${payload.jobId}] crashed:`, redactSecret(err?.message ?? String(err), payload.githubToken));
+        await postCallback(payload.callbackUrl, payload.callbackToken, {
+          jobId: payload.jobId,
+          ok: false,
+          error: redactSecret(err?.message ?? String(err), payload.githubToken),
+        }).catch((cbErr) => {
+          console.error(`[repair ${payload.jobId}] callback also failed:`, cbErr);
+        });
+      })
+      .finally(() => inFlightJobs.delete(payload.jobId));
     return;
   }
 
@@ -132,13 +165,25 @@ async function gracefulShutdown(sig) {
   shuttingDown = true;
   console.log(`received ${sig} — draining ${inFlightJobs.size} in-flight job(s)`);
   const drains = Array.from(inFlightJobs.values()).map((p) =>
-    postCallback(p.callbackUrl, p.callbackToken, {
-      jobId: p.jobId,
-      repo: p.repo,
-      prNumber: p.prNumber,
-      status: "errored",
-      error: `container was killed by ${sig} mid-run (deploy rollout or sleepAfter)`,
-    }).catch((cbErr) => {
+    postCallback(
+      p.callbackUrl,
+      p.callbackToken,
+      // Stage 268 — repair jobs use the /internal/repair-done payload shape
+      // ({jobId, ok, error}); autofix jobs keep the /internal/job-done shape.
+      p.jobType === "simsa_repair"
+        ? {
+            jobId: p.jobId,
+            ok: false,
+            error: `container was killed by ${sig} mid-run (deploy rollout or sleepAfter)`,
+          }
+        : {
+            jobId: p.jobId,
+            repo: p.repo,
+            prNumber: p.prNumber,
+            status: "errored",
+            error: `container was killed by ${sig} mid-run (deploy rollout or sleepAfter)`,
+          },
+    ).catch((cbErr) => {
       console.error(`[shutdown] callback failed for ${p.jobId}:`, cbErr);
     }),
   );
@@ -343,6 +388,162 @@ async function runJob(payload) {
       console.error(`[job ${jobId}] cleanup failed:`, cleanupErr);
     }
   }
+}
+
+// --- Stage 268: simsa_repair job runner ------------------------------------
+
+/**
+ * Run a single visual-check repair job.
+ *
+ * v1 behavior (HONEST FALLBACK, chosen deliberately): runAutofix's input
+ * contract is PR-shaped (it reviews an EXISTING PR via `conclave review --pr N`
+ * and applies council-blocker patches) — it cannot cleanly consume a
+ * free-form agent fix prompt with no PR. Instead of pretending, the repair
+ * job:
+ *
+ *   1. Shallow-clones the repo with the user's OAuth token (public_repo)
+ *   2. Creates the repair branch (fix/simsa-{runId})
+ *   3. Commits SIMSA-FIX-BRIEF.md containing the deterministic agent fix
+ *      prompt (Stage 260B output)
+ *   4. Opens a DRAFT PR titled "Simsa 수리 시작점: ..." whose body carries the
+ *      prompt AND states explicitly that code changes were not auto-applied
+ *   5. Reports {jobId, ok, prUrl, prNumber, branch, envCause} to
+ *      /internal/repair-done
+ *
+ * The token lives only in memory (clone URL + API Authorization header) and
+ * is redacted from every error message before it leaves this process.
+ */
+async function runRepairJob(payload) {
+  const {
+    jobId,
+    repo, // "owner/name"
+    githubToken,
+    branch,
+    callbackUrl,
+    callbackToken,
+    runningUrl,
+    envCause = false,
+  } = payload;
+
+  const start = Date.now();
+  console.log(`[repair ${jobId}] start: ${repo} branch=${branch} envCause=${envCause}`);
+
+  // Ack running (best effort — the Worker treats queued/running the same for
+  // the 409 guard; a lost ack only affects dashboard status granularity).
+  if (runningUrl) {
+    await postCallback(runningUrl, callbackToken, { jobId }).catch((err) => {
+      console.error(`[repair ${jobId}] running ack failed:`, err?.message ?? err);
+    });
+  }
+
+  const workDir = await fs.mkdtemp(path.join(WORK_ROOT, `repair-${jobId}-`));
+  try {
+    // 1. Shallow clone with the user's OAuth token.
+    const cloneUrl = `https://x-access-token:${githubToken}@github.com/${repo}.git`;
+    await execFileP("git", ["clone", "--depth", "1", cloneUrl, workDir], { timeout: 90_000 });
+
+    // Base branch = whatever the clone checked out (the repo default).
+    const baseBranch = (
+      await execFileP("git", ["-C", workDir, "rev-parse", "--abbrev-ref", "HEAD"], { timeout: 10_000 })
+    ).stdout.trim();
+
+    // 2. Repair branch. Deterministic name per run — a retry after a failed
+    //    earlier attempt force-pushes the same branch instead of erroring.
+    await execFileP("git", ["-C", workDir, "checkout", "-b", branch], { timeout: 10_000 });
+
+    // 3. Commit the fix brief.
+    const content = buildRepairPrContent(payload);
+    await fs.writeFile(path.join(workDir, content.briefFileName), content.briefContent, "utf8");
+    await execFileP("git", ["-C", workDir, "config", "user.name", "simsa-repair[bot]"]);
+    await execFileP("git", ["-C", workDir, "config", "user.email", "simsa-repair@trysimsa.com"]);
+    await execFileP("git", ["-C", workDir, "add", content.briefFileName], { timeout: 10_000 });
+    await execFileP("git", ["-C", workDir, "commit", "-m", content.title], { timeout: 10_000 });
+    await execFileP("git", ["-C", workDir, "push", "--force", "origin", `HEAD:${branch}`], { timeout: 60_000 });
+    console.log(`[repair ${jobId}] pushed ${branch} (base ${baseBranch})`);
+
+    // 4. Draft PR via the REST API. If a PR for this head already exists
+    //    (retry path), reuse it instead of failing on the 422.
+    const pr = await createOrReuseRepairPr({
+      repo,
+      token: githubToken,
+      head: branch,
+      base: baseBranch,
+      title: content.title,
+      body: content.body,
+    });
+    console.log(`[repair ${jobId}] PR ready: #${pr.number} ${pr.html_url}`);
+
+    // 5. Report done.
+    await postCallback(callbackUrl, callbackToken, {
+      jobId,
+      ok: true,
+      prUrl: pr.html_url,
+      prNumber: pr.number,
+      branch,
+      envCause: envCause === true,
+      durationMs: Date.now() - start,
+    });
+  } catch (err) {
+    const message = redactSecret(err?.message ?? String(err), githubToken);
+    console.error(`[repair ${jobId}] failed:`, message);
+    await postCallback(callbackUrl, callbackToken, {
+      jobId,
+      ok: false,
+      error: message.slice(0, 500),
+      durationMs: Date.now() - start,
+    });
+  } finally {
+    try {
+      await fs.rm(workDir, { recursive: true, force: true });
+    } catch (cleanupErr) {
+      console.error(`[repair ${jobId}] cleanup failed:`, cleanupErr);
+    }
+  }
+}
+
+/**
+ * Create the draft repair PR, falling back gracefully:
+ *   - 422 "already exists" → look up + return the existing open PR for the head
+ *   - 422 mentioning draft (plan doesn't support draft PRs) → retry non-draft
+ */
+async function createOrReuseRepairPr({ repo, token, head, base, title, body }) {
+  const apiHeaders = {
+    authorization: `Bearer ${token}`,
+    accept: "application/vnd.github+json",
+    "content-type": "application/json",
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "simsa-repair",
+  };
+  const owner = repo.split("/")[0];
+
+  const create = async (draft) => {
+    const r = await fetch(`https://api.github.com/repos/${repo}/pulls`, {
+      method: "POST",
+      headers: apiHeaders,
+      body: JSON.stringify({ title, head, base, body, draft }),
+    });
+    return { status: r.status, json: await r.json().catch(() => ({})) };
+  };
+
+  let res = await create(true);
+  if (res.status === 422) {
+    const detail = JSON.stringify(res.json.errors ?? res.json.message ?? "");
+    if (/already exists/i.test(detail)) {
+      const list = await fetch(
+        `https://api.github.com/repos/${repo}/pulls?head=${encodeURIComponent(`${owner}:${head}`)}&state=open`,
+        { headers: apiHeaders },
+      );
+      const pulls = list.ok ? await list.json().catch(() => []) : [];
+      if (Array.isArray(pulls) && pulls[0]?.html_url) return pulls[0];
+    }
+    if (/draft/i.test(detail)) {
+      res = await create(false);
+    }
+  }
+  if (res.status !== 201) {
+    throw new Error(`PR create failed: ${res.status} ${JSON.stringify(res.json.message ?? res.json).slice(0, 300)}`);
+  }
+  return res.json;
 }
 
 /**

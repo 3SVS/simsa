@@ -2,7 +2,7 @@ import { createApp } from "./router.js";
 import type { Env } from "./env.js";
 import { assertPreflight } from "./preflight.js";
 import { selfHealWebhook } from "./webhook-heal.js";
-import { cleanupStuckJobs, cleanupStuckVisualChecks } from "./stuck-cleanup.js";
+import { cleanupStuckJobs, cleanupStuckVisualChecks, cleanupStuckRepairJobs } from "./stuck-cleanup.js";
 import { refreshAllSources } from "./external-references.js";
 import { retryPendingFeedback } from "./routes/feedback.js";
 import { promoteSeedsPass } from "./seed-promoter.js";
@@ -59,6 +59,14 @@ export default {
         console.log(JSON.stringify({ cron: "stuck-cleanup-visual-checks", cronExpression: event.cron, ...result }));
       } catch (err) {
         console.error("[stuck-cleanup-visual-checks] crashed:", err);
+      }
+      // Stage 268 — same tick also sweeps repair jobs stuck in queued|running
+      // (ConclaveSandbox repair job killed / dispatch lost).
+      try {
+        const result = await cleanupStuckRepairJobs(env);
+        console.log(JSON.stringify({ cron: "stuck-cleanup-repair-jobs", cronExpression: event.cron, ...result }));
+      } catch (err) {
+        console.error("[stuck-cleanup-repair-jobs] crashed:", err);
       }
       return;
     }

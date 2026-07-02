@@ -68,6 +68,113 @@ export function extractHeaderEnv(headers) {
   return out;
 }
 
+/**
+ * Stage 268 — simsa_repair job payload validation. A repair job carries the
+ * user's OAuth token + the visual check's deterministic agent fix prompt; the
+ * container creates a repair branch + draft PR on the user's repo.
+ */
+const REQUIRED_REPAIR_FIELDS = [
+  "jobId",
+  "repo",
+  "githubToken",
+  "branch",
+  "agentPrompt",
+  "callbackUrl",
+  "callbackToken",
+];
+
+export function validateRepairPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, missing: REQUIRED_REPAIR_FIELDS };
+  }
+  const missing = REQUIRED_REPAIR_FIELDS.filter(
+    (k) => payload[k] === undefined || payload[k] === null || payload[k] === "",
+  );
+  if (missing.length > 0) return { ok: false, missing };
+  return { ok: true };
+}
+
+/**
+ * Stage 268 — strip a secret from a message before it travels anywhere
+ * (callback body, logs). Pure; no-op when the secret is empty.
+ */
+export function redactSecret(message, secret) {
+  const text = String(message ?? "");
+  if (typeof secret !== "string" || secret.length === 0) return text;
+  return text.split(secret).join("[REDACTED]");
+}
+
+/**
+ * Stage 268 — deterministic repair-PR content (no LLM). The v1 repair job
+ * does NOT auto-apply code changes: it commits the agent fix prompt as
+ * SIMSA-FIX-BRIEF.md on a repair branch and opens a DRAFT PR so any agent or
+ * human can execute the brief. The PR body says so explicitly — honest
+ * boundaries over pretended fixes.
+ *
+ * Returns { title, body, briefFileName, briefContent } — all strings, all
+ * derived only from the payload (never from env/secrets).
+ */
+export function buildRepairPrContent(payload) {
+  const intent = typeof payload?.intent === "string" && payload.intent.trim()
+    ? payload.intent.trim()
+    : "핵심 기능 점검";
+  const shortIntent = intent.length > 60 ? `${intent.slice(0, 57)}...` : intent;
+  const decision = typeof payload?.decision === "string" && payload.decision ? payload.decision : "Not Judged";
+  const targetUrl = typeof payload?.targetUrl === "string" ? payload.targetUrl : "";
+  const visualCheckId = typeof payload?.visualCheckId === "string" ? payload.visualCheckId : "";
+  const agentPrompt = String(payload?.agentPrompt ?? "");
+  const envCause = payload?.envCause === true;
+
+  const title = `Simsa 수리 시작점: ${shortIntent}`;
+
+  const bodyLines = [
+    "## Simsa 시각 검수 수리 브리프",
+    "",
+    "Simsa가 실제 브라우저로 앱을 열어 확인한 결과 문제가 발견되어, 수리 시작점 브랜치를 만들었습니다.",
+    "",
+    `- 검수 대상: ${targetUrl || "(기록 없음)"}`,
+    `- 판정: ${decision}`,
+    ...(visualCheckId ? [`- 검사 ID: \`${visualCheckId}\``] : []),
+    "",
+    "> **주의: 이 PR에는 자동 적용된 코드 수정이 없습니다.**",
+    "> 아래 수리 지시서(SIMSA-FIX-BRIEF.md와 동일)를 개발 에이전트나 개발자가 이 브랜치에서 실행해 주세요.",
+    "",
+  ];
+  if (envCause) {
+    bodyLines.push(
+      "> **환경 원인 가능성:** 증거에 백엔드 주소가 응답하지 않는 패턴(DNS/연결 실패)이 포함되어 있습니다.",
+      "> 코드 수정만으로 완전히 해결되지 않을 수 있어요 — 환경 변수(백엔드 주소 등) 설정도 함께 확인하세요.",
+      "",
+    );
+  }
+  bodyLines.push("### 수리 지시서", "", "```", agentPrompt, "```", "");
+
+  const briefContent = [
+    "# SIMSA-FIX-BRIEF",
+    "",
+    "이 파일은 Simsa 시각 검수가 생성한 수리 지시서입니다.",
+    "이 브랜치에서 아래 지시서를 그대로 실행한 뒤, 이 파일은 삭제해도 됩니다.",
+    "",
+    ...(envCause
+      ? [
+          "> 환경 원인 가능성: 코드 수정만으로 완전히 해결되지 않을 수 있어요 — 환경 변수 설정도 확인하세요.",
+          "",
+        ]
+      : []),
+    "---",
+    "",
+    agentPrompt,
+    "",
+  ].join("\n");
+
+  return {
+    title,
+    body: bodyLines.join("\n"),
+    briefFileName: "SIMSA-FIX-BRIEF.md",
+    briefContent,
+  };
+}
+
 const VERDICT_FROM_STATUS = Object.freeze({
   approved: "approve",
   merged: "approve",

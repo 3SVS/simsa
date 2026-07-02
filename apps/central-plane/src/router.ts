@@ -40,6 +40,7 @@ import { createWorkspaceSourcesRoutes } from "./routes/workspace-sources.js";
 import { createWorkspaceDocumentIntakeRoutes } from "./routes/workspace-document-intake.js";
 import { createWorkspaceVisualChecksRoutes } from "./routes/workspace-visual-checks.js";
 import { createWorkspaceVisualCheckRunRoutes } from "./routes/workspace-visual-check-runs.js";
+import { createWorkspaceRepairJobRoutes } from "./routes/workspace-repair-jobs.js";
 import { createWorkspaceExperimentRoutes } from "./routes/workspace-experiment.js";
 import { createWorkspaceAgentWorkflowRoutes } from "./routes/workspace-agent-workflow.js";
 import { createWorkspaceMembershipRoutes } from "./routes/workspace-membership.js";
@@ -164,6 +165,11 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // SimsaInspector container job; /internal/visual-check-{running,done} are
   // the container's callbacks (Bearer INTERNAL_CALLBACK_TOKEN).
   app.route("/", createWorkspaceVisualCheckRunRoutes());
+  // Stage 268 — repair loop: POST .../visual-checks/:runId/repair dispatches a
+  // simsa_repair job into the ConclaveSandbox container (repair branch + draft
+  // PR from the run's agent_prompt); /internal/repair-{running,done} are the
+  // container's callbacks (Bearer INTERNAL_CALLBACK_TOKEN).
+  app.route("/", createWorkspaceRepairJobRoutes());
   // Stage 72 — Persisted Manual Multi-Agent Experiments.
   app.route("/", createWorkspaceExperimentRoutes());
   // Stage 112 — Persisted Agent Workflow Records (intake snapshot save/list/read).
