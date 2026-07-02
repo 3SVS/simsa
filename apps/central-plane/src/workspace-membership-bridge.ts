@@ -8,7 +8,9 @@
  * Privacy/identity rules baked in here:
  *   - `userKey` is the LEGACY anonymous scope, NEVER an authenticated identity.
  *   - Only safe, non-sensitive fields are returned (id/name/role + email). No tokens/secrets.
- *   - `canCreatePersonalWorkspace` / `canClaimProjects` are hard-coded false (later, gated stages).
+ *   - `canCreatePersonalWorkspace` / `canClaimProjects` are computed capabilities now that the
+ *     claim flow exists (routes/workspace-claim.ts): both require a live session; claiming also
+ *     requires a legacy userKey to claim. Signed-out callers always get false.
  */
 
 /** A workspace membership row, reduced to safe display fields (no tokens). */
@@ -34,8 +36,8 @@ export type MembershipBridgeResponse = {
   workspaces: BridgeWorkspace[];
   legacyProjectCount: number;
   bridgeMode: "read_only";
-  canCreatePersonalWorkspace: false;
-  canClaimProjects: false;
+  canCreatePersonalWorkspace: boolean;
+  canClaimProjects: boolean;
 };
 
 /**
@@ -69,7 +71,7 @@ export function buildMembershipResponse(input: MembershipBridgeInput): Membershi
     workspaces,
     legacyProjectCount: Number.isFinite(input.legacyProjectCount) && input.legacyProjectCount > 0 ? Math.floor(input.legacyProjectCount) : 0,
     bridgeMode: "read_only",
-    canCreatePersonalWorkspace: false,
-    canClaimProjects: false,
+    canCreatePersonalWorkspace: authenticated,
+    canClaimProjects: authenticated && typeof input.userKey === "string" && input.userKey.length > 0,
   };
 }

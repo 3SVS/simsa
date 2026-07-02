@@ -57,14 +57,14 @@ export default function ChecksPage() {
     let cancelled = false;
     async function load() {
       setPrLoadPhase("loading");
-      const linkedRes = await fetchLinkedPulls(id);
+      const linkedRes = await fetchLinkedPulls(id, getUserKey());
       if (cancelled) return;
       if (!linkedRes.ok) { setPrLoadPhase("done"); return; }
       setLinkedPulls(linkedRes.pulls);
       const reviews: Record<number, ReviewRun> = {};
       await Promise.all(
         linkedRes.pulls.map(async (lp) => {
-          const r = await getLatestPRReview(id, lp.number);
+          const r = await getLatestPRReview(id, lp.number, getUserKey());
           if (!cancelled && r.ok && r.run) reviews[lp.number] = r.run;
         }),
       );
@@ -101,7 +101,7 @@ export default function ChecksPage() {
       criteria: ext?.itemCriteria?.[r.id] ?? [],
     }));
 
-    const res = await callCheckDraftApi({ projectId: id, productSpec, items });
+    const res = await callCheckDraftApi({ projectId: id, userKey: getUserKey(), productSpec, items });
     if (!res.ok) {
       if (res.error === "rate_limited") {
         setRateLimitMsg(t.common.rateLimited);

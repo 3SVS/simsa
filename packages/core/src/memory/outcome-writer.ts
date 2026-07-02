@@ -97,6 +97,15 @@ export class OutcomeWriter {
     };
     await this.store.writeEpisodic(entry);
     this.episodicIndex.set(id, entry);
+    // Opportunistic TTL enforcement (decision #17: episodic 90d). Best-effort —
+    // a prune failure must never break the review that triggered the write.
+    if (this.store.pruneEpisodic) {
+      try {
+        await this.store.pruneEpisodic();
+      } catch {
+        /* ignore — pruning retries on the next review */
+      }
+    }
     return entry;
   }
 

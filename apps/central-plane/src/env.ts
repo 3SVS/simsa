@@ -155,6 +155,18 @@ export interface Env {
    */
   WORKSPACE_GENERATION_LIMIT_PER_HOUR?: string;
   /**
+   * Security hardening — hourly per-userKey cap for
+   * POST /workspace/projects/:id/github/pulls/:number/review.
+   * Parsed as integer; defaults to 30 when unset or non-numeric.
+   */
+  WORKSPACE_PR_REVIEW_HOURLY_LIMIT?: string;
+  /**
+   * Security hardening — hourly per-userKey cap for the PR comment write
+   * endpoints (POST …/comment and PATCH …/comment/:commentId).
+   * Parsed as integer; defaults to 60 when unset or non-numeric.
+   */
+  WORKSPACE_PR_COMMENT_HOURLY_LIMIT?: string;
+  /**
    * v0.14.5 — Lemon Squeezy MoR for paid tiers (Stripe Korea is
    * personal-only; LS handles VAT across KR/US/EU). All four secrets
    * required for billing routes to function; otherwise /billing

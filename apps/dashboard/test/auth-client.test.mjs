@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getAuthSession, signOutAuth, resolveAuthStatus } from "../src/lib/auth-client.mjs";
+import { getAuthSession, signOutAuth, resolveAuthStatus, getMembership, claimWorkspace } from "../src/lib/auth-client.mjs";
 
 function fakeFetch(impl) {
   return async (...args) => impl(...args);
@@ -57,4 +57,44 @@ test("resolveAuthStatus maps results to UI states", () => {
     email: "x@example.test",
   });
   assert.deepEqual(resolveAuthStatus(undefined), { status: "signed_out", email: null });
+});
+
+// Claim flow client (membership bridge + claim) — same-origin, credentialed.
+
+test("getMembership hits /api/membership/me with the userKey header and returns ok bodies only", async () => {
+  let seen = null;
+  const f = fakeFetch(async (url, init) => {
+    seen = { url, headers: init.headers, credentials: init.credentials };
+    return { ok: true, json: async () => ({ ok: true, authenticated: true, legacyProjectCount: 2, canClaimProjects: true }) };
+  });
+  const m = await getMembership("uk_abc", f);
+  assert.equal(m.legacyProjectCount, 2);
+  assert.equal(seen.url, "/api/membership/me");
+  assert.equal(seen.credentials, "include");
+  assert.equal(seen.headers["x-simsa-user-key"], "uk_abc");
+  // non-ok / error bodies → null
+  assert.equal(await getMembership("uk", fakeFetch(async () => ({ ok: false }))), null);
+  assert.equal(await getMembership("uk", fakeFetch(async () => ({ ok: true, json: async () => ({ ok: false }) }))), null);
+  assert.equal(await getMembership("uk", fakeFetch(async () => { throw new Error("net"); })), null);
+});
+
+test("claimWorkspace POSTs the userKey and maps success + failure shapes", async () => {
+  let seen = null;
+  const f = fakeFetch(async (url, init) => {
+    seen = { url, method: init.method, body: init.body, headers: init.headers };
+    return { ok: true, json: async () => ({ ok: true, workspaceId: "ws_1", alreadyClaimed: false, claimedProjects: 3 }) };
+  });
+  const r = await claimWorkspace("uk_abc", f);
+  assert.deepEqual(r, { ok: true, workspaceId: "ws_1", alreadyClaimed: false, claimedProjects: 3 });
+  assert.equal(seen.url, "/api/membership/claim");
+  assert.equal(seen.method, "POST");
+  assert.equal(JSON.parse(seen.body).userKey, "uk_abc");
+  assert.equal(seen.headers["x-simsa-user-key"], "uk_abc");
+
+  const taken = await claimWorkspace("uk", fakeFetch(async () => ({ ok: false, status: 409, json: async () => ({ ok: false, error: "claimed_by_other" }) })));
+  assert.deepEqual(taken, { ok: false, error: "claimed_by_other" });
+  const unauth = await claimWorkspace("uk", fakeFetch(async () => ({ ok: false, status: 401, json: async () => ({ ok: false, error: "unauthenticated" }) })));
+  assert.equal(unauth.error, "unauthenticated");
+  const net = await claimWorkspace("uk", fakeFetch(async () => { throw new Error("net"); }));
+  assert.equal(net.error, "network");
 });

@@ -122,9 +122,9 @@ function addLinkedPR(env, projectId, prNumber, selectedItemIds = ["req_001"]) {
   });
 }
 
-function addProject(env, projectId) {
+function addProject(env, projectId, userKey = "uk1") {
   env.DB.state.projects.set(projectId, {
-    id: projectId, user_key: "uk1", title: "Test Project",
+    id: projectId, user_key: userKey, title: "Test Project",
     idea: "테스트 아이디어", understood_json: null,
     product_spec_json: JSON.stringify({
       productName: "테스트 앱", oneLine: "설명", targetUsers: ["사용자"],
@@ -347,6 +347,7 @@ describe("buildDiffSummary", () => {
 describe("POST /workspace/projects/:id/github/pulls/:number/review", () => {
   it("returns 400 when no repo linked", async () => {
     const env = makeEnv();
+    addProject(env, "norepo");
     const app = createApp();
     const req = new Request("http://localhost/workspace/projects/norepo/github/pulls/1/review", {
       method: "POST",
@@ -362,6 +363,7 @@ describe("POST /workspace/projects/:id/github/pulls/:number/review", () => {
   it("returns 400 when no selected items (no linked PR, no body itemIds)", async () => {
     const env = makeEnv();
     addRepo(env, "proj_test");
+    addProject(env, "proj_test");
     const app = createApp();
     const req = new Request("http://localhost/workspace/projects/proj_test/github/pulls/99/review", {
       method: "POST",
@@ -378,6 +380,7 @@ describe("POST /workspace/projects/:id/github/pulls/:number/review", () => {
     const env = makeEnv({ CONCLAVE_TOKEN_KEK: "fake_kek" });
     addRepo(env, "proj_a");
     addLinkedPR(env, "proj_a", 5, ["req_001"]);
+    addProject(env, "proj_a", "uk_nobody");
     const app = createApp();
     const req = new Request("http://localhost/workspace/projects/proj_a/github/pulls/5/review", {
       method: "POST",
@@ -394,6 +397,7 @@ describe("POST /workspace/projects/:id/github/pulls/:number/review", () => {
     const env = makeEnv({ CONCLAVE_TOKEN_KEK: null });
     addRepo(env, "proj_b");
     addLinkedPR(env, "proj_b", 3, ["req_001"]);
+    addProject(env, "proj_b");
     const app = createApp();
     const req = new Request("http://localhost/workspace/projects/proj_b/github/pulls/3/review", {
       method: "POST",
@@ -433,9 +437,10 @@ describe("GET /workspace/projects/:id/github/pulls/:number/review", () => {
   it("returns null run when no review has been run", async () => {
     const env = makeEnv();
     addRepo(env, "proj_d");
+    addProject(env, "proj_d");
     const app = createApp();
     const resp = await app.fetch(
-      new Request("http://localhost/workspace/projects/proj_d/github/pulls/1/review"),
+      new Request("http://localhost/workspace/projects/proj_d/github/pulls/1/review?userKey=uk1"),
       env,
     );
     assert.equal(resp.status, 200);
@@ -446,9 +451,10 @@ describe("GET /workspace/projects/:id/github/pulls/:number/review", () => {
 
   it("returns null run when no repo linked", async () => {
     const env = makeEnv();
+    addProject(env, "norepo");
     const app = createApp();
     const resp = await app.fetch(
-      new Request("http://localhost/workspace/projects/norepo/github/pulls/1/review"),
+      new Request("http://localhost/workspace/projects/norepo/github/pulls/1/review?userKey=uk1"),
       env,
     );
     assert.equal(resp.status, 200);
@@ -460,6 +466,7 @@ describe("GET /workspace/projects/:id/github/pulls/:number/review", () => {
   it("returns stored run with result", async () => {
     const env = makeEnv();
     addRepo(env, "proj_e");
+    addProject(env, "proj_e");
     // Insert a run directly into mock DB
     const runId = "wprr_test001";
     const result = { ok: true, source: "mock-fallback", summary: { passed: 1, failed: 0, inconclusive: 0, needsDecision: 0 }, results: [{ itemId: "req_001", title: "로그인", status: "passed", userLabel: "통과", reason: "OK", evidence: [], nextAction: "" }] };
@@ -473,7 +480,7 @@ describe("GET /workspace/projects/:id/github/pulls/:number/review", () => {
     });
     const app = createApp();
     const resp = await app.fetch(
-      new Request("http://localhost/workspace/projects/proj_e/github/pulls/5/review"),
+      new Request("http://localhost/workspace/projects/proj_e/github/pulls/5/review?userKey=uk1"),
       env,
     );
     assert.equal(resp.status, 200);
@@ -486,6 +493,7 @@ describe("GET /workspace/projects/:id/github/pulls/:number/review", () => {
   it("maps result userLabels correctly", async () => {
     const env = makeEnv();
     addRepo(env, "proj_f");
+    addProject(env, "proj_f");
     const runId = "wprr_test002";
     const result = {
       ok: true, source: "mock-fallback",
@@ -505,7 +513,7 @@ describe("GET /workspace/projects/:id/github/pulls/:number/review", () => {
     });
     const app = createApp();
     const resp = await app.fetch(
-      new Request("http://localhost/workspace/projects/proj_f/github/pulls/3/review"),
+      new Request("http://localhost/workspace/projects/proj_f/github/pulls/3/review?userKey=uk1"),
       env,
     );
     const body = await resp.json();

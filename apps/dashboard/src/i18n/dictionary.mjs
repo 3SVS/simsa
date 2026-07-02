@@ -100,6 +100,16 @@ const EN = {
       signOut: "Sign out",
       signOutError: "Could not sign out. Try again.",
       keepsLocal: "Your local projects and userKey are unchanged by sign-in.",
+      claimTitle: "Link this browser's data to your account",
+      claimDesc:
+        "Right now your projects are tied to this browser only. Linking attaches them to your account's personal workspace, so they survive browser resets and can be shared with a team later.",
+      claimProjectsToLink: "Projects to link: {n}",
+      claimButton: "Link to my account",
+      claimWorking: "Linking…",
+      claimDone: "Linked {n} project(s) to your account.",
+      claimAlreadyDone: "Already linked to your account — any new projects were included.",
+      claimTakenError: "This browser's data is already linked to a different account.",
+      claimError: "Could not link. Please try again.",
     },
     badges: {
       local: "Local",
@@ -2033,6 +2043,16 @@ const KO = {
       signOut: "로그아웃",
       signOutError: "로그아웃하지 못했습니다. 다시 시도하세요.",
       keepsLocal: "로그인해도 로컬 프로젝트와 userKey는 그대로 유지됩니다.",
+      claimTitle: "이 브라우저의 데이터를 계정에 연결",
+      claimDesc:
+        "지금은 프로젝트가 이 브라우저에만 묶여 있어요. 계정에 연결하면 개인 워크스페이스에 귀속되어 브라우저를 바꿔도 유지되고, 나중에 팀과 공유할 수 있게 됩니다.",
+      claimProjectsToLink: "연결할 프로젝트: {n}개",
+      claimButton: "내 계정에 연결",
+      claimWorking: "연결 중…",
+      claimDone: "프로젝트 {n}개를 계정에 연결했어요.",
+      claimAlreadyDone: "이미 계정에 연결되어 있어요 — 새 프로젝트가 있으면 함께 연결했습니다.",
+      claimTakenError: "이 브라우저의 데이터는 이미 다른 계정에 연결되어 있어요.",
+      claimError: "연결하지 못했어요. 다시 시도해주세요.",
     },
     badges: {
       local: "로컬",

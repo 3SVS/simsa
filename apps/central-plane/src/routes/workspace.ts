@@ -25,6 +25,7 @@ import {
 import {
   upsertProject,
   getProject,
+  getOwnedProject,
   listProjectsByUser,
   saveCheckRun,
   saveFixSuggestion as saveFixSuggestionToDb,
@@ -254,6 +255,15 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       return new Response(JSON.stringify({ ok: false, error: "userKey_and_title_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
     try {
+      // Overwrite-IDOR guard: a client-supplied id that already exists and
+      // belongs to a DIFFERENT user_key must never be overwritten. Same-owner
+      // upsert (dashboard re-save) keeps working; new ids keep working.
+      if (typeof b["id"] === "string" && b["id"]) {
+        const existing = await getProject(c.env, b["id"]).catch(() => null);
+        if (existing && existing.userKey !== String(b["userKey"])) {
+          return new Response(JSON.stringify({ ok: false, error: "id_conflict" }), { status: 409, headers: { "content-type": "application/json", ...headers } });
+        }
+      }
       const id = await upsertProject(c.env, {
         id: typeof b["id"] === "string" ? b["id"] : undefined,
         userKey: String(b["userKey"]),
@@ -288,13 +298,18 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     }
   });
 
-  // ── GET /workspace/projects/:id ──────────────────────────────────────────────
+  // ── GET /workspace/projects/:id?userKey=... ──────────────────────────────────
+  // Ownership-enforced: 404 not_found for missing OR not-owned (no existence oracle).
   app.get("/workspace/projects/:id", async (c) => {
     const origin = c.req.header("origin") ?? null;
     const headers = corsHeaders(origin);
     const id = c.req.param("id");
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) {
+      return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
     try {
-      const project = await getProject(c.env, id);
+      const project = await getOwnedProject(c.env, id, userKey);
       if (!project) return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404, headers: { "content-type": "application/json", ...headers } });
       return new Response(JSON.stringify({ ok: true, project }), { status: 200, headers: { "content-type": "application/json", ...headers } });
     } catch (err) {
@@ -327,6 +342,21 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       return new Response(JSON.stringify({ ok: false, error: "productSpec_and_items_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
 
+    // Ownership gate for the project-scoped side effect (check-run persistence).
+    // Generation itself only uses client-supplied inputs, so it stays available
+    // for local-only projects — but writing under a projectId requires a
+    // userKey, and the write is silently skipped unless the project is owned.
+    const checkUserKey = typeof (body as Record<string, unknown>)["userKey"] === "string"
+      ? String((body as Record<string, unknown>)["userKey"])
+      : "";
+    let checkProjectOwned = false;
+    if (req.projectId) {
+      if (!checkUserKey) {
+        return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+      }
+      checkProjectOwned = Boolean(await getOwnedProject(c.env, req.projectId, checkUserKey).catch(() => null));
+    }
+
     let result;
     try {
       result = await generateCheckDraft({ productSpec: req.productSpec, items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" }, c.env.ANTHROPIC_API_KEY);
@@ -337,8 +367,8 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
-    // Best-effort persist check run to D1
-    if (req.projectId) {
+    // Best-effort persist check run to D1 — only into projects the caller owns.
+    if (req.projectId && checkProjectOwned) {
       saveCheckRun(c.env, req.projectId, result.source, result).catch(() => undefined);
     }
 
@@ -379,6 +409,19 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       return new Response(JSON.stringify({ ok: false, error: "item_and_checkResult_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
 
+    // Ownership gate for the project-scoped side effect (fix-suggestion
+    // persistence) — same pattern as /workspace/check-draft above.
+    const fixUserKey = typeof (body as Record<string, unknown>)["userKey"] === "string"
+      ? String((body as Record<string, unknown>)["userKey"])
+      : "";
+    let fixProjectOwned = false;
+    if (req.projectId) {
+      if (!fixUserKey) {
+        return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+      }
+      fixProjectOwned = Boolean(await getOwnedProject(c.env, req.projectId, fixUserKey).catch(() => null));
+    }
+
     let result;
     try {
       result = await generateFixSuggestion(req as WorkspaceFixSuggestionRequest, c.env.ANTHROPIC_API_KEY);
@@ -389,7 +432,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
-    if (req.projectId) {
+    if (req.projectId && fixProjectOwned) {
       saveFixSuggestionToDb(c.env, req.projectId, req.item.id, result.suggestion).catch(() => undefined);
     }
 
@@ -424,20 +467,29 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       return new Response(JSON.stringify({ ok: false, error: "project_or_projectId_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
 
-    // If projectId provided but no inline project, attempt to load from D1
+    // If projectId provided but no inline project, load from D1 — ownership
+    // enforced: reading another user's project through this path was a
+    // read-IDOR (title/idea/spec/items leak). 404 for missing OR not owned.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let project: any = req.project;
     if (!project && req.projectId) {
+      const exportUserKey = typeof (body as Record<string, unknown>)["userKey"] === "string"
+        ? String((body as Record<string, unknown>)["userKey"])
+        : "";
+      if (!exportUserKey) {
+        return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+      }
       try {
-        const dbProj = await getProject(c.env, req.projectId);
-        if (dbProj) {
-          project = {
-            title: dbProj.title,
-            idea: dbProj.idea ?? "",
-            productSpec: dbProj.productSpec ?? {},
-            items: Array.isArray(dbProj.items) ? dbProj.items : [],
-          };
+        const dbProj = await getOwnedProject(c.env, req.projectId, exportUserKey);
+        if (!dbProj) {
+          return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404, headers: { "content-type": "application/json", ...headers } });
         }
+        project = {
+          title: dbProj.title,
+          idea: dbProj.idea ?? "",
+          productSpec: dbProj.productSpec ?? {},
+          items: Array.isArray(dbProj.items) ? dbProj.items : [],
+        };
       } catch (err) {
         console.warn("[workspace/export] D1 load failed:", err);
       }
@@ -478,6 +530,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     if (!b["projectId"] || typeof b["projectId"] !== "string") {
       return new Response(JSON.stringify({ ok: false, error: "projectId_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
+    const outcomeUserKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
+    if (!outcomeUserKey) {
+      return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
     if (!isValidTarget(b["target"])) {
       return new Response(JSON.stringify({ ok: false, error: "target_invalid: claude_code | codex | both" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
@@ -489,10 +545,16 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       ? (b["selectedItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
       : [];
 
+    // Ownership: 404 for missing OR not-owned project (no existence oracle).
+    const ownedOutcomeProject = await getOwnedProject(c.env, b["projectId"], outcomeUserKey).catch(() => null);
+    if (!ownedOutcomeProject) {
+      return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404, headers: { "content-type": "application/json", ...headers } });
+    }
+
     try {
       const outcome = await saveOutcome(c.env, {
         projectId: b["projectId"],
-        userKey: typeof b["userKey"] === "string" ? b["userKey"] : "",
+        userKey: outcomeUserKey,
         target: b["target"],
         selectedItemIds,
         outcome: b["outcome"],
@@ -505,11 +567,21 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     }
   });
 
-  // ── GET /workspace/projects/:id/builder-pack-outcomes ────────────────────────
+  // ── GET /workspace/projects/:id/builder-pack-outcomes?userKey=... ────────────
+  // Ownership-enforced: 404 not_found for missing OR not-owned project.
   app.get("/workspace/projects/:id/builder-pack-outcomes", async (c) => {
     const origin = c.req.header("origin") ?? null;
     const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
     const projectId = c.req.param("id");
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) {
+      return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    const owned = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
+    if (!owned) {
+      return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404, headers: { "content-type": "application/json", ...headers } });
+    }
 
     try {
       const outcomes = await listOutcomes(c.env, projectId, 50);

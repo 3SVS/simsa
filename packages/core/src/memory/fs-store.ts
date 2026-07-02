@@ -10,7 +10,7 @@ import {
   type FailureEntry,
   type SemanticRule,
 } from "./schema.js";
-import type { MemoryReadQuery, MemoryRetrieval, MemoryStore } from "./store.js";
+import type { EpisodicPruneResult, MemoryReadQuery, MemoryRetrieval, MemoryStore } from "./store.js";
 import { retrieve } from "./retrieval.js";
 import {
   BUNDLED_DESIGN_ANSWER_KEYS,
@@ -226,6 +226,35 @@ export class FileSystemMemoryStore implements MemoryStore {
       }
     }
     return out;
+  }
+
+  /**
+   * Enforce the episodic 90-day TTL (decision #17). Day directories are
+   * named YYYY-MM-DD, so "older than cutoff" is a plain string compare.
+   * Whole day-buckets strictly older than the cutoff are removed; the
+   * cutoff day itself is kept. Non-date directories are left untouched.
+   * Answer-keys / failure-catalog / semantic rules are never pruned.
+   */
+  async pruneEpisodic(opts?: { ttlDays?: number; now?: Date }): Promise<EpisodicPruneResult> {
+    const ttlDays = opts?.ttlDays ?? 90;
+    const now = opts?.now ?? new Date();
+    const cutoff = new Date(now.getTime() - ttlDays * 24 * 60 * 60 * 1000);
+    const cutoffDay = cutoff.toISOString().slice(0, 10);
+
+    const episRoot = path.join(this.root, "episodic");
+    const days = await safeReaddir(episRoot);
+    let removedDays = 0;
+    let removedEntries = 0;
+    for (const day of days) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      if (day >= cutoffDay) continue;
+      const dir = path.join(episRoot, day);
+      const files = await safeReaddir(dir);
+      removedEntries += files.filter((f) => f.endsWith(".json")).length;
+      await fs.rm(dir, { recursive: true, force: true });
+      removedDays += 1;
+    }
+    return { removedDays, removedEntries, cutoffDay };
   }
 
   async listRules(): Promise<SemanticRule[]> {

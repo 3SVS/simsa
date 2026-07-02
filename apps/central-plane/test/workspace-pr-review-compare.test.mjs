@@ -247,6 +247,13 @@ function makeDb(extra = {}) {
               if (sql.includes("FROM workspace_project_repos")) {
                 return repos.get(args[0]) ?? null;
               }
+              // Ownership hardening: every project id resolves to a row owned
+              // by this file's route-test userKey.
+              if (sql.includes("FROM workspace_projects")) {
+                return { id: args[0], user_key: "user123", title: "T", idea: "",
+                  understood_json: null, product_spec_json: "{}", items_json: "[]",
+                  created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
+              }
               return null;
             },
             async all() {

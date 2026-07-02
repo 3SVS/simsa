@@ -129,7 +129,15 @@ function makeMockDb({ runs = [], repos = [], connections = [] } = {}) {
           if (/FROM workspace_pr_comments/.test(sql) && /status = 'posted'/.test(sql)) {
             return null;
           }
-          // workspace_projects, credit queries → null defaults
+          // Ownership hardening: every project id resolves to a row owned
+          // by this file's route-test userKey.
+          if (/FROM workspace_projects/.test(sql)) {
+            const [pid] = bound;
+            return { id: pid, user_key: "uk1", title: "T", idea: "",
+              understood_json: null, product_spec_json: "{}", items_json: "[]",
+              created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
+          }
+          // credit queries → null defaults
           return null;
         },
         async run() {

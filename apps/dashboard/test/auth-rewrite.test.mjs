@@ -50,15 +50,19 @@ test("valid http(s) origin is used and trailing slashes stripped", () => {
   );
 });
 
-test("buildAuthRewrites maps /api/auth/:path* to the worker, scoped only to /api/auth", () => {
+test("buildAuthRewrites maps /api/auth + /api/membership to the worker, tightly scoped", () => {
   const rules = buildAuthRewrites("https://conclave-ai.seunghunbae.workers.dev");
-  assert.equal(rules.length, 1);
+  assert.equal(rules.length, 2);
   assert.deepEqual(rules[0], {
     source: "/api/auth/:path*",
     destination: "https://conclave-ai.seunghunbae.workers.dev/api/auth/:path*",
   });
-  // Scoped to /api/auth — does not match other dashboard routes.
-  assert.ok(rules[0].source.startsWith("/api/auth/"));
+  assert.deepEqual(rules[1], {
+    source: "/api/membership/:path*",
+    destination: "https://conclave-ai.seunghunbae.workers.dev/workspace/membership/:path*",
+  });
+  // Scoped — does not match other dashboard routes.
+  assert.ok(rules.every((r) => r.source.startsWith("/api/auth/") || r.source.startsWith("/api/membership/")));
   assert.ok(!rules.some((r) => r.source === "/:path*" || r.source === "/api/:path*"));
 });
 

@@ -97,6 +97,15 @@ export type Dictionary = {
       signOut: string;
       signOutError: string;
       keepsLocal: string;
+      claimTitle: string;
+      claimDesc: string;
+      claimProjectsToLink: string;
+      claimButton: string;
+      claimWorking: string;
+      claimDone: string;
+      claimAlreadyDone: string;
+      claimTakenError: string;
+      claimError: string;
     };
     badges: { local: string; planned: string; requiresSignIn: string; readOnly: string };
   };

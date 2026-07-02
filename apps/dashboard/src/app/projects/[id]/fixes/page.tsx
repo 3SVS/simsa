@@ -8,6 +8,7 @@ import {
   getLocalProject,
   loadExtendedProjectData,
   saveExtendedProjectData,
+  getUserKey,
 } from "@/lib/workflow-store";
 import {
   callFixSuggestionApi,
@@ -64,6 +65,7 @@ export default function FixesPage() {
 
     const res = await callFixSuggestionApi({
       projectId: id,
+      userKey: getUserKey(),
       item: {
         id: item.itemId,
         title: item.title,

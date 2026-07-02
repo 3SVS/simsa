@@ -29,8 +29,9 @@ test("authenticated, no workspace rows: authenticated true, hasPersonalWorkspace
   assert.equal(r.email, "a@example.test");
   assert.equal(r.hasPersonalWorkspace, false);
   assert.deepEqual(r.workspaces, []);
-  assert.equal(r.canCreatePersonalWorkspace, false);
-  assert.equal(r.canClaimProjects, false);
+  // Claim flow exists now (workspace-claim.ts): authenticated → capabilities computed.
+  assert.equal(r.canCreatePersonalWorkspace, true);
+  assert.equal(r.canClaimProjects, true); // userKey present
 });
 
 test("authenticated with workspaces: hasPersonalWorkspace true, only safe fields", () => {

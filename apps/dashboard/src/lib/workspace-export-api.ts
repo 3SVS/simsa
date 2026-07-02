@@ -30,6 +30,8 @@ export type ExportApiError =
 
 export type ExportBuilderPackInput = {
   projectId?: string;
+  /** Required by the server when loading the project by projectId (ownership check). */
+  userKey?: string;
   project?: {
     title: string;
     idea?: string;
@@ -76,7 +78,8 @@ export type RemoteOutcome = {
 
 export type SaveOutcomeInput = {
   projectId: string;
-  userKey?: string;
+  /** Required — the server enforces project ownership. */
+  userKey: string;
   target: ExportTarget;
   selectedItemIds: string[];
   outcome: OutcomeStatus;
@@ -110,10 +113,11 @@ export async function callSaveOutcomeApi(
 
 export async function callListOutcomesApi(
   projectId: string,
+  userKey: string,
 ): Promise<ListOutcomesResult> {
   try {
     const resp = await fetch(
-      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/builder-pack-outcomes`,
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/builder-pack-outcomes?userKey=${encodeURIComponent(userKey)}`,
       { signal: AbortSignal.timeout(8000) },
     );
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
