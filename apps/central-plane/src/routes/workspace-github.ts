@@ -65,6 +65,7 @@ import {
 import type { CommentResultItem, ComparisonDataForComment } from "../workspace/pr-comment.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { checkCreditEnforcementDryRun, checkCreditEnforcement } from "../workspace/credit-enforcement.js";
+import { getMarketplaceEntitlement } from "../workspace/marketplace-entitlement.js";
 import type { CreditEnforcementDryRun, CreditEnforcementResult } from "../workspace/credit-enforcement.js";
 import { generateDebitId, buildPrReviewDebitSourceEventId, validateIdempotencyKey } from "../workspace/credits.js";
 import {
@@ -838,12 +839,16 @@ export function createWorkspaceGitHubRoutes(
 
     let creditEnforcement: CreditEnforcementResult | CreditEnforcementDryRun | undefined;
     try {
+      // Paid GitHub Marketplace plan raises the monthly included runs.
+      // Fail-safe: any lookup error → null → base free allowance only.
+      const entitlement = await getMarketplaceEntitlement(c.env, userKey);
       const enfResult = await checkCreditEnforcement({
         env: c.env,
         userKey,
         eventType: "workspace_pr_review_run",
         projectId,
         sourceEventId: prReviewExecutionId,
+        entitlement,
       });
       creditEnforcement = {
         ...enfResult,

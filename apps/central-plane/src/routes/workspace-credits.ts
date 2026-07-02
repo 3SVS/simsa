@@ -17,6 +17,7 @@ import type { Env } from "../env.js";
 import { listCreditBalances } from "../workspace/credits.js";
 import type { CreditType } from "../workspace/credits.js";
 import { getAllowanceDryRun } from "../workspace/allowance-usage.js";
+import { getMarketplaceEntitlement } from "../workspace/marketplace-entitlement.js";
 import { getCreditExecutionConfig, isActualDebitAllowedForUser } from "../workspace/credit-config.js";
 import {
   createTopUpRequest,
@@ -60,10 +61,15 @@ export function createWorkspaceCreditsRoutes(): Hono<{ Bindings: Env }> {
         balances.unshift({ creditType: "review", label: "Review credit", balance: 0 });
       }
 
+      // Paid GitHub Marketplace plan raises the monthly included runs.
+      // getMarketplaceEntitlement is fail-safe (any error → null → base allowance).
+      const entitlement = await getMarketplaceEntitlement(c.env, userKey);
+
       const allowanceDryRun = await getAllowanceDryRun({
         env: c.env,
         userKey,
         eventType: "workspace_pr_review_run",
+        entitlement,
       });
 
       return c.json({
@@ -79,6 +85,7 @@ export function createWorkspaceCreditsRoutes(): Hono<{ Bindings: Env }> {
             remainingIncludedRuns: allowanceDryRun?.remainingIncludedRuns ?? 5,
           },
         },
+        ...(entitlement ? { entitlement } : {}),
         actualDebitsEnabled: config.actualDebitsEnabled,
         actualDebitAllowedForUser,
       });

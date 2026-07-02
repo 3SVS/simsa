@@ -172,3 +172,58 @@ test("loadConfig: .conclaverc.json wins over package.json when both present (cos
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------
+// Decision #22 wiring — efficiency.triage / efficiency.compact config.
+// Additive Zod defaults: legacy configs keep validating, defaults ON.
+// ---------------------------------------------------------------------
+
+test("loadConfig: legacy efficiency block gets triage + compact defaults (ON)", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aic-cli-cfg-"));
+  try {
+    fs.writeFileSync(
+      path.join(dir, CONFIG_FILENAME),
+      // Exactly what `conclave init` wrote pre-decision-#22-wiring.
+      JSON.stringify({ version: 1, efficiency: { cacheEnabled: true, compactEnabled: true } }),
+    );
+    const { config } = await loadConfig(dir);
+    assert.deepEqual(config.efficiency.triage, {
+      enabled: true,
+      liteLineThreshold: 40,
+      liteFileThreshold: 3,
+    });
+    assert.deepEqual(config.efficiency.compact, { enabled: true, targetPriorTokens: 2000 });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig: triage + compact individually disableable", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aic-cli-cfg-"));
+  try {
+    fs.writeFileSync(
+      path.join(dir, CONFIG_FILENAME),
+      JSON.stringify({
+        version: 1,
+        efficiency: {
+          cacheEnabled: true,
+          compactEnabled: true,
+          triage: { enabled: false },
+          compact: { enabled: false, targetPriorTokens: 500 },
+        },
+      }),
+    );
+    const { config } = await loadConfig(dir);
+    assert.equal(config.efficiency.triage.enabled, false);
+    assert.equal(config.efficiency.triage.liteLineThreshold, 40); // sibling defaults still fill
+    assert.equal(config.efficiency.compact.enabled, false);
+    assert.equal(config.efficiency.compact.targetPriorTokens, 500);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("DEFAULT_CONFIG: triage + compact default ON (decision #22)", () => {
+  assert.equal(DEFAULT_CONFIG.efficiency.triage.enabled, true);
+  assert.equal(DEFAULT_CONFIG.efficiency.compact.enabled, true);
+});

@@ -8,6 +8,7 @@ import type { Env } from "./env.js";
 import { healthRoutes } from "./routes/health.js";
 import { registerRoutes } from "./routes/register.js";
 import { episodicRoutes } from "./routes/episodic.js";
+import { federatedBaselinesRoutes } from "./routes/federated-baselines.js";
 import { episodicAnchorRoutes } from "./routes/episodic-anchor.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { createOAuthRoutes } from "./routes/oauth.js";
@@ -74,6 +75,7 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", healthRoutes);
   app.route("/", registerRoutes);
   app.route("/", episodicRoutes);
+  app.route("/", federatedBaselinesRoutes);
   app.route("/", episodicAnchorRoutes);
   app.route("/", memoryRoutes);
   app.route("/", createOAuthRoutes(fetchImpl));

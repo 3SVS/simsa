@@ -167,6 +167,13 @@ export default function CreditsPage() {
                           .replace("{period}", allowance.periodKey)
                       : t.creditsPage.noRemainingRuns.replace("{period}", allowance.periodKey)}
                   </p>
+                  {credits.entitlement && (
+                    <p className="text-gray-500">
+                      {t.creditsPage.planIncluded
+                        .replace("{plan}", credits.entitlement.planName)
+                        .replace("{n}", String(credits.entitlement.includedRunsPerMonth))}
+                    </p>
+                  )}
                 </div>
               )}
 

@@ -289,6 +289,7 @@ export type Dictionary = {
     usedOfRuns: string;
     remainingRuns: string;
     noRemainingRuns: string;
+    planIncluded: string;
     actualDebitOn: string;
     dryRunMode: string;
     topUpTitle: string;

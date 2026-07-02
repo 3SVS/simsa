@@ -1,6 +1,6 @@
 export type { Agent, ReviewContext, ReviewResult, Blocker, Severity, PriorReview, ReviewDomain, ReviewMode } from "./agent.js";
-export { Council } from "./council.js";
-export type { CouncilOutcome, CouncilOptions, RoundOutcome } from "./council.js";
+export { Council, compactPriorReviews, DEFAULT_PRIOR_SUMMARY_TARGET_TOKENS } from "./council.js";
+export type { CouncilOutcome, CouncilOptions, RoundOutcome, PriorCompactionOptions } from "./council.js";
 export { splitDiff, integrateChunkOutcomes } from "./diff-splitter.js";
 export type { DiffChunk, SplitDiffOptions } from "./diff-splitter.js";
 export { TieredCouncil } from "./tiered-council.js";

@@ -114,7 +114,12 @@ export class OutcomeWriter {
     if (!existing) {
       throw new Error(`OutcomeWriter: no episodic entry found for id ${input.episodicId}`);
     }
-    const updated: EpisodicEntry = { ...existing, outcome: input.outcome };
+    const updated: EpisodicEntry = {
+      ...existing,
+      outcome: input.outcome,
+      // Resolution timestamp — feeds the scoring "time" axis (decision #19).
+      outcomeAt: new Date().toISOString(),
+    };
     await this.store.writeEpisodic(updated);
     this.episodicIndex.set(input.episodicId, updated);
 
