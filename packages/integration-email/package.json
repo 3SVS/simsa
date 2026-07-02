@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/integration-email",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Conclave AI email notifier — pluggable transport (Resend default; SMTP/SES/nodemailer drop-ins).",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",
