@@ -33,9 +33,11 @@ import { PrCommentMockup } from "../components/PrCommentMockup";
 const SITE_URL = "https://conclave-ai.dev";
 
 const LOGIN_URL = "https://github.com/apps/conclave-ai-code-council/installations/new";
-// GHM-only sales (2026-07-03): all paid tiers check out through the GitHub
-// Marketplace listing — GitHub handles billing/tax; no Lemon Squeezy.
-const MARKETPLACE_URL = "https://github.com/marketplace/conclave-ai-code-council";
+// GHM-only sales (2026-07-03): all paid tiers check out through GitHub —
+// GitHub handles billing/tax; no Lemon Squeezy. The App page always resolves;
+// swap to the public /marketplace/<listing> URL once the listing is approved
+// and its slug is confirmed (it 404s while in draft/review).
+const MARKETPLACE_URL = "https://github.com/apps/conclave-ai-code-council";
 
 export default function Home() {
   return (
