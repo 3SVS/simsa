@@ -76,6 +76,18 @@ export interface Env {
    */
   SANDBOX?: DurableObjectNamespace;
   /**
+   * Stage 263 — SimsaInspector container binding
+   * (apps/central-plane/inspector-container/). One instance per visual-check
+   * run: the Worker calls
+   *   c.env.INSPECTOR.idFromName(`vc-${runId}`).get().fetch(...)
+   * to forward the inspection job into a Playwright + Chromium container that
+   * executes the deep-flow check, uploads evidence via the Stage 261 evidence
+   * endpoint, and reports back to /internal/visual-check-done. Optional:
+   * without the binding, POST .../visual-checks/run still creates the queued
+   * row and returns dispatched:false (note inspector_unavailable).
+   */
+  INSPECTOR?: DurableObjectNamespace;
+  /**
    * Stage 261 — R2 bucket `simsa-evidence`: visual-check evidence
    * (screenshots/video under checks/{userKey}/{projectId}/{runId}/) and
    * uploaded project documents (PRD/md under docs/{userKey}/{projectId}/).

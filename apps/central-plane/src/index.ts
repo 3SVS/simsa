@@ -2,7 +2,7 @@ import { createApp } from "./router.js";
 import type { Env } from "./env.js";
 import { assertPreflight } from "./preflight.js";
 import { selfHealWebhook } from "./webhook-heal.js";
-import { cleanupStuckJobs } from "./stuck-cleanup.js";
+import { cleanupStuckJobs, cleanupStuckVisualChecks } from "./stuck-cleanup.js";
 import { refreshAllSources } from "./external-references.js";
 import { retryPendingFeedback } from "./routes/feedback.js";
 import { promoteSeedsPass } from "./seed-promoter.js";
@@ -51,6 +51,14 @@ export default {
         console.log(JSON.stringify({ cron: "stuck-cleanup", cronExpression: event.cron, ...result }));
       } catch (err) {
         console.error("[stuck-cleanup] crashed:", err);
+      }
+      // Stage 263 — same tick also sweeps visual-check runs stuck in
+      // queued|running (SimsaInspector container killed / dispatch lost).
+      try {
+        const result = await cleanupStuckVisualChecks(env);
+        console.log(JSON.stringify({ cron: "stuck-cleanup-visual-checks", cronExpression: event.cron, ...result }));
+      } catch (err) {
+        console.error("[stuck-cleanup-visual-checks] crashed:", err);
       }
       return;
     }
@@ -237,4 +245,8 @@ export { createApp } from "./router.js";
 // --test consumers of router.ts don't transitively pull in the Workers-
 // only `@cloudflare/containers` runtime imports.
 export { ConclaveSandbox } from "./container.js";
+// Stage 263 — SimsaInspector container DO (Playwright visual inspections).
+// Same rule as ConclaveSandbox: exported ONLY from index.ts so node --test
+// consumers of router.ts never pull in `@cloudflare/containers`.
+export { SimsaInspector } from "./inspector-container.js";
 export type { Env } from "./env.js";

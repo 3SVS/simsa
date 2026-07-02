@@ -188,6 +188,139 @@ export async function getVisualCheckById(env: Env, id: string): Promise<DbVisual
   return row ? fromRow(row) : null;
 }
 
+/**
+ * Stage 263 — insert a QUEUED cloud-runner row. The container fills the real
+ * report/decision later via /internal/visual-check-done; until then the row
+ * carries a placeholder report and a 'Not Judged' decision so list/detail
+ * render consistently while the run is in flight.
+ */
+export async function insertQueuedVisualCheck(
+  env: Env,
+  input: {
+    projectId: string;
+    userKey: string;
+    targetUrl: string;
+    intent: string;
+    now?: string;
+  },
+): Promise<DbVisualCheck> {
+  const id = randId();
+  const now = input.now ?? new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO workspace_visual_checks
+       (id, project_id, user_key, target_url, intent, decision, works,
+        status, executor, report_json, agent_prompt, evidence_keys_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'Not Judged', NULL, 'queued', 'container', '{}', NULL, '[]', ?, ?)`,
+  )
+    .bind(id, input.projectId, input.userKey, input.targetUrl, input.intent, now, now)
+    .run();
+  return {
+    id,
+    projectId: input.projectId,
+    userKey: input.userKey,
+    targetUrl: input.targetUrl,
+    intent: input.intent,
+    decision: "Not Judged",
+    works: null,
+    status: "queued",
+    executor: "container",
+    reportJson: "{}",
+    evidenceKeys: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Stage 263 — a project's currently active (queued|running) cloud run, if any. */
+export async function findActiveVisualCheckForProject(
+  env: Env,
+  projectId: string,
+): Promise<{ id: string; status: VisualCheckStatus } | null> {
+  const row = (await env.DB.prepare(
+    `SELECT id, status FROM workspace_visual_checks
+      WHERE project_id = ? AND status IN ('queued', 'running')
+      ORDER BY created_at DESC
+      LIMIT 1`,
+  )
+    .bind(projectId)
+    .first()) as { id: string; status: VisualCheckStatus } | null;
+  return row ?? null;
+}
+
+/** Stage 263 — queued → running (only from an in-flight state; done/failed are final). */
+export async function markVisualCheckRunning(env: Env, id: string): Promise<boolean> {
+  const res = await env.DB.prepare(
+    `UPDATE workspace_visual_checks
+        SET status = 'running', updated_at = ?
+      WHERE id = ? AND status IN ('queued', 'running')`,
+  )
+    .bind(new Date().toISOString(), id)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+/** Stage 263 — terminal success: store the container's report + verdict. */
+export async function markVisualCheckDone(
+  env: Env,
+  id: string,
+  input: { decision: string; works: boolean | null; reportJson: string; agentPrompt?: string },
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE workspace_visual_checks
+        SET status = 'done', decision = ?, works = ?, report_json = ?, agent_prompt = ?, updated_at = ?
+      WHERE id = ?`,
+  )
+    .bind(
+      input.decision,
+      input.works === null ? null : input.works ? 1 : 0,
+      input.reportJson,
+      input.agentPrompt ?? null,
+      new Date().toISOString(),
+      id,
+    )
+    .run();
+}
+
+/**
+ * Stage 263 — terminal failure. Keeps works NULL (we could not verify) and
+ * snapshots the error into report_json only when the run still carries the
+ * queued placeholder, so a partial report the container managed to send is
+ * never clobbered.
+ */
+export async function markVisualCheckFailed(env: Env, id: string, error: string): Promise<void> {
+  const truncated = error.slice(0, 500);
+  await env.DB.prepare(
+    `UPDATE workspace_visual_checks
+        SET status = 'failed',
+            decision = 'Not Verified',
+            report_json = CASE WHEN report_json = '{}' THEN ? ELSE report_json END,
+            updated_at = ?
+      WHERE id = ?`,
+  )
+    .bind(JSON.stringify({ error: truncated }), new Date().toISOString(), id)
+    .run();
+}
+
+/**
+ * Stage 263 — cloud runs stuck in queued|running past the cutoff (container
+ * killed mid-run / dispatch lost). Mirrors the saas jobs stuck sweep.
+ */
+export async function listStuckVisualChecks(
+  env: Env,
+  cutoffIso: string,
+  limit: number,
+): Promise<Array<{ id: string; status: VisualCheckStatus }>> {
+  const rs = await env.DB.prepare(
+    `SELECT id, status FROM workspace_visual_checks
+      WHERE status IN ('queued', 'running') AND updated_at < ?
+      ORDER BY updated_at ASC
+      LIMIT ?`,
+  )
+    .bind(cutoffIso, limit)
+    .all<{ id: string; status: VisualCheckStatus }>();
+  return rs.results ?? [];
+}
+
 /** Append an uploaded evidence key to the run's manifest (read-modify-write). */
 export async function appendVisualCheckEvidenceKey(env: Env, id: string, key: string): Promise<string[]> {
   const row = await getVisualCheckById(env, id);

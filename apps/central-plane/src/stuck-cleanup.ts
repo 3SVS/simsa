@@ -15,6 +15,7 @@
 import type { Env } from "./env.js";
 import { findInstallationByRepoSlug } from "./db/saas.js";
 import { postPrComment } from "./gh-app.js";
+import { listStuckVisualChecks, markVisualCheckFailed } from "./workspace/visual-check-db.js";
 
 const STUCK_AFTER_MS = 30 * 60 * 1000; // 30 minutes
 const SWEEP_LIMIT = 50; // safety cap; never touch more than 50 rows in a single tick
@@ -76,4 +77,40 @@ export async function cleanupStuckJobs(
     }
   }
   return { swept: rows.length, commented, errors };
+}
+
+/**
+ * Stage 263 — sweep Simsa visual-check runs stuck in queued|running >30 min.
+ *
+ * Mirrors cleanupStuckJobs: the SimsaInspector container was killed mid-run
+ * (deploy rollout, OOM, wall-clock timeout) or the dispatch was lost, so no
+ * /internal/visual-check-done callback will ever arrive. Uses updated_at as
+ * the staleness clock (the row is touched on queue + on the running ack).
+ * Runs on the same `*\/5 * * * *` cron tick as the saas jobs sweep.
+ */
+export async function cleanupStuckVisualChecks(
+  env: Env,
+): Promise<{ swept: number; errors: number }> {
+  const cutoff = new Date(Date.now() - STUCK_AFTER_MS).toISOString();
+  let rows: Array<{ id: string; status: string }>;
+  try {
+    rows = await listStuckVisualChecks(env, cutoff, SWEEP_LIMIT);
+  } catch (err) {
+    // Table may not exist yet on a fresh D1 (migration 0050 unapplied) —
+    // don't let the visual sweep break the jobs sweep sharing this cron.
+    console.error("[stuck-cleanup] visual-check query failed:", err);
+    return { swept: 0, errors: 1 };
+  }
+  let errors = 0;
+  const reason =
+    "inspector container did not report a result within 30 minutes — likely killed by a deploy rollout or a hung page load. Run the inspection again.";
+  for (const r of rows) {
+    try {
+      await markVisualCheckFailed(env, r.id, reason);
+    } catch (err) {
+      errors += 1;
+      console.error(`[stuck-cleanup] visual-check ${r.id} failed:`, err);
+    }
+  }
+  return { swept: rows.length, errors };
 }

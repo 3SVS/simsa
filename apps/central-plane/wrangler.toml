@@ -108,3 +108,30 @@ name = "SANDBOX"
 [[migrations]]
 tag = "v1-sandbox"
 new_sqlite_classes = ["ConclaveSandbox"]
+
+# Stage 263 — SimsaInspector container (Playwright + Chromium).
+#
+# Runs the Simsa deep-flow visual completion check per
+# POST /workspace/projects/:id/visual-checks/run. One instance per run
+# (named vc-<runId>). Executes the same logic as
+# tools/simsa-completion-loop-spike/visual-run.mjs, uploads screenshots/video
+# via the Stage 261 evidence endpoint, then reports to
+# /internal/visual-check-done (Bearer INTERNAL_CALLBACK_TOKEN).
+#
+# instance_type "basic" (1 GiB memory / 4 GB disk): headless Chromium OOMs on
+# the default "dev" (256 MiB) instance. Image is built in CI by
+# deploy-central-plane.yml — first deploy after this lands builds + pushes it.
+[[containers]]
+class_name = "SimsaInspector"
+image = "./inspector-container/Dockerfile"
+image_build_context = "../.."
+max_instances = 5
+instance_type = "basic"
+
+[[durable_objects.bindings]]
+class_name = "SimsaInspector"
+name = "INSPECTOR"
+
+[[migrations]]
+tag = "v2-inspector"
+new_sqlite_classes = ["SimsaInspector"]

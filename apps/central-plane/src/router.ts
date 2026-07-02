@@ -38,6 +38,7 @@ import { createWorkspaceCreditsRoutes } from "./routes/workspace-credits.js";
 import { createWorkspaceBenchmarkRoutes } from "./routes/workspace-benchmark.js";
 import { createWorkspaceSourcesRoutes } from "./routes/workspace-sources.js";
 import { createWorkspaceVisualChecksRoutes } from "./routes/workspace-visual-checks.js";
+import { createWorkspaceVisualCheckRunRoutes } from "./routes/workspace-visual-check-runs.js";
 import { createWorkspaceExperimentRoutes } from "./routes/workspace-experiment.js";
 import { createWorkspaceAgentWorkflowRoutes } from "./routes/workspace-agent-workflow.js";
 import { createWorkspaceMembershipRoutes } from "./routes/workspace-membership.js";
@@ -154,6 +155,10 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceSourcesRoutes());
   // Stage 261 — Simsa visual completion-check runs (report snapshots + R2 evidence).
   app.route("/", createWorkspaceVisualChecksRoutes());
+  // Stage 263 — cloud runner dispatch: POST .../visual-checks/run queues a
+  // SimsaInspector container job; /internal/visual-check-{running,done} are
+  // the container's callbacks (Bearer INTERNAL_CALLBACK_TOKEN).
+  app.route("/", createWorkspaceVisualCheckRunRoutes());
   // Stage 72 — Persisted Manual Multi-Agent Experiments.
   app.route("/", createWorkspaceExperimentRoutes());
   // Stage 112 — Persisted Agent Workflow Records (intake snapshot save/list/read).

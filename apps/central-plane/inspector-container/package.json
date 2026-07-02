@@ -1,0 +1,13 @@
+{
+  "name": "simsa-inspector-container",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stage 263 — SimsaInspector container runtime deps. NOT a pnpm workspace package (workspace globs are packages/* + apps/* only); installed with npm inside the Docker image. The playwright version MUST match the mcr.microsoft.com/playwright base tag in the Dockerfile AND tools/simsa-completion-loop-spike/package.json.",
+  "dependencies": {
+    "playwright": "1.60.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
