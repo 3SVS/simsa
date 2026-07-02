@@ -37,6 +37,7 @@ import { createWorkspaceAdminCreditsRoutes } from "./routes/workspace-admin-cred
 import { createWorkspaceCreditsRoutes } from "./routes/workspace-credits.js";
 import { createWorkspaceBenchmarkRoutes } from "./routes/workspace-benchmark.js";
 import { createWorkspaceSourcesRoutes } from "./routes/workspace-sources.js";
+import { createWorkspaceDocumentIntakeRoutes } from "./routes/workspace-document-intake.js";
 import { createWorkspaceVisualChecksRoutes } from "./routes/workspace-visual-checks.js";
 import { createWorkspaceVisualCheckRunRoutes } from "./routes/workspace-visual-check-runs.js";
 import { createWorkspaceExperimentRoutes } from "./routes/workspace-experiment.js";
@@ -153,6 +154,10 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceBenchmarkRoutes());
   // Stage 261 — Unified project sources (website / github_repo / document upload → R2).
   app.route("/", createWorkspaceSourcesRoutes());
+  // Stage 265 — Document intake → spec draft (PRD/md upload to draft spec).
+  // POST /workspace/projects/:id/sources/:sourceId/spec-draft — draft only,
+  // same generation path + hourly rate-limit bucket as idea-to-spec-draft.
+  app.route("/", createWorkspaceDocumentIntakeRoutes());
   // Stage 261 — Simsa visual completion-check runs (report snapshots + R2 evidence).
   app.route("/", createWorkspaceVisualChecksRoutes());
   // Stage 263 — cloud runner dispatch: POST .../visual-checks/run queues a
