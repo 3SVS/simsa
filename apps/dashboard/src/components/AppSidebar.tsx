@@ -57,7 +57,7 @@ export function AppSidebar() {
 
   const groups = [
     { label: t.nav.groupPlan, items: [["", t.nav.overview], ["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items]] },
-    { label: t.nav.groupReview, items: [["github", t.nav.github], ["checks", t.nav.checks], ["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] },
+    { label: t.nav.groupReview, items: [["github", t.nav.github], ["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks], ["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] },
     { label: t.nav.groupDeliver, items: [["fixes", t.nav.fixes], ["export", t.nav.export]] },
   ] as const;
 
@@ -118,6 +118,7 @@ export function AppSidebar() {
               </div>
             ))}
             <div className="mt-2 border-t border-gray-100 pt-2">
+              <Link href={`${base}/sources`} className={itemClass(pathname === `${base}/sources`)}>{t.nav.sources}</Link>
               <Link href={`${base}/settings`} className={itemClass(pathname === `${base}/settings`)}>{t.nav.settings}</Link>
             </div>
           </>
