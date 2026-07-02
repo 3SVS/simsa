@@ -16,6 +16,7 @@ function makeMockDb() {
     prs: new Map(),
     repos: new Map(),
     connections: new Map(),
+    projects: new Map(),
   };
   return {
     state,
@@ -39,6 +40,10 @@ function makeMockDb() {
             const [uk] = bound;
             const entries = [...state.connections.values()].filter(c => c.user_key === uk);
             return entries[0] ?? null;
+          }
+          if (/FROM workspace_projects/.test(sql)) {
+            const [id] = bound;
+            return state.projects.get(id) ?? null;
           }
           return null;
         },
@@ -82,6 +87,14 @@ function addRepo(env, projectId, owner = "testowner", name = "testrepo") {
     github_connection_id: "wgc1", repo_id: "123",
     repo_full_name: `${owner}/${name}`, repo_owner: owner, repo_name: name,
     default_branch: "main", private: 0, html_url: `https://github.com/${owner}/${name}`,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  });
+}
+
+function addProject(env, projectId, userKey = "uk1") {
+  env.DB.state.projects.set(projectId, {
+    id: projectId, user_key: userKey, title: "Test Project", idea: "",
+    understood_json: null, product_spec_json: "{}", items_json: "[]",
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   });
 }
@@ -186,6 +199,7 @@ describe("fetchGitHubPulls", () => {
 describe("GET /workspace/projects/:id/github/pulls", () => {
   it("returns 400 when no repo linked", async () => {
     const env = makeEnv();
+    addProject(env, "norepo");
     const app = createApp({ fetch: () => Promise.resolve(new Response("{}", { status: 200 })) });
     const req = new Request("http://localhost/workspace/projects/norepo/github/pulls?userKey=uk1");
     const resp = await app.fetch(req, env);
@@ -197,6 +211,7 @@ describe("GET /workspace/projects/:id/github/pulls", () => {
   it("returns 401 when not connected", async () => {
     const env = makeEnv();
     addRepo(env, "proj_x");
+    addProject(env, "proj_x", "uk_nobody");
     const app = createApp({ fetch: () => Promise.resolve(new Response("{}", { status: 200 })) });
     const req = new Request("http://localhost/workspace/projects/proj_x/github/pulls?userKey=uk_nobody");
     const resp = await app.fetch(req, env);
@@ -206,6 +221,7 @@ describe("GET /workspace/projects/:id/github/pulls", () => {
   it("returns PR list via mocked GitHub API", async () => {
     const env = makeEnv();
     addRepo(env, "proj_x");
+    addProject(env, "proj_x");
     addConnection(env, "uk1");
 
     const mockPulls = [
@@ -258,6 +274,7 @@ describe("POST /workspace/projects/:id/github/pulls/:number/link", () => {
   it("upserts PR mapping and returns linked pull", async () => {
     const env = makeEnv();
     addRepo(env, "proj_b");
+    addProject(env, "proj_b");
     const app = createApp();
     const req = new Request("http://localhost/workspace/projects/proj_b/github/pulls/7/link", {
       method: "POST",
@@ -283,6 +300,7 @@ describe("GET /workspace/projects/:id/github/linked-pulls", () => {
   it("returns linked PRs with selectedItemIds", async () => {
     const env = makeEnv();
     addRepo(env, "proj_c");
+    addProject(env, "proj_c");
     // Manually insert a PR into mock DB
     env.DB.state.prs.set("proj_c::testowner/testrepo::5", {
       id: "wpr_abc", project_id: "proj_c", user_key: "uk1",
@@ -293,7 +311,7 @@ describe("GET /workspace/projects/:id/github/linked-pulls", () => {
       created_at: "2026-06-12T00:00:00Z", updated_at: "2026-06-12T00:00:00Z",
     });
     const app = createApp();
-    const resp = await app.fetch(new Request("http://localhost/workspace/projects/proj_c/github/linked-pulls"), env);
+    const resp = await app.fetch(new Request("http://localhost/workspace/projects/proj_c/github/linked-pulls?userKey=uk1"), env);
     assert.equal(resp.status, 200);
     const body = await resp.json();
     assert.equal(body.ok, true);
@@ -304,8 +322,9 @@ describe("GET /workspace/projects/:id/github/linked-pulls", () => {
 
   it("returns empty array for project with no linked PRs", async () => {
     const env = makeEnv();
+    addProject(env, "empty_proj");
     const app = createApp();
-    const resp = await app.fetch(new Request("http://localhost/workspace/projects/empty_proj/github/linked-pulls"), env);
+    const resp = await app.fetch(new Request("http://localhost/workspace/projects/empty_proj/github/linked-pulls?userKey=uk1"), env);
     assert.equal(resp.status, 200);
     const body = await resp.json();
     assert.equal(body.ok, true);

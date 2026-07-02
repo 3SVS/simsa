@@ -9,6 +9,15 @@
 import type { Env } from "../env.js";
 import { getMonthlyAllowanceRule, getCurrentAllowancePeriod } from "./allowance-rules.js";
 
+/**
+ * Minimal shape an entitlement must provide to raise the monthly allowance.
+ * Kept structural (not the full MarketplaceEntitlement) so pure tests can
+ * inject `{ includedRunsPerMonth: 30 }` without touching D1.
+ */
+export type AllowanceEntitlement = {
+  includedRunsPerMonth: number;
+};
+
 export type AllowanceDryRun = {
   enabled: true;
   eventType: string;
@@ -26,14 +35,25 @@ export async function getAllowanceDryRun({
   userKey,
   eventType,
   now,
+  entitlement,
 }: {
   env: Env;
   userKey: string;
   eventType: string;
   now?: Date;
+  /**
+   * Optional paid-plan entitlement (e.g. GitHub Marketplace).
+   * When present, its includedRunsPerMonth is ADDED to the base free
+   * allowance. Resolved by the route layer (see marketplace-entitlement.ts);
+   * omitted → base free allowance only, so existing callers are unchanged.
+   */
+  entitlement?: AllowanceEntitlement | null;
 }): Promise<AllowanceDryRun | null> {
   const rule = getMonthlyAllowanceRule(eventType);
   if (!rule) return null;
+
+  const entitlementRuns = Math.max(0, Math.floor(entitlement?.includedRunsPerMonth ?? 0));
+  const includedRuns = rule.includedRuns + entitlementRuns;
 
   const { periodKey, periodStart, periodEnd } = getCurrentAllowancePeriod(now);
 
@@ -45,7 +65,7 @@ export async function getAllowanceDryRun({
     .first<{ count: number }>();
 
   const usedThisPeriod = result?.count ?? 0;
-  const remainingIncludedRuns = Math.max(0, rule.includedRuns - usedThisPeriod);
+  const remainingIncludedRuns = Math.max(0, includedRuns - usedThisPeriod);
   const coveredByAllowance = remainingIncludedRuns > 0;
   const billableUnitsAfterAllowance = coveredByAllowance ? 0 : 1;
 
@@ -54,7 +74,7 @@ export async function getAllowanceDryRun({
     eventType,
     period: "monthly",
     periodKey,
-    includedRuns: rule.includedRuns,
+    includedRuns,
     usedThisPeriod,
     remainingIncludedRuns,
     coveredByAllowance,

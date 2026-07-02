@@ -24,6 +24,17 @@ export interface MemoryRetrieval {
   rules: SemanticRule[];
 }
 
+/** Result of an episodic prune pass (decision #17: episodic raw log has a
+ *  90-day TTL; answer-keys and failure-catalog are NEVER pruned). */
+export interface EpisodicPruneResult {
+  /** Day-directories (or day-buckets) removed. */
+  removedDays: number;
+  /** Individual episodic entries removed. */
+  removedEntries: number;
+  /** ISO day (YYYY-MM-DD); buckets strictly older than this were removed. */
+  cutoffDay: string;
+}
+
 /**
  * MemoryStore — read + write interface for the self-evolve substrate.
  *
@@ -50,6 +61,12 @@ export interface MemoryStore {
   findEpisodic(id: string): Promise<EpisodicEntry | null>;
   /** List every episodic entry (mostly for outcome polling + admin tools). */
   listEpisodic(): Promise<EpisodicEntry[]>;
+  /**
+   * Remove episodic entries older than the TTL (default 90 days). Optional —
+   * read-only store implementations may omit it. Never touches answer-keys,
+   * failure-catalog, or semantic rules (those are ∞ TTL by decision #17).
+   */
+  pruneEpisodic?(opts?: { ttlDays?: number; now?: Date }): Promise<EpisodicPruneResult>;
 }
 
 /**

@@ -119,7 +119,7 @@ export default function SettingsPage() {
     setPhase("loading");
     const [statusRes, repoRes] = await Promise.all([
       fetchGitHubStatus(userKey),
-      fetchProjectRepo(id),
+      fetchProjectRepo(id, getUserKey()),
     ]);
 
     if (statusRes.connected) {

@@ -35,10 +35,10 @@ Legend:
 | 16 | Config loader → cosmiconfig | ✅ | `packages/cli/src/lib/config.ts` |
 | 17 | Memory dual substrate (answer-keys + failure-catalog) | ✅ | `packages/core/src/memory/` |
 | 18 | Seed from solo-cto-agent catalog | ✅ | `packages/core/src/memory/seeder.ts` |
-| 19 | Agent scoring weights | ✅ | `packages/core/src/scoring.ts` |
+| 19 | Agent scoring weights | 🟡 | `scoring.ts` — review + rework axes real; time axis measured from v0.17 (`outcomeAt` → median resolution hours; legacy entries skip); buildPass remains a merge-rate PROXY (no CI signal); per-category precision/recall not computed |
 | 20 | Visual review CLI flag | ✅ | `conclave review --visual` |
 | 21 | Federated sync | ✅ | `packages/core/src/federated/` + `conclave sync` |
-| 22 | Efficiency gate first-class | ✅ | `packages/core/src/efficiency/` |
+| 22 | Efficiency gate first-class | 🟡 | cache/budget/route/metrics live via `EfficiencyGate.run()`; triage + prior-compaction wired v0.17 (config-gated `efficiency.triage/compact`, default ON); relevance (`buildRelevanceContext`) remains scaffolding awaiting scm-github diff/import resolvers |
 | 23 | Vision judge (semantic classification) | ✅ | `packages/visual-review/src/judge.ts` |
 | 24 | Equal-weight notifiers | ✅ | `integration-{telegram,discord,slack,email}` |
 | 25 | Cost per PR target | 📄 | `ARCHITECTURE.md`; `BudgetTracker` enforces |

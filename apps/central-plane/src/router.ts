@@ -8,6 +8,7 @@ import type { Env } from "./env.js";
 import { healthRoutes } from "./routes/health.js";
 import { registerRoutes } from "./routes/register.js";
 import { episodicRoutes } from "./routes/episodic.js";
+import { federatedBaselinesRoutes } from "./routes/federated-baselines.js";
 import { episodicAnchorRoutes } from "./routes/episodic-anchor.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { createOAuthRoutes } from "./routes/oauth.js";
@@ -44,6 +45,7 @@ import { createWorkspaceRepairJobRoutes } from "./routes/workspace-repair-jobs.j
 import { createWorkspaceExperimentRoutes } from "./routes/workspace-experiment.js";
 import { createWorkspaceAgentWorkflowRoutes } from "./routes/workspace-agent-workflow.js";
 import { createWorkspaceMembershipRoutes } from "./routes/workspace-membership.js";
+import { createWorkspaceClaimRoutes } from "./routes/workspace-claim.js";
 import { createAuthSpikeRoutes } from "./routes/auth-spike.js";
 import type { FetchLike } from "./github.js";
 
@@ -73,6 +75,7 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", healthRoutes);
   app.route("/", registerRoutes);
   app.route("/", episodicRoutes);
+  app.route("/", federatedBaselinesRoutes);
   app.route("/", episodicAnchorRoutes);
   app.route("/", memoryRoutes);
   app.route("/", createOAuthRoutes(fetchImpl));
@@ -176,6 +179,9 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceAgentWorkflowRoutes());
   // Stage 254 — read-only auth-user ↔ workspace bridge (GET /workspace/membership/me).
   app.route("/", createWorkspaceMembershipRoutes());
+  // Claim flow (separate file — workspace-membership.ts carries a tested
+  // read-only source guarantee): session-gated, 401 when auth is dormant.
+  app.route("/", createWorkspaceClaimRoutes());
   // Stage 209 / 221 — Better Auth LOCAL-ONLY route (/api/auth/*), gated by
   // AUTH_ENABLED. Default off → 503 auth_disabled in production. The D1-backed
   // runtime is constructed per-request ONLY behind AUTH_ENABLED + secret + env.DB
@@ -183,8 +189,10 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // UI; no production migration/deploy (see auth-spike.ts + docs/stage-220 memo).
   app.route("/", createAuthSpikeRoutes());
   app.onError((err, c) => {
-    console.error("central-plane error:", err);
-    return c.json({ error: err.message || "internal error" }, 500);
+    // Log the full error (message + stack) server-side only. Never echo
+    // err.message to clients — it can leak internals (SQL, file paths, keys).
+    console.error("central-plane error:", err, err instanceof Error ? err.stack : undefined);
+    return c.json({ error: "internal_error" }, 500);
   });
   app.notFound((c) => c.json({ error: "not found", path: c.req.path }, 404));
   return app;

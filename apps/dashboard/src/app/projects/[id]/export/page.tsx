@@ -169,7 +169,7 @@ export default function ExportPage() {
   // ── Load outcomes on mount (D1 first, localStorage fallback) ─────────────
   useEffect(() => {
     async function loadRemote() {
-      const remote = await callListOutcomesApi(id);
+      const remote = await callListOutcomesApi(id, getUserKey());
       if (remote.ok && remote.outcomes.length > 0) {
         setOutcomes(remote.outcomes);
       } else {

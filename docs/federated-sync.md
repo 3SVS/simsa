@@ -198,3 +198,30 @@ Start here:
   shape) to the transport. The transport never sees raw memory.
 
 Any deviation from this flow is a bug.
+
+## central-plane endpoint (v0.17)
+
+`conclave sync` can now round-trip against Conclave's own central-plane: the
+worker exposes the transport contract directly —
+
+```
+POST {origin}/baselines   Authorization: Bearer <install token (c_…)>
+GET  {origin}/baselines?since=<ISO>
+```
+
+Config:
+
+```jsonc
+{
+  "federated": {
+    "enabled": true,
+    "endpoint": "https://<central-plane origin>",
+    "apiToken": "<CONCLAVE_TOKEN from `conclave register`>"
+  }
+}
+```
+
+Counts are conveyed on GET by repeating each hash (capped at 20 per hash,
+5,000 entries per response) — `buildFrequencyMap` on the client rebuilds the
+population frequency, and the log-saturating rerank boost makes the cap
+immaterial. Wire-format and privacy guarantees are unchanged.

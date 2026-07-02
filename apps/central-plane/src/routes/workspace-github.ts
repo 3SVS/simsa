@@ -49,7 +49,8 @@ import {
 } from "../workspace/pr-review-compare.js";
 import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
-import { getProject } from "../workspace/db.js";
+import { getProject, getOwnedProject } from "../workspace/db.js";
+import { consumeUserHourlyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
 import { normalizeProductSpec, normalizeCheckableItems } from "../workspace/check.js";
 import { generatePRFixBrief } from "../workspace/pr-fix-brief.js";
@@ -64,6 +65,7 @@ import {
 import type { CommentResultItem, ComparisonDataForComment } from "../workspace/pr-comment.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { checkCreditEnforcementDryRun, checkCreditEnforcement } from "../workspace/credit-enforcement.js";
+import { getMarketplaceEntitlement } from "../workspace/marketplace-entitlement.js";
 import type { CreditEnforcementDryRun, CreditEnforcementResult } from "../workspace/credit-enforcement.js";
 import { generateDebitId, buildPrReviewDebitSourceEventId, validateIdempotencyKey } from "../workspace/credits.js";
 import {
@@ -103,6 +105,54 @@ function json(data: unknown, status = 200, origin: string | null = null): Respon
     status,
     headers: { "content-type": "application/json", ...corsHeaders(origin) },
   });
+}
+
+// ─── Ownership + rate-limit gates (security hardening) ───────────────────────
+
+/**
+ * Ownership gate for every project-scoped route in this file. Returns a ready
+ * 404 Response when the project is missing OR belongs to another userKey —
+ * one indistinguishable "not_found" so low-entropy project ids can't be probed.
+ * Returns null when the caller owns the project.
+ */
+async function denyUnlessOwnedProject(
+  env: Env,
+  projectId: string,
+  userKey: string,
+  origin: string | null,
+): Promise<Response | null> {
+  const owned = await getOwnedProject(env, projectId, userKey).catch(() => null);
+  if (!owned) return json({ ok: false, error: "not_found" }, 404, origin);
+  return null;
+}
+
+const DEFAULT_PR_REVIEW_HOURLY_LIMIT = 30;
+const DEFAULT_PR_COMMENT_HOURLY_LIMIT = 60;
+
+/**
+ * Per-userKey hourly rate-limit gate. Returns a ready 429 Response when the
+ * bucket is exhausted, null otherwise (consuming one slot).
+ */
+async function denyIfRateLimited(
+  env: Env,
+  bucket: "workspace-pr-review" | "workspace-pr-comment",
+  userKey: string,
+  limitPerHour: number,
+  origin: string | null,
+): Promise<Response | null> {
+  const rl = await consumeUserHourlyLimit(env, bucket, userKey, limitPerHour);
+  if (!rl.limited) return null;
+  return new Response(
+    JSON.stringify({ ok: false, error: "rate_limited", retryAfterSeconds: rl.retryAfterSeconds }),
+    {
+      status: 429,
+      headers: {
+        "content-type": "application/json",
+        "retry-after": String(rl.retryAfterSeconds),
+        ...corsHeaders(origin),
+      },
+    },
+  );
 }
 
 // ─── Comparison helper ────────────────────────────────────────────────────────
@@ -447,6 +497,9 @@ export function createWorkspaceGitHubRoutes(
       return json({ ok: false, error: "repo.fullName_required" }, 400, origin);
     }
 
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
     // Verify GitHub connection exists
     let conn;
     try {
@@ -488,10 +541,15 @@ export function createWorkspaceGitHubRoutes(
     }
   });
 
-  // ── GET /workspace/projects/:id/repo ──────────────────────────────────────
+  // ── GET /workspace/projects/:id/repo?userKey=... ──────────────────────────
   app.get("/workspace/projects/:id/repo", async (c) => {
     const origin = c.req.header("origin") ?? null;
     const projectId = c.req.param("id");
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     try {
       const repo = await getProjectRepo(c.env, projectId);
@@ -523,6 +581,9 @@ export function createWorkspaceGitHubRoutes(
     const userKey = c.req.query("userKey") ?? "";
 
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: false, error: "no_repo_linked — connect a repo first" }, 400, origin);
@@ -591,6 +652,9 @@ export function createWorkspaceGitHubRoutes(
       return json({ ok: false, error: "selectedItemIds_must_not_be_empty" }, 400, origin);
     }
 
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: false, error: "no_repo_linked" }, 400, origin);
 
@@ -613,10 +677,15 @@ export function createWorkspaceGitHubRoutes(
     }
   });
 
-  // ── GET /workspace/projects/:id/github/linked-pulls ──────────────────────
+  // ── GET /workspace/projects/:id/github/linked-pulls?userKey=... ──────────
   app.get("/workspace/projects/:id/github/linked-pulls", async (c) => {
     const origin = c.req.header("origin") ?? null;
     const projectId = c.req.param("id");
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     try {
       const pulls = await getLinkedPRs(c.env, projectId);
@@ -652,6 +721,16 @@ export function createWorkspaceGitHubRoutes(
     const b = body as Record<string, unknown>;
     const userKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    // Ownership: the project must belong to the caller before anything else
+    // (repo link, runs, and credits are all project-scoped).
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
+    // Per-userKey hourly rate limit for review execution (LLM + GitHub cost).
+    const reviewLimit = hourlyLimitFromEnv(c.env.WORKSPACE_PR_REVIEW_HOURLY_LIMIT, DEFAULT_PR_REVIEW_HOURLY_LIMIT);
+    const limited = await denyIfRateLimited(c.env, "workspace-pr-review", userKey, reviewLimit, origin);
+    if (limited) return limited;
 
     // Stage 40: normalize hand-picked selectedItemIds (dedupe, trim, drop
     // empties, cap). Returns undefined when not an array → falls back to
@@ -760,12 +839,16 @@ export function createWorkspaceGitHubRoutes(
 
     let creditEnforcement: CreditEnforcementResult | CreditEnforcementDryRun | undefined;
     try {
+      // Paid GitHub Marketplace plan raises the monthly included runs.
+      // Fail-safe: any lookup error → null → base free allowance only.
+      const entitlement = await getMarketplaceEntitlement(c.env, userKey);
       const enfResult = await checkCreditEnforcement({
         env: c.env,
         userKey,
         eventType: "workspace_pr_review_run",
         projectId,
         sourceEventId: prReviewExecutionId,
+        entitlement,
       });
       creditEnforcement = {
         ...enfResult,
@@ -952,7 +1035,7 @@ export function createWorkspaceGitHubRoutes(
     }, 200, origin);
   });
 
-  // ── GET /workspace/projects/:id/github/pulls/:number/review ──────────────
+  // ── GET /workspace/projects/:id/github/pulls/:number/review?userKey=... ──
   // Return the latest review run for a PR.
   app.get("/workspace/projects/:id/github/pulls/:number/review", async (c) => {
     const origin = c.req.header("origin") ?? null;
@@ -961,6 +1044,12 @@ export function createWorkspaceGitHubRoutes(
     if (isNaN(prNumber) || prNumber < 1) {
       return json({ ok: false, error: "invalid_pr_number" }, 400, origin);
     }
+
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: true, run: null }, 200, origin);
@@ -1012,6 +1101,9 @@ export function createWorkspaceGitHubRoutes(
     const b = body as Record<string, unknown>;
     const userKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     const bodySelectedIds = Array.isArray(b["selectedItemIds"])
       ? (b["selectedItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
@@ -1169,6 +1261,9 @@ export function createWorkspaceGitHubRoutes(
     const userKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
 
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
     const bodySelectedIds = Array.isArray(b["selectedItemIds"])
       ? (b["selectedItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
       : undefined;
@@ -1315,6 +1410,14 @@ export function createWorkspaceGitHubRoutes(
     const b = body as Record<string, unknown>;
     const userKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
+    // Per-userKey hourly rate limit for GitHub comment writes.
+    const commentLimit = hourlyLimitFromEnv(c.env.WORKSPACE_PR_COMMENT_HOURLY_LIMIT, DEFAULT_PR_COMMENT_HOURLY_LIMIT);
+    const limited = await denyIfRateLimited(c.env, "workspace-pr-comment", userKey, commentLimit, origin);
+    if (limited) return limited;
 
     const bodySelectedIds = Array.isArray(b["selectedItemIds"])
       ? (b["selectedItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
@@ -1564,7 +1667,7 @@ export function createWorkspaceGitHubRoutes(
     }, 200, origin);
   });
 
-  // ── GET /workspace/projects/:id/github/pulls/:number/comments ─────────────
+  // ── GET /workspace/projects/:id/github/pulls/:number/comments?userKey=... ─
   // List comment records for a PR (most recent first).
   app.get("/workspace/projects/:id/github/pulls/:number/comments", async (c) => {
     const origin = c.req.header("origin") ?? null;
@@ -1573,6 +1676,12 @@ export function createWorkspaceGitHubRoutes(
     if (isNaN(prNumber) || prNumber < 1) {
       return json({ ok: false, error: "invalid_pr_number" }, 400, origin);
     }
+
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: true, comments: [], latestPostedComment: null }, 200, origin);
@@ -1618,6 +1727,12 @@ export function createWorkspaceGitHubRoutes(
       return json({ ok: false, error: "invalid_pr_number" }, 400, origin);
     }
 
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: false, error: "no_repo_linked" }, 400, origin);
 
@@ -1642,9 +1757,8 @@ export function createWorkspaceGitHubRoutes(
       // Compute comparison
       const comparison = compareRunResults(previousResults, latestResults);
 
-      // Record usage event (non-fatal)
-      const userKey = c.req.query("userKey") ?? "";
-      if (userKey) {
+      // Record usage event (non-fatal) — userKey validated above.
+      {
         await insertUsageEvent(c.env, {
           userKey,
           projectId,
@@ -1693,6 +1807,14 @@ export function createWorkspaceGitHubRoutes(
     const b = body as Record<string, unknown>;
     const userKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
+    // Shares the comment-write bucket with POST …/comment.
+    const commentLimit = hourlyLimitFromEnv(c.env.WORKSPACE_PR_COMMENT_HOURLY_LIMIT, DEFAULT_PR_COMMENT_HOURLY_LIMIT);
+    const limited = await denyIfRateLimited(c.env, "workspace-pr-comment", userKey, commentLimit, origin);
+    if (limited) return limited;
 
     const customBody = typeof b["body"] === "string" ? b["body"] : undefined;
     const bodySelectedIds = Array.isArray(b["selectedItemIds"])
@@ -1840,6 +1962,9 @@ export function createWorkspaceGitHubRoutes(
     const userKey = c.req.query("userKey");
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
 
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
     try {
       const run = await getReviewRunById(c.env, runId);
       if (!run) return json({ ok: false, error: "run_not_found" }, 404, origin);
@@ -1911,6 +2036,9 @@ export function createWorkspaceGitHubRoutes(
 
     const userKey = c.req.query("userKey");
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: false, error: "no_repo_linked" }, 404, origin);
@@ -1984,6 +2112,9 @@ export function createWorkspaceGitHubRoutes(
     const userKey = c.req.query("userKey");
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
 
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
+
     const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
     const limit = isNaN(limitParam) || limitParam < 1 ? 20 : Math.min(limitParam, 100);
 
@@ -2034,6 +2165,9 @@ export function createWorkspaceGitHubRoutes(
 
     const userKey = c.req.query("userKey");
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
+    if (denied) return denied;
 
     const limitParam = parseInt(c.req.query("limit") ?? "50", 10);
     const limit = isNaN(limitParam) || limitParam < 1 ? 50 : Math.min(limitParam, 200);

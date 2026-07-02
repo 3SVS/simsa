@@ -70,6 +70,7 @@ import {
   type TimelineBenchmarkInput,
   type TimelineActionPackInput,
 } from "../workspace/project-evolution-timeline.js";
+import { getOwnedProject } from "../workspace/db.js";
 
 const DECISION_STATUSES = ["undecided", "selected", "needs_fix", "no_clear_winner"];
 const CANDIDATE_OUTCOMES = ["selected", "rejected", "needs_fix", "undecided"];
@@ -288,6 +289,12 @@ export function createWorkspaceExperimentRoutes(): Hono<{ Bindings: Env }> {
     const projectId = c.req.param("id");
     const userKey = c.req.query("userKey") ?? "";
     if (!userKey) return c.json({ ok: false, error: "userKey_required" }, 400);
+
+    // Ownership: the lightweight list query is project-scoped only, so gate on
+    // the project itself. 404 for missing OR not-owned — no existence oracle.
+    const owned = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
+    if (!owned) return c.json({ ok: false, error: "not_found" }, 404);
+
     try {
       const experiments = await listExperiments(c.env, projectId, { limit: 50 });
       return c.json({ ok: true, experiments });

@@ -122,15 +122,18 @@ function makeMockDb({ runs = [], repos = [], linkedPRs = [], projects = [] } = {
             const [pid, , prNum] = bound;
             return runs.find((r) => r.project_id === pid && r.pr_number === prNum) ?? null;
           }
-          // getProject (workspace_projects)
+          // getProject (workspace_projects) — ownership hardening: rows are
+          // owned by this file's route-test userKey (uk1) and every id exists.
           if (/FROM workspace_projects/.test(sql)) {
             const [pid] = bound;
             const proj = projects.find((p) => p.id === pid);
-            if (!proj) return null;
             return {
-              id: proj.id,
-              items_json: JSON.stringify(proj.items ?? []),
-              product_spec_json: JSON.stringify(proj.spec ?? {}),
+              id: pid,
+              user_key: proj?.user_key ?? "uk1",
+              title: "T", idea: "", understood_json: null,
+              items_json: JSON.stringify(proj?.items ?? []),
+              product_spec_json: JSON.stringify(proj?.spec ?? {}),
+              created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
             };
           }
           // credit enforcement helpers (allowance, balance, etc.) — return null/0 defaults

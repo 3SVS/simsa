@@ -245,7 +245,8 @@ export async function listExperimentCandidates(env: Env, experimentId: string): 
     `SELECT ${CAND_COLS}
        FROM workspace_agent_experiment_candidates
       WHERE experiment_id = ?
-      ORDER BY created_at ASC`,
+      ORDER BY created_at ASC
+      LIMIT 50`,
   )
     .bind(experimentId)
     .all();

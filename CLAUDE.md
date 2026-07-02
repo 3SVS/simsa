@@ -8,7 +8,7 @@ Conclave AI — a multi-agent council that reviews AI-generated code, debates bl
 
 ## Common commands
 
-Run from repo root unless noted. Turbo handles build ordering across the 26 workspace packages.
+Run from repo root unless noted. Turbo handles build ordering across the 28 workspace packages (33 incl. apps).
 
 ```bash
 pnpm install
@@ -38,7 +38,7 @@ Tests use `node --test` only — **never add Jest or Vitest**. Mock at the seam 
 
 ## Releases
 
-**Never run `npm publish` from a laptop.** All 26 packages bump + publish in lockstep via `.github/workflows/release.yml` (Actions → release → Run workflow, on `main`, choose patch/minor/major). The workflow gates `workflow_dispatch` to `main` and fails fast otherwise. See `docs/release-process.md`.
+**Never run `npm publish` from a laptop.** All publishable packages bump + publish in lockstep via `.github/workflows/release.yml` (Actions → release → Run workflow, on `main`, choose patch/minor/major). The workflow gates `workflow_dispatch` to `main` and fails fast otherwise. See `docs/release-process.md`.
 
 ## Central plane (Cloudflare Worker)
 

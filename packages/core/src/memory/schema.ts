@@ -48,6 +48,10 @@ export const EpisodicEntrySchema = z.object({
   reviews: z.array(ReviewResultSchema),
   councilVerdict: z.enum(["approve", "rework", "reject"]),
   outcome: z.enum(["merged", "rejected", "reworked", "pending"]),
+  /** When the outcome was recorded (merge/reject/rework moment). Absent on
+   *  pending entries and entries written before v0.17 — the scoring time
+   *  axis simply skips those. */
+  outcomeAt: z.string().datetime().optional(),
   costUsd: z.number().nonnegative(),
   cycleNumber: z.number().int().min(1).default(1),
   priorEpisodicId: z.string().optional(),

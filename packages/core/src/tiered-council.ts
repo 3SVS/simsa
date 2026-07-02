@@ -1,5 +1,11 @@
 import type { Agent, PriorReview, ReviewContext, ReviewDomain } from "./agent.js";
-import { Council, type CouncilOutcome } from "./council.js";
+import {
+  Council,
+  compactPriorReviews,
+  DEFAULT_PRIOR_SUMMARY_TARGET_TOKENS,
+  type CouncilOutcome,
+  type PriorCompactionOptions,
+} from "./council.js";
 
 export interface TieredCouncilOptions {
   /** Draft council — cheap/fast agents. Runs first. */
@@ -26,6 +32,12 @@ export interface TieredCouncilOptions {
   agentWeights?: ReadonlyMap<string, number>;
   /** Mirror of `Council.rejectThreshold`. Default 0.5. */
   rejectThreshold?: number;
+  /**
+   * Decision #22 — round-to-round prior compaction. Passed through to
+   * both tier councils AND applied to the tier-1 → tier-2 handoff
+   * priors. Defaults on; no-op under the summary token budget.
+   */
+  priorCompaction?: PriorCompactionOptions;
 }
 
 /**
@@ -79,6 +91,7 @@ export class TieredCouncil {
   private readonly tier1HasAgents: boolean;
   private readonly tier2HasAgents: boolean;
   private readonly alwaysEscalate: boolean;
+  private readonly priorCompaction: { enabled: boolean; targetTokens: number };
 
   constructor(opts: TieredCouncilOptions) {
     this.tier1HasAgents = opts.tier1Agents.length > 0;
@@ -87,11 +100,17 @@ export class TieredCouncil {
       throw new Error("TieredCouncil: tier1Agents must be non-empty");
     }
     this.alwaysEscalate = opts.alwaysEscalate ?? false;
+    this.priorCompaction = {
+      enabled: opts.priorCompaction?.enabled ?? true,
+      targetTokens:
+        opts.priorCompaction?.targetTokens ?? DEFAULT_PRIOR_SUMMARY_TARGET_TOKENS,
+    };
     this.tier1Council = new Council({
       agents: opts.tier1Agents,
       maxRounds: opts.tier1MaxRounds ?? 1,
       ...(opts.agentWeights ? { agentWeights: opts.agentWeights } : {}),
       ...(opts.rejectThreshold !== undefined ? { rejectThreshold: opts.rejectThreshold } : {}),
+      ...(opts.priorCompaction ? { priorCompaction: opts.priorCompaction } : {}),
     });
     // Tier 2 may be empty if the user is running tier-1-only on a
     // domain that never escalates (idea-like workflows). Guard against
@@ -105,6 +124,7 @@ export class TieredCouncil {
       maxRounds: opts.tier2MaxRounds ?? 2,
       ...(opts.agentWeights ? { agentWeights: opts.agentWeights } : {}),
       ...(opts.rejectThreshold !== undefined ? { rejectThreshold: opts.rejectThreshold } : {}),
+      ...(opts.priorCompaction ? { priorCompaction: opts.priorCompaction } : {}),
     });
   }
 
@@ -135,7 +155,7 @@ export class TieredCouncil {
       };
     }
 
-    const tier2Priors: PriorReview[] = tier1Outcome.results.map((r) => {
+    let tier2Priors: PriorReview[] = tier1Outcome.results.map((r) => {
       const p: PriorReview = {
         agent: r.agent,
         verdict: r.verdict,
@@ -144,6 +164,13 @@ export class TieredCouncil {
       if (r.summary) p.summary = r.summary;
       return p;
     });
+    // Decision #22 — compact the tier-1 handoff before tier-2 renders
+    // it into prompts. No-op under the summary token budget.
+    if (this.priorCompaction.enabled) {
+      tier2Priors = await compactPriorReviews(tier2Priors, {
+        targetTokens: this.priorCompaction.targetTokens,
+      });
+    }
     const tier2Ctx: ReviewContext = {
       ...ctx,
       tier: 2,

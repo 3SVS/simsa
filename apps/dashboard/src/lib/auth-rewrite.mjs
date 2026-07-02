@@ -42,5 +42,11 @@ export function buildAuthRewrites(origin) {
       source: "/api/auth/:path*",
       destination: `${origin}/api/auth/:path*`,
     },
+    // Membership bridge + claim flow ride the same first-party origin so the
+    // Better Auth session cookie reaches the worker (same reasoning as /api/auth).
+    {
+      source: "/api/membership/:path*",
+      destination: `${origin}/workspace/membership/:path*`,
+    },
   ];
 }

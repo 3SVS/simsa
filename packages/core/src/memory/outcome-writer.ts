@@ -97,6 +97,15 @@ export class OutcomeWriter {
     };
     await this.store.writeEpisodic(entry);
     this.episodicIndex.set(id, entry);
+    // Opportunistic TTL enforcement (decision #17: episodic 90d). Best-effort —
+    // a prune failure must never break the review that triggered the write.
+    if (this.store.pruneEpisodic) {
+      try {
+        await this.store.pruneEpisodic();
+      } catch {
+        /* ignore — pruning retries on the next review */
+      }
+    }
     return entry;
   }
 
@@ -105,7 +114,12 @@ export class OutcomeWriter {
     if (!existing) {
       throw new Error(`OutcomeWriter: no episodic entry found for id ${input.episodicId}`);
     }
-    const updated: EpisodicEntry = { ...existing, outcome: input.outcome };
+    const updated: EpisodicEntry = {
+      ...existing,
+      outcome: input.outcome,
+      // Resolution timestamp — feeds the scoring "time" axis (decision #19).
+      outcomeAt: new Date().toISOString(),
+    };
     await this.store.writeEpisodic(updated);
     this.episodicIndex.set(input.episodicId, updated);
 

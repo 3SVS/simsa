@@ -74,8 +74,8 @@ export default function GitHubPage() {
   const loadInitial = useCallback(async () => {
     setLoadPhase("loading");
     const [repoRes, linkedRes] = await Promise.all([
-      fetchProjectRepo(id),
-      fetchLinkedPulls(id),
+      fetchProjectRepo(id, getUserKey()),
+      fetchLinkedPulls(id, getUserKey()),
     ]);
     if (repoRes.ok && repoRes.repo) {
       setRepo(repoRes.repo);
@@ -87,7 +87,7 @@ export default function GitHubPage() {
       setLinkedPulls(linkedRes.pulls);
       // Load any existing review runs for linked PRs
       for (const lp of linkedRes.pulls) {
-        const reviewRes = await getLatestPRReview(id, lp.number);
+        const reviewRes = await getLatestPRReview(id, lp.number, getUserKey());
         if (reviewRes.ok && reviewRes.run) {
           setReviewRuns((prev) => ({ ...prev, [lp.number]: reviewRes.run! }));
           setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
@@ -697,7 +697,7 @@ function PRCommentPanel({
   async function loadPastComments() {
     if (pastLoaded) return;
     setPastLoaded(true);
-    const res = await listPRComments(projectId, lp.number);
+    const res = await listPRComments(projectId, lp.number, getUserKey());
     if (res.ok) {
       setPastComments(res.comments);
       setLatestPosted(res.latestPostedComment);

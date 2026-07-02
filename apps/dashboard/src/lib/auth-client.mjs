@@ -52,6 +52,66 @@ export async function signOutAuth(fetchImpl) {
   }
 }
 
+const MEMBERSHIP_ME_PATH = "/api/membership/me";
+const MEMBERSHIP_CLAIM_PATH = "/api/membership/claim";
+
+/**
+ * Fetch the auth-user ↔ workspace membership bridge (same-origin, credentialed).
+ * Sends the legacy userKey via the `x-simsa-user-key` header (kept out of URLs).
+ * Returns the parsed bridge response or null on any failure. Never throws.
+ * @param {string} userKey
+ * @param {typeof fetch} [fetchImpl]
+ */
+export async function getMembership(userKey, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return null;
+  try {
+    const res = await f(MEMBERSHIP_ME_PATH, {
+      method: "GET",
+      credentials: "include",
+      headers: { accept: "application/json", ...(userKey ? { "x-simsa-user-key": userKey } : {}) },
+    });
+    if (!res || !res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return data && typeof data === "object" && data.ok === true ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Claim this browser's legacy userKey data into the signed-in account
+ * (creates/reuses the personal workspace and assigns unclaimed projects).
+ * Returns a discriminated result; never throws.
+ * @param {string} userKey
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ ok: true, workspaceId: string, alreadyClaimed: boolean, claimedProjects: number } | { ok: false, error: string }>}
+ */
+export async function claimWorkspace(userKey, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "no_fetch" };
+  try {
+    const res = await f(MEMBERSHIP_CLAIM_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json", ...(userKey ? { "x-simsa-user-key": userKey } : {}) },
+      body: JSON.stringify({ userKey }),
+    });
+    const data = res ? await res.json().catch(() => null) : null;
+    if (res && res.ok && data && data.ok === true) {
+      return {
+        ok: true,
+        workspaceId: String(data.workspaceId ?? ""),
+        alreadyClaimed: data.alreadyClaimed === true,
+        claimedProjects: Number.isFinite(data.claimedProjects) ? Number(data.claimedProjects) : 0,
+      };
+    }
+    return { ok: false, error: data && typeof data.error === "string" ? data.error : `http_${res ? res.status : 0}` };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
 /**
  * Resolve a UI auth status from a session fetch result. Pure + deterministic.
  * @param {{ loading?: boolean, error?: boolean, session?: any }} input
