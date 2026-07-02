@@ -36,7 +36,9 @@ export type GitHubRepo = {
 
 export type LookupRepoResponse =
   | { ok: true; repo: GitHubRepo }
-  | { ok: false; error: string };
+  // appInstallUrl: additive — set when a private repo needs the GitHub App
+  // installed (error "app_not_installed", sometimes "not_found").
+  | { ok: false; error: string; appInstallUrl?: string };
 
 export type GitHubReposResponse =
   | { ok: true; repos: GitHubRepo[] }

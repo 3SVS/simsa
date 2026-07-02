@@ -33,6 +33,9 @@ import { PrCommentMockup } from "../components/PrCommentMockup";
 const SITE_URL = "https://conclave-ai.dev";
 
 const LOGIN_URL = "https://github.com/apps/conclave-ai-code-council/installations/new";
+// GHM-only sales (2026-07-03): all paid tiers check out through the GitHub
+// Marketplace listing — GitHub handles billing/tax; no Lemon Squeezy.
+const MARKETPLACE_URL = "https://github.com/marketplace/conclave-ai-code-council";
 
 export default function Home() {
   return (
@@ -346,12 +349,12 @@ function Pricing() {
         <SectionHeader numeral="V" mark="indulgences" title="Indulgences" />
         <p className="mt-5 max-w-prose text-ink-muted text-lg leading-relaxed">
           Hard cutoffs, no surprise invoices. Bring your own Anthropic key for free unlimited
-          usage, or pay $3 once for a single council pass on one PR.
+          usage, or subscribe through GitHub — billing and tax handled by GitHub Marketplace,
+          cancel anytime.
         </p>
-        {/* v0.14.5 — 4-card pricing grid. Free + $3 First-PR pass are live;
-            Solo/Pro are honestly marked "coming soon" until Lemon Squeezy
-            subscriptions ship in a follow-up sprint. Free and First-PR
-            actually convert; Solo/Pro are waitlist via DM. */}
+        {/* GHM-only pricing (2026-07-03): every paid tier checks out on the
+            GitHub Marketplace listing. Plan names must match the workspace
+            entitlement mapping (marketplace-entitlement.ts). */}
         <div className="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <PriceCard
             tier="Free"
@@ -368,54 +371,49 @@ function Pricing() {
           />
           <PriceCard
             tier="First-PR pass"
-            sub="once · no subscription"
+            sub="one month · cancel anytime"
             price="$3"
             highlight
             features={[
-              "One full council review on YOUR PR",
+              "Full council reviews on YOUR PRs",
               "Includes tier-2 escalation if needed",
               "PRD-aware spec mismatch flagged",
-              "No card on file · pay once",
+              "Billed by GitHub · cancel after month one",
             ]}
             cta="Buy first-PR pass →"
-            ctaHref="/billing"
+            ctaHref={MARKETPLACE_URL}
           />
           <PriceCard
             tier="Solo"
-            sub="coming soon"
+            sub="per month · via GitHub"
             price="$19"
-            comingSoon
             features={[
               "30 reviews / month",
               "10 autofix cycles / month",
               "Council + PRD layer",
               "Telegram dispatches",
-              "$5 booster: +5 reviews",
             ]}
-            cta="Join Solo waitlist"
-            ctaHref="https://threads.com/@baessi1"
+            cta="Subscribe on GitHub →"
+            ctaHref={MARKETPLACE_URL}
           />
           <PriceCard
             tier="Pro"
-            sub="coming soon"
+            sub="per month · via GitHub"
             price="$49"
-            comingSoon
             features={[
-              "80 reviews / month",
+              "100 reviews / month",
               "30 autofix cycles / month",
               "Priority sandbox queue",
               "Private mode (no data sharing)",
-              "$5 booster",
             ]}
-            cta="Join Pro waitlist"
-            ctaHref="https://threads.com/@baessi1"
+            cta="Subscribe on GitHub →"
+            ctaHref={MARKETPLACE_URL}
           />
         </div>
         <p className="mt-12 max-w-prose text-sm text-ink-mute leading-relaxed">
-          Free + First-PR pass are live today. Solo and Pro subscriptions land once we have
-          paying users — DM <a href="https://threads.com/@baessi1" className="link-anim text-ink-muted hover:text-ink" target="_blank" rel="noreferrer">@baessi1</a> on
-          Threads to join the waitlist. Lemon Squeezy (Merchant of Record) handles VAT across
-          KR / US / EU so we don&apos;t have to.
+          All paid tiers check out through the GitHub Marketplace listing — GitHub bills your
+          existing payment method and handles tax, and you can cancel anytime from your GitHub
+          billing settings. Questions? DM <a href="https://threads.com/@baessi1" className="link-anim text-ink-muted hover:text-ink" target="_blank" rel="noreferrer">@baessi1</a> on Threads.
         </p>
       </div>
     </section>

@@ -33,6 +33,9 @@ export type MarketplaceEntitlement = {
  */
 export const PLAN_INCLUDED_RUNS: Readonly<Record<string, number>> = {
   free: 0,
+  // $3 entry tier from the GHM listing — a month of light usage, cancel anytime.
+  "first-pr pass": 5,
+  "first pr pass": 5,
   solo: 30,
   pro: 100,
 };

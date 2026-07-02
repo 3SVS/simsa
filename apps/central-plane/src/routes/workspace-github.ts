@@ -36,6 +36,7 @@ import {
   fetchGitHubUser, fetchGitHubRepos, fetchGitHubRepoByFullName, fetchGitHubPulls,
   isAllowedReturnTo, appendGitHubConnected,
 } from "../workspace/github-oauth.js";
+import { getRepoViaApp, resolveRepoAccessToken } from "../workspace/github-app-access.js";
 import { upsertProjectPR, getLinkedPRs } from "../workspace/pr-db.js";
 import {
   insertReviewRun, updateReviewRun, getLatestReviewRun, getLatestTwoPrReviewRuns,
@@ -76,6 +77,7 @@ import {
   buildPrReviewTelegramMessage,
   sendWorkspaceTelegramMessage,
 } from "../workspace/telegram-notify.js";
+import { notifyPrReviewCompleteByEmail } from "../workspace/email-notify.js";
 
 // ─── CORS helpers (shared with workspace.ts) ──────────────────────────────────
 
@@ -459,9 +461,25 @@ export function createWorkspaceGitHubRoutes(
     } catch (err) {
       return json({ ok: false, error: `github_api_failed: ${(err as Error).message}` }, 502, origin);
     }
-    if (!repo) return json({ ok: false, error: "not_found" }, 404, origin);
-    // Stage 56 does NOT add private-repo support — surface a clear, non-fatal reason.
-    if (repo.private) return json({ ok: false, error: "private_unsupported" }, 200, origin);
+    // Private repos via the existing GitHub App (additive, fail-safe):
+    //  - OAuth 404 covers both "doesn't exist" and "private + public_repo scope";
+    //    the App lookup disambiguates: installed → link allowed.
+    //  - OAuth sees it but private=true (broader legacy scope) → same App path.
+    //  - App not installed / creds missing → the previous error contract, plus
+    //    an actionable appInstallUrl (GH_APP_INSTALL_URL) when configured.
+    const appInstallUrl = c.env.GH_APP_INSTALL_URL ?? "";
+    if (!repo || repo.private) {
+      const viaApp = await getRepoViaApp(c.env, owner, repoName, fetchImpl);
+      if (viaApp) {
+        repo = viaApp;
+      } else if (!repo) {
+        return json({ ok: false, error: "not_found", ...(appInstallUrl ? { appInstallUrl } : {}) }, 404, origin);
+      } else {
+        // Known-private, App not installed → actionable error (supersedes
+        // Stage 56's private_unsupported).
+        return json({ ok: false, error: "app_not_installed", ...(appInstallUrl ? { appInstallUrl } : {}) }, 200, origin);
+      }
+    }
 
     return json({
       ok: true,
@@ -588,17 +606,15 @@ export function createWorkspaceGitHubRoutes(
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: false, error: "no_repo_linked — connect a repo first" }, 400, origin);
 
-    const conn = await getGitHubConnectionByUserKey(c.env, userKey).catch(() => null);
-    if (!conn || !conn.accessTokenEnc) {
-      return json({ ok: false, error: "not_connected — connect GitHub first" }, 401, origin);
+    // OAuth-first, App-fallback token resolution (private repos via the App).
+    const access = await resolveRepoAccessToken(c.env, userKey, repo.repoOwner, repo.repoName, fetchImpl, { repoPrivate: repo.private });
+    if (!access.ok) {
+      if (access.error === "not_connected") {
+        return json({ ok: false, error: "not_connected — connect GitHub first" }, 401, origin);
+      }
+      return json({ ok: false, error: access.error }, 503, origin);
     }
-
-    const kek = c.env.CONCLAVE_TOKEN_KEK;
-    if (!kek) return json({ ok: false, error: "token_unavailable" }, 503, origin);
-
-    let token: string;
-    try { token = await decryptToken(conn.accessTokenEnc, kek); }
-    catch { return json({ ok: false, error: "token_decrypt_failed" }, 503, origin); }
+    const token = access.token;
 
     let pulls;
     try {
@@ -777,18 +793,18 @@ export function createWorkspaceGitHubRoutes(
       return json({ ok: false, error: "no_selected_items" }, 400, origin);
     }
 
-    // 4. GitHub token
+    // 4. GitHub token — OAuth first, App installation token fallback (private repos).
     if (!c.env.CONCLAVE_TOKEN_KEK) {
       return json({ ok: false, error: "token_unavailable" }, 503, origin);
     }
     const conn = await getGitHubConnectionByUserKey(c.env, userKey).catch(() => null);
     if (!conn) return json({ ok: false, error: "not_connected" }, 401, origin);
-    let token: string;
-    try {
-      token = await decryptToken(conn.accessTokenEnc, c.env.CONCLAVE_TOKEN_KEK);
-    } catch {
-      return json({ ok: false, error: "token_decrypt_failed" }, 503, origin);
+    const access = await resolveRepoAccessToken(c.env, userKey, repo.repoOwner, repo.repoName, fetchImpl, { repoPrivate: repo.private });
+    if (!access.ok) {
+      if (access.error === "not_connected") return json({ ok: false, error: "not_connected" }, 401, origin);
+      return json({ ok: false, error: access.error }, 503, origin);
     }
+    const token = access.token;
 
     // 5. Load items + productSpec: prefer body payload, fall back to D1
     let items: CheckableItem[];
@@ -995,6 +1011,18 @@ export function createWorkspaceGitHubRoutes(
         console.warn("[workspace/pr-review] telegram notification failed:", err);
       }
     })();
+
+    // 10b. Email notification (Resend) — self-contained + non-fatal; dormant
+    // until RESEND_API_KEY is set. Settings lookup, policy, history record and
+    // usage event all live inside the helper (workspace/email-notify.ts).
+    await notifyPrReviewCompleteByEmail(c.env, {
+      userKey,
+      projectId,
+      repoFullName: repo.repoFullName,
+      prNumber,
+      summary: reviewResult.summary,
+      results: reviewResult.results.map((r) => ({ title: r.title, status: r.status })),
+    }, fetchImpl);
 
     // 11. Build rerun metadata + comparison if applicable
     let rerunMeta: { ofReviewRunId: string; reusedSelectedItemIds: string[] } | undefined;
@@ -1481,12 +1509,13 @@ export function createWorkspaceGitHubRoutes(
       }, 403, origin);
     }
 
-    let token: string;
-    try {
-      token = await decryptToken(conn.accessTokenEnc, c.env.CONCLAVE_TOKEN_KEK);
-    } catch {
-      return json({ ok: false, error: "token_decrypt_failed" }, 503, origin);
+    // OAuth-first, App-fallback token resolution (private repos via the App).
+    const access = await resolveRepoAccessToken(c.env, userKey, repo.repoOwner, repo.repoName, fetchImpl, { repoPrivate: repo.private });
+    if (!access.ok) {
+      if (access.error === "not_connected") return json({ ok: false, error: "not_connected" }, 401, origin);
+      return json({ ok: false, error: access.error }, 503, origin);
     }
+    const token = access.token;
 
     // 4. Build or use provided body
     const selectedItemIds = bodySelectedIds?.length ? bodySelectedIds : runSelectedItemIds;
@@ -1847,16 +1876,17 @@ export function createWorkspaceGitHubRoutes(
       }, 403, origin);
     }
 
-    let token: string;
-    try {
-      token = await decryptToken(conn.accessTokenEnc, c.env.CONCLAVE_TOKEN_KEK);
-    } catch {
-      return json({ ok: false, error: "token_decrypt_failed" }, 503, origin);
-    }
-
-    // 3. Build updated body
+    // 3. Build updated body (repo first — the token resolver needs owner/repo
+    // for the OAuth-first/App-fallback probe on private repos).
     const repo = await getProjectRepo(c.env, projectId).catch(() => null);
     if (!repo) return json({ ok: false, error: "no_repo_linked" }, 400, origin);
+
+    const access = await resolveRepoAccessToken(c.env, userKey, repo.repoOwner, repo.repoName, fetchImpl, { repoPrivate: repo.private });
+    if (!access.ok) {
+      if (access.error === "not_connected") return json({ ok: false, error: "not_connected" }, 401, origin);
+      return json({ ok: false, error: access.error }, 503, origin);
+    }
+    const token = access.token;
 
     let commentBody: string;
     if (customBody) {

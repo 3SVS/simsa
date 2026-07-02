@@ -9,7 +9,9 @@ import type { Env } from "../env.js";
 
 export type NotifyPolicy = "problems_only" | "always" | "disabled";
 export type NotificationStatus = "sent" | "skipped" | "error";
-export type NotificationChannel = "telegram";
+// "email" (Resend): the destination address is stored in the existing chat_id
+// column (generic per-channel destination) — no migration needed.
+export type NotificationChannel = "telegram" | "email";
 
 export type DbNotificationSettings = {
   id: string;

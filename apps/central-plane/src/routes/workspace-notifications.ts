@@ -1,12 +1,17 @@
 /**
  * workspace-notifications.ts
  *
- * Telegram notification settings + history routes for Workspace.
+ * Telegram + email notification settings + history routes for Workspace.
  *
- * GET  /workspace/notifications/settings?userKey=...&channel=telegram
- * POST /workspace/notifications/settings
- * POST /workspace/notifications/test
+ * GET  /workspace/notifications/settings?userKey=...&channel=telegram|email
+ * POST /workspace/notifications/settings      (channel: telegram|email)
+ * POST /workspace/notifications/test          (channel: telegram|email)
  * GET  /workspace/notifications?userKey=...
+ *
+ * Email channel (Resend): reuses the same settings/history tables — the
+ * address lives in the chat_id column (generic destination). Dormant until
+ * RESEND_API_KEY is set. Full addresses are never logged or stored in
+ * history previews (masked "a***@domain").
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
@@ -21,6 +26,23 @@ import {
   type NotificationChannel,
 } from "../workspace/notification-db.js";
 import { sendWorkspaceTelegramMessage } from "../workspace/telegram-notify.js";
+import {
+  sendWorkspaceEmail,
+  isValidEmailAddress,
+  maskEmailAddress,
+} from "../workspace/email-notify.js";
+import { consumeUserHourlyLimit } from "../workspace/rate-limit.js";
+
+/** Hourly cap on email test sends per userKey. */
+const EMAIL_TEST_HOURLY_LIMIT = 5;
+
+/** Attach `emailAddress` alias for email-channel settings (address lives in chat_id). */
+function shapeSettings<T extends { channel: string; chatId: string }>(
+  settings: T | null,
+): (T & { emailAddress?: string }) | null {
+  if (!settings) return null;
+  return settings.channel === "email" ? { ...settings, emailAddress: settings.chatId } : settings;
+}
 
 // ALLOWED_ORIGINS centralized in ./cors.ts (Stage 91) — imported at top.
 
@@ -64,9 +86,11 @@ export function createWorkspaceNotificationRoutes(
 
     try {
       const settings = await getNotificationSettings(c.env, userKey, channel);
-      // Expose telegramEnabled so the dashboard can show whether the server has the bot token
+      // Expose telegramEnabled / emailConfigured so the dashboard can show whether
+      // the server has the bot token / Resend key. Never the values themselves.
       const telegramEnabled = Boolean(c.env.TELEGRAM_BOT_TOKEN);
-      return json({ ok: true, settings, telegramEnabled }, 200, origin);
+      const emailConfigured = Boolean(c.env.RESEND_API_KEY);
+      return json({ ok: true, settings: shapeSettings(settings), telegramEnabled, emailConfigured }, 200, origin);
     } catch (err) {
       console.error("[notifications/settings GET] error:", err);
       return json({ ok: false, error: "db_error" }, 500, origin);
@@ -88,13 +112,33 @@ export function createWorkspaceNotificationRoutes(
     const notifyPolicy = (typeof b["notifyPolicy"] === "string" ? b["notifyPolicy"] : "problems_only") as NotifyPolicy;
 
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
-    if (!chatId) return json({ ok: false, error: "chatId_required" }, 400, origin);
     if (!["problems_only", "always", "disabled"].includes(notifyPolicy)) {
       return json({ ok: false, error: "invalid_notifyPolicy" }, 400, origin);
     }
+
+    // Email channel: destination is an email address (stored in chat_id).
+    if (channel === "email") {
+      const emailAddress =
+        typeof b["emailAddress"] === "string" ? b["emailAddress"].trim() : chatId;
+      if (!emailAddress) return json({ ok: false, error: "emailAddress_required" }, 400, origin);
+      if (!isValidEmailAddress(emailAddress)) {
+        return json({ ok: false, error: "invalid_email" }, 400, origin);
+      }
+      try {
+        const settings = await upsertNotificationSettings(c.env, {
+          userKey, channel, chatId: emailAddress, enabled, notifyPolicy,
+        });
+        return json({ ok: true, settings: shapeSettings(settings) }, 200, origin);
+      } catch (err) {
+        console.error("[notifications/settings POST] error:", err);
+        return json({ ok: false, error: "db_error" }, 500, origin);
+      }
+    }
+
     if (channel !== "telegram") {
       return json({ ok: false, error: "unsupported_channel" }, 400, origin);
     }
+    if (!chatId) return json({ ok: false, error: "chatId_required" }, 400, origin);
 
     try {
       const settings = await upsertNotificationSettings(c.env, { userKey, channel, chatId, enabled, notifyPolicy });
@@ -117,6 +161,60 @@ export function createWorkspaceNotificationRoutes(
     const channel = ((typeof b["channel"] === "string" ? b["channel"] : "telegram") as NotificationChannel);
 
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+
+    // ── Email test send (Resend) ─────────────────────────────────────────────
+    if (channel === "email") {
+      // Rate limit first (attempt-based — bumps even on later failures).
+      const limit = await consumeUserHourlyLimit(c.env, "workspace_email_test", userKey, EMAIL_TEST_HOURLY_LIMIT);
+      if (limit.limited) {
+        return json({
+          ok: false,
+          error: "rate_limited",
+          retryAfterSeconds: limit.retryAfterSeconds,
+          message: "테스트 메일을 너무 자주 보냈어요. 잠시 후 다시 시도해주세요.",
+        }, 429, origin);
+      }
+
+      if (!c.env.RESEND_API_KEY) {
+        return json({
+          ok: false,
+          error: "email_not_configured",
+          message: "이메일 알림을 보내려면 서버 설정이 필요해요.",
+        }, 503, origin);
+      }
+
+      const settings = await getNotificationSettings(c.env, userKey, "email").catch(() => null);
+      if (!settings) {
+        return json({ ok: false, error: "settings_not_found", message: "먼저 이메일 주소를 저장해주세요." }, 400, origin);
+      }
+
+      const subject = "Simsa 테스트 메일";
+      const testText = `Simsa 테스트 메일입니다.\n\n알림이 정상적으로 설정됐어요.\nPR 확인 완료 시 이 주소로 결과를 알려드릴게요.`;
+      const result = await sendWorkspaceEmail(
+        c.env,
+        { to: settings.chatId, subject, text: testText },
+        fetchImpl,
+      );
+
+      await insertNotificationRecord(c.env, {
+        userKey,
+        channel: "email",
+        eventType: "test",
+        status: result.ok ? "sent" : "error",
+        destinationPreview: `email:${maskEmailAddress(settings.chatId)}`,
+        messagePreview: testText.slice(0, 100),
+        errorMessage: result.ok ? undefined : result.error,
+      });
+
+      if (result.ok) {
+        return json({ ok: true, status: "sent" }, 200, origin);
+      }
+      return json({
+        ok: false,
+        error: result.error,
+        message: "이메일 전송에 실패했어요. 주소가 맞는지 확인해주세요.",
+      }, 502, origin);
+    }
 
     if (!c.env.TELEGRAM_BOT_TOKEN) {
       return json({

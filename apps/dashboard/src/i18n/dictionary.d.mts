@@ -627,6 +627,23 @@ export type Dictionary = {
     failed: string;
     prReviewComplete: string;
   };
+  emailNotify: {
+    title: string;
+    desc: string;
+    notConfigured: string;
+    address: string;
+    addressHint: string;
+    addressPlaceholder: string;
+    invalidAddress: string;
+    enable: string;
+    saving: string;
+    saved: string;
+    saveError: string;
+    sendTest: string;
+    sending: string;
+    testSent: string;
+    testError: string;
+  };
   github: {
     connectTitle: string;
     connectIntro: string;
@@ -662,6 +679,8 @@ export type Dictionary = {
     viewHistory: string;
     errorNotFound: string;
     errorPrivate: string;
+    appInstallHint: string;
+    appInstallLink: string;
     errorNotConnected: string;
     errorInvalidName: string;
     reposLoadError: string;
