@@ -26,6 +26,10 @@ import {
   type NotificationSettings,
   type NotificationRecord,
 } from "@/lib/workspace-notifications-api";
+import {
+  fetchTrainingConsent,
+  saveTrainingConsent,
+} from "@/lib/workspace-training-consent-api";
 
 export default function SettingsPage() {
   const { id } = useParams<{ id: string }>();
@@ -73,6 +77,11 @@ export default function SettingsPage() {
   const [emTestPhase, setEmTestPhase] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [emTestError, setEmTestError] = useState("");
 
+  // Training-data consent state (opt-in; default OFF)
+  const [trainConsented, setTrainConsented] = useState(false);
+  const [trainStorageConfigured, setTrainStorageConfigured] = useState(false);
+  const [trainSavePhase, setTrainSavePhase] = useState<"idle" | "saving" | "done" | "error">("idle");
+
   const userKey = getUserKey();
 
   // Load Telegram settings on mount
@@ -108,6 +117,26 @@ export default function SettingsPage() {
     if (res.ok) setNotifications(res.notifications);
     setNotifPhase("done");
   }, [userKey]);
+
+  // Load training-data consent on mount
+  const loadTrainingConsent = useCallback(async () => {
+    const res = await fetchTrainingConsent(userKey);
+    if (res.ok) {
+      setTrainConsented(res.active);
+      setTrainStorageConfigured(Boolean(res.storageConfigured));
+    }
+  }, [userKey]);
+
+  async function handleToggleTrainingConsent(next: boolean) {
+    setTrainSavePhase("saving");
+    const res = await saveTrainingConsent(userKey, next);
+    if (res.ok) {
+      setTrainConsented(res.active);
+      setTrainSavePhase("done");
+    } else {
+      setTrainSavePhase("error");
+    }
+  }
 
   async function handleSaveTgSettings() {
     if (!tgChatId.trim()) return;
@@ -206,7 +235,8 @@ export default function SettingsPage() {
     loadTgSettings();
     loadEmSettings();
     loadNotifications();
-  }, [loadStatus, loadTgSettings, loadEmSettings, loadNotifications]);
+    loadTrainingConsent();
+  }, [loadStatus, loadTgSettings, loadEmSettings, loadNotifications, loadTrainingConsent]);
 
   async function loadRepos() {
     setReposPhase("loading");
@@ -724,6 +754,47 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ─── Data & training consent (opt-in) ────────────────────────────── */}
+      <div className="mt-10">
+        <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.trainingConsent.title}</h2>
+        <p className="mb-4 mt-1 text-sm text-gray-500">{t.trainingConsent.desc}</p>
+
+        <div className="card space-y-4 p-5">
+          <ul className="space-y-1.5 text-xs text-gray-500">
+            <li>• {t.trainingConsent.point1}</li>
+            <li>• {t.trainingConsent.point2}</li>
+            <li>• {t.trainingConsent.point3}</li>
+          </ul>
+
+          <div className="flex items-center gap-3 border-t border-gray-100 pt-4">
+            <input
+              id="train-consent"
+              type="checkbox"
+              checked={trainConsented}
+              onChange={(e) => void handleToggleTrainingConsent(e.target.checked)}
+              disabled={trainSavePhase === "saving"}
+              className="h-4 w-4"
+            />
+            <label htmlFor="train-consent" className="text-sm text-gray-700">
+              {t.trainingConsent.enable}
+            </label>
+          </div>
+
+          {!trainStorageConfigured && (
+            <p className="text-xs text-gray-400">{t.trainingConsent.storageNote}</p>
+          )}
+          {trainSavePhase === "done" && trainConsented && (
+            <p className="text-xs text-green-600">✓ {t.trainingConsent.savedOn}</p>
+          )}
+          {trainSavePhase === "done" && !trainConsented && (
+            <p className="text-xs text-gray-500">{t.trainingConsent.savedOff}</p>
+          )}
+          {trainSavePhase === "error" && (
+            <p className="text-xs text-red-600">{t.trainingConsent.saveError}</p>
+          )}
+        </div>
       </div>
     </div>
   );
