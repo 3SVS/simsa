@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/platform-vercel",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Conclave AI Vercel adapter — resolve preview URL for a commit SHA via Vercel REST API.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

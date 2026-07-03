@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/integration-slack",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Conclave AI Slack notifier — posts review outcomes to a Slack channel via incoming webhook.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",
