@@ -35,6 +35,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { StatusText } from "@/components/StatusText";
 import { useI18n } from "@/i18n/I18nProvider";
 import { statusLabel } from "@/i18n/dictionary.mjs";
+import { errorText } from "@/i18n/error-text.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import type { ItemStatus } from "@/lib/labels";
 
@@ -172,6 +173,7 @@ export default function GitHubPage() {
       items,
       productSpec,
       idempotencyKey,
+      locale,
     });
     if (res.ok) {
       setReviewRuns((prev) => ({ ...prev, [lp.number]: res.run }));
@@ -665,7 +667,7 @@ function PRCommentPanel({
       setPreviewPhase("done");
     } else {
       setPreviewPhase("error");
-      setErrorMsg(res.message ?? res.error ?? t.comment.previewError);
+      setErrorMsg(res.message ?? errorText(t, res.error, "generic"));
     }
   }
 
@@ -690,7 +692,7 @@ function PRCommentPanel({
       if (res.error === "github_scope_required") {
         setScopeError(true);
       }
-      setErrorMsg(res.message ?? res.error ?? t.comment.postError);
+      setErrorMsg(res.message ?? errorText(t, res.error, "generic"));
     }
   }
 
@@ -1049,7 +1051,7 @@ function FixBriefPanel({
 
       {/* Error */}
       {phase === "error" && result && !result.ok && (
-        <p className="text-xs text-red-500">{result.error}</p>
+        <p className="text-xs text-red-500">{errorText(t, result.error, "generic")}</p>
       )}
 
       {/* Result */}

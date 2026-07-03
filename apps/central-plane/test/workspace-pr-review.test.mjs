@@ -263,6 +263,20 @@ describe("reviewPRAgainstItems: mock fallback", () => {
     }, undefined);
     assert.equal(res.results[0].status, "failed");
     assert.equal(res.results[0].userLabel, "안 맞음");
+    // Default (no locale) → Korean reason text.
+    assert.match(res.results[0].reason, /제외 범위/);
+  });
+
+  it("heuristic fallback follows locale: en → English reason text", async () => {
+    const res = await reviewPRAgainstItems({
+      productSpec: MOCK_SPEC, items: [MOCK_ITEMS[1]],
+      prMeta: MOCK_PR_META, prFiles: MOCK_PR_FILES,
+      locale: "en",
+    }, undefined);
+    assert.equal(res.results[0].status, "failed");
+    assert.match(res.results[0].reason, /out of scope/i);
+    // No Korean characters leak into the English reason.
+    assert.ok(!/[가-힣]/.test(res.results[0].reason), "English reason must not contain Hangul");
   });
 
   it("marks items in openQuestions as needs_decision", async () => {

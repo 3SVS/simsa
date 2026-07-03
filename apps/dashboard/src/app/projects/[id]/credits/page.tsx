@@ -14,6 +14,7 @@ import {
 } from "@/lib/workspace-credits-api";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
+import { errorText } from "@/i18n/error-text.mjs";
 
 const STATUS_COLORS: Record<string, string> = {
   requested: "text-amber-600 bg-amber-50 border-amber-200",
@@ -131,11 +132,19 @@ export default function CreditsPage() {
           <h2 className="font-semibold text-gray-700 text-sm">{t.creditsPage.balanceTitle}</h2>
         </div>
         <div className="p-5">
-          {creditsPhase === "loading" && (
+          {(creditsPhase === "loading" || (creditsPhase === "idle" && userKey)) && (
             <p className="text-sm text-gray-400">{t.creditsPage.loading}</p>
           )}
+          {creditsPhase === "idle" && !userKey && (
+            <p className="text-sm text-gray-400">{t.creditsPage.signInToView}</p>
+          )}
           {creditsPhase === "error" && (
-            <p className="text-sm text-red-500">{creditsError}</p>
+            <div className="space-y-2">
+              <p className="text-sm text-red-500">{errorText(t, creditsError, "loadFailed")}</p>
+              <button onClick={() => void loadCredits()} className="btn btn-sm btn-secondary">
+                {t.common.retry}
+              </button>
+            </div>
           )}
           {creditsPhase === "done" && credits && (
             <div className="space-y-4">
@@ -243,7 +252,7 @@ export default function CreditsPage() {
               </div>
 
               {submitPhase === "error" && (
-                <p className="text-sm text-red-500">{submitError}</p>
+                <p className="text-sm text-red-500">{errorText(t, submitError, "saveFailed")}</p>
               )}
 
               <button
@@ -272,6 +281,14 @@ export default function CreditsPage() {
         <div className="p-5">
           {requestsPhase === "loading" && (
             <p className="text-sm text-gray-400">{t.creditsPage.loading}</p>
+          )}
+          {requestsPhase === "error" && (
+            <div className="space-y-2">
+              <p className="text-sm text-red-500">{t.errors.loadFailed}</p>
+              <button onClick={() => void loadRequests()} className="btn btn-sm btn-secondary">
+                {t.common.retry}
+              </button>
+            </div>
           )}
           {requestsPhase === "done" && requests.length === 0 && (
             <p className="text-sm text-gray-400">{t.creditsPage.noRequests}</p>

@@ -157,6 +157,21 @@ export type Dictionary = {
     more: string;
     rateLimited: string;
   };
+  errors: {
+    generic: string;
+    network: string;
+    timeout: string;
+    server: string;
+    unauthorized: string;
+    notFound: string;
+    rateLimited: string;
+    insufficientCredits: string;
+    githubScopeRequired: string;
+    prNotFound: string;
+    deliveryFailed: string;
+    saveFailed: string;
+    loadFailed: string;
+  };
   overview: {
     specCompleteness: string;
     resultsSummary: string;
@@ -309,6 +324,7 @@ export type Dictionary = {
     footer: string;
     unknownError: string;
     requestFailed: string;
+    signInToView: string;
     statusRequested: string;
     statusFulfilled: string;
     statusRejected: string;

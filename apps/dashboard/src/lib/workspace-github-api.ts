@@ -433,6 +433,7 @@ export async function startPRReview(
     productSpec?: ProductSpec;
     idempotencyKey?: string;
     rerunOfReviewRunId?: string;
+    locale?: "en" | "ko";
   },
 ): Promise<StartReviewResponse> {
   try {

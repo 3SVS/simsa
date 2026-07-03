@@ -61,7 +61,7 @@ export default function SettingsPage() {
   const [tgTestPhase, setTgTestPhase] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [tgTestError, setTgTestError] = useState("");
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [notifPhase, setNotifPhase] = useState<"idle" | "loading" | "done">("idle");
+  const [notifPhase, setNotifPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
 
   // Email notification state (simple default alternative to Telegram)
   const [emSettings, setEmSettings] = useState<NotificationSettings | null>(null);
@@ -105,8 +105,12 @@ export default function SettingsPage() {
   const loadNotifications = useCallback(async () => {
     setNotifPhase("loading");
     const res = await fetchNotifications(userKey);
-    if (res.ok) setNotifications(res.notifications);
-    setNotifPhase("done");
+    if (res.ok) {
+      setNotifications(res.notifications);
+      setNotifPhase("done");
+    } else {
+      setNotifPhase("error");
+    }
   }, [userKey]);
 
   async function handleSaveTgSettings() {
@@ -417,7 +421,7 @@ export default function SettingsPage() {
                   {linkedRepo.fullName}
                 </a>
                 {linkedRepo.private && (
-                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-400">private</span>
+                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-400">{t.github.statePrivate}</span>
                 )}
                 {linkedRepo.defaultBranch && (
                   <span className="text-xs text-gray-400">→ {linkedRepo.defaultBranch}</span>
@@ -693,6 +697,15 @@ export default function SettingsPage() {
         </div>
 
         {notifPhase === "loading" && <p className="text-xs text-gray-400">{t.common.loading}</p>}
+
+        {notifPhase === "error" && (
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-red-500">{t.errors.loadFailed}</p>
+            <button onClick={() => void loadNotifications()} className="btn btn-sm btn-secondary">
+              {t.common.retry}
+            </button>
+          </div>
+        )}
 
         {notifPhase === "done" && notifications.length === 0 && (
           <p className="text-xs text-gray-400">{t.telegram.noHistory}</p>

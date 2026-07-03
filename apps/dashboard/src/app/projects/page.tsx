@@ -12,9 +12,14 @@ import type { Dictionary } from "@/i18n/dictionary.mjs";
 export default function ProjectsPage() {
   const { t } = useI18n();
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
+  // Guard the one-frame empty-state flash: localProjects starts [] and only
+  // fills after this effect runs, so a returning user would briefly see the
+  // "no projects yet" card before their projects hydrate in.
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     setLocalProjects(loadLocalProjects());
+    setHydrated(true);
   }, []);
 
   return (
@@ -24,7 +29,13 @@ export default function ProjectsPage() {
         <p className="mt-1 text-sm text-gray-500">{t.projects.homeSubtitle}</p>
       </div>
 
-      {localProjects.length === 0 ? (
+      {!hydrated ? (
+        <div className="grid gap-4">
+          {[0, 1].map((i) => (
+            <div key={i} className="h-28 animate-pulse rounded-xl border border-gray-100 bg-gray-50" />
+          ))}
+        </div>
+      ) : localProjects.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
           <h2 className="text-base font-semibold text-gray-900">{t.projects.emptyTitle}</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">{t.projects.emptyBody}</p>
