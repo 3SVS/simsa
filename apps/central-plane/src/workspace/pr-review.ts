@@ -32,7 +32,12 @@ export type PRReviewResponse = {
   };
   results: CheckResultItem[];
   warnings?: string[];
+  /** Usage measurement (cost_meta) — tokens + model. null on the heuristic path. */
+  usage?: { tokens_consumed: number | null; model_used: string | null };
 };
+
+/** The review model — surfaced for cost_meta.model_used. */
+export const REVIEW_MODEL = "claude-haiku-4-5-20251001";
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
@@ -99,7 +104,7 @@ async function callAnthropic(
   prompt: string,
   timeoutMs = 25000,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
-): Promise<string> {
+): Promise<{ text: string; tokens: number | null }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let resp: Response;
@@ -113,7 +118,7 @@ async function callAnthropic(
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: REVIEW_MODEL,
         max_tokens: 6000,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -125,8 +130,14 @@ async function callAnthropic(
     const tail = await resp.text().catch(() => "");
     throw new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
   }
-  const data = (await resp.json()) as { content?: Array<{ type: string; text?: string }> };
-  return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
+  const data = (await resp.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+  const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
+  const tokens =
+    (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0) || null;
+  return { text, tokens };
 }
 
 // ─── Mock fallback heuristics ─────────────────────────────────────────────────
@@ -316,8 +327,11 @@ export async function reviewPRAgainstItems(
 
   const prompt = buildReviewPrompt(req);
   let rawText = "";
+  let tokensConsumed: number | null = null;
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl);
+    const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl);
+    rawText = out.text;
+    tokensConsumed = out.tokens;
   } catch (err) {
     console.error("[workspace/pr-review] LLM call failed:", err);
     return buildMockFallback(req);
@@ -349,5 +363,11 @@ export async function reviewPRAgainstItems(
     needsDecision: results.filter((r) => r.status === "needs_decision").length,
   };
 
-  return { ok: true, source: "llm", summary, results };
+  return {
+    ok: true,
+    source: "llm",
+    summary,
+    results,
+    usage: { tokens_consumed: tokensConsumed, model_used: REVIEW_MODEL },
+  };
 }

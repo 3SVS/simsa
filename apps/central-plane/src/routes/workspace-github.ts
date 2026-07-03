@@ -51,8 +51,10 @@ import {
 import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
 import { captureTrainingRecord } from "../workspace/training-store.js";
+import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
-import { getProject, getOwnedProject } from "../workspace/db.js";
+import { detectContentLang } from "../workspace/topic-tags.js";
+import { getProject, getOwnedProject, listProjectsByUser } from "../workspace/db.js";
 import { consumeUserHourlyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
 import { normalizeProductSpec, normalizeCheckableItems } from "../workspace/check.js";
@@ -964,6 +966,14 @@ export function createWorkspaceGitHubRoutes(
       projForTag?.entryPath === "idea" || projForTag?.entryPath === "code" || projForTag?.entryPath === "spec"
         ? projForTag.entryPath
         : null;
+    // STEP 3 dims: content_lang (detected from spec text), topic_tags + acquisition
+    // (from project), user_context (project_seq → skill_signal), plan_tier (beta),
+    // assistance (wild — no guided feature yet), cost_meta (usage measurement).
+    const specText = (() => {
+      try { return JSON.stringify(productSpec); } catch { return ""; }
+    })();
+    const projectCount = await listProjectsByUser(c.env, userKey, 200).then((r) => r.length).catch(() => null);
+    const usage = reviewResult.usage;
     await captureTrainingRecord(c.env, {
       userKey,
       projectId,
@@ -980,8 +990,21 @@ export function createWorkspaceGitHubRoutes(
       envelope: {
         region: cfCountry,
         locale: reviewLocale,
+        contentLang: detectContentLang(specText),
         builtWith: normalizeBuiltWith(projForTag?.builtWith),
         entryPath: projEntryPath,
+        topicTags: (projForTag?.topicTags as TopicTags) ?? null,
+        acquisition: (projForTag?.acquisition as AcquisitionTag) ?? null,
+        userContext: {
+          skill_signal: projectCount === null ? null : projectCount <= 1 ? "first_project" : "returning",
+          session_seq: null,
+          project_seq: projectCount,
+        },
+        planTier: "free_beta", // managed beta review path — value at capture
+        assistance: { mode: "wild", guided_at: null, guided_scope: null },
+        costMeta: usage
+          ? { tokens_consumed: usage.tokens_consumed, model_used: usage.model_used, review_count_in_session: null }
+          : null,
       },
     }).catch(() => {});
 

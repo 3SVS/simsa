@@ -106,8 +106,9 @@ test("STEP1 수집≠저장: stored R2 payload has ALL P1 envelope keys (null ok
     "event_id", "schema_version", "subject_hash", "workspace_hash", "consent_version",
     "region", "locale", "content_lang", "timezone",
     "entry_path", "built_with", "topic_tags", "acquisition", "user_context", "commercial",
+    "assistance", "cost_meta",
     "event_type", "payload_scrub_state", "outcome",
-    "device_context", "experiment_arm", "quality_signals", "cost_meta",
+    "device_context", "experiment_arm", "quality_signals",
   ]) {
     assert.ok(key in rec, `P1 envelope key "${key}" must exist in the stored R2 record`);
   }
@@ -115,6 +116,46 @@ test("STEP1 수집≠저장: stored R2 payload has ALL P1 envelope keys (null ok
   assert.equal(rec.event_type, "pr_reviewed");
   assert.equal(rec.payload_scrub_state, "clean");
   assert.ok("plan_tier" in rec.commercial, "commercial.plan_tier slot must exist");
+});
+
+test("STEP3 수집≠저장: assistance + cost_meta + topic_tags land in the stored R2 record", async () => {
+  const r2 = new FakeR2();
+  const env = { DB: dbWithConsent({ consented: true, version: TRAINING_CONSENT_VERSION }), EVIDENCE: r2 };
+  await captureTrainingRecord(env, {
+    ...baseInput(),
+    envelope: {
+      region: "KR", contentLang: "ko",
+      topicTags: { domain: "productivity", pattern: "upload->ai->export", integrations: ["Linear"], ai_feature: "summarization" },
+      acquisition: { source: "reddit" },
+      userContext: { skill_signal: "first_project", session_seq: null, project_seq: 1 },
+      planTier: "free_beta",
+      assistance: { mode: "wild", guided_at: null, guided_scope: null },
+      costMeta: { tokens_consumed: 14200, model_used: "claude-haiku-4-5-20251001", review_count_in_session: null },
+    },
+  });
+  const rec = JSON.parse(r2.puts[0].value);
+  // assistance always "wild" today (separate-storage tag)
+  assert.equal(rec.assistance.mode, "wild");
+  assert.equal(rec.assistance.guided_at, null);
+  // cost_meta is measurement (real token number), not billing
+  assert.equal(rec.cost_meta.tokens_consumed, 14200);
+  assert.equal(rec.cost_meta.model_used, "claude-haiku-4-5-20251001");
+  // topic + content + acquisition + user_context + plan_tier
+  assert.equal(rec.topic_tags.domain, "productivity");
+  assert.deepEqual(rec.topic_tags.integrations, ["Linear"]);
+  assert.equal(rec.content_lang, "ko");
+  assert.equal(rec.acquisition.source, "reddit");
+  assert.equal(rec.user_context.skill_signal, "first_project");
+  assert.equal(rec.commercial.plan_tier, "free_beta");
+});
+
+test("assistance defaults to wild + cost_meta null when envelope omits them", async () => {
+  const r2 = new FakeR2();
+  const env = { DB: dbWithConsent({ consented: true, version: TRAINING_CONSENT_VERSION }), EVIDENCE: r2 };
+  await captureTrainingRecord(env, baseInput());
+  const rec = JSON.parse(r2.puts[0].value);
+  assert.equal(rec.assistance.mode, "wild"); // never null — always tagged
+  assert.equal(rec.cost_meta, null);
 });
 
 test("STEP1: envelope values actually flow into the stored record", async () => {

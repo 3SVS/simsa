@@ -67,6 +67,28 @@ export type UserContextTag = {
   project_seq?: number | null;
 } | null;
 
+/**
+ * Guided vs wild. Separates data that came from Simsa's steering (guided) from
+ * pure user-origin data (wild) — mixing them corrupts the moat's pure failure
+ * patterns. Slot only for now: no guided feature exists, so mode is always
+ * "wild"; guided_at / guided_scope stay null until a guided feature ships.
+ */
+export type AssistanceTag = {
+  mode?: "wild" | "guided";
+  guided_at?: "before_build" | "after_review" | null;
+  guided_scope?: unknown; // P3 slot
+} | null;
+
+/**
+ * Usage MEASUREMENT (not billing). Enables a future count→token pricing decision
+ * to be made from data. No debit / cap / enforcement is added — measure only.
+ */
+export type CostMeta = {
+  review_count_in_session?: number | null;
+  tokens_consumed?: number | null;
+  model_used?: string | null;
+} | null;
+
 /** Envelope tags captured at review time. All optional — null slot if no source yet. */
 export type EnvelopeInput = {
   /** sha256(workspaceId) — team/personal split. */
@@ -81,6 +103,10 @@ export type EnvelopeInput = {
   userContext?: UserContextTag;
   /** Tier AT CAPTURE — never join the current tier (would corrupt past rows). */
   planTier?: string | null;
+  /** Guided vs wild (STEP 3). Always "wild" today — slot for future guided feature. */
+  assistance?: AssistanceTag;
+  /** Usage measurement (STEP 3) — tokens/model/session count. Not billing. */
+  costMeta?: CostMeta;
 };
 
 /**
@@ -186,6 +212,10 @@ export type TrainingRecord = {
   user_context: UserContextTag;
   // ── commercial dimension (P1 — tier at capture, never joined) ──
   commercial: { plan_tier: string | null; plan_at_capture: unknown };
+  // ── assistance (guided vs wild — separate-storage tag; "wild" today) ──
+  assistance: { mode: "wild" | "guided"; guided_at: "before_build" | "after_review" | null; guided_scope: unknown };
+  // ── cost_meta (usage measurement, NOT billing) ──
+  cost_meta: CostMeta;
   // ── event body ──
   event_type: "pr_reviewed" | "pr_rechecked";
   payload_scrub_state: "clean" | "metadata_only" | "raw_pending";
@@ -204,7 +234,6 @@ export type TrainingRecord = {
   device_context: unknown;
   experiment_arm: string | null;
   quality_signals: unknown;
-  cost_meta: unknown;
 };
 
 /**
@@ -247,6 +276,14 @@ export function buildTrainingRecord(
     user_context: env.userContext ?? null,
     // commercial — plan_tier is the value AT CAPTURE (never re-joined)
     commercial: { plan_tier: env.planTier ?? null, plan_at_capture: null },
+    // assistance — guided vs wild. Always "wild" today (no guided feature yet).
+    assistance: {
+      mode: env.assistance?.mode ?? "wild",
+      guided_at: env.assistance?.guided_at ?? null,
+      guided_scope: env.assistance?.guided_scope ?? null,
+    },
+    // cost_meta — usage measurement (tokens/model/session count), NOT billing.
+    cost_meta: env.costMeta ?? null,
     // event body
     event_type: input.rerunOfReviewRunId ? "pr_rechecked" : "pr_reviewed",
     payload_scrub_state: "clean", // code-based review payload → redactSecrets applied
@@ -269,7 +306,6 @@ export function buildTrainingRecord(
     device_context: null,
     experiment_arm: null,
     quality_signals: null,
-    cost_meta: null,
   };
 }
 
