@@ -1,6 +1,6 @@
 {
   "name": "@simsa/cli",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "Simsa (Conclave AI) CLI — ships the `conclave` and `simsa` binaries.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

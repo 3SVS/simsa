@@ -1,6 +1,6 @@
 {
   "name": "@simsa/visual-review",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "Conclave AI visual review — Playwright screenshots + pixel diff for before/after design review.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

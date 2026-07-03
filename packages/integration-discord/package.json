@@ -1,6 +1,6 @@
 {
   "name": "@simsa/integration-discord",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Conclave AI Discord notifier — posts review outcomes to a Discord channel via incoming webhook.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

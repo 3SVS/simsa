@@ -1,6 +1,6 @@
 {
   "name": "@simsa/platform-railway",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Conclave AI Railway adapter — resolve preview URL for a commit SHA via Railway's GraphQL API.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

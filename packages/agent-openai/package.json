@@ -1,6 +1,6 @@
 {
   "name": "@simsa/agent-openai",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Conclave AI OpenAI agent — wraps the OpenAI SDK with strict-JSON-schema structured output.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

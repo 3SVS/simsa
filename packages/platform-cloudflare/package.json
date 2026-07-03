@@ -1,6 +1,6 @@
 {
   "name": "@simsa/platform-cloudflare",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Conclave AI Cloudflare Pages adapter — resolve preview URL for a commit SHA via Cloudflare API.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

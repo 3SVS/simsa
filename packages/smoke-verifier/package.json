@@ -1,6 +1,6 @@
 {
   "name": "@simsa/smoke-verifier",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "Conclave AI smoke verification — runs Playwright user-flow checks against a live deploy URL after autofix push, catches runtime regressions that build+test verify cannot (e.g. missing env vars, paused backend, broken third-party calls).",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@simsa/agent-worker",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "Conclave AI Worker agent — turns Council blockers into a unified-diff patch ready to commit back to the PR branch.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

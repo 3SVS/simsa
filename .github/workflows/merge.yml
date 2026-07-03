@@ -42,7 +42,7 @@ on:
         description: 'npm version tag for @simsa/cli (record-outcome step). Keep in lockstep with review.yml/rework.yml default.'
         required: false
         type: string
-        default: 0.18.0
+        default: 0.18.1
       central-url:
         description: 'Override the central-plane base URL. Leave blank for production.'
         required: false

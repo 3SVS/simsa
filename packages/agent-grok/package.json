@@ -1,6 +1,6 @@
 {
   "name": "@simsa/agent-grok",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Conclave AI Grok agent — OpenAI-wire-compatible, routes to xAI's api.x.ai/v1 with strict-JSON-schema structured output.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

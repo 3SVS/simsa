@@ -1,6 +1,6 @@
 {
   "name": "@simsa/agent-gemini",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Conclave AI Gemini agent — wraps @google/genai with responseSchema structured output. Long-context slot per decision #10.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",
