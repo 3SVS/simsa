@@ -54,6 +54,28 @@ describe("generateIdeaToSpecDraft", () => {
     assertValidResponse(result);
   });
 
+  it("generic fallback is Korean by default (no English leak for KR users)", async () => {
+    const result = await generateIdeaToSpecDraft(
+      { idea: "부동산 매물 관리 서비스" }, // non-meeting → generic branch
+      undefined,
+    );
+    assert.equal(result.source, "mock-fallback");
+    // The acceptance items a non-dev reads must be Korean, not "The core feature works end to end".
+    const titles = result.items.map((i) => i.title).join(" ");
+    assert.ok(/[가-힣]/.test(titles), "generic fallback item titles must be Korean");
+    assert.ok(!/works end to end/i.test(titles), "must not leak the English generic template");
+    assert.ok(/[가-힣]/.test(result.understood.summary), "summary must be Korean");
+  });
+
+  it("generic fallback honors locale:'en'", async () => {
+    const result = await generateIdeaToSpecDraft(
+      { idea: "a real-estate listing manager", locale: "en" },
+      undefined,
+    );
+    assert.equal(result.source, "mock-fallback");
+    assert.match(result.items.map((i) => i.title).join(" "), /works end to end/i);
+  });
+
   it("handles empty idea gracefully", async () => {
     const result = await generateIdeaToSpecDraft({ idea: "" }, undefined);
     assert.equal(result.ok, true);

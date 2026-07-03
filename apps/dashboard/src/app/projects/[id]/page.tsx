@@ -159,24 +159,32 @@ export default function ProjectOverviewPage() {
         </div>
       </section>
 
-      {/* Stage 81/82: evolution analytics — only once there is review activity;
-          they are meaningless (and intimidating) on a fresh project. */}
+      {/* Stage 81/82: evolution analytics. These are power-user "engine" gauges
+          (experiments, action packs, benchmarks) that read as intimidating
+          all-zeros to a non-developer. Tucked behind a collapsed disclosure so
+          the default overview stays clean; power users can expand it. */}
       {hasReviewActivity && (
-        <>
-          <section className="mb-8">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="section-title">{t.evolution.learningTitle}</h2>
-            </div>
-            <EvolutionLearningCard projectId={id} t={t} />
-          </section>
+        <details className="mb-8 rounded-lg border border-gray-100">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm">
+            <span className="font-medium text-gray-700">{t.evolution.advancedTitle}</span>
+            <span className="ml-2 text-xs text-gray-400">{t.evolution.advancedHint}</span>
+          </summary>
+          <div className="border-t border-gray-100 px-4 pb-4 pt-4">
+            <section className="mb-8">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="section-title">{t.evolution.learningTitle}</h2>
+              </div>
+              <EvolutionLearningCard projectId={id} t={t} />
+            </section>
 
-          <section className="mb-8">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="section-title">{t.evolution.timelineTitle}</h2>
-            </div>
-            <EvolutionTimelineCard projectId={id} t={t} />
-          </section>
-        </>
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="section-title">{t.evolution.timelineTitle}</h2>
+              </div>
+              <EvolutionTimelineCard projectId={id} t={t} />
+            </section>
+          </div>
+        </details>
       )}
     </div>
   );
