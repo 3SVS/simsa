@@ -37,8 +37,12 @@ function makeDb(opts = {}) {
   const repos = new Map();
   const connections = new Map();
   const prs = new Map();
+  // Ownership hardening: routes now verify the project belongs to the caller.
+  // Tests set this to the userKey they call with.
+  const projectOwner = { value: "uk1" };
 
   return {
+    _projectOwner: projectOwner,
     _settings: settings,
     _notifications: notifications,
     _reviewRuns: reviewRuns,
@@ -100,7 +104,11 @@ function makeDb(opts = {}) {
               }
               if (sql.includes("FROM workspace_project_repos")) return repos.get(args[0]) ?? null;
               if (sql.includes("FROM workspace_github_connections")) return connections.get(args[0]) ?? null;
-              if (sql.includes("FROM workspace_workspace_projects") || sql.includes("FROM workspace_projects")) return null;
+              if (sql.includes("FROM workspace_workspace_projects") || sql.includes("FROM workspace_projects")) {
+                return { id: args[0], user_key: projectOwner.value, title: "T", idea: "",
+                  understood_json: null, product_spec_json: "{}", items_json: "[]",
+                  created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
+              }
               if (sql.includes("FROM workspace_oauth_states")) return null;
               return null;
             },
@@ -439,6 +447,7 @@ const REVIEW_PRODUCT_SPEC = {
 async function runReviewWithMockLLM(env, mockFetch, userKey, prNumber) {
   const db = env.DB;
   const kek = env.CONCLAVE_TOKEN_KEK;
+  db._projectOwner.value = userKey;
 
   db._repos.set("proj1", { id: "repo1", project_id: "proj1", repo_full_name: "org/repo", repo_owner: "org", repo_name: "repo", default_branch: "main", is_private: 0, html_url: "https://github.com/org/repo" });
 

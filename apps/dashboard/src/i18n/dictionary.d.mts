@@ -97,6 +97,15 @@ export type Dictionary = {
       signOut: string;
       signOutError: string;
       keepsLocal: string;
+      claimTitle: string;
+      claimDesc: string;
+      claimProjectsToLink: string;
+      claimButton: string;
+      claimWorking: string;
+      claimDone: string;
+      claimAlreadyDone: string;
+      claimTakenError: string;
+      claimError: string;
     };
     badges: { local: string; planned: string; requiresSignIn: string; readOnly: string };
   };
@@ -280,6 +289,7 @@ export type Dictionary = {
     usedOfRuns: string;
     remainingRuns: string;
     noRemainingRuns: string;
+    planIncluded: string;
     actualDebitOn: string;
     dryRunMode: string;
     topUpTitle: string;
@@ -617,6 +627,23 @@ export type Dictionary = {
     failed: string;
     prReviewComplete: string;
   };
+  emailNotify: {
+    title: string;
+    desc: string;
+    notConfigured: string;
+    address: string;
+    addressHint: string;
+    addressPlaceholder: string;
+    invalidAddress: string;
+    enable: string;
+    saving: string;
+    saved: string;
+    saveError: string;
+    sendTest: string;
+    sending: string;
+    testSent: string;
+    testError: string;
+  };
   github: {
     connectTitle: string;
     connectIntro: string;
@@ -652,6 +679,8 @@ export type Dictionary = {
     viewHistory: string;
     errorNotFound: string;
     errorPrivate: string;
+    appInstallHint: string;
+    appInstallLink: string;
     errorNotConnected: string;
     errorInvalidName: string;
     reposLoadError: string;

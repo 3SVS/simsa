@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Dashboard API client for workspace Telegram notification settings + history.
- * TELEGRAM_BOT_TOKEN is NEVER exposed here — central-plane manages it.
+ * Dashboard API client for workspace Telegram + email notification settings
+ * and history. TELEGRAM_BOT_TOKEN / RESEND_API_KEY are NEVER exposed here —
+ * central-plane manages them.
  */
 
 const CENTRAL_PLANE_URL =
@@ -12,7 +13,7 @@ const CENTRAL_PLANE_URL =
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type NotifyPolicy = "problems_only" | "always" | "disabled";
-export type NotificationChannel = "telegram";
+export type NotificationChannel = "telegram" | "email";
 export type NotificationStatus = "sent" | "skipped" | "error";
 
 export type NotificationSettings = {
@@ -20,6 +21,8 @@ export type NotificationSettings = {
   userKey: string;
   channel: NotificationChannel;
   chatId: string;
+  /** Email channel only — the destination address (server alias of chatId). */
+  emailAddress?: string;
   enabled: boolean;
   notifyPolicy: NotifyPolicy;
   createdAt: string;
@@ -40,7 +43,13 @@ export type NotificationRecord = {
 };
 
 export type NotificationSettingsResponse =
-  | { ok: true; settings: NotificationSettings | null; telegramEnabled: boolean }
+  | {
+      ok: true;
+      settings: NotificationSettings | null;
+      telegramEnabled: boolean;
+      /** True when the server has RESEND_API_KEY provisioned (email channel usable). */
+      emailConfigured?: boolean;
+    }
   | { ok: false; error: string };
 
 export type SaveSettingsResponse =
@@ -74,7 +83,10 @@ export async function fetchNotificationSettings(
 export async function saveNotificationSettings(input: {
   userKey: string;
   channel?: NotificationChannel;
-  chatId: string;
+  /** Telegram channel destination. */
+  chatId?: string;
+  /** Email channel destination. */
+  emailAddress?: string;
   enabled: boolean;
   notifyPolicy: NotifyPolicy;
 }): Promise<SaveSettingsResponse> {

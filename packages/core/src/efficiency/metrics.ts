@@ -25,11 +25,9 @@ export interface MetricsSink {
 }
 
 /**
- * MetricsRecorder — collects per-call metrics in memory and optionally
- * forwards to an external sink (Langfuse self-hosted planned; stub here).
- *
- * Real Langfuse OTLP wiring lands when observability package is added;
- * until then this is the source of truth for cost/tokens/latency.
+ * MetricsRecorder — collects per-call metrics in memory and forwards each
+ * record to the injected `MetricsSink` (in production, `LangfuseMetricsSink`
+ * from @conclave-ai/observability-langfuse, wired by cli/commands/review.ts).
  */
 export class MetricsRecorder {
   private readonly records: CallMetric[] = [];

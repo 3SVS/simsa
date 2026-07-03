@@ -1,4 +1,56 @@
 import type { Agent, PriorReview, ReviewContext, ReviewResult } from "./agent.js";
+import { compact, type CompactableMessage } from "./efficiency/compact.js";
+
+/**
+ * Decision #22 — round-to-round prior compaction knobs, shared by
+ * `Council` (round 2+ debate priors) and `TieredCouncil` (tier-1 →
+ * tier-2 handoff priors). Enabled by default; set `enabled: false`
+ * to restore the pre-wiring behavior of passing full prior text.
+ */
+export interface PriorCompactionOptions {
+  /** Default true (decision #22: efficiency capabilities are first-class). */
+  enabled?: boolean;
+  /** Token budget for the priors' free-text summaries. Default 2000. */
+  targetTokens?: number;
+}
+
+/** Default summary-token budget for `compactPriorReviews`. ~8KB of text. */
+export const DEFAULT_PRIOR_SUMMARY_TARGET_TOKENS = 2000;
+
+/**
+ * Decision #22 — run a round's `PriorReview[]` through the efficiency
+ * gate's `compact()` before it becomes the next round's `ctx.priors`.
+ *
+ * Structured fields (agent / verdict / blockers) are never touched —
+ * they are the schema-critical debate signal. Only the free-text
+ * `summary` bulk is subject to the token budget: each prior's summary
+ * becomes one `CompactableMessage`, and when their combined estimate
+ * exceeds `targetTokens`, `compact()` keeps as many (newest-last) as
+ * fit; the rest lose their `summary` (optional in `PriorReview`, so
+ * the result stays schema-valid and prompt renderers degrade
+ * gracefully). Under budget → priors pass through untouched.
+ */
+export async function compactPriorReviews(
+  priors: readonly PriorReview[],
+  opts: { targetTokens?: number } = {},
+): Promise<PriorReview[]> {
+  const target = opts.targetTokens ?? DEFAULT_PRIOR_SUMMARY_TARGET_TOKENS;
+  const messages: CompactableMessage[] = priors.map((p) => ({
+    role: "assistant" as const,
+    content: p.summary ?? "",
+    tokens: Math.ceil((p.summary ?? "").length / 4),
+  }));
+  const total = messages.reduce((sum, m) => sum + m.tokens, 0);
+  if (total <= target) return [...priors];
+  const result = await compact(messages, { targetTokens: target });
+  const kept = new Set(result.messages);
+  return priors.map((p, i) => {
+    const msg = messages[i];
+    if (msg && kept.has(msg)) return p;
+    // Summary dropped by the compactor — keep the structured signal.
+    return { agent: p.agent, verdict: p.verdict, blockers: p.blockers };
+  });
+}
 
 /**
  * v0.15 — Transient-error retry wrapper for individual agent.review() calls.
@@ -137,6 +189,13 @@ export interface CouncilOptions {
    * pass `{ maxRetries: 0 }` to keep call counts deterministic and fast.
    */
   retry?: { maxRetries?: number; baseDelayMs?: number };
+  /**
+   * Decision #22 — compact round N's priors before round N+1 sees them.
+   * Defaults to `{ enabled: true, targetTokens: 2000 }`; a no-op unless
+   * the priors' summaries collectively exceed the token budget, so
+   * small debates are byte-identical to the pre-wiring behavior.
+   */
+  priorCompaction?: PriorCompactionOptions;
 }
 
 /**
@@ -192,6 +251,7 @@ export class Council {
   private readonly agentWeights: ReadonlyMap<string, number>;
   private readonly rejectThreshold: number;
   private readonly retry: { maxRetries: number; baseDelayMs: number };
+  private readonly priorCompaction: { enabled: boolean; targetTokens: number };
 
   constructor(opts: CouncilOptions) {
     if (opts.agents.length === 0) {
@@ -205,6 +265,10 @@ export class Council {
     this.retry = {
       maxRetries: opts.retry?.maxRetries ?? 2,
       baseDelayMs: opts.retry?.baseDelayMs ?? 1500,
+    };
+    this.priorCompaction = {
+      enabled: opts.priorCompaction?.enabled ?? true,
+      targetTokens: opts.priorCompaction?.targetTokens ?? DEFAULT_PRIOR_SUMMARY_TARGET_TOKENS,
     };
   }
 
@@ -301,6 +365,13 @@ export class Council {
         if (r.summary) p.summary = r.summary;
         return p;
       });
+      // Decision #22 — compact this round's priors before round N+1
+      // renders them into prompts. No-op under the token budget.
+      if (this.priorCompaction.enabled) {
+        priors = await compactPriorReviews(priors, {
+          targetTokens: this.priorCompaction.targetTokens,
+        });
+      }
     }
 
     return {

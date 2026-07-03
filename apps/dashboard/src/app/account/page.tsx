@@ -13,7 +13,9 @@ import {
   displayInitial,
   DISPLAY_NAME_MAX,
 } from "@/lib/account-preferences.mjs";
-import { getAuthSession, signOutAuth, resolveAuthStatus } from "@/lib/auth-client.mjs";
+import { getAuthSession, signOutAuth, resolveAuthStatus, getMembership, claimWorkspace } from "@/lib/auth-client.mjs";
+import type { MembershipBridge, ClaimResult } from "@/lib/auth-client.mjs";
+import { getUserKey } from "@/lib/workflow-store";
 
 function Badge({ children, tone = "gray" }: { children: React.ReactNode; tone?: "gray" | "gold" | "muted" }) {
   const cls =
@@ -35,6 +37,10 @@ export default function AccountPage() {
   const [authSession, setAuthSession] = useState<unknown>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(false);
+  // Claim flow — link this browser's legacy userKey data to the signed-in account.
+  const [membership, setMembership] = useState<MembershipBridge | null>(null);
+  const [claimPhase, setClaimPhase] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
 
   useEffect(() => {
     setDisplayName(readDisplayName(typeof window !== "undefined" ? window.localStorage : null, ""));
@@ -63,6 +69,31 @@ export default function AccountPage() {
   }
 
   const authStatus = resolveAuthStatus({ loading: authLoading, error: authError, session: authSession });
+
+  // Fetch the membership bridge once signed in (read-only; shows claimable count).
+  useEffect(() => {
+    if (authStatus.status !== "signed_in") return;
+    let active = true;
+    getMembership(getUserKey()).then((m) => {
+      if (active) setMembership(m);
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus.status]);
+
+  async function onClaim() {
+    setClaimPhase("working");
+    setClaimResult(null);
+    const res = await claimWorkspace(getUserKey());
+    setClaimResult(res);
+    setClaimPhase(res.ok ? "done" : "error");
+    if (res.ok) {
+      const m = await getMembership(getUserKey());
+      if (m) setMembership(m);
+    }
+  }
 
   function onChange(v: string) {
     setDisplayName(v);
@@ -136,6 +167,43 @@ export default function AccountPage() {
               {a.auth.signOut}
             </button>
             {authError && <p className="mt-1 text-xs text-red-500">{a.auth.signOutError}</p>}
+          </div>
+        )}
+
+        {/* Claim: attach this browser's userKey-scoped data to the account. */}
+        {authStatus.status === "signed_in" && membership?.canClaimProjects && (
+          <div className="mt-4 rounded-md border border-gray-100 bg-gray-50/60 px-4 py-3">
+            <p className="text-xs font-semibold text-gray-700">{a.auth.claimTitle}</p>
+            <p className="mt-1 text-xs text-gray-500">{a.auth.claimDesc}</p>
+            {membership.legacyProjectCount > 0 && (
+              <p className="mt-1 text-xs text-gray-500">
+                {a.auth.claimProjectsToLink.replace("{n}", String(membership.legacyProjectCount))}
+              </p>
+            )}
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={onClaim}
+                disabled={claimPhase === "working"}
+                className="btn btn-primary btn-sm"
+              >
+                {claimPhase === "working" ? a.auth.claimWorking : a.auth.claimButton}
+              </button>
+            </div>
+            {claimPhase === "done" && claimResult?.ok && (
+              <p className="mt-2 text-xs text-green-600">
+                {claimResult.alreadyClaimed
+                  ? a.auth.claimAlreadyDone
+                  : a.auth.claimDone.replace("{n}", String(claimResult.claimedProjects))}
+              </p>
+            )}
+            {claimPhase === "error" && (
+              <p className="mt-2 text-xs text-red-500">
+                {claimResult && !claimResult.ok && claimResult.error === "claimed_by_other"
+                  ? a.auth.claimTakenError
+                  : a.auth.claimError}
+              </p>
+            )}
           </div>
         )}
         <p className="mt-2 text-xs text-gray-400">{a.auth.keepsLocal}</p>

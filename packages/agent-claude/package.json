@@ -1,7 +1,7 @@
 {
   "name": "@conclave-ai/agent-claude",
   "version": "0.11.0",
-  "description": "Conclave AI Claude agent — wraps @anthropic-ai/claude-agent-sdk.",
+  "description": "Conclave AI Claude agent — one-shot tool-use review via @anthropic-ai/sdk (agent-sdk migration deferred per decision-status #8).",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

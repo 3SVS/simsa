@@ -29,6 +29,12 @@ export type WorkspaceAllowanceInfo = {
   remainingIncludedRuns: number;
 };
 
+export type MarketplaceEntitlement = {
+  planName: string;
+  includedRunsPerMonth: number;
+  source: "github_marketplace";
+};
+
 export type WorkspaceCreditsResponse = {
   ok: true;
   userKey: string;
@@ -36,6 +42,8 @@ export type WorkspaceCreditsResponse = {
   allowance: {
     review: WorkspaceAllowanceInfo;
   };
+  /** Present when a paid GitHub Marketplace plan raises the monthly included runs. */
+  entitlement?: MarketplaceEntitlement;
   actualDebitsEnabled: boolean;
   actualDebitAllowedForUser: boolean;
 };

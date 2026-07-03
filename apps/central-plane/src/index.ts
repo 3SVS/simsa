@@ -4,6 +4,7 @@ import { assertPreflight } from "./preflight.js";
 import { selfHealWebhook } from "./webhook-heal.js";
 import { cleanupStuckJobs, cleanupStuckVisualChecks, cleanupStuckRepairJobs } from "./stuck-cleanup.js";
 import { refreshAllSources } from "./external-references.js";
+import { sweepPlaintextGithubTokens } from "./db/token-encrypt-sweep.js";
 import { retryPendingFeedback } from "./routes/feedback.js";
 import { promoteSeedsPass } from "./seed-promoter.js";
 import { runSourceDiscovery } from "./source-discovery.js";
@@ -71,6 +72,14 @@ export default {
       return;
     }
     if (event.cron === "0 3 * * *") {
+      // Piggybacked daily hygiene: drain legacy plaintext GitHub tokens into
+      // the encrypted column (migration 0004 phase 2). No-op without KEK.
+      try {
+        const sweep = await sweepPlaintextGithubTokens(env);
+        console.log(JSON.stringify({ cron: "token-encrypt-sweep", cronExpression: event.cron, ...sweep }));
+      } catch (err) {
+        console.error("[token-encrypt-sweep] crashed:", err);
+      }
       try {
         const results = await refreshAllSources(env);
         const ok = results.filter((r) => r.ok).length;

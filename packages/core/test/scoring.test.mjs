@@ -127,10 +127,61 @@ test("computeAgentScore: approved but later rejected → buildPass drops", () =>
   assert.equal(s.components.buildPass, 0.5);
 });
 
-test("computeAgentScore: time component currently always null (placeholder)", () => {
+test("computeAgentScore: time is null without outcomeAt (legacy entries)", () => {
   const entries = [episodic({ id: "x", reviews: [approve("claude")], outcome: "merged" })];
   const s = computeAgentScore("claude", entries);
   assert.equal(s.components.time, null);
+});
+
+test("computeAgentScore: time axis measures createdAt → outcomeAt median", () => {
+  const at = (startIso, hoursLater) => ({
+    ...episodic({ id: `t${hoursLater}`, reviews: [approve("claude")], outcome: "merged" }),
+    createdAt: startIso,
+    outcomeAt: new Date(Date.parse(startIso) + hoursLater * 3_600_000).toISOString(),
+  });
+  // Median ≤ 4h → full credit 1.0
+  const fast = computeAgentScore("claude", [at("2026-07-01T00:00:00.000Z", 2)]);
+  assert.equal(fast.components.time, 1);
+  assert.ok(fast.componentsUsed.includes("time"));
+  // Median ≥ 168h (7d) → 0
+  const slow = computeAgentScore("claude", [at("2026-07-01T00:00:00.000Z", 200)]);
+  assert.equal(slow.components.time, 0);
+  // Midpoint (86h) → linear ≈ (168-86)/164
+  const mid = computeAgentScore("claude", [at("2026-07-01T00:00:00.000Z", 86)]);
+  assert.ok(Math.abs(mid.components.time - (168 - 86) / 164) < 1e-9);
+  // Median across three entries (2h, 86h, 200h → median 86h)
+  const mixed = computeAgentScore("claude", [
+    at("2026-07-01T00:00:00.000Z", 2),
+    at("2026-07-02T00:00:00.000Z", 86),
+    at("2026-07-03T00:00:00.000Z", 200),
+  ]);
+  assert.ok(Math.abs(mixed.components.time - (168 - 86) / 164) < 1e-9);
+  // Pending / missing outcomeAt entries are skipped, not zeroed
+  const withPending = computeAgentScore("claude", [
+    at("2026-07-01T00:00:00.000Z", 2),
+    episodic({ id: "p", reviews: [approve("claude")], outcome: "pending" }),
+  ]);
+  assert.equal(withPending.components.time, 1);
+});
+
+test("OutcomeWriter.recordOutcome stamps outcomeAt for the time axis", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aic-score-time-"));
+  try {
+    const store = new FileSystemMemoryStore({ root, skipBundledSeeds: true });
+    const writer = new OutcomeWriter({ store });
+    const entry = await writer.writeReview({
+      ctx: { repo: "acme/app", pullNumber: 9, newSha: "s", diff: "d" },
+      reviews: [approve("claude")],
+      councilVerdict: "approve",
+      costUsd: 0,
+    });
+    await writer.recordOutcome({ episodicId: entry.id, outcome: "merged" });
+    const stored = await store.findEpisodic(entry.id);
+    assert.ok(stored.outcomeAt, "outcomeAt stamped on outcome");
+    assert.ok(Date.parse(stored.outcomeAt) >= Date.parse(stored.createdAt));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("computeAgentScore: componentsUsed lists contributing components only", () => {

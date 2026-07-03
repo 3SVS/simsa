@@ -138,11 +138,31 @@ export interface Env {
   WORKSPACE_GH_SCOPES?: string;
   WORKSPACE_GH_DASHBOARD_URL?: string;
   /**
+   * Private-repo support via the existing GitHub App (workspace/github-app-access.ts).
+   * Public "install this App" URL shown to users whose private repo isn't
+   * reachable, e.g. https://github.com/apps/<slug>/installations/new.
+   * Set via wrangler.toml [vars]; empty string = no install link surfaced.
+   */
+  GH_APP_INSTALL_URL?: string;
+  /**
    * Stage 17 — base URL of the dashboard. Used when building Telegram notification
    * message links. Defaults to https://app.trysimsa.com when unset (Stage 92).
    * Set via wrangler.toml [vars] or `wrangler secret put DASHBOARD_BASE_URL`.
    */
   DASHBOARD_BASE_URL?: string;
+  /**
+   * Email notifications (Resend) — simple default alternative to Telegram for
+   * workspace "PR review complete" notifications. DORMANT until RESEND_API_KEY
+   * is provisioned: without it every email path returns
+   * { ok:false, error:"not_configured" } (503 email_not_configured on the test
+   * endpoint) and never throws.
+   *
+   * Set via `wrangler secret put RESEND_API_KEY`.
+   * NOTIFY_EMAIL_FROM is optional (wrangler.toml [vars]) and defaults to
+   * "Simsa <notify@trysimsa.com>".
+   */
+  RESEND_API_KEY?: string;
+  NOTIFY_EMAIL_FROM?: string;
   /**
    * Stage 18 — Admin usage stats key. Set via `wrangler secret put ADMIN_USAGE_STATS_KEY`.
    * Required for GET /admin/usage-stats. Returns 503 when unset, 401 on key mismatch.
@@ -154,6 +174,18 @@ export interface Env {
    * Set via wrangler.toml [vars] or `wrangler secret put`.
    */
   WORKSPACE_GENERATION_LIMIT_PER_HOUR?: string;
+  /**
+   * Security hardening — hourly per-userKey cap for
+   * POST /workspace/projects/:id/github/pulls/:number/review.
+   * Parsed as integer; defaults to 30 when unset or non-numeric.
+   */
+  WORKSPACE_PR_REVIEW_HOURLY_LIMIT?: string;
+  /**
+   * Security hardening — hourly per-userKey cap for the PR comment write
+   * endpoints (POST …/comment and PATCH …/comment/:commentId).
+   * Parsed as integer; defaults to 60 when unset or non-numeric.
+   */
+  WORKSPACE_PR_COMMENT_HOURLY_LIMIT?: string;
   /**
    * v0.14.5 — Lemon Squeezy MoR for paid tiers (Stripe Korea is
    * personal-only; LS handles VAT across KR/US/EU). All four secrets
@@ -170,6 +202,16 @@ export interface Env {
   LEMONSQUEEZY_WEBHOOK_SECRET?: string;
   LEMONSQUEEZY_STORE_ID?: string;
   LEMONSQUEEZY_VARIANT_ID_FIRST_PR?: string;
+  /**
+   * LS subscriptions — variant id → monthly workspace review credits.
+   * JSON string like {"123456":30,"789012":100}. Parsed fail-safe by
+   * parseSubscriptionVariantCredits(): malformed JSON / non-object →
+   * treated as empty mapping (subscription events still ack 200 and
+   * persist state, but no credits are granted; a structured line is
+   * logged for manual review). Unknown variants → log + no grant.
+   * Set via wrangler.toml [vars] or `wrangler secret put`.
+   */
+  LS_SUBSCRIPTION_VARIANT_CREDITS?: string;
   /**
    * Founder-alert hook for the very first external installs.
    * When a `gh_app_installations` row is created in the install/created

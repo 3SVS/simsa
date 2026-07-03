@@ -35,6 +35,10 @@ WORKSPACE_GH_CLIENT_ID = "Ov23ctqhuNRdhunT36Y9"
 WORKSPACE_GH_REDIRECT_URI = "https://conclave-ai.seunghunbae.workers.dev/workspace/github/oauth/callback"
 WORKSPACE_GH_SCOPES = "read:user public_repo"
 WORKSPACE_GH_DASHBOARD_URL = "https://dashboard.conclave-ai.dev"
+# Private-repo support — public install URL of the existing GitHub App
+# (e.g. "https://github.com/apps/<slug>/installations/new"). Shown to users
+# whose private repo needs the App installed. Empty = no install link surfaced.
+GH_APP_INSTALL_URL = "https://github.com/apps/conclave-ai-code-council/installations/new"
 
 # Stage 24 — Credit execution feature flags (default false = dry-run only).
 # Set to "true" to activate actual debits / blocking. Production stays false

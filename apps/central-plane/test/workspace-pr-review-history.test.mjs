@@ -36,6 +36,14 @@ function makeMockDb(reviewRuns = [], repos = []) {
       return {
         bind(...args) { bound = args; return this; },
         async first() {
+          // Ownership hardening: every project id resolves to a row owned
+          // by this file's route-test userKey.
+          if (/FROM workspace_projects/.test(sql)) {
+            const [pid] = bound;
+            return { id: pid, user_key: "uk1", title: "T", idea: "",
+              understood_json: null, product_spec_json: "{}", items_json: "[]",
+              created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
+          }
           if (/FROM workspace_project_repos/.test(sql)) {
             const [pid] = bound;
             return repos.find((r) => r.project_id === pid) ?? null;

@@ -16,7 +16,7 @@ import { getCreditBalance, debitCredits, generateDebitId } from "./credits.js";
 import type { CreditType } from "./credits.js";
 import type { BillingStatus } from "./billing-rules.js";
 import { getAllowanceDryRun } from "./allowance-usage.js";
-import type { AllowanceDryRun } from "./allowance-usage.js";
+import type { AllowanceDryRun, AllowanceEntitlement } from "./allowance-usage.js";
 import { getCreditExecutionConfig, isActualDebitAllowedForUser } from "./credit-config.js";
 
 export type CreditEnforcementDryRun = {
@@ -130,12 +130,19 @@ export async function checkCreditEnforcement({
   eventType,
   projectId,
   sourceEventId,
+  entitlement,
 }: {
   env: Env;
   userKey: string;
   eventType: string;
   projectId?: string;
   sourceEventId?: string;
+  /**
+   * Optional paid-plan entitlement (e.g. GitHub Marketplace) that raises
+   * the monthly included runs. Resolved by the route layer; omitted → base
+   * free allowance only (existing callers/tests unchanged).
+   */
+  entitlement?: AllowanceEntitlement | null;
 }): Promise<CreditEnforcementResult> {
   const config = getCreditExecutionConfig(env);
   const rule = getBillingRule(eventType);
@@ -172,7 +179,7 @@ export async function checkCreditEnforcement({
 
   let allowance: AllowanceDryRun | null = null;
   try {
-    allowance = await getAllowanceDryRun({ env, userKey, eventType });
+    allowance = await getAllowanceDryRun({ env, userKey, eventType, entitlement });
   } catch {
     allowance = null;
   }
@@ -249,10 +256,12 @@ export async function checkCreditEnforcementDryRun({
   env,
   userKey,
   eventType,
+  entitlement,
 }: {
   env: Env;
   userKey: string;
   eventType: string;
+  entitlement?: AllowanceEntitlement | null;
 }): Promise<CreditEnforcementDryRun> {
   const rule = getBillingRule(eventType);
 
@@ -276,7 +285,7 @@ export async function checkCreditEnforcementDryRun({
   // Check monthly allowance first (non-fatal)
   let allowance: AllowanceDryRun | null = null;
   try {
-    allowance = await getAllowanceDryRun({ env, userKey, eventType });
+    allowance = await getAllowanceDryRun({ env, userKey, eventType, entitlement });
   } catch {
     allowance = null;
   }

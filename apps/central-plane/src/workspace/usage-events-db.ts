@@ -18,7 +18,9 @@ export type UsageEventType =
   | "workspace_pr_comment_updated"
   | "workspace_fix_pack_exported"
   | "workspace_telegram_notification_sent"
-  | "workspace_telegram_notification_error";
+  | "workspace_telegram_notification_error"
+  | "workspace_email_notification_sent"
+  | "workspace_email_notification_error";
 
 function randId(): string {
   const ts = Date.now().toString(36).slice(-6);

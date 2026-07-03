@@ -60,7 +60,7 @@ export function computeAgentScore(agent: string, entries: readonly EpisodicEntry
   const reviewApproval = sampleCount === 0 ? null : computeReviewApproval(agent, relevant);
   const buildPass = sampleCount === 0 ? null : computeBuildPass(agent, relevant);
   const rework = sampleCount === 0 ? null : computeReworkFriendly(relevant);
-  const time = null; // Not yet tracked — needs resolution timestamps beyond createdAt.
+  const time = sampleCount === 0 ? null : computeTimeToResolution(relevant);
 
   const components: AgentScoreComponents = { buildPass, reviewApproval, time, rework };
   const { score, used } = weightAndNormalize(components);
@@ -169,6 +169,37 @@ function computeBuildPass(agent: string, entries: readonly EpisodicEntry[]): num
     if (e.outcome === "merged") merged += 1;
   }
   return denom === 0 ? null : merged / denom;
+}
+
+/** Time-to-resolution window: ≤ FULL_CREDIT hours scores 1.0, ≥ ZERO hours
+ *  scores 0.0, linear in between. A week without resolution is treated as
+ *  "the review didn't speed anything up". */
+const TIME_FULL_CREDIT_HOURS = 4;
+const TIME_ZERO_HOURS = 168; // 7 days
+
+/**
+ * Median hours from review (createdAt) to recorded outcome (outcomeAt),
+ * mapped onto [0, 1]. Entries without outcomeAt (pending, or written before
+ * v0.17 when the field did not exist) are skipped; returns null when nothing
+ * measurable exists — the weighted normalizer then renormalizes without the
+ * time axis, exactly as before.
+ */
+function computeTimeToResolution(entries: readonly EpisodicEntry[]): number | null {
+  const hours: number[] = [];
+  for (const e of entries) {
+    if (e.outcome === "pending" || !e.outcomeAt) continue;
+    const started = Date.parse(e.createdAt);
+    const resolved = Date.parse(e.outcomeAt);
+    if (!Number.isFinite(started) || !Number.isFinite(resolved) || resolved < started) continue;
+    hours.push((resolved - started) / 3_600_000);
+  }
+  if (hours.length === 0) return null;
+  hours.sort((a, b) => a - b);
+  const mid = Math.floor(hours.length / 2);
+  const median = hours.length % 2 === 1 ? hours[mid]! : (hours[mid - 1]! + hours[mid]!) / 2;
+  if (median <= TIME_FULL_CREDIT_HOURS) return 1;
+  if (median >= TIME_ZERO_HOURS) return 0;
+  return clamp01((TIME_ZERO_HOURS - median) / (TIME_ZERO_HOURS - TIME_FULL_CREDIT_HOURS));
 }
 
 /** 1 - (reworked outcomes / resolved outcomes). Null when nothing is resolved yet. */

@@ -36,7 +36,9 @@ export type GitHubRepo = {
 
 export type LookupRepoResponse =
   | { ok: true; repo: GitHubRepo }
-  | { ok: false; error: string };
+  // appInstallUrl: additive — set when a private repo needs the GitHub App
+  // installed (error "app_not_installed", sometimes "not_found").
+  | { ok: false; error: string; appInstallUrl?: string };
 
 export type GitHubReposResponse =
   | { ok: true; repos: GitHubRepo[] }
@@ -178,10 +180,10 @@ export async function linkProjectRepo(
   }
 }
 
-export async function fetchProjectRepo(projectId: string): Promise<ProjectRepoResponse> {
+export async function fetchProjectRepo(projectId: string, userKey: string): Promise<ProjectRepoResponse> {
   try {
     const resp = await fetch(
-      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/repo`,
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/repo?userKey=${encodeURIComponent(userKey)}`,
       { signal: AbortSignal.timeout(8000) },
     );
     if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
@@ -247,10 +249,10 @@ export async function fetchProjectPulls(
   }
 }
 
-export async function fetchLinkedPulls(projectId: string): Promise<LinkedPullsResponse> {
+export async function fetchLinkedPulls(projectId: string, userKey: string): Promise<LinkedPullsResponse> {
   try {
     const resp = await fetch(
-      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/github/linked-pulls`,
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/github/linked-pulls?userKey=${encodeURIComponent(userKey)}`,
       { signal: AbortSignal.timeout(8000) },
     );
     if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
@@ -457,10 +459,11 @@ export async function startPRReview(
 export async function getLatestPRReview(
   projectId: string,
   prNumber: number,
+  userKey: string,
 ): Promise<GetReviewResponse> {
   try {
     const resp = await fetch(
-      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/github/pulls/${prNumber}/review`,
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/github/pulls/${prNumber}/review?userKey=${encodeURIComponent(userKey)}`,
       { signal: AbortSignal.timeout(8000) },
     );
     if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
@@ -673,10 +676,11 @@ export async function updatePRComment(
 export async function listPRComments(
   projectId: string,
   prNumber: number,
+  userKey: string,
 ): Promise<ListCommentsResponse> {
   try {
     const resp = await fetch(
-      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/github/pulls/${prNumber}/comments`,
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/github/pulls/${prNumber}/comments?userKey=${encodeURIComponent(userKey)}`,
       { signal: AbortSignal.timeout(8000) },
     );
     if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };

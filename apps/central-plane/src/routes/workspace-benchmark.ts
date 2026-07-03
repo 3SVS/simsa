@@ -34,6 +34,7 @@ import {
   listAgentBenchmarks,
   getAgentBenchmarkById,
 } from "../workspace/agent-benchmark-db.js";
+import { getOwnedProject } from "../workspace/db.js";
 
 type CandidateInput = {
   id?: unknown;
@@ -189,6 +190,12 @@ export function createWorkspaceBenchmarkRoutes(): Hono<{ Bindings: Env }> {
     const projectId = c.req.param("id");
     const userKey = c.req.query("userKey") ?? "";
     if (!userKey) return c.json({ ok: false, error: "userKey_required" }, 400);
+
+    // Ownership: the list query is project-scoped (no user_key column in the
+    // lightweight select), so gate on the project itself. 404 for missing OR
+    // not-owned — no existence oracle.
+    const owned = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
+    if (!owned) return c.json({ ok: false, error: "not_found" }, 404);
 
     try {
       const benchmarks = await listAgentBenchmarks(c.env, projectId, { limit: 50 });

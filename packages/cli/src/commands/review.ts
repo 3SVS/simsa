@@ -67,6 +67,7 @@ import {
   type SpawnedAgentOutcomeReport,
 } from "../lib/spawned-agents-resolver.js";
 import { loadProjectContext, loadDesignContext, loadPrd } from "../lib/project-context.js";
+import { planTriage } from "../lib/triage-plan.js";
 import { loadPrDiff, loadGitDiff, loadFileDiff, type LoadedDiff } from "../lib/diff-source.js";
 import { renderPlainSummarySection, renderReview, verdictToExitCode } from "../lib/output.js";
 import { buildPlatforms, type PlatformId } from "../lib/platform-factory.js";
@@ -601,6 +602,22 @@ export async function review(argv: string[]): Promise<void> {
   let tier1IdsResolved: string[] = [];
   let tier2IdsResolved: string[] = [];
 
+  // Decision #22 — round-to-round prior compaction (core efficiency/
+  // compact.ts). Honors BOTH the legacy flat `efficiency.compactEnabled`
+  // and the structured `efficiency.compact.enabled` (each defaults true;
+  // either set to false disables). Passed to whichever council shape is
+  // built below; a no-op unless a debate round's prior summaries exceed
+  // the token budget.
+  const priorCompaction = {
+    enabled:
+      config.efficiency.compactEnabled !== false &&
+      config.efficiency.compact.enabled !== false,
+    targetTokens: config.efficiency.compact.targetPriorTokens,
+  };
+  // Decision #22 — candidate agents for the triage lite path (first
+  // built tier-1 / flat agent). Captured by both branches below.
+  let liteCandidates: Agent[] = [];
+
   if (useTiered && domainConfig) {
     // For "mixed" runs, union tier-1 / tier-2 across code + design
     // domain configs (deduped, preserving order: code first, then any
@@ -676,7 +693,9 @@ export async function review(argv: string[]): Promise<void> {
       tier2MaxRounds,
       alwaysEscalate,
       ...(agentWeights ? { agentWeights } : {}),
+      priorCompaction,
     });
+    liteCandidates = tier1;
   } else {
     // Legacy flat-Council path — used when config.council.domains is absent.
     const flatAgents: Agent[] = [];
@@ -696,7 +715,40 @@ export async function review(argv: string[]): Promise<void> {
       maxRounds: config.council.maxRounds,
       enableDebate: config.council.enableDebate,
       ...(agentWeights ? { agentWeights } : {}),
+      priorCompaction,
     });
+    liteCandidates = flatAgents;
+  }
+
+  // Decision #22 — pre-council triage. A small, non-risky, code-domain
+  // diff skips the full council and runs a single-agent lite review
+  // (first tier-1 / configured agent, 1 round). The decision rules live
+  // in core/efficiency/triage.ts; the CLI-layer gates (flag, domain)
+  // live in lib/triage-plan.ts (pure, unit-tested). Design + mixed
+  // domains never take the lite path. Disable with
+  // `efficiency.triage.enabled: false` in .conclaverc.json.
+  const triagePlan = planTriage({
+    diff: loaded.diff,
+    resolvedDomain,
+    enabled: config.efficiency.triage.enabled !== false,
+    liteLineThreshold: config.efficiency.triage.liteLineThreshold,
+    liteFileThreshold: config.efficiency.triage.liteFileThreshold,
+  });
+  if (triagePlan.useLite && liteCandidates.length > 0) {
+    const liteAgent = liteCandidates[0]!;
+    infoOut(
+      `conclave review: triage → lite path (${triagePlan.outcome?.reason ?? "lite"}) — single-agent review by ${liteAgent.id}\n`,
+    );
+    council = new Council({
+      agents: [liteAgent],
+      maxRounds: 1,
+      priorCompaction,
+    });
+    // Keep the --json emitter's roster accurate for the lite run.
+    tier1IdsResolved = [liteAgent.id];
+    tier2IdsResolved = [];
+  } else if (triagePlan.outcome) {
+    infoOut(`conclave review: triage → full council (${triagePlan.outcome.reason})\n`);
   }
 
   // 5. Deliberate — first read deploy status from GH check-suites so

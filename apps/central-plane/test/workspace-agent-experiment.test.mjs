@@ -70,6 +70,13 @@ function makeDb({ runs = new Map(), benchmarks = [], experiments = [], candidate
             return { meta: { changes: 0 } };
           },
           async first() {
+            // Ownership hardening: the list route now verifies the project
+            // belongs to the caller. The test project is owned by USER.
+            if (sql.includes("FROM workspace_projects")) {
+              return { id: args[0], user_key: "uk_owner", title: "T", idea: "",
+                understood_json: null, product_spec_json: "{}", items_json: "[]",
+                created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
+            }
             if (sql.includes("FROM workspace_agent_experiments") && sql.includes("WHERE id = ?")) {
               return experiments.find((e) => e.id === args[0]) ?? null;
             }

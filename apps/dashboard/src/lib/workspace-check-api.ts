@@ -91,6 +91,8 @@ export async function saveProjectToDb(payload: {
 
 export type CheckDraftInput = {
   projectId?: string;
+  /** Required by the server when projectId is present (ownership-gated persistence). */
+  userKey?: string;
   productSpec: unknown;
   items: Array<{ id: string; title: string; status: string; criteria: string[] }>;
 };
@@ -127,6 +129,8 @@ export async function callCheckDraftApi(
 
 export type FixSuggestionInput = {
   projectId?: string;
+  /** Required by the server when projectId is present (ownership-gated persistence). */
+  userKey?: string;
   item: { id: string; title: string; status: string; criteria: string[] };
   checkResult: { reason: string; evidence: string[]; nextAction: string };
   productSpec: unknown;

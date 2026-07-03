@@ -44,6 +44,9 @@ export default function SettingsPage() {
   const [directInput, setDirectInput] = useState("");
   const [lookupPhase, setLookupPhase] = useState<"idle" | "loading" | "error">("idle");
   const [lookupError, setLookupError] = useState("");
+  // Private repos: install URL for the GitHub App when the backend says the
+  // repo needs it (error "app_not_installed", or "not_found" with a hint URL).
+  const [lookupInstallUrl, setLookupInstallUrl] = useState("");
   // Stage 273: disconnect flow (GitHub OAuth has no account picker — disconnect
   // + logout at github.com is the only way to switch accounts).
   const [disconnectPhase, setDisconnectPhase] = useState<"idle" | "working" | "done" | "error">("idle");
@@ -60,6 +63,16 @@ export default function SettingsPage() {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [notifPhase, setNotifPhase] = useState<"idle" | "loading" | "done">("idle");
 
+  // Email notification state (simple default alternative to Telegram)
+  const [emSettings, setEmSettings] = useState<NotificationSettings | null>(null);
+  const [emConfigured, setEmConfigured] = useState(false);
+  const [emAddress, setEmAddress] = useState("");
+  const [emEnabledToggle, setEmEnabledToggle] = useState(true);
+  const [emSavePhase, setEmSavePhase] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const [emSaveError, setEmSaveError] = useState("");
+  const [emTestPhase, setEmTestPhase] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [emTestError, setEmTestError] = useState("");
+
   const userKey = getUserKey();
 
   // Load Telegram settings on mount
@@ -72,6 +85,19 @@ export default function SettingsPage() {
         setTgChatId(res.settings.chatId);
         setTgPolicy(res.settings.notifyPolicy);
         setTgEnabledToggle(res.settings.enabled);
+      }
+    }
+  }, [userKey]);
+
+  // Load email notification settings on mount
+  const loadEmSettings = useCallback(async () => {
+    const res = await fetchNotificationSettings(userKey, "email");
+    if (res.ok) {
+      setEmConfigured(Boolean(res.emailConfigured));
+      if (res.settings) {
+        setEmSettings(res.settings);
+        setEmAddress(res.settings.emailAddress ?? res.settings.chatId);
+        setEmEnabledToggle(res.settings.enabled);
       }
     }
   }, [userKey]);
@@ -114,12 +140,53 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveEmSettings() {
+    const address = emAddress.trim();
+    if (!address) return;
+    setEmSaveError("");
+    // Loose client-side check (x@y.z) — server validates again.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      setEmSavePhase("error");
+      setEmSaveError(t.emailNotify.invalidAddress);
+      return;
+    }
+    setEmSavePhase("saving");
+    const res = await saveNotificationSettings({
+      userKey,
+      channel: "email",
+      emailAddress: address,
+      enabled: emEnabledToggle,
+      notifyPolicy: "problems_only",
+    });
+    if (res.ok) {
+      setEmSettings(res.settings);
+      setEmSavePhase("done");
+      void loadNotifications();
+    } else {
+      setEmSavePhase("error");
+      setEmSaveError(res.error === "invalid_email" ? t.emailNotify.invalidAddress : t.emailNotify.saveError);
+    }
+  }
+
+  async function handleTestEmailNotification() {
+    setEmTestPhase("sending");
+    setEmTestError("");
+    const res = await testNotification(userKey, "email");
+    if (res.ok) {
+      setEmTestPhase("sent");
+      void loadNotifications();
+    } else {
+      setEmTestPhase("error");
+      setEmTestError(res.message ?? res.error ?? t.emailNotify.testError);
+    }
+  }
+
   // Load connection status + linked repo on mount
   const loadStatus = useCallback(async () => {
     setPhase("loading");
     const [statusRes, repoRes] = await Promise.all([
       fetchGitHubStatus(userKey),
-      fetchProjectRepo(id),
+      fetchProjectRepo(id, getUserKey()),
     ]);
 
     if (statusRes.connected) {
@@ -137,8 +204,9 @@ export default function SettingsPage() {
   useEffect(() => {
     loadStatus();
     loadTgSettings();
+    loadEmSettings();
     loadNotifications();
-  }, [loadStatus, loadTgSettings, loadNotifications]);
+  }, [loadStatus, loadTgSettings, loadEmSettings, loadNotifications]);
 
   async function loadRepos() {
     setReposPhase("loading");
@@ -175,6 +243,7 @@ export default function SettingsPage() {
     }
     setLookupPhase("loading");
     setLookupError("");
+    setLookupInstallUrl("");
     const res = await lookupGitHubRepo(userKey, fullName);
     if (res.ok) {
       setLookupPhase("idle");
@@ -184,10 +253,12 @@ export default function SettingsPage() {
       const msg: Record<string, string> = {
         not_found: t.github.errorNotFound,
         private_unsupported: t.github.errorPrivate,
+        app_not_installed: t.github.appInstallHint,
         not_connected: t.github.errorNotConnected,
         invalid_full_name: t.github.errorInvalidName,
       };
       setLookupError(msg[res.error] ?? t.github.linkFailed);
+      setLookupInstallUrl(res.appInstallUrl ?? "");
     }
   }
 
@@ -439,6 +510,18 @@ export default function SettingsPage() {
             {lookupPhase === "error" && lookupError && (
               <p className="mt-2 text-xs text-red-500">{lookupError}</p>
             )}
+            {lookupPhase === "error" && lookupInstallUrl && (
+              <p className="mt-1 text-xs">
+                <a
+                  href={lookupInstallUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-700 underline hover:text-brand-800"
+                >
+                  {t.github.appInstallLink} →
+                </a>
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between border-t border-gray-100 p-4">
@@ -463,6 +546,67 @@ export default function SettingsPage() {
       {linkPhase === "error" && (
         <p className="callout callout-error">{t.github.linkFailed}</p>
       )}
+
+      {/* ─── Email notifications (simple default) ────────────────────────── */}
+      <div className="mt-10">
+        <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.emailNotify.title}</h2>
+        <p className="mb-4 mt-1 text-sm text-gray-500">{t.emailNotify.desc}</p>
+
+        {!emConfigured && (
+          <div className="callout mb-4 border-amber-200 bg-amber-50 text-xs text-amber-700">{t.emailNotify.notConfigured}</div>
+        )}
+
+        <div className="card space-y-4 p-5">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-600">{t.emailNotify.address}</label>
+            <input
+              type="email"
+              value={emAddress}
+              onChange={(e) => setEmAddress(e.target.value)}
+              placeholder={t.emailNotify.addressPlaceholder}
+              disabled={!emConfigured}
+              className="input disabled:opacity-50"
+            />
+            <p className="mt-1 text-xs text-gray-400">{t.emailNotify.addressHint}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="em-enabled"
+              checked={emEnabledToggle}
+              onChange={(e) => setEmEnabledToggle(e.target.checked)}
+              disabled={!emConfigured}
+              className="rounded border-gray-300 accent-brand-600 disabled:opacity-50"
+            />
+            <label htmlFor="em-enabled" className="text-sm text-gray-700">{t.emailNotify.enable}</label>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={handleSaveEmSettings}
+              disabled={!emConfigured || !emAddress.trim() || emSavePhase === "saving"}
+              className="btn btn-md btn-primary"
+            >
+              {emSavePhase === "saving" ? t.emailNotify.saving : t.common.save}
+            </button>
+            {emSettings && (
+              <button
+                onClick={handleTestEmailNotification}
+                disabled={!emConfigured || emTestPhase === "sending"}
+                className="btn btn-md btn-secondary"
+              >
+                {emTestPhase === "sending" ? t.emailNotify.sending : t.emailNotify.sendTest}
+              </button>
+            )}
+          </div>
+
+          {emSavePhase === "done" && <p className="text-xs text-green-600">✓ {t.emailNotify.saved}</p>}
+          {emSavePhase === "error" && <p className="text-xs text-red-600">{emSaveError || t.emailNotify.saveError}</p>}
+          {emTestPhase === "sent" && <p className="text-xs text-green-600">✓ {t.emailNotify.testSent}</p>}
+          {emTestPhase === "error" && <p className="text-xs text-red-600">{emTestError || t.emailNotify.testError}</p>}
+        </div>
+      </div>
 
       {/* ─── Telegram notifications ──────────────────────────────────────── */}
       <div className="mt-10">

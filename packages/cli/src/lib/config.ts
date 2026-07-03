@@ -30,6 +30,38 @@ export const ConclaveConfigSchema = z.object({
       diffSplitter: z.boolean().default(true),
       diffSplitterMaxLines: z.number().int().min(50).default(500),
       diffSplitterMaxFilesPerChunk: z.number().int().min(1).default(20),
+      /**
+       * Decision #22 — pre-council triage. When enabled (default), a
+       * small non-risky code-domain diff skips the full council and
+       * runs a single-agent "lite" review (first tier-1 / configured
+       * agent, 1 round). Risky paths (schema / auth / payments /
+       * migrations / .sql), large diffs, and non-trivial diffs without
+       * test coverage always go full — see core/efficiency/triage.ts.
+       * Design + mixed domains never take the lite path.
+       */
+      triage: z
+        .object({
+          enabled: z.boolean().default(true),
+          liteLineThreshold: z.number().int().min(1).default(40),
+          liteFileThreshold: z.number().int().min(1).default(3),
+        })
+        .default({ enabled: true, liteLineThreshold: 40, liteFileThreshold: 3 }),
+      /**
+       * Decision #22 — round-to-round prior compaction (core
+       * efficiency/compact.ts). Applies to Council round-2+ debate
+       * priors and the tier-1 → tier-2 handoff: when the priors'
+       * free-text summaries exceed `targetPriorTokens`, the compactor
+       * keeps as many as fit and drops the rest (verdicts + blockers
+       * are never touched). Compaction runs only when BOTH this flag
+       * and the legacy flat `compactEnabled` are true (both default
+       * true).
+       */
+      compact: z
+        .object({
+          enabled: z.boolean().default(true),
+          targetPriorTokens: z.number().int().min(100).default(2000),
+        })
+        .default({ enabled: true, targetPriorTokens: 2000 }),
     })
     .default({
       cacheEnabled: true,
@@ -37,6 +69,8 @@ export const ConclaveConfigSchema = z.object({
       diffSplitter: true,
       diffSplitterMaxLines: 500,
       diffSplitterMaxFilesPerChunk: 20,
+      triage: { enabled: true, liteLineThreshold: 40, liteFileThreshold: 3 },
+      compact: { enabled: true, targetPriorTokens: 2000 },
     }),
   memory: z
     .object({
@@ -342,6 +376,8 @@ export const DEFAULT_CONFIG: ConclaveConfig = {
     diffSplitter: true,
     diffSplitterMaxLines: 500,
     diffSplitterMaxFilesPerChunk: 20,
+    triage: { enabled: true, liteLineThreshold: 40, liteFileThreshold: 3 },
+    compact: { enabled: true, targetPriorTokens: 2000 },
   },
   council: { maxRounds: 3, enableDebate: true, agentScoreRouting: true },
   memory: {

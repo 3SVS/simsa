@@ -58,6 +58,10 @@ export async function upsertProject(
 ): Promise<string> {
   const id = input.id ?? randId("wsp");
   const now = new Date().toISOString();
+  // Security hardening: the DO UPDATE only fires when the existing row belongs
+  // to the same user_key — a client-supplied id can never overwrite another
+  // user's project. The route ALSO pre-checks and returns 409; this WHERE
+  // clause is defense-in-depth for any other caller of this helper.
   await env.DB.prepare(
     `INSERT INTO workspace_projects
        (id, user_key, title, idea, understood_json, product_spec_json, items_json, created_at, updated_at)
@@ -68,7 +72,8 @@ export async function upsertProject(
        understood_json = excluded.understood_json,
        product_spec_json = excluded.product_spec_json,
        items_json = excluded.items_json,
-       updated_at = excluded.updated_at`,
+       updated_at = excluded.updated_at
+     WHERE workspace_projects.user_key = excluded.user_key`,
   )
     .bind(
       id,
@@ -114,6 +119,23 @@ export async function getProject(env: Env, id: string): Promise<DbProject | null
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * Ownership-checked project fetch. Returns the project row ONLY when it exists
+ * AND its user_key matches the caller's userKey — otherwise null. Routes must
+ * respond 404 { ok:false, error:"not_found" } on null (a single response for
+ * both "missing" and "not owned", so project ids can't be probed).
+ */
+export async function getOwnedProject(
+  env: Env,
+  id: string,
+  userKey: string,
+): Promise<DbProject | null> {
+  if (!id || !userKey) return null;
+  const project = await getProject(env, id);
+  if (!project || project.userKey !== userKey) return null;
+  return project;
 }
 
 /** List a user's projects (lightweight summary, newest first). userKey-scoped. */

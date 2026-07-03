@@ -106,7 +106,11 @@ function makeDb(extra = {}) {
                 return data.get(args[0]) ?? null;
               }
               if (sql.includes("FROM workspace_workspace_projects") || sql.includes("FROM workspace_projects")) {
-                return null;
+                // Ownership hardening: every project id resolves to a row owned
+                // by this file's route-test userKey.
+                return { id: args[0], user_key: "user123", title: "T", idea: "",
+                  understood_json: null, product_spec_json: "{}", items_json: "[]",
+                  created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" };
               }
               return null;
             },
@@ -644,7 +648,7 @@ describe("GET /workspace/projects/:id/github/pulls/:number/comments", () => {
     seedRepo(env);
 
     const app = createApp();
-    const req = makeRequest("GET", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comments`);
+    const req = makeRequest("GET", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comments?userKey=user123`);
     const resp = await app.fetch(req, env);
     const data = await resp.json();
     assert.equal(data.ok, true);
@@ -665,7 +669,7 @@ describe("GET /workspace/projects/:id/github/pulls/:number/comments", () => {
     });
 
     const app = createApp();
-    const req = makeRequest("GET", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comments`);
+    const req = makeRequest("GET", `/workspace/projects/proj1/github/pulls/${PR_NUMBER}/comments?userKey=user123`);
     const resp = await app.fetch(req, env);
     const data = await resp.json();
     assert.equal(data.ok, true);
