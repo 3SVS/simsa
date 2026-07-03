@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import type { Env } from "../env.js";
 import { ALLOWED_ORIGINS } from "./cors.js";
 import { generateIdeaToSpecDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
+import { normalizeBuiltWith } from "../workspace/built-with.js";
 import {
   generateCheckDraft,
   type WorkspaceCheckDraftRequest,
@@ -264,6 +265,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
           return new Response(JSON.stringify({ ok: false, error: "id_conflict" }), { status: 409, headers: { "content-type": "application/json", ...headers } });
         }
       }
+      const entryPath =
+        b["entryPath"] === "idea" || b["entryPath"] === "code" || b["entryPath"] === "spec"
+          ? (b["entryPath"] as string)
+          : null;
       const id = await upsertProject(c.env, {
         id: typeof b["id"] === "string" ? b["id"] : undefined,
         userKey: String(b["userKey"]),
@@ -272,6 +277,9 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         understood: b["understood"] ?? {},
         productSpec: b["productSpec"] ?? {},
         items: b["items"] ?? [],
+        // P1 envelope collection — normalized so unknown tools fall into `other`.
+        builtWith: normalizeBuiltWith(b["builtWith"]),
+        entryPath,
       });
       return new Response(JSON.stringify({ ok: true, id }), { status: 200, headers: { "content-type": "application/json", ...headers } });
     } catch (err) {

@@ -51,6 +51,7 @@ import {
 import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
 import { captureTrainingRecord } from "../workspace/training-store.js";
+import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { getProject, getOwnedProject } from "../workspace/db.js";
 import { consumeUserHourlyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
@@ -955,8 +956,14 @@ export function createWorkspaceGitHubRoutes(
     // fine-tune / distillation. Opt-in only: no-op without active consent or an
     // EVIDENCE bucket, and never throws (best-effort telemetry).
     // region from the edge (Cloudflare adds request.cf.country — coarse, not PII);
-    // locale from the review request. Other envelope tags land in STEP 2/3.
+    // locale from the review request. built_with + entry_path come from the
+    // project (STEP 2). Remaining envelope tags land in STEP 3.
     const cfCountry = (c.req.raw as { cf?: { country?: string } }).cf?.country ?? null;
+    const projForTag = await getProject(c.env, projectId).catch(() => null);
+    const projEntryPath =
+      projForTag?.entryPath === "idea" || projForTag?.entryPath === "code" || projForTag?.entryPath === "spec"
+        ? projForTag.entryPath
+        : null;
     await captureTrainingRecord(c.env, {
       userKey,
       projectId,
@@ -973,6 +980,8 @@ export function createWorkspaceGitHubRoutes(
       envelope: {
         region: cfCountry,
         locale: reviewLocale,
+        builtWith: normalizeBuiltWith(projForTag?.builtWith),
+        entryPath: projEntryPath,
       },
     }).catch(() => {});
 
