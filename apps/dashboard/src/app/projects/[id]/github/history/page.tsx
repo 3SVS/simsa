@@ -81,6 +81,7 @@ function QuickRerun({
   userKey: string;
 }) {
   const router = useRouter();
+  const { locale } = useI18n();
   const [phase, setPhase] = useState<"idle" | "running" | "error">("idle");
 
   const enabled = (rerunAction?.recommendedItemCount ?? 0) > 0;
@@ -96,6 +97,7 @@ function QuickRerun({
       selectedItemIds: recommendedItemIds,
       rerunOfReviewRunId: runId,
       idempotencyKey,
+      locale,
     });
     if (!res.ok) {
       setPhase("error");

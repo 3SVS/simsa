@@ -738,6 +738,8 @@ export function createWorkspaceGitHubRoutes(
     const b = body as Record<string, unknown>;
     const userKey = typeof b["userKey"] === "string" ? b["userKey"] : "";
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
+    // Review findings (reason/evidence/nextAction) follow the user's UI language.
+    const reviewLocale: "en" | "ko" = b["locale"] === "en" ? "en" : "ko";
 
     // Ownership: the project must belong to the caller before anything else
     // (repo link, runs, and credits are all project-scoped).
@@ -922,6 +924,7 @@ export function createWorkspaceGitHubRoutes(
           items: itemsToReview,
           prMeta: prFilesResult.meta,
           prFiles: prFilesResult.files,
+          locale: reviewLocale,
         },
         c.env.ANTHROPIC_API_KEY,
         fetchImpl,

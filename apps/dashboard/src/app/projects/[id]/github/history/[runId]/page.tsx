@@ -36,6 +36,7 @@ import {
 } from "@/lib/review-run-comparison.mjs";
 import type { ReviewRunComparison, ReviewRunComparisonItem } from "@/lib/review-run-comparison.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
+import { errorText } from "@/i18n/error-text.mjs";
 import { statusLabel } from "@/i18n/dictionary.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -859,7 +860,7 @@ function ReviewItemSelectionPanel({
 function RerunPanel({
   projectId, prNumber, runId, userKey, selectedItemIds,
 }: { projectId: string; prNumber: number; runId: string; userKey: string; selectedItemIds: string[] }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [newRunId, setNewRunId] = useState<string | null>(null);
   const [comparison, setComparison] = useState<SpecificRunComparison | null>(null);
@@ -881,9 +882,10 @@ function RerunPanel({
       rerunOfReviewRunId: runId,
       selectedItemIds,
       idempotencyKey,
+      locale,
     });
     if (!res.ok) {
-      setErrorMsg(res.error ?? t.runDetail.reviewFailed);
+      setErrorMsg(errorText(t, res.error, "generic"));
       setPhase("error");
       return;
     }

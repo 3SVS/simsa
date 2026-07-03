@@ -208,6 +208,24 @@ const EN = {
     more: "more",
     rateLimited: "Too many requests. Please wait a moment and try again.",
   },
+  // Friendly, localized messages for backend error codes. Non-developers must
+  // never see a raw code like "db_error" or "HTTP 500". Map at the render site
+  // via errorText(t, code); unknown codes fall back to `generic`.
+  errors: {
+    generic: "Something went wrong. Please try again.",
+    network: "Couldn't reach the server. Check your connection and try again.",
+    timeout: "This is taking longer than expected. Please try again.",
+    server: "The server had a problem. Please try again in a moment.",
+    unauthorized: "Please sign in again to continue.",
+    notFound: "We couldn't find what you were looking for.",
+    rateLimited: "Too many requests. Please wait a moment and try again.",
+    insufficientCredits: "You've used your free reviews for this month. Add credits to keep going.",
+    githubScopeRequired: "We need permission to post to GitHub. Reconnect GitHub and try again.",
+    prNotFound: "We couldn't find that pull request. It may have been closed or renamed.",
+    deliveryFailed: "Delivery failed. Please check the settings and try again.",
+    saveFailed: "Couldn't save. Please try again.",
+    loadFailed: "Couldn't load this. Please try again.",
+  },
   overview: {
     specCompleteness: "Product brief completeness",
     resultsSummary: "Review summary",
@@ -369,6 +387,7 @@ const EN = {
     footer: "After you request a top-up, an admin reviews and grants it. During beta, this is handled manually with no payment.",
     unknownError: "Unknown error",
     requestFailed: "Request failed",
+    signInToView: "Sign in to view your balance.",
     statusRequested: "Requested",
     statusFulfilled: "Granted",
     statusRejected: "Rejected",
@@ -1464,10 +1483,6 @@ const EN = {
     timelineOpen: "Open",
     timelineTruncated: "Timeline truncated",
   },
-  errors: {
-    generic: "Something went wrong. Please try again.",
-    loadFailed: "Could not load. Please try again.",
-  },
   // Stage 159 — MCP handoff/intake destination (the page the MCP handoff link opens).
   intake: {
     handoff: {
@@ -2183,6 +2198,21 @@ const KO = {
     more: "개 더",
     rateLimited: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
   },
+  errors: {
+    generic: "문제가 발생했어요. 잠시 후 다시 시도해주세요.",
+    network: "서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.",
+    timeout: "시간이 조금 오래 걸리고 있어요. 다시 시도해주세요.",
+    server: "서버에 문제가 있었어요. 잠시 후 다시 시도해주세요.",
+    unauthorized: "계속하려면 다시 로그인해주세요.",
+    notFound: "찾으시는 항목을 찾을 수 없었어요.",
+    rateLimited: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
+    insufficientCredits: "이번 달 무료 확인 횟수를 모두 사용했어요. 크레딧을 충전하면 계속 이용할 수 있어요.",
+    githubScopeRequired: "GitHub에 게시하려면 권한이 필요해요. GitHub를 다시 연결하고 시도해주세요.",
+    prNotFound: "해당 PR을 찾을 수 없었어요. 닫혔거나 이름이 바뀌었을 수 있어요.",
+    deliveryFailed: "전송에 실패했어요. 설정을 확인하고 다시 시도해주세요.",
+    saveFailed: "저장하지 못했어요. 다시 시도해주세요.",
+    loadFailed: "불러오지 못했어요. 다시 시도해주세요.",
+  },
   overview: {
     specCompleteness: "제품 설명서 완성도",
     resultsSummary: "확인 결과 요약",
@@ -2344,6 +2374,7 @@ const KO = {
     footer: "크레딧 충전 요청 후 관리자가 확인하면 지급됩니다. 현재는 결제 없이 관리자가 수동으로 처리합니다.",
     unknownError: "알 수 없는 오류",
     requestFailed: "요청 실패",
+    signInToView: "잔액을 보려면 로그인해주세요.",
     statusRequested: "요청됨",
     statusFulfilled: "지급됨",
     statusRejected: "거절됨",
@@ -3431,10 +3462,6 @@ const KO = {
     timelineImpactInconclusive: "영향 판단 불가",
     timelineOpen: "열기",
     timelineTruncated: "타임라인이 일부만 표시됩니다",
-  },
-  errors: {
-    generic: "문제가 발생했어요. 다시 시도해주세요.",
-    loadFailed: "불러오지 못했어요. 다시 시도해주세요.",
   },
   // Stage 159 — MCP 핸드오프/인테이크 도착 화면. Product term은 영어 유지 + 한국어 보조.
   intake: {

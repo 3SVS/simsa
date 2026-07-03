@@ -77,6 +77,7 @@ export async function fetchWorkspaceCredits(
 ): Promise<WorkspaceCreditsResponse> {
   const res = await fetch(
     `${BASE_URL}/workspace/credits?userKey=${encodeURIComponent(userKey)}`,
+    { signal: AbortSignal.timeout(8000) },
   );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -92,6 +93,7 @@ export async function createTopUpRequest(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
+    signal: AbortSignal.timeout(15000),
   });
   const body = await res.json();
   if (!res.ok) {
@@ -109,6 +111,7 @@ export async function fetchTopUpRequests(
 ): Promise<TopUpRequest[]> {
   const res = await fetch(
     `${BASE_URL}/workspace/credits/top-up-requests?userKey=${encodeURIComponent(userKey)}`,
+    { signal: AbortSignal.timeout(8000) },
   );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

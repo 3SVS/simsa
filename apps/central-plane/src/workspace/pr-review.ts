@@ -72,7 +72,7 @@ ${diffSummary}
 
 중요한 규칙:
 - PR diff만으로 확인이 안 되면 "확인 부족"으로 표시 (억지로 통과/실패로 만들지 말 것)
-- 모든 사용자 대상 텍스트는 한국어로 작성
+- ${req.locale === "en" ? "Write all user-facing text (reason, evidence, nextAction) in ENGLISH" : "모든 사용자 대상 텍스트는 한국어로 작성"}
 - reason은 diff에서 관찰한 구체적인 내용을 1~2문장으로
 - evidence는 PR에서 관련 파일명이나 코드 변경 내용 (없으면 빈 배열)
 - nextAction은 사용자가 할 수 있는 다음 행동 1줄
@@ -134,12 +134,38 @@ async function callAnthropic(
 /** File extensions that strongly suggest code-level implementation. */
 const CODE_EXTENSIONS = /\.(ts|tsx|js|jsx|py|go|java|kt|swift|rb|rs|cs|cpp|c|php|vue|svelte)$/i;
 
+/** Localized copy for the heuristic fallback (no API key / LLM failure path). */
+const HEURISTIC_COPY = {
+  ko: {
+    excludedReason: "이 항목은 이번 버전의 제외 범위에 있는 기능과 관련됩니다.",
+    excludedNext: "제품 설명서의 포함/제외 범위를 다시 확인하거나, 이번 버전에서 제외하세요.",
+    openReason: "이 항목은 아직 결정되지 않은 제품 방향과 연결됩니다.",
+    openNext: "제품 설명서의 결정 필요 항목을 먼저 확정하고 다시 확인하세요.",
+    passReason: "PR의 변경 파일이 이 항목과 관련된 것으로 보이며, 완성 기준이 충분합니다.",
+    passNext: "변경 내용을 직접 검토해 기준이 모두 충족됐는지 확인하세요.",
+    incReason: "PR diff만으로는 이 항목의 구현 여부를 확인하기 어렵습니다.",
+    incNext: "변경된 파일 목록을 직접 확인하거나, 담당 개발자에게 어떤 파일에서 구현했는지 확인하세요.",
+  },
+  en: {
+    excludedReason: "This item relates to a feature marked out of scope for this version.",
+    excludedNext: "Re-check the in/out-of-scope list in your product spec, or leave it out of this version.",
+    openReason: "This item is tied to a product decision that hasn't been made yet.",
+    openNext: "Settle the open decision in your product spec first, then re-check.",
+    passReason: "The PR's changed files appear related to this item and the acceptance criteria look sufficient.",
+    passNext: "Review the changes yourself to confirm every criterion is met.",
+    incReason: "The PR diff alone isn't enough to confirm whether this item is implemented.",
+    incNext: "Check the changed files yourself, or ask the developer which file implements it.",
+  },
+} as const;
+
 function reviewItemHeuristic(
   item: CheckableItem,
   spec: ProductSpecForCheck,
   files: PullRequestFile[],
+  locale: "ko" | "en" = "ko",
 ): Omit<CheckResultItem, "title"> {
   const titleLower = item.title.toLowerCase();
+  const c = HEURISTIC_COPY[locale];
 
   // Check excluded features
   const conflictsExcluded = spec.excluded.some((ex) => {
@@ -154,11 +180,11 @@ function reviewItemHeuristic(
       itemId: item.id,
       status: "failed",
       userLabel: "안 맞음",
-      reason: "이 항목은 이번 버전의 제외 범위에 있는 기능과 관련됩니다.",
+      reason: c.excludedReason,
       evidence: spec.excluded.filter((ex) =>
         ex.split(/[\s,·]+/).some((w) => w.length > 1 && titleLower.includes(w.toLowerCase())),
       ),
-      nextAction: "제품 설명서의 포함/제외 범위를 다시 확인하거나, 이번 버전에서 제외하세요.",
+      nextAction: c.excludedNext,
     };
   }
 
@@ -175,11 +201,11 @@ function reviewItemHeuristic(
       itemId: item.id,
       status: "needs_decision",
       userLabel: "결정 필요",
-      reason: "이 항목은 아직 결정되지 않은 제품 방향과 연결됩니다.",
+      reason: c.openReason,
       evidence: spec.openQuestions.filter((q) =>
         q.split(/[\s,·]+/).some((w) => w.length > 1 && titleLower.includes(w.toLowerCase())),
       ),
-      nextAction: "제품 설명서의 결정 필요 항목을 먼저 확정하고 다시 확인하세요.",
+      nextAction: c.openNext,
     };
   }
 
@@ -195,9 +221,9 @@ function reviewItemHeuristic(
       itemId: item.id,
       status: "passed",
       userLabel: "통과",
-      reason: "PR의 변경 파일이 이 항목과 관련된 것으로 보이며, 완성 기준이 충분합니다.",
+      reason: c.passReason,
       evidence: matchingFiles.slice(0, 3).map((f) => f.filename),
-      nextAction: "변경 내용을 직접 검토해 기준이 모두 충족됐는지 확인하세요.",
+      nextAction: c.passNext,
     };
   }
 
@@ -206,15 +232,16 @@ function reviewItemHeuristic(
     itemId: item.id,
     status: "inconclusive",
     userLabel: "확인 부족",
-    reason: "PR diff만으로는 이 항목의 구현 여부를 확인하기 어렵습니다.",
+    reason: c.incReason,
     evidence: [],
-    nextAction: "변경된 파일 목록을 직접 확인하거나, 담당 개발자에게 어떤 파일에서 구현했는지 확인하세요.",
+    nextAction: c.incNext,
   };
 }
 
 function buildMockFallback(req: PRReviewRequest): PRReviewResponse {
+  const locale = req.locale === "en" ? "en" : "ko";
   const results: CheckResultItem[] = req.items.map((item) => ({
-    ...reviewItemHeuristic(item, req.productSpec, req.prFiles),
+    ...reviewItemHeuristic(item, req.productSpec, req.prFiles, locale),
     title: item.title,
   }));
 
