@@ -779,6 +779,7 @@ export default function SettingsPage() {
             <li>• {t.trainingConsent.point1}</li>
             <li>• {t.trainingConsent.point2}</li>
             <li>• {t.trainingConsent.point3}</li>
+            <li>• {t.trainingConsent.point4}</li>
           </ul>
 
           <div className="flex items-center gap-3 border-t border-gray-100 pt-4">

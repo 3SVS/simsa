@@ -106,7 +106,7 @@ test("STEP1 수집≠저장: stored R2 payload has ALL P1 envelope keys (null ok
     "event_id", "schema_version", "subject_hash", "workspace_hash", "consent_version",
     "region", "locale", "content_lang", "timezone",
     "entry_path", "built_with", "topic_tags", "acquisition", "user_context", "commercial",
-    "assistance", "cost_meta",
+    "assistance", "cost_meta", "channel", "mcp_client",
     "event_type", "payload_scrub_state", "outcome",
     "device_context", "experiment_arm", "quality_signals",
   ]) {
@@ -147,6 +147,28 @@ test("STEP3 수집≠저장: assistance + cost_meta + topic_tags land in the sto
   assert.equal(rec.acquisition.source, "reddit");
   assert.equal(rec.user_context.skill_signal, "first_project");
   assert.equal(rec.commercial.plan_tier, "free_beta");
+});
+
+test("growth/channel slots exist in the stored record (P1 level slots + web channel)", async () => {
+  const r2 = new FakeR2();
+  const env = { DB: dbWithConsent({ consented: true, version: TRAINING_CONSENT_VERSION }), EVIDENCE: r2 };
+  await captureTrainingRecord(env, {
+    ...baseInput(),
+    envelope: {
+      channel: "web",
+      userContext: { skill_signal: "first_project", project_seq: 1 },
+    },
+  });
+  const rec = JSON.parse(r2.puts[0].value);
+  // channel slot filled "web"; mcp_client null slot present
+  assert.equal(rec.channel, "web");
+  assert.ok("mcp_client" in rec);
+  // P1 level slots present (null until leveling ships) + P3 growth slots present
+  for (const k of ["skill_level", "level_at_capture", "concepts_unlocked", "growth_events"]) {
+    assert.ok(k in rec.user_context, `user_context.${k} slot must exist`);
+    assert.equal(rec.user_context[k], null);
+  }
+  assert.equal(rec.user_context.skill_signal, "first_project");
 });
 
 test("assistance defaults to wild + cost_meta null when envelope omits them", async () => {

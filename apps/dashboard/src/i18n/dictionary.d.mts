@@ -682,6 +682,7 @@ export type Dictionary = {
     point1: string;
     point2: string;
     point3: string;
+    point4: string;
     enable: string;
     storageNote: string;
     savedOn: string;

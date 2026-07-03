@@ -60,11 +60,20 @@ export type AcquisitionTag = {
   referrer_hash?: string | null; // P2
 } | null;
 
-/** User-context signals for retention/skill analysis. */
+/**
+ * User-context signals for retention/skill analysis + longitudinal growth.
+ * skill_level / level_at_capture are P1 slots (no leveling feature yet → null,
+ * but the slot must exist so future captures can stamp the level AT CAPTURE —
+ * same never-join rule as plan_tier). concepts_unlocked / growth_events are P3.
+ */
 export type UserContextTag = {
   skill_signal?: string | null; // "first_project" | "returning"
   session_seq?: number | null;
   project_seq?: number | null;
+  skill_level?: number | null; // P1 slot — current level (null until leveling ships)
+  level_at_capture?: number | null; // P1 slot — level stamped at this event
+  concepts_unlocked?: string[] | null; // P3 slot
+  growth_events?: unknown[] | null; // P3 slot
 } | null;
 
 /**
@@ -107,6 +116,10 @@ export type EnvelopeInput = {
   assistance?: AssistanceTag;
   /** Usage measurement (STEP 3) — tokens/model/session count. Not billing. */
   costMeta?: CostMeta;
+  /** Channel this review came through. "web" today; MCP is a future channel (P3 slot). */
+  channel?: "web" | "mcp" | null;
+  /** MCP client when channel="mcp" (e.g. "cursor"). P3 slot — null on web. */
+  mcpClient?: string | null;
 };
 
 /**
@@ -216,6 +229,9 @@ export type TrainingRecord = {
   assistance: { mode: "wild" | "guided"; guided_at: "before_build" | "after_review" | null; guided_scope: unknown };
   // ── cost_meta (usage measurement, NOT billing) ──
   cost_meta: CostMeta;
+  // ── channel dimension (web today; MCP is a future channel) ──
+  channel: "web" | "mcp" | null;
+  mcp_client: string | null;
   // ── event body ──
   event_type: "pr_reviewed" | "pr_rechecked";
   payload_scrub_state: "clean" | "metadata_only" | "raw_pending";
@@ -272,8 +288,17 @@ export function buildTrainingRecord(
     topic_tags: env.topicTags ?? null,
     // acquisition
     acquisition: env.acquisition ?? null,
-    // user context
-    user_context: env.userContext ?? null,
+    // user context — all slots always present (skill_level/level_at_capture are
+    // P1 slots, null until a leveling feature stamps the level AT CAPTURE).
+    user_context: {
+      skill_signal: env.userContext?.skill_signal ?? null,
+      session_seq: env.userContext?.session_seq ?? null,
+      project_seq: env.userContext?.project_seq ?? null,
+      skill_level: env.userContext?.skill_level ?? null,
+      level_at_capture: env.userContext?.level_at_capture ?? null,
+      concepts_unlocked: env.userContext?.concepts_unlocked ?? null,
+      growth_events: env.userContext?.growth_events ?? null,
+    },
     // commercial — plan_tier is the value AT CAPTURE (never re-joined)
     commercial: { plan_tier: env.planTier ?? null, plan_at_capture: null },
     // assistance — guided vs wild. Always "wild" today (no guided feature yet).
@@ -284,6 +309,9 @@ export function buildTrainingRecord(
     },
     // cost_meta — usage measurement (tokens/model/session count), NOT billing.
     cost_meta: env.costMeta ?? null,
+    // channel — web today; MCP is a future channel (slot only).
+    channel: env.channel ?? null,
+    mcp_client: env.mcpClient ?? null,
     // event body
     event_type: input.rerunOfReviewRunId ? "pr_rechecked" : "pr_reviewed",
     payload_scrub_state: "clean", // code-based review payload → redactSecrets applied
