@@ -93,6 +93,8 @@ export type CaptureTrainingInput = {
   };
   finalStatus: string;
   rerunOfReviewRunId?: string;
+  /** Which AI tool(s) built this app — the per-agent moat tag (from the project). */
+  builtWith?: unknown;
   /** Injected clock for tests; defaults to real time. */
   now?: string;
   /** Injected subject hash for tests; defaults to sha256(userKey). */
@@ -116,6 +118,8 @@ export type TrainingRecord = {
   repo_full_name: string;
   pr_number: number;
   head_sha: string;
+  // provenance — which AI tool(s) produced this code (the per-agent moat tag)
+  built_with: unknown;
   // INPUT
   product_spec: unknown;
   acceptance_items: unknown[];
@@ -149,6 +153,8 @@ export function buildTrainingRecord(
     repo_full_name: input.repoFullName,
     pr_number: input.prNumber,
     head_sha: input.headSha ?? "",
+    // Per-agent moat tag. Scrubbed too — the freetext "other" could contain anything.
+    built_with: scrubJson(input.builtWith ?? null),
     // Secret-scrub every user-authored surface before it lands in R2. A
     // vibe-coder's diff or spec routinely contains live keys / .env values.
     product_spec: scrubJson(input.productSpec),

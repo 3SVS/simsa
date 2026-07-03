@@ -51,6 +51,8 @@ import {
 import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
 import { captureTrainingRecord } from "../workspace/training-store.js";
+import { captureJourneyEvent } from "../workspace/journey-store.js";
+import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { getProject, getOwnedProject } from "../workspace/db.js";
 import { consumeUserHourlyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
@@ -954,6 +956,9 @@ export function createWorkspaceGitHubRoutes(
     // 9c. Capture the raw training triplet (diff + council verdict) for a future
     // fine-tune / distillation. Opt-in only: no-op without active consent or an
     // EVIDENCE bucket, and never throws (best-effort telemetry).
+    // Load the project's builtWith tag (per-agent moat axis) so the record — and
+    // the journey event below — resolve per agent. Best-effort, non-fatal.
+    const projForTag = await getProject(c.env, projectId).catch(() => null);
     await captureTrainingRecord(c.env, {
       userKey,
       projectId,
@@ -967,6 +972,26 @@ export function createWorkspaceGitHubRoutes(
       review: reviewResult,
       finalStatus,
       rerunOfReviewRunId,
+      builtWith: projForTag?.builtWith,
+    }).catch(() => {});
+
+    // 9d. Journey event: pr_reviewed (first review) vs pr_rechecked (a re-run).
+    // rerunOfReviewRunId distinguishes them — the recheck is half of the crown
+    // jewel (fix_brief → next-PR round-trip, per agent). Code-based, full capture.
+    await captureJourneyEvent(c.env, {
+      userKey,
+      projectId,
+      eventType: rerunOfReviewRunId ? "pr_rechecked" : "pr_reviewed",
+      builtWith: normalizeBuiltWith(projForTag?.builtWith),
+      eventId: run.id,
+      payload: {
+        reviewRunId: run.id,
+        rerunOfReviewRunId: rerunOfReviewRunId ?? null,
+        prNumber,
+        finalStatus,
+        summary: reviewResult.summary,
+        source: reviewResult.source,
+      },
     }).catch(() => {});
 
     // 10. Telegram notification (non-blocking: failure must not fail the review response)
@@ -1281,6 +1306,23 @@ export function createWorkspaceGitHubRoutes(
       runId: runId,
       target,
     });
+
+    // Journey event: fix_brief_generated — the first half of the crown-jewel
+    // round-trip (this brief → the user's next PR → pr_rechecked, per agent).
+    const projForFbTag = await getProject(c.env, projectId).catch(() => null);
+    await captureJourneyEvent(c.env, {
+      userKey,
+      projectId,
+      eventType: "fix_brief_generated",
+      builtWith: normalizeBuiltWith(projForFbTag?.builtWith),
+      eventId: `${runId}_fixbrief`,
+      payload: {
+        sourceReviewRunId: runId,
+        prNumber,
+        target,
+        itemCount: Array.isArray(selectedItemIds) ? selectedItemIds.length : null,
+      },
+    }).catch(() => {});
 
     return json({
       ...result,

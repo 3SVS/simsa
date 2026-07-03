@@ -85,6 +85,17 @@ test("buildTrainingRecord: stable shape, deterministic, pending outcome", () => 
   assert.deepEqual(rec.summary, { passed: 1, failed: 0, inconclusive: 0, needsDecision: 0 });
 });
 
+test("buildTrainingRecord: builtWith tag flows onto the record", () => {
+  const rec = buildTrainingRecord(
+    { ...baseInput(), builtWith: { tools: ["cursor", "v0"], primary: "cursor" } },
+    "hash_x",
+    "2026-07-03T00:00:00.000Z",
+  );
+  assert.deepEqual(rec.built_with, { tools: ["cursor", "v0"], primary: "cursor" });
+  // absent builtWith → null, not undefined (stable shape)
+  assert.equal(buildTrainingRecord(baseInput(), "h", "2026-07-03T00:00:00.000Z").built_with, null);
+});
+
 test("trainingRecordKey is day-bucketed", () => {
   assert.equal(
     trainingRecordKey("2026-07-03T12:34:56.000Z", "run_1"),
