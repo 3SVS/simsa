@@ -20,11 +20,11 @@ import {
   runSmoke,
   scanForAiSlop,
   type SmokeResult,
-} from "@conclave-ai/smoke-verifier";
+} from "@simsa/smoke-verifier";
 import {
   classifyFailure,
   type FailureDiagnosis,
-} from "@conclave-ai/failure-classifier";
+} from "@simsa/failure-classifier";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -54,7 +54,7 @@ export async function runSmokeIfConfigured(
   }
 
   // Lazy-import playwright. Many users will already have it via visual-review.
-  // Playwright is an optional peer dep — types are not bundled with @conclave-ai/cli
+  // Playwright is an optional peer dep — types are not bundled with @simsa/cli
   // because not every user wants the browser binary. The dynamic-import string
   // is opaque to TypeScript so the resolution errors stay runtime-only.
   let chromium: { launch: (opts?: { headless?: boolean }) => Promise<unknown> } | null = null;

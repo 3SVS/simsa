@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Local smoke for @conclave-ai/mcp-workspace. Verifies the server can reach
+ * Local smoke for @simsa/mcp-workspace. Verifies the server can reach
  * central-plane and that the audit log never leaks the userKey.
  *
- *   pnpm --filter @conclave-ai/mcp-workspace build
+ *   pnpm --filter @simsa/mcp-workspace build
  *   CONCLAVE_USER_KEY=uk_... node packages/mcp-workspace/scripts/smoke.mjs
  *
  * Never prints the userKey or any secret.

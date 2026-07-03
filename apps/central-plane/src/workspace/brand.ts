@@ -9,7 +9,7 @@
  *   - any user-visible heading the server controls
  *
  * DO NOT use BRAND.* for:
- *   - npm package names (`@conclave-ai/*`) — frozen
+ *   - npm package names (`@simsa/*`) — frozen
  *   - env var names / URL fragments (`CONCLAVE_*`, `conclave-ai.*`) — deploy infra
  *   - DB table or migration names — frozen
  *   - HTTP route paths (`/workspace/*`) — frozen

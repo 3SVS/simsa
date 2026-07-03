@@ -1,2 +1,2 @@
-// Stage 137 — compatibility wrapper. Logic in @conclave-ai/workspace-preview.
-export * from "@conclave-ai/workspace-preview/acceptance-graph-derived";
+// Stage 137 — compatibility wrapper. Logic in @simsa/workspace-preview.
+export * from "@simsa/workspace-preview/acceptance-graph-derived";

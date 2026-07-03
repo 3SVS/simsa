@@ -1,7 +1,7 @@
 /**
  * Phase B.5 — published package contract.
  *
- * Simulates what a real user gets when they `pnpm add -g @conclave-ai/cli`:
+ * Simulates what a real user gets when they `pnpm add -g @simsa/cli`:
  *   - npm pack the local workspace package into a tarball
  *   - install it into an isolated tmpdir as a TRUE consumer (no
  *     workspace symlinks)
@@ -82,8 +82,8 @@ test("B.5: every workspace:* dep exists as a sibling package on disk", () => {
   const packagesRoot = path.resolve(CLI_PKG_DIR, "..");
   for (const [dep, spec] of Object.entries(pkg.dependencies ?? {})) {
     if (spec !== "workspace:*") continue;
-    // dep is "@conclave-ai/<name>" — sibling dir is just <name>.
-    const localName = dep.startsWith("@conclave-ai/") ? dep.slice("@conclave-ai/".length) : dep;
+    // dep is "@simsa/<name>" — sibling dir is just <name>.
+    const localName = dep.startsWith("@simsa/") ? dep.slice("@simsa/".length) : dep;
     const sibling = path.join(packagesRoot, localName);
     assert.ok(
       fs.existsSync(sibling),
@@ -102,7 +102,7 @@ test("B.5: each workspace dep has dist/ — they'd publish empty otherwise", () 
   const packagesRoot = path.resolve(CLI_PKG_DIR, "..");
   for (const [dep, spec] of Object.entries(pkg.dependencies ?? {})) {
     if (spec !== "workspace:*") continue;
-    const localName = dep.slice("@conclave-ai/".length);
+    const localName = dep.slice("@simsa/".length);
     const distDir = path.join(packagesRoot, localName, "dist");
     assert.ok(
       fs.existsSync(distDir),
@@ -121,7 +121,7 @@ test("B.5: every workspace dep's package.json files[] includes 'dist'", () => {
   const packagesRoot = path.resolve(CLI_PKG_DIR, "..");
   for (const [dep, spec] of Object.entries(pkg.dependencies ?? {})) {
     if (spec !== "workspace:*") continue;
-    const localName = dep.slice("@conclave-ai/".length);
+    const localName = dep.slice("@simsa/".length);
     const siblingPkg = JSON.parse(
       fs.readFileSync(path.join(packagesRoot, localName, "package.json"), "utf8"),
     );

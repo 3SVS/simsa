@@ -21,7 +21,7 @@ import {
   FileSystemMemoryStore,
   computeAllAgentScores,
   deriveAgentWeights,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 function freshFs() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "aic-h2-10-fc-"));

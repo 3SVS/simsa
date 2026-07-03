@@ -1,7 +1,7 @@
-# @conclave-ai/integration-slack
+# @simsa/integration-slack
 
 Slack notifier for Conclave AI council reviews. Implements the
-`Notifier` interface from `@conclave-ai/core`.
+`Notifier` interface from `@simsa/core`.
 
 Decision #24: equal-weight integration alongside Telegram / Discord /
 Email / CLI.
@@ -9,13 +9,13 @@ Email / CLI.
 ## Install
 
 ```bash
-pnpm add @conclave-ai/integration-slack @conclave-ai/core
+pnpm add @simsa/integration-slack @simsa/core
 ```
 
 ## Usage
 
 ```ts
-import { SlackNotifier } from "@conclave-ai/integration-slack";
+import { SlackNotifier } from "@simsa/integration-slack";
 
 const slack = new SlackNotifier({
   webhookUrl: process.env.SLACK_WEBHOOK_URL,

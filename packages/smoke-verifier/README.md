@@ -1,4 +1,4 @@
-# @conclave-ai/smoke-verifier
+# @simsa/smoke-verifier
 
 Playwright-driven smoke checks against a live deploy URL after autofix
 push. Closes the gap between "build + tests pass" and "user-facing flows

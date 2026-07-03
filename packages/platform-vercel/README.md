@@ -1,8 +1,8 @@
-# @conclave-ai/platform-vercel
+# @simsa/platform-vercel
 
 Vercel adapter for Conclave AI — resolves the preview URL for a given
 commit SHA via Vercel's `/v6/deployments` REST endpoint. Implements the
-`Platform` interface from `@conclave-ai/core`.
+`Platform` interface from `@simsa/core`.
 
 Decision #31: Vercel is part of the v2.0 platform set alongside Netlify
 / Railway / Cloudflare Pages / `deployment-status`.
@@ -10,14 +10,14 @@ Decision #31: Vercel is part of the v2.0 platform set alongside Netlify
 ## Install
 
 ```bash
-pnpm add @conclave-ai/platform-vercel @conclave-ai/core
+pnpm add @simsa/platform-vercel @simsa/core
 ```
 
 ## Usage
 
 ```ts
-import { VercelPlatform } from "@conclave-ai/platform-vercel";
-import { resolveFirstPreview } from "@conclave-ai/core";
+import { VercelPlatform } from "@simsa/platform-vercel";
+import { resolveFirstPreview } from "@simsa/core";
 
 const vercel = new VercelPlatform({
   token: process.env.VERCEL_TOKEN,

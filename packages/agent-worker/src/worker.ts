@@ -1,4 +1,4 @@
-import { EfficiencyGate, estimateTokens } from "@conclave-ai/core";
+import { EfficiencyGate, estimateTokens } from "@simsa/core";
 import type { AnthropicCreateParams, AnthropicLike, AnthropicResponse } from "./anthropic-types.js";
 import { REWRITE_TOOL_NAME, REWRITE_TOOL_DESCRIPTION, REWRITE_TOOL_INPUT_SCHEMA } from "./patch-tool.js";
 import { buildWorkerPrompt, buildCacheablePrefix, WORKER_SYSTEM_PROMPT } from "./prompts.js";

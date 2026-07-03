@@ -1,8 +1,8 @@
-// @conclave-ai/workspace-preview — public entry.
+// @simsa/workspace-preview — public entry.
 //
 // Pure deterministic preview helpers shared by the dashboard and MCP Basic.
 // Stage 136 moved the intake helpers here. Stages 137~138 add the remaining
-// derived-signal helpers. Subpath exports (e.g. "@conclave-ai/workspace-preview/
+// derived-signal helpers. Subpath exports (e.g. "@simsa/workspace-preview/
 // intake-acceptance-map") are also available.
 export {
   WORKSPACE_PREVIEW_PACKAGE,

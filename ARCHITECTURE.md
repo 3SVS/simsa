@@ -7,7 +7,7 @@ truth for scaffolding.
 ## Product
 
 - **Brand**: Conclave AI (hero display may be stylized `Con{claude}ve`)
-- **npm scope**: `@conclave-ai` (fallbacks: `conclaveai`, `conclave-ai-io`)
+- **npm scope**: `@simsa` (was `@conclave-ai` pre-2026-07; old npm account lost)
 - **CLI binary**: `conclave`
 - **Positioning (α)**: *"AI drafted. Council refined."*
 - **Tagline**: *A multi-agent council reviews your AI-generated code and
@@ -46,7 +46,7 @@ truth for scaffolding.
          ↕                                ↕
 ┌────────────────────────┐  ┌────────────────────────────────┐
 │  Layer 4 — AGENTS      │  │  Layer 5 — INFRASTRUCTURE      │
-│  @conclave-ai/agent-*  │  │  scm / platform / integration  │
+│  @simsa/agent-*  │  │  scm / platform / integration  │
 │  (pluggable npm pkgs)  │  │  packages                      │
 │  claude, openai,       │  │  GitHub/Vercel/Netlify/...     │
 │  gemini, grok,         │  │  Telegram/Discord/Slack/Email  │
@@ -160,7 +160,7 @@ conclave-ai/
 ├── ARCHITECTURE.md               # this doc
 ├── LICENSE
 ├── packages/
-│   ├── core/                     # @conclave-ai/core
+│   ├── core/                     # @simsa/core
 │   │   └── src/
 │   │       ├── agent.ts          # Agent interface
 │   │       ├── council.ts        # Mastra-based N-agent graph
@@ -180,7 +180,7 @@ conclave-ai/
 │   │              replit,vertex-deploy,docker-local,
 │   │              deployment-status}/
 │   ├── integration-{telegram,discord,slack,email}/
-│   ├── cli/                      # @conclave-ai/cli, binary `conclave`
+│   ├── cli/                      # @simsa/cli, binary `conclave`
 │   └── orchestrator-template/    # GitHub Actions YAML templates
 ├── apps/
 │   ├── web-dashboard/            # v2.1 — cost/trace viz

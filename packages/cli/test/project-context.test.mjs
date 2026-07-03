@@ -300,7 +300,7 @@ test("ConclaveConfigSchema: context section is optional (v0.6.3 configs still pa
 // ── agent prompts: verify projectContext lands in rendered prompts ──
 
 test("agent prompts: claude buildReviewPrompt includes Project context section", async () => {
-  const { buildReviewPrompt } = await import("@conclave-ai/agent-claude");
+  const { buildReviewPrompt } = await import("@simsa/agent-claude");
   const prompt = buildReviewPrompt({
     diff: "+x",
     repo: "acme/x",
@@ -315,7 +315,7 @@ test("agent prompts: claude buildReviewPrompt includes Project context section",
 });
 
 test("agent prompts: openai buildReviewPrompt includes Project context section", async () => {
-  const { buildReviewPrompt } = await import("@conclave-ai/agent-openai");
+  const { buildReviewPrompt } = await import("@simsa/agent-openai");
   const prompt = buildReviewPrompt({
     diff: "+x",
     repo: "acme/x",
@@ -328,7 +328,7 @@ test("agent prompts: openai buildReviewPrompt includes Project context section",
 });
 
 test("agent prompts: gemini buildReviewPrompt includes Project context section", async () => {
-  const { buildReviewPrompt } = await import("@conclave-ai/agent-gemini");
+  const { buildReviewPrompt } = await import("@simsa/agent-gemini");
   const prompt = buildReviewPrompt({
     diff: "+x",
     repo: "acme/x",
@@ -341,7 +341,7 @@ test("agent prompts: gemini buildReviewPrompt includes Project context section",
 });
 
 test("agent prompts: claude buildReviewPrompt without projectContext → no section (backward compat)", async () => {
-  const { buildReviewPrompt } = await import("@conclave-ai/agent-claude");
+  const { buildReviewPrompt } = await import("@simsa/agent-claude");
   const prompt = buildReviewPrompt({
     diff: "+x",
     repo: "acme/x",
@@ -352,7 +352,7 @@ test("agent prompts: claude buildReviewPrompt without projectContext → no sect
 });
 
 test("agent prompts: design buildUserPrompt includes Project context + Design intent", async () => {
-  const { buildUserPrompt } = await import("@conclave-ai/agent-design");
+  const { buildUserPrompt } = await import("@simsa/agent-design");
   const prompt = buildUserPrompt(
     {
       diff: "+x",
@@ -371,7 +371,7 @@ test("agent prompts: design buildUserPrompt includes Project context + Design in
 });
 
 test("agent prompts: claude audit prompt includes Project context", async () => {
-  const { buildReviewPrompt } = await import("@conclave-ai/agent-claude");
+  const { buildReviewPrompt } = await import("@simsa/agent-claude");
   const prompt = buildReviewPrompt({
     diff: "file contents here",
     repo: "acme/x",

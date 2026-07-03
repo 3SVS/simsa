@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/agent-design",
+  "name": "@simsa/agent-design",
   "version": "0.15.0",
   "description": "Conclave AI design-specialist agent — vision-based review over before/after screenshots.",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,8 +25,8 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*",
-    "@conclave-ai/visual-review": "workspace:*",
+    "@simsa/core": "workspace:*",
+    "@simsa/visual-review": "workspace:*",
     "@anthropic-ai/sdk": "^0.65.0"
   },
   "devDependencies": {

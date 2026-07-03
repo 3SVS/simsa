@@ -1,4 +1,4 @@
-import type { ReviewContext } from "@conclave-ai/core";
+import type { ReviewContext } from "@simsa/core";
 
 export const SYSTEM_PROMPT = `You are a senior code reviewer on a multi-agent council for Conclave AI. The council reviews AI-generated code and design changes before merge.
 

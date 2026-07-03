@@ -3,7 +3,7 @@
  * decide whether a code-only diff touches any UI surfaces.
  *
  * v0.9.3 (Apr 2026): the canonical glob list, exclude list, and matcher
- * primitives now live in `@conclave-ai/core/ui-detect`. This file is a
+ * primitives now live in `@simsa/core/ui-detect`. This file is a
  * thin re-export so the CLI's domain-detect and the DesignAgent's
  * Mode B/C dispatch share one source of truth — the v0.5.4 TODO is
  * resolved.
@@ -18,7 +18,7 @@ import {
   filterUiFiles as coreFilterUiFiles,
   diffTouchesUi as coreDiffTouchesUi,
   extractChangedFilePaths,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 /** True when the path looks like a UI / rendered-surface file. */
 export function isUiPath(path: string): boolean {

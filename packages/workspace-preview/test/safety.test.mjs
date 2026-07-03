@@ -9,7 +9,7 @@ import {
 
 test("safety summary returns package metadata + rules", () => {
   const s = getWorkspacePreviewSafetySummary();
-  assert.equal(s.package.name, "@conclave-ai/workspace-preview");
+  assert.equal(s.package.name, "@simsa/workspace-preview");
   assert.ok(s.package.purpose.length > 0);
   assert.ok(Array.isArray(s.rules) && s.rules.length >= 8);
 });

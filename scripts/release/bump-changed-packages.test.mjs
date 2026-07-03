@@ -157,14 +157,14 @@ function makeWorkspace(pkgs) {
   return tmp;
 }
 
-test("readWorkspaceDeps: extracts @conclave-ai/* from dependencies", () => {
+test("readWorkspaceDeps: extracts @simsa/* from dependencies", () => {
   const ws = makeWorkspace({
     cli: {
-      name: "@conclave-ai/cli",
+      name: "@simsa/cli",
       version: "0.13.0",
       dependencies: {
-        "@conclave-ai/core": "workspace:*",
-        "@conclave-ai/agent-claude": "workspace:*",
+        "@simsa/core": "workspace:*",
+        "@simsa/agent-claude": "workspace:*",
         "external-pkg": "^1.0.0",
       },
     },
@@ -180,10 +180,10 @@ test("readWorkspaceDeps: extracts @conclave-ai/* from dependencies", () => {
 test("readWorkspaceDeps: includes devDependencies and peerDependencies", () => {
   const ws = makeWorkspace({
     pkg: {
-      name: "@conclave-ai/pkg",
+      name: "@simsa/pkg",
       version: "0.0.0",
-      devDependencies: { "@conclave-ai/test-utils": "workspace:*" },
-      peerDependencies: { "@conclave-ai/types": "workspace:*" },
+      devDependencies: { "@simsa/test-utils": "workspace:*" },
+      peerDependencies: { "@simsa/types": "workspace:*" },
     },
   });
   try {
@@ -196,16 +196,16 @@ test("readWorkspaceDeps: includes devDependencies and peerDependencies", () => {
 
 test("expandWithDependents: cli depends on core → bumping core also bumps cli", () => {
   const ws = makeWorkspace({
-    core: { name: "@conclave-ai/core", version: "0.1.0" },
+    core: { name: "@simsa/core", version: "0.1.0" },
     cli: {
-      name: "@conclave-ai/cli",
+      name: "@simsa/cli",
       version: "0.1.0",
-      dependencies: { "@conclave-ai/core": "workspace:*" },
+      dependencies: { "@simsa/core": "workspace:*" },
     },
     "agent-design": {
-      name: "@conclave-ai/agent-design",
+      name: "@simsa/agent-design",
       version: "0.1.0",
-      dependencies: { "@conclave-ai/core": "workspace:*" },
+      dependencies: { "@simsa/core": "workspace:*" },
     },
   });
   try {
@@ -218,16 +218,16 @@ test("expandWithDependents: cli depends on core → bumping core also bumps cli"
 
 test("expandWithDependents: transitive — core → cli → integration-x", () => {
   const ws = makeWorkspace({
-    core: { name: "@conclave-ai/core", version: "0.1.0" },
+    core: { name: "@simsa/core", version: "0.1.0" },
     cli: {
-      name: "@conclave-ai/cli",
+      name: "@simsa/cli",
       version: "0.1.0",
-      dependencies: { "@conclave-ai/core": "workspace:*" },
+      dependencies: { "@simsa/core": "workspace:*" },
     },
     "integration-x": {
-      name: "@conclave-ai/integration-x",
+      name: "@simsa/integration-x",
       version: "0.1.0",
-      dependencies: { "@conclave-ai/cli": "workspace:*" },
+      dependencies: { "@simsa/cli": "workspace:*" },
     },
   });
   try {
@@ -240,13 +240,13 @@ test("expandWithDependents: transitive — core → cli → integration-x", () =
 
 test("expandWithDependents: independent packages don't get pulled in", () => {
   const ws = makeWorkspace({
-    core: { name: "@conclave-ai/core", version: "0.1.0" },
+    core: { name: "@simsa/core", version: "0.1.0" },
     cli: {
-      name: "@conclave-ai/cli",
+      name: "@simsa/cli",
       version: "0.1.0",
-      dependencies: { "@conclave-ai/core": "workspace:*" },
+      dependencies: { "@simsa/core": "workspace:*" },
     },
-    standalone: { name: "@conclave-ai/standalone", version: "0.1.0" },
+    standalone: { name: "@simsa/standalone", version: "0.1.0" },
   });
   try {
     const expanded = expandWithDependents(new Set(["core"]), ws, ["core", "cli", "standalone"]);
@@ -259,11 +259,11 @@ test("expandWithDependents: independent packages don't get pulled in", () => {
 
 test("expandWithDependents: empty initial set → empty expansion", () => {
   const ws = makeWorkspace({
-    core: { name: "@conclave-ai/core", version: "0.1.0" },
+    core: { name: "@simsa/core", version: "0.1.0" },
     cli: {
-      name: "@conclave-ai/cli",
+      name: "@simsa/cli",
       version: "0.1.0",
-      dependencies: { "@conclave-ai/core": "workspace:*" },
+      dependencies: { "@simsa/core": "workspace:*" },
     },
   });
   try {

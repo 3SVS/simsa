@@ -1,4 +1,4 @@
-import type { Platform } from "@conclave-ai/core";
+import type { Platform } from "@simsa/core";
 
 export type PlatformId = "vercel" | "netlify" | "cloudflare" | "railway" | "render" | "deployment-status";
 
@@ -28,7 +28,7 @@ export async function buildPlatforms(
           skipped.push({ id, reason: "VERCEL_TOKEN not set" });
           continue;
         }
-        const mod = await import("@conclave-ai/platform-vercel");
+        const mod = await import("@simsa/platform-vercel");
         try {
           platforms.push(new mod.VercelPlatform());
         } catch (err) {
@@ -41,7 +41,7 @@ export async function buildPlatforms(
           skipped.push({ id, reason: "NETLIFY_TOKEN or NETLIFY_SITE_ID not set" });
           continue;
         }
-        const mod = await import("@conclave-ai/platform-netlify");
+        const mod = await import("@simsa/platform-netlify");
         try {
           platforms.push(new mod.NetlifyPlatform());
         } catch (err) {
@@ -58,7 +58,7 @@ export async function buildPlatforms(
           skipped.push({ id, reason: "CLOUDFLARE_API_TOKEN / ACCOUNT_ID / PROJECT_NAME not set" });
           continue;
         }
-        const mod = await import("@conclave-ai/platform-cloudflare");
+        const mod = await import("@simsa/platform-cloudflare");
         try {
           platforms.push(new mod.CloudflarePlatform());
         } catch (err) {
@@ -71,7 +71,7 @@ export async function buildPlatforms(
           skipped.push({ id, reason: "RAILWAY_API_TOKEN or RAILWAY_PROJECT_ID not set" });
           continue;
         }
-        const mod = await import("@conclave-ai/platform-railway");
+        const mod = await import("@simsa/platform-railway");
         try {
           platforms.push(new mod.RailwayPlatform());
         } catch (err) {
@@ -84,7 +84,7 @@ export async function buildPlatforms(
           skipped.push({ id, reason: "RENDER_API_TOKEN or RENDER_SERVICE_ID not set" });
           continue;
         }
-        const mod = await import("@conclave-ai/platform-render");
+        const mod = await import("@simsa/platform-render");
         try {
           platforms.push(new mod.RenderPlatform());
         } catch (err) {
@@ -94,7 +94,7 @@ export async function buildPlatforms(
       }
       case "deployment-status": {
         // No env vars — uses gh CLI auth. Always try to add.
-        const mod = await import("@conclave-ai/platform-deployment-status");
+        const mod = await import("@simsa/platform-deployment-status");
         try {
           platforms.push(new mod.DeploymentStatusPlatform());
         } catch (err) {

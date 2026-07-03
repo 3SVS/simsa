@@ -1,4 +1,4 @@
-# @conclave-ai/central-plane
+# @simsa/central-plane
 
 Cloudflare Worker that backs conclave-ai's v0.4 centralized install model.
 

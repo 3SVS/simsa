@@ -1,4 +1,4 @@
-import type { ReviewContext } from "@conclave-ai/core";
+import type { ReviewContext } from "@simsa/core";
 
 /**
  * Audit-mode system prompt (v0.6.0). Used by `conclave audit` to run a

@@ -30,13 +30,13 @@ import {
   type PlainSummaryLocale,
   type ReviewContext,
   type ReviewResult,
-} from "@conclave-ai/core";
-import { ClaudeAgent } from "@conclave-ai/agent-claude";
-import { DesignAgent } from "@conclave-ai/agent-design";
-import { OpenAIAgent } from "@conclave-ai/agent-openai";
-import { GeminiAgent } from "@conclave-ai/agent-gemini";
+} from "@simsa/core";
+import { ClaudeAgent } from "@simsa/agent-claude";
+import { DesignAgent } from "@simsa/agent-design";
+import { OpenAIAgent } from "@simsa/agent-openai";
+import { GeminiAgent } from "@simsa/agent-gemini";
 import { loadConfig, resolveMemoryRoot } from "../lib/config.js";
-import { FileSystemMemoryStore } from "@conclave-ai/core";
+import { FileSystemMemoryStore } from "@simsa/core";
 import {
   loadAuditRagContext,
   formatAuditRagTelemetry,

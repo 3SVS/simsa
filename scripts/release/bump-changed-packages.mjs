@@ -6,7 +6,7 @@
  *
  * Why: in lockstep mode, every package's version advances every
  * release — even packages with zero file changes since the last tag.
- * That made `git log --oneline @conclave-ai/agent-design@0.9.x..@conclave-ai/agent-design@0.10.0`
+ * That made `git log --oneline @simsa/agent-design@0.9.x..@simsa/agent-design@0.10.0`
  * meaningless (the tag advanced; the code didn't), and burned npm
  * publishing bandwidth on no-op tarballs.
  *
@@ -76,12 +76,12 @@ export function packageChangedFromList(name, changed) {
   return changed.some((p) => p.startsWith(prefix));
 }
 
-const WORKSPACE_SCOPE = "@conclave-ai/";
+const WORKSPACE_SCOPE = "@simsa/";
 
 /**
  * Read the workspace-internal dependencies declared by a package's
  * package.json. Returns the set of dependency names with the scope
- * prefix stripped — i.e., for `"@conclave-ai/core": "workspace:*"`
+ * prefix stripped — i.e., for `"@simsa/core": "workspace:*"`
  * we return "core". Both runtime and dev deps are included; both
  * cause the consumer to be republished.
  */
@@ -109,8 +109,8 @@ export function readWorkspaceDeps(pkgDir) {
  *
  * Live RC: v0.13.13 fuzzy-dedupe shipped in core@0.11.13 but cli was
  * still on 0.13.12 (no source change). cli@0.13.12's published
- * package.json says `"@conclave-ai/core": "0.11.12"` (exact) — so
- * `pnpm i -g @conclave-ai/cli@0.13.12` pulls the OLD core, no fuzzy
+ * package.json says `"@simsa/core": "0.11.12"` (exact) — so
+ * `pnpm i -g @simsa/cli@0.13.12` pulls the OLD core, no fuzzy
  * dedupe. Operators wouldn't see the fix until cli's source
  * incidentally changed.
  *

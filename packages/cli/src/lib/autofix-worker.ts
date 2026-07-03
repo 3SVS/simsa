@@ -5,14 +5,14 @@ import type {
   BlockerFix,
   FileRewrite,
   ReviewResult,
-} from "@conclave-ai/core";
-import { isFileDenied } from "@conclave-ai/core";
+} from "@simsa/core";
+import { isFileDenied } from "@simsa/core";
 import type {
   ClaudeWorker,
   FileSnapshot,
   WorkerContext,
   WorkerOutcome,
-} from "@conclave-ai/agent-worker";
+} from "@simsa/agent-worker";
 import { classifyAnthropicError, formatClassifiedReason } from "./anthropic-error-classify.js";
 
 export type WorkerLike = {

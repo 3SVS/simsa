@@ -1,4 +1,4 @@
-# @conclave-ai/visual-review
+# @simsa/visual-review
 
 Before/after visual review for Conclave AI. Captures PNG screenshots of
 a PR's deployed preview (before SHA + after SHA), runs pixel diff, saves
@@ -10,7 +10,7 @@ Decision #15: odiff is the intended fast path for v2.x; pixelmatch
 ## Install
 
 ```bash
-pnpm add @conclave-ai/visual-review @conclave-ai/core
+pnpm add @simsa/visual-review @simsa/core
 pnpm add playwright           # peer dep; install chromium separately
 npx playwright install chromium
 ```
@@ -18,9 +18,9 @@ npx playwright install chromium
 ## Usage
 
 ```ts
-import { runVisualReview } from "@conclave-ai/visual-review";
-import { VercelPlatform } from "@conclave-ai/platform-vercel";
-import { NetlifyPlatform } from "@conclave-ai/platform-netlify";
+import { runVisualReview } from "@simsa/visual-review";
+import { VercelPlatform } from "@simsa/platform-vercel";
+import { NetlifyPlatform } from "@simsa/platform-netlify";
 
 const result = await runVisualReview({
   repo: "acme/app",

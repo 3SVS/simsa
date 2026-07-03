@@ -53,6 +53,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_PAT }}
         run: |
-          npx -y -p @conclave-ai/cli@latest conclave record-outcome \
+          npx -y -p @simsa/cli@latest conclave record-outcome \
             --id ${{ github.event.client_payload.episodic }} \
             --result merged

@@ -41,7 +41,7 @@ jobs:
 
       - name: Poll Telegram + dispatch
         run: |
-          npx -y -p @conclave-ai/telegram-bot-runner@latest \
+          npx -y -p @simsa/telegram-bot-runner@latest \
             conclave-telegram-bot \
               --repo ${{ github.repository }} \
               --offset-file .telegram-bot-offset.json \

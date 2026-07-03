@@ -27,7 +27,7 @@ export interface MetricsSink {
 /**
  * MetricsRecorder — collects per-call metrics in memory and forwards each
  * record to the injected `MetricsSink` (in production, `LangfuseMetricsSink`
- * from @conclave-ai/observability-langfuse, wired by cli/commands/review.ts).
+ * from @simsa/observability-langfuse, wired by cli/commands/review.ts).
  */
 export class MetricsRecorder {
   private readonly records: CallMetric[] = [];

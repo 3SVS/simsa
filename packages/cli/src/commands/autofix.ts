@@ -18,10 +18,10 @@ import {
   type WorkerOutcome,
   type WorkerContext,
 } from "../autofix-pipeline.js";
-import type { AutofixResult } from "@conclave-ai/core";
+import type { AutofixResult } from "@simsa/core";
 
 // Re-exports — tests + downstream consumers (central-plane, etc.) import
-// these from "@conclave-ai/cli/dist/commands/autofix.js". Keeping the
+// these from "@simsa/cli/dist/commands/autofix.js". Keeping the
 // surface stable lets us split the orchestration body out without
 // breaking call sites.
 export {
@@ -75,7 +75,7 @@ Options:
 Safety rails (all mandatory):
   - LoopGuard (per repo#pr:sha, 5 attempts / 1h window — inherited from v0.4).
   - CircuitBreaker (3 consecutive worker errors trip the circuit).
-  - Secret-guard scan runs on every patch before apply (see @conclave-ai/secret-guard).
+  - Secret-guard scan runs on every patch before apply (see @simsa/secret-guard).
   - File deny-list: .env* / *.pem / *.key / *secret* / *.credentials*.
   - Diff budget: 500 lines total across all patches per iteration. Tripping STOPS the loop.
   - Tests MUST pass before commit; failures revert the staged changes.

@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { Blocker, BlockerFix } from "@conclave-ai/core";
+import type { Blocker, BlockerFix } from "@simsa/core";
 import type { HandlerResult, BinaryEncodingHandlerDeps } from "./binary-encoding.js";
 
 /**

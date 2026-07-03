@@ -2,10 +2,10 @@
  * UI / design-surface detection — shared primitives.
  *
  * Two callsites consume these:
- *   1. `@conclave-ai/cli` (`lib/domain-detect.ts`) — decides whether a PR
+ *   1. `@simsa/cli` (`lib/domain-detect.ts`) — decides whether a PR
  *      counts as `code` / `design` / `mixed` so the runner spins up the
  *      Design agent.
- *   2. `@conclave-ai/agent-design` (`ui-globs.ts`) — once the Design
+ *   2. `@simsa/agent-design` (`ui-globs.ts`) — once the Design
  *      agent IS running and no screenshots are attached, it dispatches
  *      Mode B vs. Mode C using `diffTouchesUi(diff)` here.
  *

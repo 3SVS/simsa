@@ -257,7 +257,7 @@ test("checkCliVersion: installed < latest → WARN with `npm i -g` hint", async 
   const r = await checkCliVersion("0.13.6", "https://r/x", fakeFetch);
   assert.equal(r.status, "warn");
   assert.ok(r.detail?.includes("0.14.0"));
-  assert.ok(r.hint?.includes("npm i -g @conclave-ai/cli@0.14.0"));
+  assert.ok(r.hint?.includes("npm i -g @simsa/cli@0.14.0"));
 });
 
 test("checkCliVersion: registry probe fails → WARN with installed version still surfaced", async () => {

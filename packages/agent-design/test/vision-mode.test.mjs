@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EfficiencyGate } from "@conclave-ai/core";
+import { EfficiencyGate } from "@simsa/core";
 import { DesignAgent, REVIEW_TOOL_NAME } from "../dist/index.js";
 
 // ---- shared helpers -----------------------------------------------------

@@ -12,7 +12,7 @@
  * 표시", "앱 시작 안전성"). Keep the mapping dense + updatable here
  * rather than scattered across notifier renderers.
  */
-import type { AutofixIteration, AutofixResultStatus, Blocker, BlockerFix, ReviewResult } from "@conclave-ai/core";
+import type { AutofixIteration, AutofixResultStatus, Blocker, BlockerFix, ReviewResult } from "@simsa/core";
 
 export type DeployOutcome = "success" | "failure" | "pending" | "unknown";
 export type Recommendation = "approve" | "hold" | "reject";

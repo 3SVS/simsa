@@ -7,7 +7,7 @@
 // credentials (env is empty for Basic-only mode), and makes no network call.
 //
 // Exposes buildClaudeDesktopBasicConfig() for tests; prints when run directly
-// (`pnpm --filter @conclave-ai/mcp-workspace print:claude-desktop-basic-config`).
+// (`pnpm --filter @simsa/mcp-workspace print:claude-desktop-basic-config`).
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -29,7 +29,7 @@ export function buildClaudeDesktopBasicConfig({ requireBuilt = true } = {}) {
   const entry = resolveServerEntry();
   if (requireBuilt && !existsSync(entry)) {
     throw new Error(
-      `dist/index.js not found at ${entry}. Run: pnpm --filter @conclave-ai/mcp-workspace build`,
+      `dist/index.js not found at ${entry}. Run: pnpm --filter @simsa/mcp-workspace build`,
     );
   }
   return {

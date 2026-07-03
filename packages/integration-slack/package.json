@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/integration-slack",
+  "name": "@simsa/integration-slack",
   "version": "0.10.0",
   "description": "Conclave AI Slack notifier — posts review outcomes to a Slack channel via incoming webhook.",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*"
+    "@simsa/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

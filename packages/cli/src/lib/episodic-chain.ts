@@ -1,4 +1,4 @@
-import type { FileSystemMemoryStore } from "@conclave-ai/core";
+import type { FileSystemMemoryStore } from "@simsa/core";
 
 /**
  * findPriorEpisodicId — locate the episodic entry that represents the

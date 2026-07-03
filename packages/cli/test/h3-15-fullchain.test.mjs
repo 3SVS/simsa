@@ -26,7 +26,7 @@ import {
   applyFailureGate,
   detectCatchRegressions,
   writeCatchRegression,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 function freshFs() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "aic-h3-15-fc-"));

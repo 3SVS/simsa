@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/central-plane",
+  "name": "@simsa/central-plane",
   "version": "0.13.0",
   "private": true,
   "description": "Conclave AI central control plane — Cloudflare Worker + D1 backing the v0.4 install model.",
@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@cloudflare/containers": "^0.0.30",
-    "@conclave-ai/core": "workspace:*",
+    "@simsa/core": "workspace:*",
     "better-auth": "1.6.20",
     "hono": "^4.6.14",
     "kysely-d1": "0.4.0"

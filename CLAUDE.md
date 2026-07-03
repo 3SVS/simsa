@@ -23,9 +23,9 @@ pnpm clean          # turbo run clean + rm -rf node_modules
 Single-package work — use Turbo's `--filter`:
 
 ```bash
-pnpm turbo run build    --filter @conclave-ai/core
-pnpm turbo run test     --filter @conclave-ai/cli
-pnpm turbo run typecheck --filter @conclave-ai/agent-claude
+pnpm turbo run build    --filter @simsa/core
+pnpm turbo run test     --filter @simsa/cli
+pnpm turbo run typecheck --filter @simsa/agent-claude
 ```
 
 Single test file — drop into the package and run node directly:

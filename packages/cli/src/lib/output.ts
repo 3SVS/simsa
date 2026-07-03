@@ -1,4 +1,4 @@
-import type { Blocker, PlainSummary, ReviewResult, MetricsSummary } from "@conclave-ai/core";
+import type { Blocker, PlainSummary, ReviewResult, MetricsSummary } from "@simsa/core";
 
 export interface PrintReviewInput {
   repo: string;

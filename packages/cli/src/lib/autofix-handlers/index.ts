@@ -1,4 +1,4 @@
-import type { Blocker, BlockerFix } from "@conclave-ai/core";
+import type { Blocker, BlockerFix } from "@simsa/core";
 import type { GitLike } from "../autofix-worker.js";
 import {
   tryBinaryEncodingFix,
@@ -86,4 +86,4 @@ export async function runSpecialHandlers(
   return { claimed: false };
 }
 
-export type { BlockerFix, Blocker } from "@conclave-ai/core";
+export type { BlockerFix, Blocker } from "@simsa/core";

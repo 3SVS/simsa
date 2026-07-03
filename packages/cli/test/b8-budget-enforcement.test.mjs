@@ -17,7 +17,7 @@ import {
   BudgetExceededError,
   BudgetTracker,
   EfficiencyGate,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 test("B.8: hard cap — second reserve over the limit throws BudgetExceededError", () => {
   const t = new BudgetTracker({ perPrUsd: 1.0 });

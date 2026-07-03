@@ -101,7 +101,7 @@ export interface ReviewContext {
   /**
    * Optional before/after screenshot pairs captured for design-domain
    * reviews. Consumed by vision-based design agents (e.g. `DesignAgent`
-   * from `@conclave-ai/agent-design`) to reason about layout regressions,
+   * from `@simsa/agent-design`) to reason about layout regressions,
    * contrast, and unintentional style changes.
    *
    * `before` / `after` are raw PNG bytes (Buffer) or base64-encoded PNG

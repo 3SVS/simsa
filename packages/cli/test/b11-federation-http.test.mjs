@@ -19,7 +19,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { HttpFederatedSyncTransport } from "@conclave-ai/core";
+import { HttpFederatedSyncTransport } from "@simsa/core";
 
 function startServer(handler) {
   return new Promise((resolve) => {

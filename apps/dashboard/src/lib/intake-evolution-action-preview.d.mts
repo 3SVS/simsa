@@ -1,2 +1,2 @@
-// Stage 137 — compatibility wrapper types. See @conclave-ai/workspace-preview.
-export * from "@conclave-ai/workspace-preview/intake-evolution-action-preview";
+// Stage 137 — compatibility wrapper types. See @simsa/workspace-preview.
+export * from "@simsa/workspace-preview/intake-evolution-action-preview";

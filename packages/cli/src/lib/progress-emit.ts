@@ -1,4 +1,4 @@
-import type { Notifier, NotifyProgressInput } from "@conclave-ai/core";
+import type { Notifier, NotifyProgressInput } from "@simsa/core";
 
 /**
  * v0.11 — fan a progress stage out to every notifier that opted in to

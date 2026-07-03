@@ -90,7 +90,7 @@ jobs:
           if [ -n "${CYCLE:-}" ] && [ "${CYCLE}" != "null" ]; then
             CYCLE_ARG="--rework-cycle ${CYCLE}"
           fi
-          npx -y -p @conclave-ai/cli@0.8.0 conclave rework \
+          npx -y -p @simsa/cli@0.8.0 conclave rework \
             --pr ${{ steps.resolve.outputs.pr }} \
             --episodic ${{ github.event.client_payload.episodic }} \
             $CYCLE_ARG

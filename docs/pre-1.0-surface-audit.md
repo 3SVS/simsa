@@ -1,7 +1,7 @@
 # Pre-1.0 surface audit
 
 **Date:** 2026-05-10  
-**Latest published:** `@conclave-ai/cli@0.16.2` (lockstep `v0.14.2`)
+**Latest published:** `@simsa/cli@0.16.2` (lockstep `v0.14.2`)
 
 This audit inventories every public surface of conclave-ai and classifies
 each item against a 1.0 stability commitment. It is the input to the

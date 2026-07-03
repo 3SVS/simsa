@@ -8,7 +8,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scanPatch, formatFinding } from "@conclave-ai/secret-guard";
+import { scanPatch, formatFinding } from "@simsa/secret-guard";
 
 const FAKE_KEYS = {
   anthropic: "sk-ant-api03-" + "x".repeat(95),

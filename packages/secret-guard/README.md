@@ -1,4 +1,4 @@
-# @conclave-ai/secret-guard
+# @simsa/secret-guard
 
 Pre-commit secret scanner. Takes a unified diff or raw text, returns a list of findings plus a `blocked` flag.
 
@@ -7,7 +7,7 @@ Used by `conclave rework` before `git apply` — if the worker's patch contains 
 ## Usage
 
 ```ts
-import { scanPatch } from "@conclave-ai/secret-guard";
+import { scanPatch } from "@simsa/secret-guard";
 
 const result = scanPatch(workerOutcome.patch);
 if (result.blocked) {

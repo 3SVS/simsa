@@ -1,8 +1,8 @@
-import type { Notifier } from "@conclave-ai/core";
-import { TelegramNotifier } from "@conclave-ai/integration-telegram";
-import { DiscordNotifier } from "@conclave-ai/integration-discord";
-import { SlackNotifier } from "@conclave-ai/integration-slack";
-import { EmailNotifier } from "@conclave-ai/integration-email";
+import type { Notifier } from "@simsa/core";
+import { TelegramNotifier } from "@simsa/integration-telegram";
+import { DiscordNotifier } from "@simsa/integration-discord";
+import { SlackNotifier } from "@simsa/integration-slack";
+import { EmailNotifier } from "@simsa/integration-email";
 import type { ConclaveConfig } from "./config.js";
 
 /**

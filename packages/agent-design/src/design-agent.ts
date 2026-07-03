@@ -1,5 +1,5 @@
-import type { Agent, Blocker, ReviewContext, ReviewResult } from "@conclave-ai/core";
-import { EfficiencyGate, estimateTokens } from "@conclave-ai/core";
+import type { Agent, Blocker, ReviewContext, ReviewResult } from "@simsa/core";
+import { EfficiencyGate, estimateTokens } from "@simsa/core";
 import {
   REVIEW_TOOL_NAME,
   REVIEW_TOOL_DESCRIPTION,
@@ -619,7 +619,7 @@ function errorResult(agentId: string, reason: string): ReviewResult {
 
 /**
  * Approximate USD cost for a vision call on Claude Opus 4.7. We don't
- * import `@conclave-ai/agent-claude`'s pricing table to keep the
+ * import `@simsa/agent-claude`'s pricing table to keep the
  * dependency graph tight; the efficiency gate uses this only for the
  * per-PR budget accounting. Accuracy within ~20% is good enough.
  */

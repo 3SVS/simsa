@@ -25,15 +25,15 @@ import {
   type EpisodicEntry,
   type MemoryStore,
   type ReviewResult,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import {
   ClaudeWorker,
   type ClaudeWorkerOptions,
   type WorkerOutcome,
   type WorkerContext,
-} from "@conclave-ai/agent-worker";
-import { formatFinding, scanPatch, type ScanResult } from "@conclave-ai/secret-guard";
-import { fetchPrState, fetchDeployStatus as defaultFetchDeployStatus, fetchPreviewUrl, type DeployStatus, type GhRunner, type PullRequestState } from "@conclave-ai/scm-github";
+} from "@simsa/agent-worker";
+import { formatFinding, scanPatch, type ScanResult } from "@simsa/secret-guard";
+import { fetchPrState, fetchDeployStatus as defaultFetchDeployStatus, fetchPreviewUrl, type DeployStatus, type GhRunner, type PullRequestState } from "@simsa/scm-github";
 import { loadConfig, resolveMemoryRoot, type ConclaveConfig } from "./lib/config.js";
 import { loadPrd } from "./lib/project-context.js";
 import { runPerBlocker, type WorkerLike, type GitLike } from "./lib/autofix-worker.js";
@@ -49,7 +49,7 @@ import { runSmokeIfConfigured } from "./lib/smoke-runner.js";
 import { resolveKey } from "./lib/credentials.js";
 import { buildNotifiers } from "./lib/notifier-factory.js";
 import { emitProgress } from "./lib/progress-emit.js";
-import type { Notifier } from "@conclave-ai/core";
+import type { Notifier } from "@simsa/core";
 import {
   verify,
   summarizeFailure,
@@ -154,7 +154,7 @@ export interface AutofixDeps {
   mergePr?: (prNumber: number, cwd: string) => Promise<void>;
   /**
    * v0.13.7 — read deploy preview status for a given commit SHA. Defaults
-   * to `fetchDeployStatus` from `@conclave-ai/scm-github` (uses `gh api
+   * to `fetchDeployStatus` from `@simsa/scm-github` (uses `gh api
    * /repos/.../check-runs`). Tests inject a stub to drive the poll loop
    * without hitting GitHub.
    */
@@ -1527,7 +1527,7 @@ export async function runAutofix(args: AutofixArgs, deps: AutofixDeps = {}): Pro
     let smokeBrokenThisIter = false;
     let smokeFailureReason = "";
     let aiSlopHitsThisIter: Array<{ reason: string; match: string }> | undefined;
-    let smokeDiagnosisThisIter: import("@conclave-ai/failure-classifier").FailureDiagnosis | undefined;
+    let smokeDiagnosisThisIter: import("@simsa/failure-classifier").FailureDiagnosis | undefined;
 
     // H3 #11 — write a solution sidecar so the next review cycle can
     // attach the (blocker, patch) pairs to its EpisodicEntry. On merge,

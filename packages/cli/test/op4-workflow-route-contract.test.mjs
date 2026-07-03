@@ -82,7 +82,7 @@ test("OP-4 /admin/webhook-status route exists + returns shape doctor expects", (
 test("OP-4 review.yml install step pins explicit cli-version (no `latest` supply-chain risk)", () => {
   const review = readFile(".github/workflows/review.yml");
   // The install step uses ${{ inputs.cli-version }} with a pinned default.
-  assert.match(review, /pnpm add -g.*@conclave-ai\/cli@\$\{\{\s*inputs\.cli-version/);
+  assert.match(review, /pnpm add -g.*@simsa\/cli@\$\{\{\s*inputs\.cli-version/);
   // Default value MUST be a real version, not "latest" or "*".
   const defaultMatch = review.match(/cli-version:\s*[\s\S]*?default:\s*([0-9.]+)/);
   assert.ok(defaultMatch, "cli-version default must be defined");

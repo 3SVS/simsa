@@ -23,7 +23,7 @@
  * matching the repo's "tests import dist" convention, so this is a true runtime proof
  * of the same code path a later (separately-approved) wiring stage would use.
  *
- * Run: pnpm --filter @conclave-ai/central-plane smoke:better-auth-d1
+ * Run: pnpm --filter @simsa/central-plane smoke:better-auth-d1
  *      (build first; the harness imports ../dist)
  */
 import { getPlatformProxy } from "wrangler";

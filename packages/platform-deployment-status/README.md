@@ -1,4 +1,4 @@
-# @conclave-ai/platform-deployment-status
+# @simsa/platform-deployment-status
 
 Generic GitHub-Deployments-API adapter. Works with **any** host that
 reports deployments back to GitHub via the standard
@@ -16,13 +16,13 @@ same way humans audit deploys via the PR's "Deployments" tab.
 
 ## Setup
 
-Uses `gh api` — same auth as `@conclave-ai/scm-github`. No separate
+Uses `gh api` — same auth as `@simsa/scm-github`. No separate
 token. `gh auth login` once is enough.
 
 ## Usage
 
 ```ts
-import { DeploymentStatusPlatform } from "@conclave-ai/platform-deployment-status";
+import { DeploymentStatusPlatform } from "@simsa/platform-deployment-status";
 
 const generic = new DeploymentStatusPlatform({
   environment: "preview",          // optional filter

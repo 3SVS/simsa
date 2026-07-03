@@ -4,7 +4,7 @@
  * Pure, dependency-free helpers that turn a Simsa fix brief (the
  * deterministic agent fix prompt built by nondev-report.ts
  * `buildAgentFixPrompt`) into input for the Conclave worker agent
- * (@conclave-ai/agent-worker `ClaudeWorker.work(WorkerContext)`), plus the
+ * (@simsa/agent-worker `ClaudeWorker.work(WorkerContext)`), plus the
  * safety rails around applying the worker's full-file rewrites inside the
  * repair container.
  *
@@ -34,7 +34,7 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** Severity enum matches @conclave-ai/core BlockerSchema. */
+/** Severity enum matches @simsa/core BlockerSchema. */
 export type RepairSeverity = "blocker" | "major" | "minor" | "nit";
 
 export interface RepairFinding {
@@ -58,7 +58,7 @@ export interface ParsedRepairBrief {
   hasFindingsSection: boolean;
 }
 
-/** Structurally compatible with @conclave-ai/core ReviewResult. */
+/** Structurally compatible with @simsa/core ReviewResult. */
 export interface RepairReview {
   agent: string;
   verdict: "rework";
@@ -375,7 +375,7 @@ export function pickSnapshotBatch(
 
 // ─── Rewrite application safety ───────────────────────────────────────────────
 
-/** Mirror of @conclave-ai/core DEFAULT_AUTOFIX_DENY_PATTERNS (kept dependency-free). */
+/** Mirror of @simsa/core DEFAULT_AUTOFIX_DENY_PATTERNS (kept dependency-free). */
 const DENY_NAME_PATTERNS: readonly RegExp[] = [
   /^\.env$/i,
   /^\.env\..*$/i,

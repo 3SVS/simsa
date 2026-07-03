@@ -25,7 +25,7 @@ import {
   HttpFederatedSyncTransport,
   runFederatedSync,
   FileSystemMemoryStore,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 export interface AutoPullArgs {
   /** Repo cwd, used to resolve memoryRoot. */

@@ -1,4 +1,4 @@
-import type { Blocker } from "@conclave-ai/core";
+import type { Blocker } from "@simsa/core";
 import type { WorkerContext } from "./types.js";
 
 export const WORKER_SYSTEM_PROMPT = `You are the Worker agent on Conclave AI. Your job is to turn council blockers into complete file rewrites that resolve those blockers.

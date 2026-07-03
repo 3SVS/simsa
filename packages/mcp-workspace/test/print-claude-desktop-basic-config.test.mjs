@@ -46,7 +46,7 @@ describe("Claude Desktop Basic config helper", () => {
       assert.ok(cfg.mcpServers["Simsa-Basic"]); // build present → valid config
     } catch (err) {
       assert.match(String(err.message), /dist\/index\.js not found/);
-      assert.match(String(err.message), /pnpm --filter @conclave-ai\/mcp-workspace build/);
+      assert.match(String(err.message), /pnpm --filter @simsa\/mcp-workspace build/);
     }
   });
 });

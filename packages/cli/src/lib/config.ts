@@ -363,7 +363,7 @@ export const DEFAULT_CONFIG: ConclaveConfig = {
   // Council needs ≥3 distinct vendor perspectives to surface disagreement
   // signal. Phase-1 retrospective (2026-05-06) confirmed multi-agent moat
   // on real eventbadge PRs: openai-only catches included a supply-chain
-  // pin (`@conclave-ai/cli@latest` with write-creds) and a CI reliability
+  // pin (`@simsa/cli@latest` with write-creds) and a CI reliability
   // bomb that claude alone missed. Gemini is included to fill that third
   // perspective slot. Agents whose API key is unset are skipped silently
   // by buildAgent (see commands/review.ts), so this is safe even when a

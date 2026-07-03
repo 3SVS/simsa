@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/agent-ollama",
+  "name": "@simsa/agent-ollama",
   "version": "0.10.0",
   "description": "Conclave AI Ollama agent — local inference via Ollama's OpenAI-compatible endpoint. Zero cost, zero API key.",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*",
+    "@simsa/core": "workspace:*",
     "openai": "^4.76.0"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-# @conclave-ai/observability-langfuse
+# @simsa/observability-langfuse
 
 Langfuse sink for Conclave AI's efficiency-gate metrics. Forwards every
 LLM call's cost / tokens / latency / cache-hit to Langfuse for trace
@@ -10,14 +10,14 @@ works identically — pass the cloud base URL.
 ## Install
 
 ```bash
-pnpm add @conclave-ai/observability-langfuse @conclave-ai/core
+pnpm add @simsa/observability-langfuse @simsa/core
 ```
 
 ## Usage
 
 ```ts
-import { EfficiencyGate, MetricsRecorder } from "@conclave-ai/core";
-import { LangfuseMetricsSink } from "@conclave-ai/observability-langfuse";
+import { EfficiencyGate, MetricsRecorder } from "@simsa/core";
+import { LangfuseMetricsSink } from "@simsa/observability-langfuse";
 
 const sink = new LangfuseMetricsSink({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY,

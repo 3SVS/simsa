@@ -12,8 +12,8 @@ Step-by-step from zero to a real council review.
 ## 1. Install the CLI
 
 ```bash
-pnpm add -g @conclave-ai/cli
-# or: npm install -g @conclave-ai/cli
+pnpm add -g @simsa/cli
+# or: npm install -g @simsa/cli
 ```
 
 This installs the `conclave` binary. Verify:

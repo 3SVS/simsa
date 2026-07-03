@@ -161,14 +161,14 @@ test("Stage 270: server.mjs drives the worker seam against the compiled brief mo
   assert.match(serverMjs, /auto_fix/, "server.mjs must report the auto_fix mode");
 });
 
-test("Stage 270: Dockerfile still builds @conclave-ai/cli (whose dep graph provides agent-worker dist)", () => {
+test("Stage 270: Dockerfile still builds @simsa/cli (whose dep graph provides agent-worker dist)", () => {
   // ClaudeWorker is imported from /app/packages/agent-worker/dist —
   // produced transitively because turbo's build dependsOn ^build and cli
   // depends on agent-worker. If the cli filter disappears, the repair
   // job's worker import breaks at runtime.
   assert.match(
     dockerfile,
-    /--filter @conclave-ai\/cli/,
-    "Dockerfile must keep building @conclave-ai/cli",
+    /--filter @simsa\/cli/,
+    "Dockerfile must keep building @simsa/cli",
   );
 });

@@ -15,7 +15,7 @@
  *
  * Pure renderer — no I/O. The caller wires the gh subprocess.
  */
-import type { AutofixResultStatus, Blocker } from "@conclave-ai/core";
+import type { AutofixResultStatus, Blocker } from "@simsa/core";
 
 export interface BailSummaryContext {
   iterationsAttempted: number;

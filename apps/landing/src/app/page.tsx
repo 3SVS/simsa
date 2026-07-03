@@ -183,7 +183,7 @@ function InstallCommand() {
       </div>
       <pre className="px-4 py-3 leading-relaxed">
         <span className="text-gold">$</span>{" "}
-        <span className="text-parchment">npm i -g @conclave-ai/cli</span>
+        <span className="text-parchment">npm i -g @simsa/cli</span>
       </pre>
     </div>
   );

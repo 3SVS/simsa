@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { FileSystemMemoryStore, seedFromLegacyCatalogPath } from "@conclave-ai/core";
+import { FileSystemMemoryStore, seedFromLegacyCatalogPath } from "@simsa/core";
 import { loadConfig, resolveMemoryRoot, CONFIG_FILENAME, DEFAULT_CONFIG } from "../lib/config.js";
 
 const HELP = `conclave migrate — bring a solo-cto-agent install over to conclave-ai

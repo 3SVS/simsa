@@ -90,7 +90,7 @@ export type McpHandoffInput = {
 export type McpHandoffResult = McpPreviewBoundary & {
   ok: true;
   kind: "web_app_handoff_link";
-  handoff: import("@conclave-ai/workspace-preview/web-app-handoff-link").WebAppHandoffLink;
+  handoff: import("@simsa/workspace-preview/web-app-handoff-link").WebAppHandoffLink;
 };
 
 export function createWebAppHandoffLink(input?: McpHandoffInput): McpHandoffResult;

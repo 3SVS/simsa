@@ -18,7 +18,7 @@
  *   - No production secret (throwaway labelled literal), no network, no .wrangler state.
  *   - dev-only / unpackaged; the deployed Worker bundles only src/index.ts.
  *
- * Run: pnpm --filter @conclave-ai/central-plane smoke:auth-route-d1  (build first)
+ * Run: pnpm --filter @simsa/central-plane smoke:auth-route-d1  (build first)
  */
 import { getPlatformProxy } from "wrangler";
 import { createApp } from "../dist/router.js";

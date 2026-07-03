@@ -1,6 +1,6 @@
 /**
  * UX-2 / UX-3 follow-on — LIVE INVARIANT pinning the central plane's
- * VALID_STAGES list against the source of truth in the @conclave-ai/core
+ * VALID_STAGES list against the source of truth in the @simsa/core
  * ProgressStage type.
  *
  * Pre-invariant: cli@0.14.2 added autofix-cycle-ended, autofix-blocker-
@@ -75,7 +75,7 @@ test("LIVE INVARIANT: central plane VALID_STAGES covers every core ProgressStage
   assert.equal(
     missing.length,
     0,
-    `central-plane review.ts VALID_STAGES is missing ${missing.length} stage(s) from @conclave-ai/core ProgressStage: ${missing.join(", ")}. ` +
+    `central-plane review.ts VALID_STAGES is missing ${missing.length} stage(s) from @simsa/core ProgressStage: ${missing.join(", ")}. ` +
       `Add to apps/central-plane/src/routes/review.ts and progress-format.ts. Without this, emits of those stages return HTTP 400 and the Telegram message stops updating.`,
   );
 });

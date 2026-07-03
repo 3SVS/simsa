@@ -18,7 +18,7 @@ import {
   buildAgentRunPlan,
   buildIntakeEvidencePlan,
   buildAcceptanceGraphDerivedView,
-} from "@conclave-ai/workspace-preview";
+} from "@simsa/workspace-preview";
 
 const WRAPPERS = [
   ["acceptance_map", previewAcceptanceMap],
