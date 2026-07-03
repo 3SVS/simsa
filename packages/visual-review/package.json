@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/visual-review",
-  "version": "0.16.2",
+  "version": "0.17.0",
   "description": "Conclave AI visual review — Playwright screenshots + pixel diff for before/after design review.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/agent-ollama",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Conclave AI Ollama agent — local inference via Ollama's OpenAI-compatible endpoint. Zero cost, zero API key.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

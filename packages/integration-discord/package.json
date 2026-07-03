@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/integration-discord",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Conclave AI Discord notifier — posts review outcomes to a Discord channel via incoming webhook.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

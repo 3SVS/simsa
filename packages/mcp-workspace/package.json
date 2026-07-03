@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/mcp-workspace",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Conclave AI workspace MCP server — exposes the acceptance/PR-review workflow as agent-callable MCP tools over stdio.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",

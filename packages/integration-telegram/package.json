@@ -1,6 +1,6 @@
 {
   "name": "@conclave-ai/integration-telegram",
-  "version": "0.14.2",
+  "version": "0.15.0",
   "description": "Conclave AI Telegram notifier — posts review outcomes to a Telegram chat via Bot API.",
   "license": "FSL-1.1-Apache-2.0",
   "type": "module",
