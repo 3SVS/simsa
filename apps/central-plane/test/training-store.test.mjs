@@ -85,11 +85,60 @@ test("buildTrainingRecord: stable shape, deterministic, pending outcome", () => 
   assert.deepEqual(rec.summary, { passed: 1, failed: 0, inconclusive: 0, needsDecision: 0 });
 });
 
-test("trainingRecordKey is day-bucketed", () => {
+test("trainingRecordKey is region-partitioned + day-bucketed", () => {
+  assert.equal(
+    trainingRecordKey("2026-07-03T12:34:56.000Z", "run_1", "KR"),
+    "events/KR/2026/07/03/run_1.json",
+  );
+  // no region → "unknown"
   assert.equal(
     trainingRecordKey("2026-07-03T12:34:56.000Z", "run_1"),
-    "training/2026/07/03/run_1.json",
+    "events/unknown/2026/07/03/run_1.json",
   );
+});
+
+test("STEP1 수집≠저장: stored R2 payload has ALL P1 envelope keys (null ok)", async () => {
+  const r2 = new FakeR2();
+  const env = { DB: dbWithConsent({ consented: true, version: TRAINING_CONSENT_VERSION }), EVIDENCE: r2 };
+  await captureTrainingRecord(env, baseInput());
+  const rec = JSON.parse(r2.puts[0].value); // the ACTUAL stored JSON, not the input
+  for (const key of [
+    "event_id", "schema_version", "subject_hash", "workspace_hash", "consent_version",
+    "region", "locale", "content_lang", "timezone",
+    "entry_path", "built_with", "topic_tags", "acquisition", "user_context", "commercial",
+    "event_type", "payload_scrub_state", "outcome",
+    "device_context", "experiment_arm", "quality_signals", "cost_meta",
+  ]) {
+    assert.ok(key in rec, `P1 envelope key "${key}" must exist in the stored R2 record`);
+  }
+  assert.equal(rec.schema_version, "2.0");
+  assert.equal(rec.event_type, "pr_reviewed");
+  assert.equal(rec.payload_scrub_state, "clean");
+  assert.ok("plan_tier" in rec.commercial, "commercial.plan_tier slot must exist");
+});
+
+test("STEP1: envelope values actually flow into the stored record", async () => {
+  const r2 = new FakeR2();
+  const env = { DB: dbWithConsent({ consented: true, version: TRAINING_CONSENT_VERSION }), EVIDENCE: r2 };
+  await captureTrainingRecord(env, {
+    ...baseInput(),
+    rerunOfReviewRunId: "prev_run",
+    envelope: {
+      region: "KR", locale: "ko", contentLang: "ko", entryPath: "code",
+      builtWith: { tools: ["cursor"], primary: "cursor" },
+      planTier: "free_beta",
+      userContext: { skill_signal: "first_project", session_seq: 3, project_seq: 1 },
+    },
+  });
+  assert.equal(r2.puts[0].key, "events/KR/2026/07/03/run_1.json");
+  const rec = JSON.parse(r2.puts[0].value);
+  assert.equal(rec.region, "KR");
+  assert.equal(rec.locale, "ko");
+  assert.equal(rec.entry_path, "code");
+  assert.deepEqual(rec.built_with, { tools: ["cursor"], primary: "cursor" });
+  assert.equal(rec.commercial.plan_tier, "free_beta");
+  assert.equal(rec.event_type, "pr_rechecked"); // rerun → rechecked
+  assert.equal(rec.user_context.session_seq, 3);
 });
 
 test("no consent row → no-op, bucket untouched", async () => {
@@ -120,7 +169,7 @@ test("consent + bucket → stores at day-bucketed key", async () => {
   const env = { DB: dbWithConsent({ consented: true, version: TRAINING_CONSENT_VERSION }), EVIDENCE: r2 };
   const res = await captureTrainingRecord(env, baseInput());
   assert.equal(res.stored, true);
-  assert.equal(res.key, "training/2026/07/03/run_1.json");
+  assert.equal(res.key, "events/unknown/2026/07/03/run_1.json");
   assert.equal(r2.puts.length, 1);
   assert.equal(r2.puts[0].opts.httpMetadata.contentType, "application/json");
 });
