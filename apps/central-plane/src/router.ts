@@ -33,6 +33,7 @@ import { createLemonsqueezyWebhookRoutes } from "./routes/lemonsqueezy-webhook.j
 import { createWorkspaceRoutes } from "./routes/workspace.js";
 import { createWorkspaceGitHubRoutes } from "./routes/workspace-github.js";
 import { createWorkspaceNotificationRoutes } from "./routes/workspace-notifications.js";
+import { createWorkspaceTrainingConsentRoutes } from "./routes/workspace-training-consent.js";
 import { createWorkspaceAdminStatsRoutes } from "./routes/workspace-admin-stats.js";
 import { createWorkspaceAdminCreditsRoutes } from "./routes/workspace-admin-credits.js";
 import { createWorkspaceCreditsRoutes } from "./routes/workspace-credits.js";
@@ -148,6 +149,9 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceGitHubRoutes(fetchImpl));
   // Stage 17 — Telegram notification settings + history.
   app.route("/", createWorkspaceNotificationRoutes(fetchImpl));
+  // Training-data consent — opt-in to retaining raw review triplets (diff +
+  // council verdict) in the durable training store. Default OFF; version-gated.
+  app.route("/", createWorkspaceTrainingConsentRoutes());
   // Stage 18 — Admin usage stats (key-gated, no billing).
   app.route("/", createWorkspaceAdminStatsRoutes());
   // Stage 20 — Admin credit ledger (key-gated, manual grant + preview, no debit).

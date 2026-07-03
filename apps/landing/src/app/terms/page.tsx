@@ -136,7 +136,36 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-medium mb-3">VI. Outputs</h2>
+            <h2 className="font-display text-2xl font-medium mb-3">
+              VI. Data &amp; model training
+            </h2>
+            <p className="mb-3">
+              We do not train on your code by default. Reviews are processed to
+              produce a result and are not retained for model training unless
+              you explicitly opt in.
+            </p>
+            <p className="mb-3">
+              <strong>Opt-in (off by default).</strong> If you turn on
+              &ldquo;Help improve Simsa&rdquo; in your workspace settings, we
+              retain the reviewed code changes (diff), your acceptance items,
+              and the review result, and may use them &mdash; after
+              anonymization &mdash; to improve review quality, including
+              training our own models. Retained records are keyed to an
+              anonymized identifier; your account handle and email are never
+              included. You can withdraw consent at any time; new reviews stop
+              being retained from that point (previously retained,
+              already-anonymized records may remain in training sets).
+            </p>
+            <p>
+              <strong>BYO (CLI) mode.</strong> Your code and diffs stay on your
+              machine and are never sent to us for training. Only the anonymous
+              failure-pattern counts described in our federated-sync docs leave
+              your machine, and only if you enable sync.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="font-display text-2xl font-medium mb-3">VII. Outputs</h2>
             <p>
               The council&rsquo;s verdicts, patches, and summaries are
               algorithmically generated. They are advisory. You retain full
@@ -150,7 +179,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display text-2xl font-medium mb-3">
-              VII. Limitation of liability
+              VIII. Limitation of liability
             </h2>
             <p>
               To the maximum extent permitted by law, our aggregate liability
@@ -164,7 +193,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display text-2xl font-medium mb-3">
-              VIII. Termination
+              IX. Termination
             </h2>
             <p>
               You can stop using the service at any time by uninstalling the
@@ -179,7 +208,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display text-2xl font-medium mb-3">
-              IX. Governing law
+              X. Governing law
             </h2>
             <p>
               These terms are governed by the laws of the Republic of Korea.
@@ -191,7 +220,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-medium mb-3">X. Contact</h2>
+            <h2 className="font-display text-2xl font-medium mb-3">XI. Contact</h2>
             <p>
               3SVS Co. (brand: 3Stripe) &middot; Seoul, Republic of Korea
               &middot;{" "}

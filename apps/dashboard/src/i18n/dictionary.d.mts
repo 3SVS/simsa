@@ -644,6 +644,18 @@ export type Dictionary = {
     testSent: string;
     testError: string;
   };
+  trainingConsent: {
+    title: string;
+    desc: string;
+    point1: string;
+    point2: string;
+    point3: string;
+    enable: string;
+    storageNote: string;
+    savedOn: string;
+    savedOff: string;
+    saveError: string;
+  };
   github: {
     connectTitle: string;
     connectIntro: string;

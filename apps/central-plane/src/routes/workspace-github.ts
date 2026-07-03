@@ -50,6 +50,7 @@ import {
 } from "../workspace/pr-review-compare.js";
 import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
+import { captureTrainingRecord } from "../workspace/training-store.js";
 import { getProject, getOwnedProject } from "../workspace/db.js";
 import { consumeUserHourlyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
@@ -946,6 +947,24 @@ export function createWorkspaceGitHubRoutes(
       eventType: "workspace_pr_review_run",
       metadata: { source: reviewResult.source, prNumber, repoFullName: repo.repoFullName, ...reviewResult.summary },
     });
+
+    // 9c. Capture the raw training triplet (diff + council verdict) for a future
+    // fine-tune / distillation. Opt-in only: no-op without active consent or an
+    // EVIDENCE bucket, and never throws (best-effort telemetry).
+    await captureTrainingRecord(c.env, {
+      userKey,
+      projectId,
+      reviewRunId: run.id,
+      repoFullName: repo.repoFullName,
+      prNumber,
+      headSha: prFilesResult.meta.headSha,
+      productSpec,
+      items: itemsToReview,
+      prFiles: prFilesResult.files,
+      review: reviewResult,
+      finalStatus,
+      rerunOfReviewRunId,
+    }).catch(() => {});
 
     // 10. Telegram notification (non-blocking: failure must not fail the review response)
     await (async () => {
