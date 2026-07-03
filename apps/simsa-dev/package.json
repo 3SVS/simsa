@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/simsa-dev",
+  "name": "@simsa/simsa-dev",
   "version": "0.16.0",
   "private": true,
   "type": "module",

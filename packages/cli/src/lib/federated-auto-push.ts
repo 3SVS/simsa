@@ -5,7 +5,7 @@ import {
   type AnswerKey,
   type FailureEntry,
   type FederatedSyncTransport,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import type { ConclaveConfig } from "./config.js";
 
 export interface AutoPushInput {

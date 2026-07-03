@@ -8,7 +8,7 @@
 //
 // child_process/stdio is used HERE (a dev smoke) only — product runtime never spawns
 // processes. Exposes runStdioSmoke() for tests; prints a short, secret-free summary
-// when run directly (`pnpm --filter @conclave-ai/mcp-workspace smoke:basic:stdio`).
+// when run directly (`pnpm --filter @simsa/mcp-workspace smoke:basic:stdio`).
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { existsSync } from "node:fs";

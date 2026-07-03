@@ -22,7 +22,7 @@ import path from "node:path";
 import {
   FileSystemMemoryStore,
   OutcomeWriter,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { findPriorEpisodicId } from "../dist/lib/episodic-chain.js";
 import {
   readSolutionSidecar,

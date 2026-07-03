@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/integration-email",
+  "name": "@simsa/integration-email",
   "version": "0.10.0",
   "description": "Conclave AI email notifier — pluggable transport (Resend default; SMTP/SES/nodemailer drop-ins).",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*"
+    "@simsa/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

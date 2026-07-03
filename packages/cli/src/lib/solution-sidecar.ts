@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { SolutionPatch } from "@conclave-ai/core";
+import type { SolutionPatch } from "@simsa/core";
 
 /**
  * H3 #11 — sidecar handoff between `conclave autofix` and the next

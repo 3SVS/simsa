@@ -1,4 +1,4 @@
-import type { NotifyReviewInput } from "@conclave-ai/core";
+import type { NotifyReviewInput } from "@simsa/core";
 
 const VERDICT_LABEL: Record<"approve" | "rework" | "reject", string> = {
   approve: "APPROVE",

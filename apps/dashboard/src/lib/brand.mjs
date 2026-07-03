@@ -13,8 +13,8 @@
 //   - CSS variable names / Tailwind classes (`brand-50`, `brand-700`) — internal
 //   - route paths (`/workspace/*`) — internal
 //   - test fixture IDs (`uk_owner`, `proj_*`) — internal
-//   - npm package names (`@conclave-ai/*`) — frozen
-//   - MCP package id (`@conclave-ai/mcp-workspace`) — frozen
+//   - npm package names (`@simsa/*`) — frozen
+//   - MCP package id (`@simsa/mcp-workspace`) — frozen
 //
 // i18n note: `t.brand.wordmark` in dictionary.mjs intentionally holds the same
 // value. The two are siblings — i18n drives locale-aware chrome, BRAND drives

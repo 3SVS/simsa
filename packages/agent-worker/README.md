@@ -1,4 +1,4 @@
-# @conclave-ai/agent-worker
+# @simsa/agent-worker
 
 Worker agent for Conclave AI. Consumes `ReviewResult[]` from the council and emits a unified-diff `WorkerOutcome` ready to be applied with `git apply` and committed back to the PR branch.
 
@@ -7,8 +7,8 @@ Pure with respect to the filesystem — it never reads files or shells out to gi
 ## Usage
 
 ```ts
-import { ClaudeWorker } from "@conclave-ai/agent-worker";
-import { EfficiencyGate } from "@conclave-ai/core";
+import { ClaudeWorker } from "@simsa/agent-worker";
+import { EfficiencyGate } from "@simsa/core";
 
 const worker = new ClaudeWorker({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -32,7 +32,7 @@ const outcome = await worker.work({
 
 ## Why a separate package
 
-The worker uses the same LLM plumbing as `agent-claude` (tool-use, efficiency gate, pricing table) but emits a fundamentally different artifact — a patch, not a review. Keeping them separate means the `Agent` interface in `@conclave-ai/core` stays clean (review-only) and the worker's commit-loop concerns don't leak into the council.
+The worker uses the same LLM plumbing as `agent-claude` (tool-use, efficiency gate, pricing table) but emits a fundamentally different artifact — a patch, not a review. Keeping them separate means the `Agent` interface in `@simsa/core` stays clean (review-only) and the worker's commit-loop concerns don't leak into the council.
 
 ## Guard integration
 
@@ -46,4 +46,4 @@ loopGuard.check(`${ctx.repo}#${ctx.pullNumber}:${ctx.newSha}`);
 const outcome = await breaker.guard("worker", () => worker.work(ctx));
 ```
 
-See `@conclave-ai/core` `guards.ts` for the API.
+See `@simsa/core` `guards.ts` for the API.

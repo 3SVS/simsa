@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { FileSystemMemoryStore } from "@conclave-ai/core";
+import { FileSystemMemoryStore } from "@simsa/core";
 import { findPriorEpisodicId } from "../dist/lib/episodic-chain.js";
 
 function freshStore() {

@@ -20,7 +20,7 @@ import {
   dedupeBlockersAcrossAgents,
   LoopGuard,
   CircuitBreaker,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 // ---- parseArgv ------------------------------------------------------------
 

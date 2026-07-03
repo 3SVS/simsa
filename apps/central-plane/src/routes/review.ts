@@ -7,8 +7,8 @@ import {
   renderAutonomyMessage,
   type AutonomyContext,
   type AutonomyState,
-} from "@conclave-ai/core/autonomy";
-import type { PlainSummary, PlainSummaryLocale } from "@conclave-ai/core/plain-summary";
+} from "@simsa/core/autonomy";
+import type { PlainSummary, PlainSummaryLocale } from "@simsa/core/plain-summary";
 import type { Env } from "../env.js";
 import type { FetchLike } from "../github.js";
 import { findInstallByTokenHash, touchInstall, addMonthlySpend } from "../db/installs.js";

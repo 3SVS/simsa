@@ -61,7 +61,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build central-plane (+ core dep)
-        run: pnpm turbo run build --filter @conclave-ai/central-plane
+        run: pnpm turbo run build --filter @simsa/central-plane
 
       - name: Ensure R2 bucket (Stage 261 — idempotent)
         working-directory: apps/central-plane

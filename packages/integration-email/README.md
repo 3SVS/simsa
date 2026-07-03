@@ -1,7 +1,7 @@
-# @conclave-ai/integration-email
+# @simsa/integration-email
 
 Email notifier for Conclave AI council reviews. Implements the
-`Notifier` interface from `@conclave-ai/core`.
+`Notifier` interface from `@simsa/core`.
 
 Decision #24: equal-weight integration alongside Telegram / Discord /
 Slack / CLI.
@@ -9,13 +9,13 @@ Slack / CLI.
 ## Install
 
 ```bash
-pnpm add @conclave-ai/integration-email @conclave-ai/core
+pnpm add @simsa/integration-email @simsa/core
 ```
 
 ## Default transport — Resend
 
 ```ts
-import { EmailNotifier } from "@conclave-ai/integration-email";
+import { EmailNotifier } from "@simsa/integration-email";
 
 const email = new EmailNotifier({
   from: "conclave@yourdomain.com",

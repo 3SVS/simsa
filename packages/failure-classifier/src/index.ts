@@ -1,8 +1,8 @@
 /**
- * @conclave-ai/failure-classifier — pattern-match runtime regressions
+ * @simsa/failure-classifier — pattern-match runtime regressions
  * to actionable user guidance.
  *
- * When `@conclave-ai/smoke-verifier` reports a step failure, we have:
+ * When `@simsa/smoke-verifier` reports a step failure, we have:
  *   - HTTP status code (or null on connection-level failure)
  *   - response body text (or stderr from a failed page render)
  *   - the step that triggered (goto / expect-text / etc.)

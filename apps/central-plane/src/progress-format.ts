@@ -1,7 +1,7 @@
 /**
  * v0.11 — Telegram progress-stage renderer for the central plane.
  *
- * Mirrors `@conclave-ai/integration-telegram/src/progress-format.ts` —
+ * Mirrors `@simsa/integration-telegram/src/progress-format.ts` —
  * the format MUST stay in sync so direct-path and central-path messages
  * look identical in a chat. We don't import the integration-telegram
  * package here because that package targets Node + bundles a different
@@ -60,7 +60,7 @@ export interface ProgressPayload {
   blockerTotal?: number;
   blockerLabel?: string;
   blockerOutcome?: string;
-  // UX-4 — terminal report fields (mirrors @conclave-ai/core).
+  // UX-4 — terminal report fields (mirrors @simsa/core).
   cyclesRun?: number;
   totalBlockersFound?: number;
   blockersAutofixed?: number;

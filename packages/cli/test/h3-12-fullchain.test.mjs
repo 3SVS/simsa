@@ -24,7 +24,7 @@ import {
   FileSystemMemoryStore,
   applyFailureGate,
   writeReworkLoopFailure,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 function freshFs() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "aic-h3-12-fc-"));

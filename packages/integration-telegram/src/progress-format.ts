@@ -1,4 +1,4 @@
-import type { NotifyProgressInput, ProgressStage } from "@conclave-ai/core";
+import type { NotifyProgressInput, ProgressStage } from "@simsa/core";
 
 /**
  * v0.11 — Telegram-side rendering for progress streams.

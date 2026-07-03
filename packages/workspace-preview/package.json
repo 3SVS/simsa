@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/workspace-preview",
+  "name": "@simsa/workspace-preview",
   "version": "0.1.0",
   "private": true,
   "description": "Pure deterministic preview helpers for Simsa workspace planning, shared by the dashboard and MCP Basic. No React/Next/browser/network/env/mutation/hosted-execution/payment/secrets.",

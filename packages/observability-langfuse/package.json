@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/observability-langfuse",
+  "name": "@simsa/observability-langfuse",
   "version": "0.10.0",
   "description": "Conclave AI observability sink — forwards efficiency-gate metrics to Langfuse (self-hosted per decision #13).",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*",
+    "@simsa/core": "workspace:*",
     "langfuse": "^3.30.0"
   },
   "devDependencies": {

@@ -17,13 +17,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { scanPatch } from "@conclave-ai/secret-guard";
+import { scanPatch } from "@simsa/secret-guard";
 import {
   FileSystemMemoryStore,
   OutcomeWriter,
   redactAnswerKey,
   redactFailure,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { writeSolutionSidecar, readSolutionSidecar } from "../dist/lib/solution-sidecar.js";
 import { computeFingerprint, checkAndRecordNotification } from "../dist/lib/notification-ledger.js";
 

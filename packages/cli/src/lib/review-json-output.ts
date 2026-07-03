@@ -25,7 +25,7 @@ import type {
   MetricsSummary,
   PlainSummary,
   ReviewResult,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 export interface ReviewJsonInput {
   repo: string;

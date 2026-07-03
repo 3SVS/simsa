@@ -1,4 +1,4 @@
-import type { NotifyReviewInput } from "@conclave-ai/core";
+import type { NotifyReviewInput } from "@simsa/core";
 
 const VERDICT_COLOR: Record<"approve" | "rework" | "reject", number> = {
   approve: 0x22c55e, // green-500

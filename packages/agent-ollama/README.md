@@ -1,16 +1,16 @@
-# @conclave-ai/agent-ollama
+# @simsa/agent-ollama
 
 Conclave AI Ollama agent. Routes reviews to a local or self-hosted
 Ollama instance via its OpenAI-compatible endpoint.
 
 ## Install
 
-Pulled in automatically by `@conclave-ai/cli` when `"ollama"` is in
+Pulled in automatically by `@simsa/cli` when `"ollama"` is in
 `.conclaverc.json` → `agents`.
 
 Standalone:
 ```bash
-pnpm add @conclave-ai/agent-ollama
+pnpm add @simsa/agent-ollama
 ```
 
 ## Why Ollama
@@ -42,7 +42,7 @@ string `"ollama"` as a placeholder so its constructor doesn't throw.
 ## Usage
 
 ```typescript
-import { OllamaAgent } from "@conclave-ai/agent-ollama";
+import { OllamaAgent } from "@simsa/agent-ollama";
 
 const agent = new OllamaAgent({ gate: efficiencyGate });
 const result = await agent.review(ctx);

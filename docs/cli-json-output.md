@@ -228,7 +228,7 @@ emit zero in their place. Treat their absence as `0`.
 
 ## Versioning the JSON contract
 
-This document tracks the shape as of `@conclave-ai/cli@0.16.2` /
+This document tracks the shape as of `@simsa/cli@0.16.2` /
 `v0.14.2`. Breaking changes (rename, remove, type widen) are
 forbidden across `0.x` minor releases and require:
 

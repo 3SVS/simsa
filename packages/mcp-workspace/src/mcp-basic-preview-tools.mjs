@@ -1,6 +1,6 @@
 // Stage 136 — MCP Basic preview tool wrappers (intake set).
 //
-// Pure local wrappers around the shared @conclave-ai/workspace-preview helpers.
+// Pure local wrappers around the shared @simsa/workspace-preview helpers.
 // Read/preview only: NO network, central-plane, env, mutation, file write, LLM,
 // payment provider, agent execution, or PR-comment posting. Each wrapper returns
 // the derived preview plus a small boundary object. Missing input returns a safe
@@ -15,7 +15,7 @@ import {
   buildAgentToolRecommendationMemoryView,
   buildTemplateEffectivenessSignalsView,
   buildWebAppHandoffLink,
-} from "@conclave-ai/workspace-preview";
+} from "@simsa/workspace-preview";
 
 const BOUNDARY = {
   mutatesState: false,

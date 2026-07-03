@@ -2,7 +2,7 @@ import type {
   Notifier,
   NotifyReviewInput,
   NotifyProgressInput,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import {
   TelegramClient,
   type HttpFetch,

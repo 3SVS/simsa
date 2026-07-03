@@ -71,7 +71,7 @@ If you care about preserving any answer-keys or failure-catalog entries you hand
 From the repo root:
 
 ```powershell
-npm install -g @conclave-ai/cli
+npm install -g @simsa/cli
 conclave init
 ```
 
@@ -171,7 +171,7 @@ wrangler secret put CONCLAVE_TOKEN_KEK --env production
 wrangler d1 execute conclave-ai --remote --file=./migrations/0004_encrypt_github_tokens.sql
 
 # 4. Deploy the Worker so it starts writing the encrypted column
-pnpm --filter @conclave-ai/central-plane ship
+pnpm --filter @simsa/central-plane ship
 ```
 
 After deploy:

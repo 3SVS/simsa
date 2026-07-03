@@ -1,16 +1,16 @@
-# @conclave-ai/agent-grok
+# @simsa/agent-grok
 
 Conclave AI Grok agent. Wraps xAI's OpenAI-wire-compatible API at
 `https://api.x.ai/v1` via the `openai` SDK.
 
 ## Install
 
-Pulled in automatically by `@conclave-ai/cli` when `"grok"` is in
+Pulled in automatically by `@simsa/cli` when `"grok"` is in
 `.conclaverc.json` → `agents`.
 
 Standalone:
 ```bash
-pnpm add @conclave-ai/agent-grok
+pnpm add @simsa/agent-grok
 ```
 
 ## Models
@@ -31,7 +31,7 @@ pnpm add @conclave-ai/agent-grok
 ## Usage
 
 ```typescript
-import { GrokAgent } from "@conclave-ai/agent-grok";
+import { GrokAgent } from "@simsa/agent-grok";
 
 const agent = new GrokAgent({ gate: efficiencyGate });
 const result = await agent.review(ctx);

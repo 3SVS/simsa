@@ -30,7 +30,7 @@ import {
   detectCatchRegressions,
   newEpisodicId,
   writeCatchRegression,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { runInit } from "../dist/commands/init.js";
 import { loadConfig, resolveMemoryRoot } from "../dist/lib/config.js";
 import { applyDeployGuard } from "../dist/lib/deploy-guard.js";

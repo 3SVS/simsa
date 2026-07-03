@@ -1,4 +1,4 @@
-import type { ReviewContext } from "@conclave-ai/core";
+import type { ReviewContext } from "@simsa/core";
 
 export type VisualJudgmentCategory =
   | "intentional" // deliberate redesign, working as expected

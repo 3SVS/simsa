@@ -1,4 +1,4 @@
-# @conclave-ai/core
+# @simsa/core
 
 Agent interface, council orchestration, self-evolve substrate, and
 efficiency gate for Conclave AI.
@@ -9,13 +9,13 @@ graph, memory substrate, and efficiency gate land in subsequent PRs.
 ## Install
 
 ```bash
-pnpm add @conclave-ai/core
+pnpm add @simsa/core
 ```
 
 ## Usage
 
 ```ts
-import { Council, type Agent, type ReviewContext } from "@conclave-ai/core";
+import { Council, type Agent, type ReviewContext } from "@simsa/core";
 
 const council = new Council({ agents: [claudeAgent, openaiAgent] });
 const ctx: ReviewContext = {

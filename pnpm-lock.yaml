@@ -23,7 +23,7 @@ importers:
       '@cloudflare/containers':
         specifier: ^0.0.30
         version: 0.0.30
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../../packages/core
       better-auth:
@@ -48,7 +48,7 @@ importers:
 
   apps/dashboard:
     dependencies:
-      '@conclave-ai/workspace-preview':
+      '@simsa/workspace-preview':
         specifier: workspace:*
         version: link:../../packages/workspace-preview
       jszip:
@@ -202,7 +202,7 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.65.0
         version: 0.65.0(zod@4.4.3)
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -215,10 +215,10 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.65.0
         version: 0.65.0(zod@4.4.3)
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
-      '@conclave-ai/visual-review':
+      '@simsa/visual-review':
         specifier: workspace:*
         version: link:../visual-review
     devDependencies:
@@ -228,12 +228,12 @@ importers:
 
   packages/agent-gemini:
     dependencies:
-      '@conclave-ai/core':
-        specifier: workspace:*
-        version: link:../core
       '@google/genai':
         specifier: ^0.10.0
         version: 0.10.0
+      '@simsa/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       typescript:
         specifier: ^5.7.0
@@ -241,7 +241,7 @@ importers:
 
   packages/agent-grok:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
       openai:
@@ -254,7 +254,7 @@ importers:
 
   packages/agent-ollama:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
       openai:
@@ -267,7 +267,7 @@ importers:
 
   packages/agent-openai:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
       openai:
@@ -283,7 +283,7 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.65.0
         version: 0.65.0(zod@4.4.3)
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -296,81 +296,81 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.65.0
         version: 0.65.0(zod@3.25.76)
-      '@conclave-ai/agent-claude':
-        specifier: workspace:*
-        version: link:../agent-claude
-      '@conclave-ai/agent-design':
-        specifier: workspace:*
-        version: link:../agent-design
-      '@conclave-ai/agent-gemini':
-        specifier: workspace:*
-        version: link:../agent-gemini
-      '@conclave-ai/agent-grok':
-        specifier: workspace:*
-        version: link:../agent-grok
-      '@conclave-ai/agent-ollama':
-        specifier: workspace:*
-        version: link:../agent-ollama
-      '@conclave-ai/agent-openai':
-        specifier: workspace:*
-        version: link:../agent-openai
-      '@conclave-ai/agent-worker':
-        specifier: workspace:*
-        version: link:../agent-worker
-      '@conclave-ai/core':
-        specifier: workspace:*
-        version: link:../core
-      '@conclave-ai/failure-classifier':
-        specifier: workspace:*
-        version: link:../failure-classifier
-      '@conclave-ai/integration-discord':
-        specifier: workspace:*
-        version: link:../integration-discord
-      '@conclave-ai/integration-email':
-        specifier: workspace:*
-        version: link:../integration-email
-      '@conclave-ai/integration-slack':
-        specifier: workspace:*
-        version: link:../integration-slack
-      '@conclave-ai/integration-telegram':
-        specifier: workspace:*
-        version: link:../integration-telegram
-      '@conclave-ai/observability-langfuse':
-        specifier: workspace:*
-        version: link:../observability-langfuse
-      '@conclave-ai/platform-cloudflare':
-        specifier: workspace:*
-        version: link:../platform-cloudflare
-      '@conclave-ai/platform-deployment-status':
-        specifier: workspace:*
-        version: link:../platform-deployment-status
-      '@conclave-ai/platform-netlify':
-        specifier: workspace:*
-        version: link:../platform-netlify
-      '@conclave-ai/platform-railway':
-        specifier: workspace:*
-        version: link:../platform-railway
-      '@conclave-ai/platform-render':
-        specifier: workspace:*
-        version: link:../platform-render
-      '@conclave-ai/platform-vercel':
-        specifier: workspace:*
-        version: link:../platform-vercel
-      '@conclave-ai/scm-github':
-        specifier: workspace:*
-        version: link:../scm-github
-      '@conclave-ai/secret-guard':
-        specifier: workspace:*
-        version: link:../secret-guard
-      '@conclave-ai/smoke-verifier':
-        specifier: workspace:*
-        version: link:../smoke-verifier
-      '@conclave-ai/visual-review':
-        specifier: workspace:*
-        version: link:../visual-review
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
+      '@simsa/agent-claude':
+        specifier: workspace:*
+        version: link:../agent-claude
+      '@simsa/agent-design':
+        specifier: workspace:*
+        version: link:../agent-design
+      '@simsa/agent-gemini':
+        specifier: workspace:*
+        version: link:../agent-gemini
+      '@simsa/agent-grok':
+        specifier: workspace:*
+        version: link:../agent-grok
+      '@simsa/agent-ollama':
+        specifier: workspace:*
+        version: link:../agent-ollama
+      '@simsa/agent-openai':
+        specifier: workspace:*
+        version: link:../agent-openai
+      '@simsa/agent-worker':
+        specifier: workspace:*
+        version: link:../agent-worker
+      '@simsa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@simsa/failure-classifier':
+        specifier: workspace:*
+        version: link:../failure-classifier
+      '@simsa/integration-discord':
+        specifier: workspace:*
+        version: link:../integration-discord
+      '@simsa/integration-email':
+        specifier: workspace:*
+        version: link:../integration-email
+      '@simsa/integration-slack':
+        specifier: workspace:*
+        version: link:../integration-slack
+      '@simsa/integration-telegram':
+        specifier: workspace:*
+        version: link:../integration-telegram
+      '@simsa/observability-langfuse':
+        specifier: workspace:*
+        version: link:../observability-langfuse
+      '@simsa/platform-cloudflare':
+        specifier: workspace:*
+        version: link:../platform-cloudflare
+      '@simsa/platform-deployment-status':
+        specifier: workspace:*
+        version: link:../platform-deployment-status
+      '@simsa/platform-netlify':
+        specifier: workspace:*
+        version: link:../platform-netlify
+      '@simsa/platform-railway':
+        specifier: workspace:*
+        version: link:../platform-railway
+      '@simsa/platform-render':
+        specifier: workspace:*
+        version: link:../platform-render
+      '@simsa/platform-vercel':
+        specifier: workspace:*
+        version: link:../platform-vercel
+      '@simsa/scm-github':
+        specifier: workspace:*
+        version: link:../scm-github
+      '@simsa/secret-guard':
+        specifier: workspace:*
+        version: link:../secret-guard
+      '@simsa/smoke-verifier':
+        specifier: workspace:*
+        version: link:../smoke-verifier
+      '@simsa/visual-review':
+        specifier: workspace:*
+        version: link:../visual-review
       cosmiconfig:
         specifier: ^9.0.1
         version: 9.0.1(typescript@5.9.3)
@@ -394,7 +394,7 @@ importers:
 
   packages/failure-classifier:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -404,7 +404,7 @@ importers:
 
   packages/integration-discord:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -414,7 +414,7 @@ importers:
 
   packages/integration-email:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -424,7 +424,7 @@ importers:
 
   packages/integration-slack:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -434,7 +434,7 @@ importers:
 
   packages/integration-telegram:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -444,12 +444,12 @@ importers:
 
   packages/mcp-workspace:
     dependencies:
-      '@conclave-ai/workspace-preview':
-        specifier: workspace:*
-        version: link:../workspace-preview
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
+      '@simsa/workspace-preview':
+        specifier: workspace:*
+        version: link:../workspace-preview
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -460,7 +460,7 @@ importers:
 
   packages/observability-langfuse:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
       langfuse:
@@ -473,7 +473,7 @@ importers:
 
   packages/platform-cloudflare:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -483,7 +483,7 @@ importers:
 
   packages/platform-deployment-status:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -493,7 +493,7 @@ importers:
 
   packages/platform-netlify:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -503,7 +503,7 @@ importers:
 
   packages/platform-railway:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -513,7 +513,7 @@ importers:
 
   packages/platform-render:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -523,7 +523,7 @@ importers:
 
   packages/platform-vercel:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -533,7 +533,7 @@ importers:
 
   packages/scm-github:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -549,7 +549,7 @@ importers:
 
   packages/smoke-verifier:
     dependencies:
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
       playwright:
@@ -574,7 +574,7 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.65.0
         version: 0.65.0(zod@4.4.3)
-      '@conclave-ai/core':
+      '@simsa/core':
         specifier: workspace:*
         version: link:../core
       odiff-bin:

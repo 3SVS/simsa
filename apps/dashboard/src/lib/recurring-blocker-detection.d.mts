@@ -1,2 +1,2 @@
-// Stage 137 — compatibility wrapper types. See @conclave-ai/workspace-preview.
-export * from "@conclave-ai/workspace-preview/recurring-blocker-detection";
+// Stage 137 — compatibility wrapper types. See @simsa/workspace-preview.
+export * from "@simsa/workspace-preview/recurring-blocker-detection";

@@ -32,20 +32,20 @@ import {
   type ReviewContext,
   type ReviewDomain,
   type TieredCouncilOutcome,
-} from "@conclave-ai/core";
-import { ClaudeAgent } from "@conclave-ai/agent-claude";
-import { DesignAgent } from "@conclave-ai/agent-design";
-import { OpenAIAgent } from "@conclave-ai/agent-openai";
-import { GeminiAgent } from "@conclave-ai/agent-gemini";
-import { OllamaAgent } from "@conclave-ai/agent-ollama";
-import { GrokAgent } from "@conclave-ai/agent-grok";
-import { LangfuseMetricsSink } from "@conclave-ai/observability-langfuse";
-import type { Notifier } from "@conclave-ai/core";
+} from "@simsa/core";
+import { ClaudeAgent } from "@simsa/agent-claude";
+import { DesignAgent } from "@simsa/agent-design";
+import { OpenAIAgent } from "@simsa/agent-openai";
+import { GeminiAgent } from "@simsa/agent-gemini";
+import { OllamaAgent } from "@simsa/agent-ollama";
+import { GrokAgent } from "@simsa/agent-grok";
+import { LangfuseMetricsSink } from "@simsa/observability-langfuse";
+import type { Notifier } from "@simsa/core";
 import { buildNotifiers } from "../lib/notifier-factory.js";
 import { emitProgress } from "../lib/progress-emit.js";
 import { autoPullFederatedBaselineInBackground } from "../lib/auto-pull-federated.js";
 import { pushEpisodicAnchor } from "../lib/episodic-anchor.js";
-import { fetchDeployStatus } from "@conclave-ai/scm-github";
+import { fetchDeployStatus } from "@simsa/scm-github";
 import { loadConfig, resolveMemoryRoot } from "../lib/config.js";
 import { fetchExternalReferences } from "../lib/external-references.js";
 import { fetchPromotedSeeds } from "../lib/promoted-seeds.js";
@@ -86,7 +86,7 @@ import { findPriorEpisodicId } from "../lib/episodic-chain.js";
 import { deleteSolutionSidecar, readSolutionSidecar } from "../lib/solution-sidecar.js";
 import { applyDeployGuard } from "../lib/deploy-guard.js";
 import { checkAndRecordNotification, computeFingerprint } from "../lib/notification-ledger.js";
-import type { ViewportSpec } from "@conclave-ai/visual-review";
+import type { ViewportSpec } from "@simsa/visual-review";
 
 type ReviewDomainInput = "code" | "design";
 interface ReviewArgs {
@@ -981,7 +981,7 @@ export async function review(argv: string[]): Promise<void> {
                 // Pre-compute pixel diff ratios for each baseline→after pair
                 // so DesignAgent sees a quantitative drift signal alongside
                 // the image. Failures per-route are non-fatal.
-                const visualMod = await import("@conclave-ai/visual-review");
+                const visualMod = await import("@simsa/visual-review");
                 const { PixelmatchDiff } = visualMod;
                 const diffEngine = new PixelmatchDiff();
                 const driftPairs: NonNullable<typeof reviewCtx.designBaselineDrift> = [];
@@ -1602,7 +1602,7 @@ export async function review(argv: string[]): Promise<void> {
   //    DesignAgent's "whether it's good". No extra Playwright run.
   if (visualCaptureResult && visualCaptureResult.artifacts.length > 0) {
     try {
-      const visualMod = await import("@conclave-ai/visual-review");
+      const visualMod = await import("@simsa/visual-review");
       const { PixelmatchDiff, classifyDiffRatio } = visualMod;
       const diffEngine = new PixelmatchDiff();
       infoOut(`\n── visual pixel-diff ──\n`);

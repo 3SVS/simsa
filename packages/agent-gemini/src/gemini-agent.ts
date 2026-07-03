@@ -1,5 +1,5 @@
-import type { Agent, ReviewContext, ReviewResult, Blocker } from "@conclave-ai/core";
-import { EfficiencyGate, estimateTokens } from "@conclave-ai/core";
+import type { Agent, ReviewContext, ReviewResult, Blocker } from "@simsa/core";
+import { EfficiencyGate, estimateTokens } from "@simsa/core";
 import { REVIEW_RESPONSE_SCHEMA } from "./review-schema.js";
 import { SYSTEM_PROMPT, buildReviewPrompt, buildCacheablePrefix } from "./prompts.js";
 import { actualCost, estimateCallCost } from "./pricing.js";

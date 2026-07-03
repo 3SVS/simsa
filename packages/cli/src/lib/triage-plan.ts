@@ -3,7 +3,7 @@ import {
   touchesRiskyPath,
   triageReview,
   type TriageOutcome,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 /**
  * Decision #22 — pre-council triage plan. Pure + exported (same

@@ -1,2 +1,2 @@
-// Stage 136 — compatibility wrapper. Logic lives in @conclave-ai/workspace-preview.
-export * from "@conclave-ai/workspace-preview/intake-url";
+// Stage 136 — compatibility wrapper. Logic lives in @simsa/workspace-preview.
+export * from "@simsa/workspace-preview/intake-url";

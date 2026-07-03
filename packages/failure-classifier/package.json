@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/failure-classifier",
+  "name": "@simsa/failure-classifier",
   "version": "0.18.0",
   "description": "Conclave AI failure classifier — pattern-match runtime regressions (Supabase paused, env vars missing, DB migration not applied, API quota, etc.) to actionable user guidance.",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*"
+    "@simsa/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

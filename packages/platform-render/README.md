@@ -1,4 +1,4 @@
-# @conclave-ai/platform-render
+# @simsa/platform-render
 
 Conclave AI Render adapter. Resolves a deploy URL for a given commit
 SHA via Render's REST API (`api.render.com/v1`).
@@ -9,11 +9,11 @@ five (Vercel/Netlify/Cloudflare/Railway/deployment-status) per the
 
 ## Install
 
-Pulled in automatically by `@conclave-ai/cli` when `"render"` is in
+Pulled in automatically by `@simsa/cli` when `"render"` is in
 `config.visual.platforms`.
 
 ```bash
-pnpm add @conclave-ai/platform-render
+pnpm add @simsa/platform-render
 ```
 
 ## Env

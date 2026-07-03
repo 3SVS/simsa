@@ -7,7 +7,7 @@
 # `max_cycles`, and `episodic` in its client_payload. This workflow:
 #
 #   1. Checks out the PR branch (the head ref of pr_number).
-#   2. Installs @conclave-ai/cli (same pinned version as review.yml).
+#   2. Installs @simsa/cli (same pinned version as review.yml).
 #   3. Runs `conclave autofix --pr N --rework-cycle <cycle>
 #      --max-iterations 1 --autonomy l2`. Autofix (since v0.7) commits
 #      and pushes by itself; v0.10 embeds the cycle marker in the
@@ -57,7 +57,7 @@ on:
         type: string
         default: "3"
       cli-version:
-        description: 'npm version tag for @conclave-ai/cli. Keep in lockstep with review.yml default.'
+        description: 'npm version tag for @simsa/cli. Keep in lockstep with review.yml default.'
         required: false
         type: string
         default: 0.18.0
@@ -167,9 +167,9 @@ jobs:
           node-version: '22'
           package-manager-cache: false
 
-      - name: Install @conclave-ai/cli
+      - name: Install @simsa/cli
         if: steps.guard.outputs.skip != 'true'
-        run: pnpm add -g "@conclave-ai/cli@${{ inputs.cli-version }}"
+        run: pnpm add -g "@simsa/cli@${{ inputs.cli-version }}"
 
       # v0.13.4 — install consumer repo's deps so autofix's build/test
       # verify step can actually run. Without this, `pnpm run build`

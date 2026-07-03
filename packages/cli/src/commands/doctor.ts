@@ -26,7 +26,7 @@ const execFileP = promisify(execFile);
 
 const DEFAULT_WORKER_HEALTH = "https://conclave-ai.seunghunbae.workers.dev/healthz";
 const DEFAULT_WORKER_BASE = "https://conclave-ai.seunghunbae.workers.dev";
-const DEFAULT_NPM_REGISTRY = "https://registry.npmjs.org/@conclave-ai/cli/latest";
+const DEFAULT_NPM_REGISTRY = "https://registry.npmjs.org/@simsa/cli/latest";
 const EXPECTED_REUSABLE_REPO = "3SVS/conclave-ai";
 const EXPECTED_REUSABLE_TAG = "v0.4";
 const HTTP_TIMEOUT_MS = 8_000;
@@ -328,7 +328,7 @@ export async function checkCliVersion(
   if (!fetchImpl) {
     return {
       key: "cli-version",
-      label: "@conclave-ai/cli version",
+      label: "@simsa/cli version",
       status: "warn",
       detail: `installed ${installedVersion} (cannot check latest — no fetch)`,
     };
@@ -341,7 +341,7 @@ export async function checkCliVersion(
     if (!res.ok) {
       return {
         key: "cli-version",
-        label: "@conclave-ai/cli version",
+        label: "@simsa/cli version",
         status: "warn",
         detail: `installed ${installedVersion} (npm registry HTTP ${res.status})`,
       };
@@ -351,7 +351,7 @@ export async function checkCliVersion(
     if (!latest) {
       return {
         key: "cli-version",
-        label: "@conclave-ai/cli version",
+        label: "@simsa/cli version",
         status: "warn",
         detail: `installed ${installedVersion} (registry returned no version field)`,
       };
@@ -359,23 +359,23 @@ export async function checkCliVersion(
     if (compareSemver(installedVersion, latest) >= 0) {
       return {
         key: "cli-version",
-        label: "@conclave-ai/cli version",
+        label: "@simsa/cli version",
         status: "ok",
         detail: `installed ${installedVersion} (latest ${latest})`,
       };
     }
     return {
       key: "cli-version",
-      label: "@conclave-ai/cli version",
+      label: "@simsa/cli version",
       status: "warn",
       detail: `installed ${installedVersion}, latest ${latest}`,
-      hint: `npm i -g @conclave-ai/cli@${latest}`,
+      hint: `npm i -g @simsa/cli@${latest}`,
     };
   } catch (err) {
     clearTimeout(t);
     return {
       key: "cli-version",
-      label: "@conclave-ai/cli version",
+      label: "@simsa/cli version",
       status: "warn",
       detail: `installed ${installedVersion} (registry probe failed: ${err instanceof Error ? err.message : String(err)})`,
     };

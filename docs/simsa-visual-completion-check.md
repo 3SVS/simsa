@@ -76,7 +76,7 @@ Required 직접 눈으로 확인이 필요해요` · `Needs Clarification 무엇
 ## 실행
 
 ```
-pnpm --filter @conclave-ai/central-plane build     # 순수 모듈 빌드 (tool 이 dist 를 import)
+pnpm --filter @simsa/central-plane build     # 순수 모듈 빌드 (tool 이 dist 를 import)
 cd tools/simsa-completion-loop-spike && npm install # 로컬 격리, 브라우저는 캐시 사용
 node visual-run.mjs <targetUrl> <outDir> [검색어]
 ```

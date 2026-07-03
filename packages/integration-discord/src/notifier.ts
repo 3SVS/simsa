@@ -1,4 +1,4 @@
-import type { Notifier, NotifyReviewInput } from "@conclave-ai/core";
+import type { Notifier, NotifyReviewInput } from "@simsa/core";
 import { formatReviewForDiscord } from "./format.js";
 
 export interface HttpFetch {

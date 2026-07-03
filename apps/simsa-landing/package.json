@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/simsa-landing",
+  "name": "@simsa/simsa-landing",
   "version": "0.16.0",
   "private": true,
   "type": "module",

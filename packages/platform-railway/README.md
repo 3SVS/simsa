@@ -1,4 +1,4 @@
-# @conclave-ai/platform-railway
+# @simsa/platform-railway
 
 Conclave AI Railway adapter. Resolves a preview URL for a given commit SHA
 via Railway's GraphQL API

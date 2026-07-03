@@ -36,7 +36,7 @@ import {
   OutcomeWriter,
   applyFailureGate,
   newEpisodicId,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { runInit } from "../dist/commands/init.js";
 import { loadConfig, resolveMemoryRoot } from "../dist/lib/config.js";
 

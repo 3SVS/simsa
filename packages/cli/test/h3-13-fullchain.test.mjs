@@ -29,8 +29,8 @@ import {
   FileSystemMemoryStore,
   extractPriorBailHints,
   writeReworkLoopFailure,
-} from "@conclave-ai/core";
-import { buildCacheablePrefix } from "@conclave-ai/agent-worker";
+} from "@simsa/core";
+import { buildCacheablePrefix } from "@simsa/agent-worker";
 import { buildPerBlockerContext } from "../dist/lib/autofix-worker.js";
 
 function freshFs() {

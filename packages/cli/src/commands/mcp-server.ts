@@ -3,8 +3,8 @@ import {
   computeAllAgentScores,
   formatAnswerKeyForPrompt,
   formatFailureForPrompt,
-} from "@conclave-ai/core";
-import type { AnswerKey, EpisodicEntry, FailureEntry, MemoryStore } from "@conclave-ai/core";
+} from "@simsa/core";
+import type { AnswerKey, EpisodicEntry, FailureEntry, MemoryStore } from "@simsa/core";
 import { loadConfig, resolveMemoryRoot } from "../lib/config.js";
 
 const HELP = `conclave mcp-server — run an MCP server exposing conclave's memory (decision #11)

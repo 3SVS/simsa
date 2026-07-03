@@ -215,7 +215,7 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
  *   2. Checkout the PR branch
  *   3. Read .conclaverc.json + .conclave/prd.md if present
  *   4. Build a payload for runAutofix
- *   5. Invoke runAutofix from @conclave-ai/cli/dist/autofix-pipeline.js
+ *   5. Invoke runAutofix from @simsa/cli/dist/autofix-pipeline.js
  *   6. POST the result to the Worker callback
  */
 async function runJob(payload) {
@@ -283,7 +283,7 @@ async function runJob(payload) {
     console.log(`[job ${jobId}] deploy probe settled: ${deployFinal}`);
 
     // 4. Lazy import the pipeline. Direct monorepo path (not via
-    //    /app/node_modules/@conclave-ai/cli) — pnpm's workspace symlink
+    //    /app/node_modules/@simsa/cli) — pnpm's workspace symlink
     //    layout under .pnpm/ doesn't always expose dist at the bare
     //    /node_modules/<pkg>/dist path inside the container. The
     //    Dockerfile COPYs the whole `packages/` tree and `pnpm turbo`
@@ -405,7 +405,7 @@ async function runJob(payload) {
  *
  * Stage 270 behavior (true auto-repair): when the Worker forwards an
  * ANTHROPIC_API_KEY, the container drives the REAL worker agent
- * (@conclave-ai/agent-worker ClaudeWorker.work) with the Simsa fix brief as
+ * (@simsa/agent-worker ClaudeWorker.work) with the Simsa fix brief as
  * the blocker input so actual code changes land on the repair branch:
  *
  *   1. Shallow-clones the repo with the user's OAuth token (public_repo)

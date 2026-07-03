@@ -26,7 +26,7 @@ import {
   FileSystemMemoryStore,
   OutcomeWriter,
   formatAnswerKeyForPrompt,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { findPriorEpisodicId } from "../dist/lib/episodic-chain.js";
 
 function freshFs() {

@@ -1,5 +1,5 @@
-import type { ReviewResult } from "@conclave-ai/core";
-import type { FileRewrite } from "@conclave-ai/core";
+import type { ReviewResult } from "@simsa/core";
+import type { FileRewrite } from "@simsa/core";
 
 /**
  * Snapshot of a file as it exists on the PR branch right now.

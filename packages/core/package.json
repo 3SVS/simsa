@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/core",
+  "name": "@simsa/core",
   "version": "0.16.0",
   "description": "Conclave AI core — Agent interface, council orchestration, self-evolve substrate, efficiency gate.",
   "license": "FSL-1.1-Apache-2.0",

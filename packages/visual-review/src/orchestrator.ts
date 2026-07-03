@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { Platform, PreviewResolution } from "@conclave-ai/core";
-import { resolveFirstPreview } from "@conclave-ai/core";
+import type { Platform, PreviewResolution } from "@simsa/core";
+import { resolveFirstPreview } from "@simsa/core";
 import {
   PlaywrightCapture,
   type CaptureOptions,

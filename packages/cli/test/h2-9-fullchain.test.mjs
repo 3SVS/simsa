@@ -21,7 +21,7 @@ import {
   applyFailureGate,
   integrateChunkOutcomes,
   splitDiff,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 class FakeAgent {
   constructor(id, perChunkBehavior) {

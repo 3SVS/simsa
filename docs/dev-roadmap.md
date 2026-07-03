@@ -265,10 +265,10 @@ new BYO user sees on the way in.
 
 ## H5 — Orchestrator template (DX multiplier, 1 item)
 
-21. **`@conclave-ai/orchestrator-template` package** — reusable GitHub
+21. **`@simsa/orchestrator-template` package** — reusable GitHub
     Actions YAML that a user's repo wires in once. Original
     `solo-cto-agent` port promise from ARCHITECTURE.md §Monorepo Layout.
-    With this in place, a user runs `npx @conclave-ai/orchestrator-template
+    With this in place, a user runs `npx @simsa/orchestrator-template
     install` (or equivalent) and their `.github/workflows/` has conclave
     wired without copy-pasting from this repo's own dev-loop. Currently
     the only wired workflows are this repo's own `dev-loop.yml` and

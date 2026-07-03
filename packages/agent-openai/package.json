@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/agent-openai",
+  "name": "@simsa/agent-openai",
   "version": "0.12.0",
   "description": "Conclave AI OpenAI agent — wraps the OpenAI SDK with strict-JSON-schema structured output.",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*",
+    "@simsa/core": "workspace:*",
     "openai": "^4.76.0"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import type { EpisodicEntry, MemoryStore, OutcomeWriter } from "@conclave-ai/core";
+import type { EpisodicEntry, MemoryStore, OutcomeWriter } from "@simsa/core";
 import {
   fetchPrState,
   classifyTransition,

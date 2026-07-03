@@ -1,4 +1,4 @@
-import type { Blocker, CouncilOutcome, ReviewResult } from "@conclave-ai/core";
+import type { Blocker, CouncilOutcome, ReviewResult } from "@simsa/core";
 
 /**
  * Phase B.4a — hard programmatic guard against the user-reported

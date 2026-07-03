@@ -39,7 +39,7 @@ on:
   workflow_call:
     inputs:
       cli-version:
-        description: 'npm version tag for @conclave-ai/cli (record-outcome step). Keep in lockstep with review.yml/rework.yml default.'
+        description: 'npm version tag for @simsa/cli (record-outcome step). Keep in lockstep with review.yml/rework.yml default.'
         required: false
         type: string
         default: 0.18.0
@@ -131,7 +131,7 @@ jobs:
           CLI_VERSION: ${{ inputs.cli-version }}
         continue-on-error: true
         run: |
-          npx -y -p "@conclave-ai/cli@${CLI_VERSION}" conclave record-outcome \
+          npx -y -p "@simsa/cli@${CLI_VERSION}" conclave record-outcome \
             --id ${{ github.event.client_payload.episodic }} \
             --result merged || \
             echo "::notice::record-outcome skipped (no local episodic — central plane already has anchor)"

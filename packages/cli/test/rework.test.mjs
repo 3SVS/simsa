@@ -6,7 +6,7 @@ import {
   resolveEpisodic,
   runRework,
 } from "../dist/commands/rework.js";
-import { LoopGuard, CircuitBreaker } from "@conclave-ai/core";
+import { LoopGuard, CircuitBreaker } from "@simsa/core";
 
 // ---- parseArgv ------------------------------------------------------------
 

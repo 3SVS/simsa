@@ -1,7 +1,7 @@
 /**
  * v0.9.0 — multi-modal visual review orchestrator.
  *
- * Bridges `conclave review` and `@conclave-ai/visual-review` so the
+ * Bridges `conclave review` and `@simsa/visual-review` so the
  * DesignAgent's Mode A (vision) path actually receives screenshots.
  *
  * Lives in the CLI, not visual-review, because:
@@ -22,15 +22,15 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Platform, PreviewResolution } from "@conclave-ai/core";
-import { resolveFirstPreview } from "@conclave-ai/core";
+import type { Platform, PreviewResolution } from "@simsa/core";
+import { resolveFirstPreview } from "@simsa/core";
 import type {
   CaptureRoutesInput,
   CaptureRoutesResult,
   RouteCapture,
   ViewportSpec,
   ScreenshotCapture,
-} from "@conclave-ai/visual-review";
+} from "@simsa/visual-review";
 
 export interface VisualCaptureInput {
   repo: string;
@@ -212,7 +212,7 @@ export async function runVisualCapture(input: VisualCaptureInput): Promise<Visua
   const captureImpl =
     input.captureRoutesImpl ??
     (await (async () => {
-      const mod = await import("@conclave-ai/visual-review");
+      const mod = await import("@simsa/visual-review");
       return mod.captureRoutes;
     })());
 

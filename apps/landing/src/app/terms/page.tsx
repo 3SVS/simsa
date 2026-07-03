@@ -42,7 +42,7 @@ export default function TermsPage() {
             <p>
               Conclave AI is a multi-agent code review service. It runs as a
               GitHub App (<code className="font-mono text-sm bg-parchment-light px-1.5 py-0.5 rounded">conclave-ai-code-council</code>)
-              and a CLI (<code className="font-mono text-sm bg-parchment-light px-1.5 py-0.5 rounded">@conclave-ai/cli</code>).
+              and a CLI (<code className="font-mono text-sm bg-parchment-light px-1.5 py-0.5 rounded">@simsa/cli</code>).
               It reviews pull requests, optionally writes patches via an
               autofix loop, and learns from accepted / rejected outcomes. By
               installing the App or running the CLI, you agree to these terms.

@@ -7,7 +7,7 @@
 // NOT assumed).
 
 export const WORKSPACE_PREVIEW_PACKAGE = {
-  name: "@conclave-ai/workspace-preview",
+  name: "@simsa/workspace-preview",
   purpose: "Pure deterministic preview helpers for Simsa workspace planning.",
   isPublished: false,
   allowsNetwork: false,

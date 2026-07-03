@@ -7,7 +7,7 @@
 // no central-plane call, no env required, nothing published or deployed.
 //
 // Exposes runBasicSmoke() for tests; runs + prints a short, secret-free summary
-// when invoked directly (`pnpm --filter @conclave-ai/mcp-workspace smoke:basic`).
+// when invoked directly (`pnpm --filter @simsa/mcp-workspace smoke:basic`).
 import { getMcpToolRegistrationPlan, runBasicPreviewTool } from "../dist/server.js";
 
 const BASIC_TOOLS = [

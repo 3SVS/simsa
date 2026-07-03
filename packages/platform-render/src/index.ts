@@ -1,4 +1,4 @@
-import type { Platform, PreviewResolution, ResolvePreviewInput } from "@conclave-ai/core";
+import type { Platform, PreviewResolution, ResolvePreviewInput } from "@simsa/core";
 
 export interface HttpFetch {
   (url: string, init: { method: string; headers: Record<string, string>; body?: string }): Promise<{

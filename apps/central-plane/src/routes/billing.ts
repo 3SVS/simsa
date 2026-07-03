@@ -268,7 +268,7 @@ function renderSuccessHtml(): string {
     If your CLI is already logged in, run <code>conclave review --pr &lt;N&gt; --use-saas</code> on a real PR and the credit applies automatically. If you don't have the CLI yet:
   </p>
   <p class="body" style="text-align:left;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;background:var(--parchment-light);border:1px solid var(--parchment-line);border-radius:3px;padding:14px 18px;">
-    1. <code>npm i -g @conclave-ai/cli</code><br>
+    1. <code>npm i -g @simsa/cli</code><br>
     2. <code>conclave login</code> with the same email<br>
     3. <code>conclave review --pr &lt;N&gt; --use-saas</code>
   </p>

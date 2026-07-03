@@ -1,6 +1,6 @@
-# @conclave-ai/telegram-bot-runner
+# @simsa/telegram-bot-runner
 
-Long-polls Telegram `callback_query` updates (the 🔧 Rework / ✅ Approve / ❌ Reject buttons that `@conclave-ai/integration-telegram` renders) and dispatches `repository_dispatch` events back to the target repo's GH Actions workflows.
+Long-polls Telegram `callback_query` updates (the 🔧 Rework / ✅ Approve / ❌ Reject buttons that `@simsa/integration-telegram` renders) and dispatches `repository_dispatch` events back to the target repo's GH Actions workflows.
 
 Closes the final gap documented in `next_session_kickoff.md`: the notifier already emits action buttons, but until now clicking them did nothing.
 
@@ -41,7 +41,7 @@ jobs:
         with:
           path: .telegram-bot-offset.json
           key: telegram-bot-offset
-      - run: npx -p @conclave-ai/telegram-bot-runner conclave-telegram-bot --repo ${{ github.repository }}
+      - run: npx -p @simsa/telegram-bot-runner conclave-telegram-bot --repo ${{ github.repository }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           GH_TOKEN: ${{ secrets.ORCHESTRATOR_PAT }}
@@ -52,7 +52,7 @@ The offset file is cached across runs so consecutive polls don't double-process 
 ## API (for embedding)
 
 ```ts
-import { runBotOnce } from "@conclave-ai/telegram-bot-runner";
+import { runBotOnce } from "@simsa/telegram-bot-runner";
 
 const result = await runBotOnce({
   botToken: process.env.TELEGRAM_BOT_TOKEN!,

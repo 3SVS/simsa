@@ -1,5 +1,5 @@
 /**
- * @conclave-ai/smoke-verifier — Playwright-driven smoke checks against
+ * @simsa/smoke-verifier — Playwright-driven smoke checks against
  * a live deploy URL after autofix push.
  *
  * Why: Conclave's existing build+test verify in `packages/cli/src/autofix-pipeline.ts`
@@ -30,7 +30,7 @@
  *
  * Future v2: AI Slop check (scan the deployed bundle for "TODO: implement",
  * placeholder strings, etc.), visual diff integration via
- * @conclave-ai/visual-review.
+ * @simsa/visual-review.
  */
 
 import { parse as parseYaml } from "yaml";

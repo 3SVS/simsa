@@ -1,4 +1,4 @@
-# @conclave-ai/cli
+# @simsa/cli
 
 The `conclave` command-line interface for Conclave AI.
 
@@ -9,9 +9,9 @@ notification dispatch land in later PRs.
 ## Install
 
 ```bash
-pnpm add -g @conclave-ai/cli
+pnpm add -g @simsa/cli
 # or
-npm install -g @conclave-ai/cli
+npm install -g @simsa/cli
 ```
 
 ## Commands

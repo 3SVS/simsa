@@ -55,7 +55,7 @@ autofix: complete, awaiting Bae approval (L2)
 1. **Load verdict.** Either run `conclave review` implicitly via a
    subprocess hook, or pass `--verdict path/to/episodic.json` from a
    prior review.
-2. **Per-blocker fix.** Each blocker is sent to `@conclave-ai/agent-worker`
+2. **Per-blocker fix.** Each blocker is sent to `@simsa/agent-worker`
    (ClaudeWorker) with the current file contents. The worker returns a
    unified-diff patch.
 3. **Safety checks.**
@@ -84,7 +84,7 @@ autofix: complete, awaiting Bae approval (L2)
 | Budget | $3 | `--budget <usd>` (hard max $10) |
 | Iterations | 2 | `--max-iterations N` (hard max 3) |
 | Diff budget | 500 lines | not overridable |
-| LoopGuard | 5/hour/(repo:pr:sha) | inherited from `@conclave-ai/core` |
+| LoopGuard | 5/hour/(repo:pr:sha) | inherited from `@simsa/core` |
 | CircuitBreaker | 3 errors | inherited |
 | Deny-list | .env* / *.pem / *.key / *secret* / *.credentials* | `autofix.denyPatterns` in config |
 | Secret-guard | on | `--skip-secret-guard` (discouraged) or `--allow-secret <ruleId>` |

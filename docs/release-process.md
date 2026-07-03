@@ -7,7 +7,7 @@ work — you almost never run `npm publish` locally.
 ## Prerequisites (one-time)
 
 - `NPM_TOKEN` secret on the GitHub repo — Automation-type token scoped
-  to the `@conclave-ai` org with Publish permission. Rotate annually.
+  to the `@simsa` org with Publish permission. Rotate annually.
 - `ORCHESTRATOR_PAT` secret on the GitHub repo — a Personal Access
   Token with `repo` + `workflow` scopes. **REQUIRED** because PIA-1's
   `bump-workflow-cli-version.mjs` step modifies
@@ -75,8 +75,8 @@ step (already done) and goes straight to publish.
 After the workflow finishes:
 
 ```bash
-npm view @conclave-ai/core versions --json   # should show the new version
-npm view @conclave-ai/cli version            # should match
+npm view @simsa/core versions --json   # should show the new version
+npm view @simsa/cli version            # should match
 ```
 
 Every package publishes in lockstep, so checking core + cli is enough
@@ -85,7 +85,7 @@ to confirm the release landed.
 ## Troubleshooting
 
 - **Workflow fails at "Publish to npm" with 401/403** → `NPM_TOKEN`
-  secret is missing, expired, or doesn't have `@conclave-ai` scope.
+  secret is missing, expired, or doesn't have `@simsa` scope.
 - **Workflow fails at bump commit push** → repo workflow permissions
   aren't "Read and write." Fix in repo settings.
 - **"All package versions already on registry — skipping publish"** →

@@ -1,2 +1,2 @@
-// Stage 138 — compatibility wrapper. Logic in @conclave-ai/workspace-preview.
-export * from "@conclave-ai/workspace-preview/template-effectiveness-signals";
+// Stage 138 — compatibility wrapper. Logic in @simsa/workspace-preview.
+export * from "@simsa/workspace-preview/template-effectiveness-signals";

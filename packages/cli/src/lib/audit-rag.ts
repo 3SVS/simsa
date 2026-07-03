@@ -30,7 +30,7 @@ import {
   type FileSystemMemoryStore,
   formatAnswerKeyForPrompt,
   formatFailureForPrompt,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { fetchExternalReferences } from "./external-references.js";
 import { fetchPromotedSeeds } from "./promoted-seeds.js";
 import { fetchOssPatterns } from "./oss-patterns.js";

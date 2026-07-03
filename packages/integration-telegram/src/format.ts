@@ -1,4 +1,4 @@
-import type { Blocker, NotifyReviewInput, PlainSummary, ReviewResult } from "@conclave-ai/core";
+import type { Blocker, NotifyReviewInput, PlainSummary, ReviewResult } from "@simsa/core";
 
 const VERDICT_EMOJI: Record<"approve" | "rework" | "reject", string> = {
   approve: "✅",

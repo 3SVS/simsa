@@ -1,4 +1,4 @@
-# @conclave-ai/mcp-workspace
+# @simsa/mcp-workspace
 
 **A stdio MCP server for Simsa acceptance workflows.** It runs in two modes:
 
@@ -47,8 +47,8 @@ this repo:
 
 ```bash
 pnpm install
-pnpm --filter @conclave-ai/mcp-workspace build
-pnpm --filter @conclave-ai/mcp-workspace smoke:basic
+pnpm --filter @simsa/mcp-workspace build
+pnpm --filter @simsa/mcp-workspace smoke:basic
 ```
 
 Expected (safe, secret-free) output:
@@ -134,12 +134,12 @@ entry point. Build first, then point your MCP host at `dist/index.js`:
 ```
 
 The local MCP server display/config entry uses **`Simsa-Basic`** for user-facing
-private dogfood. (Internal package names — `@conclave-ai/mcp-workspace`,
-`@conclave-ai/workspace-preview` — are unchanged.)
+private dogfood. (Internal package names — `@simsa/mcp-workspace`,
+`@simsa/workspace-preview` — are unchanged.)
 
 Notes:
 
-- Run the build first (`pnpm --filter @conclave-ai/mcp-workspace build`).
+- Run the build first (`pnpm --filter @simsa/mcp-workspace build`).
 - Use an **absolute** path to `dist/index.js`.
 - Keep `env` empty for **Basic-only mode**.
 - Add `CONCLAVE_USER_KEY` only if you intentionally want the connected tools.
@@ -153,11 +153,11 @@ Before any publish, MCP Basic is dogfooded privately in real hosts. To run the
 Claude Desktop app-side check yourself:
 
 ```bash
-pnpm --filter @conclave-ai/mcp-workspace build
-pnpm --filter @conclave-ai/mcp-workspace smoke:basic
-pnpm --filter @conclave-ai/mcp-workspace smoke:basic:stdio
-pnpm --filter @conclave-ai/mcp-workspace qa:basic-tools
-pnpm --filter @conclave-ai/mcp-workspace print:claude-desktop-basic-config
+pnpm --filter @simsa/mcp-workspace build
+pnpm --filter @simsa/mcp-workspace smoke:basic
+pnpm --filter @simsa/mcp-workspace smoke:basic:stdio
+pnpm --filter @simsa/mcp-workspace qa:basic-tools
+pnpm --filter @simsa/mcp-workspace print:claude-desktop-basic-config
 ```
 
 Then add the generated `Simsa-Basic` config (empty `env`) to Claude Desktop, restart,
@@ -204,7 +204,7 @@ These require a user key and are for the **env-backed connected mode** only.
   "mcpServers": {
     "conclave-workspace": {
       "command": "pnpm",
-      "args": ["--filter", "@conclave-ai/mcp-workspace", "start"],
+      "args": ["--filter", "@simsa/mcp-workspace", "start"],
       "env": {
         "CONCLAVE_API_BASE_URL": "https://conclave-ai.seunghunbae.workers.dev",
         "CONCLAVE_USER_KEY": "uk_..."
@@ -291,15 +291,15 @@ Actual credit debit/blocking is currently **OFF** (dry-run) on the workspace.
 Basic (no credentials, no network):
 
 ```bash
-pnpm --filter @conclave-ai/mcp-workspace build
-pnpm --filter @conclave-ai/mcp-workspace smoke:basic
+pnpm --filter @simsa/mcp-workspace build
+pnpm --filter @simsa/mcp-workspace smoke:basic
 ```
 
 Connected (requires a user key; reaches central-plane):
 
 ```bash
-pnpm --filter @conclave-ai/mcp-workspace build
-CONCLAVE_USER_KEY=uk_... pnpm --filter @conclave-ai/mcp-workspace smoke
+pnpm --filter @simsa/mcp-workspace build
+CONCLAVE_USER_KEY=uk_... pnpm --filter @simsa/mcp-workspace smoke
 ```
 
 The connected smoke checks that the server reaches central-plane, `list_projects`
@@ -317,17 +317,17 @@ returns ok, and the audit log does not leak the userKey. Neither smoke prints se
 Run these diagnostics first (all local, no credentials, no network):
 
 ```bash
-pnpm --filter @conclave-ai/mcp-workspace build
-pnpm --filter @conclave-ai/mcp-workspace smoke:basic
-pnpm --filter @conclave-ai/mcp-workspace smoke:basic:stdio
-pnpm --filter @conclave-ai/mcp-workspace qa:basic-tools
-pnpm --filter @conclave-ai/mcp-workspace print:claude-desktop-basic-config
+pnpm --filter @simsa/mcp-workspace build
+pnpm --filter @simsa/mcp-workspace smoke:basic
+pnpm --filter @simsa/mcp-workspace smoke:basic:stdio
+pnpm --filter @simsa/mcp-workspace qa:basic-tools
+pnpm --filter @simsa/mcp-workspace print:claude-desktop-basic-config
 ```
 
 ### `dist/index.js` not found
 **Likely cause:** the package was not built. **Check:** `ls
 packages/mcp-workspace/dist/index.js`. **Fix:** `pnpm --filter
-@conclave-ai/mcp-workspace build`. **Safety:** don't hand-edit `dist/`; rebuild.
+@simsa/mcp-workspace build`. **Safety:** don't hand-edit `dist/`; rebuild.
 
 ### `smoke:basic` (or `smoke:basic:stdio`) fails
 **Check:** rerun after `build`. **Fix:** build first, then re-run; for the stdio smoke

@@ -1,4 +1,4 @@
-import type { ReviewContext } from "@conclave-ai/core";
+import type { ReviewContext } from "@simsa/core";
 
 /**
  * v0.16.6 — RAG section builder. Pulls `ctx.answerKeys` (prior approved

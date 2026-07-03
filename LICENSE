@@ -20,7 +20,7 @@ Terms and Conditions
 Licensor: 3SVS
 
 Software: Conclave AI — the source code in this repository, including
-the @conclave-ai/* npm packages, the central-plane Cloudflare Worker,
+the @simsa/* npm packages, the central-plane Cloudflare Worker,
 and the conclave-ai.dev landing surface.
 
 

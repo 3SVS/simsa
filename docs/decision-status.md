@@ -155,7 +155,7 @@ Tier 2 (authoritative, up to 2-round cross-review):
   brainstorm workflow lands it ships as a separate skill/package, not
   part of `conclave review`.
 - **Deepseek from default agent list.** Still published at
-  `@conclave-ai/agent-deepseek@0.1.0` (npm 72-hour window passed,
+  `@simsa/agent-deepseek@0.1.0` (npm 72-hour window passed,
   can't unpublish and don't need to), but removed from the default
   tier-1 config. User can opt back in via explicit `agents` entry.
 

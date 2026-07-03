@@ -1,4 +1,4 @@
-# @conclave-ai/scm-github
+# @simsa/scm-github
 
 GitHub SCM adapter for Conclave AI. Resolves PR state for automatic
 outcome capture — closes the gap where users previously had to run
@@ -7,14 +7,14 @@ outcome capture — closes the gap where users previously had to run
 ## Install
 
 ```bash
-pnpm add @conclave-ai/scm-github @conclave-ai/core
+pnpm add @simsa/scm-github @simsa/core
 ```
 
 ## Usage
 
 ```ts
-import { FileSystemMemoryStore, OutcomeWriter } from "@conclave-ai/core";
-import { pollOutcomes } from "@conclave-ai/scm-github";
+import { FileSystemMemoryStore, OutcomeWriter } from "@simsa/core";
+import { pollOutcomes } from "@simsa/scm-github";
 
 const store = new FileSystemMemoryStore({ root: ".conclave" });
 const writer = new OutcomeWriter({ store });
@@ -26,7 +26,7 @@ console.log(`merged=${summary.merged} rejected=${summary.rejected} reworked=${su
 ## Dependency
 
 Uses the `gh` CLI for auth + network. Same dependency as
-`@conclave-ai/cli` already requires for `conclave review --pr N`, so
+`@simsa/cli` already requires for `conclave review --pr N`, so
 there is no new auth setup — `gh auth login` once is enough.
 
 ## Transition rules

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EfficiencyGate } from "@conclave-ai/core";
+import { EfficiencyGate } from "@simsa/core";
 import { ClaudeWorker, parseRewriteToolUse, WORKER_SYSTEM_PROMPT } from "../dist/index.js";
 
 function makeMockClient(responses) {

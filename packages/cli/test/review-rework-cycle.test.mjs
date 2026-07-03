@@ -6,7 +6,7 @@ import {
   formatCycleMarker,
   parseCycleFromCommitMessage,
   AUTONOMY_HARD_CEILING_CYCLES,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 
 // review --rework-cycle ---------------------------------------------------
 

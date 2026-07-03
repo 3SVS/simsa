@@ -2,7 +2,7 @@
 #
 # Spawned by the Worker (apps/central-plane/src/container.ts) via the
 # Cloudflare Containers Durable-Object binding when /saas/review or
-# /saas/autofix fires. Runs the @conclave-ai/cli autofix-pipeline
+# /saas/autofix fires. Runs the @simsa/cli autofix-pipeline
 # inside the container, isolated from the Worker's CPU budget.
 #
 # Build context: apps/central-plane/ (set in wrangler.toml).
@@ -72,9 +72,9 @@ RUN npx tsc container-src/repair-brief.ts \
 # all of its workspace dependencies. Skip apps/* and packages we don't
 # call (visual-review for the smoke path is loaded via lazy-import).
 RUN pnpm turbo run build \
-    --filter @conclave-ai/cli \
-    --filter @conclave-ai/smoke-verifier \
-    --filter @conclave-ai/failure-classifier
+    --filter @simsa/cli \
+    --filter @simsa/smoke-verifier \
+    --filter @simsa/failure-classifier
 
 # Pre-create the work dir so the runtime user has writable space.
 RUN mkdir -p /var/lib/conclave && chmod 770 /var/lib/conclave

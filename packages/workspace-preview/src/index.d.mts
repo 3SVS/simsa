@@ -1,4 +1,4 @@
-// Public type entry for @conclave-ai/workspace-preview.
+// Public type entry for @simsa/workspace-preview.
 export {
   WORKSPACE_PREVIEW_PACKAGE,
   WORKSPACE_PREVIEW_SAFETY_RULES,

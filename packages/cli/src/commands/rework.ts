@@ -14,11 +14,11 @@ import {
   OutcomeWriter,
   type EpisodicEntry,
   type MemoryStore,
-} from "@conclave-ai/core";
-import { ClaudeWorker, type ClaudeWorkerOptions, type FileSnapshot, type WorkerOutcome } from "@conclave-ai/agent-worker";
-import { fetchPrState, type GhRunner, type PullRequestState } from "@conclave-ai/scm-github";
-import { formatFinding, scanPatch, type ScanResult } from "@conclave-ai/secret-guard";
-import { formatCycleMarker } from "@conclave-ai/core";
+} from "@simsa/core";
+import { ClaudeWorker, type ClaudeWorkerOptions, type FileSnapshot, type WorkerOutcome } from "@simsa/agent-worker";
+import { fetchPrState, type GhRunner, type PullRequestState } from "@simsa/scm-github";
+import { formatFinding, scanPatch, type ScanResult } from "@simsa/secret-guard";
+import { formatCycleMarker } from "@simsa/core";
 import { loadConfig, resolveMemoryRoot, type ConclaveConfig } from "../lib/config.js";
 import { resolveKey } from "../lib/credentials.js";
 import { fetchEpisodicAnchor } from "../lib/episodic-anchor.js";
@@ -165,7 +165,7 @@ export interface ReworkDeps {
   fetchAnchor?: (id: string) => Promise<EpisodicEntry | null>;
   /** Factory for a real ClaudeWorker when `worker` is not injected. */
   workerFactory?: (opts: ClaudeWorkerOptions) => { work: (ctx: Parameters<ClaudeWorker["work"]>[0]) => Promise<WorkerOutcome> };
-  /** Patch scanner — defaults to `scanPatch` from @conclave-ai/secret-guard. */
+  /** Patch scanner — defaults to `scanPatch` from @simsa/secret-guard. */
   secretScan?: (patch: string, opts?: { allow?: readonly string[] }) => ScanResult;
   /** Writes a file to disk — injectable for tests (defaults to fs.writeFile). */
   writeFile?: (absPath: string, content: string, encoding: BufferEncoding) => Promise<void>;

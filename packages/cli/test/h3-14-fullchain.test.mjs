@@ -24,7 +24,7 @@ import path from "node:path";
 import {
   FileSystemMemoryStore,
   OutcomeWriter,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { autoPushOutcome } from "../dist/lib/federated-auto-push.js";
 
 function freshFs() {

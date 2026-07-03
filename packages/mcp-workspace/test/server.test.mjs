@@ -46,6 +46,6 @@ describe("README packaging", () => {
 
   it("includes both an agent config and a local-dev config example", () => {
     assert.match(README, /"conclave-mcp-workspace"/);
-    assert.match(README, /"--filter", "@conclave-ai\/mcp-workspace", "start"/);
+    assert.match(README, /"--filter", "@simsa\/mcp-workspace", "start"/);
   });
 });

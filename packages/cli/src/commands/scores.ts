@@ -1,4 +1,4 @@
-import { FileSystemMemoryStore, computeAllAgentScores, AGENT_SCORE_WEIGHTS } from "@conclave-ai/core";
+import { FileSystemMemoryStore, computeAllAgentScores, AGENT_SCORE_WEIGHTS } from "@simsa/core";
 import { loadConfig, resolveMemoryRoot } from "../lib/config.js";
 
 const HELP = `conclave scores — show per-agent performance scores

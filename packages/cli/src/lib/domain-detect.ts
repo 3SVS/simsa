@@ -9,7 +9,7 @@
  * agents + design agent).
  *
  * v0.9.3: shared glob list + matcher + diff parser now live in
- * `@conclave-ai/core/ui-detect`. This file owns the CLI-specific
+ * `@simsa/core/ui-detect`. This file owns the CLI-specific
  * `detectDomain` decision tree (domain bucket + reason string) and
  * re-exports the shared primitives so existing CLI consumers keep
  * working.
@@ -23,8 +23,8 @@ import {
   matchesAny,
   globToRegExp,
   extractChangedFilesFromDiff,
-} from "@conclave-ai/core";
-import type { ChangedFile, ChangedFileStatus } from "@conclave-ai/core";
+} from "@simsa/core";
+import type { ChangedFile, ChangedFileStatus } from "@simsa/core";
 
 export type { ChangedFile, ChangedFileStatus };
 export { extractChangedFilesFromDiff, globToRegExp };
@@ -42,7 +42,7 @@ export interface DomainDetectOptions {
 
 /**
  * Default UI-signal globs. Re-exported from core; see
- * `@conclave-ai/core/ui-detect.ts` for rationale.
+ * `@simsa/core/ui-detect.ts` for rationale.
  */
 export const DEFAULT_UI_SIGNALS: readonly string[] = CORE_DEFAULT_UI_SIGNALS;
 

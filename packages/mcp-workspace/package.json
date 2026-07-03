@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/mcp-workspace",
+  "name": "@simsa/mcp-workspace",
   "version": "0.9.0",
   "description": "Conclave AI workspace MCP server — exposes the acceptance/PR-review workflow as agent-callable MCP tools over stdio.",
   "license": "FSL-1.1-Apache-2.0",
@@ -34,7 +34,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/workspace-preview": "workspace:*",
+    "@simsa/workspace-preview": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.24.0"
   },

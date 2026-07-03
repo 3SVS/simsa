@@ -1,4 +1,4 @@
-import type { Notifier, NotifyReviewInput } from "@conclave-ai/core";
+import type { Notifier, NotifyReviewInput } from "@simsa/core";
 import { renderEmail } from "./format.js";
 import { ResendTransport, type EmailTransport, type HttpFetch } from "./transport.js";
 

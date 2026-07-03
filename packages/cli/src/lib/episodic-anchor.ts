@@ -1,4 +1,4 @@
-import type { EpisodicEntry } from "@conclave-ai/core";
+import type { EpisodicEntry } from "@simsa/core";
 
 /**
  * v0.12.x — anchor an episodic in central plane so CI rework can fetch

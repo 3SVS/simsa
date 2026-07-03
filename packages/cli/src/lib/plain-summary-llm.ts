@@ -9,7 +9,7 @@
  *     keeping the interface in core + adapter here means any package can
  *     build its own without a core change.
  */
-import type { PlainSummaryLlm } from "@conclave-ai/core";
+import type { PlainSummaryLlm } from "@simsa/core";
 import { resolveKey } from "./credentials.js";
 
 const DEFAULT_MODEL = "claude-haiku-4-5";

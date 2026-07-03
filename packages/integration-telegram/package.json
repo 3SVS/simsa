@@ -1,5 +1,5 @@
 {
-  "name": "@conclave-ai/integration-telegram",
+  "name": "@simsa/integration-telegram",
   "version": "0.16.0",
   "description": "Conclave AI Telegram notifier — posts review outcomes to a Telegram chat via Bot API.",
   "license": "FSL-1.1-Apache-2.0",
@@ -25,7 +25,7 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "@conclave-ai/core": "workspace:*"
+    "@simsa/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

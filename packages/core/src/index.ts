@@ -27,7 +27,7 @@ export type { AgentScore, AgentScoreComponents, DeriveAgentWeightsOptions } from
 export { tallyWeighted } from "./council.js";
 
 // UI / design-surface detection (v0.9.3 — shared between
-// @conclave-ai/cli's domain-detect and @conclave-ai/agent-design's
+// @simsa/cli's domain-detect and @simsa/agent-design's
 // ui-globs so the two layers can't drift on what counts as "UI").
 export {
   DEFAULT_UI_SIGNALS,
@@ -45,7 +45,7 @@ export {
 export type { ChangedFile, ChangedFileStatus, UiDetectOptions } from "./ui-detect.js";
 
 // Autofix (v0.7) — shared types for the autonomous fix loop. CLI lives
-// in @conclave-ai/cli; core only owns the data contracts so consumers
+// in @simsa/cli; core only owns the data contracts so consumers
 // can render autofix verdicts without pulling the CLI dep graph.
 export {
   isFileDenied,
@@ -109,7 +109,7 @@ export type {
 } from "./autonomy.js";
 
 // Memory substrate (decision #17: answer-keys + failure-catalog duality as core primitive).
-// Re-exported here for convenience; dedicated subpath at @conclave-ai/core/memory.
+// Re-exported here for convenience; dedicated subpath at @simsa/core/memory.
 export {
   FileSystemMemoryStore,
   AnswerKeySchema,
@@ -176,7 +176,7 @@ export type {
 
 // Federated sync (decision #21) — redact answer-keys + failures to the
 // k-anonymous baseline shape and ship them across a pluggable transport.
-// Re-exported here for convenience; dedicated subpath at @conclave-ai/core/federated.
+// Re-exported here for convenience; dedicated subpath at @simsa/core/federated.
 export {
   FederatedBaselineSchema,
   FederatedBaselineKindSchema,
@@ -208,7 +208,7 @@ export type {
 
 // Efficiency Gate (decision #22: first-class from day 1) — every LLM call
 // routes through `EfficiencyGate.run(...)`. Re-exported here for convenience;
-// the dedicated subpath export lives at @conclave-ai/core/efficiency.
+// the dedicated subpath export lives at @simsa/core/efficiency.
 export {
   EfficiencyGate,
   PromptCache,

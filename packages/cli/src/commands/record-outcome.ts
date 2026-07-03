@@ -3,7 +3,7 @@ import {
   FileSystemMemoryStore,
   OutcomeWriter,
   type OutcomeResult,
-} from "@conclave-ai/core";
+} from "@simsa/core";
 import { loadConfig, resolveMemoryRoot } from "../lib/config.js";
 import { autoPushOutcome } from "../lib/federated-auto-push.js";
 

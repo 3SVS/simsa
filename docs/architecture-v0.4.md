@@ -8,7 +8,7 @@
 
 ## 1. Why v0.4 — the distribution problem
 
-v0.3 ships a CLI (`@conclave-ai/cli`) that each repo installs individually and drives via GitHub Actions. Adoption requires:
+v0.3 ships a CLI (`@simsa/cli`) that each repo installs individually and drives via GitHub Actions. Adoption requires:
 
 - Copying 4–5 workflow YAMLs into `.github/workflows/`
 - Provisioning 5+ secrets (ANTHROPIC / OPENAI / GEMINI / TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / ORCHESTRATOR_PAT)
@@ -27,7 +27,7 @@ v0.4's purpose: **collapse the install path to a single CLI command, and move me
 ```
   one time, roughly 2 minutes:
 
-  $ npm install -g @conclave-ai/cli
+  $ npm install -g @simsa/cli
   $ conclave init
     - detects git remote (e.g. acme/service)
     - opens browser, GitHub OAuth, conclave.ai registers the repo
