@@ -27,10 +27,37 @@
  * `outcome: "pending"`.
  */
 import type { Env } from "../env.js";
+import { redactSecrets } from "@simsa/secret-guard";
 import { sha256Hex } from "../util.js";
 import { TRAINING_CONSENT_VERSION, hasActiveTrainingConsent } from "./training-consent-db.js";
 
 export const TRAINING_SCHEMA_VERSION = 1;
+
+/**
+ * Scrub secrets out of arbitrary free text before it is persisted. Non-dev
+ * users routinely paste live API keys / .env values into code and specs, so
+ * every string that reaches the training store is run through the same
+ * secret-guard rules the CLI uses. Over-redaction is the safe error.
+ */
+function scrubText(text: string): string {
+  if (!text) return text;
+  return redactSecrets(text).text;
+}
+
+/**
+ * Deep-scrub a JSON-serializable value (product spec, acceptance items). The
+ * value came from a JSON request body, so it round-trips; if anything goes
+ * wrong we return a marker rather than risk leaking the raw value.
+ */
+function scrubJson(value: unknown): unknown {
+  try {
+    const s = JSON.stringify(value);
+    if (s === undefined) return null;
+    return JSON.parse(scrubText(s));
+  } catch {
+    return "[redacted-unserializable]";
+  }
+}
 
 /** A single PR file as fetched from GitHub (the diff). */
 export type TrainingPrFile = {
@@ -122,11 +149,21 @@ export function buildTrainingRecord(
     repo_full_name: input.repoFullName,
     pr_number: input.prNumber,
     head_sha: input.headSha ?? "",
-    product_spec: input.productSpec,
-    acceptance_items: input.items,
-    pr_files: input.prFiles,
+    // Secret-scrub every user-authored surface before it lands in R2. A
+    // vibe-coder's diff or spec routinely contains live keys / .env values.
+    product_spec: scrubJson(input.productSpec),
+    acceptance_items: Array.isArray(input.items)
+      ? (scrubJson(input.items) as unknown[])
+      : input.items,
+    pr_files: input.prFiles.map((f) => ({
+      ...f,
+      ...(f.patch ? { patch: scrubText(f.patch) } : {}),
+    })),
     review_source: input.review.source,
-    results: input.review.results,
+    // The verdict text (reason) could quote a secret line from the diff.
+    // Scrubbing only rewrites exact key-shaped matches, so the label is
+    // otherwise untouched.
+    results: scrubJson(input.review.results) as TrainingResultItem[],
     summary: input.review.summary,
     final_status: input.finalStatus,
     outcome: "pending",
