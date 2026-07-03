@@ -71,6 +71,8 @@ export async function saveProjectToDb(payload: {
   understood: unknown;
   productSpec: unknown;
   items: unknown;
+  builtWith?: unknown;
+  entryPath?: "idea" | "code" | "spec";
 }): Promise<{ ok: true; id: string } | ApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/projects`, {

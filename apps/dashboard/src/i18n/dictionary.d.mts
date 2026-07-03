@@ -172,6 +172,22 @@ export type Dictionary = {
     saveFailed: string;
     loadFailed: string;
   };
+  builtWith: {
+    question: string;
+    hint: string;
+    otherPlaceholder: string;
+    tools: {
+      v0: string;
+      lovable: string;
+      bolt: string;
+      cursor: string;
+      claudeCode: string;
+      replit: string;
+      windsurf: string;
+      codex: string;
+      handCoded: string;
+    };
+  };
   overview: {
     specCompleteness: string;
     resultsSummary: string;

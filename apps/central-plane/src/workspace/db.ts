@@ -21,6 +21,10 @@ export type DbProject = {
   understood: unknown;
   productSpec: unknown;
   items: unknown;
+  /** builtWith — which AI tool(s) built the app (per-agent moat tag). */
+  builtWith: unknown;
+  /** entry_path — which branch the project entered through ("idea"|"code"|"spec"). */
+  entryPath: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -54,6 +58,8 @@ export async function upsertProject(
     understood: unknown;
     productSpec: unknown;
     items: unknown;
+    builtWith?: unknown;
+    entryPath?: string | null;
   },
 ): Promise<string> {
   const id = input.id ?? randId("wsp");
@@ -64,14 +70,16 @@ export async function upsertProject(
   // clause is defense-in-depth for any other caller of this helper.
   await env.DB.prepare(
     `INSERT INTO workspace_projects
-       (id, user_key, title, idea, understood_json, product_spec_json, items_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET
        title = excluded.title,
        idea = excluded.idea,
        understood_json = excluded.understood_json,
        product_spec_json = excluded.product_spec_json,
        items_json = excluded.items_json,
+       built_with_json = excluded.built_with_json,
+       entry_path = excluded.entry_path,
        updated_at = excluded.updated_at
      WHERE workspace_projects.user_key = excluded.user_key`,
   )
@@ -83,6 +91,8 @@ export async function upsertProject(
       JSON.stringify(input.understood),
       JSON.stringify(input.productSpec),
       JSON.stringify(input.items),
+      JSON.stringify(input.builtWith ?? null),
+      input.entryPath ?? null,
       now,
       now,
     )
@@ -92,7 +102,7 @@ export async function upsertProject(
 
 export async function getProject(env: Env, id: string): Promise<DbProject | null> {
   const row = await env.DB.prepare(
-    `SELECT id, user_key, title, idea, understood_json, product_spec_json, items_json, created_at, updated_at
+    `SELECT id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, created_at, updated_at
      FROM workspace_projects WHERE id = ?`,
   )
     .bind(id)
@@ -104,6 +114,8 @@ export async function getProject(env: Env, id: string): Promise<DbProject | null
       understood_json: string;
       product_spec_json: string;
       items_json: string;
+      built_with_json: string | null;
+      entry_path: string | null;
       created_at: string;
       updated_at: string;
     }>();
@@ -116,6 +128,8 @@ export async function getProject(env: Env, id: string): Promise<DbProject | null
     understood: safeJson(row.understood_json),
     productSpec: safeJson(row.product_spec_json),
     items: safeJson(row.items_json),
+    builtWith: safeJson(row.built_with_json ?? "null"),
+    entryPath: row.entry_path ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

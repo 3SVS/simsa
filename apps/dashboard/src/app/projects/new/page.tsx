@@ -21,6 +21,20 @@ import type { Dictionary } from "@/i18n/dictionary.mjs";
 
 type Step = 1 | 2 | 3 | 4;
 
+// builtWith options — id matches the central-plane canonical ids (built-with.ts);
+// labelKey indexes t.builtWith.tools. "other" is the free-text input, not a chip.
+const BUILT_WITH_OPTIONS: ReadonlyArray<{ id: string; labelKey: keyof Dictionary["builtWith"]["tools"] }> = [
+  { id: "v0", labelKey: "v0" },
+  { id: "lovable", labelKey: "lovable" },
+  { id: "bolt", labelKey: "bolt" },
+  { id: "cursor", labelKey: "cursor" },
+  { id: "claude-code", labelKey: "claudeCode" },
+  { id: "replit", labelKey: "replit" },
+  { id: "windsurf", labelKey: "windsurf" },
+  { id: "codex", labelKey: "codex" },
+  { id: "hand-coded", labelKey: "handCoded" },
+];
+
 export default function NewProjectPage() {
   const router = useRouter();
   const { t } = useI18n();
@@ -33,6 +47,13 @@ export default function NewProjectPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isGeneratingSpec, setIsGeneratingSpec] = useState(false);
   const [specResult, setSpecResult] = useState<IdeaToSpecDraftResponse | null>(null);
+  // builtWith — which AI tool(s) built this app (per-agent moat tag).
+  const [builtWithTools, setBuiltWithTools] = useState<string[]>([]);
+  const [builtWithOther, setBuiltWithOther] = useState("");
+
+  function toggleBuiltWith(tool: string) {
+    setBuiltWithTools((prev) => (prev.includes(tool) ? prev.filter((x) => x !== tool) : [...prev, tool]));
+  }
 
   const answeredCount = Object.keys(answers).length;
   const questions = result?.questions ?? [];
@@ -116,6 +137,13 @@ export default function NewProjectPage() {
       understood: spec.understood,
       productSpec: spec.productSpec,
       items: spec.items,
+      builtWith:
+        builtWithTools.length || builtWithOther.trim()
+          ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
+          : undefined,
+      // This flow starts from an idea (the only entry today). The single-entry
+      // / 3-branch UI is a separate track; entry_path fills in per branch later.
+      entryPath: "idea",
     }).catch(() => undefined);
     router.push(`/projects/${id}`);
   }
@@ -228,7 +256,36 @@ export default function NewProjectPage() {
 
           {/* Step 4: result */}
           {step === 4 && (specResult ?? result) && (
-            <SpecPreview t={t} data={(specResult ?? result)!} isFallback={isFallback} onBack={() => setStep(3)} onSave={handleSave} />
+            <>
+              <div className="card mb-4 p-5">
+                <h3 className="text-sm font-semibold text-gray-800">{t.builtWith.question}</h3>
+                <p className="mb-3 mt-1 text-xs text-gray-500">{t.builtWith.hint}</p>
+                <div className="flex flex-wrap gap-2">
+                  {BUILT_WITH_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => toggleBuiltWith(opt.id)}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        builtWithTools.includes(opt.id)
+                          ? "border-brand-300 bg-brand-50 text-brand-700"
+                          : "border-gray-200 text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      {t.builtWith.tools[opt.labelKey]}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={builtWithOther}
+                  onChange={(e) => setBuiltWithOther(e.target.value)}
+                  placeholder={t.builtWith.otherPlaceholder}
+                  className="input mt-3 text-sm"
+                />
+              </div>
+              <SpecPreview t={t} data={(specResult ?? result)!} isFallback={isFallback} onBack={() => setStep(3)} onSave={handleSave} />
+            </>
           )}
         </div>
       </main>
