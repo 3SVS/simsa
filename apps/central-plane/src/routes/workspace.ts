@@ -15,6 +15,7 @@ import type { Env } from "../env.js";
 import { ALLOWED_ORIGINS } from "./cors.js";
 import { generateIdeaToSpecDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
+import { classifyTopics } from "../workspace/topic-tags.js";
 import {
   generateCheckDraft,
   type WorkspaceCheckDraftRequest,
@@ -269,17 +270,28 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         b["entryPath"] === "idea" || b["entryPath"] === "code" || b["entryPath"] === "spec"
           ? (b["entryPath"] as string)
           : null;
+      // topic_tags — deterministic classification of idea + spec (no LLM, no raw
+      // text stored; only structured tags). acquisition — where the user arrived.
+      const ideaText = typeof b["idea"] === "string" ? b["idea"] : "";
+      const topicTags = classifyTopics(`${ideaText} ${JSON.stringify(b["productSpec"] ?? {})}`);
+      const acqSource =
+        b["acquisition"] && typeof b["acquisition"] === "object"
+          ? (b["acquisition"] as Record<string, unknown>)["source"]
+          : b["acquisitionSource"];
+      const acquisition = { source: typeof acqSource === "string" ? acqSource.slice(0, 40) : "direct" };
       const id = await upsertProject(c.env, {
         id: typeof b["id"] === "string" ? b["id"] : undefined,
         userKey: String(b["userKey"]),
         title: String(b["title"]),
-        idea: typeof b["idea"] === "string" ? b["idea"] : "",
+        idea: ideaText,
         understood: b["understood"] ?? {},
         productSpec: b["productSpec"] ?? {},
         items: b["items"] ?? [],
         // P1 envelope collection — normalized so unknown tools fall into `other`.
         builtWith: normalizeBuiltWith(b["builtWith"]),
         entryPath,
+        topicTags,
+        acquisition,
       });
       return new Response(JSON.stringify({ ok: true, id }), { status: 200, headers: { "content-type": "application/json", ...headers } });
     } catch (err) {
