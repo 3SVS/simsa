@@ -31,7 +31,57 @@ import { redactSecrets } from "@simsa/secret-guard";
 import { sha256Hex } from "../util.js";
 import { TRAINING_CONSENT_VERSION, hasActiveTrainingConsent } from "./training-consent-db.js";
 
-export const TRAINING_SCHEMA_VERSION = 1;
+// 2.0 — the P1 envelope (region/locale/entry_path/built_with/topic_tags/
+// acquisition/user_context/commercial + reserved P2/P3 slots). All new fields
+// are nullable; schema_version tracks when each began to be filled.
+export const TRAINING_SCHEMA_VERSION = "2.0";
+
+/** builtWith tag — which AI tool(s) produced the code (per-agent moat axis). */
+export type BuiltWithTag = {
+  tools?: string[];
+  primary?: string | null;
+  other?: string | null;
+  modelNote?: string | null; // P2
+  tool_versions?: unknown; // P3 slot
+} | null;
+
+/** LLM-classified topic tags (market map). */
+export type TopicTags = {
+  domain?: string | null;
+  pattern?: string | null;
+  integrations?: string[];
+  ai_feature?: string | null;
+} | null;
+
+/** Where the user came from + how (P1 source; campaign/referrer are P2). */
+export type AcquisitionTag = {
+  source?: string | null;
+  campaign?: string | null; // P2
+  referrer_hash?: string | null; // P2
+} | null;
+
+/** User-context signals for retention/skill analysis. */
+export type UserContextTag = {
+  skill_signal?: string | null; // "first_project" | "returning"
+  session_seq?: number | null;
+  project_seq?: number | null;
+} | null;
+
+/** Envelope tags captured at review time. All optional — null slot if no source yet. */
+export type EnvelopeInput = {
+  /** sha256(workspaceId) — team/personal split. */
+  workspaceHash?: string | null;
+  region?: string | null; // ISO-3166, IP-based
+  locale?: string | null; // BCP-47 UI language
+  contentLang?: string | null; // detected input language
+  entryPath?: "idea" | "code" | "spec" | null;
+  builtWith?: BuiltWithTag;
+  topicTags?: TopicTags;
+  acquisition?: AcquisitionTag;
+  userContext?: UserContextTag;
+  /** Tier AT CAPTURE — never join the current tier (would corrupt past rows). */
+  planTier?: string | null;
+};
 
 /**
  * Scrub secrets out of arbitrary free text before it is persisted. Non-dev
@@ -93,6 +143,8 @@ export type CaptureTrainingInput = {
   };
   finalStatus: string;
   rerunOfReviewRunId?: string;
+  /** P1 envelope tags (all optional; unsourced ones stored as null). */
+  envelope?: EnvelopeInput;
   /** Injected clock for tests; defaults to real time. */
   now?: string;
   /** Injected subject hash for tests; defaults to sha256(userKey). */
@@ -105,10 +157,12 @@ export type CaptureTrainingInput = {
  * OUTCOME (reward — pending until a later poll fills it).
  */
 export type TrainingRecord = {
-  schema_version: number;
+  // ── identity ──
+  event_id: string;
   captured_at: string;
-  // identity + provenance (no raw handle)
-  subject_hash: string;
+  schema_version: string;
+  subject_hash: string; // sha256(userKey) — no raw handle
+  workspace_hash: string | null; // sha256(workspaceId) — P1, null until sourced
   consent_version: string;
   project_id: string;
   review_run_id: string;
@@ -116,17 +170,41 @@ export type TrainingRecord = {
   repo_full_name: string;
   pr_number: number;
   head_sha: string;
-  // INPUT
+  // ── global dimension (P1; timezone P2) ──
+  region: string | null;
+  locale: string | null;
+  content_lang: string | null;
+  timezone: string | null;
+  // ── entry / tool dimension (P1) ──
+  entry_path: "idea" | "code" | "spec" | null;
+  built_with: BuiltWithTag;
+  // ── topic dimension (P1) ──
+  topic_tags: TopicTags;
+  // ── acquisition dimension (P1 source) ──
+  acquisition: AcquisitionTag;
+  // ── user-context dimension (P1) ──
+  user_context: UserContextTag;
+  // ── commercial dimension (P1 — tier at capture, never joined) ──
+  commercial: { plan_tier: string | null; plan_at_capture: unknown };
+  // ── event body ──
+  event_type: "pr_reviewed" | "pr_rechecked";
+  payload_scrub_state: "clean" | "metadata_only" | "raw_pending";
+  // ── INPUT (the crude oil, scrubbed) ──
   product_spec: unknown;
   acceptance_items: unknown[];
   pr_files: TrainingPrFile[];
-  // LABEL (council verdict)
+  // ── LABEL (council verdict) ──
   review_source: string;
   results: TrainingResultItem[];
   summary: { passed: number; failed: number; inconclusive: number; needsDecision: number };
   final_status: string;
-  // OUTCOME (reward signal)
-  outcome: "pending";
+  // ── OUTCOME (reward — pending until the STEP-4 poll fills it) ──
+  outcome: "pending" | "resolved" | "unresolved" | "merged" | "rejected";
+  // ── reserved future slots (P3; null now) ──
+  device_context: unknown;
+  experiment_arm: string | null;
+  quality_signals: unknown;
+  cost_meta: unknown;
 };
 
 /**
@@ -138,10 +216,14 @@ export function buildTrainingRecord(
   subjectHash: string,
   capturedAt: string,
 ): TrainingRecord {
+  const env = input.envelope ?? {};
   return {
-    schema_version: TRAINING_SCHEMA_VERSION,
+    // identity
+    event_id: input.reviewRunId,
     captured_at: capturedAt,
+    schema_version: TRAINING_SCHEMA_VERSION,
     subject_hash: subjectHash,
+    workspace_hash: env.workspaceHash ?? null,
     consent_version: TRAINING_CONSENT_VERSION,
     project_id: input.projectId,
     review_run_id: input.reviewRunId,
@@ -149,8 +231,26 @@ export function buildTrainingRecord(
     repo_full_name: input.repoFullName,
     pr_number: input.prNumber,
     head_sha: input.headSha ?? "",
-    // Secret-scrub every user-authored surface before it lands in R2. A
-    // vibe-coder's diff or spec routinely contains live keys / .env values.
+    // global
+    region: env.region ?? null,
+    locale: env.locale ?? null,
+    content_lang: env.contentLang ?? null,
+    timezone: null,
+    // entry / tool — built_with freetext scrubbed (the "other" field is arbitrary)
+    entry_path: env.entryPath ?? null,
+    built_with: (env.builtWith ? scrubJson(env.builtWith) : null) as BuiltWithTag,
+    // topic
+    topic_tags: env.topicTags ?? null,
+    // acquisition
+    acquisition: env.acquisition ?? null,
+    // user context
+    user_context: env.userContext ?? null,
+    // commercial — plan_tier is the value AT CAPTURE (never re-joined)
+    commercial: { plan_tier: env.planTier ?? null, plan_at_capture: null },
+    // event body
+    event_type: input.rerunOfReviewRunId ? "pr_rechecked" : "pr_reviewed",
+    payload_scrub_state: "clean", // code-based review payload → redactSecrets applied
+    // INPUT — secret-scrub every user-authored surface before it lands in R2.
     product_spec: scrubJson(input.productSpec),
     acceptance_items: Array.isArray(input.items)
       ? (scrubJson(input.items) as unknown[])
@@ -159,24 +259,31 @@ export function buildTrainingRecord(
       ...f,
       ...(f.patch ? { patch: scrubText(f.patch) } : {}),
     })),
+    // LABEL — the verdict reason could quote a secret line from the diff.
     review_source: input.review.source,
-    // The verdict text (reason) could quote a secret line from the diff.
-    // Scrubbing only rewrites exact key-shaped matches, so the label is
-    // otherwise untouched.
     results: scrubJson(input.review.results) as TrainingResultItem[],
     summary: input.review.summary,
     final_status: input.finalStatus,
     outcome: "pending",
+    // reserved P3 slots
+    device_context: null,
+    experiment_arm: null,
+    quality_signals: null,
+    cost_meta: null,
   };
 }
 
-/** R2 object key. Day-bucketed so the store is browsable and cheap to sweep. */
-export function trainingRecordKey(capturedAt: string, reviewRunId: string): string {
-  // capturedAt is an ISO string; slice the date without constructing a Date
-  // (keeps this pure and TZ-free).
+/**
+ * R2 object key. Region-partitioned then day-bucketed:
+ * `events/{region}/YYYY/MM/DD/<eventId>.json`. Region enables per-country
+ * analysis (the moat's global axis) without scanning; unknown region → "unknown".
+ */
+export function trainingRecordKey(capturedAt: string, eventId: string, region?: string | null): string {
   const day = capturedAt.slice(0, 10); // YYYY-MM-DD
   const [y, m, d] = day.split("-");
-  return `training/${y}/${m}/${d}/${reviewRunId}.json`;
+  const safeRegion = (region ?? "unknown").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 12) || "unknown";
+  const safeEvent = eventId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80);
+  return `events/${safeRegion}/${y}/${m}/${d}/${safeEvent}.json`;
 }
 
 export type CaptureResult =
@@ -201,7 +308,7 @@ export async function captureTrainingRecord(
     const capturedAt = input.now ?? new Date().toISOString();
     const subjectHash = input.subjectHash ?? (await sha256Hex(input.userKey));
     const record = buildTrainingRecord(input, subjectHash, capturedAt);
-    const key = trainingRecordKey(capturedAt, input.reviewRunId);
+    const key = trainingRecordKey(capturedAt, input.reviewRunId, input.envelope?.region);
     await env.EVIDENCE.put(key, JSON.stringify(record), {
       httpMetadata: { contentType: "application/json" },
     });

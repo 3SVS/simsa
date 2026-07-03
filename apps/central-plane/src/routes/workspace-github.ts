@@ -954,6 +954,9 @@ export function createWorkspaceGitHubRoutes(
     // 9c. Capture the raw training triplet (diff + council verdict) for a future
     // fine-tune / distillation. Opt-in only: no-op without active consent or an
     // EVIDENCE bucket, and never throws (best-effort telemetry).
+    // region from the edge (Cloudflare adds request.cf.country — coarse, not PII);
+    // locale from the review request. Other envelope tags land in STEP 2/3.
+    const cfCountry = (c.req.raw as { cf?: { country?: string } }).cf?.country ?? null;
     await captureTrainingRecord(c.env, {
       userKey,
       projectId,
@@ -967,6 +970,10 @@ export function createWorkspaceGitHubRoutes(
       review: reviewResult,
       finalStatus,
       rerunOfReviewRunId,
+      envelope: {
+        region: cfCountry,
+        locale: reviewLocale,
+      },
     }).catch(() => {});
 
     // 10. Telegram notification (non-blocking: failure must not fail the review response)
