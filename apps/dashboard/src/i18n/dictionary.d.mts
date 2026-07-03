@@ -1319,6 +1319,8 @@ export type Dictionary = {
     summaryReasonNotEnoughData: string;
     summaryReasonsLabel: string;
     summaryLimitationsLabel: string;
+    advancedTitle: string;
+    advancedHint: string;
     learningTitle: string;
     learningDesc: string;
     learningExperiments: string;
