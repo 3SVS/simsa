@@ -131,6 +131,12 @@ What was added (SaaS path only, since the server already holds the diff there):
   (`workspace-github.ts`, step 9c). No consent OR no R2 bucket → no-op. Stores
   one JSON record per review at `training/YYYY/MM/DD/<runId>.json` in R2. Keyed
   by `sha256(userKey)` — **raw handle/email never in the payload**.
+- **Secret-scrubbed before storage.** Every user-authored surface (diff body,
+  product spec, acceptance items, verdict reasons) is run through
+  `@simsa/secret-guard`'s `redactSecrets` before it lands in R2 — non-dev users
+  routinely paste live API keys / `.env` values into code and specs. Exact
+  key-shaped matches (AWS/OpenAI/Anthropic/GitHub/Stripe/…) are replaced with a
+  redacted preview; non-secret code is untouched.
 - **ToS clause** added: landing Terms §VI "Data & model training" (opt-in,
   anonymized; BYO/CLI code never leaves the machine).
 

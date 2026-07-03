@@ -152,9 +152,12 @@ export default function TermsPage() {
               anonymization &mdash; to improve review quality, including
               training our own models. Retained records are keyed to an
               anonymized identifier; your account handle and email are never
-              included. You can withdraw consent at any time; new reviews stop
-              being retained from that point (previously retained,
-              already-anonymized records may remain in training sets).
+              included, and we automatically scrub detected secrets (API keys,
+              tokens, <code className="font-mono text-sm">.env</code> values)
+              from the stored code before retention. You can withdraw consent at
+              any time; new reviews stop being retained from that point
+              (previously retained, already-anonymized records may remain in
+              training sets).
             </p>
             <p>
               <strong>BYO (CLI) mode.</strong> Your code and diffs stay on your

@@ -123,3 +123,63 @@ export function formatFinding(f: SecretFinding): string {
   const loc = f.file ? `${f.file}:${f.line}:${f.column}` : `line ${f.line}:${f.column}`;
   return `[${f.confidence}] ${f.ruleName} (${f.ruleId}) @ ${loc} → ${f.preview}`;
 }
+
+/**
+ * Return `text` with every matched secret replaced by its redacted preview,
+ * plus the findings. Unlike `scanText`/`scanPatch` (which only report),
+ * this rewrites the content so it is safe to persist — the raw secret never
+ * survives in the output.
+ *
+ * Scans ALL lines (not just diff `+` lines): callers persisting arbitrary
+ * content — a training record's diff body, a pasted product spec — need every
+ * occurrence gone, not only additions. When a rule captures group 1 (the
+ * secret inside a larger `key=...` match), only that group is redacted so the
+ * surrounding context (the key name) stays intact and legible.
+ *
+ * By default all confidences are redacted (includeLowConfidence defaults true
+ * here) — when scrubbing for storage, over-redaction is the safe error.
+ */
+export function redactSecrets(
+  text: string,
+  opts: ScanOptions = {},
+): { text: string; findings: SecretFinding[] } {
+  const rules = opts.rules ?? DEFAULT_RULES;
+  const allow = new Set(opts.allow ?? []);
+  const scrubOpts: ScanOptions = { includeLowConfidence: true, ...opts };
+  const findings: SecretFinding[] = [];
+
+  const lines = text.split(/\r?\n/);
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx += 1) {
+    let line = lines[lineIdx]!;
+    for (const rule of rules) {
+      if (allow.has(rule.id)) continue;
+      if (!shouldSurface(rule, scrubOpts)) continue;
+      const flags = rule.pattern.flags.includes("g")
+        ? rule.pattern.flags
+        : `${rule.pattern.flags}g`;
+      const g = new RegExp(rule.pattern.source, flags);
+      line = line.replace(g, (full: string, ...rest: unknown[]) => {
+        // rest = [group1, group2, ..., offset, wholeString(, groups)]; group 1
+        // is the labeled secret when the rule uses a capture group.
+        const group1 = typeof rest[0] === "string" ? rest[0] : undefined;
+        const secret = group1 ?? full;
+        findings.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          confidence: rule.confidence,
+          line: lineIdx + 1,
+          column: 0,
+          preview: redact(secret),
+          ...(opts.file ? { file: opts.file } : {}),
+        });
+        // Redact only the secret substring, preserving surrounding context.
+        return group1 && full.includes(group1)
+          ? full.replace(group1, redact(secret))
+          : redact(secret);
+      });
+    }
+    lines[lineIdx] = line;
+  }
+
+  return { text: lines.join("\n"), findings };
+}

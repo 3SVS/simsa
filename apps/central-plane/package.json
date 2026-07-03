@@ -24,6 +24,7 @@
   "dependencies": {
     "@cloudflare/containers": "^0.0.30",
     "@simsa/core": "workspace:*",
+    "@simsa/secret-guard": "workspace:*",
     "better-auth": "1.6.20",
     "hono": "^4.6.14",
     "kysely-d1": "0.4.0"

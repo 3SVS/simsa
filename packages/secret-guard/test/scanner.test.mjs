@@ -227,3 +227,35 @@ test("DEFAULT_RULES: every rule has unique id and no banned regex flags", () => 
     assert.equal(rule.pattern.multiline, false, `rule ${rule.id}: pattern must not use /m`);
   }
 });
+
+// ---------- redactSecrets --------------------------------------------------
+
+test("redactSecrets: rewrites secrets, preserves surrounding text", async () => {
+  const { redactSecrets } = await import("../dist/index.js");
+  const src = [
+    'const aws = "AKIAIOSFODNN7EXAMPLE";',
+    "const n = 42;",
+    'const key = "sk-abcdefghijklmnopqrstuvwxyz01234567890A";',
+  ].join("\n");
+  const { text, findings } = redactSecrets(src);
+  assert.ok(!text.includes("AKIAIOSFODNN7EXAMPLE"), "aws key removed");
+  assert.ok(!text.includes("sk-abcdefghijklmnopqrstuvwxyz01234567890A"), "openai key removed");
+  assert.ok(text.includes("const n = 42;"), "non-secret line untouched");
+  assert.ok(findings.length >= 2, "reports what it redacted");
+});
+
+test("redactSecrets: labeled rule redacts only the captured secret, keeps the key name", async () => {
+  const { redactSecrets } = await import("../dist/index.js");
+  const src = "aws_secret_access_key = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'";
+  const { text } = redactSecrets(src);
+  assert.ok(text.includes("aws_secret_access_key"), "context/key name preserved");
+  assert.ok(!text.includes("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"), "secret value redacted");
+});
+
+test("redactSecrets: clean text is returned unchanged with no findings", async () => {
+  const { redactSecrets } = await import("../dist/index.js");
+  const src = "function add(a, b) { return a + b; }";
+  const { text, findings } = redactSecrets(src);
+  assert.equal(text, src);
+  assert.equal(findings.length, 0);
+});
