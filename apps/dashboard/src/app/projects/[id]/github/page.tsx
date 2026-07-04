@@ -43,6 +43,7 @@ import { errorText } from "@/i18n/error-text.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import type { ItemStatus } from "@/lib/labels";
 import { LoginSavePrompt } from "@/components/LoginSavePrompt";
+import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 
 export default function GitHubPage() {
   const { id } = useParams<{ id: string }>();
@@ -78,6 +79,8 @@ export default function GitHubPage() {
   const [comparisonDataByPr, setComparisonDataByPr] = useState<Record<number, PrReviewComparisonResponse>>({});
   // Specific review-failure message per PR (rate limit / credits / network…).
   const [reviewErrorByPr, setReviewErrorByPr] = useState<Record<number, string>>({});
+  // "✓ finished" flash for runs completed in THIS session (visible completion signal).
+  const [justCompletedByPr, setJustCompletedByPr] = useState<Record<number, boolean>>({});
 
   const ext = loadExtendedProjectData(id);
   const checkResultMap = new Map(
@@ -134,6 +137,21 @@ export default function GitHubPage() {
     forceItemsRefresh((v) => v + 1); // re-read getLocalProject → picker appears
   }
 
+  /** Poll the latest run until it leaves "running"; returns true when it lands. */
+  async function pollRunUntilDone(prNumber: number, attempts: number): Promise<boolean> {
+    for (let i = 0; i < attempts; i++) {
+      await new Promise((r) => setTimeout(r, 10_000));
+      const latest = await getLatestPRReview(id, prNumber, getUserKey()).catch(() => null);
+      if (latest?.ok && latest.run && latest.run.status !== "running") {
+        setReviewRuns((prev) => ({ ...prev, [prNumber]: latest.run! }));
+        setReviewPhase((prev) => ({ ...prev, [prNumber]: "done" }));
+        setJustCompletedByPr((prev) => ({ ...prev, [prNumber]: true }));
+        return true;
+      }
+    }
+    return false;
+  }
+
   const loadInitial = useCallback(async () => {
     setLoadPhase("loading");
     const [repoRes, linkedRes] = await Promise.all([
@@ -159,10 +177,24 @@ export default function GitHubPage() {
         const reviewRes = await getLatestPRReview(id, lp.number, getUserKey());
         if (reviewRes.ok && reviewRes.run) {
           setReviewRuns((prev) => ({ ...prev, [lp.number]: reviewRes.run! }));
-          setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
+          if (reviewRes.run.status === "running") {
+            // A review is still executing server-side (user navigated away and
+            // came back) — resume the running view and keep polling instead of
+            // showing the idle "run review" button again.
+            setReviewPhase((prev) => ({ ...prev, [lp.number]: "running" }));
+            void pollRunUntilDone(lp.number, 18).then((landed) => {
+              if (!landed) {
+                setReviewErrorByPr((prev) => ({ ...prev, [lp.number]: t.github.reviewFailed }));
+                setReviewPhase((prev) => ({ ...prev, [lp.number]: "error" }));
+              }
+            });
+          } else {
+            setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
+          }
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => { loadInitial(); }, [loadInitial]);
@@ -249,6 +281,7 @@ export default function GitHubPage() {
     if (res.ok) {
       setReviewRuns((prev) => ({ ...prev, [lp.number]: res.run }));
       setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
+      setJustCompletedByPr((prev) => ({ ...prev, [lp.number]: true }));
       if (res.creditEnforcement) {
         setCreditDryRunByPr((prev) => ({ ...prev, [lp.number]: res.creditEnforcement! }));
       } else if (res.creditDryRun) {
@@ -272,15 +305,7 @@ export default function GitHubPage() {
       "no_selected_items", "not_found", "invalid_json", "userKey_required",
     ]);
     if (!finalServerCodes.has(res.error)) {
-      for (let attempt = 0; attempt < 6; attempt++) {
-        await new Promise((r) => setTimeout(r, 10_000));
-        const latest = await getLatestPRReview(id, lp.number, userKey).catch(() => null);
-        if (latest?.ok && latest.run && latest.run.status !== "running") {
-          setReviewRuns((prev) => ({ ...prev, [lp.number]: latest.run! }));
-          setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
-          return;
-        }
-      }
+      if (await pollRunUntilDone(lp.number, 6)) return;
     }
     // Real failure — show a SPECIFIC message (rate_limited → daily-cap copy,
     // not the generic "check your PR on GitHub" misdirection).
@@ -518,11 +543,8 @@ export default function GitHubPage() {
 
                         {phase === "running" && (
                           <div className="space-y-1">
-                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                              <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-brand-600" />
-                              {t.github.reviewing}
-                            </div>
-                            <p className="pl-6 text-xs text-gray-500">{t.github.reviewingHint}</p>
+                            <SimsaStampThinking variant="panel" label={t.github.reviewing} />
+                            <p className="text-xs text-gray-500">{t.github.reviewingHint}</p>
                           </div>
                         )}
 
@@ -541,6 +563,9 @@ export default function GitHubPage() {
 
                         {phase === "done" && run && (
                           <>
+                            {justCompletedByPr[lp.number] && (
+                              <p className="mb-2 text-sm font-medium text-green-600">✓ {t.github.reviewDone}</p>
+                            )}
                             <ReviewResultPanel run={run} onRerun={() => handleStartReview(lp)} />
                             {creditDryRunByPr[lp.number] && (
                               <CreditDryRunBanner t={t} dryRun={creditDryRunByPr[lp.number]!} projectId={id} />
