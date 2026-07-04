@@ -195,6 +195,7 @@ export type Dictionary = {
     lockNeedItems: string;
     lockNeedCode: string;
     next: string;
+    optionalTag: string;
   };
   branch: {
     title: string;
@@ -205,6 +206,18 @@ export type Dictionary = {
     codeDesc: string;
     specTitle: string;
     specDesc: string;
+    codeStepTitle: string;
+    codeStepSub: string;
+    codeName: string;
+    codeNamePlaceholder: string;
+    codeDescLabel: string;
+    codeDescPlaceholder: string;
+    codeCreate: string;
+    codeCreating: string;
+    specStepTitle: string;
+    specStepSub: string;
+    specPastePlaceholder: string;
+    specGenerate: string;
   };
   overview: {
     specCompleteness: string;

@@ -107,6 +107,9 @@ export type ExtendedProjectData = {
   itemCriteria?: Record<string, string[]>;
   checkResults?: CheckDraftResponse;
   fixSuggestions?: Record<string, FixSuggestionResponse>;
+  /** Which branch this project entered through — the progress map adapts to it
+   *  (code branch: prepare step is optional, review never locks on items). */
+  entryPath?: "idea" | "code" | "spec";
 };
 
 const EXT_KEY = (id: string) => `conclave_wf_ext_${id}`;

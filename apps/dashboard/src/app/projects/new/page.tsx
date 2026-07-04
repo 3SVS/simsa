@@ -53,6 +53,10 @@ export default function NewProjectPage() {
   // Single entry → adaptive branch. The chosen branch fills the P1 entry_path.
   // Until a branch is picked the chooser shows; then the step flow proceeds.
   const [entryPath, setEntryPath] = useState<"idea" | "code" | "spec" | null>(null);
+  // Code branch: skip the idea step entirely (that's the branch's normal path).
+  const [appName, setAppName] = useState("");
+  const [codeDesc, setCodeDesc] = useState("");
+  const [isCreatingCode, setIsCreatingCode] = useState(false);
 
   function toggleBuiltWith(tool: string) {
     setBuiltWithTools((prev) => (prev.includes(tool) ? prev.filter((x) => x !== tool) : [...prev, tool]));
@@ -104,6 +108,95 @@ export default function NewProjectPage() {
     setIsGeneratingSpec(false);
   }
 
+  // Spec branch: paste → one-shot conversion → straight to the preview (step 4).
+  // No understanding-confirm / question round — a written plan already carries
+  // its decisions; asking again is friction.
+  async function handleGenerateFromSpec() {
+    if (!ideaText.trim()) return;
+    setIsLoading(true);
+    setIsFallback(false);
+    setRateLimitMsg(null);
+    const res = await callWorkspaceApi({ idea: ideaText });
+    if (res.ok) {
+      setSpecResult(res.data);
+      setIsFallback(res.data.source === "mock-fallback");
+      setStep(4);
+    } else if (res.error === "rate_limited") {
+      setRateLimitMsg(t.common.rateLimited);
+    } else {
+      setSpecResult(res.fallback);
+      setIsFallback(true);
+      setStep(4);
+    }
+    setIsLoading(false);
+  }
+
+  // Code branch: name + builtWith (+ optional one-liner) → create the project
+  // and go STRAIGHT to code connect (settings). Skipping the idea step is this
+  // branch's normal path — with a one-liner we still draft checklist items in
+  // the same call, without one the project starts empty (items are optional
+  // here; the progress map treats prepare as optional for code entry).
+  async function handleCreateCodeProject() {
+    const name = appName.trim();
+    if (!name || isCreatingCode) return;
+    setIsCreatingCode(true);
+    setRateLimitMsg(null);
+
+    let generated: IdeaToSpecDraftResponse | null = null;
+    if (codeDesc.trim()) {
+      const res = await callWorkspaceApi({ idea: codeDesc.trim() });
+      if (res.ok) generated = res.data;
+      else if (res.error !== "rate_limited") generated = res.fallback;
+    }
+
+    const id = generateProjectId();
+    saveProject({
+      id,
+      name,
+      description: generated?.productSpec.oneLine ?? codeDesc.trim(),
+      createdAt: new Date().toISOString().slice(0, 10),
+      spec: {
+        completeness: generated ? 60 : 0,
+        goal: generated?.productSpec.problem ?? "",
+        included: generated?.productSpec.included ?? [],
+        excluded: generated?.productSpec.excluded ?? [],
+        openDecisions: generated?.productSpec.openQuestions ?? [],
+      },
+      requirements: (generated?.items ?? []).map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: "not_started" as const,
+        category: "feature",
+        priority: "must" as const,
+      })),
+    });
+    saveExtendedProjectData(id, {
+      ...(generated
+        ? {
+            productSpec: generated.productSpec,
+            itemCriteria: Object.fromEntries(generated.items.map((i) => [i.id, i.criteria ?? []])),
+          }
+        : {}),
+      entryPath: "code",
+    });
+    saveProjectToDb({
+      id,
+      userKey: getUserKey(),
+      title: name,
+      idea: codeDesc.trim(),
+      understood: generated?.understood ?? {},
+      productSpec: generated?.productSpec ?? {},
+      items: generated?.items ?? [],
+      builtWith:
+        builtWithTools.length || builtWithOther.trim()
+          ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
+          : undefined,
+      entryPath: "code",
+    }).catch(() => undefined);
+    // Straight to code connect — that IS this branch's step 1.
+    router.push(`/projects/${id}/settings`);
+  }
+
   function handleSave() {
     const spec = specResult ?? result;
     if (!spec) return;
@@ -131,6 +224,7 @@ export default function NewProjectPage() {
     saveExtendedProjectData(id, {
       productSpec: spec.productSpec,
       itemCriteria: Object.fromEntries(spec.items.map((i) => [i.id, i.criteria ?? []])),
+      entryPath: entryPath ?? "idea",
     });
     saveProjectToDb({
       id,
@@ -188,7 +282,94 @@ export default function NewProjectPage() {
           )}
 
           {/* Step 1: idea */}
-          {entryPath !== null && step === 1 && (
+          {/* CODE branch step 1 — name + builtWith (+ optional one-liner) →
+              straight to code connect. No idea step: that's this branch's
+              normal path, not a deficit. */}
+          {entryPath === "code" && step === 1 && (
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.codeStepTitle}</h1>
+              <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.codeStepSub}</p>
+
+              <label className="mb-1 block text-xs font-semibold text-gray-600">{t.branch.codeName}</label>
+              <input
+                type="text"
+                value={appName}
+                onChange={(e) => setAppName(e.target.value)}
+                placeholder={t.branch.codeNamePlaceholder}
+                className="input mb-6"
+              />
+
+              <p className="mb-1 text-xs font-semibold text-gray-600">{t.builtWith.question}</p>
+              <p className="mb-3 text-xs text-gray-400">{t.builtWith.hint}</p>
+              <div className="mb-6 flex flex-wrap gap-2">
+                {BUILT_WITH_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => toggleBuiltWith(opt.id)}
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                      builtWithTools.includes(opt.id)
+                        ? "border-brand-300 bg-brand-50 text-brand-700"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    {t.builtWith.tools[opt.labelKey]}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={builtWithOther}
+                onChange={(e) => setBuiltWithOther(e.target.value)}
+                placeholder={t.builtWith.otherPlaceholder}
+                className="input mb-6 text-sm"
+              />
+
+              <label className="mb-1 block text-xs font-semibold text-gray-600">{t.branch.codeDescLabel}</label>
+              <textarea
+                value={codeDesc}
+                onChange={(e) => setCodeDesc(e.target.value)}
+                placeholder={t.branch.codeDescPlaceholder}
+                rows={2}
+                className="input mb-8 resize-none rounded-lg"
+              />
+
+              <button
+                onClick={handleCreateCodeProject}
+                disabled={!appName.trim() || isCreatingCode}
+                className="btn btn-primary w-full py-3"
+              >
+                {isCreatingCode ? t.branch.codeCreating : `${t.branch.codeCreate} →`}
+              </button>
+              {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
+            </div>
+          )}
+
+          {/* SPEC branch step 1 — paste the plan → one-shot conversion → preview. */}
+          {entryPath === "spec" && step === 1 && (
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.specStepTitle}</h1>
+              <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.specStepSub}</p>
+              <textarea
+                value={ideaText}
+                onChange={(e) => setIdeaText(e.target.value)}
+                placeholder={t.branch.specPastePlaceholder}
+                rows={12}
+                className="input mb-8 resize-none rounded-lg font-mono text-sm"
+              />
+              <button
+                onClick={handleGenerateFromSpec}
+                disabled={!ideaText.trim() || isLoading}
+                className="btn btn-primary w-full py-3"
+              >
+                {isLoading ? t.np.reading : `${t.branch.specGenerate} →`}
+              </button>
+              {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
+              <p className="mt-3 text-center text-xs text-gray-400">{t.np.freeBeta}</p>
+            </div>
+          )}
+
+          {entryPath === "idea" && step === 1 && (
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.np.step1Title}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.np.step1Sub}</p>

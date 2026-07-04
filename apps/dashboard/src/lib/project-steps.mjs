@@ -18,9 +18,13 @@
 /** @typedef {"done" | "current" | "todo" | "locked"} StepStatus */
 
 /**
- * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasReviewRun: boolean | null }} facts
+ * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasReviewRun: boolean | null, entryPath?: "idea" | "code" | "spec" | null }} facts
  *   null = unknown (loading or fetch failed) — treated as "not confirmed", never locks.
- * @returns {Array<{ key: "prepare" | "review" | "results", status: StepStatus, lockReason: "need_items" | "need_code" | null }>}
+ *   entryPath: the branch this project entered through. For the CODE branch the
+ *   prepare step is OPTIONAL by design (the user skipped the idea step — that is
+ *   the branch's normal path, not a deficit): prepare renders as optional, and
+ *   review NEVER locks on missing items.
+ * @returns {Array<{ key: "prepare" | "review" | "results", status: StepStatus, lockReason: "need_items" | "need_code" | null, optional: boolean }>}
  */
 export function computeProjectSteps(facts) {
   const f = facts ?? {};
@@ -29,13 +33,16 @@ export function computeProjectSteps(facts) {
   const hasRepo = f.hasRepo === true;
   const noRepo = f.hasRepo === false;
   const hasRun = f.hasReviewRun === true;
+  const codeEntry = f.entryPath === "code";
 
-  // Step 1 — 준비 (idea / spec / items). Always accessible.
+  // Step 1 — 준비 (idea / spec / items). Always accessible. Optional on the
+  // code branch (skipping it is that branch's normal path, never a red mark).
   const prepareDone = hasItems;
 
   // Step 2 — 검수 (connect code / run review). Locked only when items are
-  // CONFIRMED missing. Done when the code is connected AND a review has run.
-  const reviewLocked = noItems;
+  // CONFIRMED missing — except on the code branch, where no-items is normal.
+  // Done when the code is connected AND a review has run.
+  const reviewLocked = noItems && !codeEntry;
   const reviewDone = hasRepo && hasRun;
 
   // Step 3 — 결과·수정 (results / fixes / re-check). Locked only when the code
@@ -43,16 +50,25 @@ export function computeProjectSteps(facts) {
   // it is the working loop, not a checkbox.
   const resultsLocked = noRepo;
 
-  const prepare = { key: /** @type {const} */ ("prepare"), status: /** @type {StepStatus} */ (prepareDone ? "done" : "current"), lockReason: null };
+  // On the code branch, prepare is never "current" (the flow starts at review):
+  // it shows as done when items exist, otherwise as a neutral optional todo.
+  const prepareStatus = prepareDone ? "done" : codeEntry ? "todo" : "current";
+  const prepare = {
+    key: /** @type {const} */ ("prepare"),
+    status: /** @type {StepStatus} */ (prepareStatus),
+    lockReason: null,
+    optional: codeEntry,
+  };
 
   let reviewStatus;
   if (reviewLocked) reviewStatus = "locked";
   else if (reviewDone) reviewStatus = "done";
-  else reviewStatus = prepareDone ? "current" : "todo";
+  else reviewStatus = prepareDone || codeEntry ? "current" : "todo";
   const review = {
     key: /** @type {const} */ ("review"),
     status: /** @type {StepStatus} */ (reviewStatus),
     lockReason: reviewLocked ? /** @type {const} */ ("need_items") : null,
+    optional: false,
   };
 
   let resultsStatus;
@@ -63,6 +79,7 @@ export function computeProjectSteps(facts) {
     key: /** @type {const} */ ("results"),
     status: /** @type {StepStatus} */ (resultsStatus),
     lockReason: resultsLocked ? /** @type {const} */ ("need_code") : null,
+    optional: false,
   };
 
   return [prepare, review, results];
