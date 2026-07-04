@@ -5,6 +5,7 @@ import { getProject } from "@/lib/mock-data";
 import { getLocalProject } from "@/lib/workflow-store";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { useI18n } from "@/i18n/I18nProvider";
+import { StepNextButton } from "@/components/StepNextButton";
 
 export default function SpecPage() {
   const { id } = useParams<{ id: string }>();
@@ -64,6 +65,7 @@ export default function SpecPage() {
           </Section>
         )}
       </div>
+      <StepNextButton />
     </div>
   );
 }

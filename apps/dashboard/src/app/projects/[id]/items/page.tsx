@@ -6,6 +6,7 @@ import { getLocalProject } from "@/lib/workflow-store";
 import { ACCEPTANCE_CRITERIA } from "@/lib/mock-generators";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useI18n } from "@/i18n/I18nProvider";
+import { StepNextButton } from "@/components/StepNextButton";
 
 export default function ItemsPage() {
   const { id } = useParams<{ id: string }>();
@@ -64,6 +65,7 @@ export default function ItemsPage() {
           {t.items.ctaButton} →
         </a>
       </div>
+      <StepNextButton />
     </div>
   );
 }

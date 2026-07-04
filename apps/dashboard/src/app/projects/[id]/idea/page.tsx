@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject } from "@/lib/workflow-store";
 import { useI18n } from "@/i18n/I18nProvider";
+import { StepNextButton } from "@/components/StepNextButton";
 
 export default function IdeaPage() {
   const { id } = useParams<{ id: string }>();
@@ -53,6 +54,7 @@ export default function IdeaPage() {
           ))}
         </ul>
       </div>
+      <StepNextButton />
     </div>
   );
 }
