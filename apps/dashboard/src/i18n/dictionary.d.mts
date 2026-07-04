@@ -188,6 +188,16 @@ export type Dictionary = {
       handCoded: string;
     };
   };
+  branch: {
+    title: string;
+    subtitle: string;
+    ideaTitle: string;
+    ideaDesc: string;
+    codeTitle: string;
+    codeDesc: string;
+    specTitle: string;
+    specDesc: string;
+  };
   overview: {
     specCompleteness: string;
     resultsSummary: string;
