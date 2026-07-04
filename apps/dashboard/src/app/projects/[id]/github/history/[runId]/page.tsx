@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
+import { getLocalProject, loadExtendedProjectData, getUserKey, applyReviewResultsToLocalProject } from "@/lib/workflow-store";
 import {
   getReviewRunDetail,
   generatePRFixBrief,
@@ -817,6 +817,11 @@ function ReviewItemSelectionPanel({
         <p className="text-xs text-gray-500 mt-0.5">
           {t.runDetail.selDesc}
         </p>
+        {items.length > 0 && items.every((i) => i.status === "passed") && (
+          <p className="mt-1.5 rounded-md bg-green-50 px-2.5 py-1.5 text-xs text-green-700">
+            {t.runDetail.allPassedNote}
+          </p>
+        )}
         <div className="flex flex-wrap gap-1.5 mt-2.5">
           <button
             onClick={() => onChange(recommendedRerunItemIds(items))}
@@ -1012,6 +1017,10 @@ export default function RunDetailPage() {
         return;
       }
       setDetail({ repoFullName: res.repoFullName, prNumber: res.prNumber, run: res.run });
+      // Keep list/overview progress in sync with what this run concluded.
+      if (res.run.status !== "running" && res.run.results) {
+        applyReviewResultsToLocalProject(id, res.run.results);
+      }
 
       // Stage 44: restore stored selection, else recommended fallback.
       const validItemIds = res.run.results.map((r) => r.itemId);

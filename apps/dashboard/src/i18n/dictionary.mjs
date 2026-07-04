@@ -301,6 +301,8 @@ const EN = {
     subtitle: "Pick whatever fits — you'll end up in the same place: your app, reviewed.",
     backToChooser: "Back to the three choices",
     backToPaste: "Back to your document",
+    uploadFile: "Load from file",
+    uploadHint: "Text files (.txt / .md) — or drop a file anywhere on the screen.",
     ideaTitle: "💡 I just have an idea",
     ideaDesc: "Describe what you want to build. We'll turn it into things to check.",
     codeTitle: "🔗 I already built an app",
@@ -857,6 +859,12 @@ const EN = {
     testSent: "Test email sent. Check your inbox.",
     testError: "Could not send. Check the address and try again.",
   },
+  dropzone: {
+    title: "Drop it here to start from your document",
+    hint: "Text files (.txt / .md) are read right away.",
+    unsupported: "Only text files (.txt / .md) can be read for now — PDF/Word is coming. Please copy and paste the content instead.",
+    readError: "Couldn't read that file. Please copy and paste the content instead.",
+  },
   nf: {
     title: "We can't find this project in this browser",
     body: "Projects are stored in the browser where they were created. If you made it in another browser or an incognito window, open it there.",
@@ -1015,6 +1023,7 @@ const EN = {
     usageNote: "Download the ZIP, unzip it into your project's code folder (the top of the repository), and use it directly in Claude Code or Codex. When the AI has updated the code changes (PR), come back and press Check again.",
   },
   runDetail: {
+    allPassedNote: "Everything passed — re-checking is optional. As a final step, open your live app and try it yourself.",
     backToHistory: "← Back to review history",
     loading: "Loading the review…",
     notFoundTitle: "We couldn't find this review.",
@@ -2423,6 +2432,8 @@ const KO = {
     subtitle: "지금 갖고 계신 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
     backToChooser: "처음 선택으로 돌아가기",
     backToPaste: "붙여넣기로 돌아가기",
+    uploadFile: "파일에서 불러오기",
+    uploadHint: "텍스트 파일(.txt/.md) — 화면 아무 데나 끌어다 놓아도 돼요.",
     ideaTitle: "💡 아이디어만 있어요",
     ideaDesc: "만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요.",
     codeTitle: "🔗 이미 만든 앱이 있어요",
@@ -2979,6 +2990,12 @@ const KO = {
     testSent: "테스트 메일을 보냈어요. 받은편지함을 확인해주세요.",
     testError: "전송에 실패했어요. 주소가 맞는지 확인해주세요.",
   },
+  dropzone: {
+    title: "여기에 놓으면 이 문서로 시작해요",
+    hint: "텍스트 파일(.txt/.md)은 바로 읽어 드려요.",
+    unsupported: "지금은 텍스트 파일(.txt/.md)만 읽을 수 있어요 — PDF/Word는 준비 중이에요. 내용을 복사해 붙여넣어 주세요.",
+    readError: "파일을 읽지 못했어요. 내용을 복사해 붙여넣어 주세요.",
+  },
   nf: {
     title: "이 브라우저에서 프로젝트를 찾을 수 없어요",
     body: "프로젝트는 만든 브라우저에 저장돼요. 다른 브라우저나 시크릿 창에서 만들었다면 그곳에서 열어주세요.",
@@ -3137,6 +3154,7 @@ const KO = {
     usageNote: "ZIP을 다운받아 프로젝트 코드 폴더(저장소 최상위)에 압축 해제하면 Claude Code나 Codex에서 바로 사용할 수 있어요. AI가 코드 변경(PR)을 갱신하면 돌아와서 다시 확인을 눌러주세요.",
   },
   runDetail: {
+    allPassedNote: "모든 항목이 통과했어요 — 다시 확인은 선택이에요. 마지막으로 라이브 앱을 직접 열어 확인해보는 걸 추천해요.",
     backToHistory: "← 확인 기록으로 돌아가기",
     loading: "확인 결과를 불러오는 중…",
     notFoundTitle: "확인 결과를 찾을 수 없어요.",
