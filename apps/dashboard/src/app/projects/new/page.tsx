@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { callWorkspaceApi } from "@/lib/workspace-api";
@@ -8,6 +10,7 @@ import {
   generateProjectId,
   saveExtendedProjectData,
   getUserKey,
+  markProjectSyncFailed,
 } from "@/lib/workflow-store";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import type {
@@ -88,6 +91,19 @@ function NewProjectInner() {
     const fromUrl = raw === "idea" || raw === "code" || raw === "spec" ? raw : null;
     setEntryPath(fromUrl);
     if (fromUrl === null) setStep(1);
+    // ?fresh=<nonce> (sidebar "new project" while already here) = full reset:
+    // the user asked for a NEW project, so typed state is cleared too.
+    if (searchParams.get("fresh")) {
+      setIdeaText("");
+      setResult(null);
+      setSpecResult(null);
+      setAnswers({});
+      setAppName("");
+      setCodeDesc("");
+      setBuiltWithTools([]);
+      setBuiltWithOther("");
+      setRateLimitMsg(null);
+    }
   }, [searchParams]);
 
   function chooseBranch(id: "idea" | "code" | "spec") {
@@ -240,7 +256,7 @@ function NewProjectInner() {
           ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
           : undefined,
       entryPath: "code",
-    }).catch(() => undefined);
+    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
     // Straight to code connect — that IS this branch's step 1.
     router.push(`/projects/${id}/settings`);
   }
@@ -288,7 +304,7 @@ function NewProjectInner() {
           : undefined,
       // The branch the user chose at the single entry (idea/code/spec).
       entryPath: entryPath ?? "idea",
-    }).catch(() => undefined);
+    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
     router.push(`/projects/${id}`);
   }
 
@@ -307,6 +323,9 @@ function NewProjectInner() {
               sets entry_path (idea/code/spec) which persists to the P1 envelope. */}
           {entryPath === null && (
             <div>
+              <Link href="/projects" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+                <span aria-hidden>←</span> {t.nav.allProjects}
+              </Link>
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.title}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.subtitle}</p>
               <div className="space-y-3">
@@ -635,6 +654,12 @@ function ApiQuestionCard({
           placeholder={t.np.typeYourOwn}
           className="input mt-3"
           onBlur={(e) => e.target.value && onAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const v = (e.target as HTMLInputElement).value;
+              if (v) onAnswer(v);
+            }
+          }}
         />
       )}
     </div>

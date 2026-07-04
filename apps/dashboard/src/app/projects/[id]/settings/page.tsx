@@ -597,6 +597,7 @@ export default function SettingsPage() {
             <input
               type="email"
               value={emAddress}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSaveEmSettings(); } }}
               onChange={(e) => setEmAddress(e.target.value)}
               placeholder={t.emailNotify.addressPlaceholder}
               disabled={!emConfigured}
@@ -658,6 +659,7 @@ export default function SettingsPage() {
             <input
               type="text"
               value={tgChatId}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSaveTgSettings(); } }}
               onChange={(e) => setTgChatId(e.target.value)}
               placeholder={t.telegram.chatIdPlaceholder}
               disabled={!tgEnabled}

@@ -170,3 +170,33 @@ export function generateOutcomeId(): string {
   const rand = Math.random().toString(36).slice(2, 5);
   return `oc_${ts}${rand}`;
 }
+
+// ── Server-sync failure flag (UX P1: silent .catch(() => undefined) saves) ──
+// Local-first saves fire-and-forget to the server; when that write fails the
+// user must still learn about it. Callers mark the project here and the
+// project overview shows a one-time dismissible banner.
+const SYNC_FAILED_KEY = "simsa:sync-failed";
+
+export function markProjectSyncFailed(projectId: string): void {
+  try {
+    const raw = window.localStorage.getItem(SYNC_FAILED_KEY);
+    const list: string[] = raw ? (JSON.parse(raw) as string[]) : [];
+    if (!list.includes(projectId)) list.push(projectId);
+    window.localStorage.setItem(SYNC_FAILED_KEY, JSON.stringify(list));
+  } catch {
+    /* storage unavailable — nothing else we can do */
+  }
+}
+
+export function consumeProjectSyncFailed(projectId: string): boolean {
+  try {
+    const raw = window.localStorage.getItem(SYNC_FAILED_KEY);
+    if (!raw) return false;
+    const list = JSON.parse(raw) as string[];
+    if (!list.includes(projectId)) return false;
+    window.localStorage.setItem(SYNC_FAILED_KEY, JSON.stringify(list.filter((x) => x !== projectId)));
+    return true;
+  } catch {
+    return false;
+  }
+}

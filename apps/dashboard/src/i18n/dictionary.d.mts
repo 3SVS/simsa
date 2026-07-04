@@ -148,6 +148,8 @@ export type Dictionary = {
   };
   fix: { title: string; subtitle: string };
   common: {
+    syncFailed: string;
+    dismiss: string;
     goOverview: string;
     loading: string;
     save: string;

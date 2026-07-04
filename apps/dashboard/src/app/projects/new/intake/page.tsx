@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 // Stage 101 — unified intake foundation UI.
 // One front door with multiple starting points. Deterministic local preview
 // only — no backend, no model call, no external fetch. Future stages wire real
@@ -391,6 +393,12 @@ export default function IntakePage() {
   return (
     <div className="flex flex-1 justify-center px-4 py-12">
       <div className="w-full max-w-2xl">
+        <Link
+          href="/projects/new"
+          className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900"
+        >
+          <span aria-hidden>←</span> {tr.branch.backToChooser}
+        </Link>
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
           {tr.intake.handoff.title}
         </h1>

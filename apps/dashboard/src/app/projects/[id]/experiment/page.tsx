@@ -379,6 +379,7 @@ export default function ExperimentPage() {
         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             value={titleInput}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSaveExperiment(); } }}
             onChange={(e) => setTitleInput(e.target.value)}
             placeholder={t.experiment.titlePlaceholder}
             maxLength={120}
@@ -885,7 +886,12 @@ function OutcomeQualitySection({
 
   async function handleCopy() {
     try {
+      try {
       await navigator.clipboard.writeText(packText);
+    } catch {
+      window.prompt(t.github.copyManually, packText);
+      return;
+    }
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -940,7 +946,12 @@ function OutcomeQualitySection({
   async function handleCopySaved() {
     if (!openedPack) return;
     try {
+      try {
       await navigator.clipboard.writeText(openedPack.text);
+    } catch {
+      window.prompt(t.github.copyManually, openedPack.text);
+      return;
+    }
       setCopiedSaved(true);
       window.setTimeout(() => setCopiedSaved(false), 1500);
     } catch {

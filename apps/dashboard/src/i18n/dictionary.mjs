@@ -199,6 +199,8 @@ const EN = {
     subtitle: "Clear instructions you can hand to Claude Code, Codex, or a teammate.",
   },
   common: {
+    syncFailed: "Saving to the server failed — your work is safe on this device. Check your connection; the next save will sync it.",
+    dismiss: "Dismiss",
     goOverview: "Go to project overview",
     loading: "Loading…",
     save: "Save",
@@ -2303,6 +2305,8 @@ const KO = {
     subtitle: "Claude Code, Codex, 또는 동료에게 그대로 넘길 수 있는 수정 안내입니다.",
   },
   common: {
+    syncFailed: "서버 저장에 실패했어요 — 이 기기에는 저장돼 있어요. 인터넷 연결을 확인하고 다음 저장 때 다시 동기화돼요.",
+    dismiss: "닫기",
     goOverview: "프로젝트 개요로 가기",
     loading: "불러오는 중…",
     save: "저장",

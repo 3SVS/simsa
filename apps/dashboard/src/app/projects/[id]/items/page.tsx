@@ -10,6 +10,7 @@ import {
   getUserKey,
   saveProject,
   saveExtendedProjectData,
+  markProjectSyncFailed,
 } from "@/lib/workflow-store";
 import { callWorkspaceApi } from "@/lib/workspace-api";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
@@ -75,7 +76,7 @@ export default function ItemsPage() {
       understood: generated.understood ?? {},
       productSpec: generated.productSpec,
       items: generated.items,
-    }).catch(() => undefined);
+    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
     setGenPhase("idle");
     forceRefresh((v) => v + 1);
   }

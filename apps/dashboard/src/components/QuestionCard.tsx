@@ -73,6 +73,12 @@ export function QuestionCard({ question, index, total, answer, onAnswer }: Props
           placeholder={t.np.typeYourOwn}
           className="mt-3 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
           onBlur={(e) => e.target.value && onAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const v = (e.target as HTMLInputElement).value;
+              if (v) onAnswer(v);
+            }
+          }}
         />
       )}
     </div>

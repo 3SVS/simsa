@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData } from "@/lib/workflow-store";
+import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData, markProjectSyncFailed } from "@/lib/workflow-store";
 import { callWorkspaceApi } from "@/lib/workspace-api";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import {
@@ -56,6 +56,7 @@ export default function GitHubPage() {
   const [pullsPhase, setPullsPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [pullsError, setPullsError] = useState("");
   const [linkedPulls, setLinkedPulls] = useState<LinkedPull[]>([]);
+  const [linkedLoadFailed, setLinkedLoadFailed] = useState(false);
   const [selectedPR, setSelectedPR] = useState<GitHubPull | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [linkPhase, setLinkPhase] = useState<"idle" | "saving" | "done" | "error">("idle");
@@ -128,7 +129,7 @@ export default function GitHubPage() {
       understood: generated.understood ?? {},
       productSpec: generated.productSpec,
       items: generated.items,
-    }).catch(() => undefined);
+    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
     setGenPhase("idle");
     forceItemsRefresh((v) => v + 1); // re-read getLocalProject → picker appears
   }
@@ -150,6 +151,7 @@ export default function GitHubPage() {
       // must not be sent to settings to "connect" what is already connected.
       setLoadPhase("load_error");
     }
+    setLinkedLoadFailed(!linkedRes.ok);
     if (linkedRes.ok) {
       setLinkedPulls(linkedRes.pulls);
       // Load any existing review runs for linked PRs
@@ -450,6 +452,13 @@ export default function GitHubPage() {
                 {linkPhase === "done" && <span className="text-sm text-green-600">✓ {t.github.linked}</span>}
                 {linkPhase === "error" && <span className="text-sm text-red-500">{t.github.linkSaveError}</span>}
               </div>
+            </div>
+          )}
+
+          {linkedLoadFailed && (
+            <div className="callout callout-error flex items-center justify-between">
+              <span>{t.errors.loadFailed}</span>
+              <button onClick={() => void loadInitial()} className="btn btn-sm btn-secondary">{t.common.retry}</button>
             </div>
           )}
 

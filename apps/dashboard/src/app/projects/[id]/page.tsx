@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getProject, getProjectStats } from "@/lib/mock-data";
-import { getLocalProject, getUserKey } from "@/lib/workflow-store";
+import { getLocalProject, getUserKey , consumeProjectSyncFailed } from "@/lib/workflow-store";
 import { StatCard } from "@/components/StatCard";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -52,7 +52,12 @@ const VC_TONE_CLASS: Record<VerdictTone, string> = {
 const VC_STATUS_SLATE_CLASS = "bg-slate-50 text-slate-600 border-slate-200";
 
 export default function ProjectOverviewPage() {
+  // One-time "server save failed" notice (marked by fire-and-forget saves).
+  const [syncFailed, setSyncFailed] = useState(false);
   const { id } = useParams<{ id: string }>();
+  useEffect(() => {
+    if (consumeProjectSyncFailed(id)) setSyncFailed(true);
+  }, [id]);
   const { t, locale } = useI18n();
   // Locally-created projects live in localStorage (client-only); mock demos are
   // bundled. Read on the client so real projects resolve.
@@ -64,6 +69,12 @@ export default function ProjectOverviewPage() {
 
   return (
     <div className="max-w-3xl">
+      {syncFailed && (
+        <div className="callout mb-4 flex items-start justify-between gap-3 border-amber-200 bg-amber-50 text-amber-800">
+          <span>{t.common.syncFailed}</span>
+          <button onClick={() => setSyncFailed(false)} aria-label={t.common.dismiss} className="text-amber-700 hover:text-amber-900">×</button>
+        </div>
+      )}
       <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{project.name}</h1>
       <p className="mb-6 mt-1 text-sm text-gray-500">{project.description}</p>
 

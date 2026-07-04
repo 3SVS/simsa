@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { loadLocalProjects, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
@@ -23,6 +23,7 @@ function useProjectId(pathname: string): string | null {
 export function AppSidebar() {
   const { t } = useI18n();
   const pathname = usePathname() ?? "";
+  const router = useRouter();
   const projectId = useProjectId(pathname);
 
   const [collapsed, setCollapsed] = useState(false);
@@ -133,7 +134,18 @@ export function AppSidebar() {
       </div>
 
       <div className="px-3 py-1.5">
-        <Link href="/projects/new" className="flex items-center gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-50">
+        <Link
+          href="/projects/new"
+          onClick={(e) => {
+            // Already on the new-project flow: same-href Link is a no-op, so
+            // force a full reset instead (?fresh nonce → the flow clears state).
+            if (pathname.startsWith("/projects/new")) {
+              e.preventDefault();
+              router.push(`/projects/new?fresh=${Date.now()}`);
+            }
+          }}
+          className="flex items-center gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-50"
+        >
           <span className="text-gray-500">＋</span>
           {t.nav.newProject}
         </Link>
