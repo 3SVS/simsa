@@ -210,7 +210,7 @@ test("OP-7: real fetch is called with redirect:'manual' so no follow-the-redirec
 test("checkWorkflowFiles: matching workflow with expected tag → OK", async () => {
   const r = await checkWorkflowFiles("/repo", {
     readDir: async () => ["conclave.yml"],
-    readFile: async () => `name: Conclave AI\n  uses: 3SVS/conclave-ai/.github/workflows/review.yml@v0.4\n`,
+    readFile: async () => `name: Conclave AI\n  uses: 3SVS/simsa/.github/workflows/review.yml@v0.4\n`,
   });
   assert.equal(r.status, "ok");
   assert.ok(r.detail?.includes("@v0.4"));
@@ -219,7 +219,7 @@ test("checkWorkflowFiles: matching workflow with expected tag → OK", async () 
 test("checkWorkflowFiles: workflow with stale tag → WARN with bump hint", async () => {
   const r = await checkWorkflowFiles("/repo", {
     readDir: async () => ["conclave.yml"],
-    readFile: async () => `uses: 3SVS/conclave-ai/.github/workflows/review.yml@v0.3`,
+    readFile: async () => `uses: 3SVS/simsa/.github/workflows/review.yml@v0.3`,
   });
   assert.equal(r.status, "warn");
   assert.ok(r.detail?.includes("v0.3"));
@@ -293,7 +293,7 @@ test("runDoctor: prints results + returns code 0 when no fails", async () => {
     env,
     fetch: fakeFetch,
     readDir: async () => ["conclave.yml"],
-    readFile: async () => `uses: 3SVS/conclave-ai/.github/workflows/review.yml@v0.4`,
+    readFile: async () => `uses: 3SVS/simsa/.github/workflows/review.yml@v0.4`,
     cliVersion: "0.13.6",
     cwd: "/repo",
     stdout: (s) => lines.push(s),

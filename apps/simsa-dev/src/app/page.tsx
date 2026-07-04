@@ -3,7 +3,7 @@
 // no API/SDK/MCP docs are promised (MCP package is not yet published), and the
 // "coming soon" item is plain text, not a broken link.
 const APP_URL = "https://app.trysimsa.com";
-const REPO_URL = "https://github.com/3SVS/conclave-ai"; // public repo
+const REPO_URL = "https://github.com/3SVS/simsa"; // public repo
 // Real contact mailbox (operator-provided), shared with the trysimsa.com surface.
 const CONTACT_EMAIL = "seunghunbae@b2w.kr";
 // Stage 97: mailto-based early access — no backend / DB / email provider.

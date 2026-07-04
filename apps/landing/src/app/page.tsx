@@ -76,7 +76,7 @@ function TopBar() {
           <a href="#pricing" className="link-anim hover:text-ink hidden md:inline">Pricing</a>
           <a href="#faq" className="link-anim hover:text-ink hidden md:inline">FAQ</a>
           <a
-            href="https://github.com/3SVS/conclave-ai"
+            href="https://github.com/3SVS/simsa"
             className="link-anim hover:text-ink hidden lg:inline"
             target="_blank"
             rel="noreferrer"
@@ -586,7 +586,7 @@ function Footer() {
             Archives
           </p>
           <a
-            href="https://github.com/3SVS/conclave-ai"
+            href="https://github.com/3SVS/simsa"
             className="block link-anim hover:text-ink"
             target="_blank"
             rel="noreferrer"

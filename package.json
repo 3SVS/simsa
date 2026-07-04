@@ -7,9 +7,9 @@
   "author": "Seunghun Bae",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/3SVS/conclave-ai.git"
+    "url": "git+https://github.com/3SVS/simsa.git"
   },
-  "homepage": "https://github.com/3SVS/conclave-ai#readme",
+  "homepage": "https://github.com/3SVS/simsa#readme",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20"
