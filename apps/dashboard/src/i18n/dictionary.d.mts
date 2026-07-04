@@ -22,6 +22,7 @@ export type Dictionary = {
   brand: { wordmark: string; tagline: string };
   lang: { label: string; english: string; korean: string };
   nav: {
+    groupAnytime: string;
     openMenu: string;
     closeMenu: string;
     overview: string;
@@ -96,6 +97,8 @@ export type Dictionary = {
       loading: string;
       signedOut: string;
       signedInAs: string;
+      signIn: string;
+      signedOutHint: string;
       signOut: string;
       signOutError: string;
       keepsLocal: string;
@@ -322,6 +325,17 @@ export type Dictionary = {
     openDecisions: string;
   };
   items: {
+    addItem: string;
+    editItem: string;
+    deleteItem: string;
+    deleteConfirm: string;
+    saveItem: string;
+    titleLabel: string;
+    titleRequired: string;
+    criteriaLabel: string;
+    criteriaPlaceholder: string;
+    noteLabel: string;
+    notePlaceholder: string;
     title: string;
     subtitle: string;
     criteria: string;

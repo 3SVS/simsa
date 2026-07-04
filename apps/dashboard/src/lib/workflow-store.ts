@@ -105,6 +105,8 @@ import type { CheckDraftResponse, FixSuggestionResponse } from "./workspace-chec
 export type ExtendedProjectData = {
   productSpec?: WorkspaceProductSpec;
   itemCriteria?: Record<string, string[]>;
+  /** Per-item free-text notes the user attaches to checking items (editable). */
+  itemNotes?: Record<string, string>;
   checkResults?: CheckDraftResponse;
   fixSuggestions?: Record<string, FixSuggestionResponse>;
   /** Which branch this project entered through — the progress map adapts to it
