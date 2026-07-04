@@ -108,3 +108,18 @@ test("Stage 227: runtime builds with topology config when all gates present", ()
   assert.ok(auth, "expected a Better Auth instance with topology config + all gates");
   assert.equal(typeof auth.handler, "function");
 });
+
+// ─── Auth-upgrade STEP: GitHub social-login provider gating ─────────────────
+
+test("resolveGithubLoginProvider: dormant unless BOTH id+secret are set", async () => {
+  const { resolveGithubLoginProvider } = await import("../dist/better-auth-spike.js");
+  assert.equal(resolveGithubLoginProvider({}), null);
+  assert.equal(resolveGithubLoginProvider(undefined), null);
+  assert.equal(resolveGithubLoginProvider({ AUTH_GH_CLIENT_ID: "id_only" }), null);
+  assert.equal(resolveGithubLoginProvider({ AUTH_GH_CLIENT_SECRET: "secret_only" }), null);
+  assert.equal(resolveGithubLoginProvider({ AUTH_GH_CLIENT_ID: "  ", AUTH_GH_CLIENT_SECRET: "s" }), null);
+  assert.deepEqual(
+    resolveGithubLoginProvider({ AUTH_GH_CLIENT_ID: "cid", AUTH_GH_CLIENT_SECRET: "csec" }),
+    { clientId: "cid", clientSecret: "csec" },
+  );
+});

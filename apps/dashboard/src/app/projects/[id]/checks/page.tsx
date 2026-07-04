@@ -27,6 +27,7 @@ import type { ItemStatus } from "@/lib/labels";
 import { useI18n } from "@/i18n/I18nProvider";
 import { statusLabel } from "@/i18n/dictionary.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
+import { LoginSavePrompt } from "@/components/LoginSavePrompt";
 
 export default function ChecksPage() {
   const { id } = useParams<{ id: string }>();
@@ -242,6 +243,9 @@ export default function ChecksPage() {
 
         {prLoadPhase === "done" && latestPrReview && (
           <div className="space-y-4">
+            {/* Value-moment login promotion: results exist → offer to save them
+                to an account (anonymous userKey is browser-bound otherwise). */}
+            <LoginSavePrompt hasResult={true} />
             {/* PR info */}
             <div className="card p-4">
               <div className="mb-3 flex items-center gap-3">

@@ -57,6 +57,26 @@ export function resolveAuthRuntimeGate(env: Partial<Env> | undefined): AuthRunti
  * Call this per-request with `c.env`; the dialect is lazy and touches the DB only
  * when a handler actually runs.
  */
+/**
+ * GitHub social-login provider config — GitHub-first sign-in for the vibe-coder
+ * audience. DORMANT until BOTH AUTH_GH_CLIENT_ID and AUTH_GH_CLIENT_SECRET are
+ * set (fail-safe: partial config yields no provider). This is a SEPARATE GitHub
+ * OAuth app from WORKSPACE_GH_*: GitHub requires the redirect host to exactly
+ * match the registered callback host, and the login callback must live on the
+ * DASHBOARD origin (first-party session cookie via the /api/auth proxy) while
+ * the workspace repo-connect callback lives on the Worker origin — one app
+ * cannot serve both hosts. Pure + exported so the gating is unit-testable.
+ */
+export function resolveGithubLoginProvider(
+  env: Partial<Env> | undefined,
+): { clientId: string; clientSecret: string } | null {
+  const e = env ?? {};
+  const clientId = typeof e.AUTH_GH_CLIENT_ID === "string" ? e.AUTH_GH_CLIENT_ID.trim() : "";
+  const clientSecret = typeof e.AUTH_GH_CLIENT_SECRET === "string" ? e.AUTH_GH_CLIENT_SECRET.trim() : "";
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret };
+}
+
 export function createBetterAuthRuntime(env: Partial<Env> | undefined) {
   if (resolveAuthRuntimeGate(env) !== "ready") return null;
   const e = env ?? {};
@@ -67,10 +87,12 @@ export function createBetterAuthRuntime(env: Partial<Env> | undefined) {
   // Optional topology config (Stage 227): spread ONLY when set, so an unset env leaves the
   // options identical to before (origin derived from the request). Never activates auth.
   const topology = resolveAuthTopologyConfig(e);
+  const github = resolveGithubLoginProvider(e);
   return betterAuth({
     secret,
     database: buildBetterAuthD1Database(db),
     emailAndPassword: { enabled: true },
+    ...(github ? { socialProviders: { github } } : {}),
     ...(topology.baseURL ? { baseURL: topology.baseURL } : {}),
     ...(topology.trustedOrigins ? { trustedOrigins: topology.trustedOrigins } : {}),
   });

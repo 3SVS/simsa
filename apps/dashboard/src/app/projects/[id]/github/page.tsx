@@ -38,6 +38,7 @@ import { statusLabel } from "@/i18n/dictionary.mjs";
 import { errorText } from "@/i18n/error-text.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import type { ItemStatus } from "@/lib/labels";
+import { LoginSavePrompt } from "@/components/LoginSavePrompt";
 
 export default function GitHubPage() {
   const { id } = useParams<{ id: string }>();
@@ -1163,6 +1164,9 @@ function ReviewResultPanel({ run, onRerun }: { run: ReviewRun; onRerun: () => vo
       {run.status === "error" && run.errorMessage && (
         <p className="text-xs text-red-500">{run.errorMessage}</p>
       )}
+
+      {/* Value-moment login promotion: first results are in — offer to save. */}
+      {run.results && run.results.length > 0 && <LoginSavePrompt hasResult={true} />}
 
       {/* Per-item results */}
       {run.results && run.results.length > 0 && (

@@ -267,6 +267,17 @@ export interface Env {
   BETTER_AUTH_BASE_URL?: string;
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
   /**
+   * GitHub SOCIAL LOGIN (Better Auth socialProviders.github) — a SEPARATE
+   * GitHub OAuth app from WORKSPACE_GH_* (the repo-connect app): GitHub
+   * requires the redirect host to exactly match the registered callback host,
+   * and the login callback lives on the DASHBOARD origin
+   * (https://app.trysimsa.com/api/auth/callback/github via the /api/auth
+   * proxy) while repo-connect's lives on the Worker origin. Dormant until BOTH
+   * are set. Secret via the set-worker-secrets workflow — never local wrangler.
+   */
+  AUTH_GH_CLIENT_ID?: string;
+  AUTH_GH_CLIENT_SECRET?: string;
+  /**
    * Stage 241 — auth sign-up exposure guard. Controls whether the public
    * `POST /api/auth/sign-up/*` endpoint is allowed, INDEPENDENTLY of AUTH_ENABLED.
    * Fail-closed: default (unset / unknown) = "disabled" → sign-up is blocked (403

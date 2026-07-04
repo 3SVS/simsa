@@ -188,6 +188,32 @@ export type Dictionary = {
       handCoded: string;
     };
   };
+  login: {
+    title: string;
+    subtitle: string;
+    github: string;
+    githubUnavailable: string;
+    or: string;
+    name: string;
+    email: string;
+    password: string;
+    signIn: string;
+    signUp: string;
+    toSignUp: string;
+    toSignIn: string;
+    working: string;
+    linking: string;
+    signInFailed: string;
+    signUpFailed: string;
+    keepsLocal: string;
+    skip: string;
+  };
+  loginPrompt: {
+    title: string;
+    desc: string;
+    cta: string;
+    dismiss: string;
+  };
   commandCenter: {
     title: string;
     createItems: string;
