@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -216,7 +218,7 @@ function FixPackPanel({
 
   if (phase === "loading") {
     return (
-      <div ref={containerRef} className="flex items-center gap-2 text-sm text-gray-400 py-2">
+      <div ref={containerRef} className="flex items-center gap-2 text-sm text-gray-500 py-2">
         <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin flex-shrink-0" />
         {t.runDetail.fpCreating}
       </div>
@@ -286,7 +288,7 @@ function FixPackPanel({
       {/* File preview */}
       {selectedFile && (
         <div className="p-4 bg-white">
-          <p className="text-xs text-gray-400 mb-2 font-mono">{selectedFile.path}</p>
+          <p className="text-xs text-gray-500 mb-2 font-mono">{selectedFile.path}</p>
           <pre className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
             {selectedFile.content}
           </pre>
@@ -328,6 +330,7 @@ function CommentPanel({
 }) {
   const { t, locale } = useI18n();
   const [phase, setPhase] = useState<"idle" | "previewing" | "ready" | "posting" | "posted" | "error">("idle");
+  const [postError, setPostError] = useState<string | null>(null);
   const [preview, setPreview] = useState<CommentPreview | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [postResult, setPostResult] = useState<{ url?: string } | null>(null);
@@ -357,7 +360,10 @@ function CommentPanel({
 
   const post = useCallback(async () => {
     if (!preview) return;
+    // Publishes publicly on GitHub and can't be deleted from here.
+    if (!window.confirm(t.comment.postConfirm)) return;
     setPhase("posting");
+    setPostError(null);
     const res = await postPRComment(projectId, prNumber, {
       ...buildComparisonCommentInput({
         userKey, reviewRunId: runId, selectedItemIds: sharedSelected,
@@ -366,7 +372,12 @@ function CommentPanel({
       mode: "new",
       locale,
     });
-    if (!res.ok) { setPhase("ready"); return; }
+    if (!res.ok) {
+      // Never fail silently: the user must see WHY the public post didn't land.
+      setPostError(errorText(t, res.error, "generic"));
+      setPhase("ready");
+      return;
+    }
     setPostResult({ url: (res as { comment?: { githubCommentUrl?: string } }).comment?.githubCommentUrl });
     setPhase("posted");
   }, [projectId, prNumber, runId, userKey, preview, sharedSelected, includeRerunComparison, comparisonAvailable, locale]);
@@ -399,13 +410,13 @@ function CommentPanel({
             />
             <span>
               {t.runDetail.cmInclude}
-              <span className="block text-[11px] text-gray-400">
+              <span className="block text-[11px] text-gray-500">
                 {t.runDetail.cmIncludeHint}
               </span>
             </span>
           </label>
         ) : comparisonDisplayOnly ? (
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-gray-500">
             {t.runDetail.cmDisplayOnly}
           </p>
         ) : null}
@@ -421,7 +432,7 @@ function CommentPanel({
 
   if (phase === "previewing") {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+      <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
         <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin flex-shrink-0" />
         {t.runDetail.cmGenerating}
       </div>
@@ -470,6 +481,8 @@ function CommentPanel({
           </button>
         </div>
       </div>
+      <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">{t.comment.publicOnly}</p>
+      {postError && <p className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">{postError}</p>}
 
       {warnings.length > 0 && (
         <div className="bg-amber-50 border-b border-amber-100 px-4 py-2">
@@ -523,7 +536,7 @@ function ComparisonPanel({ cmp, newRunId, projectId, selectedCount }: {
           {typeof selectedCount === "number" && selectedCount > 0 && (
             <p className="text-xs text-indigo-600 mt-0.5">{t.runDetail.rerunDoneCount.replace("{n}", String(selectedCount))}</p>
           )}
-          <p className="text-xs text-gray-400 mt-0.5">{cmp.summaryText}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{cmp.summaryText}</p>
         </div>
         <Link
           href={`/projects/${projectId}/github/history/${newRunId}`}
@@ -539,9 +552,9 @@ function ComparisonPanel({ cmp, newRunId, projectId, selectedCount }: {
             {cmp.improved.map((item) => (
               <div key={item.itemId} className="text-xs text-gray-600 mb-1.5">
                 <span className="font-medium">{item.title}</span>
-                <span className="text-gray-400 mx-1">·</span>
+                <span className="text-gray-500 mx-1">·</span>
                 <span className={CMP_STATUS_COLORS[item.from] ?? ""}>{statusText(t, item.from)}</span>
-                <span className="text-gray-400 mx-1">→</span>
+                <span className="text-gray-500 mx-1">→</span>
                 <span className={CMP_STATUS_COLORS[item.to] ?? ""}>{statusText(t, item.to)}</span>
               </div>
             ))}
@@ -553,9 +566,9 @@ function ComparisonPanel({ cmp, newRunId, projectId, selectedCount }: {
             {cmp.newlyProblematic.map((item) => (
               <div key={item.itemId} className="text-xs text-gray-600 mb-1.5">
                 <span className="font-medium">{item.title}</span>
-                <span className="text-gray-400 mx-1">·</span>
+                <span className="text-gray-500 mx-1">·</span>
                 <span className={CMP_STATUS_COLORS[item.from] ?? ""}>{statusText(t, item.from)}</span>
-                <span className="text-gray-400 mx-1">→</span>
+                <span className="text-gray-500 mx-1">→</span>
                 <span className={CMP_STATUS_COLORS[item.to] ?? ""}>{statusText(t, item.to)}</span>
               </div>
             ))}
@@ -567,7 +580,7 @@ function ComparisonPanel({ cmp, newRunId, projectId, selectedCount }: {
             {cmp.stillOpen.map((item) => (
               <div key={item.itemId} className="text-xs text-gray-600 mb-1.5">
                 <span className="font-medium">{item.title}</span>
-                <span className="text-gray-400 mx-1">·</span>
+                <span className="text-gray-500 mx-1">·</span>
                 <span className={CMP_STATUS_COLORS[item.status] ?? ""}>{statusText(t, item.status)}</span>
               </div>
             ))}
@@ -583,7 +596,7 @@ function ComparisonPanel({ cmp, newRunId, projectId, selectedCount }: {
             ))}
           </div>
         )}
-        <div className="px-4 py-3 bg-gray-50 text-xs text-gray-400">
+        <div className="px-4 py-3 bg-gray-50 text-xs text-gray-500">
           {t.runDetail.cmpCaption}
         </div>
       </div>
@@ -621,7 +634,7 @@ function autoCompareErrorText(t: Dictionary, reason: string): string {
 // Stage 48: status-transition pill — previous status → current status.
 function TransitionPill({ item }: { item: ReviewRunComparisonItem }) {
   const { t } = useI18n();
-  const sourceColor = item.sourceStatus ? (CMP_STATUS_COLORS[item.sourceStatus] ?? "text-gray-500") : "text-gray-400";
+  const sourceColor = item.sourceStatus ? (CMP_STATUS_COLORS[item.sourceStatus] ?? "text-gray-500") : "text-gray-500";
   const currentColor = item.currentStatus ? (CMP_STATUS_COLORS[item.currentStatus] ?? "text-gray-500") : "text-gray-500";
   return (
     <span className="inline-flex items-center gap-1 text-[11px] border border-gray-200 rounded-full px-2 py-0.5 bg-white">
@@ -647,7 +660,7 @@ function AutoCompareGroup({ title, description, color, items }: {
   return (
     <div className="px-4 py-3">
       <p className={`text-xs font-medium ${color}`}>{title} ({items.length})</p>
-      <p className="text-[11px] text-gray-400 mb-2">{description}</p>
+      <p className="text-[11px] text-gray-500 mb-2">{description}</p>
       <div className="space-y-2">
         {items.map((item) => (
           <div key={item.itemId}>
@@ -656,7 +669,7 @@ function AutoCompareGroup({ title, description, color, items }: {
               <TransitionPill item={item} />
             </div>
             {item.currentEvidence && (
-              <p className="text-[11px] text-gray-400 mt-0.5 truncate">{t.runDetail.acCurrentEvidence}: {item.currentEvidence}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5 truncate">{t.runDetail.acCurrentEvidence}: {item.currentEvidence}</p>
             )}
             {item.currentNextAction && (
               <p className="text-[11px] text-indigo-500 mt-0.5 truncate">{t.runDetail.acNextAction}: {item.currentNextAction}</p>
@@ -676,7 +689,7 @@ function AutoComparisonPanel({ state, hasLineage, onSendToComment }: {
   const { t, locale } = useI18n();
   if (state.phase === "loading") {
     return (
-      <div className="flex items-center gap-2 text-xs text-gray-400 py-1">
+      <div className="flex items-center gap-2 text-xs text-gray-500 py-1">
         <div className="w-3 h-3 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin flex-shrink-0" />
         {t.runDetail.acComparing}
       </div>
@@ -687,7 +700,7 @@ function AutoComparisonPanel({ state, hasLineage, onSendToComment }: {
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
         <p className="text-xs font-medium text-gray-600">{t.runDetail.acCannotCompare}</p>
-        <p className="text-[11px] text-gray-400 mt-0.5">{autoCompareErrorText(t, state.reason)}</p>
+        <p className="text-[11px] text-gray-500 mt-0.5">{autoCompareErrorText(t, state.reason)}</p>
       </div>
     );
   }
@@ -697,10 +710,10 @@ function AutoComparisonPanel({ state, hasLineage, onSendToComment }: {
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
         <p className="text-sm font-semibold text-gray-800">{t.runDetail.acTitle}</p>
-        <p className="text-xs text-gray-400 mt-0.5">
+        <p className="text-xs text-gray-500 mt-0.5">
           {t.runDetail.acCaption}
         </p>
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-gray-400">
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-gray-500">
           <span>{t.runDetail.acPrevious}: {formatDate(sourceCreatedAt, locale)}</span>
           <span>{t.runDetail.acCurrent}: {formatDate(currentCreatedAt, locale)}</span>
         </div>
@@ -744,7 +757,7 @@ function AutoComparisonPanel({ state, hasLineage, onSendToComment }: {
             {t.runDetail.acSendToComment}
           </button>
         ) : (
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-gray-500">
             {t.runDetail.acNeedLineage}
           </p>
         )}
@@ -775,7 +788,7 @@ function RerunItemRow({ item, checked, onToggle }: {
           </span>
           <span className="text-xs font-medium text-gray-800 truncate">{item.title}</span>
         </div>
-        {evidence && <p className="text-[11px] text-gray-400 mt-0.5 truncate">{evidence}</p>}
+        {evidence && <p className="text-[11px] text-gray-500 mt-0.5 truncate">{evidence}</p>}
         {item.status !== "passed" && item.nextAction && (
           <p className="text-[11px] text-indigo-500 mt-0.5 truncate">{t.runDetail.next}: {item.nextAction}</p>
         )}
@@ -801,7 +814,7 @@ function ReviewItemSelectionPanel({
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
         <p className="text-sm font-semibold text-gray-800">{t.runDetail.selTitle}</p>
-        <p className="text-xs text-gray-400 mt-0.5">
+        <p className="text-xs text-gray-500 mt-0.5">
           {t.runDetail.selDesc}
         </p>
         <div className="flex flex-wrap gap-1.5 mt-2.5">
@@ -851,7 +864,7 @@ function ReviewItemSelectionPanel({
             {t.runDetail.selHint}
           </p>
         )}
-        {storageNote && <span className="text-[11px] text-gray-400 flex-shrink-0">{storageNote}</span>}
+        {storageNote && <span className="text-[11px] text-gray-500 flex-shrink-0">{storageNote}</span>}
       </div>
     </div>
   );
@@ -896,7 +909,7 @@ function RerunPanel({
 
   if (phase === "running") {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+      <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
         <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin flex-shrink-0" />
         {t.runDetail.rerunRunning}
       </div>
@@ -1069,7 +1082,7 @@ export default function RunDetailPage() {
     return () => { cancelled = true; };
   }, [phase, detail, fromRunId, id, runId, userKey]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const historyUrl = `/projects/${id}/github/history`;
   const prPageUrl = `/projects/${id}/github`;
@@ -1077,7 +1090,7 @@ export default function RunDetailPage() {
   if (phase === "loading") {
     return (
       <div className="max-w-3xl">
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="w-4 h-4 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin flex-shrink-0" />
           {t.runDetail.loading}
         </div>
@@ -1088,12 +1101,12 @@ export default function RunDetailPage() {
   if (phase === "not_found") {
     return (
       <div className="max-w-3xl space-y-4">
-        <Link href={historyUrl} className="text-xs text-gray-400 hover:text-indigo-600 inline-block">
+        <Link href={historyUrl} className="text-xs text-gray-500 hover:text-indigo-600 inline-block">
           {t.runDetail.backToHistory}
         </Link>
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
           <p className="text-sm font-medium text-gray-700 mb-1">{t.runDetail.notFoundTitle}</p>
-          <p className="text-xs text-gray-400">{t.runDetail.notFoundDesc}</p>
+          <p className="text-xs text-gray-500">{t.runDetail.notFoundDesc}</p>
         </div>
       </div>
     );
@@ -1102,7 +1115,7 @@ export default function RunDetailPage() {
   if (phase === "error" || !detail) {
     return (
       <div className="max-w-3xl space-y-4">
-        <Link href={historyUrl} className="text-xs text-gray-400 hover:text-indigo-600 inline-block">
+        <Link href={historyUrl} className="text-xs text-gray-500 hover:text-indigo-600 inline-block">
           {t.runDetail.backToHistory}
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
@@ -1133,11 +1146,11 @@ export default function RunDetailPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href={historyUrl} className="text-xs text-gray-400 hover:text-indigo-600 mb-2 inline-block">
+          <Link href={historyUrl} className="text-xs text-gray-500 hover:text-indigo-600 mb-2 inline-block">
             {t.runDetail.backToHistory}
           </Link>
           <h2 className="text-lg font-bold text-gray-900">{t.runDetail.title}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{repoFullName} · PR #{prNumber}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{repoFullName} · PR #{prNumber}</p>
         </div>
         <StatusBadge status={run.status} />
       </div>
@@ -1271,7 +1284,7 @@ export default function RunDetailPage() {
         </section>
       ) : (
         run.status !== "error" && run.status !== "queued" && (
-          <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
+          <div className="bg-gray-50 rounded-xl border border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
             {t.runDetail.noItemResults}
           </div>
         )

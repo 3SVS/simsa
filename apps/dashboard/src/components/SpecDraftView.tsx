@@ -26,7 +26,7 @@ export function UnderstoodCard({
     <div className="card mb-6 p-6">
       <p className="mb-5 text-sm leading-relaxed text-gray-800">{understood.summary}</p>
       <div className="mb-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.mainUsers}</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.np.mainUsers}</p>
         <ul className="space-y-1">
           {understood.targetUsers.map((u, i) => (
             <li key={i} className="flex gap-2 text-sm text-gray-700">
@@ -36,7 +36,7 @@ export function UnderstoodCard({
         </ul>
       </div>
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.mainFlow}</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.np.mainFlow}</p>
         <ol className="space-y-1">
           {understood.mainFlow.map((f, i) => (
             <li key={i} className="flex gap-2 text-sm text-gray-700">
@@ -68,7 +68,7 @@ export function SpecDraftBody({
         <SpecRow label={t.np.problem} value={productSpec.problem} />
 
         <div className="mt-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.included}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.np.included}</p>
           <ul className="space-y-1">
             {productSpec.included.map((item, i) => (
               <li key={i} className="flex gap-2 text-sm text-gray-700">
@@ -80,7 +80,7 @@ export function SpecDraftBody({
 
         {productSpec.excluded.length > 0 && (
           <div className="mt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.np.excluded}</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.np.excluded}</p>
             <ul className="space-y-1">
               {productSpec.excluded.map((item, i) => (
                 <li key={i} className="flex gap-2 text-sm text-gray-500">
@@ -141,7 +141,7 @@ export function RequirementRow({ item }: { item: WorkspaceRequirementItem }) {
 export function SpecRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="mb-3">
-      <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+      <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
       <p className="text-sm text-gray-700">{value}</p>
     </div>
   );

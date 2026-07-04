@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -135,7 +137,7 @@ export default function BenchmarkPage() {
     return () => { cancelled = true; };
   }, [id, userKey, loadSaved]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const selectedIds = new Set(configs.map((c) => c.runId));
   const availableRuns = runs.filter((r) => !selectedIds.has(r.id));
@@ -217,13 +219,16 @@ export default function BenchmarkPage() {
       </div>
 
       {phase === "loading" && (
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
           {t.benchmark.loading}
         </div>
       )}
       {phase === "error" && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{t.benchmark.loadError}</div>
+        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{t.benchmark.loadError}</span>
+          <button onClick={() => window.location.reload()} className="btn btn-sm btn-secondary">{t.common.retry}</button>
+        </div>
       )}
 
       {phase === "done" && (
@@ -231,21 +236,24 @@ export default function BenchmarkPage() {
           {/* Candidate selector */}
           <section className="rounded-xl border border-gray-200 bg-white p-5">
             <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.selectorTitle}</h3>
-            <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.selectorHint}</p>
+            <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.selectorHint}</p>
 
             {runs.length === 0 ? (
               <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-6 text-center">
                 <p className="text-sm font-medium text-gray-700">{t.benchmark.emptyTitle}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.emptyBody}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.emptyBody}</p>
+                <a href={`/projects/${id}/github`} className="btn btn-md btn-primary mt-4">
+                  {t.checks.connectPr} →
+                </a>
               </div>
             ) : (
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 {/* Available runs */}
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{t.benchmark.availableRuns}</p>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{t.benchmark.availableRuns}</p>
                   <div className="space-y-1.5">
                     {availableRuns.length === 0 && (
-                      <p className="text-xs text-gray-400">{t.benchmark.noRuns}</p>
+                      <p className="text-xs text-gray-500">{t.benchmark.noRuns}</p>
                     )}
                     {availableRuns.map((run) => (
                       <div key={run.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 px-3 py-2">
@@ -253,7 +261,7 @@ export default function BenchmarkPage() {
                           <p className="text-xs font-medium text-gray-700">
                             {t.benchmark.runMeta.replace("{pr}", String(run.prNumber)).replace("{date}", formatDate(run.createdAt, locale))}
                           </p>
-                          <p className="truncate text-[11px] text-gray-400">
+                          <p className="truncate text-[11px] text-gray-500">
                             {t.benchmark.runCounts
                               .replace("{passed}", String(run.summary?.passed ?? 0))
                               .replace("{failed}", String(run.summary?.failed ?? 0))
@@ -273,20 +281,20 @@ export default function BenchmarkPage() {
 
                 {/* Selected candidates */}
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{t.benchmark.selected}</p>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{t.benchmark.selected}</p>
                   <div className="space-y-2">
                     {configs.length === 0 && (
-                      <p className="text-xs text-gray-400">{t.benchmark.needMoreBody}</p>
+                      <p className="text-xs text-gray-500">{t.benchmark.needMoreBody}</p>
                     )}
                     {configs.map((c) => {
                       const run = runById.get(c.runId);
                       return (
                         <div key={c.runId} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
                           <div className="mb-2 flex items-center justify-between">
-                            <span className="text-[11px] text-gray-400">
+                            <span className="text-[11px] text-gray-500">
                               {run ? t.benchmark.runMeta.replace("{pr}", String(run.prNumber)).replace("{date}", formatDate(run.createdAt, locale)) : c.runId}
                             </span>
-                            <button onClick={() => removeCandidate(c.runId)} className="text-[11px] text-gray-400 underline hover:text-gray-600">
+                            <button onClick={() => removeCandidate(c.runId)} className="text-[11px] text-gray-500 underline hover:text-gray-600">
                               {t.benchmark.remove}
                             </button>
                           </div>
@@ -331,7 +339,7 @@ export default function BenchmarkPage() {
           {runs.length > 0 && configs.length < 2 && (
             <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-6 text-center">
               <p className="text-sm font-medium text-gray-700">{t.benchmark.needMoreTitle}</p>
-              <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.needMoreBody}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.needMoreBody}</p>
             </div>
           )}
 
@@ -356,7 +364,7 @@ export default function BenchmarkPage() {
                     >
                       <div className="mb-2 flex items-center justify-between">
                         <p className="text-sm font-semibold text-gray-800">{candidate.label}</p>
-                        <span className="text-[11px] text-gray-400">{modeLabel(t, candidate.mode)} · {sourceLabel(t, candidate.source)}</span>
+                        <span className="text-[11px] text-gray-500">{modeLabel(t, candidate.mode)} · {sourceLabel(t, candidate.source)}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <Stat label={t.benchmark.acceptancePassRate} value={pct(metrics.acceptancePassRate)} strong />
@@ -371,13 +379,13 @@ export default function BenchmarkPage() {
               </section>
 
               {/* Comparison table */}
-              <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+              <section className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
                 <div className="border-b border-gray-100 px-5 py-3">
                   <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.comparisonTitle}</h3>
                 </div>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
+                    <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                       <th className="px-4 py-2 text-left font-medium">{t.benchmark.colCandidate}</th>
                       <th className="px-4 py-2 text-right font-medium">{t.benchmark.colPassRate}</th>
                       <th className="px-4 py-2 text-right font-medium">{t.benchmark.colPassed}</th>
@@ -432,7 +440,7 @@ export default function BenchmarkPage() {
               {/* Remaining blockers */}
               <section className="rounded-xl border border-gray-200 bg-white p-5">
                 <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.blockersTitle}</h3>
-                <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.blockersSubtitle}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.blockersSubtitle}</p>
                 {result.recommendation && result.recommendation.blockers.length > 0 ? (
                   <ul className="mt-2 space-y-1">
                     {result.recommendation.blockers.map((b) => (
@@ -440,7 +448,7 @@ export default function BenchmarkPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-xs text-gray-400">{t.benchmark.noBlockers}</p>
+                  <p className="mt-2 text-xs text-gray-500">{t.benchmark.noBlockers}</p>
                 )}
               </section>
 
@@ -479,7 +487,7 @@ export default function BenchmarkPage() {
           <section className="rounded-xl border border-gray-200 bg-white p-5">
             <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.savedBenchmarks}</h3>
             {saved.length === 0 ? (
-              <p className="mt-2 text-xs text-gray-400">{t.benchmark.noSavedBenchmarks}</p>
+              <p className="mt-2 text-xs text-gray-500">{t.benchmark.noSavedBenchmarks}</p>
             ) : (
               <ul className="mt-3 space-y-1.5">
                 {saved.map((b) => {
@@ -496,7 +504,7 @@ export default function BenchmarkPage() {
                     <li key={b.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 px-3 py-2">
                       <div className="min-w-0">
                         <p className="truncate text-xs font-medium text-gray-700">{b.title || t.benchmark.savedBenchmarks}</p>
-                        <p className="truncate text-[11px] text-gray-400">
+                        <p className="truncate text-[11px] text-gray-500">
                           {t.benchmark.savedAt.replace("{date}", formatDate(b.createdAt, locale))} · {winnerLabel}
                         </p>
                       </div>
@@ -521,7 +529,7 @@ export default function BenchmarkPage() {
 function Stat({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
     <div>
-      <p className="text-[11px] text-gray-400">{label}</p>
+      <p className="text-[11px] text-gray-500">{label}</p>
       <p className={`${strong ? "text-base font-bold text-gray-900" : "text-sm font-medium text-gray-700"}`}>{value}</p>
     </div>
   );

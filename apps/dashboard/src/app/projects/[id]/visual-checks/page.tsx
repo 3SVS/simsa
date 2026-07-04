@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 // Stage 262 — Visual checks (시각 검수) list. Client component: reads the
 // project from localStorage (server components 404'd on local projects before)
 // and the runs from the central plane with the browser-persisted userKey.
@@ -134,7 +136,7 @@ export default function VisualChecksPage() {
     return () => { cancelled = true; clearInterval(timer); };
   }, [hasActiveRun, id, userKey]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const buttonState = runButtonState({ hasWebsiteSource, hasActiveRun });
   // Stage 266 — verdict transition between the two most recent done runs
@@ -229,14 +231,17 @@ export default function VisualChecksPage() {
       </section>
 
       {phase === "loading" && (
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
           {t.visualChecks.loading}
         </div>
       )}
 
       {phase === "error" && (
-        <div className="callout callout-error">{t.visualChecks.loadError}</div>
+        <div className="callout callout-error flex items-center justify-between">
+          <span>{t.visualChecks.loadError}</span>
+          <button onClick={() => window.location.reload()} className="btn btn-sm btn-secondary">{t.common.retry}</button>
+        </div>
       )}
 
       {phase === "done" && checks.length === 0 && (
@@ -274,9 +279,9 @@ export default function VisualChecksPage() {
                       </span>
                       <span className="truncate text-sm font-medium text-gray-800">{check.targetUrl}</span>
                     </div>
-                    <span className="flex-shrink-0 text-xs text-gray-400">{formatDateTime(check.createdAt, locale)}</span>
+                    <span className="flex-shrink-0 text-xs text-gray-500">{formatDateTime(check.createdAt, locale)}</span>
                   </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
                     <span className="inline-flex items-center rounded-full border border-gray-200 px-2 py-0.5">
                       {executorLabel(t, check.executor)}
                     </span>

@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject } from "@/lib/workflow-store";
@@ -12,22 +14,37 @@ export default function IdeaPage() {
   // Read on the client so locally-created (localStorage) projects resolve,
   // not just the bundled mock demos.
   const project = getLocalProject(id) ?? getProject(id);
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
+
+  // Code-branch projects legitimately start without a worked-up idea/spec —
+  // show a guiding empty state instead of blank cards.
+  const isEmpty = !project.spec.goal && project.spec.included.length === 0 && !project.description;
 
   return (
     <div className="max-w-2xl">
       <h1 className="page-title">{t.nav.idea}</h1>
       <p className="page-subtitle mb-8">{t.idea.subtitle}</p>
 
+      {isEmpty && (
+        <div className="empty-state mb-6">
+          <p className="text-sm text-gray-600">{t.idea.emptyBody}</p>
+          <a href={`/projects/${id}`} className="btn btn-md btn-primary mt-4">
+            {t.common.goOverview}
+          </a>
+        </div>
+      )}
+
+      {!isEmpty && (
+      <>
       <div className="card mb-6 p-6">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
           {t.idea.yourInput}
         </h2>
         <p className="text-sm leading-relaxed text-gray-800">{project.description}</p>
       </div>
 
       <div className="card mb-6 p-6">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
           {t.idea.understood}
         </h2>
         <p className="text-sm font-medium text-gray-800 mb-3">{project.spec.goal}</p>
@@ -54,6 +71,8 @@ export default function IdeaPage() {
           ))}
         </ul>
       </div>
+      </>
+      )}
       <StepNextButton />
     </div>
   );

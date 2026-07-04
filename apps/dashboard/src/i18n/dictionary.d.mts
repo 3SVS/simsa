@@ -22,6 +22,8 @@ export type Dictionary = {
   brand: { wordmark: string; tagline: string };
   lang: { label: string; english: string; korean: string };
   nav: {
+    openMenu: string;
+    closeMenu: string;
     overview: string;
     idea: string;
     spec: string;
@@ -146,6 +148,9 @@ export type Dictionary = {
   };
   fix: { title: string; subtitle: string };
   common: {
+    syncFailed: string;
+    dismiss: string;
+    goOverview: string;
     loading: string;
     save: string;
     cancel: string;
@@ -237,6 +242,8 @@ export type Dictionary = {
   branch: {
     title: string;
     subtitle: string;
+    backToChooser: string;
+    backToPaste: string;
     ideaTitle: string;
     ideaDesc: string;
     codeTitle: string;
@@ -266,7 +273,7 @@ export type Dictionary = {
     gsStep2: string;
     gsStep3: string;
   };
-  idea: { subtitle: string; yourInput: string; understood: string; excluded: string };
+  idea: { emptyBody: string; subtitle: string; yourInput: string; understood: string; excluded: string };
   np: {
     title: string;
     ideaPlaceholder: string;
@@ -305,6 +312,7 @@ export type Dictionary = {
     customInput: string;
   };
   spec: {
+    emptyBody: string;
     title: string;
     reviewNote: string;
     completeness: string;
@@ -323,6 +331,7 @@ export type Dictionary = {
   };
   priority: { must: string; should: string; could: string };
   fixesScreen: {
+    generateError: string;
     title: string;
     reviewFirst: string;
     allPassed: string;
@@ -342,6 +351,7 @@ export type Dictionary = {
     doNotDo: string;
   };
   checks: {
+    pageSubtitle: string;
     draftTitle: string;
     draftDesc: string;
     prTitle: string;
@@ -744,6 +754,12 @@ export type Dictionary = {
     testSent: string;
     testError: string;
   };
+  nf: {
+    title: string;
+    body: string;
+    allProjects: string;
+    newProject: string;
+  };
   trainingConsent: {
     title: string;
     desc: string;
@@ -812,6 +828,9 @@ export type Dictionary = {
     generateItems: string;
     generatingItems: string;
     generateItemsError: string;
+    reviewingHint: string;
+    connectionLoadError: string;
+    copyManually: string;
     selected: string;
     saveLink: string;
     linked: string;
@@ -842,6 +861,7 @@ export type Dictionary = {
     nextLabel: string;
   };
   comment: {
+    postConfirm: string;
     title: string;
     desc: string;
     publicOnly: string;
@@ -1134,6 +1154,7 @@ export type Dictionary = {
     recordDecision: string;
   };
   experiment: {
+    titleRequired: string;
     title: string;
     subtitle: string;
     chooseTemplate: string;

@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -115,7 +117,7 @@ function QuickRerun({
 
   if (phase === "running") {
     return (
-      <div className="flex items-center gap-2 text-xs text-gray-400">
+      <div className="flex items-center gap-2 text-xs text-gray-500">
         <div className="h-3 w-3 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
         {t.history.rerunning}
       </div>
@@ -144,7 +146,7 @@ function QuickRerun({
         {detailLink}
       </div>
       {!enabled && (
-        <p className="text-[11px] text-gray-400">
+        <p className="text-[11px] text-gray-500">
           {rerunAction?.disabledReason === "results_unavailable" ? t.history.rerunDisabledNoResults : t.history.rerunNoItems}
         </p>
       )}
@@ -207,7 +209,7 @@ export default function ReviewHistoryPage() {
     return () => { cancelled = true; };
   }, [id, userKey]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   // Group runs by PR number for display
   const byPr = new Map<number, ProjectReviewHistoryItem[]>();
@@ -223,7 +225,7 @@ export default function ReviewHistoryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.history.title}</h2>
-          <p className="mt-0.5 text-xs text-gray-400">{t.history.desc}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{t.history.desc}</p>
         </div>
         <Link href={`/projects/${id}/github`} className="text-xs font-medium text-brand-700 hover:text-brand-800">
           ← {t.history.backToPr}
@@ -232,20 +234,25 @@ export default function ReviewHistoryPage() {
 
       {/* Loading */}
       {phase === "loading" && (
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
           {t.history.loading}
         </div>
       )}
 
       {/* Error */}
-      {phase === "error" && <div className="callout callout-error">{t.history.loadError}</div>}
+      {phase === "error" && (
+        <div className="callout callout-error flex items-center justify-between">
+          <span>{t.history.loadError}</span>
+          <button onClick={() => window.location.reload()} className="btn btn-sm btn-secondary">{t.common.retry}</button>
+        </div>
+      )}
 
       {/* Empty */}
       {phase === "done" && runs.length === 0 && (
         <div className="card p-10 text-center">
           <p className="mb-1 text-sm font-medium text-gray-600">{t.history.emptyTitle}</p>
-          <p className="mb-4 text-xs text-gray-400">{t.history.emptyBody}</p>
+          <p className="mb-4 text-xs text-gray-500">{t.history.emptyBody}</p>
           <Link href={`/projects/${id}/github`} className="btn btn-md btn-primary">
             {t.checks.connectPr} →
           </Link>
@@ -281,7 +288,7 @@ export default function ReviewHistoryPage() {
                     <span className="text-xs font-semibold text-gray-700 flex-shrink-0">
                       PR #{run.prNumber}
                     </span>
-                    <span className="text-xs text-gray-400 truncate">{run.repoFullName}</span>
+                    <span className="text-xs text-gray-500 truncate">{run.repoFullName}</span>
                   </div>
                   <RunStatusBadge t={t} status={run.status} />
                 </div>
@@ -289,11 +296,11 @@ export default function ReviewHistoryPage() {
                 {run.summary && <SummaryBar t={t} summary={run.summary} />}
 
                 {run.status === "error" && run.errorMessage && (
-                  <p className="mt-1 text-xs text-gray-400">{t.runStatus.error}: {run.errorMessage}</p>
+                  <p className="mt-1 text-xs text-gray-500">{t.runStatus.error}: {run.errorMessage}</p>
                 )}
 
                 <div className="mt-1.5 flex items-center justify-between">
-                  <span className="font-mono text-xs text-gray-400">{formatDate(run.createdAt, locale)}</span>
+                  <span className="font-mono text-xs text-gray-500">{formatDate(run.createdAt, locale)}</span>
                   <span className="text-xs text-gray-300">{run.selectedItemCount} {t.history.items}</span>
                 </div>
 
@@ -328,7 +335,7 @@ export default function ReviewHistoryPage() {
                     <span className="text-xs font-bold text-gray-700">PR #{prNum}</span>
                     {latest && <RunStatusBadge t={t} status={latest.status} />}
                   </div>
-                  <p className="text-xs text-gray-400">{prRuns.length} {t.history.totalRuns}</p>
+                  <p className="text-xs text-gray-500">{prRuns.length} {t.history.totalRuns}</p>
                 </div>
               );
             })}

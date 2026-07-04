@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { callWorkspaceApi } from "@/lib/workspace-api";
 import {
   saveProject,
   generateProjectId,
   saveExtendedProjectData,
   getUserKey,
+  markProjectSyncFailed,
 } from "@/lib/workflow-store";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import type {
@@ -36,7 +39,17 @@ const BUILT_WITH_OPTIONS: ReadonlyArray<{ id: string; labelKey: keyof Dictionary
 ];
 
 export default function NewProjectPage() {
+  // useSearchParams needs a Suspense boundary when the route is prerendered.
+  return (
+    <Suspense fallback={null}>
+      <NewProjectInner />
+    </Suspense>
+  );
+}
+
+function NewProjectInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [ideaText, setIdeaText] = useState("");
@@ -52,6 +65,11 @@ export default function NewProjectPage() {
   const [builtWithOther, setBuiltWithOther] = useState("");
   // Single entry → adaptive branch. The chosen branch fills the P1 entry_path.
   // Until a branch is picked the chooser shows; then the step flow proceeds.
+  //
+  // The chosen branch is mirrored in the URL (?path=idea|code|spec) so every
+  // way "back" works: the browser back button, the sidebar "새 프로젝트" link
+  // (plain /projects/new → chooser), and the visible back button below. Typed
+  // input is intentionally kept when returning — only the screen changes.
   const [entryPath, setEntryPath] = useState<"idea" | "code" | "spec" | null>(null);
   // Code branch: skip the idea step entirely (that's the branch's normal path).
   const [appName, setAppName] = useState("");
@@ -64,6 +82,52 @@ export default function NewProjectPage() {
 
   const answeredCount = Object.keys(answers).length;
   const questions = result?.questions ?? [];
+
+  // URL is the source of truth for the chosen branch: /projects/new shows the
+  // chooser; ?path=idea|code|spec shows that branch. This makes browser-back
+  // and a re-click on the sidebar "new project" link both land on the chooser.
+  useEffect(() => {
+    const raw = searchParams.get("path");
+    const fromUrl = raw === "idea" || raw === "code" || raw === "spec" ? raw : null;
+    setEntryPath(fromUrl);
+    if (fromUrl === null) setStep(1);
+    // ?fresh=<nonce> (sidebar "new project" while already here) = full reset:
+    // the user asked for a NEW project, so typed state is cleared too.
+    if (searchParams.get("fresh")) {
+      setIdeaText("");
+      setResult(null);
+      setSpecResult(null);
+      setAnswers({});
+      setAppName("");
+      setCodeDesc("");
+      setBuiltWithTools([]);
+      setBuiltWithOther("");
+      setRateLimitMsg(null);
+    }
+  }, [searchParams]);
+
+  function chooseBranch(id: "idea" | "code" | "spec") {
+    setEntryPath(id); // immediate — the effect above re-confirms from the URL
+    setStep(1);
+    router.push(`/projects/new?path=${id}`);
+  }
+
+  function backToChooser() {
+    router.push("/projects/new");
+  }
+
+  /** Prominent "back to the three choices" button, shown on every branch screen. */
+  function BackToChooserButton() {
+    return (
+      <button
+        type="button"
+        onClick={backToChooser}
+        className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900"
+      >
+        <span aria-hidden="true">←</span> {t.branch.backToChooser}
+      </button>
+    );
+  }
 
   async function handleGenerateUnderstanding() {
     if (!ideaText.trim()) return;
@@ -192,7 +256,7 @@ export default function NewProjectPage() {
           ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
           : undefined,
       entryPath: "code",
-    }).catch(() => undefined);
+    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
     // Straight to code connect — that IS this branch's step 1.
     router.push(`/projects/${id}/settings`);
   }
@@ -240,7 +304,7 @@ export default function NewProjectPage() {
           : undefined,
       // The branch the user chose at the single entry (idea/code/spec).
       entryPath: entryPath ?? "idea",
-    }).catch(() => undefined);
+    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
     router.push(`/projects/${id}`);
   }
 
@@ -259,6 +323,9 @@ export default function NewProjectPage() {
               sets entry_path (idea/code/spec) which persists to the P1 envelope. */}
           {entryPath === null && (
             <div>
+              <Link href="/projects" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+                <span aria-hidden>←</span> {t.nav.allProjects}
+              </Link>
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.title}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.subtitle}</p>
               <div className="space-y-3">
@@ -270,7 +337,7 @@ export default function NewProjectPage() {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => { setEntryPath(id); setStep(1); }}
+                    onClick={() => chooseBranch(id)}
                     className="card w-full p-5 text-left transition-colors hover:border-brand-300"
                   >
                     <span className="block text-sm font-semibold text-gray-900">{title}</span>
@@ -287,6 +354,7 @@ export default function NewProjectPage() {
               normal path, not a deficit. */}
           {entryPath === "code" && step === 1 && (
             <div>
+              <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.codeStepTitle}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.codeStepSub}</p>
 
@@ -300,7 +368,7 @@ export default function NewProjectPage() {
               />
 
               <p className="mb-1 text-xs font-semibold text-gray-600">{t.builtWith.question}</p>
-              <p className="mb-3 text-xs text-gray-400">{t.builtWith.hint}</p>
+              <p className="mb-3 text-xs text-gray-500">{t.builtWith.hint}</p>
               <div className="mb-6 flex flex-wrap gap-2">
                 {BUILT_WITH_OPTIONS.map((opt) => (
                   <button
@@ -348,6 +416,7 @@ export default function NewProjectPage() {
           {/* SPEC branch step 1 — paste the plan → one-shot conversion → preview. */}
           {entryPath === "spec" && step === 1 && (
             <div>
+              <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.specStepTitle}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.specStepSub}</p>
               <textarea
@@ -365,12 +434,13 @@ export default function NewProjectPage() {
                 {isLoading ? t.np.reading : `${t.branch.specGenerate} →`}
               </button>
               {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
-              <p className="mt-3 text-center text-xs text-gray-400">{t.np.freeBeta}</p>
+              <p className="mt-3 text-center text-xs text-gray-500">{t.np.freeBeta}</p>
             </div>
           )}
 
           {entryPath === "idea" && step === 1 && (
             <div>
+              <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.np.step1Title}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.np.step1Sub}</p>
               <textarea
@@ -381,7 +451,7 @@ export default function NewProjectPage() {
                 className="input resize-none rounded-lg"
               />
               <div className="mb-8 mt-4">
-                <p className="mb-2 text-xs text-gray-400">{t.np.examplesLabel}</p>
+                <p className="mb-2 text-xs text-gray-500">{t.np.examplesLabel}</p>
                 <div className="flex flex-col gap-2">
                   {t.np.examples.map((ex, i) => (
                     <button
@@ -402,7 +472,7 @@ export default function NewProjectPage() {
                 {isLoading ? t.np.reading : `${t.np.generateSpec} →`}
               </button>
               {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
-              <p className="mt-3 text-center text-xs text-gray-400">{t.np.freeBeta}</p>
+              <p className="mt-3 text-center text-xs text-gray-500">{t.np.freeBeta}</p>
             </div>
           )}
 
@@ -426,7 +496,7 @@ export default function NewProjectPage() {
               <button onClick={() => setStep(3)} className="btn btn-primary w-full py-3">
                 {t.np.confirmAnswer} →
               </button>
-              <button onClick={() => setStep(1)} className="mt-3 w-full text-center text-xs text-gray-400 underline hover:text-gray-600">
+              <button onClick={() => setStep(1)} className="mt-3 w-full text-center text-xs text-gray-500 underline hover:text-gray-600">
                 {t.np.editIdea}
               </button>
             </div>
@@ -494,7 +564,17 @@ export default function NewProjectPage() {
                   className="input mt-3 text-sm"
                 />
               </div>
-              <SpecPreview t={t} data={(specResult ?? result)!} isFallback={isFallback} onBack={() => setStep(3)} onSave={handleSave} />
+              {/* Spec branch never visited the question steps — its back goes to
+                  the paste screen (step 1). Sending it to step 3 stranded the
+                  user on an empty-questions screen with a blank step 2 behind it. */}
+              <SpecPreview
+                t={t}
+                data={(specResult ?? result)!}
+                isFallback={isFallback}
+                backLabel={entryPath === "spec" ? t.branch.backToPaste : t.np.editQuestions}
+                onBack={() => setStep(entryPath === "spec" ? 1 : 3)}
+                onSave={handleSave}
+              />
             </>
           )}
         </div>
@@ -523,9 +603,9 @@ function ApiQuestionCard({
   return (
     <div className="card p-6">
       <div className="mb-4 flex items-center gap-2">
-        <span className="font-mono text-xs text-gray-400">{index + 1} / {total}</span>
+        <span className="font-mono text-xs text-gray-500">{index + 1} / {total}</span>
         {answer && answer !== "defer" && <span className="text-xs font-medium text-green-600">✓ {t.np.answered}</span>}
-        {answer === "defer" && <span className="text-xs text-gray-400">{t.np.decideLater}</span>}
+        {answer === "defer" && <span className="text-xs text-gray-500">{t.np.decideLater}</span>}
       </div>
       <p className="mb-4 text-base font-medium leading-snug text-gray-900">{question.question}</p>
       <div className="mb-5 rounded-lg bg-brand-50 px-4 py-3">
@@ -550,7 +630,7 @@ function ApiQuestionCard({
           <button
             onClick={() => onAnswer("defer")}
             className={`rounded-lg border px-4 py-2 text-sm transition-all ${
-              answer === "defer" ? "border-gray-300 bg-gray-200 text-gray-700" : "border-gray-200 bg-white text-gray-400 hover:bg-gray-50"
+              answer === "defer" ? "border-gray-300 bg-gray-200 text-gray-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
             }`}
           >
             {t.np.decideLater}
@@ -574,6 +654,12 @@ function ApiQuestionCard({
           placeholder={t.np.typeYourOwn}
           className="input mt-3"
           onBlur={(e) => e.target.value && onAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const v = (e.target as HTMLInputElement).value;
+              if (v) onAnswer(v);
+            }
+          }}
         />
       )}
     </div>
@@ -584,12 +670,14 @@ function SpecPreview({
   t,
   data,
   isFallback,
+  backLabel,
   onBack,
   onSave,
 }: {
   t: Dictionary;
   data: IdeaToSpecDraftResponse;
   isFallback: boolean;
+  backLabel: string;
   onBack: () => void;
   onSave: () => void;
 }) {
@@ -604,7 +692,7 @@ function SpecPreview({
 
       <div className="flex gap-3">
         <button onClick={onBack} className="btn btn-secondary flex-1 py-3">
-          ← {t.np.editQuestions}
+          ← {backLabel}
         </button>
         <button onClick={onSave} className="btn btn-primary flex-[2] py-3">
           {t.np.saveAndStart} →

@@ -149,7 +149,7 @@ export default function DocumentDraftPage() {
         <h2 className="page-title">{t.sources.draft.title}</h2>
         <p className="page-subtitle">{t.sources.draft.subtitle}</p>
         {sourceLabel && (
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-gray-500">
             {t.sources.draft.sourceLabel}: <span className="text-gray-600">{sourceLabel}</span>
           </p>
         )}
@@ -202,7 +202,7 @@ export default function DocumentDraftPage() {
           {draft.questions.length > 0 && (
             <div className="mb-6">
               <p className="mb-1 text-sm font-semibold text-gray-700">{t.sources.draft.questionsTitle}</p>
-              <p className="mb-3 text-xs text-gray-400">{t.sources.draft.questionsNote}</p>
+              <p className="mb-3 text-xs text-gray-500">{t.sources.draft.questionsNote}</p>
               <div className="space-y-2">
                 {draft.questions.map((q) => (
                   <div key={q.id} className="card p-4">
@@ -243,7 +243,7 @@ export default function DocumentDraftPage() {
             >
               {saving ? t.sources.draft.confirming : t.sources.draft.confirm}
             </button>
-            <p className="mt-2 text-center text-xs text-gray-400">{t.sources.draft.confirmHint}</p>
+            <p className="mt-2 text-center text-xs text-gray-500">{t.sources.draft.confirmHint}</p>
           </div>
         </div>
       )}

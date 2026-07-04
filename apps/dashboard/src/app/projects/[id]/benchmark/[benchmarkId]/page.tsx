@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, Fragment } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -86,7 +88,7 @@ const MATRIX_BADGE: Record<string, string> = {
   failed: "border-red-200 bg-red-50 text-red-700",
   needs_decision: "border-slate-200 bg-slate-50 text-slate-700",
   inconclusive: "border-yellow-200 bg-yellow-50 text-yellow-700",
-  missing: "border-gray-200 bg-gray-50 text-gray-400",
+  missing: "border-gray-200 bg-gray-50 text-gray-500",
 };
 
 function matrixStatusLabel(t: Dictionary, status: string): string {
@@ -126,14 +128,14 @@ export default function BenchmarkDetailPage() {
     return () => { cancelled = true; };
   }, [id, benchmarkId, userKey]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const backUrl = `/projects/${id}/benchmark`;
 
   if (phase === "loading") {
     return (
       <div className="max-w-3xl">
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
           {t.benchmark.detailLoading}
         </div>
@@ -143,7 +145,7 @@ export default function BenchmarkDetailPage() {
   if (phase === "not_found" || phase === "error" || !data) {
     return (
       <div className="max-w-3xl space-y-4">
-        <Link href={backUrl} className="text-xs text-gray-400 hover:text-indigo-600">{t.benchmark.detailBack}</Link>
+        <Link href={backUrl} className="text-xs text-gray-500 hover:text-indigo-600">{t.benchmark.detailBack}</Link>
         <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
           {phase === "not_found" ? t.benchmark.notFoundDetail : t.benchmark.loadErrorDetail}
         </div>
@@ -304,7 +306,7 @@ export default function BenchmarkDetailPage() {
     <div className="max-w-4xl space-y-6">
       {/* Header */}
       <div>
-        <Link href={backUrl} className="text-xs text-gray-400 hover:text-indigo-600">{t.benchmark.detailBack}</Link>
+        <Link href={backUrl} className="text-xs text-gray-500 hover:text-indigo-600">{t.benchmark.detailBack}</Link>
         <div className="mt-2 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.benchmark.detailTitle}</h2>
@@ -334,7 +336,7 @@ export default function BenchmarkDetailPage() {
       {/* Acceptance set alignment */}
       {alignment && (
         alignment.aligned ? (
-          <p className="text-xs text-gray-400">{t.benchmark.sameAcceptanceSet}</p>
+          <p className="text-xs text-gray-500">{t.benchmark.sameAcceptanceSet}</p>
         ) : (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
             {t.benchmark.acceptanceSetWarning}
@@ -399,12 +401,12 @@ export default function BenchmarkDetailPage() {
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-5 py-3">
           <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.candidateComparison}</h3>
-          <p className="mt-0.5 text-[11px] text-gray-400">{t.benchmark.scoreNote}</p>
+          <p className="mt-0.5 text-[11px] text-gray-500">{t.benchmark.scoreNote}</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
+              <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                 <th className="px-4 py-2 text-left font-medium">{t.benchmark.colCandidate}</th>
                 <th className="px-4 py-2 text-left font-medium">{t.benchmark.colMode}</th>
                 <th className="px-4 py-2 text-left font-medium">{t.benchmark.colSource}</th>
@@ -465,7 +467,7 @@ export default function BenchmarkDetailPage() {
       {itemBlockers !== undefined ? (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.blockerItemsTitle}</h3>
-          <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.blockerItemsDesc}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.blockerItemsDesc}</p>
           {itemBlockers.length > 0 ? (
             <div className="mt-3 space-y-2">
               {itemBlockers.map((b, i) => (
@@ -477,12 +479,12 @@ export default function BenchmarkDetailPage() {
                     <span className="text-sm font-medium text-gray-800">{b.title}</span>
                   </div>
                   {b.evidence && <p className="mt-1 text-xs text-gray-500">{t.benchmark.evidence}: {b.evidence}</p>}
-                  <p className="mt-0.5 text-[11px] text-gray-400">{candidateLabelById(b.candidateId)}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-500">{candidateLabelById(b.candidateId)}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-gray-400">{t.benchmark.noBlockerItems}</p>
+            <p className="mt-2 text-xs text-gray-500">{t.benchmark.noBlockerItems}</p>
           )}
         </section>
       ) : (
@@ -501,9 +503,9 @@ export default function BenchmarkDetailPage() {
               )}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-gray-400">{t.benchmark.noRemainingBlockers}</p>
+            <p className="mt-2 text-xs text-gray-500">{t.benchmark.noRemainingBlockers}</p>
           )}
-          <p className="mt-2 text-[11px] text-gray-400">{t.benchmark.oldBenchmarkBlockers}</p>
+          <p className="mt-2 text-[11px] text-gray-500">{t.benchmark.oldBenchmarkBlockers}</p>
         </section>
       )}
 
@@ -513,7 +515,7 @@ export default function BenchmarkDetailPage() {
       ) : (
         <section className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-4">
           <p className="text-sm font-medium text-gray-700">{t.benchmark.matrixUnavailable}</p>
-          <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.matrixUnavailableBody}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.matrixUnavailableBody}</p>
         </section>
       )}
 
@@ -585,7 +587,7 @@ export default function BenchmarkDetailPage() {
 function Stat({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
     <div>
-      <p className="text-[11px] text-gray-400">{label}</p>
+      <p className="text-[11px] text-gray-500">{label}</p>
       <p className={`${strong ? "text-base font-bold text-gray-900" : "text-sm font-medium text-gray-700"}`}>{value}</p>
     </div>
   );
@@ -611,8 +613,8 @@ function MatrixSection({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.matrixTitle}</h3>
-            <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.matrixDesc}</p>
-            <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-gray-400">
+            <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.matrixDesc}</p>
+            <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-gray-500">
               <span>{t.benchmark.matrixItemsCompared.replace("{n}", String(matrix.itemsCompared))}</span>
               {matrix.disagreementCount > 0 && (
                 <span className="text-amber-600">{t.benchmark.matrixDisagreements.replace("{n}", String(matrix.disagreementCount))}</span>
@@ -635,7 +637,7 @@ function MatrixSection({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-400">
+              <tr className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
                 <th className="px-4 py-2 text-left font-medium" />
                 {candidates.map((c) => (
                   <th key={c.id} className="px-4 py-2 text-left font-medium">
@@ -691,7 +693,7 @@ function MatrixSection({
                                     {matrixStatusLabel(t, s)}
                                   </span>
                                 </div>
-                                <p className={`mt-0.5 text-xs ${ev ? "text-gray-600" : "text-gray-400"}`}>
+                                <p className={`mt-0.5 text-xs ${ev ? "text-gray-600" : "text-gray-500"}`}>
                                   {ev ?? t.benchmark.noEvidenceStored}
                                 </p>
                               </div>
@@ -709,7 +711,7 @@ function MatrixSection({
       ) : (
         <div className="px-5 py-6 text-center">
           <p className="text-sm font-medium text-gray-700">{t.benchmark.noDifferentResults}</p>
-          <p className="mt-0.5 text-xs text-gray-400">{t.benchmark.noDifferentResultsBody}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{t.benchmark.noDifferentResultsBody}</p>
         </div>
       )}
     </section>

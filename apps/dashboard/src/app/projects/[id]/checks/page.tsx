@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -117,7 +119,7 @@ export default function ChecksPage() {
     saveExtendedProjectData(id, { checkResults: res });
   }, [id, project, results, t]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const needsAction = results
     ? results.summary.failed + results.summary.inconclusive + results.summary.needsDecision
@@ -136,13 +138,17 @@ export default function ChecksPage() {
 
   return (
     <div className="max-w-3xl space-y-10">
+      <div>
+        <h1 className="page-title">{t.nav.checks}</h1>
+        <p className="page-subtitle">{t.checks.pageSubtitle}</p>
+      </div>
 
       {/* ─── Section 1: Draft review ─── */}
       <section>
         <div className="mb-1 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.checks.draftTitle}</h2>
-            <p className="mt-0.5 text-xs text-gray-400">{t.checks.draftDesc}</p>
+            <p className="mt-0.5 text-xs text-gray-500">{t.checks.draftDesc}</p>
           </div>
           {phase === "done" && (
             <button onClick={runCheck} className="flex-shrink-0 text-xs font-medium text-brand-700 hover:text-brand-800">
@@ -152,7 +158,7 @@ export default function ChecksPage() {
         </div>
 
         {phase === "loading" && (
-          <div className="my-4 flex items-center gap-2.5 text-sm text-gray-400">
+          <div className="my-4 flex items-center gap-2.5 text-sm text-gray-500">
             <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-brand-300 border-t-brand-600" />
             {t.checks.checking}
           </div>
@@ -186,7 +192,7 @@ export default function ChecksPage() {
         {phase === "idle" && !results && (
           <div className="card p-8 text-center">
             <p className="mb-1 text-sm font-medium text-gray-700">{t.checks.emptyTitle}</p>
-            <p className="mb-5 text-xs text-gray-400">{t.checks.emptyDesc}</p>
+            <p className="mb-5 text-xs text-gray-500">{t.checks.emptyDesc}</p>
             <button onClick={runCheck} className="btn btn-md btn-primary">{t.checks.runCheck}</button>
           </div>
         )}
@@ -221,11 +227,11 @@ export default function ChecksPage() {
       <section>
         <div className="mb-3">
           <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.checks.prTitle}</h2>
-          <p className="mt-0.5 text-xs text-gray-400">{t.checks.prDesc}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{t.checks.prDesc}</p>
         </div>
 
         {prLoadPhase === "loading" && (
-          <div className="flex items-center gap-2 text-sm text-gray-400">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
             <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
             {t.checks.prLoading}
           </div>
@@ -234,7 +240,7 @@ export default function ChecksPage() {
         {prLoadPhase === "done" && !latestPrReview && (
           <div className="card p-8 text-center">
             <p className="mb-1 text-sm text-gray-600">{t.checks.noPrReview}</p>
-            <p className="mb-4 text-xs text-gray-400">{t.checks.noPrReviewDesc}</p>
+            <p className="mb-4 text-xs text-gray-500">{t.checks.noPrReviewDesc}</p>
             <Link href={`/projects/${id}/github`} className="btn btn-md btn-primary">
               {t.checks.connectPr} →
             </Link>
@@ -250,12 +256,12 @@ export default function ChecksPage() {
             <div className="card p-4">
               <div className="mb-3 flex items-center gap-3">
                 <div className="flex-1">
-                  <p className="mb-0.5 text-xs text-gray-400">{t.checks.reviewedPr}</p>
+                  <p className="mb-0.5 text-xs text-gray-500">{t.checks.reviewedPr}</p>
                   <p className="text-sm font-medium text-gray-800">
                     {reviewedPR ? `#${reviewedPR.number} ${reviewedPR.title}` : `PR #${latestPrReview.prNumber}`}
                   </p>
                   {latestPrReview.repoFullName && (
-                    <p className="mt-0.5 font-mono text-xs text-gray-400">{latestPrReview.repoFullName}</p>
+                    <p className="mt-0.5 font-mono text-xs text-gray-500">{latestPrReview.repoFullName}</p>
                   )}
                 </div>
                 <PRReviewStatusBadge t={t} status={latestPrReview.status} />
@@ -270,8 +276,8 @@ export default function ChecksPage() {
                 </div>
               )}
 
-              <p className="text-xs text-gray-400">{t.review.basisNote}</p>
-              <p className="text-xs text-gray-400">{t.review.verifyLiveNote}</p>
+              <p className="text-xs text-gray-500">{t.review.basisNote}</p>
+              <p className="text-xs text-gray-500">{t.review.verifyLiveNote}</p>
             </div>
 
             {/* Per-item results (compact) */}
@@ -292,14 +298,14 @@ export default function ChecksPage() {
             {/* CTA */}
             <div className="flex flex-wrap items-center gap-3">
               {prNeedsAction > 0 && (
-                <Link href={`/projects/${id}/github`} className="text-sm font-medium text-brand-700 hover:text-brand-800">
+                <Link href={`/projects/${id}/github`} className="btn btn-md btn-primary">
                   {t.github.createFixInstructions} →
                 </Link>
               )}
               <Link href={`/projects/${id}/github`} className="text-sm font-medium text-brand-700 hover:text-brand-800">
                 {t.checks.viewComparison} →
               </Link>
-              <Link href={`/projects/${id}/github`} className="text-sm text-gray-400 hover:text-gray-600">
+              <Link href={`/projects/${id}/github`} className="text-sm text-gray-500 hover:text-gray-600">
                 {t.checks.toGithub} →
               </Link>
             </div>

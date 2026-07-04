@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* App shell: slim left sidebar (like an AI-platform workspace) + spacious main */}
           <div className="flex min-h-screen">
             <AppSidebar />
-            <main className="relative min-w-0 flex-1">
+            <main className="relative min-w-0 flex-1 pt-12 md:pt-0">
               <div className="absolute right-4 top-3 z-20">
                 <LanguageToggle />
               </div>
