@@ -7,6 +7,8 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { loadLocalProjects, getUserKey } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 import { buildBetaFeedbackMailto } from "@/lib/beta-feedback.mjs";
+import { computeProjectSteps } from "@/lib/project-steps.mjs";
+import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 
 const MOCK_IDS = new Set(MOCK_PROJECTS.map((p) => p.id));
 
@@ -27,6 +29,10 @@ export function AppSidebar() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Progress-map facts. null = unknown (loading/failed) — the state machine
+  // fails OPEN on null: it never locks on an unconfirmed fact.
+  const [hasRepo, setHasRepo] = useState<boolean | null>(null);
+  const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
 
   useEffect(() => {
     try {
@@ -34,6 +40,23 @@ export function AppSidebar() {
     } catch {}
     setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
   }, []);
+
+  // Observe repo-link + review-run facts for the progress map (best-effort;
+  // errors leave the fact unknown → fail-open, no false locks).
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    setHasRepo(null);
+    setHasReviewRun(null);
+    const uk = getUserKey();
+    fetchProjectRepo(projectId, uk)
+      .then((res) => { if (!cancelled) setHasRepo(res.ok ? Boolean(res.repo) : null); })
+      .catch(() => {});
+    listProjectReviewHistory(projectId, uk, { limit: 1 })
+      .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId, pathname]);
 
   function toggleCollapse() {
     setCollapsed((c) => {
@@ -59,13 +82,30 @@ export function AppSidebar() {
       active ? "bg-gray-100 font-medium text-gray-900" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
     }`;
 
-  // "Code repository" (settings) leads the Review group — it is the entry point
-  // of the review loop. Operator screens live under a collapsed Advanced group.
-  const groups = [
-    { label: t.nav.groupPlan, items: [["", t.nav.overview], ["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items]] },
-    { label: t.nav.groupReview, items: [["settings", t.nav.settings], ["github", t.nav.github], ["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks]] },
-    { label: t.nav.groupDeliver, items: [["fixes", t.nav.fixes], ["export", t.nav.export]] },
-  ] as const;
+  // The left nav is a PROGRESS MAP, not a flat tab list: three steps
+  // (준비 → 검수 → 결과·수정) with derived done/current/locked states. The state
+  // machine (project-steps.mjs) locks only on CONFIRMED-unmet preconditions and
+  // auto-checks work already done — no wandering, no rework.
+  const hasItems = project ? project.requirements.length > 0 : null;
+  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun });
+  const stepMeta: Record<string, { label: string; items: ReadonlyArray<readonly [string, string]> }> = {
+    prepare: {
+      label: t.stepsNav.prepare,
+      items: [["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items]],
+    },
+    review: {
+      label: t.stepsNav.review,
+      items: [["settings", t.nav.settings], ["github", t.nav.github]],
+    },
+    results: {
+      label: t.stepsNav.results,
+      items: [["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks], ["fixes", t.nav.fixes], ["export", t.nav.export]],
+    },
+  };
+  const lockHint = (reason: "need_items" | "need_code" | null) =>
+    reason === "need_code" ? t.stepsNav.lockNeedCode : reason === "need_items" ? t.stepsNav.lockNeedItems : "";
+  const statusGlyph = (status: string) =>
+    status === "done" ? "✓" : status === "current" ? "●" : "○";
   const advancedItems = [["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] as const;
 
   // ── Collapsed rail ──────────────────────────────────────────────────────────
@@ -109,21 +149,56 @@ export function AppSidebar() {
               ← {t.nav.allProjects}
             </Link>
             <p className="truncate px-1.5 pb-2 text-xs font-medium text-gray-700">{project.name}</p>
-            {groups.map((g) => (
-              <div key={g.label} className="mb-4">
-                <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-300">{g.label}</p>
-                <ul className="space-y-0.5">
-                  {g.items.map(([slug, label]) => {
-                    const href = slug ? `${base}/${slug}` : base;
-                    return (
-                      <li key={slug || "overview"}>
-                        <Link href={href} className={itemClass(pathname === href)}>{label}</Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+
+            {/* Overview = the command center, above the steps */}
+            <ul className="mb-3">
+              <li>
+                <Link href={base} className={itemClass(pathname === base)}>{t.nav.overview}</Link>
+              </li>
+            </ul>
+
+            {/* 3-step progress map */}
+            {steps.map((step, i) => {
+              const meta = stepMeta[step.key]!;
+              const locked = step.status === "locked";
+              return (
+                <div key={step.key} className="mb-3">
+                  <p
+                    className={`flex items-center gap-2 px-2.5 pb-1 text-[11px] font-semibold tracking-wide ${
+                      locked ? "text-gray-300" : step.status === "current" ? "text-gray-900" : "text-gray-500"
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`inline-block w-3 text-center text-[10px] ${
+                        step.status === "done"
+                          ? "text-green-600"
+                          : step.status === "current"
+                            ? "text-brand-600"
+                            : "text-gray-300"
+                      }`}
+                    >
+                      {statusGlyph(step.status)}
+                    </span>
+                    {i + 1} · {meta.label}
+                  </p>
+                  {locked ? (
+                    <p className="px-2.5 pb-1 pl-[30px] text-[11px] text-gray-300">{lockHint(step.lockReason)}</p>
+                  ) : (
+                    <ul className="space-y-0.5 pl-[18px]">
+                      {meta.items.map(([slug, label]) => {
+                        const href = `${base}/${slug}`;
+                        return (
+                          <li key={slug}>
+                            <Link href={href} className={itemClass(pathname === href)}>{label}</Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
             <div className="mb-4">
               <button
                 type="button"

@@ -242,6 +242,14 @@ const EN = {
       handCoded: "Hand-coded",
     },
   },
+  stepsNav: {
+    prepare: "Prepare",
+    review: "Review",
+    results: "Results & fixes",
+    lockNeedItems: "Create your checklist first.",
+    lockNeedCode: "Connect your code first.",
+    next: "Next",
+  },
   branch: {
     title: "What do you have to start with?",
     subtitle: "Pick whatever fits — you'll end up in the same place: your app, reviewed.",
@@ -2257,6 +2265,14 @@ const KO = {
       codex: "Codex",
       handCoded: "직접 코딩",
     },
+  },
+  stepsNav: {
+    prepare: "준비",
+    review: "검수",
+    results: "결과·수정",
+    lockNeedItems: "확인 항목을 먼저 만드세요.",
+    lockNeedCode: "코드를 먼저 연결하세요.",
+    next: "다음",
   },
   branch: {
     title: "무엇부터 시작할까요?",
