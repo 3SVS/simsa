@@ -83,6 +83,51 @@ test("IDEA/SPEC branches unchanged: no items still locks review", () => {
   }
 });
 
+// ─── STEP 4: command center — shortest path to the activation moment ────────
+
+test("activation path: items ready + no repo → connect_code (the next real step)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: false, hasReviewRun: false }),
+    { action: "connect_code", slug: "settings" },
+  );
+});
+
+test("activation path: CODE branch with no items skips create_items entirely", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  // Missing items must NOT interpose on the code branch — connect → run is the whole path.
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: false, hasReviewRun: false, entryPath: "code" }),
+    { action: "connect_code", slug: "settings" },
+  );
+});
+
+test("activation path: repo connected, no run → run_review; after run → view_results", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: true, hasReviewRun: false }),
+    { action: "run_review", slug: "github" },
+  );
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: true, hasReviewRun: true }),
+    { action: "view_results", slug: "checks" },
+  );
+});
+
+test("unknown facts → null CTA (never mislead, never flip after fetch)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.equal(nextProjectAction({ hasItems: null, hasRepo: null, hasReviewRun: null }), null);
+  assert.equal(nextProjectAction(undefined), null);
+});
+
+test("idea branch with confirmed-no items → create_items first", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: false, hasReviewRun: false, entryPath: "idea" }),
+    { action: "create_items", slug: "items" },
+  );
+});
+
 test("nextScreenSlug walks the canonical order and ends cleanly", () => {
   assert.equal(nextScreenSlug("idea"), "spec");
   assert.equal(nextScreenSlug("spec"), "items");
