@@ -570,45 +570,68 @@ export default function GitHubPage() {
                             {creditDryRunByPr[lp.number] && (
                               <CreditDryRunBanner t={t} dryRun={creditDryRunByPr[lp.number]!} projectId={id} />
                             )}
-                            <div className="mt-4 pt-4 border-t border-gray-100">
-                              <ComparisonPanel
-                                t={t}
-                                projectId={id}
-                                prNumber={lp.number}
-                                userKey={userKey}
-                                onLoad={(prNum, data) =>
-                                  setComparisonDataByPr((prev) => ({ ...prev, [prNum]: data }))
-                                }
-                              />
+                            {/* Next actions — closed by default so the result stays
+                                the protagonist ("너무 복잡한데" feedback): each panel
+                                opens only when the user chooses that action. */}
+                            <div className="mt-4 space-y-2">
+                              {run.results && run.results.some((r) => r.status !== "passed") && (
+                                <details className="card group">
+                                  <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50">
+                                    {t.github.nextActionFix}
+                                    <span aria-hidden className="text-gray-500 transition-transform group-open:rotate-90">›</span>
+                                  </summary>
+                                  <div className="border-t border-gray-100 p-4">
+                                    <FixBriefPanel
+                                      run={run}
+                                      lp={lp}
+                                      projectId={id}
+                                      userKey={userKey}
+                                      items={(project?.requirements ?? []).map((r) => ({
+                                        id: r.id,
+                                        title: r.title,
+                                        status: r.status ?? "draft",
+                                        criteria: (r as { criteria?: string[] }).criteria ?? [],
+                                      }))}
+                                      productSpec={(loadExtendedProjectData(id)?.productSpec ?? {}) as Record<string, unknown>}
+                                    />
+                                  </div>
+                                </details>
+                              )}
+                              {run.results && run.results.length > 0 && (
+                                <details className="card group">
+                                  <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50">
+                                    {t.github.nextActionComment}
+                                    <span aria-hidden className="text-gray-500 transition-transform group-open:rotate-90">›</span>
+                                  </summary>
+                                  <div className="border-t border-gray-100 p-4">
+                                    <PRCommentPanel
+                                      run={run}
+                                      lp={lp}
+                                      projectId={id}
+                                      userKey={userKey}
+                                      comparisonData={comparisonDataByPr[lp.number] ?? null}
+                                    />
+                                  </div>
+                                </details>
+                              )}
+                              <details className="card group">
+                                <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50">
+                                  {t.github.nextActionCompare}
+                                  <span aria-hidden className="text-gray-500 transition-transform group-open:rotate-90">›</span>
+                                </summary>
+                                <div className="border-t border-gray-100 p-4">
+                                  <ComparisonPanel
+                                    t={t}
+                                    projectId={id}
+                                    prNumber={lp.number}
+                                    userKey={userKey}
+                                    onLoad={(prNum, data) =>
+                                      setComparisonDataByPr((prev) => ({ ...prev, [prNum]: data }))
+                                    }
+                                  />
+                                </div>
+                              </details>
                             </div>
-                            {run.results && run.results.some((r) => r.status !== "passed") && (
-                              <div className="mt-4 pt-4 border-t border-gray-100">
-                                <FixBriefPanel
-                                  run={run}
-                                  lp={lp}
-                                  projectId={id}
-                                  userKey={userKey}
-                                  items={(project?.requirements ?? []).map((r) => ({
-                                    id: r.id,
-                                    title: r.title,
-                                    status: r.status ?? "draft",
-                                    criteria: (r as { criteria?: string[] }).criteria ?? [],
-                                  }))}
-                                  productSpec={(loadExtendedProjectData(id)?.productSpec ?? {}) as Record<string, unknown>}
-                                />
-                              </div>
-                            )}
-                            {run.results && run.results.length > 0 && (
-                              <div className="mt-4 pt-4 border-t border-gray-100">
-                                <PRCommentPanel
-                                  run={run}
-                                  lp={lp}
-                                  projectId={id}
-                                  userKey={userKey}
-                                  comparisonData={comparisonDataByPr[lp.number] ?? null}
-                                />
-                              </div>
-                            )}
                           </>
                         )}
                       </div>
@@ -1344,7 +1367,6 @@ function ReviewResultPanel({ run, onRerun }: { run: ReviewRun; onRerun: () => vo
       </div>
 
       {/* Disclaimer */}
-      <p className="text-xs text-gray-500">{t.review.basisNote}</p>
       <p className="text-xs text-gray-500">{t.review.verifyLiveNote}</p>
 
       {/* Error */}

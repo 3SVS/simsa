@@ -844,6 +844,9 @@ export type Dictionary = {
     generateItemsError: string;
     reviewingHint: string;
     reviewDone: string;
+    nextActionFix: string;
+    nextActionComment: string;
+    nextActionCompare: string;
     connectionLoadError: string;
     copyManually: string;
     selected: string;
