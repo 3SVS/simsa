@@ -20,6 +20,7 @@ import type {
 // Stage 267 — draft rendering shared with the document-intake draft page.
 import { UnderstoodCard, SpecDraftBody } from "@/components/SpecDraftView";
 import { DROPPED_DOC_KEY, DROPPED_DOC_NAME_KEY } from "@/components/GlobalDropZone";
+import { extractDocumentText, SUPPORTED_ACCEPT } from "@/lib/document-extract";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 
@@ -127,16 +128,22 @@ function NewProjectInner() {
 
   async function handleSpecFile(file: File | undefined) {
     if (!file) return;
-    if (!(file.type.startsWith("text/") || /\.(txt|md|markdown)$/i.test(file.name))) {
-      setRateLimitMsg(t.dropzone.unsupported);
+    setRateLimitMsg(t.dropzone.reading);
+    const res = await extractDocumentText(file);
+    if (!res.ok) {
+      const msg =
+        res.error === "media" ? t.dropzone.media
+        : res.error === "hwp_binary" ? t.dropzone.hwpBinary
+        : res.error === "scanned_pdf" ? t.dropzone.scannedPdf
+        : res.error === "empty" ? t.dropzone.empty
+        : res.error === "unsupported" ? t.dropzone.unsupported
+        : t.dropzone.readError;
+      setRateLimitMsg(msg);
       return;
     }
-    const text = await file.slice(0, 300_000).text().catch(() => "");
-    if (text.trim()) {
-      setIdeaText(text);
-      setLoadedFileName(file.name);
-      setRateLimitMsg(null);
-    }
+    setIdeaText(res.text);
+    setLoadedFileName(res.fileName);
+    setRateLimitMsg(null);
   }
 
   function chooseBranch(id: "idea" | "code" | "spec") {
@@ -457,7 +464,7 @@ function NewProjectInner() {
                   {t.branch.uploadFile}
                   <input
                     type="file"
-                    accept=".txt,.md,.markdown,text/plain,text/markdown"
+                    accept={SUPPORTED_ACCEPT}
                     className="hidden"
                     onChange={(e) => void handleSpecFile(e.target.files?.[0])}
                   />

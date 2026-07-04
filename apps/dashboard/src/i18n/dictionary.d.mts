@@ -774,6 +774,11 @@ export type Dictionary = {
     title: string;
     hint: string;
     unsupported: string;
+    media: string;
+    hwpBinary: string;
+    scannedPdf: string;
+    empty: string;
+    reading: string;
     readError: string;
   };
   nf: {
