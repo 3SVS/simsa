@@ -154,10 +154,14 @@ export default function TermsPage() {
               anonymized identifier; your account handle and email are never
               included, and we automatically scrub detected secrets (API keys,
               tokens, <code className="font-mono text-sm">.env</code> values)
-              from the stored code before retention. You can withdraw consent at
-              any time; new reviews stop being retained from that point
-              (previously retained, already-anonymized records may remain in
-              training sets).
+              from the stored code before retention. Anonymized, aggregated
+              insights derived from this data (for example, common failure
+              patterns across tools) may be published or shared; we share
+              patterns, never people &mdash; individual data, code, or projects
+              are never sold or shared, and the anonymized identifier cannot be
+              reversed. You can withdraw consent at any time; new reviews stop
+              being retained from that point (previously retained,
+              already-anonymized records may remain in training sets).
             </p>
             <p>
               <strong>BYO (CLI) mode.</strong> Your code and diffs stay on your

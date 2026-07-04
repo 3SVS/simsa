@@ -1005,6 +1005,8 @@ export function createWorkspaceGitHubRoutes(
         costMeta: usage
           ? { tokens_consumed: usage.tokens_consumed, model_used: usage.model_used, review_count_in_session: null }
           : null,
+        channel: "web", // this is the web review path; MCP is a future channel
+        mcpClient: null,
       },
     }).catch(() => {});
 
