@@ -50,6 +50,9 @@ export default function NewProjectPage() {
   // builtWith — which AI tool(s) built this app (per-agent moat tag).
   const [builtWithTools, setBuiltWithTools] = useState<string[]>([]);
   const [builtWithOther, setBuiltWithOther] = useState("");
+  // Single entry → adaptive branch. The chosen branch fills the P1 entry_path.
+  // Until a branch is picked the chooser shows; then the step flow proceeds.
+  const [entryPath, setEntryPath] = useState<"idea" | "code" | "spec" | null>(null);
 
   function toggleBuiltWith(tool: string) {
     setBuiltWithTools((prev) => (prev.includes(tool) ? prev.filter((x) => x !== tool) : [...prev, tool]));
@@ -141,9 +144,8 @@ export default function NewProjectPage() {
         builtWithTools.length || builtWithOther.trim()
           ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
           : undefined,
-      // This flow starts from an idea (the only entry today). The single-entry
-      // / 3-branch UI is a separate track; entry_path fills in per branch later.
-      entryPath: "idea",
+      // The branch the user chose at the single entry (idea/code/spec).
+      entryPath: entryPath ?? "idea",
     }).catch(() => undefined);
     router.push(`/projects/${id}`);
   }
@@ -158,8 +160,35 @@ export default function NewProjectPage() {
 
       <main className="flex flex-1 justify-center px-4 py-12">
         <div className="w-full max-w-2xl">
+          {/* Step 0: single entry → "what do you have?" branch chooser.
+              Asks the user's situation, not a "type" — no jargon. The choice
+              sets entry_path (idea/code/spec) which persists to the P1 envelope. */}
+          {entryPath === null && (
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.title}</h1>
+              <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.subtitle}</p>
+              <div className="space-y-3">
+                {([
+                  ["idea", t.branch.ideaTitle, t.branch.ideaDesc],
+                  ["code", t.branch.codeTitle, t.branch.codeDesc],
+                  ["spec", t.branch.specTitle, t.branch.specDesc],
+                ] as const).map(([id, title, desc]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => { setEntryPath(id); setStep(1); }}
+                    className="card w-full p-5 text-left transition-colors hover:border-brand-300"
+                  >
+                    <span className="block text-sm font-semibold text-gray-900">{title}</span>
+                    <span className="mt-1 block text-xs text-gray-500">{desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Step 1: idea */}
-          {step === 1 && (
+          {entryPath !== null && step === 1 && (
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.np.step1Title}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.np.step1Sub}</p>

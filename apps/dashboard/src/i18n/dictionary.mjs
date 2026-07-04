@@ -242,6 +242,16 @@ const EN = {
       handCoded: "Hand-coded",
     },
   },
+  branch: {
+    title: "What do you have to start with?",
+    subtitle: "Pick whatever fits — you'll end up in the same place: your app, reviewed.",
+    ideaTitle: "💡 I just have an idea",
+    ideaDesc: "Describe what you want to build. We'll turn it into things to check.",
+    codeTitle: "🔗 I already built an app",
+    codeDesc: "Connect the code and review it right away.",
+    specTitle: "📄 I have a plan or spec",
+    specDesc: "Paste it in and we'll turn it into things to check.",
+  },
   overview: {
     specCompleteness: "Product brief completeness",
     resultsSummary: "Review summary",
@@ -2247,6 +2257,16 @@ const KO = {
       codex: "Codex",
       handCoded: "직접 코딩",
     },
+  },
+  branch: {
+    title: "무엇부터 시작할까요?",
+    subtitle: "지금 갖고 계신 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
+    ideaTitle: "💡 아이디어만 있어요",
+    ideaDesc: "만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요.",
+    codeTitle: "🔗 이미 만든 앱이 있어요",
+    codeDesc: "코드를 연결하면 바로 검수해요.",
+    specTitle: "📄 기획서가 있어요",
+    specDesc: "붙여넣으면 확인할 항목으로 바꿔드려요.",
   },
   overview: {
     specCompleteness: "제품 설명서 완성도",
