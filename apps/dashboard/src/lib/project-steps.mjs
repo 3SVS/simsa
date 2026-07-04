@@ -86,6 +86,29 @@ export function computeProjectSteps(facts) {
 }
 
 /**
+ * The command center's SINGLE next action — the shortest path to the
+ * activation moment (receiving the first review result) and, after that, to
+ * the working loop. Only CONFIRMED facts produce a CTA: on unknowns it returns
+ * null (no CTA beats a misleading one that flips after a fetch resolves).
+ *
+ * The chain deliberately skips anything that doesn't move the user toward the
+ * first review result: on the code branch missing items never interpose —
+ * connect code → run review is the whole activation path.
+ *
+ * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasReviewRun: boolean | null, entryPath?: "idea" | "code" | "spec" | null }} facts
+ * @returns {{ action: "create_items" | "connect_code" | "run_review" | "view_results", slug: string } | null}
+ */
+export function nextProjectAction(facts) {
+  const f = facts ?? {};
+  const codeEntry = f.entryPath === "code";
+  if (f.hasItems === false && !codeEntry) return { action: "create_items", slug: "items" };
+  if (f.hasRepo === false) return { action: "connect_code", slug: "settings" };
+  if (f.hasRepo === true && f.hasReviewRun === false) return { action: "run_review", slug: "github" };
+  if (f.hasRepo === true && f.hasReviewRun === true) return { action: "view_results", slug: "checks" };
+  return null; // facts still unknown — show nothing rather than mislead
+}
+
+/**
  * The canonical screen order inside the flow, used by the bottom "다음 →"
  * button so a user finishing one screen is walked to the next without
  * scanning the sidebar. Pure lookup; unknown slugs return null.

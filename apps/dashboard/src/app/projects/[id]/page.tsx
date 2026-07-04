@@ -36,6 +36,9 @@ import {
 import { overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
 import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
+import { nextProjectAction } from "@/lib/project-steps.mjs";
+import { loadExtendedProjectData } from "@/lib/workflow-store";
+import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 
 // Stage 272 — verdict/status chip tones on the overview inspection card
 // (same brand tokens as the visual-checks pages; colors carry meaning only).
@@ -62,28 +65,16 @@ export default function ProjectOverviewPage() {
       <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{project.name}</h1>
       <p className="mb-6 mt-1 text-sm text-gray-500">{project.description}</p>
 
-      {/* Getting-started card for projects with no review activity yet — one
-          obvious next path instead of seven empty analytics sections. */}
-      {!hasReviewActivity && (
-        <div className="card mb-8 p-5">
-          <p className="text-sm font-semibold text-gray-900">{t.overview.gettingStartedTitle}</p>
-          <p className="mt-0.5 text-xs text-gray-500">{t.overview.gettingStartedIntro}</p>
-          <ol className="mt-3 space-y-2 text-sm text-gray-700">
-            <li className="flex gap-2">
-              <span className="font-semibold text-brand-700">1.</span>
-              <Link href={`/projects/${id}/spec`} className="hover:underline">{t.overview.gsStep1}</Link>
-            </li>
-            <li className="flex gap-2">
-              <span className="font-semibold text-brand-700">2.</span>
-              <Link href={`/projects/${id}/settings`} className="hover:underline">{t.overview.gsStep2}</Link>
-            </li>
-            <li className="flex gap-2">
-              <span className="font-semibold text-brand-700">3.</span>
-              <Link href={`/projects/${id}/github`} className="hover:underline">{t.overview.gsStep3}</Link>
-            </li>
-          </ol>
-        </div>
-      )}
+      {/* STEP 4 — command center: ONE computed "지금 할 일" CTA that walks the
+          user along the shortest path to the activation moment (first review
+          result). The 3-step explainer folds inside it pre-activation, so the
+          overview drives instead of describing. */}
+      <CommandCenterCard
+        projectId={id}
+        t={t}
+        hasItems={project.requirements.length > 0}
+        showExplainer={!hasReviewActivity}
+      />
 
       {/* Stage 183 — Plan Map ("Where are we?") read-only entry */}
       <Link
@@ -194,6 +185,73 @@ export default function ProjectOverviewPage() {
 // relative date + the single next action (run first / view progress / open
 // the report). Best-effort: the card stays hidden while loading, without a
 // userKey, or when the run list cannot be fetched.
+/**
+ * STEP 4 — the overview's command center. Computes the SINGLE next action from
+ * confirmed facts (nextProjectAction) and renders one primary CTA. While facts
+ * are unknown it renders the explainer only — no CTA beats one that flips
+ * after a fetch resolves. No gamification: a quiet card, not a celebration.
+ */
+function CommandCenterCard({
+  projectId,
+  t,
+  hasItems,
+  showExplainer,
+}: {
+  projectId: string;
+  t: Dictionary;
+  hasItems: boolean;
+  showExplainer: boolean;
+}) {
+  const [hasRepo, setHasRepo] = useState<boolean | null>(null);
+  const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const uk = getUserKey();
+    fetchProjectRepo(projectId, uk)
+      .then((res) => { if (!cancelled) setHasRepo(res.ok ? Boolean(res.repo) : null); })
+      .catch(() => {});
+    listProjectReviewHistory(projectId, uk, { limit: 1 })
+      .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  const entryPath = loadExtendedProjectData(projectId)?.entryPath ?? null;
+  const next = nextProjectAction({ hasItems, hasRepo, hasReviewRun, entryPath });
+
+  const copy: Record<string, { label: string; desc: string }> = {
+    create_items: { label: t.commandCenter.createItems, desc: t.commandCenter.createItemsDesc },
+    connect_code: { label: t.commandCenter.connectCode, desc: t.commandCenter.connectCodeDesc },
+    run_review: { label: t.commandCenter.runReview, desc: t.commandCenter.runReviewDesc },
+    view_results: { label: t.commandCenter.viewResults, desc: t.commandCenter.viewResultsDesc },
+  };
+  const c = next ? copy[next.action] : null;
+
+  if (!c && !showExplainer) return null;
+
+  return (
+    <div className="card mb-8 p-5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{t.commandCenter.title}</p>
+      {c && next && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-gray-700">{c.desc}</p>
+          <Link href={`/projects/${projectId}/${next.slug}`} className="btn btn-md btn-primary">
+            {c.label} →
+          </Link>
+        </div>
+      )}
+      {showExplainer && (
+        <ol className="mt-3 space-y-1.5 border-t border-gray-100 pt-3 text-xs text-gray-500">
+          <li>1. {t.overview.gsStep1}</li>
+          <li>2. {t.overview.gsStep2}</li>
+          <li>3. {t.overview.gsStep3}</li>
+        </ol>
+      )}
+    </div>
+  );
+}
+
 function VisualChecksOverviewCard({
   projectId,
   t,

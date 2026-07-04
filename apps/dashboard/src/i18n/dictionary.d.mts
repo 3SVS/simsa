@@ -188,6 +188,17 @@ export type Dictionary = {
       handCoded: string;
     };
   };
+  commandCenter: {
+    title: string;
+    createItems: string;
+    createItemsDesc: string;
+    connectCode: string;
+    connectCodeDesc: string;
+    runReview: string;
+    runReviewDesc: string;
+    viewResults: string;
+    viewResultsDesc: string;
+  };
   stepsNav: {
     prepare: string;
     review: string;
