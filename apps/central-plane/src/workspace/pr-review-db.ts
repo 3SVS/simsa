@@ -20,6 +20,8 @@ export type DbReviewRun = {
   resultJson?: string;
   errorMessage?: string;
   rerunOfReviewRunId?: string;
+  /** R2 key of this run's training record, if one was captured (consent on). */
+  trainingR2Key?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -28,7 +30,7 @@ export type DbReviewRun = {
 
 const COLS = `id, project_id, user_key, repo_full_name, pr_number, linked_pr_id,
               selected_item_ids_json, status, result_json, error_message,
-              rerun_of_review_run_id, created_at, updated_at`;
+              rerun_of_review_run_id, training_r2_key, created_at, updated_at`;
 
 type RawRow = {
   id: string;
@@ -42,6 +44,7 @@ type RawRow = {
   result_json: string | null;
   error_message: string | null;
   rerun_of_review_run_id: string | null;
+  training_r2_key: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -59,9 +62,17 @@ function mapRow(row: RawRow): DbReviewRun {
     resultJson: row.result_json ?? undefined,
     errorMessage: row.error_message ?? undefined,
     rerunOfReviewRunId: row.rerun_of_review_run_id ?? undefined,
+    trainingR2Key: row.training_r2_key ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** Remember where this run's training record landed in R2 (for the outcome poll). */
+export async function setReviewRunTrainingKey(env: Env, runId: string, key: string): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE workspace_pr_review_runs SET training_r2_key = ? WHERE id = ?`,
+  ).bind(key, runId).run();
 }
 
 // ─── randId ───────────────────────────────────────────────────────────────────
