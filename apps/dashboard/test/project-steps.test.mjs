@@ -56,6 +56,33 @@ test("null input tolerated (never throws)", () => {
   assert.equal(s.length, 3);
 });
 
+// ─── STEP 3: skipped-user normal path (code branch) ─────────────────────────
+
+test("CODE branch: no items is NORMAL — review never locks, prepare is optional (not red)", () => {
+  const s = byKey(computeProjectSteps({ hasItems: false, hasRepo: false, hasReviewRun: false, entryPath: "code" }));
+  assert.notEqual(s.review.status, "locked", "review must NOT lock on missing items for code entry");
+  assert.equal(s.review.status, "current"); // the code branch starts here
+  assert.equal(s.prepare.optional, true); // "이 갈래는 원래 그럼" — optional, not incomplete
+  assert.equal(s.prepare.status, "todo"); // neutral, never a red/current demand
+  // results still locks on no code — that gate is branch-independent
+  assert.equal(s.results.status, "locked");
+  assert.equal(s.results.lockReason, "need_code");
+});
+
+test("CODE branch: repo connected + run → review done, results current (full path w/o idea step)", () => {
+  const s = byKey(computeProjectSteps({ hasItems: false, hasRepo: true, hasReviewRun: true, entryPath: "code" }));
+  assert.equal(s.review.status, "done");
+  assert.equal(s.results.status, "current"); // skipping idea never blocked steps 2·3
+});
+
+test("IDEA/SPEC branches unchanged: no items still locks review", () => {
+  for (const entryPath of ["idea", "spec", null, undefined]) {
+    const s = byKey(computeProjectSteps({ hasItems: false, hasRepo: false, hasReviewRun: false, entryPath }));
+    assert.equal(s.review.status, "locked", `entryPath=${entryPath} must keep the items gate`);
+    assert.equal(s.prepare.optional, false);
+  }
+});
+
 test("nextScreenSlug walks the canonical order and ends cleanly", () => {
   assert.equal(nextScreenSlug("idea"), "spec");
   assert.equal(nextScreenSlug("spec"), "items");

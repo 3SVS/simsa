@@ -6,10 +6,11 @@ export type ProjectStepFacts = {
   hasItems: boolean | null;
   hasRepo: boolean | null;
   hasReviewRun: boolean | null;
+  entryPath?: "idea" | "code" | "spec" | null;
 };
 
 export function computeProjectSteps(
   facts: ProjectStepFacts,
-): Array<{ key: StepKey; status: StepStatus; lockReason: StepLockReason }>;
+): Array<{ key: StepKey; status: StepStatus; lockReason: StepLockReason; optional: boolean }>;
 
 export function nextScreenSlug(slug: string): string | null;

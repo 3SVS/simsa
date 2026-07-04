@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { loadLocalProjects, getUserKey } from "@/lib/workflow-store";
+import { loadLocalProjects, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 import { buildBetaFeedbackMailto } from "@/lib/beta-feedback.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
@@ -87,7 +87,10 @@ export function AppSidebar() {
   // machine (project-steps.mjs) locks only on CONFIRMED-unmet preconditions and
   // auto-checks work already done — no wandering, no rework.
   const hasItems = project ? project.requirements.length > 0 : null;
-  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun });
+  // The branch this project entered through — the map adapts (code branch:
+  // prepare is optional, review never locks on items; skipping idea is normal).
+  const entryPath = projectId ? (loadExtendedProjectData(projectId)?.entryPath ?? null) : null;
+  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun, entryPath });
   const stepMeta: Record<string, { label: string; items: ReadonlyArray<readonly [string, string]> }> = {
     prepare: {
       label: t.stepsNav.prepare,
@@ -181,6 +184,11 @@ export function AppSidebar() {
                       {statusGlyph(step.status)}
                     </span>
                     {i + 1} · {meta.label}
+                    {step.optional && (
+                      <span className="rounded-full border border-gray-200 px-1.5 py-px text-[9px] font-medium text-gray-400">
+                        {t.stepsNav.optionalTag}
+                      </span>
+                    )}
                   </p>
                   {locked ? (
                     <p className="px-2.5 pb-1 pl-[30px] text-[11px] text-gray-300">{lockHint(step.lockReason)}</p>
