@@ -17,6 +17,11 @@ ENVIRONMENT = "production"
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.
 AUTH_SIGNUP_MODE = "open"
+# Open-deploy batch (2026-07-05) — Better Auth canonical origin. Required for the
+# GitHub LOGIN OAuth app (#213): without it Better Auth derives the base URL from
+# the proxied request (workers.dev) and the GitHub callback becomes
+# redirect_uri_mismatch. Must match the login OAuth app's registered callback host.
+BETTER_AUTH_BASE_URL = "https://app.trysimsa.com"
 # Public GitHub OAuth App client_id. Register at https://github.com/settings/developers
 # (type: OAuth App, enable device flow). Leave the placeholder if OAuth is not
 # yet configured — /oauth/device/* endpoints will return 503 until this is real.
@@ -34,7 +39,9 @@ GITHUB_CLIENT_ID = "Ov23ctqhuNRdhunT36Y9"
 WORKSPACE_GH_CLIENT_ID = "Ov23ctqhuNRdhunT36Y9"
 WORKSPACE_GH_REDIRECT_URI = "https://conclave-ai.seunghunbae.workers.dev/workspace/github/oauth/callback"
 WORKSPACE_GH_SCOPES = "read:user public_repo"
-WORKSPACE_GH_DASHBOARD_URL = "https://dashboard.conclave-ai.dev"
+# 2026-07-05: dashboard.conclave-ai.dev is a DEAD domain (DNS gone) — post-connect
+# OAuth redirects were pointing at it. Live dashboard is app.trysimsa.com (Stage 92).
+WORKSPACE_GH_DASHBOARD_URL = "https://app.trysimsa.com"
 # Private-repo support — public install URL of the existing GitHub App
 # (e.g. "https://github.com/apps/<slug>/installations/new"). Shown to users
 # whose private repo needs the App installed. Empty = no install link surfaced.
