@@ -77,6 +77,14 @@ a {
   max-width: 34rem;
 }
 
+/* PR B — open-beta invite line in the hero. Quiet, not a launch banner. */
+.beta-note {
+  font-size: 0.95rem;
+  color: var(--accent);
+  margin: -1rem auto 2rem;
+  max-width: 34rem;
+}
+
 .cta {
   display: inline-flex;
   align-items: center;

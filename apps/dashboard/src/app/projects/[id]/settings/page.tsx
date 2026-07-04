@@ -783,6 +783,10 @@ export default function SettingsPage() {
             <li>• {t.trainingConsent.point4}</li>
           </ul>
 
+          <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            {t.trainingConsent.betaNote}
+          </p>
+
           <div className="flex items-center gap-3 border-t border-gray-100 pt-4">
             <input
               id="train-consent"

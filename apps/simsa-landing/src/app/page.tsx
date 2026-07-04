@@ -1,6 +1,8 @@
 // Simsa marketing entry for trysimsa.com.
 // Stage 93 hero · 95 trust/contact · 96 staged-acceptance positioning ·
-// 97 early-access request path. Static, host-agnostic, no new dependencies.
+// PR B open-beta framing: the early-access gate became an open-beta invite —
+// free while in beta, community tone, no launch hype.
+// Static, host-agnostic, no new dependencies.
 import Link from "next/link";
 
 const APP_URL = "https://app.trysimsa.com";
@@ -8,21 +10,19 @@ const APP_URL = "https://app.trysimsa.com";
 // yet — do not invent hi@trysimsa.com until it exists.
 const CONTACT_EMAIL = "seunghunbae@b2w.kr";
 
-// Stage 97: mailto-based early access — no backend / DB / email provider.
-const EARLY_ACCESS_SUBJECT = "Simsa early access request";
-const EARLY_ACCESS_BODY = `Hi Simsa team,
-
-I'd like early access.
+// Feedback channel for beta members — mailto only, no backend / DB / provider.
+const FEEDBACK_SUBJECT = "Simsa beta feedback";
+const FEEDBACK_BODY = `Hi Simsa team,
 
 What I'm building:
 
-What I already have (idea / PRD / repo / URL / AI-built app):
+What worked / what didn't:
 
-What I need Simsa to help with:
+What I wish Simsa did:
 `;
-const EARLY_ACCESS_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
-  EARLY_ACCESS_SUBJECT,
-)}&body=${encodeURIComponent(EARLY_ACCESS_BODY)}`;
+const FEEDBACK_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+  FEEDBACK_SUBJECT,
+)}&body=${encodeURIComponent(FEEDBACK_BODY)}`;
 
 const INPUTS = [
   "Idea",
@@ -55,16 +55,18 @@ export default function Home() {
             review, compare, and decide what to accept, fix, or rerun — with
             evidence.
           </p>
+          <p className="beta-note">
+            Simsa is in open beta — everything is free while we build it out.
+            You&apos;d be one of the early members, and what you run shapes what
+            it becomes.
+          </p>
           <div className="hero-actions">
             <a className="cta" href={APP_URL}>
-              Open Simsa
+              Start free — open beta
             </a>
             <Link className="cta-secondary" href="/demo">
               View demo
             </Link>
-            <a className="cta-secondary" href={EARLY_ACCESS_MAILTO}>
-              Request early access
-            </a>
           </div>
         </div>
       </section>
@@ -147,22 +149,25 @@ export default function Home() {
 
       <section className="section">
         <div className="container">
-          <h2>Request early access</h2>
+          <h2>Join the open beta</h2>
           <p>
-            Have an idea, PRD, GitHub repo, or AI-built app you want to turn into
-            accepted product work? Send a short note and we will review whether
-            Simsa is a good fit.
+            No waitlist, no invite code — bring an idea, a PRD, a GitHub repo,
+            or an AI-built app and start checking it today. Everything is free
+            during the beta.
           </p>
-          <p>Include:</p>
-          <ul className="guidance">
-            <li>what you are building</li>
-            <li>what you already have</li>
-            <li>where the current work lives, if shareable</li>
-            <li>what you need to decide next</li>
-          </ul>
-          <a className="cta" href={EARLY_ACCESS_MAILTO}>
-            Request early access
-          </a>
+          <p>
+            Being early matters here: the reviews beta members run are what
+            teach Simsa which failures actually happen in AI-built software.
+            If something feels off or missing, tell us — we read every note.
+          </p>
+          <div className="hero-actions">
+            <a className="cta" href={APP_URL}>
+              Start free — open beta
+            </a>
+            <a className="cta-secondary" href={FEEDBACK_MAILTO}>
+              Send beta feedback
+            </a>
+          </div>
         </div>
       </section>
 
