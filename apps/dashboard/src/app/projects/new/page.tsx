@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { callWorkspaceApi } from "@/lib/workspace-api";
 import {
   saveProject,
@@ -36,7 +36,17 @@ const BUILT_WITH_OPTIONS: ReadonlyArray<{ id: string; labelKey: keyof Dictionary
 ];
 
 export default function NewProjectPage() {
+  // useSearchParams needs a Suspense boundary when the route is prerendered.
+  return (
+    <Suspense fallback={null}>
+      <NewProjectInner />
+    </Suspense>
+  );
+}
+
+function NewProjectInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [ideaText, setIdeaText] = useState("");
@@ -52,6 +62,11 @@ export default function NewProjectPage() {
   const [builtWithOther, setBuiltWithOther] = useState("");
   // Single entry → adaptive branch. The chosen branch fills the P1 entry_path.
   // Until a branch is picked the chooser shows; then the step flow proceeds.
+  //
+  // The chosen branch is mirrored in the URL (?path=idea|code|spec) so every
+  // way "back" works: the browser back button, the sidebar "새 프로젝트" link
+  // (plain /projects/new → chooser), and the visible back button below. Typed
+  // input is intentionally kept when returning — only the screen changes.
   const [entryPath, setEntryPath] = useState<"idea" | "code" | "spec" | null>(null);
   // Code branch: skip the idea step entirely (that's the branch's normal path).
   const [appName, setAppName] = useState("");
@@ -64,6 +79,39 @@ export default function NewProjectPage() {
 
   const answeredCount = Object.keys(answers).length;
   const questions = result?.questions ?? [];
+
+  // URL is the source of truth for the chosen branch: /projects/new shows the
+  // chooser; ?path=idea|code|spec shows that branch. This makes browser-back
+  // and a re-click on the sidebar "new project" link both land on the chooser.
+  useEffect(() => {
+    const raw = searchParams.get("path");
+    const fromUrl = raw === "idea" || raw === "code" || raw === "spec" ? raw : null;
+    setEntryPath(fromUrl);
+    if (fromUrl === null) setStep(1);
+  }, [searchParams]);
+
+  function chooseBranch(id: "idea" | "code" | "spec") {
+    setEntryPath(id); // immediate — the effect above re-confirms from the URL
+    setStep(1);
+    router.push(`/projects/new?path=${id}`);
+  }
+
+  function backToChooser() {
+    router.push("/projects/new");
+  }
+
+  /** Prominent "back to the three choices" button, shown on every branch screen. */
+  function BackToChooserButton() {
+    return (
+      <button
+        type="button"
+        onClick={backToChooser}
+        className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900"
+      >
+        <span aria-hidden="true">←</span> {t.branch.backToChooser}
+      </button>
+    );
+  }
 
   async function handleGenerateUnderstanding() {
     if (!ideaText.trim()) return;
@@ -270,7 +318,7 @@ export default function NewProjectPage() {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => { setEntryPath(id); setStep(1); }}
+                    onClick={() => chooseBranch(id)}
                     className="card w-full p-5 text-left transition-colors hover:border-brand-300"
                   >
                     <span className="block text-sm font-semibold text-gray-900">{title}</span>
@@ -287,6 +335,7 @@ export default function NewProjectPage() {
               normal path, not a deficit. */}
           {entryPath === "code" && step === 1 && (
             <div>
+              <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.codeStepTitle}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.codeStepSub}</p>
 
@@ -348,6 +397,7 @@ export default function NewProjectPage() {
           {/* SPEC branch step 1 — paste the plan → one-shot conversion → preview. */}
           {entryPath === "spec" && step === 1 && (
             <div>
+              <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.specStepTitle}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.specStepSub}</p>
               <textarea
@@ -371,6 +421,7 @@ export default function NewProjectPage() {
 
           {entryPath === "idea" && step === 1 && (
             <div>
+              <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.np.step1Title}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.np.step1Sub}</p>
               <textarea

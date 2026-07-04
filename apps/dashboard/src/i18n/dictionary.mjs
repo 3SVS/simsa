@@ -291,6 +291,7 @@ const EN = {
   branch: {
     title: "What do you have to start with?",
     subtitle: "Pick whatever fits — you'll end up in the same place: your app, reviewed.",
+    backToChooser: "Back to the three choices",
     ideaTitle: "💡 I just have an idea",
     ideaDesc: "Describe what you want to build. We'll turn it into things to check.",
     codeTitle: "🔗 I already built an app",
@@ -2372,6 +2373,7 @@ const KO = {
   branch: {
     title: "무엇부터 시작할까요?",
     subtitle: "지금 갖고 계신 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
+    backToChooser: "처음 선택으로 돌아가기",
     ideaTitle: "💡 아이디어만 있어요",
     ideaDesc: "만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요.",
     codeTitle: "🔗 이미 만든 앱이 있어요",

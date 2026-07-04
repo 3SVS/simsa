@@ -237,6 +237,7 @@ export type Dictionary = {
   branch: {
     title: string;
     subtitle: string;
+    backToChooser: string;
     ideaTitle: string;
     ideaDesc: string;
     codeTitle: string;
