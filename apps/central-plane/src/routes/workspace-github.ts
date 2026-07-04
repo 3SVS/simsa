@@ -40,7 +40,7 @@ import { getRepoViaApp, resolveRepoAccessToken } from "../workspace/github-app-a
 import { upsertProjectPR, getLinkedPRs } from "../workspace/pr-db.js";
 import {
   insertReviewRun, updateReviewRun, getLatestReviewRun, getLatestTwoPrReviewRuns,
-  listPRReviewRuns, listProjectReviewRuns, getReviewRunById,
+  listPRReviewRuns, listProjectReviewRuns, getReviewRunById, setReviewRunTrainingKey,
 } from "../workspace/pr-review-db.js";
 import { loadPRReviewRunForAction } from "../workspace/pr-review-run-loader.js";
 import { normalizeSelectedItemIds, recommendedRerunItemIds } from "../workspace/selected-items.js";
@@ -50,7 +50,7 @@ import {
 } from "../workspace/pr-review-compare.js";
 import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
-import { captureTrainingRecord } from "../workspace/training-store.js";
+import { captureTrainingRecord, computeRecheckOutcome, updateTrainingRecordOutcome } from "../workspace/training-store.js";
 import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { detectContentLang } from "../workspace/topic-tags.js";
@@ -974,7 +974,7 @@ export function createWorkspaceGitHubRoutes(
     })();
     const projectCount = await listProjectsByUser(c.env, userKey, 200).then((r) => r.length).catch(() => null);
     const usage = reviewResult.usage;
-    await captureTrainingRecord(c.env, {
+    const captureRes = await captureTrainingRecord(c.env, {
       userKey,
       projectId,
       reviewRunId: run.id,
@@ -1008,7 +1008,26 @@ export function createWorkspaceGitHubRoutes(
         channel: "web", // this is the web review path; MCP is a future channel
         mcpClient: null,
       },
-    }).catch(() => {});
+    }).catch(() => ({ stored: false as const }));
+
+    // 9d. STEP 4 outcome poll. Remember where this record landed (so a future
+    // recheck can find it); and if THIS is a recheck, fill the PRIOR record's
+    // outcome (pending → resolved/unresolved) by comparing prior vs current. All
+    // best-effort, non-fatal, consent already implied by a stored key.
+    if (captureRes.stored) {
+      await setReviewRunTrainingKey(c.env, run.id, captureRes.key).catch(() => {});
+    }
+    if (rerunOfReviewRunId) {
+      const priorRun = await getReviewRunById(c.env, rerunOfReviewRunId).catch(() => null);
+      if (priorRun?.trainingR2Key) {
+        const priorResults = (() => {
+          try { return (JSON.parse(priorRun.resultJson ?? "{}").results ?? []) as Array<{ itemId?: string; status?: string }>; }
+          catch { return []; }
+        })();
+        const outcome = computeRecheckOutcome(priorResults, reviewResult.results);
+        await updateTrainingRecordOutcome(c.env, priorRun.trainingR2Key, outcome).catch(() => {});
+      }
+    }
 
     // 10. Telegram notification (non-blocking: failure must not fail the review response)
     await (async () => {

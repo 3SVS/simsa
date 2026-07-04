@@ -382,3 +382,54 @@ export async function captureTrainingRecord(
     return { stored: false, reason: "error" };
   }
 }
+
+// ─── STEP 4: outcome poll (fill the pending reward on recheck) ─────────────────
+
+type MinimalResult = { itemId?: string; status?: string };
+
+/**
+ * Compare a prior review's results to a recheck's results and decide the prior
+ * record's outcome. "resolved" = every item that wasn't passing before is now
+ * passing; "unresolved" = at least one previously-unresolved item is still not
+ * passing. Pure + deterministic. (merge/reject from GitHub is a later P2 signal.)
+ */
+export function computeRecheckOutcome(
+  priorResults: MinimalResult[],
+  currentResults: MinimalResult[],
+): "resolved" | "unresolved" {
+  const current = new Map<string, string>();
+  for (const r of currentResults) if (r.itemId) current.set(r.itemId, r.status ?? "");
+  const wasUnresolved = (priorResults ?? []).filter((r) => r.status && r.status !== "passed");
+  if (wasUnresolved.length === 0) return "resolved"; // nothing was open
+  for (const p of wasUnresolved) {
+    const now = p.itemId ? current.get(p.itemId) : undefined;
+    if (now !== "passed") return "unresolved"; // still open (or not re-checked)
+  }
+  return "resolved";
+}
+
+/**
+ * Update a PRIOR training record's outcome in place. Fetches the R2 object by
+ * key, rewrites only `outcome`, re-puts. Consent/bucket are already implied
+ * (the key only exists because the prior record was stored). Never throws.
+ */
+export async function updateTrainingRecordOutcome(
+  env: Env,
+  r2Key: string,
+  outcome: "resolved" | "unresolved" | "merged" | "rejected",
+): Promise<{ updated: boolean }> {
+  try {
+    if (!env.EVIDENCE || !r2Key) return { updated: false };
+    const obj = await env.EVIDENCE.get(r2Key);
+    if (!obj) return { updated: false };
+    const rec = JSON.parse(await obj.text()) as Record<string, unknown>;
+    rec["outcome"] = outcome;
+    await env.EVIDENCE.put(r2Key, JSON.stringify(rec), {
+      httpMetadata: { contentType: "application/json" },
+    });
+    return { updated: true };
+  } catch (err) {
+    console.warn("[training-store] outcome update failed (non-fatal):", err instanceof Error ? err.message : err);
+    return { updated: false };
+  }
+}
