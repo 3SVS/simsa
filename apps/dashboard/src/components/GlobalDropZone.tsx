@@ -5,23 +5,18 @@
  * 들어가게"). Dropping a text document anywhere starts the spec branch with
  * the file's content prefilled.
  *
- * Scope (honest): reads .txt / .md / text/* client-side. PDF/Word need a
- * parsing pipeline — until then the overlay says so instead of failing
- * silently. Content is handed off via sessionStorage (never uploaded here).
+ * Reads hwpx / PDF / docx / txt / md in the browser (lib/document-extract).
+ * Binary .hwp has no reliable JS parser — the notice tells the user to save
+ * as hwpx/PDF from 한글. Content is handed off via sessionStorage (the file
+ * itself never leaves the machine here).
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/i18n/I18nProvider";
+import { extractDocumentText } from "@/lib/document-extract";
 
 export const DROPPED_DOC_KEY = "simsa:dropped-doc";
 export const DROPPED_DOC_NAME_KEY = "simsa:dropped-doc-name";
-const MAX_TEXT_BYTES = 300_000;
-
-function isTextLike(file: File): boolean {
-  if (file.type.startsWith("text/")) return true;
-  return /\.(txt|md|markdown)$/i.test(file.name);
-}
-
 export function GlobalDropZone() {
   const { t } = useI18n();
   const router = useRouter();
@@ -49,6 +44,14 @@ export function GlobalDropZone() {
       depthRef.current = Math.max(0, depthRef.current - 1);
       if (depthRef.current === 0) setDragging(false);
     }
+    function noticeFor(error: string): string {
+      if (error === "media") return t.dropzone.media;
+      if (error === "hwp_binary") return t.dropzone.hwpBinary;
+      if (error === "scanned_pdf") return t.dropzone.scannedPdf;
+      if (error === "empty") return t.dropzone.empty;
+      if (error === "unsupported") return t.dropzone.unsupported;
+      return t.dropzone.readError;
+    }
     function onDrop(e: DragEvent) {
       if (!hasFiles(e)) return;
       e.preventDefault();
@@ -56,29 +59,22 @@ export function GlobalDropZone() {
       setDragging(false);
       const file = e.dataTransfer?.files?.[0];
       if (!file) return;
-      if (!isTextLike(file)) {
-        setNotice(t.dropzone.unsupported);
-        window.setTimeout(() => setNotice(null), 6000);
-        return;
-      }
-      file
-        .slice(0, MAX_TEXT_BYTES)
-        .text()
-        .then((text) => {
-          if (!text.trim()) return;
-          try {
-            window.sessionStorage.setItem(DROPPED_DOC_KEY, text);
-            window.sessionStorage.setItem(DROPPED_DOC_NAME_KEY, file.name);
-          } catch {
-            /* storage unavailable — nothing to hand off */
-            return;
-          }
-          router.push("/projects/new?path=spec&dropped=1");
-        })
-        .catch(() => {
-          setNotice(t.dropzone.readError);
-          window.setTimeout(() => setNotice(null), 6000);
-        });
+      setNotice(t.dropzone.reading);
+      void extractDocumentText(file).then((res) => {
+        if (!res.ok) {
+          setNotice(noticeFor(res.error));
+          window.setTimeout(() => setNotice(null), 8000);
+          return;
+        }
+        setNotice(null);
+        try {
+          window.sessionStorage.setItem(DROPPED_DOC_KEY, res.text);
+          window.sessionStorage.setItem(DROPPED_DOC_NAME_KEY, res.fileName);
+        } catch {
+          return;
+        }
+        router.push("/projects/new?path=spec&dropped=1");
+      });
     }
     window.addEventListener("dragenter", onDragEnter);
     window.addEventListener("dragover", onDragOver);
