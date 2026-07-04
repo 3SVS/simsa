@@ -112,6 +112,94 @@ export async function claimWorkspace(userKey, fetchImpl) {
   }
 }
 
+// ─── Sign-in (the auth-upgrade STEP: anonymous start → value-moment promotion) ─
+
+const SIGN_IN_EMAIL_PATH = "/api/auth/sign-in/email";
+const SIGN_UP_EMAIL_PATH = "/api/auth/sign-up/email";
+const SIGN_IN_SOCIAL_PATH = "/api/auth/sign-in/social";
+
+/**
+ * Email + password sign-in (same-origin, credentialed — the Set-Cookie rides
+ * the /api/auth proxy so the session is first-party). Never throws.
+ * @param {string} email
+ * @param {string} password
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ */
+export async function signInEmail(email, password, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "no_fetch" };
+  try {
+    const res = await f(SIGN_IN_EMAIL_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res && res.ok) return { ok: true };
+    const data = res ? await res.json().catch(() => null) : null;
+    return { ok: false, error: data && typeof data.message === "string" ? data.message : `http_${res ? res.status : 0}` };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+/**
+ * Email + password sign-up (creates the account AND signs in). Gated server-side
+ * by AUTH_SIGNUP_MODE. Never throws.
+ * @param {string} name
+ * @param {string} email
+ * @param {string} password
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ */
+export async function signUpEmail(name, email, password, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "no_fetch" };
+  try {
+    const res = await f(SIGN_UP_EMAIL_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
+    if (res && res.ok) return { ok: true };
+    const data = res ? await res.json().catch(() => null) : null;
+    return { ok: false, error: data && typeof data.message === "string" ? data.message : `http_${res ? res.status : 0}` };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+/**
+ * Start the GitHub social login (GitHub-first for the vibe-coder audience).
+ * Returns the provider redirect URL — the caller navigates to it. Dormant
+ * server-side until AUTH_GH_* is configured (then this returns an error the UI
+ * degrades on). Never throws.
+ * @param {string} callbackURL where Better Auth should land the browser after OAuth (e.g. "/login?next=/projects")
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ ok: true, url: string } | { ok: false, error: string }>}
+ */
+export async function startGithubLogin(callbackURL, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "no_fetch" };
+  try {
+    const res = await f(SIGN_IN_SOCIAL_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "github", callbackURL }),
+    });
+    const data = res ? await res.json().catch(() => null) : null;
+    if (res && res.ok && data && typeof data.url === "string" && data.url) {
+      return { ok: true, url: data.url };
+    }
+    return { ok: false, error: data && typeof data.message === "string" ? data.message : `http_${res ? res.status : 0}` };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
 /**
  * Resolve a UI auth status from a session fetch result. Pure + deterministic.
  * @param {{ loading?: boolean, error?: boolean, session?: any }} input

@@ -27,3 +27,12 @@ export type ClaimResult =
   | { ok: false; error: string };
 
 export function claimWorkspace(userKey: string, fetchImpl?: typeof fetch): Promise<ClaimResult>;
+
+export type AuthActionResult = { ok: true } | { ok: false; error: string };
+
+export function signInEmail(email: string, password: string, fetchImpl?: typeof fetch): Promise<AuthActionResult>;
+export function signUpEmail(name: string, email: string, password: string, fetchImpl?: typeof fetch): Promise<AuthActionResult>;
+export function startGithubLogin(
+  callbackURL: string,
+  fetchImpl?: typeof fetch,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }>;

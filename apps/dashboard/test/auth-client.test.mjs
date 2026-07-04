@@ -98,3 +98,48 @@ test("claimWorkspace POSTs the userKey and maps success + failure shapes", async
   const net = await claimWorkspace("uk", fakeFetch(async () => { throw new Error("net"); }));
   assert.equal(net.error, "network");
 });
+
+// ─── Auth-upgrade STEP: sign-in functions ───────────────────────────────────
+
+test("signInEmail POSTs credentials to the same-origin proxy path", async () => {
+  const { signInEmail } = await import("../src/lib/auth-client.mjs");
+  let seen = null;
+  const f = fakeFetch(async (url, init) => {
+    seen = { url, body: JSON.parse(init.body), credentials: init.credentials };
+    return { ok: true, json: async () => ({}) };
+  });
+  const r = await signInEmail("a@b.co", "password123", f);
+  assert.deepEqual(r, { ok: true });
+  assert.equal(seen.url, "/api/auth/sign-in/email");
+  assert.equal(seen.body.email, "a@b.co");
+  assert.equal(seen.credentials, "include"); // first-party cookie must ride
+  // failure maps to error, never throws
+  const bad = await signInEmail("a@b.co", "wrong", fakeFetch(async () => ({ ok: false, status: 401, json: async () => ({ message: "invalid" }) })));
+  assert.equal(bad.ok, false);
+  const net = await signInEmail("a@b.co", "x", fakeFetch(async () => { throw new Error("net"); }));
+  assert.deepEqual(net, { ok: false, error: "network" });
+});
+
+test("signUpEmail POSTs name+email+password; startGithubLogin returns the provider url", async () => {
+  const { signUpEmail, startGithubLogin } = await import("../src/lib/auth-client.mjs");
+  let seen = null;
+  const f = fakeFetch(async (url, init) => {
+    seen = { url, body: JSON.parse(init.body) };
+    return { ok: true, json: async () => ({ url: "https://github.com/login/oauth/authorize?x=1" }) };
+  });
+  const up = await signUpEmail("Bae", "a@b.co", "password123", f);
+  assert.deepEqual(up, { ok: true });
+  assert.equal(seen.url, "/api/auth/sign-up/email");
+  assert.equal(seen.body.name, "Bae");
+
+  const gh = await startGithubLogin("/login?next=/projects", f);
+  assert.equal(gh.ok, true);
+  assert.equal(gh.url, "https://github.com/login/oauth/authorize?x=1");
+  assert.equal(seen.url, "/api/auth/sign-in/social");
+  assert.equal(seen.body.provider, "github");
+  assert.equal(seen.body.callbackURL, "/login?next=/projects");
+
+  // dormant provider (not configured server-side) → clean error, UI degrades to email
+  const off = await startGithubLogin("/login", fakeFetch(async () => ({ ok: false, status: 400, json: async () => ({ message: "provider not found" }) })));
+  assert.equal(off.ok, false);
+});
