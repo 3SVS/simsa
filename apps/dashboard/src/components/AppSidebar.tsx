@@ -7,6 +7,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { loadLocalProjects, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 import { buildBetaFeedbackMailto } from "@/lib/beta-feedback.mjs";
+import { getAuthSession } from "@/lib/auth-client.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 
@@ -31,6 +32,8 @@ export function AppSidebar() {
   // menu button that opens the SAME expanded body as an overlay drawer. Without
   // this the fixed w-60 rail left ~120px of content on a 360px phone.
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Signed-in identity for the bottom profile block (null = signed out/unknown).
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -44,6 +47,12 @@ export function AppSidebar() {
       setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
     } catch {}
     setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
+    getAuthSession()
+      .then((sess) => {
+        const email = (sess as { user?: { email?: string } } | null)?.user?.email;
+        setAuthEmail(typeof email === "string" ? email : null);
+      })
+      .catch(() => {});
   }, []);
 
   // Observe repo-link + review-run facts for the progress map (best-effort;
@@ -108,7 +117,7 @@ export function AppSidebar() {
     },
     review: {
       label: t.stepsNav.review,
-      items: [["settings", t.nav.settings], ["github", t.nav.github]],
+      items: [["github", t.nav.github]],
     },
     results: {
       label: t.stepsNav.results,
@@ -155,10 +164,12 @@ export function AppSidebar() {
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
         {project ? (
           <>
-            <Link href="/projects" className="mb-2 flex items-center gap-1 px-1.5 text-xs text-gray-500 hover:text-gray-700">
-              ← {t.nav.allProjects}
-            </Link>
-            <p className="truncate px-1.5 pb-2 text-xs font-medium text-gray-700">{project.name}</p>
+            <div className="-mx-1 mb-3 border-b border-gray-100 pb-2">
+              <Link href="/projects" className="mb-1.5 flex items-center gap-1 px-2.5 text-xs text-gray-500 hover:text-gray-700">
+                ← {t.nav.allProjects}
+              </Link>
+              <p className="truncate px-2.5 text-[13px] font-semibold text-gray-900">{project.name}</p>
+            </div>
 
             {/* Overview = the command center, above the steps */}
             <ul className="mb-3">
@@ -236,7 +247,10 @@ export function AppSidebar() {
                 </ul>
               )}
             </div>
+            {/* Always available — not a step: connection/notification settings + sources */}
             <div className="mt-2 border-t border-gray-100 pt-2">
+              <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">{t.nav.groupAnytime}</p>
+              <Link href={`${base}/settings`} className={itemClass(pathname === `${base}/settings`)}>{t.nav.settings}</Link>
               <Link href={`${base}/sources`} className={itemClass(pathname === `${base}/sources`)}>{t.nav.sources}</Link>
             </div>
           </>
@@ -278,10 +292,21 @@ export function AppSidebar() {
           {t.nav.feedback}
         </a>
         <Link href="/account" aria-label={t.account.openLabel} className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-gray-50">
-          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">{initial}</span>
+          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
+            {(authEmail?.[0] ?? initial).toUpperCase()}
+          </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium text-gray-900">{t.account.workspace}</span>
-            <span className="block truncate text-[11px] text-gray-500">{t.account.plan}</span>
+            {authEmail ? (
+              <>
+                <span className="block truncate text-[13px] font-medium text-gray-900">{authEmail}</span>
+                <span className="block truncate text-[11px] text-gray-500">{t.account.plan}</span>
+              </>
+            ) : (
+              <>
+                <span className="block truncate text-[13px] font-medium text-gray-900">{t.account.workspace}</span>
+                <span className="block truncate text-[11px] text-brand-700">{t.account.auth.signIn} →</span>
+              </>
+            )}
           </span>
         </Link>
       </div>
