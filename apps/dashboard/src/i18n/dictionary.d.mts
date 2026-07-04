@@ -844,6 +844,7 @@ export type Dictionary = {
     generateItemsError: string;
     reviewingHint: string;
     reviewDone: string;
+    viewResultDetail: string;
     nextActionFix: string;
     nextActionComment: string;
     nextActionCompare: string;
