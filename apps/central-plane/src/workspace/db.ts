@@ -74,6 +74,12 @@ export async function upsertProject(
   // to the same user_key — a client-supplied id can never overwrite another
   // user's project. The route ALSO pre-checks and returns 409; this WHERE
   // clause is defense-in-depth for any other caller of this helper.
+  //
+  // Capture-once P1 fields (built_with_json / entry_path / acquisition_json)
+  // are STICKY on update: a re-save that omits them (sends null) keeps the
+  // stored value instead of wiping it. These are collected once at entry and
+  // are NOT retroactively recoverable — a document-intake or checklist re-save
+  // must never erase them. An explicit non-null value still overwrites.
   await env.DB.prepare(
     `INSERT INTO workspace_projects
        (id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, topic_tags_json, acquisition_json, created_at, updated_at)
@@ -84,10 +90,14 @@ export async function upsertProject(
        understood_json = excluded.understood_json,
        product_spec_json = excluded.product_spec_json,
        items_json = excluded.items_json,
-       built_with_json = excluded.built_with_json,
-       entry_path = excluded.entry_path,
+       built_with_json = CASE
+         WHEN excluded.built_with_json IS NULL OR excluded.built_with_json = 'null'
+         THEN workspace_projects.built_with_json ELSE excluded.built_with_json END,
+       entry_path = COALESCE(excluded.entry_path, workspace_projects.entry_path),
        topic_tags_json = excluded.topic_tags_json,
-       acquisition_json = excluded.acquisition_json,
+       acquisition_json = CASE
+         WHEN excluded.acquisition_json IS NULL OR excluded.acquisition_json = 'null'
+         THEN workspace_projects.acquisition_json ELSE excluded.acquisition_json END,
        updated_at = excluded.updated_at
      WHERE workspace_projects.user_key = excluded.user_key`,
   )

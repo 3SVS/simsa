@@ -48,17 +48,36 @@ function makeMockDb() {
         },
         async run() {
           if (/INSERT INTO workspace_projects/.test(sql)) {
-            const [id, user_key, title, idea, understood_json, product_spec_json, items_json, created_at, updated_at] = bound;
+            // Tie this mirror to the real SQL: if the capture-once sticky
+            // clauses ever disappear from the upsert, fail loudly here.
+            if (
+              !/CASE\s*\n?\s*WHEN excluded\.built_with_json/.test(sql) ||
+              !/COALESCE\(excluded\.entry_path/.test(sql) ||
+              !/WHEN excluded\.acquisition_json/.test(sql)
+            ) {
+              throw new Error("upsert SQL lost the capture-once sticky clauses (built_with/entry_path/acquisition)");
+            }
+            const [id, user_key, title, idea, understood_json, product_spec_json, items_json,
+                   built_with_json, entry_path, topic_tags_json, acquisition_json, created_at, updated_at] = bound;
             const existing = state.projects.get(id);
             if (existing) {
-              // Mirror the hardened ON CONFLICT … WHERE user_key match.
+              // Mirror the hardened ON CONFLICT … WHERE user_key match +
+              // capture-once sticky semantics (null / 'null' keeps stored value).
               if (existing.user_key === user_key) {
-                state.projects.set(id, { ...existing, title, idea, understood_json, product_spec_json, items_json, updated_at });
+                state.projects.set(id, {
+                  ...existing, title, idea, understood_json, product_spec_json, items_json,
+                  built_with_json: built_with_json === null || built_with_json === "null" ? existing.built_with_json : built_with_json,
+                  entry_path: entry_path === null ? existing.entry_path : entry_path,
+                  topic_tags_json,
+                  acquisition_json: acquisition_json === null || acquisition_json === "null" ? existing.acquisition_json : acquisition_json,
+                  updated_at,
+                });
                 return { meta: { changes: 1 } };
               }
               return { meta: { changes: 0 } };
             }
-            state.projects.set(id, { id, user_key, title, idea, understood_json, product_spec_json, items_json, created_at, updated_at });
+            state.projects.set(id, { id, user_key, title, idea, understood_json, product_spec_json, items_json,
+              built_with_json, entry_path, topic_tags_json, acquisition_json, created_at, updated_at });
             return { meta: { changes: 1 } };
           }
           if (/INSERT INTO workspace_rate_limit/.test(sql)) {
@@ -333,6 +352,79 @@ describe("per-userKey hourly rate limit", () => {
     const r2 = await call();
     assert.equal(r2.status, 429);
     assert.equal((await r2.json()).error, "rate_limited");
+  });
+});
+
+// ─── capture-once P1 fields survive re-saves ─────────────────────────────────
+
+describe("capture-once sticky upsert (built_with / entry_path / acquisition)", () => {
+  it("a re-save WITHOUT the P1 fields keeps the stored values", async () => {
+    const env = makeEnv();
+    const app = createApp();
+    const create = await app.fetch(
+      jsonReq("/workspace/projects", "POST", {
+        id: "wsp_sticky", userKey: "uk_st", title: "Code project", idea: "가계부 앱",
+        builtWith: { tools: ["lovable"], primary: "lovable" },
+        entryPath: "code",
+        acquisition: { source: "threads" },
+      }),
+      env,
+    );
+    assert.equal(create.status, 200);
+
+    // Document-intake style re-save: title/idea/items only — no P1 fields.
+    const resave = await app.fetch(
+      jsonReq("/workspace/projects", "POST", {
+        id: "wsp_sticky", userKey: "uk_st", title: "Code project v2", idea: "가계부 앱 개선", items: [{ id: "req_001", title: "로그인" }],
+      }),
+      env,
+    );
+    assert.equal(resave.status, 200);
+
+    const got = await (await app.fetch(new Request("http://localhost/workspace/projects/wsp_sticky?userKey=uk_st"), env)).json();
+    assert.equal(got.project.title, "Code project v2", "normal fields still update");
+    assert.deepEqual(got.project.builtWith, { tools: ["lovable"], primary: "lovable" }, "builtWith must survive");
+    assert.equal(got.project.entryPath, "code", "entryPath must survive");
+    assert.deepEqual(got.project.acquisition, { source: "threads" }, "acquisition must survive");
+  });
+
+  it("an explicit new builtWith still overwrites", async () => {
+    const env = makeEnv();
+    const app = createApp();
+    await app.fetch(
+      jsonReq("/workspace/projects", "POST", { id: "wsp_ow", userKey: "uk_st", title: "P", idea: "i", builtWith: { tools: ["lovable"] }, entryPath: "code" }),
+      env,
+    );
+    await app.fetch(
+      jsonReq("/workspace/projects", "POST", { id: "wsp_ow", userKey: "uk_st", title: "P", idea: "i", builtWith: { tools: ["cursor"] } }),
+      env,
+    );
+    const got = await (await app.fetch(new Request("http://localhost/workspace/projects/wsp_ow?userKey=uk_st"), env)).json();
+    assert.deepEqual(got.project.builtWith.tools, ["cursor"]);
+    assert.equal(got.project.entryPath, "code", "omitted entryPath still survives");
+  });
+
+  it("acquisition defaults to 'direct' only on CREATE, not on re-save", async () => {
+    const env = makeEnv();
+    const app = createApp();
+    await app.fetch(
+      jsonReq("/workspace/projects", "POST", { id: "wsp_acq", userKey: "uk_st", title: "P", idea: "i", acquisition: { source: "threads" } }),
+      env,
+    );
+    await app.fetch(
+      jsonReq("/workspace/projects", "POST", { id: "wsp_acq", userKey: "uk_st", title: "P2", idea: "i" }),
+      env,
+    );
+    const got = await (await app.fetch(new Request("http://localhost/workspace/projects/wsp_acq?userKey=uk_st"), env)).json();
+    assert.deepEqual(got.project.acquisition, { source: "threads" }, "re-save must not reset to direct");
+
+    const created = await app.fetch(
+      jsonReq("/workspace/projects", "POST", { id: "wsp_acq2", userKey: "uk_st", title: "P", idea: "i" }),
+      env,
+    );
+    assert.equal(created.status, 200);
+    const got2 = await (await app.fetch(new Request("http://localhost/workspace/projects/wsp_acq2?userKey=uk_st"), env)).json();
+    assert.deepEqual(got2.project.acquisition, { source: "direct" }, "create without source defaults to direct");
   });
 });
 

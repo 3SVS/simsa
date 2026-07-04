@@ -806,6 +806,12 @@ export type Dictionary = {
     openPulls: string;
     noPulls: string;
     selectItemsForPr: string;
+    noItemsYet: string;
+    noItemsHint: string;
+    noItemsIdeaPlaceholder: string;
+    generateItems: string;
+    generatingItems: string;
+    generateItemsError: string;
     selected: string;
     saveLink: string;
     linked: string;
