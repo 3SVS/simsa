@@ -178,45 +178,64 @@ export function AppSidebar() {
               </li>
             </ul>
 
-            {/* 3-step progress map */}
+            {/* 3-step progress map — each step is a visually distinct SECTION
+                (boxed group + numbered badge + bolder header), so step headers
+                never read as just another nav item. Header was 11px vs 13px
+                items before — an inverted hierarchy users couldn't parse. */}
             {steps.map((step, i) => {
               const meta = stepMeta[step.key]!;
               const locked = step.status === "locked";
+              const current = step.status === "current";
               return (
-                <div key={step.key} className="mb-3">
+                <div
+                  key={step.key}
+                  className={`mb-2 rounded-lg border p-1.5 ${
+                    current ? "border-brand-200 bg-brand-50/40" : "border-gray-100 bg-gray-50/60"
+                  } ${locked ? "opacity-70" : ""}`}
+                >
                   <p
-                    className={`flex items-center gap-2 px-2.5 pb-1 text-[11px] font-semibold tracking-wide ${
-                      locked ? "text-gray-400" : step.status === "current" ? "text-gray-900" : "text-gray-500"
+                    className={`flex items-center gap-2 px-1 pb-1 text-xs font-semibold ${
+                      locked ? "text-gray-500" : "text-gray-900"
                     }`}
                   >
                     <span
                       aria-hidden
-                      className={`inline-block w-3 text-center text-[10px] ${
+                      className={`grid h-5 w-5 flex-shrink-0 place-items-center rounded-md border text-[10px] font-bold ${
                         step.status === "done"
-                          ? "text-green-600"
-                          : step.status === "current"
-                            ? "text-brand-600"
-                            : "text-gray-400"
+                          ? "border-green-200 bg-green-50 text-green-700"
+                          : current
+                            ? "border-brand-300 bg-brand-600 text-white"
+                            : "border-gray-200 bg-white text-gray-500"
                       }`}
                     >
-                      {statusGlyph(step.status)}
+                      {step.status === "done" ? "✓" : i + 1}
                     </span>
-                    {i + 1} · {meta.label}
+                    {meta.label}
                     {step.optional && (
-                      <span className="rounded-full border border-gray-200 px-1.5 py-px text-[9px] font-medium text-gray-500">
+                      <span className="rounded-full border border-gray-200 bg-white px-1.5 py-px text-[9px] font-medium text-gray-500">
                         {t.stepsNav.optionalTag}
                       </span>
                     )}
                   </p>
                   {locked ? (
-                    <p className="px-2.5 pb-1 pl-[30px] text-[11px] text-gray-500">{lockHint(step.lockReason)}</p>
+                    <p className="px-1 pb-1 pl-8 text-[11px] text-gray-500">{lockHint(step.lockReason)}</p>
                   ) : (
-                    <ul className="space-y-0.5 pl-[18px]">
+                    <ul className="space-y-0.5">
                       {meta.items.map(([slug, label]) => {
                         const href = `${base}/${slug}`;
+                        const active = pathname === href;
                         return (
                           <li key={slug}>
-                            <Link href={href} className={itemClass(pathname === href)}>{label}</Link>
+                            <Link
+                              href={href}
+                              className={`block truncate rounded-md py-1.5 pl-8 pr-2.5 text-[13px] transition-colors ${
+                                active
+                                  ? "border border-gray-200 bg-white font-medium text-gray-900 shadow-sm"
+                                  : "text-gray-600 hover:bg-white/70 hover:text-gray-900"
+                              }`}
+                            >
+                              {label}
+                            </Link>
                           </li>
                         );
                       })}
