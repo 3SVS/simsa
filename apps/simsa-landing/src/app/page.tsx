@@ -1,9 +1,14 @@
-// Simsa marketing entry for trysimsa.com.
-// Stage 93 hero · 95 trust/contact · 96 staged-acceptance positioning ·
-// PR B open-beta framing: the early-access gate became an open-beta invite —
-// free while in beta, community tone, no launch hype.
-// Static, host-agnostic, no new dependencies.
+"use client";
+
+// Simsa marketing entry — served on simsa.dev (trysimsa.com redirects here).
+// Open-beta framing (PR B) + EN/KO with browser-language detection and a
+// manual toggle (persisted). Copy uses the dashboard's non-developer language
+// (확인 / 코드 저장소 / 기획서 / 코드 변경(PR)) — see src/lib/dictionary.mjs.
+// SSR renders EN deterministically; a hydration effect switches to the stored
+// or browser-detected language (same pattern as the dashboard I18nProvider).
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { LANDING_DICT, LANG_STORAGE_KEY, resolveInitialLang } from "../lib/dictionary.mjs";
 
 const APP_URL = "https://app.trysimsa.com";
 // Real contact mailbox (operator-provided). No trysimsa.com mailbox is wired
@@ -24,48 +29,59 @@ const FEEDBACK_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
   FEEDBACK_SUBJECT,
 )}&body=${encodeURIComponent(FEEDBACK_BODY)}`;
 
-const INPUTS = [
-  "Idea",
-  "PRD / spec",
-  "Product URL",
-  "GitHub repo",
-  "Pull request",
-  "AI-built app",
-];
-
-const OUTPUTS = [
-  "Product understanding",
-  "Acceptance items",
-  "Stage plan",
-  "Review evidence",
-  "Accept / fix / rerun decisions",
-  "Release readiness",
-];
+type Lang = "en" | "ko";
 
 export default function Home() {
+  // Deterministic SSR default (en) — the effect below re-resolves after
+  // hydration so there is no server/client markup mismatch.
+  const [lang, setLang] = useState<Lang>("en");
+
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(LANG_STORAGE_KEY);
+    } catch {
+      /* storage blocked — fall through to browser detection */
+    }
+    setLang(resolveInitialLang({ stored, navigatorLanguage: navigator.language }));
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  const toggleLang = () => {
+    const next: Lang = lang === "en" ? "ko" : "en";
+    setLang(next);
+    try {
+      window.localStorage.setItem(LANG_STORAGE_KEY, next);
+    } catch {
+      /* non-fatal */
+    }
+  };
+
+  const t = LANDING_DICT[lang];
+
   return (
     <main>
       <section className="hero">
         <div className="container">
-          <p className="wordmark">Simsa</p>
-          <h1 className="tagline">The acceptance layer for AI-built software.</h1>
-          <p className="subline">From fast AI-built drafts to accepted product work.</p>
-          <p className="lede">
-            AI coding agents can create a first draft fast. Simsa helps teams
-            review, compare, and decide what to accept, fix, or rerun — with
-            evidence.
-          </p>
-          <p className="beta-note">
-            Simsa is in open beta — everything is free while we build it out.
-            You&apos;d be one of the early members, and what you run shapes what
-            it becomes.
-          </p>
+          <div className="lang-toggle-row">
+            <button type="button" className="lang-toggle" onClick={toggleLang}>
+              {t.langToggle}
+            </button>
+          </div>
+          <p className="wordmark">{t.hero.wordmark}</p>
+          <h1 className="tagline">{t.hero.headline}</h1>
+          <p className="subline">{t.hero.subline}</p>
+          <p className="lede">{t.hero.lede}</p>
+          <p className="beta-note">{t.hero.betaNote}</p>
           <div className="hero-actions">
             <a className="cta" href={APP_URL}>
-              Start free — open beta
+              {t.hero.ctaStart}
             </a>
             <Link className="cta-secondary" href="/demo">
-              View demo
+              {t.hero.ctaDemo}
             </Link>
           </div>
         </div>
@@ -73,13 +89,10 @@ export default function Home() {
 
       <section className="section">
         <div className="container">
-          <h2>Start from anything</h2>
-          <p>
-            Bring an idea, a PRD, a product URL, a GitHub repo, a pull request,
-            or an AI-built app. Simsa turns it into a staged acceptance workflow.
-          </p>
+          <h2>{t.startAnything.title}</h2>
+          <p>{t.startAnything.body}</p>
           <div className="chips">
-            {INPUTS.map((input) => (
+            {t.startAnything.chips.map((input) => (
               <span className="chip" key={input}>
                 {input}
               </span>
@@ -90,13 +103,10 @@ export default function Home() {
 
       <section className="section">
         <div className="container">
-          <h2>What Simsa creates</h2>
-          <p>
-            Raw AI-built output becomes reviewable, comparable, acceptance-ready
-            product work.
-          </p>
+          <h2>{t.creates.title}</h2>
+          <p>{t.creates.body}</p>
           <ul className="outputs">
-            {OUTPUTS.map((output) => (
+            {t.creates.outputs.map((output) => (
               <li key={output}>{output}</li>
             ))}
           </ul>
@@ -105,42 +115,22 @@ export default function Home() {
 
       <section className="section">
         <div className="container">
-          <h2>How the workflow runs</h2>
+          <h2>{t.workflow.title}</h2>
           <ol className="steps">
-            <li>
-              Understand what exists.{" "}
-              <span>Idea, spec, repo, or AI-built draft.</span>
-            </li>
-            <li>
-              Turn it into acceptance items.{" "}
-              <span>The criteria a change has to meet.</span>
-            </li>
-            <li>
-              Review builds and agent outputs.{" "}
-              <span>Against those criteria, with evidence.</span>
-            </li>
-            <li>
-              Decide what to accept, fix, or rerun.{" "}
-              <span>Compare runs and choose.</span>
-            </li>
-            <li>
-              Keep evidence and release history.{" "}
-              <span>So decisions stay reviewable.</span>
-            </li>
+            {t.workflow.steps.map((step) => (
+              <li key={step.title}>
+                {step.title} <span>{step.sub}</span>
+              </li>
+            ))}
           </ol>
         </div>
       </section>
 
       <section className="section">
         <div className="container">
-          <h2>For teams building with AI coding agents</h2>
-          <p className="note">
-            Built for founders, product teams, and agencies. Simsa runs the
-            acceptance process on top of fast AI-built drafts — staged review,
-            evidence, and release decisions — so you can tell what is actually
-            ready to accept, fix, or rerun.
-          </p>
-          <p>For partnership inquiries, contact the team.</p>
+          <h2>{t.forWhom.title}</h2>
+          <p className="note">{t.forWhom.body}</p>
+          <p>{t.forWhom.contactLead}</p>
           <a className="contact-link" href={`mailto:${CONTACT_EMAIL}`}>
             {CONTACT_EMAIL}
           </a>
@@ -149,23 +139,15 @@ export default function Home() {
 
       <section className="section">
         <div className="container">
-          <h2>Join the open beta</h2>
-          <p>
-            No waitlist, no invite code — bring an idea, a PRD, a GitHub repo,
-            or an AI-built app and start checking it today. Everything is free
-            during the beta.
-          </p>
-          <p>
-            Being early matters here: the reviews beta members run are what
-            teach Simsa which failures actually happen in AI-built software.
-            If something feels off or missing, tell us — we read every note.
-          </p>
+          <h2>{t.joinBeta.title}</h2>
+          <p>{t.joinBeta.p1}</p>
+          <p>{t.joinBeta.p2}</p>
           <div className="hero-actions">
             <a className="cta" href={APP_URL}>
-              Start free — open beta
+              {t.joinBeta.ctaStart}
             </a>
             <a className="cta-secondary" href={FEEDBACK_MAILTO}>
-              Send beta feedback
+              {t.joinBeta.ctaFeedback}
             </a>
           </div>
         </div>
@@ -174,12 +156,12 @@ export default function Home() {
       <footer className="foot">
         <div className="container">
           <nav className="foot-links">
-            <Link href="/demo">Demo</Link>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-            <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
+            <Link href="/demo">{t.footer.demo}</Link>
+            <Link href="/privacy">{t.footer.privacy}</Link>
+            <Link href="/terms">{t.footer.terms}</Link>
+            <a href={`mailto:${CONTACT_EMAIL}`}>{t.footer.contact}</a>
           </nav>
-          <p className="foot-tag">Built for AI-built software acceptance.</p>
+          <p className="foot-tag">{t.footer.tag}</p>
         </div>
       </footer>
     </main>

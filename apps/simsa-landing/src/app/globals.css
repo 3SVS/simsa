@@ -85,6 +85,27 @@ a {
   max-width: 34rem;
 }
 
+/* EN/KO manual switch — quiet text button, top of the hero. */
+.lang-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.lang-toggle {
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.lang-toggle:hover {
+  color: var(--fg, inherit);
+}
+
 .cta {
   display: inline-flex;
   align-items: center;
