@@ -447,7 +447,7 @@ export async function startPRReview(
         method: "POST",
         headers,
         body: JSON.stringify(input),
-        signal: AbortSignal.timeout(40000),
+        signal: AbortSignal.timeout(180000), // council reviews can take minutes — 40s caused false failures
       },
     );
     const data = await resp.json().catch(() => ({ ok: false, error: `HTTP ${resp.status}` })) as StartReviewResponse;

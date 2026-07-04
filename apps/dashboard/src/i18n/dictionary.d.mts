@@ -843,6 +843,7 @@ export type Dictionary = {
     generatingItems: string;
     generateItemsError: string;
     reviewingHint: string;
+    reviewDone: string;
     connectionLoadError: string;
     copyManually: string;
     selected: string;

@@ -303,14 +303,8 @@ export default function ItemsPage() {
         )}
       </div>
 
-      {hasItems && (
-        <div className="mt-6 flex items-center justify-between rounded-lg border border-brand-100 bg-brand-50 px-5 py-4">
-          <p className="text-sm text-brand-800">{t.items.ctaQuestion}</p>
-          <a href={`/projects/${id}/export`} className="text-sm font-medium text-brand-700 hover:text-brand-800">
-            {t.items.ctaButton} →
-          </a>
-        </div>
-      )}
+      {/* Next step comes from the flow (StepNextButton) — the old builder-pack
+          shortcut jumped from prepare straight to export and confused the map. */}
       <StepNextButton />
     </div>
   );
