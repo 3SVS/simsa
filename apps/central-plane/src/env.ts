@@ -187,6 +187,14 @@ export interface Env {
    */
   WORKSPACE_PR_COMMENT_HOURLY_LIMIT?: string;
   /**
+   * beta_limits (PR B) — TEMPORARY daily per-userKey abuse caps for the free
+   * managed beta. See workspace/beta-limits.ts for rationale. Defaults:
+   * reviews 100/day, project creations 20/day. Re-tune from cost_meta after
+   * open. Parsed as positive integers; invalid/absent → defaults.
+   */
+  BETA_REVIEW_DAILY_LIMIT?: string;
+  BETA_PROJECT_CREATE_DAILY_LIMIT?: string;
+  /**
    * v0.14.5 — Lemon Squeezy MoR for paid tiers (Stripe Korea is
    * personal-only; LS handles VAT across KR/US/EU). All four secrets
    * required for billing routes to function; otherwise /billing

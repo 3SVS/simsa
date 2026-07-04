@@ -43,6 +43,11 @@ import {
   isValidTarget,
 } from "../workspace/outcomes.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
+import { consumeUserDailyLimit } from "../workspace/rate-limit.js";
+import {
+  betaProjectCreateDailyLimit,
+  BETA_PROJECT_CREATE_DAILY_BUCKET,
+} from "../workspace/beta-limits.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -260,10 +265,29 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       // Overwrite-IDOR guard: a client-supplied id that already exists and
       // belongs to a DIFFERENT user_key must never be overwritten. Same-owner
       // upsert (dashboard re-save) keeps working; new ids keep working.
+      let existing: Awaited<ReturnType<typeof getProject>> = null;
       if (typeof b["id"] === "string" && b["id"]) {
-        const existing = await getProject(c.env, b["id"]).catch(() => null);
+        existing = await getProject(c.env, b["id"]).catch(() => null);
         if (existing && existing.userKey !== String(b["userKey"])) {
           return new Response(JSON.stringify({ ok: false, error: "id_conflict" }), { status: 409, headers: { "content-type": "application/json", ...headers } });
+        }
+      }
+      // beta_limits — TEMPORARY daily cap on NEW project creations (default
+      // 20/day per userKey). Re-saves of an existing owned project (the
+      // dashboard autosaves constantly) do NOT consume the budget. See
+      // workspace/beta-limits.ts; re-tune from cost_meta after open.
+      if (!existing) {
+        const daily = await consumeUserDailyLimit(
+          c.env,
+          BETA_PROJECT_CREATE_DAILY_BUCKET,
+          String(b["userKey"]),
+          betaProjectCreateDailyLimit(c.env),
+        );
+        if (daily.limited) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "rate_limited", scope: "beta_daily", retryAfterSeconds: daily.retryAfterSeconds }),
+            { status: 429, headers: { "content-type": "application/json", "retry-after": String(daily.retryAfterSeconds), ...headers } },
+          );
         }
       }
       const entryPath =

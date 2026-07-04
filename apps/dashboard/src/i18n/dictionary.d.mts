@@ -751,6 +751,7 @@ export type Dictionary = {
     point2: string;
     point3: string;
     point4: string;
+    betaNote: string;
     enable: string;
     storageNote: string;
     savedOn: string;

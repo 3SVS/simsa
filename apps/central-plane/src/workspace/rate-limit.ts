@@ -22,6 +22,19 @@ function currentHourUtc(): string {
   return new Date().toISOString().slice(0, 13);
 }
 
+/** UTC day bucket, e.g. "2026-07-03" — resets at UTC midnight. */
+function currentDayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Seconds until the next UTC midnight (floor 60s). */
+export function secondsUntilNextDayUtc(): number {
+  const now = new Date();
+  const next = new Date(now);
+  next.setUTCHours(24, 0, 0, 0);
+  return Math.max(60, Math.floor((next.getTime() - now.getTime()) / 1000));
+}
+
 /** Seconds until the next full UTC hour (floor 60s). */
 export function secondsUntilNextHour(): number {
   const now = new Date();
@@ -84,6 +97,28 @@ export async function consumeUserHourlyLimit(
     return { limited: true, retryAfterSeconds: secondsUntilNextHour() };
   }
   await increment(env.DB, hash, hourUtc);
+  return { limited: false, retryAfterSeconds: 0 };
+}
+
+/**
+ * Check + consume one slot from a per-userKey DAILY bucket (UTC calendar day).
+ * Same `workspace_rate_limit` table as the hourly limiter — the `hour_utc`
+ * column simply stores the day key ("2026-07-03"), which can never collide
+ * with an hour key ("2026-07-03T15"). Attempt-based, like the hourly variant.
+ */
+export async function consumeUserDailyLimit(
+  env: Env,
+  bucket: string,
+  userKey: string,
+  limitPerDay: number,
+): Promise<HourlyLimitResult> {
+  const hash = await sha256Hex(`${bucket}::${userKey}`);
+  const dayUtc = currentDayUtc();
+  const count = await getCount(env.DB, hash, dayUtc);
+  if (count >= limitPerDay) {
+    return { limited: true, retryAfterSeconds: secondsUntilNextDayUtc() };
+  }
+  await increment(env.DB, hash, dayUtc);
   return { limited: false, retryAfterSeconds: 0 };
 }
 

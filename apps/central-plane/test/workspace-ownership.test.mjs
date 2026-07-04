@@ -336,6 +336,96 @@ describe("per-userKey hourly rate limit", () => {
   });
 });
 
+// ─── beta_limits: daily caps (PR B) ──────────────────────────────────────────
+
+describe("beta daily project-creation cap", () => {
+  it("blocks the N+1th NEW project in a UTC day with 429 beta_daily", async () => {
+    const env = makeEnv({ BETA_PROJECT_CREATE_DAILY_LIMIT: "2" });
+    const app = createApp();
+    const create = (title) =>
+      app.fetch(jsonReq("/workspace/projects", "POST", { userKey: "uk_cap", title }), env);
+    const r1 = await create("One");
+    assert.equal(r1.status, 200);
+    const r2 = await create("Two");
+    assert.equal(r2.status, 200);
+    const r3 = await create("Three");
+    assert.equal(r3.status, 429);
+    const body = await r3.json();
+    assert.equal(body.error, "rate_limited");
+    assert.equal(body.scope, "beta_daily");
+    assert.ok(Number(body.retryAfterSeconds) >= 60);
+    assert.ok(r3.headers.get("retry-after"));
+  });
+
+  it("re-saving an existing owned project does NOT consume the creation budget", async () => {
+    const env = makeEnv({ BETA_PROJECT_CREATE_DAILY_LIMIT: "1" });
+    const app = createApp();
+    const r1 = await app.fetch(
+      jsonReq("/workspace/projects", "POST", { userKey: "uk_cap2", title: "First" }),
+      env,
+    );
+    assert.equal(r1.status, 200);
+    const { id } = await r1.json();
+    // Budget exhausted — the dashboard's autosave re-saves must keep working.
+    for (let i = 0; i < 3; i++) {
+      const rs = await app.fetch(
+        jsonReq("/workspace/projects", "POST", { id, userKey: "uk_cap2", title: `Edit ${i}` }),
+        env,
+      );
+      assert.equal(rs.status, 200, "same-owner re-save must never be capped");
+    }
+    // …while a NEW project (fresh explicit id) is blocked.
+    const blocked = await app.fetch(
+      jsonReq("/workspace/projects", "POST", { id: "wsp_fresh_id", userKey: "uk_cap2", title: "New" }),
+      env,
+    );
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).scope, "beta_daily");
+  });
+
+  it("cap is per-userKey — another user still creates", async () => {
+    const env = makeEnv({ BETA_PROJECT_CREATE_DAILY_LIMIT: "1" });
+    const app = createApp();
+    const a1 = await app.fetch(jsonReq("/workspace/projects", "POST", { userKey: "uk_a", title: "A" }), env);
+    assert.equal(a1.status, 200);
+    const a2 = await app.fetch(jsonReq("/workspace/projects", "POST", { userKey: "uk_a", title: "A2" }), env);
+    assert.equal(a2.status, 429);
+    const b1 = await app.fetch(jsonReq("/workspace/projects", "POST", { userKey: "uk_b", title: "B" }), env);
+    assert.equal(b1.status, 200);
+  });
+});
+
+describe("beta daily review cap", () => {
+  it("review endpoint trips at BETA_REVIEW_DAILY_LIMIT (on top of the hourly cap)", async () => {
+    const env = makeEnv({ BETA_REVIEW_DAILY_LIMIT: "1" });
+    addProject(env, "wsp_brl", "uk_brl");
+    const app = createApp();
+    const call = () =>
+      app.fetch(jsonReq("/workspace/projects/wsp_brl/github/pulls/1/review", "POST", { userKey: "uk_brl" }), env);
+    const r1 = await call();
+    assert.equal(r1.status, 400); // no_repo_linked — passed both limiters (attempt consumed)
+    const r2 = await call();
+    assert.equal(r2.status, 429);
+    const body = await r2.json();
+    assert.equal(body.error, "rate_limited");
+    assert.equal(body.scope, "beta_daily");
+    assert.ok(r2.headers.get("retry-after"));
+  });
+
+  it("daily review cap is per-userKey", async () => {
+    const env = makeEnv({ BETA_REVIEW_DAILY_LIMIT: "1" });
+    addProject(env, "wsp_brl2", "uk_one_d");
+    addProject(env, "wsp_brl3", "uk_two_d");
+    const app = createApp();
+    const a1 = await app.fetch(jsonReq("/workspace/projects/wsp_brl2/github/pulls/1/review", "POST", { userKey: "uk_one_d" }), env);
+    assert.equal(a1.status, 400);
+    const a2 = await app.fetch(jsonReq("/workspace/projects/wsp_brl2/github/pulls/1/review", "POST", { userKey: "uk_one_d" }), env);
+    assert.equal(a2.status, 429);
+    const b1 = await app.fetch(jsonReq("/workspace/projects/wsp_brl3/github/pulls/1/review", "POST", { userKey: "uk_two_d" }), env);
+    assert.equal(b1.status, 400, "other user must not be capped");
+  });
+});
+
 // ─── (f) onError does not leak err.message ───────────────────────────────────
 
 describe("app.onError hygiene", () => {

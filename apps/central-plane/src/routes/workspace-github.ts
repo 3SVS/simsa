@@ -55,7 +55,8 @@ import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { detectContentLang } from "../workspace/topic-tags.js";
 import { getProject, getOwnedProject, listProjectsByUser } from "../workspace/db.js";
-import { consumeUserHourlyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
+import { consumeUserHourlyLimit, consumeUserDailyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
+import { betaReviewDailyLimit, BETA_REVIEW_DAILY_BUCKET } from "../workspace/beta-limits.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
 import { normalizeProductSpec, normalizeCheckableItems } from "../workspace/check.js";
 import { generatePRFixBrief } from "../workspace/pr-fix-brief.js";
@@ -753,6 +754,34 @@ export function createWorkspaceGitHubRoutes(
     const reviewLimit = hourlyLimitFromEnv(c.env.WORKSPACE_PR_REVIEW_HOURLY_LIMIT, DEFAULT_PR_REVIEW_HOURLY_LIMIT);
     const limited = await denyIfRateLimited(c.env, "workspace-pr-review", userKey, reviewLimit, origin);
     if (limited) return limited;
+
+    // beta_limits — TEMPORARY daily cap (default 100/day) on top of the hourly
+    // one: the managed beta is free, so this is the cost ceiling per user per
+    // UTC day. Re-tune from cost_meta after open (see workspace/beta-limits.ts).
+    const daily = await consumeUserDailyLimit(
+      c.env,
+      BETA_REVIEW_DAILY_BUCKET,
+      userKey,
+      betaReviewDailyLimit(c.env),
+    );
+    if (daily.limited) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "rate_limited",
+          scope: "beta_daily",
+          retryAfterSeconds: daily.retryAfterSeconds,
+        }),
+        {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": String(daily.retryAfterSeconds),
+            ...corsHeaders(origin),
+          },
+        },
+      );
+    }
 
     // Stage 40: normalize hand-picked selectedItemIds (dedupe, trim, drop
     // empties, cap). Returns undefined when not an array → falls back to
