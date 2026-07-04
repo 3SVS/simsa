@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -209,7 +211,7 @@ export default function ExperimentPage() {
     if (qp) void openExperiment(qp);
   }, [id, userKey, loadSaved, openExperiment]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const ext = loadExtendedProjectData(id);
   const spec = ext?.productSpec as { oneLine?: string; problem?: string } | undefined;
@@ -349,7 +351,7 @@ export default function ExperimentPage() {
             <div className="mb-2 flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-gray-800">{c.label}</p>
-                <p className="mt-0.5 text-[11px] text-gray-400">
+                <p className="mt-0.5 text-[11px] text-gray-500">
                   {t.experiment.roleLabel}: {roleLabel(t, c.role)} · {t.experiment.suggestedAgentLabel}: {agentLabel(t, c.suggestedAgent)}
                 </p>
               </div>
@@ -370,7 +372,10 @@ export default function ExperimentPage() {
       {/* Save experiment */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h3 className="text-sm font-semibold text-gray-800">{t.experiment.createExperiment}</h3>
-        <p className="mt-0.5 text-xs text-gray-400">{t.experiment.saveHint}</p>
+        <p className="mt-0.5 text-xs text-gray-500">
+          {t.experiment.saveHint}
+          {!titleInput.trim() && <span className="ml-1 text-amber-600">{t.experiment.titleRequired}</span>}
+        </p>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             value={titleInput}
@@ -395,14 +400,14 @@ export default function ExperimentPage() {
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h3 className="text-sm font-semibold text-gray-800">{t.experiment.savedExperiments}</h3>
         {saved.length === 0 ? (
-          <p className="mt-2 text-xs text-gray-400">{t.experiment.noSavedExperiments}</p>
+          <p className="mt-2 text-xs text-gray-500">{t.experiment.noSavedExperiments}</p>
         ) : (
           <ul className="mt-3 space-y-1.5">
             {saved.map((e) => (
               <li key={e.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium text-gray-700">{e.title}</p>
-                  <p className="truncate text-[11px] text-gray-400">{templateTitle(t, e.templateId)} · {e.candidateCount} · {expDate(e.createdAt, locale)}</p>
+                  <p className="truncate text-[11px] text-gray-500">{templateTitle(t, e.templateId)} · {e.candidateCount} · {expDate(e.createdAt, locale)}</p>
                 </div>
                 <button onClick={() => openExperiment(e.id)} className="flex-shrink-0 rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50">
                   {t.experiment.open}
@@ -417,7 +422,7 @@ export default function ExperimentPage() {
       {openExp && (
         <section className="rounded-xl border border-indigo-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-gray-800">{openExp.title}</h3>
-          <p className="mt-0.5 text-xs text-gray-400">{templateTitle(t, openExp.templateId)}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{templateTitle(t, openExp.templateId)}</p>
           <div className="mt-3 space-y-3">
             {openExp.candidates.map((c) => (
               <CandidateLinkCard key={c.id} candidate={c} reviewRuns={reviewRuns} onPatch={handlePatchCandidate} t={t} locale={locale} />
@@ -431,7 +436,7 @@ export default function ExperimentPage() {
             return (
               <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4">
                 <p className="text-sm font-semibold text-gray-800">{t.experiment.benchmarkHandoff}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{t.experiment.benchmarkHandoffDesc}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{t.experiment.benchmarkHandoffDesc}</p>
                 {linkedBenchmarkId ? (
                   <div className="mt-2">
                     <p className="text-xs text-green-600">{benchPhase === "done" ? t.experiment.benchmarkCreated : t.experiment.benchmarkLinked}</p>
@@ -495,7 +500,7 @@ export default function ExperimentPage() {
       {/* Benchmark link */}
       <section className="rounded-xl border border-gray-100 bg-gray-50 px-5 py-4">
         <p className="text-xs text-gray-500">{t.experiment.afterReview}</p>
-        <p className="mt-0.5 text-xs text-gray-400">{t.experiment.benchmarkHint}</p>
+        <p className="mt-0.5 text-xs text-gray-500">{t.experiment.benchmarkHint}</p>
         <Link
           href={`/projects/${id}/benchmark`}
           className="mt-2 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
@@ -571,8 +576,8 @@ function DecisionSection({
   return (
     <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4">
       <p className="text-sm font-semibold text-gray-800">{t.experiment.decision}</p>
-      <p className="mt-0.5 text-xs text-gray-400">{t.experiment.decisionDesc}</p>
-      <p className={`mt-1 text-[11px] ${hasBenchmark ? "text-gray-400" : "text-amber-700"}`}>
+      <p className="mt-0.5 text-xs text-gray-500">{t.experiment.decisionDesc}</p>
+      <p className={`mt-1 text-[11px] ${hasBenchmark ? "text-gray-500" : "text-amber-700"}`}>
         {hasBenchmark ? t.experiment.useBenchmarkEvidence : t.experiment.createBenchmarkFirst}
       </p>
       <div className="mt-3 space-y-2">
@@ -999,9 +1004,9 @@ function OutcomeQualitySection({
   return (
     <div className="mt-4 rounded-lg border border-gray-100 bg-white p-4">
       <p className="text-sm font-semibold text-gray-800">{t.outcome.title}</p>
-      <p className="mt-0.5 text-xs text-gray-400">{t.outcome.desc}</p>
+      <p className="mt-0.5 text-xs text-gray-500">{t.outcome.desc}</p>
 
-      {loading && <p className="mt-3 text-xs text-gray-400">{t.outcome.loading}</p>}
+      {loading && <p className="mt-3 text-xs text-gray-500">{t.outcome.loading}</p>}
 
       {!loading && scorecard && (
         <>
@@ -1013,7 +1018,7 @@ function OutcomeQualitySection({
             >
               {outcomeText(t, gradeLabelKey(scorecard.quality.grade))}
             </span>
-            <span className="text-[11px] text-gray-400">
+            <span className="text-[11px] text-gray-500">
               {t.outcome.score}: {scorecard.quality.score}
             </span>
           </div>
@@ -1028,13 +1033,13 @@ function OutcomeQualitySection({
           </dl>
 
           <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.outcome.recommendedNext}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.outcome.recommendedNext}</p>
             <p className="mt-0.5 text-sm font-semibold text-gray-800">
               {outcomeText(t, actionLabelKey(scorecard.nextEvolution.recommendedAction))}
             </p>
             {scorecard.nextEvolution.reasons.length > 0 && (
               <>
-                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.outcome.reasonsLabel}</p>
+                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.outcome.reasonsLabel}</p>
                 <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
                   {scorecard.nextEvolution.reasons.map((r) => (
                     <li key={r} className="flex gap-1.5">
@@ -1049,7 +1054,7 @@ function OutcomeQualitySection({
 
           {scorecard.nextEvolution.suggestedFocusItemIds.length > 0 && (
             <div className="mt-3">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.outcome.suggestedFocus}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.outcome.suggestedFocus}</p>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {scorecard.nextEvolution.suggestedFocusItemIds.map((itemId) => (
                   <span key={itemId} className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-mono text-gray-600">
@@ -1086,12 +1091,12 @@ function OutcomeQualitySection({
             </button>
           </div>
 
-          <p className="mt-3 text-[11px] leading-relaxed text-gray-400">{t.outcome.basis}</p>
+          <p className="mt-3 text-[11px] leading-relaxed text-gray-500">{t.outcome.basis}</p>
 
           {/* Evolution action pack (Stage 76 + Stage 77 persistence) */}
           <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4">
             <p className="text-sm font-semibold text-gray-800">{t.evolution.title}</p>
-            <p className="mt-0.5 text-xs text-gray-400">{t.evolution.desc}</p>
+            <p className="mt-0.5 text-xs text-gray-500">{t.evolution.desc}</p>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
@@ -1140,7 +1145,7 @@ function OutcomeQualitySection({
                     {pack.title}
                   </span>
                   {pack.targetCandidateId && (
-                    <span className="text-gray-400">
+                    <span className="text-gray-500">
                       {t.evolution.targetCandidate}: {pack.targetCandidateId}
                     </span>
                   )}
@@ -1159,7 +1164,7 @@ function OutcomeQualitySection({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-gray-800">{t.evolution.summaryTitle}</p>
-                  <p className="mt-0.5 text-[11px] text-gray-400">{t.evolution.summaryDesc}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-500">{t.evolution.summaryDesc}</p>
                 </div>
                 {summary && (
                   <span
@@ -1181,7 +1186,7 @@ function OutcomeQualitySection({
               </div>
 
               {summaryPhase === "loading" && (
-                <p className="mt-2 text-xs text-gray-400">{t.outcome.loading}</p>
+                <p className="mt-2 text-xs text-gray-500">{t.outcome.loading}</p>
               )}
 
               {summaryPhase === "ready" && summary && (
@@ -1196,44 +1201,44 @@ function OutcomeQualitySection({
                     <>
                       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
                         <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
-                          <dt className="text-gray-400">{t.evolution.summaryActionPacks}</dt>
+                          <dt className="text-gray-500">{t.evolution.summaryActionPacks}</dt>
                           <dd className="font-semibold text-gray-800">{summary.actionPackCount}</dd>
                         </div>
                         <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
-                          <dt className="text-gray-400">{t.evolution.summaryFollowedPacks}</dt>
+                          <dt className="text-gray-500">{t.evolution.summaryFollowedPacks}</dt>
                           <dd className="font-semibold text-gray-800">{summary.followedPackCount}</dd>
                         </div>
                         <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
-                          <dt className="text-gray-400">{t.evolution.summaryImprovedPacks}</dt>
+                          <dt className="text-gray-500">{t.evolution.summaryImprovedPacks}</dt>
                           <dd className="font-semibold text-emerald-700">{summary.verdictCounts.improved}</dd>
                         </div>
                         <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
-                          <dt className="text-gray-400">{t.evolution.summaryRegressedPacks}</dt>
+                          <dt className="text-gray-500">{t.evolution.summaryRegressedPacks}</dt>
                           <dd className="font-semibold text-red-700">{summary.verdictCounts.regressed}</dd>
                         </div>
                         <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
-                          <dt className="text-gray-400">{t.evolution.summaryUnchangedPacks}</dt>
+                          <dt className="text-gray-500">{t.evolution.summaryUnchangedPacks}</dt>
                           <dd className="font-semibold text-gray-700">{summary.verdictCounts.unchanged}</dd>
                         </div>
                         <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
-                          <dt className="text-gray-400">{t.evolution.summaryInconclusivePacks}</dt>
+                          <dt className="text-gray-500">{t.evolution.summaryInconclusivePacks}</dt>
                           <dd className="font-semibold text-amber-700">{summary.verdictCounts.inconclusive}</dd>
                         </div>
                       </dl>
 
                       <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 p-2">
-                        <p className="text-[10px] uppercase tracking-wide text-gray-400">{t.evolution.summaryAverageChange}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-gray-500">{t.evolution.summaryAverageChange}</p>
                         <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] sm:grid-cols-4">
-                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactPassRate}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaPercent(summary.averageDelta.passRateDelta)}</dd></div>
-                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactCritical}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.criticalIssueDelta)}</dd></div>
-                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactNotVerified}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.notVerifiedDelta)}</dd></div>
-                          <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactBlockers}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.blockerDelta)}</dd></div>
+                          <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactPassRate}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaPercent(summary.averageDelta.passRateDelta)}</dd></div>
+                          <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactCritical}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.criticalIssueDelta)}</dd></div>
+                          <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactNotVerified}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.notVerifiedDelta)}</dd></div>
+                          <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactBlockers}</dt><dd className="font-semibold text-gray-700">{formatAverageDeltaCount(summary.averageDelta.blockerDelta)}</dd></div>
                         </dl>
                       </div>
 
                       {summary.recommendedActionVerdicts.length > 0 && (
                         <div className="mt-3">
-                          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.summaryActionBreakdown}</p>
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.evolution.summaryActionBreakdown}</p>
                           <ul className="mt-1 space-y-1 text-xs">
                             {summary.recommendedActionVerdicts.map((r) => (
                               <li
@@ -1254,7 +1259,7 @@ function OutcomeQualitySection({
 
                   {summary.reasons.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.summaryReasonsLabel}</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.evolution.summaryReasonsLabel}</p>
                       <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
                         {summary.reasons.map((r) => (
                           <li key={r} className="flex gap-1.5">
@@ -1268,7 +1273,7 @@ function OutcomeQualitySection({
 
                   {summary.limitations.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.summaryLimitationsLabel}</p>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.evolution.summaryLimitationsLabel}</p>
                       <ul className="mt-1 flex flex-wrap gap-1.5">
                         {summary.limitations.map((l) => (
                           <li
@@ -1291,9 +1296,9 @@ function OutcomeQualitySection({
 
             {/* Stage 77: saved action packs list */}
             <div className="mt-4 border-t border-gray-100 pt-3">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.saved}</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.evolution.saved}</p>
               {savedPacks.length === 0 ? (
-                <p className="mt-1 text-xs text-gray-400">{t.evolution.noSaved}</p>
+                <p className="mt-1 text-xs text-gray-500">{t.evolution.noSaved}</p>
               ) : (
                 <ul className="mt-2 space-y-1.5">
                   {savedPacks.map((p) => (
@@ -1318,9 +1323,9 @@ function OutcomeQualitySection({
                             {t.evolution[followupStatusLabelKey(p.followupStatus) as keyof typeof t.evolution]}
                           </span>
                           {p.followupPullRequestNumber && (
-                            <span className="text-[10px] text-gray-400">PR #{p.followupPullRequestNumber}</span>
+                            <span className="text-[10px] text-gray-500">PR #{p.followupPullRequestNumber}</span>
                           )}
-                          <span className="text-[10px] text-gray-400">
+                          <span className="text-[10px] text-gray-500">
                             {t.evolution.createdAt}: {new Date(p.createdAt).toLocaleString()}
                           </span>
                         </div>
@@ -1344,7 +1349,7 @@ function OutcomeQualitySection({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-xs font-semibold text-gray-800">{t.evolution.serverGenerated}</p>
-                    <p className="text-[11px] text-gray-400">{t.evolution.serverGeneratedDesc}</p>
+                    <p className="text-[11px] text-gray-500">{t.evolution.serverGeneratedDesc}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -1370,7 +1375,7 @@ function OutcomeQualitySection({
                     {openedPack.title}
                   </span>
                   {openedPack.pack.targetCandidateId && (
-                    <span className="text-gray-400">
+                    <span className="text-gray-500">
                       {t.evolution.targetCandidate}: {openedPack.pack.targetCandidateId}
                     </span>
                   )}
@@ -1389,7 +1394,7 @@ function OutcomeQualitySection({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-xs font-semibold text-gray-800">{t.evolution.followup}</p>
-                      <p className="text-[11px] text-gray-400">{t.evolution.followupDesc}</p>
+                      <p className="text-[11px] text-gray-500">{t.evolution.followupDesc}</p>
                     </div>
                     <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700">
                       {t.evolution[followupStatusLabelKey(openedPack.followup.status) as keyof typeof t.evolution]}
@@ -1468,7 +1473,7 @@ function OutcomeQualitySection({
                           : t.evolution.saveFollowup}
                     </button>
                     {openedPack.followup.followedAt && (
-                      <span className="text-[11px] text-gray-400">
+                      <span className="text-[11px] text-gray-500">
                         {t.evolution.followedAt}: {new Date(openedPack.followup.followedAt).toLocaleString()}
                       </span>
                     )}
@@ -1487,7 +1492,7 @@ function OutcomeQualitySection({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-xs font-semibold text-gray-800">{t.evolution.impact}</p>
-                      <p className="text-[11px] text-gray-400">{t.evolution.impactDesc}</p>
+                      <p className="text-[11px] text-gray-500">{t.evolution.impactDesc}</p>
                     </div>
                     {impact && (
                       <span
@@ -1507,7 +1512,7 @@ function OutcomeQualitySection({
                   </div>
 
                   {impactPhase === "loading" && (
-                    <p className="mt-2 text-xs text-gray-400">{t.outcome.loading}</p>
+                    <p className="mt-2 text-xs text-gray-500">{t.outcome.loading}</p>
                   )}
 
                   {impactPhase === "ready" && impact && (
@@ -1518,42 +1523,42 @@ function OutcomeQualitySection({
                         <>
                           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                             <div className="rounded-md border border-gray-100 bg-white p-2">
-                              <p className="text-[10px] uppercase tracking-wide text-gray-400">{t.evolution.impactBefore}</p>
+                              <p className="text-[10px] uppercase tracking-wide text-gray-500">{t.evolution.impactBefore}</p>
                               {impact.before ? (
                                 <dl className="mt-1 space-y-0.5 text-[11px]">
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactPassRate}</dt><dd className="font-semibold text-gray-700">{formatRate(impact.before.passRate)}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactCritical}</dt><dd className="font-semibold text-gray-700">{impact.before.criticalIssueCount}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactNotVerified}</dt><dd className="font-semibold text-gray-700">{impact.before.notVerifiedCount}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactBlockers}</dt><dd className="font-semibold text-gray-700">{impact.before.blockerCount}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactPassRate}</dt><dd className="font-semibold text-gray-700">{formatRate(impact.before.passRate)}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactCritical}</dt><dd className="font-semibold text-gray-700">{impact.before.criticalIssueCount}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactNotVerified}</dt><dd className="font-semibold text-gray-700">{impact.before.notVerifiedCount}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactBlockers}</dt><dd className="font-semibold text-gray-700">{impact.before.blockerCount}</dd></div>
                                 </dl>
                               ) : (
-                                <p className="mt-1 text-[11px] text-gray-400">—</p>
+                                <p className="mt-1 text-[11px] text-gray-500">—</p>
                               )}
                             </div>
                             <div className="rounded-md border border-gray-100 bg-white p-2">
-                              <p className="text-[10px] uppercase tracking-wide text-gray-400">{t.evolution.impactAfter}</p>
+                              <p className="text-[10px] uppercase tracking-wide text-gray-500">{t.evolution.impactAfter}</p>
                               {impact.after ? (
                                 <dl className="mt-1 space-y-0.5 text-[11px]">
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactPassRate}</dt><dd className="font-semibold text-gray-700">{formatRate(impact.after.passRate)}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactCritical}</dt><dd className="font-semibold text-gray-700">{impact.after.criticalIssueCount}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactNotVerified}</dt><dd className="font-semibold text-gray-700">{impact.after.notVerifiedCount}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.impactBlockers}</dt><dd className="font-semibold text-gray-700">{impact.after.blockerCount}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactPassRate}</dt><dd className="font-semibold text-gray-700">{formatRate(impact.after.passRate)}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactCritical}</dt><dd className="font-semibold text-gray-700">{impact.after.criticalIssueCount}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactNotVerified}</dt><dd className="font-semibold text-gray-700">{impact.after.notVerifiedCount}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.impactBlockers}</dt><dd className="font-semibold text-gray-700">{impact.after.blockerCount}</dd></div>
                                 </dl>
                               ) : (
-                                <p className="mt-1 text-[11px] text-gray-400">—</p>
+                                <p className="mt-1 text-[11px] text-gray-500">—</p>
                               )}
                             </div>
                             <div className="rounded-md border border-gray-100 bg-white p-2">
-                              <p className="text-[10px] uppercase tracking-wide text-gray-400">{t.evolution.impactDelta}</p>
+                              <p className="text-[10px] uppercase tracking-wide text-gray-500">{t.evolution.impactDelta}</p>
                               {impact.delta ? (
                                 <dl className="mt-1 space-y-0.5 text-[11px]">
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.deltaPassRate}</dt><dd className="font-semibold text-gray-700">{formatDeltaPercent(impact.delta.passRateDelta)}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.deltaCritical}</dt><dd className="font-semibold text-gray-700">{formatDeltaInt(impact.delta.criticalIssueDelta)}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.deltaNotVerified}</dt><dd className="font-semibold text-gray-700">{formatDeltaInt(impact.delta.notVerifiedDelta)}</dd></div>
-                                  <div className="flex justify-between"><dt className="text-gray-400">{t.evolution.deltaBlockers}</dt><dd className="font-semibold text-gray-700">{formatDeltaInt(impact.delta.blockerDelta)}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.deltaPassRate}</dt><dd className="font-semibold text-gray-700">{formatDeltaPercent(impact.delta.passRateDelta)}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.deltaCritical}</dt><dd className="font-semibold text-gray-700">{formatDeltaInt(impact.delta.criticalIssueDelta)}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.deltaNotVerified}</dt><dd className="font-semibold text-gray-700">{formatDeltaInt(impact.delta.notVerifiedDelta)}</dd></div>
+                                  <div className="flex justify-between"><dt className="text-gray-500">{t.evolution.deltaBlockers}</dt><dd className="font-semibold text-gray-700">{formatDeltaInt(impact.delta.blockerDelta)}</dd></div>
                                 </dl>
                               ) : (
-                                <p className="mt-1 text-[11px] text-gray-400">—</p>
+                                <p className="mt-1 text-[11px] text-gray-500">—</p>
                               )}
                             </div>
                           </div>
@@ -1564,7 +1569,7 @@ function OutcomeQualitySection({
 
                           {impact.reasons.length > 0 && (
                             <div className="mt-3">
-                              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.impactReasons}</p>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.evolution.impactReasons}</p>
                               <ul className="mt-1 flex flex-wrap gap-1.5">
                                 {impact.reasons.map((r) => (
                                   <li
@@ -1580,7 +1585,7 @@ function OutcomeQualitySection({
 
                           {impact.limitations.length > 0 && (
                             <div className="mt-2">
-                              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{t.evolution.impactLimitations}</p>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{t.evolution.impactLimitations}</p>
                               <ul className="mt-1 flex flex-wrap gap-1.5">
                                 {impact.limitations.map((l) => (
                                   <li
@@ -1609,7 +1614,7 @@ function OutcomeQualitySection({
       )}
 
       {!loading && !scorecard && (
-        <p className="mt-3 text-xs text-gray-400">{t.evolution.needScorecard}</p>
+        <p className="mt-3 text-xs text-gray-500">{t.evolution.needScorecard}</p>
       )}
     </div>
   );
@@ -1618,7 +1623,7 @@ function OutcomeQualitySection({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-0.5">
-      <dt className="text-gray-400">{label}</dt>
+      <dt className="text-gray-500">{label}</dt>
       <dd className="font-semibold text-gray-800">{value}</dd>
     </div>
   );

@@ -349,7 +349,7 @@ function NewProjectInner() {
               />
 
               <p className="mb-1 text-xs font-semibold text-gray-600">{t.builtWith.question}</p>
-              <p className="mb-3 text-xs text-gray-400">{t.builtWith.hint}</p>
+              <p className="mb-3 text-xs text-gray-500">{t.builtWith.hint}</p>
               <div className="mb-6 flex flex-wrap gap-2">
                 {BUILT_WITH_OPTIONS.map((opt) => (
                   <button
@@ -415,7 +415,7 @@ function NewProjectInner() {
                 {isLoading ? t.np.reading : `${t.branch.specGenerate} →`}
               </button>
               {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
-              <p className="mt-3 text-center text-xs text-gray-400">{t.np.freeBeta}</p>
+              <p className="mt-3 text-center text-xs text-gray-500">{t.np.freeBeta}</p>
             </div>
           )}
 
@@ -432,7 +432,7 @@ function NewProjectInner() {
                 className="input resize-none rounded-lg"
               />
               <div className="mb-8 mt-4">
-                <p className="mb-2 text-xs text-gray-400">{t.np.examplesLabel}</p>
+                <p className="mb-2 text-xs text-gray-500">{t.np.examplesLabel}</p>
                 <div className="flex flex-col gap-2">
                   {t.np.examples.map((ex, i) => (
                     <button
@@ -453,7 +453,7 @@ function NewProjectInner() {
                 {isLoading ? t.np.reading : `${t.np.generateSpec} →`}
               </button>
               {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
-              <p className="mt-3 text-center text-xs text-gray-400">{t.np.freeBeta}</p>
+              <p className="mt-3 text-center text-xs text-gray-500">{t.np.freeBeta}</p>
             </div>
           )}
 
@@ -477,7 +477,7 @@ function NewProjectInner() {
               <button onClick={() => setStep(3)} className="btn btn-primary w-full py-3">
                 {t.np.confirmAnswer} →
               </button>
-              <button onClick={() => setStep(1)} className="mt-3 w-full text-center text-xs text-gray-400 underline hover:text-gray-600">
+              <button onClick={() => setStep(1)} className="mt-3 w-full text-center text-xs text-gray-500 underline hover:text-gray-600">
                 {t.np.editIdea}
               </button>
             </div>
@@ -545,7 +545,17 @@ function NewProjectInner() {
                   className="input mt-3 text-sm"
                 />
               </div>
-              <SpecPreview t={t} data={(specResult ?? result)!} isFallback={isFallback} onBack={() => setStep(3)} onSave={handleSave} />
+              {/* Spec branch never visited the question steps — its back goes to
+                  the paste screen (step 1). Sending it to step 3 stranded the
+                  user on an empty-questions screen with a blank step 2 behind it. */}
+              <SpecPreview
+                t={t}
+                data={(specResult ?? result)!}
+                isFallback={isFallback}
+                backLabel={entryPath === "spec" ? t.branch.backToPaste : t.np.editQuestions}
+                onBack={() => setStep(entryPath === "spec" ? 1 : 3)}
+                onSave={handleSave}
+              />
             </>
           )}
         </div>
@@ -574,9 +584,9 @@ function ApiQuestionCard({
   return (
     <div className="card p-6">
       <div className="mb-4 flex items-center gap-2">
-        <span className="font-mono text-xs text-gray-400">{index + 1} / {total}</span>
+        <span className="font-mono text-xs text-gray-500">{index + 1} / {total}</span>
         {answer && answer !== "defer" && <span className="text-xs font-medium text-green-600">✓ {t.np.answered}</span>}
-        {answer === "defer" && <span className="text-xs text-gray-400">{t.np.decideLater}</span>}
+        {answer === "defer" && <span className="text-xs text-gray-500">{t.np.decideLater}</span>}
       </div>
       <p className="mb-4 text-base font-medium leading-snug text-gray-900">{question.question}</p>
       <div className="mb-5 rounded-lg bg-brand-50 px-4 py-3">
@@ -601,7 +611,7 @@ function ApiQuestionCard({
           <button
             onClick={() => onAnswer("defer")}
             className={`rounded-lg border px-4 py-2 text-sm transition-all ${
-              answer === "defer" ? "border-gray-300 bg-gray-200 text-gray-700" : "border-gray-200 bg-white text-gray-400 hover:bg-gray-50"
+              answer === "defer" ? "border-gray-300 bg-gray-200 text-gray-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
             }`}
           >
             {t.np.decideLater}
@@ -635,12 +645,14 @@ function SpecPreview({
   t,
   data,
   isFallback,
+  backLabel,
   onBack,
   onSave,
 }: {
   t: Dictionary;
   data: IdeaToSpecDraftResponse;
   isFallback: boolean;
+  backLabel: string;
   onBack: () => void;
   onSave: () => void;
 }) {
@@ -655,7 +667,7 @@ function SpecPreview({
 
       <div className="flex gap-3">
         <button onClick={onBack} className="btn btn-secondary flex-1 py-3">
-          ← {t.np.editQuestions}
+          ← {backLabel}
         </button>
         <button onClick={onSave} className="btn btn-primary flex-[2] py-3">
           {t.np.saveAndStart} →

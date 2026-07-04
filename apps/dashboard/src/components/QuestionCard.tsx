@@ -16,14 +16,14 @@ export function QuestionCard({ question, index, total, answer, onAnswer }: Props
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs font-mono text-gray-400">
+        <span className="text-xs font-mono text-gray-500">
           {index + 1} / {total}
         </span>
         {answer && answer !== "defer" && (
           <span className="text-xs text-green-600 font-medium">{t.np.answered}</span>
         )}
         {answer === "defer" && (
-          <span className="text-xs text-gray-400">{t.np.decideLater}</span>
+          <span className="text-xs text-gray-500">{t.np.decideLater}</span>
         )}
       </div>
 

@@ -347,7 +347,7 @@ export default function SettingsPage() {
       {phase === "loading" && (
         <div className="card p-8 text-center">
           <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
-          <p className="text-sm text-gray-400">{t.common.loading}</p>
+          <p className="text-sm text-gray-500">{t.common.loading}</p>
         </div>
       )}
 
@@ -363,7 +363,7 @@ export default function SettingsPage() {
             {t.github.connectGithub}
           </button>
           {/* Stage 273: GitHub binds the browser's current session instantly — say so upfront. */}
-          <p className="mx-auto mt-3 max-w-sm text-xs text-gray-400">
+          <p className="mx-auto mt-3 max-w-sm text-xs text-gray-500">
             {t.github.instantBindCaption}{" "}
             <a
               href="https://github.com/logout"
@@ -406,7 +406,7 @@ export default function SettingsPage() {
             )}
             <div>
               <p className="text-sm font-medium text-gray-800">{ghUser.name ?? ghUser.login}</p>
-              <p className="text-xs text-gray-400">@{ghUser.login} · {t.github.connectedAs}</p>
+              <p className="text-xs text-gray-500">@{ghUser.login} · {t.github.connectedAs}</p>
             </div>
             {/* Stage 273: disconnect (with confirm) replaces the old re-connect shortcut —
                 re-running OAuth silently re-binds the same account anyway. */}
@@ -452,10 +452,10 @@ export default function SettingsPage() {
                   {linkedRepo.fullName}
                 </a>
                 {linkedRepo.private && (
-                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-400">{t.github.statePrivate}</span>
+                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500">{t.github.statePrivate}</span>
                 )}
                 {linkedRepo.defaultBranch && (
-                  <span className="text-xs text-gray-400">→ {linkedRepo.defaultBranch}</span>
+                  <span className="text-xs text-gray-500">→ {linkedRepo.defaultBranch}</span>
                 )}
               </div>
             </div>
@@ -472,7 +472,7 @@ export default function SettingsPage() {
             </button>
           )}
           {reposPhase === "loading" && (
-            <p className="mt-2 text-xs text-gray-400">{t.common.loading}</p>
+            <p className="mt-2 text-xs text-gray-500">{t.common.loading}</p>
           )}
           {reposPhase === "error" && (
             <p className="mt-2 text-xs text-red-500">{t.github.reposLoadError}</p>
@@ -505,7 +505,7 @@ export default function SettingsPage() {
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{repo.fullName}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-500">
                         {repo.defaultBranch} · {repo.private ? t.github.statePrivate : t.github.statePublic}
                       </p>
                     </div>
@@ -515,7 +515,7 @@ export default function SettingsPage() {
                   </button>
                 ))}
                 {filteredRepos.length === 0 && (
-                  <p className="py-6 text-center text-xs text-gray-400">{t.github.noMatch}</p>
+                  <p className="py-6 text-center text-xs text-gray-500">{t.github.noMatch}</p>
                 )}
               </div>
             </>
@@ -524,7 +524,7 @@ export default function SettingsPage() {
           {/* Direct owner/repo entry — for org/collaborator repos GitHub's listing omits. */}
           <div className="border-t border-gray-100 bg-gray-50/60 p-4">
             <p className="mb-1 text-sm font-semibold text-gray-700">{t.github.manualTitle}</p>
-            <p className="mb-2 text-xs text-gray-400">{t.github.manualHint}</p>
+            <p className="mb-2 text-xs text-gray-500">{t.github.manualHint}</p>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -537,7 +537,7 @@ export default function SettingsPage() {
               <button
                 onClick={() => void handleDirectLookup()}
                 disabled={lookupPhase === "loading" || linkPhase === "saving" || !directInput.trim()}
-                className="btn btn-md btn-primary flex-shrink-0"
+                className="btn btn-md btn-secondary flex-shrink-0"
               >
                 {lookupPhase === "loading" ? t.github.finding : t.github.connect}
               </button>
@@ -560,7 +560,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-center justify-between border-t border-gray-100 p-4">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               {repos.length > 0 ? `${repos.length} ${t.github.publicReposCount}` : t.github.noReposListed}
             </p>
             <button onClick={() => setPhase("connected")} className="text-xs text-gray-500 hover:text-gray-700">
@@ -602,7 +602,7 @@ export default function SettingsPage() {
               disabled={!emConfigured}
               className="input disabled:opacity-50"
             />
-            <p className="mt-1 text-xs text-gray-400">{t.emailNotify.addressHint}</p>
+            <p className="mt-1 text-xs text-gray-500">{t.emailNotify.addressHint}</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -663,7 +663,7 @@ export default function SettingsPage() {
               disabled={!tgEnabled}
               className="input disabled:opacity-50"
             />
-            <p className="mt-1 text-xs text-gray-400">{t.telegram.chatIdHint}</p>
+            <p className="mt-1 text-xs text-gray-500">{t.telegram.chatIdHint}</p>
           </div>
 
           <div>
@@ -727,7 +727,7 @@ export default function SettingsPage() {
           </button>
         </div>
 
-        {notifPhase === "loading" && <p className="text-xs text-gray-400">{t.common.loading}</p>}
+        {notifPhase === "loading" && <p className="text-xs text-gray-500">{t.common.loading}</p>}
 
         {notifPhase === "error" && (
           <div className="flex items-center gap-3">
@@ -739,7 +739,7 @@ export default function SettingsPage() {
         )}
 
         {notifPhase === "done" && notifications.length === 0 && (
-          <p className="text-xs text-gray-400">{t.telegram.noHistory}</p>
+          <p className="text-xs text-gray-500">{t.telegram.noHistory}</p>
         )}
 
         {notifPhase === "done" && notifications.length > 0 && (
@@ -749,7 +749,7 @@ export default function SettingsPage() {
                 <div key={n.id} className="flex items-start gap-3 px-4 py-3">
                   <div className="mt-0.5 flex-shrink-0">
                     {n.status === "sent" && <span className="text-xs font-semibold text-green-500">{t.telegram.sent}</span>}
-                    {n.status === "skipped" && <span className="text-xs text-gray-400">{t.telegram.skipped}</span>}
+                    {n.status === "skipped" && <span className="text-xs text-gray-500">{t.telegram.skipped}</span>}
                     {n.status === "error" && <span className="text-xs font-semibold text-red-500">{t.telegram.failed}</span>}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -757,10 +757,10 @@ export default function SettingsPage() {
                       {n.eventType === "pr_review_complete" ? t.telegram.prReviewComplete : n.eventType}
                       {n.destinationPreview ? ` · ${n.destinationPreview}` : ""}
                     </p>
-                    {n.messagePreview && <p className="mt-0.5 truncate text-xs text-gray-400">{n.messagePreview}</p>}
+                    {n.messagePreview && <p className="mt-0.5 truncate text-xs text-gray-500">{n.messagePreview}</p>}
                     {n.errorMessage && <p className="mt-0.5 truncate text-xs text-red-400">{n.errorMessage}</p>}
                   </div>
-                  <p className="flex-shrink-0 font-mono text-xs text-gray-400">
+                  <p className="flex-shrink-0 font-mono text-xs text-gray-500">
                     {new Date(n.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
@@ -802,7 +802,7 @@ export default function SettingsPage() {
           </div>
 
           {!trainStorageConfigured && (
-            <p className="text-xs text-gray-400">{t.trainingConsent.storageNote}</p>
+            <p className="text-xs text-gray-500">{t.trainingConsent.storageNote}</p>
           )}
           {trainSavePhase === "done" && trainConsented && (
             <p className="text-xs text-green-600">✓ {t.trainingConsent.savedOn}</p>

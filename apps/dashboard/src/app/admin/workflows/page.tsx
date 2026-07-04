@@ -84,7 +84,7 @@ export default function AdminWorkflowsPage() {
         account authentication. Avoid exposing or copying sensitive workflow content.
       </p>
       {/* Stage 122 — usage boundary note */}
-      <p className="mt-1 text-xs text-gray-400">
+      <p className="mt-1 text-xs text-gray-500">
         {ADMIN_USAGE_BOUNDARY_NOTE} {ADMIN_COUNTS_SIGNAL_NOTE}
       </p>
 
@@ -177,7 +177,7 @@ export default function AdminWorkflowsPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">{r.sourceSummary}</p>
-                  <p className="mt-1 text-xs text-gray-400">
+                  <p className="mt-1 text-xs text-gray-500">
                     {r.id} · userKey {r.userKey} · created {r.createdAt} · updated {r.updatedAt}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">

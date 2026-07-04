@@ -398,7 +398,7 @@ export default function IntakePage() {
           {tr.intake.handoff.subtitle}
         </p>
         {/* Stage 119 — page-level beta feedback CTA */}
-        <p className="mt-2 text-xs text-gray-400">
+        <p className="mt-2 text-xs text-gray-500">
           <FeedbackLink label={tr.intake.handoff.feedbackLabel} context={{ section: "Intake workflow" }} />{" "}
           — {ob.safetyNotes.feedback}
         </p>
@@ -410,7 +410,7 @@ export default function IntakePage() {
           <ol className="mt-3 space-y-1">
             {ob.steps.map((step, i) => (
               <li key={step} className="flex gap-2 text-sm text-gray-700">
-                <span className="text-gray-400">{i + 1}.</span>
+                <span className="text-gray-500">{i + 1}.</span>
                 <span>{step}</span>
               </li>
             ))}
@@ -484,7 +484,7 @@ export default function IntakePage() {
             <label className="mb-2 block text-sm font-medium text-gray-900">
               {tr.intake.handoff.pasteLabel}
             </label>
-            <p className="text-xs text-gray-400">{meta.inputHint}</p>
+            <p className="text-xs text-gray-500">{meta.inputHint}</p>
             {/* Stage 120 — before-input beta safety note */}
             <p className="mb-2 mt-1 text-xs text-amber-600">
               {ob.safetyNotes.beforeInput}
@@ -563,7 +563,7 @@ export default function IntakePage() {
         {/* Step 3 — deterministic local preview */}
         {draft && (
           <div className="card mt-8 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.draftTitle}
             </p>
             <h2 className="mt-1 text-base font-semibold text-gray-900">
@@ -585,7 +585,7 @@ export default function IntakePage() {
               ))}
             </ul>
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.draftPreviewNote}
             </p>
           </div>
@@ -594,7 +594,7 @@ export default function IntakePage() {
         {/* Stage 102 — deterministic PRD / spec preview (prd type only) */}
         {prdPreview && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.prdTitle}
             </p>
             <TechDetails summary={ic.techDetails}>
@@ -629,7 +629,7 @@ export default function IntakePage() {
             />
             <PrdList title={ic.missingQuestions} items={prdPreview.missingQuestions} />
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.prdPreviewNote}
             </p>
           </div>
@@ -638,7 +638,7 @@ export default function IntakePage() {
         {/* Stage 103 — deterministic Product URL preview (product_url type only) */}
         {urlPreview && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.urlTitle}
             </p>
             <TechDetails summary={ic.techDetails}>
@@ -647,21 +647,21 @@ export default function IntakePage() {
 
             <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               <div>
-                <dt className="text-xs text-gray-400">{ic.normalizedUrl}</dt>
+                <dt className="text-xs text-gray-500">{ic.normalizedUrl}</dt>
                 <dd className="break-all text-sm text-gray-700">
                   {urlPreview.normalizedUrl || "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">{ic.domain}</dt>
+                <dt className="text-xs text-gray-500">{ic.domain}</dt>
                 <dd className="text-sm text-gray-700">{urlPreview.domain}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">{ic.surfaceType}</dt>
+                <dt className="text-xs text-gray-500">{ic.surfaceType}</dt>
                 <dd className="text-sm text-gray-700">{urlPreview.pathType}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">{ic.likelySurface}</dt>
+                <dt className="text-xs text-gray-500">{ic.likelySurface}</dt>
                 <dd className="text-sm text-gray-700">{urlPreview.likelySurface}</dd>
               </div>
             </dl>
@@ -673,7 +673,7 @@ export default function IntakePage() {
             />
             <PrdList title={ic.missingQuestions} items={urlPreview.missingQuestions} />
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.urlPreviewNote}
             </p>
           </div>
@@ -682,7 +682,7 @@ export default function IntakePage() {
         {/* Stage 104 — deterministic GitHub repo preview (github_repo type only) */}
         {repoPreview && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.repoTitle}
             </p>
             <TechDetails summary={ic.techDetails}>
@@ -691,23 +691,23 @@ export default function IntakePage() {
 
             <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               <div>
-                <dt className="text-xs text-gray-400">{ic.normalizedRepo}</dt>
+                <dt className="text-xs text-gray-500">{ic.normalizedRepo}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.normalizedRepo}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">{ic.owner}</dt>
+                <dt className="text-xs text-gray-500">{ic.owner}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.owner}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">{ic.repository}</dt>
+                <dt className="text-xs text-gray-500">{ic.repository}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.repo}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-400">{ic.likelyRepoType}</dt>
+                <dt className="text-xs text-gray-500">{ic.likelyRepoType}</dt>
                 <dd className="text-sm text-gray-700">{repoPreview.likelyRepoType}</dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-xs text-gray-400">{ic.repoUrl}</dt>
+                <dt className="text-xs text-gray-500">{ic.repoUrl}</dt>
                 <dd className="break-all text-sm text-gray-700">
                   {repoPreview.repoUrl || "—"}
                 </dd>
@@ -721,7 +721,7 @@ export default function IntakePage() {
             />
             <PrdList title={ic.missingQuestions} items={repoPreview.missingQuestions} />
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.repoPreviewNote}
             </p>
           </div>
@@ -730,7 +730,7 @@ export default function IntakePage() {
         {/* Stage 105 — deterministic AI-built app recovery (ai_built_app only) */}
         {appPreview && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.appTitle}
             </p>
             <TechDetails summary={ic.techDetails}>
@@ -780,7 +780,7 @@ export default function IntakePage() {
 
             <PrdList title={ic.missingQuestions} items={appPreview.missingQuestions} />
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.appPreviewNote}
             </p>
           </div>
@@ -789,7 +789,7 @@ export default function IntakePage() {
         {/* Stage 106 — shared Acceptance Map (all intake types) */}
         {acceptanceMap && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.acceptanceMapTitle}
             </p>
             <TechDetails summary={ic.techDetails}>
@@ -824,7 +824,7 @@ export default function IntakePage() {
                   className="rounded-md border border-gray-100 bg-gray-50 px-3 py-1.5 text-sm text-gray-700"
                 >
                   <span>{it.title}</span>
-                  <span className="ml-2 text-xs text-gray-400">
+                  <span className="ml-2 text-xs text-gray-500">
                     · {it.status.replace(/_/g, " ")}
                   </span>
                 </li>
@@ -840,7 +840,7 @@ export default function IntakePage() {
               {NEXT_STEP_LABELS[acceptanceMap.recommendedNextStep]}
             </p>
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.acceptanceMapNote}
             </p>
           </div>
@@ -849,7 +849,7 @@ export default function IntakePage() {
         {/* Stage 107 — shared Stage Plan (all intake types) */}
         {stagePlan && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.stagePlanTitle}
             </p>
             <TechDetails summary={ic.techDetails}>
@@ -902,7 +902,7 @@ export default function IntakePage() {
               </ul>
             </div>
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.stagePlanNote}
             </p>
           </div>
@@ -911,7 +911,7 @@ export default function IntakePage() {
         {/* Stage 110 — Agent Run Plan (all intake types) */}
         {agentRunPlan && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.agentRunPlanTitle}
             </p>
             <TechDetails summary={ic.techDetails}>
@@ -958,7 +958,7 @@ export default function IntakePage() {
               ))}
             </div>
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.agentRunPlanNote}
             </p>
           </div>
@@ -967,7 +967,7 @@ export default function IntakePage() {
         {/* Stage 111 — Evidence Plan (all intake types) */}
         {evidencePlan && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.evidencePlanTitle} · {ic.overallLabel}{" "}
               {EVIDENCE_STATUS_LABELS[evidencePlan.overallEvidenceStatus]}
             </p>
@@ -1016,7 +1016,7 @@ export default function IntakePage() {
               items={evidencePlan.missingEvidenceQuestions}
             />
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.evidencePlanNote}
             </p>
             {/* Stage 119 — preview-section feedback CTA */}
@@ -1032,7 +1032,7 @@ export default function IntakePage() {
         {/* Stage 112 — save the generated workflow snapshot (optional) */}
         {evidencePlan && (
           <div className="card mt-6 p-5">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.saveTitle}
             </p>
             <p className="mt-2 text-sm text-gray-500">
@@ -1080,7 +1080,7 @@ export default function IntakePage() {
               </div>
             )}
 
-            <p className="mt-4 text-xs text-gray-400">
+            <p className="mt-4 text-xs text-gray-500">
               {ic.saveOptionalNote}
             </p>
           </div>
@@ -1089,7 +1089,7 @@ export default function IntakePage() {
         {/* Stage 112 — saved workflow plans (list + reopen) */}
         <div className="card mt-6 p-5">
           <div className="flex items-center justify-between">
-            <p className="text-xs uppercase tracking-wide text-gray-400">
+            <p className="text-xs uppercase tracking-wide text-gray-500">
               {ic.savedListTitle}
             </p>
             <div className="flex items-center gap-2">
@@ -1120,9 +1120,9 @@ export default function IntakePage() {
           </div>
 
           {/* Stage 120/122 — beta tenant-scope + retention + usage-boundary notes */}
-          <p className="mt-2 text-xs text-gray-400">{ub.savedWorkflowNote}</p>
-          <p className="mt-1 text-xs text-gray-400">{ob.safetyNotes.savedScope}</p>
-          <p className="mt-1 text-xs text-gray-400">{ob.safetyNotes.savedRetention}</p>
+          <p className="mt-2 text-xs text-gray-500">{ub.savedWorkflowNote}</p>
+          <p className="mt-1 text-xs text-gray-500">{ob.safetyNotes.savedScope}</p>
+          <p className="mt-1 text-xs text-gray-500">{ob.safetyNotes.savedRetention}</p>
 
           {manageMsg && (
             <p className="mt-2 text-xs text-gray-500">{manageMsg}</p>
@@ -1137,7 +1137,7 @@ export default function IntakePage() {
             <p className="mt-3 text-sm text-gray-500">{ob.emptyStates.noSavedRecords}</p>
           )}
           {savedList !== null && savedList.length > 0 && !openRecord && !detailLoading && (
-            <p className="mt-3 text-xs text-gray-400">{ob.emptyStates.noOpenedRecord}</p>
+            <p className="mt-3 text-xs text-gray-500">{ob.emptyStates.noOpenedRecord}</p>
           )}
           {savedList !== null && savedList.length > 0 && (
             <ul className="mt-3 space-y-2">
@@ -1158,7 +1158,7 @@ export default function IntakePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">{r.sourceSummary}</p>
-                  <p className="mt-1 text-xs text-gray-400">
+                  <p className="mt-1 text-xs text-gray-500">
                     {r.id} · {ic.listCreated} {r.createdAt} · {ic.listUpdated} {r.updatedAt}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -1253,7 +1253,7 @@ export default function IntakePage() {
                   )}
                 </pre>
               </details>
-              <p className="mt-2 text-xs text-gray-400">
+              <p className="mt-2 text-xs text-gray-500">
                 {ic.savedSnapshotNote}
               </p>
               {/* Stage 119 — saved-workflow feedback CTA */}
@@ -1271,7 +1271,7 @@ export default function IntakePage() {
               {/* Stage 113 — benchmark handoff preview from the saved record */}
               {handoff && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
                     {ic.handoffTitle}
                   </p>
                   <TechDetails summary={ic.techDetails}>
@@ -1359,7 +1359,7 @@ export default function IntakePage() {
                   />
                   <StageDetail label={ic.notIncludedYet} items={handoff.notIncludedYet} />
 
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-500">
                     {ic.handoffNote}
                   </p>
                 </div>
@@ -1368,7 +1368,7 @@ export default function IntakePage() {
               {/* Stage 114 — decision / outcome link preview from the saved record */}
               {outcomeLink && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
                     {ic.outcomeTitle}
                   </p>
                   <TechDetails summary={ic.techDetails}>
@@ -1444,7 +1444,7 @@ export default function IntakePage() {
                       ] as const
                     ).map(([key, label]) => (
                       <div key={key}>
-                        <dt className="text-xs text-gray-400">{label}</dt>
+                        <dt className="text-xs text-gray-500">{label}</dt>
                         <dd className="text-sm text-gray-700">
                           {outcomeLink.outcomeScorecardSignals[key]}
                         </dd>
@@ -1458,7 +1458,7 @@ export default function IntakePage() {
                   />
                   <StageDetail label={ic.notIncludedYet} items={outcomeLink.notIncludedYet} />
 
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-500">
                     {ic.outcomeNote}
                   </p>
                 </div>
@@ -1467,7 +1467,7 @@ export default function IntakePage() {
               {/* Stage 115 — evolution action pack preview from the saved record */}
               {actionPack && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
                     {ic.actionPackTitle}
                   </p>
                   <TechDetails summary={ic.techDetails}>
@@ -1505,7 +1505,7 @@ export default function IntakePage() {
                           <span className="rounded-full border border-gray-200 px-2 py-0.5 text-xs text-gray-500">
                             {a.priority}
                           </span>
-                          <span className="text-xs text-gray-400">{a.id}</span>
+                          <span className="text-xs text-gray-500">{a.id}</span>
                         </div>
                         <p className="mt-1 text-sm text-gray-600">{a.rationale}</p>
                         <p className="mt-1 text-xs text-gray-500">
@@ -1541,7 +1541,7 @@ export default function IntakePage() {
                   />
                   <StageDetail label={ic.notIncludedYet} items={actionPack.notIncludedYet} />
 
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-500">
                     {ic.actionPackNote}
                   </p>
                 </div>
@@ -1550,7 +1550,7 @@ export default function IntakePage() {
               {/* Stage 126 — derived Acceptance Graph view from the saved record */}
               {graphView && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
                     {ic.graphTitle}
                   </p>
                   <TechDetails summary={ic.techDetails}>
@@ -1572,7 +1572,7 @@ export default function IntakePage() {
                       ] as const
                     ).map(([key, label]) => (
                       <div key={key}>
-                        <dt className="text-xs text-gray-400">{label}</dt>
+                        <dt className="text-xs text-gray-500">{label}</dt>
                         <dd className="text-sm text-gray-700">
                           {graphView.signalSummary[key]}
                         </dd>
@@ -1623,7 +1623,7 @@ export default function IntakePage() {
                   <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
                     {graphView.nodes.slice(0, 6).map((n) => (
                       <li key={n.id}>
-                        <span className="text-gray-400">{n.type.replace(/_/g, " ")}:</span>{" "}
+                        <span className="text-gray-500">{n.type.replace(/_/g, " ")}:</span>{" "}
                         {n.label}
                       </li>
                     ))}
@@ -1631,14 +1631,14 @@ export default function IntakePage() {
                   <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
                     {graphView.edges.slice(0, 6).map((e) => (
                       <li key={e.id}>
-                        {e.from} <span className="text-gray-400">{e.label} →</span> {e.to}
+                        {e.from} <span className="text-gray-500">{e.label} →</span> {e.to}
                       </li>
                     ))}
                   </ul>
 
                   <StageDetail label={ic.notIncludedYet} items={graphView.notIncludedYet} />
 
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-500">
                     {ic.graphNote}
                   </p>
                 </div>
@@ -1647,7 +1647,7 @@ export default function IntakePage() {
               {/* Stage 127 — recurring blocker signals from the saved record */}
               {blockerView && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
                     {ic.blockersTitle}
                   </p>
                   <TechDetails summary={ic.techDetails}>
@@ -1708,7 +1708,7 @@ export default function IntakePage() {
 
                   <StageDetail label={ic.notIncludedYet} items={blockerView.notIncludedYet} />
 
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-500">
                     {ic.blockersNote}
                   </p>
                 </div>
@@ -1717,7 +1717,7 @@ export default function IntakePage() {
               {/* Stage 128 — agent/tool recommendation memory from the saved record */}
               {toolMemory && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
                     {ic.toolMemoryTitle}
                   </p>
                   <TechDetails summary={ic.techDetails}>
@@ -1786,7 +1786,7 @@ export default function IntakePage() {
 
                   <StageDetail label={ic.notIncludedYet} items={toolMemory.notIncludedYet} />
 
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-500">
                     {ic.toolMemoryNote}
                   </p>
                 </div>
@@ -1795,7 +1795,7 @@ export default function IntakePage() {
               {/* Stage 129 — template effectiveness signals from the saved record */}
               {templateSignals && (
                 <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">
                     {ic.templateSignalsTitle}
                   </p>
                   <TechDetails summary={ic.techDetails}>
@@ -1869,7 +1869,7 @@ export default function IntakePage() {
 
                   <StageDetail label={ic.notIncludedYet} items={templateSignals.notIncludedYet} />
 
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-500">
                     {ic.templateSignalsNote}
                   </p>
                 </div>
@@ -1913,8 +1913,8 @@ function FeedbackLink({
 function TechDetails({ summary, children }: { summary: string; children: ReactNode }) {
   return (
     <details className="mt-1">
-      <summary className="cursor-pointer text-xs text-gray-400">{summary}</summary>
-      <p className="mt-1 text-xs text-gray-400">{children}</p>
+      <summary className="cursor-pointer text-xs text-gray-500">{summary}</summary>
+      <p className="mt-1 text-xs text-gray-500">{children}</p>
     </details>
   );
 }

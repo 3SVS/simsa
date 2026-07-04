@@ -57,7 +57,7 @@ export default function ProjectsPage() {
       {MOCK_PROJECTS.length > 0 && (
         <div className="mt-10">
           <h2 className="text-sm font-semibold text-gray-700">{t.projects.examplesTitle}</h2>
-          <p className="mt-0.5 text-xs text-gray-400">{t.projects.examplesNote}</p>
+          <p className="mt-0.5 text-xs text-gray-500">{t.projects.examplesNote}</p>
           <div className="mt-3 grid gap-4">
             {MOCK_PROJECTS.map((project) => (
               <ProjectCard key={project.id} project={project} t={t} exampleBadge={t.projects.exampleBadge} />
@@ -96,7 +96,7 @@ function ProjectCard({
           </h2>
           <p className="mt-0.5 text-sm text-gray-500">{project.description}</p>
         </div>
-        <span className="whitespace-nowrap text-xs text-gray-400">{project.createdAt}</span>
+        <span className="whitespace-nowrap text-xs text-gray-500">{project.createdAt}</span>
       </div>
 
       <div className="mb-3">
@@ -111,7 +111,7 @@ function ProjectCard({
         <span className="font-medium text-red-600">{statusLabel(t, "failed")} {stats.failed}</span>
         <span className="font-medium text-amber-600">{statusLabel(t, "inconclusive")} {stats.inconclusive}</span>
         <span className="font-medium text-slate-600">{statusLabel(t, "needs_decision")} {stats.needsDecision}</span>
-        <span className="text-gray-400">{statusLabel(t, "not_started")} {stats.notStarted}</span>
+        <span className="text-gray-500">{statusLabel(t, "not_started")} {stats.notStarted}</span>
       </div>
     </Link>
   );

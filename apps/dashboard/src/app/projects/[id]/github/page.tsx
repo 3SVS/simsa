@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -48,7 +50,7 @@ export default function GitHubPage() {
   const project = getLocalProject(id) ?? getProject(id);
   const userKey = getUserKey();
 
-  const [loadPhase, setLoadPhase] = useState<"loading" | "no_repo" | "ready">("loading");
+  const [loadPhase, setLoadPhase] = useState<"loading" | "no_repo" | "load_error" | "ready">("loading");
   const [repo, setRepo] = useState<LinkedRepo | null>(null);
   const [pulls, setPulls] = useState<GitHubPull[]>([]);
   const [pullsPhase, setPullsPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -73,6 +75,8 @@ export default function GitHubPage() {
   const [creditDryRunByPr, setCreditDryRunByPr] = useState<Record<number, CreditEnforcementResult | CreditEnforcementDryRun>>({});
   // Comparison data: keyed by prNumber (loaded by ComparisonPanel, used by PRCommentPanel)
   const [comparisonDataByPr, setComparisonDataByPr] = useState<Record<number, PrReviewComparisonResponse>>({});
+  // Specific review-failure message per PR (rate limit / credits / network…).
+  const [reviewErrorByPr, setReviewErrorByPr] = useState<Record<number, string>>({});
 
   const ext = loadExtendedProjectData(id);
   const checkResultMap = new Map(
@@ -138,8 +142,13 @@ export default function GitHubPage() {
     if (repoRes.ok && repoRes.repo) {
       setRepo(repoRes.repo);
       setLoadPhase("ready");
-    } else {
+    } else if (repoRes.ok) {
+      // Confirmed: genuinely no repo linked.
       setLoadPhase("no_repo");
+    } else {
+      // Transient fetch failure ≠ "not connected" — a user WITH a linked repo
+      // must not be sent to settings to "connect" what is already connected.
+      setLoadPhase("load_error");
     }
     if (linkedRes.ok) {
       setLinkedPulls(linkedRes.pulls);
@@ -213,7 +222,10 @@ export default function GitHubPage() {
   }
 
   async function handleStartReview(lp: LinkedPull) {
+    // Double-click guard: two clicks in the same tick would start two runs.
+    if (reviewPhase[lp.number] === "running") return;
     setReviewPhase((prev) => ({ ...prev, [lp.number]: "running" }));
+    setReviewErrorByPr((prev) => ({ ...prev, [lp.number]: "" }));
     const ext2 = loadExtendedProjectData(id);
     const items = (project?.requirements ?? []).map((r) => ({
       id: r.id,
@@ -240,16 +252,41 @@ export default function GitHubPage() {
       } else if (res.creditDryRun) {
         setCreditDryRunByPr((prev) => ({ ...prev, [lp.number]: res.creditDryRun! }));
       }
-    } else {
+      return;
+    }
+    // HTTP 402: store enforcement info so CreditDryRunBanner can show the blocked state
+    if (res.error === "insufficient_credits" && res.creditEnforcement) {
+      setCreditDryRunByPr((prev) => ({ ...prev, [lp.number]: res.creditEnforcement! }));
       setReviewPhase((prev) => ({ ...prev, [lp.number]: "error" }));
-      // HTTP 402: store enforcement info so CreditDryRunBanner can show the blocked state
-      if (!res.ok && res.error === "insufficient_credits" && res.creditEnforcement) {
-        setCreditDryRunByPr((prev) => ({ ...prev, [lp.number]: res.creditEnforcement! }));
+      return;
+    }
+    // A slow-but-healthy review looks identical to a network failure here (the
+    // client request aborts at 40s while the server keeps working). Before
+    // declaring failure, poll the latest run for up to ~60s — if it lands, show
+    // the result instead of a false "review failed". Only poll on transport-ish
+    // failures; explicit server verdicts (rate limit, credits…) are final.
+    const finalServerCodes = new Set([
+      "rate_limited", "insufficient_credits", "no_repo_linked", "not_connected",
+      "no_selected_items", "not_found", "invalid_json", "userKey_required",
+    ]);
+    if (!finalServerCodes.has(res.error)) {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await new Promise((r) => setTimeout(r, 10_000));
+        const latest = await getLatestPRReview(id, lp.number, userKey).catch(() => null);
+        if (latest?.ok && latest.run && latest.run.status !== "running") {
+          setReviewRuns((prev) => ({ ...prev, [lp.number]: latest.run! }));
+          setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
+          return;
+        }
       }
     }
+    // Real failure — show a SPECIFIC message (rate_limited → daily-cap copy,
+    // not the generic "check your PR on GitHub" misdirection).
+    setReviewErrorByPr((prev) => ({ ...prev, [lp.number]: errorText(t, res.error, "generic") }));
+    setReviewPhase((prev) => ({ ...prev, [lp.number]: "error" }));
   }
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -260,7 +297,7 @@ export default function GitHubPage() {
         </div>
         <Link
           href={`/projects/${id}/github/history`}
-          className="mt-1 flex-shrink-0 text-xs font-medium text-gray-400 hover:text-brand-700"
+          className="mt-1 flex-shrink-0 text-xs font-medium text-gray-500 hover:text-brand-700"
         >
           {t.github.viewHistory} →
         </Link>
@@ -270,7 +307,7 @@ export default function GitHubPage() {
       {loadPhase === "loading" && (
         <div className="card p-6 text-center">
           <div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
-          <p className="text-sm text-gray-400">{t.github.checkingConnection}</p>
+          <p className="text-sm text-gray-500">{t.github.checkingConnection}</p>
         </div>
       )}
 
@@ -284,13 +321,23 @@ export default function GitHubPage() {
         </div>
       )}
 
+      {/* Transient load failure — retry, don't misdirect to settings */}
+      {loadPhase === "load_error" && (
+        <div className="card p-8 text-center">
+          <p className="mb-4 text-sm text-gray-600">{t.github.connectionLoadError}</p>
+          <button onClick={() => void loadInitial()} className="btn btn-md btn-primary">
+            {t.common.retry}
+          </button>
+        </div>
+      )}
+
       {/* Ready */}
       {loadPhase === "ready" && repo && (
         <>
           {/* Repo info */}
           <div className="card flex items-center justify-between p-4">
             <div>
-              <p className="mb-0.5 text-xs text-gray-400">{t.github.connectedRepo}</p>
+              <p className="mb-0.5 text-xs text-gray-500">{t.github.connectedRepo}</p>
               <a
                 href={repo.htmlUrl ?? `https://github.com/${repo.fullName}`}
                 target="_blank"
@@ -299,9 +346,9 @@ export default function GitHubPage() {
               >
                 {repo.fullName}
               </a>
-              {repo.defaultBranch && <span className="ml-2 text-xs text-gray-400">→ {repo.defaultBranch}</span>}
+              {repo.defaultBranch && <span className="ml-2 text-xs text-gray-500">→ {repo.defaultBranch}</span>}
             </div>
-            <button onClick={handleLoadPulls} disabled={pullsPhase === "loading"} className="btn btn-md btn-secondary">
+            <button onClick={handleLoadPulls} disabled={pullsPhase === "loading"} className="btn btn-md btn-primary">
               {pullsPhase === "loading" ? t.common.loading : t.github.loadPulls}
             </button>
           </div>
@@ -329,10 +376,10 @@ export default function GitHubPage() {
                       className={`w-full px-5 py-4 text-left transition-colors hover:bg-gray-50 ${selectedPR?.number === pull.number ? "border-l-2 border-brand-500 bg-brand-50" : ""}`}
                     >
                       <div className="flex items-start gap-3">
-                        <span className="mt-0.5 flex-shrink-0 font-mono text-xs text-gray-400">#{pull.number}</span>
+                        <span className="mt-0.5 flex-shrink-0 font-mono text-xs text-gray-500">#{pull.number}</span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-gray-800">{pull.title}</p>
-                          <p className="mt-0.5 font-mono text-xs text-gray-400">
+                          <p className="mt-0.5 font-mono text-xs text-gray-500">
                             {pull.headBranch} → {pull.baseBranch}
                             {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}`}
                           </p>
@@ -352,7 +399,7 @@ export default function GitHubPage() {
               <p className="mb-1 text-sm font-semibold text-gray-800">
                 PR #{selectedPR.number}: {selectedPR.title}
               </p>
-              <p className="mb-4 text-xs text-gray-400">
+              <p className="mb-4 text-xs text-gray-500">
                 {t.github.selectItemsForPr} ({selectedItemIds.size} {t.github.selected})
               </p>
               {allItems.length === 0 ? (
@@ -406,6 +453,11 @@ export default function GitHubPage() {
             </div>
           )}
 
+          {/* Link success — rendered here because handleLink clears selectedPR */}
+          {linkPhase === "done" && (
+            <p className="text-sm text-green-600">✓ {t.github.linked}</p>
+          )}
+
           {/* Linked PRs list */}
           {linkedPulls.length > 0 && (
             <div className="card">
@@ -420,10 +472,10 @@ export default function GitHubPage() {
                     <div key={lp.id} className="px-5 py-4 space-y-3">
                       {/* PR header */}
                       <div className="flex items-start gap-3">
-                        <span className="text-xs text-gray-400 font-mono mt-0.5">#{lp.number}</span>
+                        <span className="text-xs text-gray-500 font-mono mt-0.5">#{lp.number}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-800 truncate">{lp.title}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{lp.repoFullName}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{lp.repoFullName}</p>
                         </div>
                         <span className={`text-xs rounded-full px-2 py-0.5 flex-shrink-0 ${lp.state === "open" ? "text-green-600 bg-green-50 border border-green-200" : "text-gray-500 bg-gray-100 border border-gray-200"}`}>
                           {lp.state === "open" ? t.github.stateOpen : lp.state === "closed" ? t.github.stateClosed : lp.state}
@@ -448,7 +500,7 @@ export default function GitHubPage() {
                       <div className="ml-6">
                         {phase === "idle" && (
                           <div className="space-y-2">
-                            <p className="text-xs text-gray-400">{t.github.notReviewedYet}</p>
+                            <p className="text-xs text-gray-500">{t.github.notReviewedYet}</p>
                             <button onClick={() => handleStartReview(lp)} className="btn btn-md btn-primary">
                               {t.github.runReviewBtn}
                             </button>
@@ -456,9 +508,12 @@ export default function GitHubPage() {
                         )}
 
                         {phase === "running" && (
-                          <div className="flex items-center gap-2 text-sm text-gray-500">
-                            <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-brand-600" />
-                            {t.github.reviewing}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                              <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-brand-600" />
+                              {t.github.reviewing}
+                            </div>
+                            <p className="pl-6 text-xs text-gray-500">{t.github.reviewingHint}</p>
                           </div>
                         )}
 
@@ -467,7 +522,7 @@ export default function GitHubPage() {
                             {creditDryRunByPr[lp.number] && (creditDryRunByPr[lp.number] as CreditEnforcementResult).blocked ? (
                               <CreditDryRunBanner t={t} dryRun={creditDryRunByPr[lp.number]!} projectId={id} />
                             ) : (
-                              <p className="text-xs text-red-600">{t.github.reviewFailed}</p>
+                              <p className="text-xs text-red-600">{reviewErrorByPr[lp.number] || t.github.reviewFailed}</p>
                             )}
                             <button onClick={() => handleStartReview(lp)} className="btn btn-sm btn-secondary">
                               {t.common.retry}
@@ -571,7 +626,7 @@ function ComparisonPanel({
 
   if (!data.comparable) {
     return (
-      <p className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs text-gray-400">
+      <p className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs text-gray-500">
         {t.comparison.noComparison}
       </p>
     );
@@ -583,7 +638,7 @@ function ComparisonPanel({
 
   function DeltaBadge({ prev, latest }: { prev: number; latest: number }) {
     const delta = latest - prev;
-    if (delta === 0) return <span className="text-gray-400">{latest}</span>;
+    if (delta === 0) return <span className="text-gray-500">{latest}</span>;
     if (delta > 0) return <span className="text-green-600">{prev} → {latest} (+{delta})</span>;
     return <span className="text-red-600">{prev} → {latest} ({delta})</span>;
   }
@@ -592,7 +647,7 @@ function ComparisonPanel({
     <div className="space-y-3">
       <div>
         <p className="mb-0.5 text-sm font-semibold text-gray-800">{t.comparison.title}</p>
-        <p className="text-xs text-gray-400">{t.comparison.desc}</p>
+        <p className="text-xs text-gray-500">{t.comparison.desc}</p>
       </div>
 
       {/* Summary delta */}
@@ -677,7 +732,7 @@ function ComparisonPanel({
         </div>
       )}
 
-      <p className="text-xs text-gray-400 italic">{comparison.summaryText}</p>
+      <p className="text-xs text-gray-500 italic">{comparison.summaryText}</p>
     </div>
   );
 }
@@ -753,6 +808,10 @@ function PRCommentPanel({
   }
 
   async function handlePost() {
+    // Posting publishes a PUBLIC comment on the user's PR under their GitHub
+    // identity and it can't be deleted from here (only updated). Make that
+    // unmistakable at the moment of posting.
+    if (!window.confirm(t.comment.postConfirm)) return;
     setPostPhase("loading");
     setScopeError(false);
     setErrorMsg(null);
@@ -787,6 +846,14 @@ function PRCommentPanel({
     }
   }
 
+  // Duplicate-comment guard: detect an existing posted comment BEFORE the
+  // first post, so the update-vs-new choice is offered automatically instead
+  // of only after the user happens to expand "past comments".
+  useEffect(() => {
+    void loadPastComments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleRecheck() {
     setPostPhase("idle");
     setPreviewPhase("idle");
@@ -804,7 +871,7 @@ function PRCommentPanel({
     <div className="space-y-3">
       <div>
         <p className="text-sm font-semibold text-gray-800 mb-0.5">{t.comment.title}</p>
-        <p className="text-xs text-gray-400">{t.comment.desc}</p>
+        <p className="text-xs text-gray-500">{t.comment.desc}</p>
       </div>
 
       <p className="text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
@@ -825,7 +892,7 @@ function PRCommentPanel({
           <span className="text-xs text-gray-700">{t.comment.includeComparison}</span>
         </label>
         {!comparable && (
-          <p className="text-xs text-gray-400 mt-1 ml-6">{t.comment.comparisonUnavailable}</p>
+          <p className="text-xs text-gray-500 mt-1 ml-6">{t.comment.comparisonUnavailable}</p>
         )}
       </div>
 
@@ -849,7 +916,7 @@ function PRCommentPanel({
       )}
 
       {/* Item selection */}
-      <p className="mb-1 text-xs text-gray-400">
+      <p className="mb-1 text-xs text-gray-500">
         {t.exportPage.selectedOfTotal
           .replace("{sel}", String(selectedIds.size))
           .replace("{total}", String(allResults.length))}
@@ -879,7 +946,7 @@ function PRCommentPanel({
         <button
           onClick={handlePreview}
           disabled={!canPost || previewPhase === "loading"}
-          className="text-sm px-4 py-2 rounded-xl font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          className="btn btn-md btn-secondary"
         >
           {previewPhase === "loading" ? t.comment.previewing : t.comment.preview}
         </button>
@@ -887,7 +954,7 @@ function PRCommentPanel({
           <button
             onClick={handlePost}
             disabled={postPhase === "loading"}
-            className="text-sm px-4 py-2 rounded-xl font-medium bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
+            className="btn btn-md btn-primary"
           >
             {postPhase === "loading"
               ? t.comment.posting
@@ -957,7 +1024,7 @@ function PRCommentPanel({
       {/* Past comments toggle */}
       <button
         onClick={loadPastComments}
-        className="text-xs text-gray-400 hover:text-gray-600 underline"
+        className="text-xs text-gray-500 hover:text-gray-600 underline"
       >
         {t.comment.showPast}
       </button>
@@ -966,7 +1033,7 @@ function PRCommentPanel({
         <div className="space-y-1.5">
           {latestPosted && (
             <p className="text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5">
-              {t.comment.latest} {latestPosted.updatedAt.slice(0, 10)}{" "}
+              {t.comment.latest} {new Date(latestPosted.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}{" "}
               {latestPosted.githubCommentUrl && (
                 <a href={latestPosted.githubCommentUrl} target="_blank" rel="noopener noreferrer" className="underline">{t.comment.viewOnGithub}</a>
               )}
@@ -989,7 +1056,7 @@ function PRCommentPanel({
       )}
 
       {pastLoaded && pastComments.length === 0 && (
-        <p className="text-xs text-gray-400">{t.comment.noPast}</p>
+        <p className="text-xs text-gray-500">{t.comment.noPast}</p>
       )}
     </div>
   );
@@ -1056,8 +1123,14 @@ function FixBriefPanel({
   }
 
   async function handleCopy(file: FixBriefFile) {
-    await navigator.clipboard.writeText(file.content).catch(() => {});
-    setCopyMsg(file.path);
+    try {
+      await navigator.clipboard.writeText(file.content);
+      setCopyMsg(file.path); // only claim "copied" when the copy succeeded
+    } catch {
+      setCopyMsg(null);
+      window.prompt(t.github.copyManually, file.content);
+      return;
+    }
     setTimeout(() => setCopyMsg(null), 2000);
   }
 
@@ -1081,11 +1154,11 @@ function FixBriefPanel({
     <div className="space-y-3">
       <div>
         <p className="text-sm font-semibold text-gray-800 mb-0.5">{t.fixBrief.title}</p>
-        <p className="text-xs text-gray-400">{t.fixBrief.desc}</p>
+        <p className="text-xs text-gray-500">{t.fixBrief.desc}</p>
       </div>
 
       {/* Item checkboxes */}
-      <p className="mb-1 text-xs text-gray-400">
+      <p className="mb-1 text-xs text-gray-500">
         {t.exportPage.selectedOfTotal
           .replace("{sel}", String(selectedIds.size))
           .replace("{total}", String(fixableItems.length))}
@@ -1124,7 +1197,7 @@ function FixBriefPanel({
         <button
           onClick={handleGenerate}
           disabled={selectedIds.size === 0 || phase === "loading"}
-          className="text-sm px-4 py-2 rounded-xl font-medium bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
+          className="btn btn-md btn-primary"
         >
           {phase === "loading" ? t.fixBrief.generating : t.fixBrief.generate}
         </button>
@@ -1166,11 +1239,11 @@ function FixBriefPanel({
                   <span className="text-xs font-mono text-indigo-700 flex-1 truncate">{f.path}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleCopy(f); }}
-                    className="text-xs text-gray-400 hover:text-gray-600 px-2 py-0.5 rounded border border-gray-200 bg-white flex-shrink-0"
+                    className="text-xs text-gray-500 hover:text-gray-600 px-2 py-0.5 rounded border border-gray-200 bg-white flex-shrink-0"
                   >
                     {t.fixBrief.copy}
                   </button>
-                  <span className="text-gray-400 text-xs flex-shrink-0">
+                  <span className="text-gray-500 text-xs flex-shrink-0">
                     {previewFile === f.path ? "▲" : "▼"}
                   </span>
                 </button>
@@ -1185,7 +1258,7 @@ function FixBriefPanel({
             ))}
           </div>
 
-          <p className="text-xs text-gray-400">{t.fixBrief.usageNote}</p>
+          <p className="text-xs text-gray-500">{t.fixBrief.usageNote}</p>
         </div>
       )}
     </div>
@@ -1223,22 +1296,22 @@ function ReviewResultPanel({ run, onRerun }: { run: ReviewRun; onRerun: () => vo
           {t.review.resultLabel}: {runLabel}
         </span>
         {run.summary && (
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-500">
             {statusLabel(t, "passed")} {run.summary.passed} · {statusLabel(t, "failed")} {run.summary.failed} · {statusLabel(t, "inconclusive")} {run.summary.inconclusive}
             {run.summary.needsDecision > 0 && ` · ${statusLabel(t, "needs_decision")} ${run.summary.needsDecision}`}
           </span>
         )}
         <button
           onClick={onRerun}
-          className="ml-auto text-xs text-gray-400 hover:text-gray-600 underline"
+          className="ml-auto text-xs text-gray-500 hover:text-gray-600 underline"
         >
           {t.review.recheck}
         </button>
       </div>
 
       {/* Disclaimer */}
-      <p className="text-xs text-gray-400">{t.review.basisNote}</p>
-      <p className="text-xs text-gray-400">{t.review.verifyLiveNote}</p>
+      <p className="text-xs text-gray-500">{t.review.basisNote}</p>
+      <p className="text-xs text-gray-500">{t.review.verifyLiveNote}</p>
 
       {/* Error */}
       {run.status === "error" && run.errorMessage && (
@@ -1264,14 +1337,14 @@ function ReviewResultPanel({ run, onRerun }: { run: ReviewRun; onRerun: () => vo
                   <StatusText status={r.status} />
                 </span>
                 <span className="text-sm text-gray-800 flex-1 truncate">{r.title}</span>
-                <span className="text-gray-400 text-xs flex-shrink-0">{expanded === r.itemId ? "▲" : "▼"}</span>
+                <span className="text-gray-500 text-xs flex-shrink-0">{expanded === r.itemId ? "▲" : "▼"}</span>
               </button>
               {expanded === r.itemId && (
                 <div className="px-3 pb-3 space-y-2 border-t border-gray-100 pt-2">
                   <p className="text-xs text-gray-700">{r.reason}</p>
                   {r.evidence.length > 0 && (
                     <div>
-                      <p className="text-xs text-gray-400 mb-1">{t.review.evidenceLabel}</p>
+                      <p className="text-xs text-gray-500 mb-1">{t.review.evidenceLabel}</p>
                       <ul className="space-y-0.5">
                         {r.evidence.map((e, i) => (
                           <li key={i} className="text-xs text-gray-600 font-mono bg-gray-50 rounded px-2 py-0.5 truncate">

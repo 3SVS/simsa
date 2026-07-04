@@ -101,7 +101,7 @@ export default function PlanMapPage() {
         </span>
       </div>
       <p className="mt-1 text-sm text-gray-500">{pm.subtitle}</p>
-      <p className="mt-2 text-xs text-gray-400">{pm.generatedNote}</p>
+      <p className="mt-2 text-xs text-gray-500">{pm.generatedNote}</p>
 
       {/* You are here */}
       <section className="card mt-5 p-5">
@@ -110,15 +110,15 @@ export default function PlanMapPage() {
         <p className="mt-0.5 text-sm text-gray-500">{goal}</p>
         <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
           <div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
-            <dt className="text-[11px] text-gray-400">{pm.currentStage}</dt>
+            <dt className="text-[11px] text-gray-500">{pm.currentStage}</dt>
             <dd className="mt-0.5 font-medium text-gray-800">{currentStageLabel}</dd>
           </div>
           <div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
-            <dt className="text-[11px] text-gray-400">{pm.currentTrain}</dt>
+            <dt className="text-[11px] text-gray-500">{pm.currentTrain}</dt>
             <dd className="mt-0.5 font-medium text-gray-800">{trainLabel}</dd>
           </div>
           <div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
-            <dt className="text-[11px] text-gray-400">{pm.nextCheckpoint}</dt>
+            <dt className="text-[11px] text-gray-500">{pm.nextCheckpoint}</dt>
             <dd className="mt-0.5 font-medium text-gray-800">{checkpointLabel}</dd>
           </div>
         </dl>
@@ -135,7 +135,7 @@ export default function PlanMapPage() {
           <div key={key} className="card p-4">
             <p className="section-title mb-2">{pm.sections[key]}</p>
             {stages.length === 0 ? (
-              <p className="text-xs text-gray-400">—</p>
+              <p className="text-xs text-gray-500">—</p>
             ) : (
               <ul className="space-y-1.5">
                 {stages.map((s) => (
@@ -153,7 +153,7 @@ export default function PlanMapPage() {
         <div className="mt-3 grid grid-cols-3 gap-3 text-center">
           <div className="rounded-md border border-gray-100 bg-gray-50 px-2 py-3">
             <p className="text-xl font-semibold text-gray-800">{plan.evidence.completed}</p>
-            <p className="text-[11px] text-gray-400">{pm.status.completed}</p>
+            <p className="text-[11px] text-gray-500">{pm.status.completed}</p>
           </div>
           <div className="rounded-md border border-amber-100 bg-amber-50 px-2 py-3">
             <p className="text-xl font-semibold text-amber-700">{plan.evidence.notVerifiedCount}</p>
@@ -161,7 +161,7 @@ export default function PlanMapPage() {
           </div>
           <div className="rounded-md border border-gray-100 bg-gray-50 px-2 py-3">
             <p className="text-xl font-semibold text-gray-800">{plan.evidence.total}</p>
-            <p className="text-[11px] text-gray-400">{pm.evidenceLabel}</p>
+            <p className="text-[11px] text-gray-500">{pm.evidenceLabel}</p>
           </div>
         </div>
         {plan.evidence.notVerifiedCount > 0 && (
@@ -173,7 +173,7 @@ export default function PlanMapPage() {
       <section className="card mt-5 p-5">
         <p className="section-title">{pm.blockersLabel}</p>
         {plan.blockers.length === 0 ? (
-          <p className="mt-2 text-xs text-gray-400">{pm.noBlockers}</p>
+          <p className="mt-2 text-xs text-gray-500">{pm.noBlockers}</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {plan.blockers.map((b) => (
@@ -181,7 +181,7 @@ export default function PlanMapPage() {
                 <span className="mt-0.5 text-gray-300">•</span>
                 <span className="flex-1 text-gray-700">
                   {pm.blockers[b.kind as keyof typeof pm.blockers] ?? b.kind}
-                  {b.count > 0 && <span className="ml-1 font-mono text-xs text-gray-400">({b.count})</span>}
+                  {b.count > 0 && <span className="ml-1 font-mono text-xs text-gray-500">({b.count})</span>}
                 </span>
                 {b.kind === "identity" && (
                   <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-500">
@@ -217,11 +217,11 @@ export default function PlanMapPage() {
                 </div>
                 <dl className="mt-2 space-y-1 text-[11px]">
                   <div className="flex gap-1">
-                    <dt className="text-gray-400">{pm.changesLabel}:</dt>
+                    <dt className="text-gray-500">{pm.changesLabel}:</dt>
                     <dd className="text-gray-600">{gc.changes}</dd>
                   </div>
                   <div className="flex gap-1">
-                    <dt className="text-gray-400">{pm.unchangedLabel}:</dt>
+                    <dt className="text-gray-500">{pm.unchangedLabel}:</dt>
                     <dd className="text-gray-600">{gc.unchanged}</dd>
                   </div>
                 </dl>
@@ -241,7 +241,7 @@ export default function PlanMapPage() {
         </ul>
       </section>
 
-      <p className="mt-5 text-[11px] leading-relaxed text-gray-400">{pm.collabNote}</p>
+      <p className="mt-5 text-[11px] leading-relaxed text-gray-500">{pm.collabNote}</p>
 
       <div className="mt-4">
         <Link href={`/projects/${id}`} className="text-xs text-brand-700 hover:underline">

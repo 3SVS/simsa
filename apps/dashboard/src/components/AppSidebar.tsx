@@ -26,6 +26,10 @@ export function AppSidebar() {
   const projectId = useProjectId(pathname);
 
   const [collapsed, setCollapsed] = useState(false);
+  // Mobile (<md): the sidebar is hidden and replaced by a fixed top bar with a
+  // menu button that opens the SAME expanded body as an overlay drawer. Without
+  // this the fixed w-60 rail left ~120px of content on a 360px phone.
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -57,6 +61,11 @@ export function AppSidebar() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [projectId, pathname]);
+
+  // Navigating closes the mobile drawer (links inside it change the pathname).
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   function toggleCollapse() {
     setCollapsed((c) => {
@@ -111,35 +120,21 @@ export function AppSidebar() {
     status === "done" ? "✓" : status === "current" ? "●" : "○";
   const advancedItems = [["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] as const;
 
-  // ── Collapsed rail ──────────────────────────────────────────────────────────
-  if (collapsed) {
-    return (
-      <aside className="sticky top-0 flex h-screen w-14 flex-shrink-0 flex-col items-center border-r border-gray-200 bg-white py-4">
-        <button onClick={toggleCollapse} aria-label="Expand sidebar" className="mb-4 grid h-8 w-8 place-items-center rounded-md hover:bg-gray-100">
-          <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
-        </button>
-        <Link href="/projects/new" aria-label={t.nav.newProject} className="mb-2 grid h-8 w-8 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">＋</Link>
-        <Link href="/projects" aria-label={t.nav.allProjects} className="grid h-8 w-8 place-items-center rounded-md text-gray-500 hover:bg-gray-50">▦</Link>
-        <Link href="/account" aria-label={t.account.openLabel} className="mt-auto grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700">{initial}</Link>
-      </aside>
-    );
-  }
-
-  // ── Expanded sidebar ────────────────────────────────────────────────────────
-  return (
-    <aside className="sticky top-0 flex h-screen w-60 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+  // ── Expanded body (shared by the desktop aside and the mobile drawer) ──────
+  const expandedBody = (
+    <>
       {/* Brand + collapse */}
       <div className="flex items-center justify-between px-3 pb-2 pt-4">
         <Link href="/projects" className="group flex items-center gap-2.5 px-1.5">
           <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500 transition-colors group-hover:bg-gold-500" />
           <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
         </Link>
-        <button onClick={toggleCollapse} aria-label="Collapse sidebar" className="grid h-7 w-7 place-items-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700">«</button>
+        <button onClick={toggleCollapse} aria-label="Collapse sidebar" className="grid h-7 w-7 place-items-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700">«</button>
       </div>
 
       <div className="px-3 py-1.5">
         <Link href="/projects/new" className="flex items-center gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-50">
-          <span className="text-gray-400">＋</span>
+          <span className="text-gray-500">＋</span>
           {t.nav.newProject}
         </Link>
       </div>
@@ -148,7 +143,7 @@ export function AppSidebar() {
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
         {project ? (
           <>
-            <Link href="/projects" className="mb-2 flex items-center gap-1 px-1.5 text-xs text-gray-400 hover:text-gray-700">
+            <Link href="/projects" className="mb-2 flex items-center gap-1 px-1.5 text-xs text-gray-500 hover:text-gray-700">
               ← {t.nav.allProjects}
             </Link>
             <p className="truncate px-1.5 pb-2 text-xs font-medium text-gray-700">{project.name}</p>
@@ -168,7 +163,7 @@ export function AppSidebar() {
                 <div key={step.key} className="mb-3">
                   <p
                     className={`flex items-center gap-2 px-2.5 pb-1 text-[11px] font-semibold tracking-wide ${
-                      locked ? "text-gray-300" : step.status === "current" ? "text-gray-900" : "text-gray-500"
+                      locked ? "text-gray-400" : step.status === "current" ? "text-gray-900" : "text-gray-500"
                     }`}
                   >
                     <span
@@ -178,20 +173,20 @@ export function AppSidebar() {
                           ? "text-green-600"
                           : step.status === "current"
                             ? "text-brand-600"
-                            : "text-gray-300"
+                            : "text-gray-400"
                       }`}
                     >
                       {statusGlyph(step.status)}
                     </span>
                     {i + 1} · {meta.label}
                     {step.optional && (
-                      <span className="rounded-full border border-gray-200 px-1.5 py-px text-[9px] font-medium text-gray-400">
+                      <span className="rounded-full border border-gray-200 px-1.5 py-px text-[9px] font-medium text-gray-500">
                         {t.stepsNav.optionalTag}
                       </span>
                     )}
                   </p>
                   {locked ? (
-                    <p className="px-2.5 pb-1 pl-[30px] text-[11px] text-gray-300">{lockHint(step.lockReason)}</p>
+                    <p className="px-2.5 pb-1 pl-[30px] text-[11px] text-gray-500">{lockHint(step.lockReason)}</p>
                   ) : (
                     <ul className="space-y-0.5 pl-[18px]">
                       {meta.items.map(([slug, label]) => {
@@ -211,7 +206,7 @@ export function AppSidebar() {
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
-                className="flex w-full items-center justify-between px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-300 hover:text-gray-500"
+                className="flex w-full items-center justify-between px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-700"
               >
                 {t.nav.groupAdvanced}
                 <span aria-hidden>{showAdvanced ? "−" : "+"}</span>
@@ -236,26 +231,27 @@ export function AppSidebar() {
         ) : (
           <>
             <input
+              aria-label={t.nav.searchProjects}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t.nav.searchProjects}
-              className="mb-2 w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[13px] placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              className="mb-2 w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[13px] placeholder:text-gray-500 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
             />
-            <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-300">{t.nav.allProjects}</p>
+            <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">{t.nav.allProjects}</p>
             <ul className="space-y-0.5">
               {filtered.map((p) => (
                 <li key={p.id}>
                   <Link href={`/projects/${p.id}`} className={itemClass(pathname.startsWith(`/projects/${p.id}`))}>
                     {p.name}
                     {MOCK_IDS.has(p.id) && (
-                      <span className="ml-1.5 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-px text-[9px] font-medium text-gray-400">
+                      <span className="ml-1.5 rounded-full border border-gray-200 bg-gray-50 px-1.5 py-px text-[9px] font-medium text-gray-500">
                         {t.projects.exampleBadge}
                       </span>
                     )}
                   </Link>
                 </li>
               ))}
-              {filtered.length === 0 && <li className="px-2.5 py-2 text-xs text-gray-400">{t.nav.noProjects}</li>}
+              {filtered.length === 0 && <li className="px-2.5 py-2 text-xs text-gray-500">{t.nav.noProjects}</li>}
             </ul>
           </>
         )}
@@ -265,7 +261,7 @@ export function AppSidebar() {
       <div className="border-t border-gray-100 p-2">
         <a
           href={buildBetaFeedbackMailto({ route: pathname, section: "Dashboard" })}
-          className="mb-1 block rounded-md px-2.5 py-1.5 text-[12px] text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+          className="mb-1 block rounded-md px-2.5 py-1.5 text-[12px] text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
         >
           {t.nav.feedback}
         </a>
@@ -273,10 +269,70 @@ export function AppSidebar() {
           <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">{initial}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-medium text-gray-900">{t.account.workspace}</span>
-            <span className="block truncate text-[11px] text-gray-400">{t.account.plan}</span>
+            <span className="block truncate text-[11px] text-gray-500">{t.account.plan}</span>
           </span>
         </Link>
       </div>
-    </aside>
+    </>
+  );
+
+  // ── Mobile chrome: fixed top bar + overlay drawer (always <md only) ────────
+  const mobileChrome = (
+    <>
+      <div className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-gray-200 bg-white px-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label={t.nav.openMenu}
+          className="grid h-9 w-9 place-items-center rounded-md text-lg text-gray-700 hover:bg-gray-100"
+        >
+          <span aria-hidden>☰</span>
+        </button>
+        <Link href="/projects" className="flex items-center gap-2">
+          <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
+          <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
+        </Link>
+      </div>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button
+            type="button"
+            aria-label={t.nav.closeMenu}
+            onClick={() => setMobileOpen(false)}
+            className="absolute inset-0 bg-black/30"
+          />
+          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-white shadow-xl">
+            {expandedBody}
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  // ── Collapsed rail (desktop only) ───────────────────────────────────────────
+  if (collapsed) {
+    return (
+      <>
+        {mobileChrome}
+        <aside className="sticky top-0 hidden h-screen w-14 flex-shrink-0 flex-col items-center border-r border-gray-200 bg-white py-4 md:flex">
+          <button onClick={toggleCollapse} aria-label="Expand sidebar" className="mb-4 grid h-8 w-8 place-items-center rounded-md hover:bg-gray-100">
+            <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
+          </button>
+          <Link href="/projects/new" aria-label={t.nav.newProject} className="mb-2 grid h-8 w-8 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">＋</Link>
+          <Link href="/projects" aria-label={t.nav.allProjects} className="grid h-8 w-8 place-items-center rounded-md text-gray-500 hover:bg-gray-50">▦</Link>
+          <Link href="/account" aria-label={t.account.openLabel} className="mt-auto grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700">{initial}</Link>
+        </aside>
+      </>
+    );
+  }
+
+  // ── Expanded sidebar (desktop) ──────────────────────────────────────────────
+  return (
+    <>
+      {mobileChrome}
+      <aside className="sticky top-0 hidden h-screen w-60 flex-shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
+        {expandedBody}
+      </aside>
+    </>
   );
 }

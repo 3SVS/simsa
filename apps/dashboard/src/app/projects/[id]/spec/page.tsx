@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject } from "@/lib/workflow-store";
@@ -11,7 +13,7 @@ export default function SpecPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useI18n();
   const project = getLocalProject(id) ?? getProject(id);
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const { spec } = project;
 
@@ -26,6 +28,14 @@ export default function SpecPage() {
         <SpecCompleteness value={spec.completeness} />
       </div>
 
+      {!spec.goal && spec.included.length === 0 ? (
+        <div className="empty-state">
+          <p className="text-sm text-gray-600">{t.spec.emptyBody}</p>
+          <a href={`/projects/${id}`} className="btn btn-md btn-primary mt-4">
+            {t.common.goOverview}
+          </a>
+        </div>
+      ) : (
       <div className="space-y-5">
         <Section title={t.spec.goal}>
           <p className="text-sm leading-relaxed text-gray-700">{spec.goal}</p>
@@ -65,6 +75,7 @@ export default function SpecPage() {
           </Section>
         )}
       </div>
+      )}
       <StepNextButton />
     </div>
   );
@@ -73,7 +84,7 @@ export default function SpecPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card p-5">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</h2>
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</h2>
       {children}
     </div>
   );

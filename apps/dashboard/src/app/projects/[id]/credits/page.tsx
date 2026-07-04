@@ -133,10 +133,10 @@ export default function CreditsPage() {
         </div>
         <div className="p-5">
           {(creditsPhase === "loading" || (creditsPhase === "idle" && userKey)) && (
-            <p className="text-sm text-gray-400">{t.creditsPage.loading}</p>
+            <p className="text-sm text-gray-500">{t.creditsPage.loading}</p>
           )}
           {creditsPhase === "idle" && !userKey && (
-            <p className="text-sm text-gray-400">{t.creditsPage.signInToView}</p>
+            <p className="text-sm text-gray-500">{t.creditsPage.signInToView}</p>
           )}
           {creditsPhase === "error" && (
             <div className="space-y-2">
@@ -280,7 +280,7 @@ export default function CreditsPage() {
         </div>
         <div className="p-5">
           {requestsPhase === "loading" && (
-            <p className="text-sm text-gray-400">{t.creditsPage.loading}</p>
+            <p className="text-sm text-gray-500">{t.creditsPage.loading}</p>
           )}
           {requestsPhase === "error" && (
             <div className="space-y-2">
@@ -291,7 +291,7 @@ export default function CreditsPage() {
             </div>
           )}
           {requestsPhase === "done" && requests.length === 0 && (
-            <p className="text-sm text-gray-400">{t.creditsPage.noRequests}</p>
+            <p className="text-sm text-gray-500">{t.creditsPage.noRequests}</p>
           )}
           {requestsPhase === "done" && requests.length > 0 && (
             <div className="space-y-3">
@@ -315,7 +315,7 @@ export default function CreditsPage() {
                   {req.adminNote && (
                     <p className="text-xs text-indigo-600 mt-1">{t.creditsPage.adminNote} {req.adminNote}</p>
                   )}
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     {req.createdAt.slice(0, 10)}
                     {req.resolvedAt && ` → ${req.resolvedAt.slice(0, 10)} ${t.creditsPage.resolved}`}
                   </p>
@@ -327,7 +327,7 @@ export default function CreditsPage() {
       </div>
 
       {/* Footer note */}
-      <p className="text-xs text-gray-400 text-center">{t.creditsPage.footer}</p>
+      <p className="text-xs text-gray-500 text-center">{t.creditsPage.footer}</p>
     </div>
   );
 }

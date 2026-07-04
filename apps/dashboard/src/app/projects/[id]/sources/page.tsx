@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 // Stage 262 — Sources (연결). Connect a project's inputs: website URL,
 // GitHub repo (owner/repo) and PRD-style documents (md/txt/pdf, ≤10MB).
 // Client component (localStorage userKey); ownership enforced server-side.
@@ -87,7 +89,7 @@ export default function SourcesPage() {
     void load();
   }, [load]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   async function handleConnect(type: "website" | "github_repo") {
     const reference = (type === "website" ? websiteUrl : repoFullName).trim();
@@ -228,7 +230,7 @@ export default function SourcesPage() {
         <h3 className="section-title">{t.sources.connectedTitle}</h3>
 
         {phase === "loading" && (
-          <div className="flex items-center gap-2 text-sm text-gray-400">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
             <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
             {t.sources.loading}
           </div>
@@ -256,7 +258,7 @@ export default function SourcesPage() {
                     <p className="truncate text-sm font-medium text-gray-800">
                       {source.type === "document" ? (source.label ?? source.reference) : source.reference}
                     </p>
-                    <p className="truncate text-[11px] text-gray-400">
+                    <p className="truncate text-[11px] text-gray-500">
                       {formatDate(source.createdAt, locale)}
                       {source.type === "document" && source.sizeBytes != null && ` · ${formatBytes(source.sizeBytes)}`}
                       {source.type !== "document" && source.label && ` · ${source.label}`}

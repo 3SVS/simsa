@@ -21,7 +21,7 @@ export function LanguageToggle() {
             onClick={() => setLocale(o.value)}
             aria-pressed={active}
             className={`rounded-[5px] px-2 py-0.5 text-[11px] font-medium tracking-wide transition-colors ${
-              active ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-700"
+              active ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
           >
             {o.label}

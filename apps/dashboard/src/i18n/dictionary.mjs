@@ -20,6 +20,8 @@ const EN = {
   brand: { wordmark: "Simsa", tagline: "The acceptance layer for AI-built software." },
   lang: { label: "Language", english: "English", korean: "한국어" },
   nav: {
+    openMenu: "Open menu",
+    closeMenu: "Close menu",
     overview: "Overview",
     idea: "Idea",
     spec: "Product brief",
@@ -197,6 +199,7 @@ const EN = {
     subtitle: "Clear instructions you can hand to Claude Code, Codex, or a teammate.",
   },
   common: {
+    goOverview: "Go to project overview",
     loading: "Loading…",
     save: "Save",
     cancel: "Cancel",
@@ -292,6 +295,7 @@ const EN = {
     title: "What do you have to start with?",
     subtitle: "Pick whatever fits — you'll end up in the same place: your app, reviewed.",
     backToChooser: "Back to the three choices",
+    backToPaste: "Back to your document",
     ideaTitle: "💡 I just have an idea",
     ideaDesc: "Describe what you want to build. We'll turn it into things to check.",
     codeTitle: "🔗 I already built an app",
@@ -322,6 +326,7 @@ const EN = {
     gsStep3: "Run a review — pick the code changes and check them against your acceptance items.",
   },
   idea: {
+    emptyBody: "Nothing here yet — this project started from code, so there's no written idea. You can keep going from the overview.",
     subtitle: "What Simsa understood from your input.",
     yourInput: "Your idea",
     understood: "What Simsa understood",
@@ -369,6 +374,7 @@ const EN = {
     customInput: "Custom",
   },
   spec: {
+    emptyBody: "No plan yet — this project started from code. Reviews use your checking items, so you can keep going from the overview.",
     title: "Product brief",
     reviewNote: "Review the product intent before using it for acceptance checks.",
     completeness: "Completeness",
@@ -387,6 +393,7 @@ const EN = {
   },
   priority: { must: "Must", should: "Should", could: "Could" },
   fixesScreen: {
+    generateError: "Could not create the fix note.",
     title: "Fix instructions",
     reviewFirst: "Review your items in the Review results tab first.",
     allPassed: "All items passed.",
@@ -406,6 +413,7 @@ const EN = {
     doNotDo: "Do not",
   },
   checks: {
+    pageSubtitle: "The results of checking your product against its checking items.",
     draftTitle: "Draft review",
     draftDesc: "Checks your product brief and acceptance items before connecting code.",
     prTitle: "Code review (GitHub)",
@@ -833,6 +841,12 @@ const EN = {
     testSent: "Test email sent. Check your inbox.",
     testError: "Could not send. Check the address and try again.",
   },
+  nf: {
+    title: "We can't find this project in this browser",
+    body: "Projects are stored in the browser where they were created. If you made it in another browser or an incognito window, open it there.",
+    allProjects: "All projects",
+    newProject: "New project",
+  },
   trainingConsent: {
     title: "Help improve Simsa",
     desc: "Optional. Let Simsa keep the code changes it reviewed and the review results, to improve future review quality — including a future model trained on this data.",
@@ -901,6 +915,9 @@ const EN = {
     generateItems: "Create checking items",
     generatingItems: "Creating…",
     generateItemsError: "Could not create the items. Please try again.",
+    reviewingHint: "This usually takes 1–2 minutes. The result is saved even if you leave this screen.",
+    connectionLoadError: "Couldn't check the repository connection just now. This is usually temporary.",
+    copyManually: "Automatic copy was blocked — copy the text below manually.",
     selected: "selected",
     saveLink: "Save link",
     linked: "Linked.",
@@ -931,6 +948,7 @@ const EN = {
     nextLabel: "Next",
   },
   comment: {
+    postConfirm: "This will post a PUBLIC comment on your PR on GitHub, under your account. You can update it later, but you can't delete it from here. Post it?",
     title: "Share results on GitHub",
     desc: "Post the review results as a comment on the GitHub page for these code changes. This step does not change any code.",
     publicOnly: "Results can only be posted for public repositories.",
@@ -1223,6 +1241,7 @@ const EN = {
     recordDecision: "Record decision",
   },
   experiment: {
+    titleRequired: "Enter a title to enable saving.",
     title: "Manual multi-agent experiment",
     subtitle: "Plan a single-agent vs multi-agent build experiment using the same product brief and acceptance items.",
     chooseTemplate: "Choose a template",
@@ -2106,6 +2125,8 @@ const KO = {
   brand: { wordmark: "Simsa", tagline: "AI가 만든 소프트웨어를 검수하는 작업공간" },
   lang: { label: "언어", english: "English", korean: "한국어" },
   nav: {
+    openMenu: "메뉴 열기",
+    closeMenu: "메뉴 닫기",
     overview: "개요",
     idea: "아이디어",
     spec: "제품 설명서",
@@ -2282,6 +2303,7 @@ const KO = {
     subtitle: "Claude Code, Codex, 또는 동료에게 그대로 넘길 수 있는 수정 안내입니다.",
   },
   common: {
+    goOverview: "프로젝트 개요로 가기",
     loading: "불러오는 중…",
     save: "저장",
     cancel: "취소",
@@ -2374,6 +2396,7 @@ const KO = {
     title: "무엇부터 시작할까요?",
     subtitle: "지금 갖고 계신 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
     backToChooser: "처음 선택으로 돌아가기",
+    backToPaste: "붙여넣기로 돌아가기",
     ideaTitle: "💡 아이디어만 있어요",
     ideaDesc: "만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요.",
     codeTitle: "🔗 이미 만든 앱이 있어요",
@@ -2404,6 +2427,7 @@ const KO = {
     gsStep3: "확인 실행 — 코드 변경을 골라 검수 항목 기준으로 확인하세요.",
   },
   idea: {
+    emptyBody: "아직 정리된 내용이 없어요 — 이 프로젝트는 코드에서 시작해서 적어둔 아이디어가 없어요. 개요에서 계속 진행하시면 돼요.",
     subtitle: "입력한 내용을 Simsa가 어떻게 이해했는지 보여줘요.",
     yourInput: "입력한 아이디어",
     understood: "Simsa가 이해한 내용",
@@ -2451,6 +2475,7 @@ const KO = {
     customInput: "직접 입력",
   },
   spec: {
+    emptyBody: "아직 기획 내용이 없어요 — 이 프로젝트는 코드에서 시작했어요. 검수는 확인 항목 기준으로 진행되니, 개요에서 계속 진행하시면 돼요.",
     title: "제품 설명서",
     reviewNote: "검수에 사용하기 전에 제품 의도를 확인하세요.",
     completeness: "완성도",
@@ -2469,6 +2494,7 @@ const KO = {
   },
   priority: { must: "필수", should: "권장", could: "선택" },
   fixesScreen: {
+    generateError: "수정 안내를 만들지 못했어요.",
     title: "수정 지시서",
     reviewFirst: "먼저 확인 결과 탭에서 항목을 검토해주세요.",
     allPassed: "모든 항목이 통과됐습니다.",
@@ -2488,6 +2514,7 @@ const KO = {
     doNotDo: "하지 말아야 할 것",
   },
   checks: {
+    pageSubtitle: "확인 항목을 기준으로 제품을 확인한 결과예요.",
     draftTitle: "제품 설명서 기준 사전 확인",
     draftDesc: "코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다.",
     prTitle: "코드 확인 (GitHub)",
@@ -2915,6 +2942,12 @@ const KO = {
     testSent: "테스트 메일을 보냈어요. 받은편지함을 확인해주세요.",
     testError: "전송에 실패했어요. 주소가 맞는지 확인해주세요.",
   },
+  nf: {
+    title: "이 브라우저에서 프로젝트를 찾을 수 없어요",
+    body: "프로젝트는 만든 브라우저에 저장돼요. 다른 브라우저나 시크릿 창에서 만들었다면 그곳에서 열어주세요.",
+    allProjects: "모든 프로젝트",
+    newProject: "새 프로젝트",
+  },
   trainingConsent: {
     title: "Simsa 개선에 참여하기",
     desc: "선택 사항이에요. Simsa가 확인한 코드 변경과 확인 결과를 보관해서 앞으로의 확인 품질을 높이는 데 쓰도록 허용합니다 — 이 데이터로 학습한 자체 모델을 만드는 것까지 포함해요.",
@@ -2983,6 +3016,9 @@ const KO = {
     generateItems: "확인 항목 만들기",
     generatingItems: "만드는 중…",
     generateItemsError: "항목을 만들지 못했어요. 다시 시도해주세요.",
+    reviewingHint: "보통 1~2분 정도 걸려요. 이 화면을 떠나도 결과는 저장돼요.",
+    connectionLoadError: "저장소 연결 상태를 지금 확인하지 못했어요. 대부분 일시적인 문제예요.",
+    copyManually: "자동 복사가 막혔어요 — 아래 내용을 직접 복사해주세요.",
     selected: "개 선택됨",
     saveLink: "연결 저장",
     linked: "연결됐어요.",
@@ -3013,6 +3049,7 @@ const KO = {
     nextLabel: "다음",
   },
   comment: {
+    postConfirm: "GitHub의 코드 변경(PR)에 내 계정으로 공개 코멘트가 남아요. 나중에 수정은 되지만 여기서 삭제는 안 돼요. 남길까요?",
     title: "GitHub에 결과 남기기",
     desc: "확인 결과를 GitHub의 해당 코드 변경(PR) 페이지에 코멘트로 남길 수 있어요. 이 단계에서는 코드를 자동으로 고치지 않습니다.",
     publicOnly: "현재는 공개 저장소에만 결과를 남길 수 있어요.",
@@ -3305,6 +3342,7 @@ const KO = {
     recordDecision: "결정 기록",
   },
   experiment: {
+    titleRequired: "저장하려면 제목을 입력해주세요.",
     title: "수동 다중 에이전트 실험",
     subtitle: "같은 제품 설명서와 검수 항목을 기준으로 단일 에이전트와 다중 에이전트 개발 실험을 계획합니다.",
     chooseTemplate: "템플릿 선택",

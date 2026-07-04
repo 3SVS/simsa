@@ -131,7 +131,7 @@ export default function AdminUsagePage() {
 
         {stats && (
           <>
-            <p className="text-xs text-gray-400 mb-4">
+            <p className="text-xs text-gray-500 mb-4">
               {t.adminUsage.basis
                 .replace("{range}", rangeLabel(t, stats.range))
                 .replace("{cutoff}", stats.cutoff.slice(0, 10))}
@@ -187,7 +187,7 @@ export default function AdminUsagePage() {
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-4">
                     <div className="px-5 py-4 border-b border-gray-100">
                       <h2 className="font-semibold text-gray-800">{t.adminUsage.billableTitle}</h2>
-                      <p className="text-xs text-gray-400 mt-0.5">{t.adminUsage.billableDesc}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{t.adminUsage.billableDesc}</p>
                     </div>
                     <BillingEventTable rows={billableRows} />
                   </div>
@@ -269,13 +269,13 @@ export default function AdminUsagePage() {
                 <h2 className="font-semibold text-gray-800">{t.adminUsage.byEventTitle}</h2>
               </div>
               {stats.byEventType.length === 0 ? (
-                <p className="px-5 py-4 text-sm text-gray-400">{t.adminUsage.noEvents}</p>
+                <p className="px-5 py-4 text-sm text-gray-500">{t.adminUsage.noEvents}</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs">
                       <th className="text-left px-5 py-2 font-medium">{t.adminUsage.colFeature}</th>
-                      <th className="text-left px-5 py-2 font-medium text-gray-400">{t.adminUsage.colEventType}</th>
+                      <th className="text-left px-5 py-2 font-medium text-gray-500">{t.adminUsage.colEventType}</th>
                       <th className="text-right px-5 py-2 font-medium">{t.adminUsage.colCount}</th>
                     </tr>
                   </thead>
@@ -283,7 +283,7 @@ export default function AdminUsagePage() {
                     {stats.byEventType.map((row) => (
                       <tr key={row.eventType} className="border-t border-gray-100 hover:bg-gray-50">
                         <td className="px-5 py-3 text-gray-900">{row.label}</td>
-                        <td className="px-5 py-3 text-gray-400 font-mono text-xs">{row.eventType}</td>
+                        <td className="px-5 py-3 text-gray-500 font-mono text-xs">{row.eventType}</td>
                         <td className="px-5 py-3 text-right font-medium text-gray-900">
                           {row.count.toLocaleString()}
                         </td>

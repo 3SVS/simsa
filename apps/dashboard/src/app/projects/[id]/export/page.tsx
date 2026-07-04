@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
@@ -333,7 +335,7 @@ export default function ExportPage() {
     setOutcomeStatus(null);
   }
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   const currentFile = result?.bundle.files.find((f) => f.path === selectedFile);
 
@@ -349,7 +351,7 @@ export default function ExportPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t.exportPage.chooseAi}</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t.exportPage.chooseAi}</p>
             <div className="flex gap-2">
               {TARGET_VALUES.map((value) => (
                 <button key={value} onClick={() => handleTargetChange(value)}
@@ -361,7 +363,7 @@ export default function ExportPage() {
             </div>
           </div>
           <div className="flex-1">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t.exportPage.scope}</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t.exportPage.scope}</p>
             <div className="flex gap-2">
               {(["all", "selected"] as const).map((mode) => (
                 <button key={mode} onClick={() => setSelectionMode(mode)}
@@ -380,7 +382,7 @@ export default function ExportPage() {
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-semibold text-gray-700">
               {t.exportPage.selectTitle}
-              <span className="ml-2 text-xs font-normal text-gray-400">
+              <span className="ml-2 text-xs font-normal text-gray-500">
                 {t.exportPage.selectedOfTotal
                   .replace("{sel}", String(selectedIds.size))
                   .replace("{total}", String(allItems.length))}
@@ -392,7 +394,7 @@ export default function ExportPage() {
             </button>
           </div>
           {problemItemCount > 0 && (
-            <p className="text-xs text-gray-400 mb-3">{t.exportPage.recommendHint}</p>
+            <p className="text-xs text-gray-500 mb-3">{t.exportPage.recommendHint}</p>
           )}
           {/* Status filter */}
           <div className="flex gap-1.5 flex-wrap mb-3">
@@ -418,7 +420,7 @@ export default function ExportPage() {
               </label>
             ))}
             {filteredItems.length === 0 && (
-              <p className="text-xs text-gray-400 py-4 text-center">{t.exportPage.noItemsForStatus}</p>
+              <p className="text-xs text-gray-500 py-4 text-center">{t.exportPage.noItemsForStatus}</p>
             )}
           </div>
           <div className="mt-4 flex items-center justify-end">
@@ -434,7 +436,7 @@ export default function ExportPage() {
       {phase === "loading" && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
           <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-400">{t.exportPage.generatingPack}</p>
+          <p className="text-sm text-gray-500">{t.exportPage.generatingPack}</p>
         </div>
       )}
       {phase === "error" && (
@@ -495,7 +497,7 @@ export default function ExportPage() {
           {/* File browser */}
           <div className="flex gap-4 h-[500px]">
             <div className="w-48 flex-shrink-0 bg-white rounded-xl border border-gray-200 overflow-y-auto">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 border-b border-gray-100">{t.exportPage.fileList}</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3 border-b border-gray-100">{t.exportPage.fileList}</p>
               <ul className="py-1">
                 {result.bundle.files.map((f) => (
                   <li key={f.path}>
@@ -521,7 +523,7 @@ export default function ExportPage() {
                 </>
               ) : (
                 <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-gray-400">{t.exportPage.selectFile}</p>
+                  <p className="text-sm text-gray-500">{t.exportPage.selectFile}</p>
                 </div>
               )}
             </div>
@@ -637,13 +639,13 @@ function OutcomeHistory({
       <div className="space-y-2">
         {outcomes.slice(0, 10).map((oc) => (
           <div key={oc.id} className="flex items-start gap-3 text-xs text-gray-600 py-2 border-b border-gray-50 last:border-0">
-            <span className="text-gray-400 flex-shrink-0 w-32">{formatDate(oc.createdAt)}</span>
+            <span className="text-gray-500 flex-shrink-0 w-32">{formatDate(oc.createdAt)}</span>
             <span className="flex-shrink-0">{TARGET_LABEL[oc.target]}</span>
-            <span className="flex-shrink-0 text-gray-400">{t.exportPage.itemsCount.replace("{n}", String(oc.selectedItemIds.length))}</span>
-            <span className={`flex-shrink-0 font-medium ${oc.outcome === "worked" ? "text-green-600" : oc.outcome === "partial" ? "text-amber-600" : oc.outcome === "failed" ? "text-red-600" : "text-gray-400"}`}>
+            <span className="flex-shrink-0 text-gray-500">{t.exportPage.itemsCount.replace("{n}", String(oc.selectedItemIds.length))}</span>
+            <span className={`flex-shrink-0 font-medium ${oc.outcome === "worked" ? "text-green-600" : oc.outcome === "partial" ? "text-amber-600" : oc.outcome === "failed" ? "text-red-600" : "text-gray-500"}`}>
               {outcomeLabel(t, oc.outcome)}
             </span>
-            {oc.note && <span className="text-gray-400 truncate flex-1">{oc.note}</span>}
+            {oc.note && <span className="text-gray-500 truncate flex-1">{oc.note}</span>}
             <Link
               href={`/projects/${projectId}/checks`}
               title={t.exportPage.recheckTooltip}
@@ -654,7 +656,7 @@ function OutcomeHistory({
           </div>
         ))}
       </div>
-      <p className="text-xs text-gray-400 mt-3">{t.exportPage.historyNote}</p>
+      <p className="text-xs text-gray-500 mt-3">{t.exportPage.historyNote}</p>
     </div>
   );
 }

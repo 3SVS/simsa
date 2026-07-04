@@ -142,12 +142,12 @@ function LoginInner() {
         <button
           type="button"
           onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setErrorMsg(""); }}
-          className="mt-4 w-full text-center text-xs text-gray-400 underline hover:text-gray-600"
+          className="mt-4 w-full text-center text-xs text-gray-500 underline hover:text-gray-600"
         >
           {mode === "signin" ? t.login.toSignUp : t.login.toSignIn}
         </button>
 
-        <p className="mt-8 text-center text-xs text-gray-400">
+        <p className="mt-8 text-center text-xs text-gray-500">
           {t.login.keepsLocal}{" "}
           <Link href={nextPath} className="underline hover:text-gray-600">{t.login.skip}</Link>
         </p>

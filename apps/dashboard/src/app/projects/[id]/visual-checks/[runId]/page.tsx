@@ -94,15 +94,15 @@ function FindingCard({ finding, t }: { finding: NonDevFinding; t: Dictionary }) 
       </span>
       <dl className="mt-3 space-y-2.5">
         <div>
-          <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{t.visualChecks.findingWhat}</dt>
+          <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{t.visualChecks.findingWhat}</dt>
           <dd className="mt-0.5 text-sm font-medium text-gray-800">{finding.what}</dd>
         </div>
         <div>
-          <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{t.visualChecks.findingWhy}</dt>
+          <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{t.visualChecks.findingWhy}</dt>
           <dd className="mt-0.5 text-sm leading-relaxed text-gray-600">{finding.why}</dd>
         </div>
         <div>
-          <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{t.visualChecks.findingHow}</dt>
+          <dt className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{t.visualChecks.findingHow}</dt>
           <dd className="mt-0.5 text-sm leading-relaxed text-gray-600">{finding.how}</dd>
         </div>
       </dl>
@@ -130,9 +130,9 @@ function ComparedFindingList({
 }) {
   return (
     <div>
-      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{title}</h4>
+      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{title}</h4>
       {items.length === 0 ? (
-        <p className="mt-1.5 text-xs text-gray-400">{emptyText}</p>
+        <p className="mt-1.5 text-xs text-gray-500">{emptyText}</p>
       ) : (
         <ul className="mt-1.5 space-y-1.5">
           {items.map((f, i) => (
@@ -190,7 +190,7 @@ function ComparisonSection({
           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONE_CLASS[fromVerdict.tone]}`}>
             {fromVerdict.label}
           </span>
-          <span aria-hidden className="text-xs text-gray-400">→</span>
+          <span aria-hidden className="text-xs text-gray-500">→</span>
           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONE_CLASS[toVerdict.tone]}`}>
             {toVerdict.label}
           </span>
@@ -227,15 +227,15 @@ function ComparisonSection({
           </button>
           {showShots && (
             <div className="mt-3 space-y-4">
-              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 {t.visualChecks.compare.screenshotsTitle}
               </h4>
               {evidencePairs.pairs.length === 0 && (
-                <p className="text-xs text-gray-400">{t.visualChecks.compare.noPairs}</p>
+                <p className="text-xs text-gray-500">{t.visualChecks.compare.noPairs}</p>
               )}
               {evidencePairs.pairs.map((pair) => (
                 <div key={pair.name}>
-                  <p className="font-mono text-[10px] text-gray-400">{pair.name.replace(/^screenshots\//, "")}</p>
+                  <p className="font-mono text-[10px] text-gray-500">{pair.name.replace(/^screenshots\//, "")}</p>
                   <div className="mt-1.5 grid gap-3 sm:grid-cols-2">
                     {([
                       { label: t.visualChecks.compare.prevLabel, rid: prevRunId },
@@ -260,13 +260,13 @@ function ComparisonSection({
                 </div>
               ))}
               {evidencePairs.prevOnly.length > 0 && (
-                <p className="text-[11px] leading-relaxed text-gray-400">
+                <p className="text-[11px] leading-relaxed text-gray-500">
                   {t.visualChecks.compare.prevOnly}:{" "}
                   <span className="font-mono">{evidencePairs.prevOnly.map((n) => n.replace(/^screenshots\//, "")).join(", ")}</span>
                 </p>
               )}
               {evidencePairs.latestOnly.length > 0 && (
-                <p className="text-[11px] leading-relaxed text-gray-400">
+                <p className="text-[11px] leading-relaxed text-gray-500">
                   {t.visualChecks.compare.latestOnly}:{" "}
                   <span className="font-mono">{evidencePairs.latestOnly.map((n) => n.replace(/^screenshots\//, "")).join(", ")}</span>
                 </p>
@@ -395,7 +395,7 @@ function RepairSection({
       <p className="section-desc leading-relaxed">{s.desc}</p>
 
       {phase === "loading" && (
-        <div className="mt-3 flex items-center gap-2 text-sm text-gray-400">
+        <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
           <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
           {t.common.loading}
         </div>
@@ -593,7 +593,7 @@ export default function VisualCheckDetailPage() {
     return () => { cancelled = true; clearInterval(timer); };
   }, [isRunActive, id, runId, userKey]);
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <p className="text-sm text-gray-500">{t.common.notFound}</p>;
 
   async function handleCopyPrompt() {
     if (!check?.agentPrompt) return;
@@ -622,12 +622,12 @@ export default function VisualCheckDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href={`/projects/${id}/visual-checks`} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700">
+      <Link href={`/projects/${id}/visual-checks`} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
         ← {t.visualChecks.backToList}
       </Link>
 
       {phase === "loading" && (
-        <div className="flex items-center gap-2 text-sm text-gray-400">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
           {t.visualChecks.loading}
         </div>
@@ -654,7 +654,7 @@ export default function VisualCheckDetailPage() {
               {t.visualChecks.progressBody}
             </p>
           </div>
-          <p className="break-all font-mono text-[11px] text-gray-400">{check.targetUrl}</p>
+          <p className="break-all font-mono text-[11px] text-gray-500">{check.targetUrl}</p>
         </section>
       )}
 
@@ -683,7 +683,7 @@ export default function VisualCheckDetailPage() {
           <section className="card p-4">
             <dl className="space-y-2 text-sm">
               <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-400">{t.visualChecks.metaTarget}</dt>
+                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-500">{t.visualChecks.metaTarget}</dt>
                 <dd className="min-w-0 break-all text-gray-700">
                   <a href={check.targetUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">
                     {check.targetUrl}
@@ -691,11 +691,11 @@ export default function VisualCheckDetailPage() {
                 </dd>
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-400">{t.visualChecks.metaIntent}</dt>
+                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-500">{t.visualChecks.metaIntent}</dt>
                 <dd className="min-w-0 leading-relaxed text-gray-700">{report?.intent || check.intent}</dd>
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-400">
+                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-500">
                   {check.executor === "container" ? t.visualChecks.executorContainer : t.visualChecks.executorLocal}
                 </dt>
                 <dd className="text-gray-500">{formatDateTime(check.createdAt, locale)}</dd>
@@ -719,7 +719,7 @@ export default function VisualCheckDetailPage() {
           <section className="space-y-3">
             <h3 className="section-title">{t.visualChecks.findingsTitle}</h3>
             {findings.length === 0 ? (
-              <p className="text-xs text-gray-400">{t.visualChecks.noFindings}</p>
+              <p className="text-xs text-gray-500">{t.visualChecks.noFindings}</p>
             ) : (
               findings.map((f, i) => <FindingCard key={i} finding={f} t={t} />)
             )}
@@ -741,7 +741,7 @@ export default function VisualCheckDetailPage() {
                       loading="lazy"
                       className="w-full bg-gray-50"
                     />
-                    <figcaption className="border-t border-gray-100 px-3 py-1.5 font-mono text-[10px] text-gray-400">
+                    <figcaption className="border-t border-gray-100 px-3 py-1.5 font-mono text-[10px] text-gray-500">
                       {name.replace(/^screenshots\//, "")}
                     </figcaption>
                   </figure>

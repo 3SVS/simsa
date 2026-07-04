@@ -1,5 +1,7 @@
 "use client";
 
+import { ProjectNotFound } from "@/components/ProjectNotFound";
+
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -96,7 +98,7 @@ export default function FixesPage() {
     }));
   }
 
-  if (!project) return <p className="text-sm text-gray-400">{t.common.notFound}</p>;
+  if (!project) return <ProjectNotFound />;
 
   if (!checkItems) {
     return (
@@ -200,12 +202,15 @@ function FixItemCard({
             </button>
           )}
           {fixState?.phase === "error" && (
-            <button
-              onClick={onFix}
-              className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
-            >
-              {t.common.retry}
-            </button>
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-red-600">{t.fixesScreen.generateError}</span>
+              <button
+                onClick={onFix}
+                className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+              >
+                {t.common.retry}
+              </button>
+            </span>
           )}
         </div>
       </div>
@@ -227,7 +232,7 @@ function FixSuggestionPanel({ t, suggestion }: { t: Dictionary; suggestion: FixS
       )}
 
       <div>
-        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.fixesScreen.summary}</p>
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.fixesScreen.summary}</p>
         <p className="text-sm leading-relaxed text-gray-700">{plainSummary}</p>
       </div>
 
@@ -239,7 +244,7 @@ function FixSuggestionPanel({ t, suggestion }: { t: Dictionary; suggestion: FixS
 
         {builderBrief.tasks.length > 0 && (
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.fixesScreen.tasks}</p>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.fixesScreen.tasks}</p>
             <ul className="space-y-1">
               {builderBrief.tasks.map((task, i) => (
                 <li key={i} className="flex gap-2 text-xs text-gray-700">
@@ -252,7 +257,7 @@ function FixSuggestionPanel({ t, suggestion }: { t: Dictionary; suggestion: FixS
 
         {builderBrief.doneWhen.length > 0 && (
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.fixesScreen.doneWhen}</p>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.fixesScreen.doneWhen}</p>
             <ul className="space-y-1">
               {builderBrief.doneWhen.map((d, i) => (
                 <li key={i} className="flex gap-2 text-xs text-gray-700">
@@ -265,7 +270,7 @@ function FixSuggestionPanel({ t, suggestion }: { t: Dictionary; suggestion: FixS
 
         {builderBrief.doNotDo.length > 0 && (
           <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">{t.fixesScreen.doNotDo}</p>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.fixesScreen.doNotDo}</p>
             <ul className="space-y-1">
               {builderBrief.doNotDo.map((d, i) => (
                 <li key={i} className="flex gap-2 text-xs text-gray-500">

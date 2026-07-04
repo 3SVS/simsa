@@ -115,7 +115,7 @@ function BalanceTable({ balances }: { balances: CreditBalance[] }) {
           <tr key={b.creditType} className="border-b last:border-0">
             <td className="py-1">{creditTypeLabel(t, b.creditType)}</td>
             <td className="py-1 text-right font-mono font-bold text-indigo-700">{b.balance}</td>
-            <td className="py-1 text-right text-gray-400">{b.updatedAt.slice(0, 10)}</td>
+            <td className="py-1 text-right text-gray-500">{b.updatedAt.slice(0, 10)}</td>
           </tr>
         ))}
       </tbody>
@@ -165,7 +165,7 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
                     ? "text-red-500"
                     : e.status === "pending"
                     ? "text-amber-600"
-                    : "text-gray-400"
+                    : "text-gray-500"
                 }
               >
                 {statusLabelText(t, e.status)}
@@ -173,7 +173,7 @@ function LedgerTable({ entries }: { entries: LedgerEntry[] }) {
             </td>
             <td className="py-1 text-right font-mono">{e.amount}</td>
             <td className="py-1 pl-3 text-gray-600 max-w-xs truncate">{e.reason}</td>
-            <td className="py-1 text-right text-gray-400">{e.createdAt.slice(0, 10)}</td>
+            <td className="py-1 text-right text-gray-500">{e.createdAt.slice(0, 10)}</td>
           </tr>
         ))}
       </tbody>
@@ -286,7 +286,7 @@ function PendingCleanupTable({
                   </span>
                 </td>
                 <td className="py-1 pl-2 font-mono text-xs text-gray-500 max-w-xs truncate">{e.sourceEventId ?? "—"}</td>
-                <td className="py-1 pl-2 text-xs text-gray-400">{e.createdAt.slice(0, 16).replace("T", " ")}</td>
+                <td className="py-1 pl-2 text-xs text-gray-500">{e.createdAt.slice(0, 16).replace("T", " ")}</td>
                 <td className="py-1 pl-2">
                   <button
                     onClick={() => onMarkFailed(e.id)}
@@ -356,7 +356,7 @@ function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistRe
             <div key={s.id} className="border border-gray-200 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-medium text-gray-700">{s.label}</span>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-500">
                   debits={String(s.flags.actualDebitsEnabled)} · blocking={String(s.flags.blockingEnabled)}
                 </span>
               </div>
@@ -372,7 +372,7 @@ function RolloutChecklistSection({ data }: { data: AdminCreditRolloutChecklistRe
         <ul className="space-y-1">
           {productionEnableCriteria.map((criterion, i) => (
             <li key={i} className="flex gap-2 text-xs text-gray-600">
-              <span className="text-gray-400 shrink-0">{i + 1}.</span>
+              <span className="text-gray-500 shrink-0">{i + 1}.</span>
               <span>{criterion}</span>
             </li>
           ))}
@@ -446,7 +446,7 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
                       </span>
                     )
                   ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-gray-500">—</span>
                   )}
                 </td>
                 <td className="py-1 pl-3">
@@ -516,7 +516,7 @@ function MonthlyPreviewSection({ data }: { data: MonthlyCreditPreviewResult }) {
                     {u.wouldBlockCount > 0 ? (
                       <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">{t.adminCredits.countSuffix.replace("{n}", String(u.wouldBlockCount))}</span>
                     ) : (
-                      <span className="text-xs text-gray-400">0</span>
+                      <span className="text-xs text-gray-500">0</span>
                     )}
                   </td>
                 </tr>
@@ -989,13 +989,13 @@ export default function AdminCreditsPage() {
           </div>
           {balances !== null && (
             <div className="pt-2">
-              <p className="text-xs text-gray-400 mb-2">userKey: {userKey}</p>
+              <p className="text-xs text-gray-500 mb-2">userKey: {userKey}</p>
               <BalanceTable balances={balances} />
             </div>
           )}
           {ledger !== null && (
             <div className="pt-2">
-              <p className="text-xs text-gray-400 mb-2">userKey: {userKey} — {t.adminCredits.recentEntries.replace("{n}", "50")}</p>
+              <p className="text-xs text-gray-500 mb-2">userKey: {userKey} — {t.adminCredits.recentEntries.replace("{n}", "50")}</p>
               <LedgerTable entries={ledger} />
             </div>
           )}
@@ -1048,7 +1048,7 @@ export default function AdminCreditsPage() {
               {t.adminCredits.grant}
             </button>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             {t.adminCredits.grantNotice}
           </p>
         </div>
@@ -1270,7 +1270,7 @@ export default function AdminCreditsPage() {
                         {req.adminNote && (
                           <p className="text-xs text-indigo-600 mt-0.5">{t.adminCredits.topUpAdminNoteLabel}{req.adminNote}</p>
                         )}
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-xs text-gray-500 mt-1">
                           {t.adminCredits.topUpRequestedAt}{req.createdAt.slice(0, 10)}
                           {req.resolvedAt && `${t.adminCredits.topUpResolvedAt}${req.resolvedAt.slice(0, 10)}`}
                         </p>
