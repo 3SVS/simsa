@@ -6,7 +6,7 @@ export const REWORK_WORKFLOW_PATH = ".github/workflows/conclave-rework.yml";
 export const MERGE_WORKFLOW_PATH = ".github/workflows/conclave-merge.yml";
 /**
  * Reusable workflow source — GitHub ref for the hosted review workflow.
- * Currently served from `3SVS/conclave-ai`; planned to move
+ * Currently served from `3SVS/simsa`; planned to move
  * to a dedicated `conclave-ai` org once the repo is transferred.
  *
  * The `v0.4` ref is a FLOATING tag — every release workflow run moves
@@ -15,7 +15,7 @@ export const MERGE_WORKFLOW_PATH = ".github/workflows/conclave-merge.yml";
  * (e.g. `v0.5`) signals a breaking change to the workflow contract;
  * downstream installs would need to re-init to track it.
  */
-export const REUSABLE_REF = "3SVS/conclave-ai/.github/workflows/review.yml@v0.4";
+export const REUSABLE_REF = "3SVS/simsa/.github/workflows/review.yml@v0.4";
 /**
  * v0.10 — separate ref for the rework (autofix) reusable workflow. Same
  * floating major-tag track as REUSABLE_REF so the release pipeline
@@ -23,7 +23,7 @@ export const REUSABLE_REF = "3SVS/conclave-ai/.github/workflows/review.yml@v0.4"
  * ref-bump could pin the two workflows independently if needed.
  */
 export const REWORK_REUSABLE_REF =
-  "3SVS/conclave-ai/.github/workflows/rework.yml@v0.4";
+  "3SVS/simsa/.github/workflows/rework.yml@v0.4";
 /**
  * v0.13.17 — separate ref for the merge reusable workflow. Same
  * floating major-tag track as REUSABLE_REF and REWORK_REUSABLE_REF.
@@ -31,7 +31,7 @@ export const REWORK_REUSABLE_REF =
  * autonomy loop never delivers its terminal "✅ Merged" notification.
  */
 export const MERGE_REUSABLE_REF =
-  "3SVS/conclave-ai/.github/workflows/merge.yml@v0.4";
+  "3SVS/simsa/.github/workflows/merge.yml@v0.4";
 
 /**
  * The 3-line (effective) wrapper workflow per D7. Users DO NOT edit this
