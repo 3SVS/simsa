@@ -19,6 +19,7 @@ import type {
 } from "@/lib/workspace-types";
 // Stage 267 — draft rendering shared with the document-intake draft page.
 import { UnderstoodCard, SpecDraftBody } from "@/components/SpecDraftView";
+import { DROPPED_DOC_KEY, DROPPED_DOC_NAME_KEY } from "@/components/GlobalDropZone";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 
@@ -105,6 +106,38 @@ function NewProjectInner() {
       setRateLimitMsg(null);
     }
   }, [searchParams]);
+
+  // A document dropped anywhere on the site (GlobalDropZone) lands here:
+  // prefill the paste box from the sessionStorage hand-off, once.
+  const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
+  useEffect(() => {
+    if (searchParams.get("path") !== "spec") return;
+    try {
+      const text = window.sessionStorage.getItem(DROPPED_DOC_KEY);
+      if (text) {
+        setIdeaText(text);
+        setLoadedFileName(window.sessionStorage.getItem(DROPPED_DOC_NAME_KEY));
+        window.sessionStorage.removeItem(DROPPED_DOC_KEY);
+        window.sessionStorage.removeItem(DROPPED_DOC_NAME_KEY);
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, [searchParams]);
+
+  async function handleSpecFile(file: File | undefined) {
+    if (!file) return;
+    if (!(file.type.startsWith("text/") || /\.(txt|md|markdown)$/i.test(file.name))) {
+      setRateLimitMsg(t.dropzone.unsupported);
+      return;
+    }
+    const text = await file.slice(0, 300_000).text().catch(() => "");
+    if (text.trim()) {
+      setIdeaText(text);
+      setLoadedFileName(file.name);
+      setRateLimitMsg(null);
+    }
+  }
 
   function chooseBranch(id: "idea" | "code" | "spec") {
     setEntryPath(id); // immediate — the effect above re-confirms from the URL
@@ -418,7 +451,24 @@ function NewProjectInner() {
             <div>
               <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.specStepTitle}</h1>
-              <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.specStepSub}</p>
+              <p className="mb-4 mt-2 text-sm text-gray-500">{t.branch.specStepSub}</p>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <label className="btn btn-md btn-secondary cursor-pointer">
+                  {t.branch.uploadFile}
+                  <input
+                    type="file"
+                    accept=".txt,.md,.markdown,text/plain,text/markdown"
+                    className="hidden"
+                    onChange={(e) => void handleSpecFile(e.target.files?.[0])}
+                  />
+                </label>
+                <span className="text-xs text-gray-500">{t.branch.uploadHint}</span>
+                {loadedFileName && (
+                  <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs text-green-700">
+                    ✓ {loadedFileName}
+                  </span>
+                )}
+              </div>
               <textarea
                 value={ideaText}
                 onChange={(e) => setIdeaText(e.target.value)}

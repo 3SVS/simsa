@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData, markProjectSyncFailed } from "@/lib/workflow-store";
+import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData, markProjectSyncFailed, applyReviewResultsToLocalProject } from "@/lib/workflow-store";
 import { callWorkspaceApi } from "@/lib/workspace-api";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import {
@@ -132,6 +132,7 @@ export default function GitHubPage() {
         setReviewRuns((prev) => ({ ...prev, [prNumber]: latest.run! }));
         setReviewPhase((prev) => ({ ...prev, [prNumber]: "done" }));
         setJustCompletedByPr((prev) => ({ ...prev, [prNumber]: true }));
+        if (latest.run.results) applyReviewResultsToLocalProject(id, latest.run.results);
         return true;
       }
     }
@@ -163,6 +164,9 @@ export default function GitHubPage() {
         const reviewRes = await getLatestPRReview(id, lp.number, getUserKey());
         if (reviewRes.ok && reviewRes.run) {
           setReviewRuns((prev) => ({ ...prev, [lp.number]: reviewRes.run! }));
+          if (reviewRes.run.status !== "running" && reviewRes.run.results) {
+            applyReviewResultsToLocalProject(id, reviewRes.run.results);
+          }
           if (reviewRes.run.status === "running") {
             // A review is still executing server-side (user navigated away and
             // came back) — resume the running view and keep polling instead of
@@ -268,6 +272,7 @@ export default function GitHubPage() {
       setReviewRuns((prev) => ({ ...prev, [lp.number]: res.run }));
       setReviewPhase((prev) => ({ ...prev, [lp.number]: "done" }));
       setJustCompletedByPr((prev) => ({ ...prev, [lp.number]: true }));
+      if (res.run.results) applyReviewResultsToLocalProject(id, res.run.results);
       if (res.creditEnforcement) {
         setCreditDryRunByPr((prev) => ({ ...prev, [lp.number]: res.creditEnforcement! }));
       } else if (res.creditDryRun) {
@@ -695,6 +700,17 @@ function CreditDryRunBanner({ t, dryRun, projectId }: { t: Dictionary; dryRun: C
   const covered = dryRun.allowance?.coveredByAllowance === true;
   const enforcement = dryRun as CreditEnforcementResult;
   const blocked = enforcement.actualDebitsEnabled === true && enforcement.blocked === true;
+
+  // Beta: actual debits are OFF. The "이번 달 0/5 · 5회 무료 남음" counter is a
+  // post-beta pricing SIMULATION and read like a real limit ("5번 무료?" — Bae).
+  // While debits are off, say the one true thing and nothing else.
+  if (enforcement.actualDebitsEnabled !== true) {
+    return (
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="text-xs text-slate-600">{t.credit.disabledBeta}</p>
+      </div>
+    );
+  }
 
   // Product-friendly: hide internal billing flags (dry-run, rollout, debit ledger).
   // During beta actual debits are off, so the common case is "charging disabled".

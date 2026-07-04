@@ -247,6 +247,8 @@ export type Dictionary = {
     subtitle: string;
     backToChooser: string;
     backToPaste: string;
+    uploadFile: string;
+    uploadHint: string;
     ideaTitle: string;
     ideaDesc: string;
     codeTitle: string;
@@ -768,6 +770,12 @@ export type Dictionary = {
     testSent: string;
     testError: string;
   };
+  dropzone: {
+    title: string;
+    hint: string;
+    unsupported: string;
+    readError: string;
+  };
   nf: {
     title: string;
     body: string;
@@ -926,6 +934,7 @@ export type Dictionary = {
     usageNote: string;
   };
   runDetail: {
+    allPassedNote: string;
     backToHistory: string;
     loading: string;
     notFoundTitle: string;

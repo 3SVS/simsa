@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { AppSidebar } from "@/components/AppSidebar";
+import { GlobalDropZone } from "@/components/GlobalDropZone";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { BRAND } from "@/lib/brand.mjs";
 
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="bg-[#faf8f3] text-gray-900 antialiased">
         <I18nProvider>
+          <GlobalDropZone />
           {/* App shell: slim left sidebar (like an AI-platform workspace) + spacious main */}
           <div className="flex min-h-screen">
             <AppSidebar />

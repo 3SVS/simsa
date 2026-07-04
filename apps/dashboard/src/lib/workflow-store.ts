@@ -202,3 +202,32 @@ export function consumeProjectSyncFailed(projectId: string): boolean {
     return false;
   }
 }
+
+/**
+ * Apply PR-review run results to the local project's requirement statuses.
+ *
+ * Review results lived only in the run — the project list kept showing
+ * "0% · 시작 전 N" even after items passed (2026-07-05 live finding). Any
+ * surface that lands a finished run calls this so 목록/개요 진행률이 실제
+ * 검수 결과를 반영한다. Unknown itemIds are ignored (deleted items).
+ */
+export function applyReviewResultsToLocalProject(
+  projectId: string,
+  results: ReadonlyArray<{ itemId: string; status: string }>,
+): void {
+  if (typeof window === "undefined" || results.length === 0) return;
+  const project = getLocalProject(projectId);
+  if (!project) return; // mock/demo projects are read-only
+  const byId = new Map(results.map((r) => [r.itemId, r.status]));
+  const allowed = new Set(["passed", "failed", "inconclusive", "needs_decision"]);
+  let changed = false;
+  const requirements = project.requirements.map((req) => {
+    const next = byId.get(req.id);
+    if (next && allowed.has(next) && next !== req.status) {
+      changed = true;
+      return { ...req, status: next as typeof req.status };
+    }
+    return req;
+  });
+  if (changed) saveProject({ ...project, requirements });
+}
