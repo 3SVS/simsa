@@ -302,7 +302,14 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         b["acquisition"] && typeof b["acquisition"] === "object"
           ? (b["acquisition"] as Record<string, unknown>)["source"]
           : b["acquisitionSource"];
-      const acquisition = { source: typeof acqSource === "string" ? acqSource.slice(0, 40) : "direct" };
+      // Capture-once: default "direct" only on CREATE. A re-save without an
+      // acquisition passes undefined → the sticky upsert keeps the original.
+      const acquisition =
+        typeof acqSource === "string" && acqSource
+          ? { source: acqSource.slice(0, 40) }
+          : existing
+            ? undefined
+            : { source: "direct" };
       const id = await upsertProject(c.env, {
         id: typeof b["id"] === "string" ? b["id"] : undefined,
         userKey: String(b["userKey"]),

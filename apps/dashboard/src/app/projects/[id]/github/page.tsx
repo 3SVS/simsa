@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
+import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData } from "@/lib/workflow-store";
+import { callWorkspaceApi } from "@/lib/workspace-api";
+import { saveProjectToDb } from "@/lib/workspace-check-api";
 import {
   fetchProjectRepo,
   fetchProjectPulls,
@@ -55,6 +57,15 @@ export default function GitHubPage() {
   const [selectedPR, setSelectedPR] = useState<GitHubPull | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [linkPhase, setLinkPhase] = useState<"idle" | "saving" | "done" | "error">("idle");
+  // Code-branch rescue: a project created without checking items (the one-line
+  // description is optional on the code branch) dead-ends at PR linking — the
+  // picker is empty and save stays disabled. This inline generator drafts the
+  // items right here from a one-liner, reusing the same idea-to-spec API as
+  // project creation. Nothing else on this page changes when items exist.
+  const [quickIdea, setQuickIdea] = useState("");
+  const [genPhase, setGenPhase] = useState<"idle" | "loading">("idle");
+  const [genError, setGenError] = useState<string | null>(null);
+  const [, forceItemsRefresh] = useState(0);
   // Review state: keyed by prNumber
   const [reviewRuns, setReviewRuns] = useState<Record<number, ReviewRun>>({});
   const [reviewPhase, setReviewPhase] = useState<Record<number, "idle" | "running" | "done" | "error">>({});
@@ -72,6 +83,51 @@ export default function GitHubPage() {
     title: r.title,
     checkStatus: checkResultMap.get(r.id) ?? (r.status as ItemStatus),
   }));
+
+  async function handleGenerateItems() {
+    if (!project || !quickIdea.trim() || genPhase === "loading") return;
+    setGenPhase("loading");
+    setGenError(null);
+    const res = await callWorkspaceApi({ idea: quickIdea.trim() });
+    if (!res.ok && res.error === "rate_limited") {
+      setGenError(t.common.rateLimited);
+      setGenPhase("idle");
+      return;
+    }
+    const generated = res.ok ? res.data : res.fallback;
+    if (!generated?.items?.length) {
+      setGenError(t.github.generateItemsError);
+      setGenPhase("idle");
+      return;
+    }
+    saveProject({
+      ...project,
+      requirements: generated.items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: "not_started" as const,
+        category: "feature",
+        priority: "must" as const,
+      })),
+    });
+    saveExtendedProjectData(id, {
+      productSpec: generated.productSpec,
+      itemCriteria: Object.fromEntries(generated.items.map((i) => [i.id, i.criteria ?? []])),
+    });
+    // builtWith / entryPath intentionally omitted — the server upsert keeps the
+    // stored capture-once values (sticky), so this save can't wipe them.
+    saveProjectToDb({
+      id,
+      userKey: getUserKey(),
+      title: project.name,
+      idea: quickIdea.trim(),
+      understood: generated.understood ?? {},
+      productSpec: generated.productSpec,
+      items: generated.items,
+    }).catch(() => undefined);
+    setGenPhase("idle");
+    forceItemsRefresh((v) => v + 1); // re-read getLocalProject → picker appears
+  }
 
   const loadInitial = useCallback(async () => {
     setLoadPhase("loading");
@@ -299,20 +355,44 @@ export default function GitHubPage() {
               <p className="mb-4 text-xs text-gray-400">
                 {t.github.selectItemsForPr} ({selectedItemIds.size} {t.github.selected})
               </p>
-              <div className="mb-4 max-h-56 space-y-1 overflow-y-auto">
-                {allItems.map((item) => (
-                  <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-50">
-                    <input
-                      type="checkbox"
-                      checked={selectedItemIds.has(item.id)}
-                      onChange={() => toggleItem(item.id)}
-                      className="h-4 w-4 flex-shrink-0 cursor-pointer rounded accent-brand-600"
-                    />
-                    <span className="flex-1 text-sm text-gray-700">{item.title}</span>
-                    <StatusBadge status={item.checkStatus} />
-                  </label>
-                ))}
-              </div>
+              {allItems.length === 0 ? (
+                <div className="mb-4 rounded-lg bg-gray-50 p-4">
+                  <p className="text-sm font-medium text-gray-700">{t.github.noItemsYet}</p>
+                  <p className="mt-1 text-xs text-gray-500">{t.github.noItemsHint}</p>
+                  <textarea
+                    value={quickIdea}
+                    onChange={(e) => setQuickIdea(e.target.value)}
+                    rows={2}
+                    placeholder={t.github.noItemsIdeaPlaceholder}
+                    className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                  />
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      onClick={handleGenerateItems}
+                      disabled={!quickIdea.trim() || genPhase === "loading"}
+                      className="btn btn-md btn-primary"
+                    >
+                      {genPhase === "loading" ? t.github.generatingItems : t.github.generateItems}
+                    </button>
+                    {genError && <span className="text-sm text-red-500">{genError}</span>}
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-4 max-h-56 space-y-1 overflow-y-auto">
+                  {allItems.map((item) => (
+                    <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={selectedItemIds.has(item.id)}
+                        onChange={() => toggleItem(item.id)}
+                        className="h-4 w-4 flex-shrink-0 cursor-pointer rounded accent-brand-600"
+                      />
+                      <span className="flex-1 text-sm text-gray-700">{item.title}</span>
+                      <StatusBadge status={item.checkStatus} />
+                    </label>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <button onClick={handleLink} disabled={selectedItemIds.size === 0 || linkPhase === "saving"} className="btn btn-md btn-primary">
                   {linkPhase === "saving" ? t.github.saving : t.github.saveLink}
