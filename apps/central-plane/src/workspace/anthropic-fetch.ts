@@ -9,7 +9,8 @@
  */
 
 const RETRYABLE = new Set([403, 429, 500, 502, 503, 504, 529]);
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 6; // 403 "Request not allowed" hits ~60% of CF egress
+// attempts; more attempts + jitter is the only lever that raises success.
 
 export type AnthropicMessagesBody = {
   model: string;
@@ -25,11 +26,23 @@ export type AnthropicMessagesData = {
 /** POST /v1/messages with bounded retries. Throws on final failure. */
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/**
+ * Base URL for the Anthropic Messages API. When CF_AI_GATEWAY_ANTHROPIC_URL is
+ * set (e.g. https://gateway.ai.cloudflare.com/v1/{acct}/{gw}/anthropic) the
+ * call routes through Cloudflare AI Gateway, which sidesteps the direct
+ * Worker→api.anthropic.com egress that intermittently 403s.
+ */
+export function anthropicEndpoint(baseUrl?: string): string {
+  const base = (baseUrl ?? "").trim().replace(/\/$/, "");
+  return base ? `${base}/v1/messages` : "https://api.anthropic.com/v1/messages";
+}
+
 export async function anthropicMessages(
   apiKey: string,
   body: AnthropicMessagesBody,
   timeoutMs: number,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
+  endpoint: string = anthropicEndpoint(),
 ): Promise<AnthropicMessagesData> {
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -37,13 +50,15 @@ export async function anthropicMessages(
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let resp: Response | null = null;
     try {
-      resp = await fetchImpl("https://api.anthropic.com/v1/messages", {
+      resp = await fetchImpl(endpoint, {
         method: "POST",
         signal: ctrl.signal,
         headers: {
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
           "content-type": "application/json",
+          // Some WAF rules 403 requests with no/blank UA — set an explicit one.
+          "user-agent": "simsa-central-plane/1.0",
         },
         body: JSON.stringify(body),
       });
@@ -59,7 +74,12 @@ export async function anthropicMessages(
       if (!RETRYABLE.has(resp.status)) throw lastErr;
       console.warn(`[anthropic-fetch] attempt ${attempt} got ${resp.status} — retrying`);
     }
-    if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 400 * attempt));
+    if (attempt < MAX_ATTEMPTS) {
+      // Jittered backoff — a longer, varied gap gives CF a chance to re-route
+      // egress before the next attempt (retries otherwise reuse a hot IP).
+      const base = 500 * attempt;
+      await new Promise((r) => setTimeout(r, base + Math.floor((attempt * 137) % 400)));
+    }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }

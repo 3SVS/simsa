@@ -193,6 +193,15 @@ export interface Env {
    * open. Parsed as positive integers; invalid/absent → defaults.
    */
   BETA_REVIEW_DAILY_LIMIT?: string;
+  /**
+   * Optional Cloudflare AI Gateway base for Anthropic, e.g.
+   * https://gateway.ai.cloudflare.com/v1/{accountId}/{gatewayId}/anthropic
+   * When set, all workspace LLM calls route through the gateway instead of
+   * api.anthropic.com directly — sidesteps the intermittent 403 "Request not
+   * allowed" on direct Worker egress (2026-07-05). Unset = direct (default).
+   * Set via wrangler.toml [vars] (it is a URL, not a secret).
+   */
+  CF_AI_GATEWAY_ANTHROPIC_URL?: string;
   BETA_PROJECT_CREATE_DAILY_LIMIT?: string;
   /**
    * v0.14.5 — Lemon Squeezy MoR for paid tiers (Stripe Korea is

@@ -5,7 +5,7 @@
  * This is NOT a code review — it checks the spec document only.
  * LLM failure → deterministic mock fallback via heuristics.
  */
-import { anthropicMessages } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
 
 export type CheckableItem = {
   id: string;
@@ -157,11 +157,13 @@ ${itemsText}
 
 // ─── Anthropic call ───────────────────────────────────────────────────────────
 
-async function callAnthropic(apiKey: string, prompt: string, timeoutMs = 20000): Promise<string> {
+async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | undefined, timeoutMs = 20000): Promise<string> {
   const data = (await anthropicMessages(
     apiKey,
     { model: "claude-haiku-4-5-20251001", max_tokens: 4000, messages: [{ role: "user", content: prompt }] },
     timeoutMs,
+    undefined,
+    anthropicEndpoint(baseUrl),
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
@@ -312,6 +314,7 @@ function isValidCheckResponse(v: unknown): v is { results: CheckResultItem[] } {
 export async function generateCheckDraft(
   req: WorkspaceCheckDraftRequest,
   anthropicApiKey: string | undefined,
+  anthropicBaseUrl?: string,
 ): Promise<WorkspaceCheckDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.items?.length) {
     return {
@@ -331,7 +334,7 @@ export async function generateCheckDraft(
   const prompt = buildCheckPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt);
+    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
   } catch (err) {
     console.error("[workspace/check] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };

@@ -5,7 +5,7 @@
  * Produces: plain summary + spec patch + builder brief (개발 AI에게 줄 지시서).
  * LLM failure → deterministic mock fallback.
  */
-import { anthropicMessages } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
 
 export type WorkspaceFixSuggestionRequest = {
   projectId?: string;
@@ -101,11 +101,13 @@ ${JSON.stringify(req.productSpec, null, 2).slice(0, 800)}
 
 // ─── Anthropic call ───────────────────────────────────────────────────────────
 
-async function callAnthropic(apiKey: string, prompt: string, timeoutMs = 20000): Promise<string> {
+async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | undefined, timeoutMs = 20000): Promise<string> {
   const data = (await anthropicMessages(
     apiKey,
     { model: "claude-haiku-4-5-20251001", max_tokens: 3000, messages: [{ role: "user", content: prompt }] },
     timeoutMs,
+    undefined,
+    anthropicEndpoint(baseUrl),
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
@@ -219,6 +221,7 @@ function isValidFixResponse(v: unknown): v is { plainSummary: string; builderBri
 export async function generateFixSuggestion(
   req: WorkspaceFixSuggestionRequest,
   anthropicApiKey: string | undefined,
+  anthropicBaseUrl?: string,
 ): Promise<WorkspaceFixSuggestionResponse | { ok: false; error: "llm_unavailable" }> {
   if (!anthropicApiKey) {
     console.warn("[workspace/fix] no API key — using mock fallback");
@@ -228,7 +231,7 @@ export async function generateFixSuggestion(
   const prompt = buildFixPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt);
+    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
   } catch (err) {
     console.error("[workspace/fix] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };
