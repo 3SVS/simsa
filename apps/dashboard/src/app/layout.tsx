@@ -21,6 +21,15 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <head>
+        {/* Pretendard variable — Korean-first typography, aligned with the
+            marketing landing (Geist covers latin, Pretendard covers 한글 via
+            per-glyph font fallback). Dynamic subset, cached CDN. */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+      </head>
       <body className="bg-[#faf8f3] text-gray-900 antialiased">
         <I18nProvider>
           <ToastProvider>

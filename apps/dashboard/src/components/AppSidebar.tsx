@@ -7,6 +7,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { loadLocalProjects, loadExtendedProjectData, getUserKey, setActiveAccountNamespace, clearActiveAccount } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 import { FeedbackModal } from "@/components/FeedbackModal";
+import { StampMark } from "@/components/brand/StampMark";
 import { Tooltip } from "@/components/Tooltip";
 import { getAuthSession, signOutAuth } from "@/lib/auth-client.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
@@ -199,7 +200,7 @@ export function AppSidebar() {
       {/* Brand + collapse */}
       <div className="flex items-center justify-between px-3 pb-2 pt-4">
         <Link href="/projects" className="group flex items-center gap-2.5 px-1.5">
-          <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500 transition-colors group-hover:bg-gold-500" />
+          <StampMark size={24} className="transition-transform group-hover:scale-105" />
           <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
         </Link>
         <Tooltip content="Collapse sidebar" placement="bottom">
@@ -218,7 +219,7 @@ export function AppSidebar() {
               router.push(`/projects/new?fresh=${Date.now()}`);
             }
           }}
-          className="flex items-center gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          className="flex items-center gap-2 rounded-full border border-gray-200 px-3 py-1.5 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:border-gray-300"
         >
           <span className="text-gray-500">＋</span>
           {t.nav.newProject}
@@ -459,7 +460,7 @@ export function AppSidebar() {
           </button>
         </Tooltip>
         <Link href="/projects" className="flex items-center gap-2">
-          <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
+          <StampMark size={24} />
           <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
         </Link>
       </div>
@@ -487,11 +488,11 @@ export function AppSidebar() {
         <aside className="sticky top-0 hidden h-screen w-14 flex-shrink-0 flex-col items-center border-r border-gray-200 bg-white py-4 md:flex">
           <Tooltip content="Expand sidebar" placement="right">
             <button onClick={toggleCollapse} aria-label="Expand sidebar" className="mb-4 grid h-8 w-8 place-items-center rounded-md hover:bg-gray-100">
-              <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
+              <StampMark size={24} />
             </button>
           </Tooltip>
           <Tooltip content={t.nav.newProject} placement="right">
-            <Link href="/projects/new" aria-label={t.nav.newProject} className="mb-2 grid h-8 w-8 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">＋</Link>
+            <Link href="/projects/new" aria-label={t.nav.newProject} className="mb-2 grid h-8 w-8 place-items-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-gray-300">＋</Link>
           </Tooltip>
           <Tooltip content={t.nav.allProjects} placement="right">
             <Link href="/projects" aria-label={t.nav.allProjects} className="grid h-8 w-8 place-items-center rounded-md text-gray-500 hover:bg-gray-50">▦</Link>
