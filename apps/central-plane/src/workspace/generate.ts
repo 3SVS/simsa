@@ -202,7 +202,7 @@ async function callAnthropic(
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 3000,
+        max_tokens: 8000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -215,8 +215,16 @@ async function callAnthropic(
   }
   const data = (await resp.json()) as {
     content?: Array<{ type: string; text?: string }>;
+    stop_reason?: string;
   };
-  return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
+  const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
+  // Operational diagnostics (no user content): production fell back with
+  // "non-JSON" and this is the only way to see WHY from a tail.
+  console.log(
+    `[workspace/generate] blocks=${(data.content ?? []).map((b) => b.type).join(",") || "none"}` +
+      ` textLen=${text.length} stop=${data.stop_reason ?? "?"}`,
+  );
+  return text;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -532,7 +540,8 @@ export async function generateIdeaToSpecDraft(
   }
 
   // Extract JSON — LLM sometimes wraps in code fences despite instructions
-  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  const cleaned = rawText.replace(/```(?:json)?/g, "").trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     console.warn("[workspace/generate] LLM returned non-JSON, falling back");
     return buildMockFallback(req);
