@@ -1980,6 +1980,22 @@ export type Dictionary = {
       latestLabel: string;
     };
   };
+  connectReentry: {
+    title: string;
+    subtitle: string;
+    projectLabel: string;
+    urlLabel: string;
+    urlPlaceholder: string;
+    urlHint: string;
+    submit: string;
+    submitting: string;
+    errInvalidUrl: string;
+    errConnectFailed: string;
+    retry: string;
+    success: string;
+    deviceNoteTitle: string;
+    deviceNoteBody: string;
+  };
   sources: {
     title: string;
     subtitle: string;
