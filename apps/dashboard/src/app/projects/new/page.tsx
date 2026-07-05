@@ -25,6 +25,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import { Spinner } from "@/components/Spinner";
 import { useToast } from "@/components/Toast";
+import { BranchGlyph } from "@/components/brand/BranchGlyph";
 import { buildStepper, rotatingWaitLine } from "@/lib/wizard-steps.mjs";
 
 type Step = 1 | 2 | 3 | 4;
@@ -416,10 +417,17 @@ function NewProjectInner() {
                     key={id}
                     type="button"
                     onClick={() => chooseBranch(id)}
-                    className="card w-full p-5 text-left transition-colors hover:border-brand-300"
+                    className="card card-select w-full p-5 text-left"
                   >
-                    <span className="block text-sm font-semibold text-gray-900">{title}</span>
-                    <span className="mt-1 block text-xs text-gray-500">{desc}</span>
+                    <div className="flex items-start gap-3">
+                      <span aria-hidden className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
+                        <BranchGlyph branch={id} />
+                      </span>
+                      <div className="min-w-0">
+                        <span className="block text-sm font-semibold text-gray-900">{title}</span>
+                        <span className="mt-1 block text-xs text-gray-500">{desc}</span>
+                      </div>
+                    </div>
                   </button>
                 ))}
               </div>

@@ -3,13 +3,29 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Card depth ported from the marketing landing (ring + contact + ambient) so
+       the two surfaces share one shadow language, not a lone hairline border. */
+    --shadow-card: 0 0 0 1px rgba(31, 26, 23, 0.03), 0 1px 2px rgba(31, 26, 23, 0.04),
+      0 10px 30px -14px rgba(31, 26, 23, 0.1);
+    --shadow-float: 0 0 0 1px rgba(31, 26, 23, 0.04), 0 2px 4px rgba(31, 26, 23, 0.05),
+      0 20px 48px -18px rgba(31, 26, 23, 0.16);
+  }
   html {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* Geist for latin/numerals → Pretendard for 한글 (per-glyph fallback), so KO
+       text no longer drops to a system font and reads like the landing. */
+    font-family: var(--font-geist-sans), "Pretendard Variable", Pretendard,
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   body {
-    /* warm parchment workspace surface (brand: classical conclave palette) */
+    /* warm parchment workspace surface (brand: classical conclave palette) +
+       an ultra-faint top ambient tint (landing canvas), no particle field. */
     background-color: #faf8f3;
+    background-image: linear-gradient(180deg, rgba(142, 44, 57, 0.04) 0%, rgba(142, 44, 57, 0) 4%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
   }
   /* Linear-like tight, confident headings */
   h1,
@@ -31,7 +47,16 @@
   /* Surface card — thin hairline border + a faint contact shadow so cards read
      as resting on the parchment rather than floating (Linear/Geist small-things). */
   .card {
-    @apply rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.04)];
+    @apply rounded-lg border border-gray-200 bg-white;
+    box-shadow: var(--shadow-card);
+  }
+  /* A card that is itself a control (branch chooser, selectable option): hover
+     lift + float shadow, active press — the landing's card interaction. */
+  .card-select {
+    @apply cursor-pointer transition-[transform,box-shadow,border-color] duration-150 ease-out hover:-translate-y-0.5 hover:border-gray-300 active:translate-y-0 active:scale-[0.995] motion-reduce:transform-none;
+  }
+  .card-select:hover {
+    box-shadow: var(--shadow-float);
   }
 
   /* Buttons — full 5-state spec (default / hover / active-press / disabled /
@@ -40,7 +65,7 @@
      press + shadow changes animated, not just colour. Reduced-motion users get
      no scale. */
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-md text-sm font-medium transition-[transform,box-shadow,background-color,color,border-color] duration-100 ease-out active:scale-[0.97] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1 motion-reduce:active:scale-100 motion-reduce:transition-none;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full text-sm font-medium transition-[transform,box-shadow,background-color,color,border-color] duration-100 ease-out active:scale-[0.97] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-[0.45] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1 motion-reduce:active:scale-100 motion-reduce:transition-none;
   }
   /* Loading buttons stay pressable-looking but inert; fixed width is set at the
      call site so the label→spinner swap never reflows. */
