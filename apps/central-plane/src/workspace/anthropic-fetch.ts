@@ -9,7 +9,8 @@
  */
 
 const RETRYABLE = new Set([403, 429, 500, 502, 503, 504, 529]);
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 6; // 403 "Request not allowed" hits ~60% of CF egress
+// attempts; more attempts + jitter is the only lever that raises success.
 
 export type AnthropicMessagesBody = {
   model: string;
@@ -44,6 +45,8 @@ export async function anthropicMessages(
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
           "content-type": "application/json",
+          // Some WAF rules 403 requests with no/blank UA — set an explicit one.
+          "user-agent": "simsa-central-plane/1.0",
         },
         body: JSON.stringify(body),
       });
@@ -59,7 +62,12 @@ export async function anthropicMessages(
       if (!RETRYABLE.has(resp.status)) throw lastErr;
       console.warn(`[anthropic-fetch] attempt ${attempt} got ${resp.status} — retrying`);
     }
-    if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 400 * attempt));
+    if (attempt < MAX_ATTEMPTS) {
+      // Jittered backoff — a longer, varied gap gives CF a chance to re-route
+      // egress before the next attempt (retries otherwise reuse a hot IP).
+      const base = 500 * attempt;
+      await new Promise((r) => setTimeout(r, base + Math.floor((attempt * 137) % 400)));
+    }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
