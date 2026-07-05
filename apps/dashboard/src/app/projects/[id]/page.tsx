@@ -42,6 +42,7 @@ import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
+import { listProjectSources } from "@/lib/workspace-sources-api";
 
 // Stage 272 — verdict/status chip tones on the overview inspection card
 // (same brand tokens as the visual-checks pages; colors carry meaning only).
@@ -220,6 +221,9 @@ function CommandCenterCard({
 }) {
   const [hasRepo, setHasRepo] = useState<boolean | null>(null);
   const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
+  // A connected deploy/website URL — the builder path's alternative to a repo,
+  // so an idea-only project reaches its results without connecting GitHub.
+  const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,15 +234,19 @@ function CommandCenterCard({
     listProjectReviewHistory(projectId, uk, { limit: 1 })
       .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
       .catch(() => {});
+    listProjectSources(projectId, uk)
+      .then((res) => { if (!cancelled) setHasDeployUrl(res.ok ? res.sources.some((s) => s.type === "website") : null); })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [projectId]);
 
   const entryPath = loadExtendedProjectData(projectId)?.entryPath ?? null;
-  const next = nextProjectAction({ hasItems, hasRepo, hasReviewRun, entryPath });
+  const next = nextProjectAction({ hasItems, hasRepo, hasReviewRun, hasDeployUrl, entryPath });
 
   const copy: Record<string, { label: string; desc: string }> = {
     create_items: { label: t.commandCenter.createItems, desc: t.commandCenter.createItemsDesc },
     connect_code: { label: t.commandCenter.connectCode, desc: t.commandCenter.connectCodeDesc },
+    get_pack: { label: t.commandCenter.getPack, desc: t.commandCenter.getPackDesc },
     run_review: { label: t.commandCenter.runReview, desc: t.commandCenter.runReviewDesc },
     view_results: { label: t.commandCenter.viewResults, desc: t.commandCenter.viewResultsDesc },
   };
@@ -246,7 +254,7 @@ function CommandCenterCard({
 
   if (!c && !showExplainer) return null;
 
-  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun, entryPath });
+  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun, hasDeployUrl, entryPath });
   const stepLabel: Record<string, string> = {
     prepare: t.stepsNav.prepare,
     review: t.stepsNav.review,
@@ -291,6 +299,16 @@ function CommandCenterCard({
             {c.label} →
           </Link>
         </div>
+      )}
+      {/* Builder building-state: the app may already exist elsewhere — keep the
+          "connect your deploy URL" door open at all times (no GitHub required). */}
+      {next?.action === "get_pack" && (
+        <p className="mt-2 text-xs text-gray-500">
+          {t.commandCenter.alreadyBuilt}{" "}
+          <Link href={`/projects/${projectId}/sources`} className="font-medium text-brand-700 hover:underline">
+            {t.commandCenter.connectUrl} →
+          </Link>
+        </p>
       )}
       {showExplainer && (
         <ol className="mt-3 space-y-1.5 border-t border-gray-100 pt-3 text-xs text-gray-500">

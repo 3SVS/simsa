@@ -1,6 +1,17 @@
 "use client";
 
 import type { Project, RequirementItem } from "./mock-data";
+import {
+  PROJECTS_BASE,
+  DRAFT_BASE,
+  ACTIVE_NS_KEY,
+  ANON_NS,
+  namespaceFor,
+  projectsKeyFor,
+  draftKeyFor,
+  mergeProjectsById,
+  planNamespaceTransition,
+} from "./project-namespace.mjs";
 
 export type WorkflowDraft = {
   ideaText: string;
@@ -28,18 +39,68 @@ export type GeneratedSpec = {
   openDecisions: string[];
 };
 
-const DRAFT_KEY = "conclave_wf_draft";
-const PROJECTS_KEY = "conclave_wf_projects";
+// ─── Account-scoped storage keys ─────────────────────────────────────────────
+// Projects/drafts live under a per-account namespace (see project-namespace.mjs)
+// so a second account on the same browser never inherits the first account's
+// projects. `conclave_active_ns` records the current identity's namespace;
+// `setActiveAccountNamespace` / `clearActiveAccount` reconcile it on sign-in and
+// sign-out. Old un-namespaced blobs are migrated into the current namespace once.
+
+function activeNamespace(): string {
+  if (typeof window === "undefined") return ANON_NS;
+  try {
+    return localStorage.getItem(ACTIVE_NS_KEY) || ANON_NS;
+  } catch {
+    return ANON_NS;
+  }
+}
+
+function readProjectsAt(key: string): Project[] {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as Project[]) : [];
+  } catch (err) {
+    console.error("[workflow-store] corrupt localStorage entry — data hidden from UI:", err);
+    return [];
+  }
+}
+
+// One-time move of the pre-namespace global blobs into the current namespace, so
+// existing users don't see their local projects vanish when this ships. The
+// legacy keys are the bare bases (no ":ns" suffix); after the move they're
+// removed, making this idempotent.
+function migrateLegacyBlobs(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const ns = activeNamespace();
+    const legacyProjects = localStorage.getItem(PROJECTS_BASE);
+    if (legacyProjects !== null) {
+      const dest = projectsKeyFor(ns);
+      const merged = mergeProjectsById(readProjectsAt(dest), readProjectsAt(PROJECTS_BASE));
+      localStorage.setItem(dest, JSON.stringify(merged));
+      localStorage.removeItem(PROJECTS_BASE);
+    }
+    const legacyDraft = localStorage.getItem(DRAFT_BASE);
+    if (legacyDraft !== null) {
+      const dest = draftKeyFor(ns);
+      if (localStorage.getItem(dest) === null) localStorage.setItem(dest, legacyDraft);
+      localStorage.removeItem(DRAFT_BASE);
+    }
+  } catch (err) {
+    console.error("[workflow-store] legacy migration failed:", err);
+  }
+}
 
 export function saveDraft(draft: WorkflowDraft): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  localStorage.setItem(draftKeyFor(activeNamespace()), JSON.stringify(draft));
 }
 
 export function loadDraft(): WorkflowDraft | null {
   if (typeof window === "undefined") return null;
+  migrateLegacyBlobs();
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(draftKeyFor(activeNamespace()));
     return raw ? (JSON.parse(raw) as WorkflowDraft) : null;
   } catch (err) {
     console.error("[workflow-store] corrupt localStorage entry — data hidden from UI:", err);
@@ -49,7 +110,7 @@ export function loadDraft(): WorkflowDraft | null {
 
 export function clearDraft(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(DRAFT_KEY);
+  localStorage.removeItem(draftKeyFor(activeNamespace()));
 }
 
 export function saveProject(project: Project): void {
@@ -61,18 +122,47 @@ export function saveProject(project: Project): void {
   } else {
     projects.unshift(project);
   }
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  localStorage.setItem(projectsKeyFor(activeNamespace()), JSON.stringify(projects));
 }
 
 export function loadLocalProjects(): Project[] {
   if (typeof window === "undefined") return [];
+  migrateLegacyBlobs();
+  return readProjectsAt(projectsKeyFor(activeNamespace()));
+}
+
+/**
+ * Reconcile the active namespace to a signed-in identity. Call on every
+ * confirmed sign-in (with the account email/id) and on sign-out (with null).
+ * Moving FROM anonymous TO an account "claims" the anonymous projects into the
+ * account bucket so pre-sign-in work isn't stranded; a different account never
+ * inherits them.
+ */
+export function setActiveAccountNamespace(accountId: string | null): void {
+  if (typeof window === "undefined") return;
   try {
-    const raw = localStorage.getItem(PROJECTS_KEY);
-    return raw ? (JSON.parse(raw) as Project[]) : [];
+    migrateLegacyBlobs();
+    const prevNs = activeNamespace();
+    const { nextNs, claimAnon } = planNamespaceTransition(prevNs, accountId);
+    if (claimAnon) {
+      const anonKey = projectsKeyFor(ANON_NS);
+      const anonProjects = readProjectsAt(anonKey);
+      if (anonProjects.length) {
+        const destKey = projectsKeyFor(nextNs);
+        const merged = mergeProjectsById(readProjectsAt(destKey), anonProjects);
+        localStorage.setItem(destKey, JSON.stringify(merged));
+        localStorage.removeItem(anonKey);
+      }
+    }
+    localStorage.setItem(ACTIVE_NS_KEY, nextNs);
   } catch (err) {
-    console.error("[workflow-store] corrupt localStorage entry — data hidden from UI:", err);
-    return [];
+    console.error("[workflow-store] namespace reconcile failed:", err);
   }
+}
+
+/** Sign-out: return to the (empty) anonymous bucket; account data is preserved. */
+export function clearActiveAccount(): void {
+  setActiveAccountNamespace(null);
 }
 
 export function getLocalProject(id: string): Project | undefined {

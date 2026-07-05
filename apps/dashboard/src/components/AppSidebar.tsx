@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { loadLocalProjects, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
+import { loadLocalProjects, loadExtendedProjectData, getUserKey, setActiveAccountNamespace, clearActiveAccount } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { Tooltip } from "@/components/Tooltip";
-import { getAuthSession } from "@/lib/auth-client.mjs";
+import { getAuthSession, signOutAuth } from "@/lib/auth-client.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 
@@ -36,6 +36,9 @@ export function AppSidebar() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   // Signed-in identity for the bottom profile block (null = signed out/unknown).
   const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [query, setQuery] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -44,18 +47,58 @@ export function AppSidebar() {
   const [hasRepo, setHasRepo] = useState<boolean | null>(null);
   const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
 
+  // Fetch the session, reconcile local storage to that identity, then (re)load
+  // the project list from the now-correct account bucket. Called on mount and
+  // whenever a "simsa:auth-changed" event fires (sign-in/out elsewhere), so the
+  // sidebar never shows a stale signed-in identity or another account's projects.
+  const syncSession = useCallback(async () => {
+    const sess = await getAuthSession().catch(() => null);
+    const email = (sess as { user?: { email?: string } } | null)?.user?.email;
+    const resolved = typeof email === "string" ? email : null;
+    setActiveAccountNamespace(resolved);
+    setAuthEmail(resolved);
+    setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
+  }, []);
+
   useEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
     } catch {}
+    // Optimistic first paint from whatever bucket is active; syncSession then
+    // reconciles to the confirmed identity and reloads.
     setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
-    getAuthSession()
-      .then((sess) => {
-        const email = (sess as { user?: { email?: string } } | null)?.user?.email;
-        setAuthEmail(typeof email === "string" ? email : null);
-      })
-      .catch(() => {});
-  }, []);
+    void syncSession();
+    const onAuthChanged = () => void syncSession();
+    window.addEventListener("simsa:auth-changed", onAuthChanged);
+    return () => window.removeEventListener("simsa:auth-changed", onAuthChanged);
+  }, [syncSession]);
+
+  // Close the account menu on outside click / Escape.
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAccountMenuOpen(false); };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [accountMenuOpen]);
+
+  const handleSignOut = useCallback(async () => {
+    setSigningOut(true);
+    await signOutAuth().catch(() => false);
+    clearActiveAccount();
+    setAccountMenuOpen(false);
+    setSigningOut(false);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("simsa:auth-changed"));
+    router.push("/projects");
+  }, [router]);
 
   // Observe repo-link + review-run facts for the progress map (best-effort;
   // errors leave the fact unknown → fail-open, no false locks).
@@ -138,8 +181,14 @@ export function AppSidebar() {
       items: [["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks], ["fixes", t.nav.fixes], ["export", t.nav.export]],
     },
   };
-  const lockHint = (reason: "need_items" | "need_code" | null) =>
-    reason === "need_code" ? t.stepsNav.lockNeedCode : reason === "need_items" ? t.stepsNav.lockNeedItems : "";
+  const lockHint = (reason: "need_items" | "need_code" | "need_build" | null) =>
+    reason === "need_code"
+      ? t.stepsNav.lockNeedCode
+      : reason === "need_build"
+        ? t.stepsNav.lockNeedBuild
+        : reason === "need_items"
+          ? t.stepsNav.lockNeedItems
+          : "";
   const statusGlyph = (status: string) =>
     status === "done" ? "✓" : status === "current" ? "●" : "○";
   const advancedItems = [["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] as const;
@@ -327,24 +376,70 @@ export function AppSidebar() {
         >
           {t.nav.feedback}
         </button>
-        <Link href="/account" aria-label={t.account.openLabel} className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-gray-50">
-          <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
-            {(authEmail?.[0] ?? initial).toUpperCase()}
-          </span>
-          <span className="min-w-0 flex-1">
-            {authEmail ? (
-              <>
-                <span className="block truncate text-[13px] font-medium text-gray-900">{authEmail}</span>
-                <span className="block truncate text-[11px] text-gray-500">{t.account.plan}</span>
-              </>
-            ) : (
-              <>
-                <span className="block truncate text-[13px] font-medium text-gray-900">{t.account.workspace}</span>
-                <span className="block truncate text-[11px] text-brand-700">{t.account.auth.signIn} →</span>
-              </>
-            )}
-          </span>
-        </Link>
+        <div ref={accountMenuRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setAccountMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={accountMenuOpen}
+            aria-label={t.account.openLabel}
+            className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 text-left hover:bg-gray-50"
+          >
+            <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
+              {(authEmail?.[0] ?? initial).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1">
+              {authEmail ? (
+                <>
+                  <span className="block truncate text-[13px] font-medium text-gray-900">{authEmail}</span>
+                  <span className="block truncate text-[11px] text-gray-500">{t.account.plan}</span>
+                </>
+              ) : (
+                <>
+                  <span className="block truncate text-[13px] font-medium text-gray-900">{t.account.workspace}</span>
+                  <span className="block truncate text-[11px] text-brand-700">{t.account.auth.signIn} →</span>
+                </>
+              )}
+            </span>
+            <span aria-hidden className="text-gray-400">{accountMenuOpen ? "⌄" : "⌃"}</span>
+          </button>
+
+          {accountMenuOpen && (
+            <div
+              role="menu"
+              className="absolute bottom-full left-0 z-20 mb-1 w-full overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+            >
+              <Link
+                href="/account"
+                role="menuitem"
+                onClick={() => setAccountMenuOpen(false)}
+                className="block px-3 py-1.5 text-[13px] text-gray-700 hover:bg-gray-50"
+              >
+                {t.account.menu.settings}
+              </Link>
+              {authEmail ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="block w-full px-3 py-1.5 text-left text-[13px] text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {signingOut ? t.account.menu.signingOut : t.account.menu.signOut}
+                </button>
+              ) : (
+                <Link
+                  href="/login?next=/projects"
+                  role="menuitem"
+                  onClick={() => setAccountMenuOpen(false)}
+                  className="block px-3 py-1.5 text-[13px] text-brand-700 hover:bg-gray-50"
+                >
+                  {t.account.menu.signIn}
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
