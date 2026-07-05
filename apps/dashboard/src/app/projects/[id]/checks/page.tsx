@@ -174,19 +174,43 @@ export default function ChecksPage() {
 
         {results && (
           <>
-            <p className="my-4 text-sm text-gray-500">
-              {results.results.length} {t.checks.itemsChecked}
+            <div className="my-4 flex items-baseline gap-3">
+              <p className={`text-xl font-semibold tracking-tight ${needsAction === 0 ? "text-green-600" : "text-gray-900"}`}>
+                {needsAction === 0
+                  ? t.checks.verdictAllPassed
+                  : t.checks.verdictNeedsAction.replace("{n}", String(needsAction))}
+              </p>
+              <span className="text-xs text-gray-400">{results.results.length} {t.checks.itemsChecked}</span>
               {results.source === "mock-fallback" && (
-                <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-600">{t.checks.draftTag}</span>
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-600">{t.checks.draftTag}</span>
               )}
-            </p>
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label={statusLabel(t, "passed")} value={results.summary.passed} colorClass="text-green-600" />
               <StatCard label={statusLabel(t, "failed")} value={results.summary.failed} colorClass="text-red-600" />
               <StatCard label={statusLabel(t, "inconclusive")} value={results.summary.inconclusive} colorClass="text-amber-600" />
               <StatCard label={statusLabel(t, "needs_decision")} value={results.summary.needsDecision} colorClass="text-slate-600" />
             </div>
           </>
+        )}
+
+        {/* Next action — right under the verdict so "so what do I do" is
+            visible in the 3-second glance, not below every detail card. */}
+        {results && needsAction > 0 && (
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-brand-100 bg-brand-50 px-5 py-4">
+            <p className="text-sm text-brand-800">{needsAction} {t.checks.needsAction}</p>
+            <Link href={`/projects/${id}/fixes`} className="btn btn-md btn-primary">
+              {t.checks.viewRemaining} →
+            </Link>
+          </div>
+        )}
+        {results && needsAction === 0 && (
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-green-200 bg-green-50 px-5 py-4">
+            <p className="text-sm font-medium text-green-700">{t.fixesScreen.allPassed}</p>
+            <Link href={`/projects/${id}/export`} className="btn btn-md btn-secondary">
+              {t.items.ctaButton} →
+            </Link>
+          </div>
         )}
 
         {phase === "idle" && !results && (
@@ -199,28 +223,13 @@ export default function ChecksPage() {
 
         {results && (
           <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{t.checks.itemDetails}</p>
             {results.results.map((r) => (
               <CheckResultCard key={r.itemId} t={t} result={r} />
             ))}
           </div>
         )}
 
-        {results && needsAction > 0 && (
-          <div className="mt-5 flex items-center justify-between rounded-lg border border-brand-100 bg-brand-50 px-5 py-4">
-            <p className="text-sm text-brand-800">{needsAction} {t.checks.needsAction}</p>
-            <Link href={`/projects/${id}/fixes`} className="text-sm font-medium text-brand-700 hover:text-brand-800">
-              {t.checks.viewRemaining} →
-            </Link>
-          </div>
-        )}
-        {results && needsAction === 0 && (
-          <div className="mt-5 flex items-center justify-between rounded-lg border border-green-200 bg-green-50 px-5 py-4">
-            <p className="text-sm font-medium text-green-700">{t.fixesScreen.allPassed}</p>
-            <Link href={`/projects/${id}/export`} className="text-sm font-medium text-green-700 hover:text-green-900">
-              {t.items.ctaButton} →
-            </Link>
-          </div>
-        )}
       </section>
 
       {/* ─── Section 2: Pull request review ─── */}

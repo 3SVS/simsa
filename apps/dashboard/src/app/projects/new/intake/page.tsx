@@ -1628,21 +1628,27 @@ export default function IntakePage() {
                     {ic.graphNodes}: {graphView.nodes.length} · {ic.graphEdges}:{" "}
                     {graphView.edges.length} — {ic.graphSampleBelow}
                   </p>
-                  <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
-                    {graphView.nodes.slice(0, 6).map((n) => (
+                  <ExpandableList
+                    className="mt-1 space-y-0.5 text-xs text-gray-600"
+                    moreLabel={ic.showMore}
+                    lessLabel={ic.showLess}
+                    items={graphView.nodes.map((n) => (
                       <li key={n.id}>
                         <span className="text-gray-500">{n.type.replace(/_/g, " ")}:</span>{" "}
                         {n.label}
                       </li>
                     ))}
-                  </ul>
-                  <ul className="mt-1 space-y-0.5 text-xs text-gray-500">
-                    {graphView.edges.slice(0, 6).map((e) => (
+                  />
+                  <ExpandableList
+                    className="mt-1 space-y-0.5 text-xs text-gray-500"
+                    moreLabel={ic.showMore}
+                    lessLabel={ic.showLess}
+                    items={graphView.edges.map((e) => (
                       <li key={e.id}>
                         {e.from} <span className="text-gray-500">{e.label} →</span> {e.to}
                       </li>
                     ))}
-                  </ul>
+                  />
 
                   <StageDetail label={ic.notIncludedYet} items={graphView.notIncludedYet} />
 
@@ -1924,6 +1930,38 @@ function TechDetails({ summary, children }: { summary: string; children: ReactNo
       <summary className="cursor-pointer text-xs text-gray-500">{summary}</summary>
       <p className="mt-1 text-xs text-gray-500">{children}</p>
     </details>
+  );
+}
+
+function ExpandableList({
+  items,
+  moreLabel,
+  lessLabel,
+  className,
+  initial = 6,
+}: {
+  items: React.ReactNode[];
+  moreLabel: string;
+  lessLabel: string;
+  className?: string;
+  initial?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const hidden = items.length - initial;
+  const shown = open ? items : items.slice(0, initial);
+  return (
+    <>
+      <ul className={className}>{shown}</ul>
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="mt-1 text-xs font-medium text-brand-700 hover:text-brand-800"
+        >
+          {open ? lessLabel : moreLabel.replace("{n}", String(hidden))}
+        </button>
+      )}
+    </>
   );
 }
 

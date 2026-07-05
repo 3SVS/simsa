@@ -370,6 +370,9 @@ export type Dictionary = {
     doNotDo: string;
   };
   checks: {
+    verdictAllPassed: string;
+    verdictNeedsAction: string;
+    itemDetails: string;
     pageSubtitle: string;
     draftTitle: string;
     draftDesc: string;
@@ -1723,6 +1726,8 @@ export type Dictionary = {
       graphNodes: string;
       graphEdges: string;
       graphSampleBelow: string;
+      showMore: string;
+      showLess: string;
       graphNote: string;
       blockersTitle: string;
       blockersEmpty: string;
