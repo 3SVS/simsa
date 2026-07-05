@@ -2033,6 +2033,27 @@ export type Dictionary = {
       };
     };
   };
+  interaction: {
+    dismiss: string;
+    copied: string;
+    undo: string;
+    syncFailedSaved: string;
+    savedToast: string;
+    sentToast: string;
+    copiedToast: string;
+    connectedToast: string;
+    verdictPassTitle: string;
+    verdictFailTitle: string;
+    verdictPassed: string;
+    reviewInProgress: string;
+    expandAll: string;
+    collapseAll: string;
+    whatLabel: string;
+    whyLabel: string;
+    howLabel: string;
+    stepper: { idea: string; understand: string; questions: string; done: string };
+    waitLines: string[];
+  };
 };
 
 export const LOCALES: Locale[];

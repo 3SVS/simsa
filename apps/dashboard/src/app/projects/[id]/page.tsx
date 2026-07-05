@@ -9,6 +9,7 @@ import { getProject, getProjectStats } from "@/lib/mock-data";
 import { getLocalProject, getUserKey , consumeProjectSyncFailed } from "@/lib/workflow-store";
 import { StatCard } from "@/components/StatCard";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
+import { Tooltip } from "@/components/Tooltip";
 import { useI18n } from "@/i18n/I18nProvider";
 import { statusLabel, enumStatusLabel, enumActionLabel, enumLimitationLabel } from "@/i18n/dictionary.mjs";
 import {
@@ -72,7 +73,9 @@ export default function ProjectOverviewPage() {
       {syncFailed && (
         <div className="callout mb-4 flex items-start justify-between gap-3 border-amber-200 bg-amber-50 text-amber-800">
           <span>{t.common.syncFailed}</span>
-          <button onClick={() => setSyncFailed(false)} aria-label={t.common.dismiss} className="text-amber-700 hover:text-amber-900">×</button>
+          <Tooltip content={t.common.dismiss} placement="left">
+            <button onClick={() => setSyncFailed(false)} aria-label={t.common.dismiss} className="text-amber-700 hover:text-amber-900">×</button>
+          </Tooltip>
         </div>
       )}
       <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{project.name}</h1>

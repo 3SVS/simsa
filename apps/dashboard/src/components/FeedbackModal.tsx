@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { usePathname, useParams } from "next/navigation";
 import { useI18n } from "@/i18n/I18nProvider";
+import { Tooltip } from "@/components/Tooltip";
 import { getUserKey } from "@/lib/workflow-store";
 import { sendFeedback, type FeedbackKind } from "@/lib/feedback-api";
 
@@ -69,7 +70,9 @@ export function FeedbackModal({ open, onClose }: { open: boolean; onClose: () =>
                 <h2 className="text-base font-semibold tracking-tight text-gray-900">{f.title}</h2>
                 <p className="mt-0.5 text-xs text-gray-500">{f.subtitle}</p>
               </div>
-              <button aria-label={f.close} onClick={close} className="text-gray-400 hover:text-gray-600">×</button>
+              <Tooltip content={f.close} placement="left">
+                <button aria-label={f.close} onClick={close} className="text-gray-400 hover:text-gray-600">×</button>
+              </Tooltip>
             </div>
 
             <div className="mt-4 flex gap-2">

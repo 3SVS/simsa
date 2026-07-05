@@ -23,6 +23,9 @@ import { DROPPED_DOC_KEY, DROPPED_DOC_NAME_KEY, DROPPED_DOC_SKIPPED_KEY } from "
 import { extractDocumentsText, SUPPORTED_ACCEPT } from "@/lib/document-extract";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
+import { Spinner } from "@/components/Spinner";
+import { useToast } from "@/components/Toast";
+import { buildStepper, rotatingWaitLine } from "@/lib/wizard-steps.mjs";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -53,6 +56,7 @@ function NewProjectInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useI18n();
+  const toast = useToast();
   const [step, setStep] = useState<Step>(1);
   const [ideaText, setIdeaText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -84,6 +88,21 @@ function NewProjectInner() {
 
   const answeredCount = Object.keys(answers).length;
   const questions = result?.questions ?? [];
+
+  // Progress storytelling: while an LLM call is in flight, rotate a status line
+  // ("Reading your idea… → Sketching the flow… → Drafting the items…") instead
+  // of a bare spinner. A ~1.8s tick cycles the phrase.
+  const waiting = isLoading || isGeneratingSpec;
+  const [waitTick, setWaitTick] = useState(0);
+  useEffect(() => {
+    if (!waiting) {
+      setWaitTick(0);
+      return;
+    }
+    const timer = setInterval(() => setWaitTick((n) => n + 1), 1800);
+    return () => clearInterval(timer);
+  }, [waiting]);
+  const waitLine = waiting ? rotatingWaitLine(t.interaction.waitLines, waitTick) : "";
 
   // URL is the source of truth for the chosen branch: /projects/new shows the
   // chooser; ?path=idea|code|spec shows that branch. This makes browser-back
@@ -304,7 +323,9 @@ function NewProjectInner() {
           ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
           : undefined,
       entryPath: "code",
-    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
+    })
+      .then((res) => { if (!res || res.ok !== true) { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); } })
+      .catch(() => { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); });
     // Straight to code connect — that IS this branch's step 1.
     router.push(`/projects/${id}/settings`);
   }
@@ -352,17 +373,26 @@ function NewProjectInner() {
           : undefined,
       // The branch the user chose at the single entry (idea/code/spec).
       entryPath: entryPath ?? "idea",
-    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); }).catch(() => markProjectSyncFailed(id));
+    })
+      .then((res) => { if (!res || res.ok !== true) { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); } })
+      .catch(() => { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); });
     router.push(`/projects/${id}`);
   }
 
   const progressWidth = { 1: "25%", 2: "50%", 3: "75%", 4: "100%" }[step];
+  // The labelled stepper only applies to the full idea flow (4 steps). The code
+  // and spec branches are one/two-shot, so they keep the minimal hairline bar.
+  const showStepper = entryPath === "idea";
 
   return (
     <div className="flex flex-col">
-      <div className="h-0.5 bg-gray-100">
-        <div className="h-0.5 bg-brand-600 transition-all duration-500" style={{ width: progressWidth }} />
-      </div>
+      {showStepper ? (
+        <WizardStepper t={t} step={step} />
+      ) : (
+        <div className="h-0.5 bg-gray-100">
+          <div className="h-0.5 bg-brand-600 transition-all duration-500" style={{ width: progressWidth }} />
+        </div>
+      )}
 
       <main className="flex flex-1 justify-center px-4 py-12">
         <div className="w-full max-w-2xl">
@@ -453,9 +483,16 @@ function NewProjectInner() {
               <button
                 onClick={handleCreateCodeProject}
                 disabled={!appName.trim() || isCreatingCode}
+                data-loading={isCreatingCode}
                 className="btn btn-primary w-full py-3"
               >
-                {isCreatingCode ? t.branch.codeCreating : `${t.branch.codeCreate} →`}
+                {isCreatingCode ? (
+                  <>
+                    <Spinner /> {t.branch.codeCreating}
+                  </>
+                ) : (
+                  `${t.branch.codeCreate} →`
+                )}
               </button>
               {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
             </div>
@@ -500,10 +537,18 @@ function NewProjectInner() {
               <button
                 onClick={handleGenerateFromSpec}
                 disabled={!ideaText.trim() || isLoading}
+                data-loading={isLoading}
                 className="btn btn-primary w-full py-3"
               >
-                {isLoading ? t.np.reading : `${t.branch.specGenerate} →`}
+                {isLoading ? (
+                  <>
+                    <Spinner /> {t.np.reading}
+                  </>
+                ) : (
+                  `${t.branch.specGenerate} →`
+                )}
               </button>
+              {isLoading && waitLine && <WaitLine text={waitLine} />}
               {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
               <p className="mt-3 text-center text-xs text-gray-500">{t.np.freeBeta}</p>
             </div>
@@ -538,10 +583,18 @@ function NewProjectInner() {
               <button
                 onClick={handleGenerateUnderstanding}
                 disabled={!ideaText.trim() || isLoading}
+                data-loading={isLoading}
                 className="btn btn-primary w-full py-3"
               >
-                {isLoading ? t.np.reading : `${t.np.generateSpec} →`}
+                {isLoading ? (
+                  <>
+                    <Spinner /> {t.np.reading}
+                  </>
+                ) : (
+                  `${t.np.generateSpec} →`
+                )}
               </button>
+              {isLoading && waitLine && <WaitLine text={waitLine} />}
               {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
               <p className="mt-3 text-center text-xs text-gray-500">{t.np.freeBeta}</p>
             </div>
@@ -598,10 +651,22 @@ function NewProjectInner() {
                 <button onClick={() => setStep(2)} className="btn btn-secondary flex-1 py-3">
                   ← {t.np.back}
                 </button>
-                <button onClick={handleGenerateSpec} disabled={isGeneratingSpec} className="btn btn-primary flex-[2] py-3">
-                  {isGeneratingSpec ? t.np.generating : `${t.np.generateSpec} (${answeredCount}/${questions.length}) →`}
+                <button
+                  onClick={handleGenerateSpec}
+                  disabled={isGeneratingSpec}
+                  data-loading={isGeneratingSpec}
+                  className="btn btn-primary flex-[2] py-3"
+                >
+                  {isGeneratingSpec ? (
+                    <>
+                      <Spinner /> {t.np.generating}
+                    </>
+                  ) : (
+                    `${t.np.generateSpec} (${answeredCount}/${questions.length}) →`
+                  )}
                 </button>
               </div>
+              {isGeneratingSpec && waitLine && <WaitLine text={waitLine} />}
             </div>
           )}
 
@@ -655,6 +720,66 @@ function NewProjectInner() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** Labelled stepper for the idea flow: "1 Idea → 2 Understand → 3 Questions →
+ *  4 Done", current step emphasised. Replaces the bare progress bar. */
+function WizardStepper({ t, step }: { t: Dictionary; step: number }) {
+  const labels = [
+    t.interaction.stepper.idea,
+    t.interaction.stepper.understand,
+    t.interaction.stepper.questions,
+    t.interaction.stepper.done,
+  ];
+  const steps = buildStepper(step, labels);
+  return (
+    <div className="border-b border-gray-100 bg-white/60">
+      <ol className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-2.5 text-xs">
+        {steps.map((s, i) => (
+          <li key={s.id} className="flex items-center gap-2">
+            <span
+              className={`grid h-5 w-5 flex-shrink-0 place-items-center rounded-full text-[11px] font-semibold transition-colors ${
+                s.isDone
+                  ? "bg-brand-600 text-white"
+                  : s.isCurrent
+                    ? "border-2 border-brand-500 bg-white text-brand-700"
+                    : "border border-gray-200 bg-white text-gray-400"
+              }`}
+              aria-hidden
+            >
+              {s.isDone ? "✓" : s.index}
+            </span>
+            <span
+              className={
+                s.isCurrent
+                  ? "font-semibold text-gray-900"
+                  : s.isDone
+                    ? "text-gray-600"
+                    : "text-gray-400"
+              }
+              aria-current={s.isCurrent ? "step" : undefined}
+            >
+              {s.label}
+            </span>
+            {i < steps.length - 1 && <span className="text-gray-300" aria-hidden>→</span>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** Pulsing-dot + rotating status line for a long LLM wait (H1 system status). */
+function WaitLine({ text }: { text: string }) {
+  return (
+    <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500" role="status" aria-live="polite">
+      <span className="relative flex h-2 w-2" aria-hidden>
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75 motion-reduce:animate-none" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500" />
+      </span>
+      {text}
+    </div>
+  );
+}
 
 function ApiQuestionCard({
   t,
@@ -754,7 +879,16 @@ function SpecPreview({
 }) {
   return (
     <div>
-      <h2 className="text-xl font-semibold tracking-tight text-gray-900">{t.np.specReady}</h2>
+      {/* One success moment: a check icon scale-in when the brief is ready. */}
+      <div className="mb-3 flex items-center gap-2.5">
+        <span
+          className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-green-500 text-base font-bold text-white simsa-check-in"
+          aria-hidden
+        >
+          ✓
+        </span>
+        <h2 className="text-xl font-semibold tracking-tight text-gray-900">{t.np.specReady}</h2>
+      </div>
       <p className="mb-6 mt-1 text-sm text-gray-500">{t.np.saveNote}</p>
 
       {isFallback && <div className="callout mb-5 border-amber-100 bg-amber-50 text-xs text-amber-700">{t.np.draftNote}</div>}

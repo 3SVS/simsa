@@ -7,6 +7,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { loadLocalProjects, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 import { FeedbackModal } from "@/components/FeedbackModal";
+import { Tooltip } from "@/components/Tooltip";
 import { getAuthSession } from "@/lib/auth-client.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
@@ -104,9 +105,14 @@ export function AppSidebar() {
     ? projects.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
     : projects;
 
+  // Active items carry a 2px brand left-stripe (not background-only) so the
+  // current location reads at a glance. border-l is always present (transparent
+  // when inactive) so text never shifts on selection.
   const itemClass = (active: boolean) =>
-    `block truncate rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
-      active ? "bg-gray-100 font-medium text-gray-900" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+    `block truncate rounded-md border-l-2 px-2.5 py-1.5 text-[13px] transition-colors ${
+      active
+        ? "border-brand-500 bg-gray-100 font-medium text-gray-900"
+        : "border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900"
     }`;
 
   // The left nav is a PROGRESS MAP, not a flat tab list: three steps
@@ -147,7 +153,9 @@ export function AppSidebar() {
           <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500 transition-colors group-hover:bg-gold-500" />
           <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
         </Link>
-        <button onClick={toggleCollapse} aria-label="Collapse sidebar" className="grid h-7 w-7 place-items-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700">«</button>
+        <Tooltip content="Collapse sidebar" placement="bottom">
+          <button onClick={toggleCollapse} aria-label="Collapse sidebar" className="grid h-7 w-7 place-items-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700">«</button>
+        </Tooltip>
       </div>
 
       <div className="px-3 py-1.5">
@@ -345,14 +353,16 @@ export function AppSidebar() {
   const mobileChrome = (
     <>
       <div className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-gray-200 bg-white px-3 md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          aria-label={t.nav.openMenu}
-          className="grid h-9 w-9 place-items-center rounded-md text-lg text-gray-700 hover:bg-gray-100"
-        >
-          <span aria-hidden>☰</span>
-        </button>
+        <Tooltip content={t.nav.openMenu} placement="bottom">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label={t.nav.openMenu}
+            className="grid h-9 w-9 place-items-center rounded-md text-lg text-gray-700 hover:bg-gray-100"
+          >
+            <span aria-hidden>☰</span>
+          </button>
+        </Tooltip>
         <Link href="/projects" className="flex items-center gap-2">
           <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
           <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
@@ -380,12 +390,20 @@ export function AppSidebar() {
       <>
         {mobileChrome}
         <aside className="sticky top-0 hidden h-screen w-14 flex-shrink-0 flex-col items-center border-r border-gray-200 bg-white py-4 md:flex">
-          <button onClick={toggleCollapse} aria-label="Expand sidebar" className="mb-4 grid h-8 w-8 place-items-center rounded-md hover:bg-gray-100">
-            <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
-          </button>
-          <Link href="/projects/new" aria-label={t.nav.newProject} className="mb-2 grid h-8 w-8 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">＋</Link>
-          <Link href="/projects" aria-label={t.nav.allProjects} className="grid h-8 w-8 place-items-center rounded-md text-gray-500 hover:bg-gray-50">▦</Link>
-          <Link href="/account" aria-label={t.account.openLabel} className="mt-auto grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700">{initial}</Link>
+          <Tooltip content="Expand sidebar" placement="right">
+            <button onClick={toggleCollapse} aria-label="Expand sidebar" className="mb-4 grid h-8 w-8 place-items-center rounded-md hover:bg-gray-100">
+              <span aria-hidden className="h-3 w-3 rounded-full border-[1.5px] border-gold-500" />
+            </button>
+          </Tooltip>
+          <Tooltip content={t.nav.newProject} placement="right">
+            <Link href="/projects/new" aria-label={t.nav.newProject} className="mb-2 grid h-8 w-8 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">＋</Link>
+          </Tooltip>
+          <Tooltip content={t.nav.allProjects} placement="right">
+            <Link href="/projects" aria-label={t.nav.allProjects} className="grid h-8 w-8 place-items-center rounded-md text-gray-500 hover:bg-gray-50">▦</Link>
+          </Tooltip>
+          <Tooltip content={t.account.openLabel} placement="right">
+            <Link href="/account" aria-label={t.account.openLabel} className="mt-auto grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700">{initial}</Link>
+          </Tooltip>
         </aside>
         <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       </>
