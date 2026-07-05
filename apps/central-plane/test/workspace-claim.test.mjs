@@ -36,7 +36,8 @@ class FakeDb {
   }
 }
 
-const sessionAs = (id) => async () => (id ? { id } : null);
+const sessionAs = (id, emailVerified) => async () =>
+  id ? { id, ...(emailVerified === undefined ? {} : { emailVerified }) } : null;
 
 function claim(app, env, { userKey, headerKey } = {}) {
   return app.fetch(
@@ -132,4 +133,34 @@ test("header x-simsa-user-key wins over the body key", async () => {
   const res = await claim(app, { DB: db }, { userKey: "uk_body", headerKey: "uk_header" });
   assert.equal(res.status, 200);
   assert.deepEqual(db.calls[0].binds, ["uk_header"]);
+});
+
+// ─── D2 soft-auth: email verification gates the CLAIM (not sign-in) ──────────
+
+test("verification required + unverified email → 403 email_unverified, no DB writes", async () => {
+  const db = new FakeDb({ existingWorkspace: null });
+  const app = createWorkspaceClaimRoutes({ resolveSession: sessionAs("u1", false) });
+  // RESEND_API_KEY set → verification is operational → the gate is active.
+  const res = await claim(app, { DB: db, RESEND_API_KEY: "re_x" }, { userKey: "uk_a" });
+  assert.equal(res.status, 403);
+  assert.equal((await res.json()).error, "email_unverified");
+  assert.equal(db.calls.length, 0, "an unverified claim must not touch the DB");
+});
+
+test("verification required + verified email → claim proceeds", async () => {
+  const db = new FakeDb({ existingWorkspace: null, changesByIndex: { 2: 1 } });
+  const app = createWorkspaceClaimRoutes({ resolveSession: sessionAs("u1", true) });
+  const res = await claim(app, { DB: db, RESEND_API_KEY: "re_x" }, { userKey: "uk_a" });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).ok, true);
+});
+
+test("verification NOT configured (no Resend) → unverified still claims (fail-open)", async () => {
+  const db = new FakeDb({ existingWorkspace: null });
+  const app = createWorkspaceClaimRoutes({ resolveSession: sessionAs("u1", false) });
+  // No RESEND_API_KEY → can't send verification mail → gating would strand
+  // everyone, so claim behaves exactly as before.
+  const res = await claim(app, { DB: db }, { userKey: "uk_a" });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).ok, true);
 });
