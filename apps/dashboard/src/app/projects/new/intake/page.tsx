@@ -74,7 +74,6 @@ import type {
   WorkflowRecordListItem,
 } from "@/lib/workspace-agent-workflow-api";
 import { getUserKey } from "@/lib/workflow-store";
-import { buildBetaFeedbackMailto } from "@/lib/beta-feedback.mjs";
 import { getBetaOnboardingCopy } from "@/lib/beta-onboarding.mjs";
 import { getBetaUsageBoundaryCopy } from "@/lib/beta-usage-boundary.mjs";
 import { buildBenchmarkHandoffPreview } from "@/lib/intake-benchmark-handoff.mjs";
@@ -1907,12 +1906,13 @@ function FeedbackLink({
   className?: string;
 }) {
   return (
-    <a
-      href={buildBetaFeedbackMailto({ route: "/projects/new/intake", ...context })}
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new CustomEvent("simsa:open-feedback"))}
       className={className ?? "text-xs font-medium text-brand-600 hover:underline"}
     >
       {label}
-    </a>
+    </button>
   );
 }
 

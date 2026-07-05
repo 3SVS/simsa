@@ -446,3 +446,8 @@ a {
 .legal a {
   color: var(--accent);
 }
+
+/* FAQ — plain definition list, calm spacing (no accordions, no chrome). */
+.faq { display: flex; flex-direction: column; gap: 1.25rem; margin-top: 1.5rem; }
+.faq-item dt { font-weight: 600; color: var(--fg, #18181b); }
+.faq-item dd { margin: 0.35rem 0 0; color: var(--muted); line-height: 1.55; }

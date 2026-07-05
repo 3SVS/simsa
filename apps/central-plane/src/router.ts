@@ -47,6 +47,7 @@ import { createWorkspaceExperimentRoutes } from "./routes/workspace-experiment.j
 import { createWorkspaceAgentWorkflowRoutes } from "./routes/workspace-agent-workflow.js";
 import { createWorkspaceMembershipRoutes } from "./routes/workspace-membership.js";
 import { createWorkspaceClaimRoutes } from "./routes/workspace-claim.js";
+import { createWorkspaceFeedbackRoutes } from "./routes/workspace-feedback.js";
 import { createAuthSpikeRoutes } from "./routes/auth-spike.js";
 import type { FetchLike } from "./github.js";
 
@@ -186,6 +187,7 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // Claim flow (separate file — workspace-membership.ts carries a tested
   // read-only source guarantee): session-gated, 401 when auth is dormant.
   app.route("/", createWorkspaceClaimRoutes());
+  app.route("/", createWorkspaceFeedbackRoutes());
   // Stage 209 / 221 — Better Auth LOCAL-ONLY route (/api/auth/*), gated by
   // AUTH_ENABLED. Default off → 503 auth_disabled in production. The D1-backed
   // runtime is constructed per-request ONLY behind AUTH_ENABLED + secret + env.DB

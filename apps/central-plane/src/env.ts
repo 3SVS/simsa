@@ -204,6 +204,15 @@ export interface Env {
   CF_AI_GATEWAY_ANTHROPIC_URL?: string;
   BETA_PROJECT_CREATE_DAILY_LIMIT?: string;
   /**
+   * In-app feedback (workspace-feedback.ts) admin notification targets.
+   * ADMIN_TELEGRAM_CHAT_ID: numeric chat id to DM new feedback to (uses the
+   * existing TELEGRAM_BOT_TOKEN). ADMIN_FEEDBACK_EMAIL: fallback recipient
+   * (uses RESEND_API_KEY). Both optional — feedback is still stored in D1
+   * without either; notification is best-effort.
+   */
+  ADMIN_TELEGRAM_CHAT_ID?: string;
+  ADMIN_FEEDBACK_EMAIL?: string;
+  /**
    * v0.14.5 — Lemon Squeezy MoR for paid tiers (Stripe Korea is
    * personal-only; LS handles VAT across KR/US/EU). All four secrets
    * required for billing routes to function; otherwise /billing

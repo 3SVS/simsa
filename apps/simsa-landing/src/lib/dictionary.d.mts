@@ -21,6 +21,7 @@ export interface LandingDict {
   workflow: { title: string; steps: { title: string; sub: string }[] };
   forWhom: { title: string; body: string; contactLead: string };
   joinBeta: { title: string; p1: string; p2: string; ctaStart: string; ctaFeedback: string };
+  faq: { title: string; items: { q: string; a: string }[] };
   footer: { demo: string; privacy: string; terms: string; contact: string; tag: string };
 }
 
