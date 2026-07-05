@@ -56,6 +56,12 @@ export type Dictionary = {
     title: string;
     subtitle: string;
     openLabel: string;
+    menu: {
+      settings: string;
+      signOut: string;
+      signingOut: string;
+      signIn: string;
+    };
     sections: {
       profile: string;
       preferences: string;
@@ -110,7 +116,10 @@ export type Dictionary = {
       claimDone: string;
       claimAlreadyDone: string;
       claimTakenError: string;
+      claimFailedTitle: string;
       claimError: string;
+      claimRetry: string;
+      claimRetryFailed: string;
     };
     badges: { local: string; planned: string; requiresSignIn: string; readOnly: string };
   };
@@ -220,6 +229,7 @@ export type Dictionary = {
     linking: string;
     signInFailed: string;
     signUpFailed: string;
+    invalidEmail: string;
     keepsLocal: string;
     skip: string;
   };
