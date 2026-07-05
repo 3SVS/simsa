@@ -17,11 +17,12 @@ ENVIRONMENT = "production"
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.
 AUTH_SIGNUP_MODE = "open"
-# Cloudflare AI Gateway (gateway "simsa") — routes Anthropic calls through the
-# gateway instead of api.anthropic.com directly, eliminating the ~60% 403
-# "Request not allowed" on direct Worker egress (2026-07-05). Base only; the
-# code appends /v1/messages. Gateway is unauthenticated (no token header).
-CF_AI_GATEWAY_ANTHROPIC_URL = "https://gateway.ai.cloudflare.com/v1/8735d5a7b0af1d7f97dd46f705ace797/simsa/anthropic"
+# Cloudflare AI Gateway (gateway "simsa") — DISABLED 2026-07-05: routing through
+# the gateway's /anthropic route rejected the (valid, works-direct) key as
+# "invalid x-api-key" (401). The gateway needs BYOK/stored-key config in the CF
+# dashboard before this can route Anthropic. Until then we run direct +
+# retry-6 (#228). Re-enable by uncommenting once the gateway forwards x-api-key.
+# CF_AI_GATEWAY_ANTHROPIC_URL = "https://gateway.ai.cloudflare.com/v1/8735d5a7b0af1d7f97dd46f705ace797/simsa/anthropic"
 # Open-deploy batch (2026-07-05) — Better Auth canonical origin. Required for the
 # GitHub LOGIN OAuth app (#213): without it Better Auth derives the base URL from
 # the proxied request (workers.dev) and the GitHub callback becomes
