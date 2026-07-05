@@ -26,9 +26,10 @@ import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { createBetterAuthRuntime } from "../better-auth-spike.js";
+import { emailVerificationRequired } from "../auth-email-verification.js";
 import { parseUserKey } from "../workspace-membership-bridge.js";
 
-export type SessionUser = { id: string };
+export type SessionUser = { id: string; emailVerified?: boolean };
 
 export type ResolveSession = (
   env: Partial<Env> | undefined,
@@ -42,7 +43,9 @@ export const resolveBetterAuthSession: ResolveSession = async (env, headers) => 
     if (!auth) return null;
     const session = await auth.api.getSession({ headers });
     const user = session?.user;
-    if (user && typeof user.id === "string" && user.id) return { id: user.id };
+    if (user && typeof user.id === "string" && user.id) {
+      return { id: user.id, emailVerified: user.emailVerified === true };
+    }
     return null;
   } catch {
     return null;
@@ -65,6 +68,14 @@ export function createWorkspaceClaimRoutes(deps?: {
   app.post("/workspace/membership/claim", async (c) => {
     const user = await resolveSession(c.env, c.req.raw.headers);
     if (!user) return c.json({ ok: false, error: "unauthenticated" }, 401);
+
+    // D2 soft-auth: cross-device sync (binding this browser's projects to the
+    // account) requires a verified email — but ONLY when verification is
+    // operational (Resend configured). If it isn't, gating would strand every
+    // user, so we fail open and claim as before. Sign-in is never blocked here.
+    if (emailVerificationRequired(c.env) && user.emailVerified !== true) {
+      return c.json({ ok: false, error: "email_unverified" }, 403);
+    }
 
     let bodyUserKey: string | null = null;
     try {

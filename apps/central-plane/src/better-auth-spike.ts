@@ -3,6 +3,8 @@ import type { Env } from "./env.js";
 import { getAuthSpikeConfig } from "./auth-spike-config.js";
 import { buildBetterAuthD1Database } from "./better-auth-d1.js";
 import { resolveAuthTopologyConfig } from "./auth-topology.js";
+import { emailVerificationRequired, buildVerificationEmail } from "./auth-email-verification.js";
+import { sendWorkspaceEmail } from "./workspace/email-notify.js";
 
 /**
  * Stage 204 / 221 — Better Auth LOCAL-ONLY runtime (gated D1 wiring).
@@ -88,10 +90,29 @@ export function createBetterAuthRuntime(env: Partial<Env> | undefined) {
   // options identical to before (origin derived from the request). Never activates auth.
   const topology = resolveAuthTopologyConfig(e);
   const github = resolveGithubLoginProvider(e);
+  // D2 soft-auth: send a verification email on sign-up ONLY when Resend is
+  // configured (else we couldn't deliver it). `emailAndPassword` deliberately
+  // does NOT set requireEmailVerification — sign-in is never blocked; the
+  // verified flag gates the workspace claim instead (see workspace-claim.ts).
+  const verify = emailVerificationRequired(e);
   return betterAuth({
     secret,
     database: buildBetterAuthD1Database(db),
     emailAndPassword: { enabled: true },
+    ...(verify
+      ? {
+          emailVerification: {
+            sendOnSignUp: true,
+            autoSignInAfterVerification: true,
+            sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+              const { subject, text } = buildVerificationEmail(url);
+              // sendWorkspaceEmail never throws; swallow its result so a mail
+              // hiccup never breaks sign-up.
+              await sendWorkspaceEmail(e as Env, { to: user.email, subject, text });
+            },
+          },
+        }
+      : {}),
     ...(github ? { socialProviders: { github } } : {}),
     ...(topology.baseURL ? { baseURL: topology.baseURL } : {}),
     ...(topology.trustedOrigins ? { trustedOrigins: topology.trustedOrigins } : {}),

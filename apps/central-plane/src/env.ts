@@ -164,6 +164,13 @@ export interface Env {
   RESEND_API_KEY?: string;
   NOTIFY_EMAIL_FROM?: string;
   /**
+   * D2 soft-auth — email-verification kill switch. Verification is otherwise
+   * enabled automatically whenever RESEND_API_KEY is set (so verification mail
+   * can actually be sent). Set to "off" to force it off even with Resend
+   * configured. It gates the workspace CLAIM (cross-device sync), never login.
+   */
+  AUTH_EMAIL_VERIFICATION?: string;
+  /**
    * Stage 18 — Admin usage stats key. Set via `wrangler secret put ADMIN_USAGE_STATS_KEY`.
    * Required for GET /admin/usage-stats. Returns 503 when unset, 401 on key mismatch.
    */
