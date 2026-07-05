@@ -30,6 +30,10 @@
     "./plain-summary": {
       "types": "./dist/plain-summary.d.ts",
       "import": "./dist/plain-summary.js"
+    },
+    "./ux-rubric": {
+      "types": "./dist/ux-rubric/index.d.ts",
+      "import": "./dist/ux-rubric/index.js"
     }
   },
   "files": [

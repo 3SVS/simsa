@@ -206,6 +206,40 @@ export type {
   FileSystemBaselineStoreOptions,
 } from "./federated/index.js";
 
+// Baseline UX QA rubric (§2/§4/§8) — versioned, git-tracked rule data + Zod
+// contracts that a machine UX pass grades a live surface against. Pure data:
+// detectors that emit the graded signals ship in a later PR. Re-exported here
+// for convenience; dedicated subpath at @simsa/core/ux-rubric.
+export {
+  RUBRIC_VERSION,
+  BASELINE_UX_RUBRIC,
+  RubricItemSchema,
+  RubricSchema,
+  RawSignalSchema,
+  RubricFindingSchema,
+  requiresInteraction,
+  isStaticDetector,
+  getRunnableRules,
+  getGatingRules,
+  getRuleById,
+  classifySignals,
+  assertRubricInvariants,
+  DOGFOOD_SIGNALS,
+  CLEAN_SIGNALS,
+} from "./ux-rubric/index.js";
+export type {
+  RubricLayer,
+  RubricDetector,
+  RubricSeverity,
+  RubricStatus,
+  RubricItem,
+  Rubric,
+  RawSignal,
+  RubricFinding,
+  RunnableCapabilities,
+  ClassifyResult,
+} from "./ux-rubric/index.js";
+
 // Efficiency Gate (decision #22: first-class from day 1) — every LLM call
 // routes through `EfficiencyGate.run(...)`. Re-exported here for convenience;
 // the dedicated subpath export lives at @simsa/core/efficiency.
