@@ -1,0 +1,92 @@
+name: canary
+
+# Production canary — the eye that catches a "success-shaped failure" in
+# minutes, not weeks. On 2026-07-05 the generation LLM was 100% degrading to a
+# mock draft for ~3 weeks and only a human noticed. This probes the REAL
+# user-facing paths every 15 min and fails the job (→ GitHub notifies the repo
+# owner by email) when any is wrong. If CANARY_TELEGRAM_CHAT_ID is set it also
+# DMs Telegram via the existing TELEGRAM_BOT_TOKEN.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BASE: https://conclave-ai.seunghunbae.workers.dev
+      APP: https://app.trysimsa.com
+    steps:
+      - name: Probe production
+        id: probe
+        run: |
+          set -uo pipefail
+          fails=""
+
+          # 1. Worker health
+          if ! curl -sS --max-time 20 "$BASE/healthz" | grep -q '"db":"up"'; then
+            fails="$fails\n- healthz: db not up"
+          fi
+
+          # 2. Auth session proxy (first-party cookie path)
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$APP/api/auth/get-session")
+          if [ "$code" != "200" ]; then fails="$fails\n- auth get-session: HTTP $code"; fi
+
+          # 3. Review preflight must allow Idempotency-Key (the 3-week CORS bug)
+          if ! curl -sS -i --max-time 20 -X OPTIONS \
+               "$BASE/workspace/projects/x/github/pulls/1/review" \
+               -H "Origin: $APP" -H "Access-Control-Request-Method: POST" \
+               -H "Access-Control-Request-Headers: content-type,idempotency-key" \
+             | grep -i "access-control-allow-headers" | grep -qi "idempotency-key"; then
+            fails="$fails\n- review preflight: Idempotency-Key not allowed"
+          fi
+
+          # 4. THE crown jewel: generation must be a REAL llm draft, not a mock.
+          #    (This is exactly what silently broke.) One call/15min; the
+          #    per-IP hourly rate limit won't trip at this cadence.
+          gen=$(curl -sS --max-time 90 -X POST "$BASE/workspace/idea-to-spec-draft" \
+                -H "content-type: application/json" \
+                -d '{"idea":"canary — a small app to track daily water intake","locale":"en"}')
+          src=$(printf '%s' "$gen" | sed -n 's/.*"source":"\([^"]*\)".*/\1/p')
+          err=$(printf '%s' "$gen" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')
+          if [ "$src" != "llm" ]; then
+            fails="$fails\n- generation NOT real: source=${src:-none} error=${err:-none}"
+          fi
+
+          if [ -n "$fails" ]; then
+            echo -e "SIMSA CANARY FAILED:$fails"
+            {
+              echo "status=fail"
+              echo "summary<<EOF"
+              echo -e "🔴 Simsa canary failed:$fails"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "All canary checks passed."
+
+      - name: Telegram alert (optional)
+        if: failure()
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.CANARY_TELEGRAM_CHAT_ID }}
+          MSG: ${{ steps.probe.outputs.summary }}
+        run: |
+          # No token/chat configured → GitHub's native failure email is the
+          # alert; skip Telegram silently.
+          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
+            echo "Telegram not configured — relying on GitHub failure notification."
+            exit 0
+          fi
+          TEXT="${MSG:-🔴 Simsa canary failed (see the Actions run).}"
+          curl -sS --max-time 20 \
+            "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHAT}" \
+            --data-urlencode "text=${TEXT}" >/dev/null || true
