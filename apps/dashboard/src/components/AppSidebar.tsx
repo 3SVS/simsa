@@ -132,8 +132,14 @@ export function AppSidebar() {
       items: [["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks], ["fixes", t.nav.fixes], ["export", t.nav.export]],
     },
   };
-  const lockHint = (reason: "need_items" | "need_code" | null) =>
-    reason === "need_code" ? t.stepsNav.lockNeedCode : reason === "need_items" ? t.stepsNav.lockNeedItems : "";
+  const lockHint = (reason: "need_items" | "need_code" | "need_build" | null) =>
+    reason === "need_code"
+      ? t.stepsNav.lockNeedCode
+      : reason === "need_build"
+        ? t.stepsNav.lockNeedBuild
+        : reason === "need_items"
+          ? t.stepsNav.lockNeedItems
+          : "";
   const statusGlyph = (status: string) =>
     status === "done" ? "✓" : status === "current" ? "●" : "○";
   const advancedItems = [["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] as const;
