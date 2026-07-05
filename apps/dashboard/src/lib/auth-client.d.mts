@@ -36,3 +36,12 @@ export function startGithubLogin(
   callbackURL: string,
   fetchImpl?: typeof fetch,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }>;
+export function startGoogleLogin(
+  callbackURL: string,
+  fetchImpl?: typeof fetch,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }>;
+export function sendVerificationEmail(
+  email: string,
+  callbackURL?: string,
+  fetchImpl?: typeof fetch,
+): Promise<AuthActionResult>;

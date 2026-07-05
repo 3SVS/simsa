@@ -123,3 +123,16 @@ test("resolveGithubLoginProvider: dormant unless BOTH id+secret are set", async 
     { clientId: "cid", clientSecret: "csec" },
   );
 });
+
+test("resolveGoogleLoginProvider: dormant unless BOTH id+secret are set (D3)", async () => {
+  const { resolveGoogleLoginProvider } = await import("../dist/better-auth-spike.js");
+  assert.equal(resolveGoogleLoginProvider({}), null);
+  assert.equal(resolveGoogleLoginProvider(undefined), null);
+  assert.equal(resolveGoogleLoginProvider({ AUTH_GOOGLE_CLIENT_ID: "id_only" }), null);
+  assert.equal(resolveGoogleLoginProvider({ AUTH_GOOGLE_CLIENT_SECRET: "secret_only" }), null);
+  assert.equal(resolveGoogleLoginProvider({ AUTH_GOOGLE_CLIENT_ID: "  ", AUTH_GOOGLE_CLIENT_SECRET: "s" }), null);
+  assert.deepEqual(
+    resolveGoogleLoginProvider({ AUTH_GOOGLE_CLIENT_ID: "cid", AUTH_GOOGLE_CLIENT_SECRET: "csec" }),
+    { clientId: "cid", clientSecret: "csec" },
+  );
+});

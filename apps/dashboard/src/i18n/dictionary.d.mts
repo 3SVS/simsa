@@ -120,6 +120,12 @@ export type Dictionary = {
       claimError: string;
       claimRetry: string;
       claimRetryFailed: string;
+      verifyTitle: string;
+      verifyDesc: string;
+      verifyResend: string;
+      verifySending: string;
+      verifySent: string;
+      verifyError: string;
     };
     badges: { local: string; planned: string; requiresSignIn: string; readOnly: string };
   };
@@ -215,6 +221,8 @@ export type Dictionary = {
   login: {
     title: string;
     subtitle: string;
+    google: string;
+    googleUnavailable: string;
     github: string;
     githubUnavailable: string;
     or: string;
