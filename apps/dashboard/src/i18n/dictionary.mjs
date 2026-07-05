@@ -220,6 +220,7 @@ const EN = {
   // never see a raw code like "db_error" or "HTTP 500". Map at the render site
   // via errorText(t, code); unknown codes fall back to `generic`.
   errors: {
+    llmUnavailable: "The AI connection is having trouble right now. Please try again in a moment — your input is still here.",
     generic: "Something went wrong. Please try again.",
     network: "Couldn't reach the server. Check your connection and try again.",
     timeout: "This is taking longer than expected. Please try again.",
@@ -2358,6 +2359,7 @@ const KO = {
     rateLimited: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",
   },
   errors: {
+    llmUnavailable: "지금 AI 연결이 원활하지 않아요. 잠시 후 다시 시도해주세요 — 입력하신 내용은 그대로 남아 있어요.",
     generic: "문제가 발생했어요. 잠시 후 다시 시도해주세요.",
     network: "서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.",
     timeout: "시간이 조금 오래 걸리고 있어요. 다시 시도해주세요.",

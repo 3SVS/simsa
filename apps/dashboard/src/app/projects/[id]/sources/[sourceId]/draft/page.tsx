@@ -35,6 +35,7 @@ import {
   loadExtendedProjectData,
   saveProject,
   saveExtendedProjectData,
+  markProjectSyncFailed,
 } from "@/lib/workflow-store";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 
@@ -131,7 +132,8 @@ export default function DocumentDraftPage() {
       understood: draft.understood,
       productSpec: draft.productSpec,
       items: draft.items,
-    }).catch(() => undefined);
+    }).then((res) => { if (!res || res.ok !== true) markProjectSyncFailed(id); })
+      .catch(() => markProjectSyncFailed(id));
     router.push(`/projects/${id}/spec`);
   }
 

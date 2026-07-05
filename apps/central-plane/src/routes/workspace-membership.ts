@@ -70,7 +70,8 @@ export function createWorkspaceMembershipRoutes(): Hono<{ Bindings: Env }> {
           name: String(r.name),
           role: String(r.role),
         }));
-      } catch {
+      } catch (err) {
+        console.error("[workspace-membership] workspaces query failed (shown as none):", err);
         workspaces = [];
       }
     }
@@ -83,7 +84,8 @@ export function createWorkspaceMembershipRoutes(): Hono<{ Bindings: Env }> {
           .first<{ n?: number }>();
         const n = Number(row?.n ?? 0);
         legacyProjectCount = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-      } catch {
+      } catch (err) {
+        console.error("[workspace-membership] project-count query failed (shown as 0):", err);
         legacyProjectCount = 0;
       }
     }

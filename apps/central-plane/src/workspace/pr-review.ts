@@ -314,21 +314,31 @@ export async function reviewPRAgainstItems(
     rawText = out.text;
     tokensConsumed = out.tokens;
   } catch (err) {
+    // Honest failure (2026-07-05 census #1): heuristic verdicts could emit
+    // "passed" for code no model ever reviewed — and even reach a GitHub
+    // comment. An LLM failure now fails the run visibly (error + retry).
     console.error("[workspace/pr-review] LLM call failed:", err);
-    return buildMockFallback(req);
+    throw new Error("llm_unavailable");
   }
 
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return buildMockFallback(req);
+  if (!jsonMatch) {
+    console.warn("[workspace/pr-review] LLM returned non-JSON. head:", rawText.slice(0, 200));
+    throw new Error("llm_unavailable");
+  }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch {
-    return buildMockFallback(req);
+    console.warn("[workspace/pr-review] JSON parse failed");
+    throw new Error("llm_unavailable");
   }
 
-  if (!isValidResponse(parsed)) return buildMockFallback(req);
+  if (!isValidResponse(parsed)) {
+    console.warn("[workspace/pr-review] response failed shape validation");
+    throw new Error("llm_unavailable");
+  }
 
   const resultMap = new Map(req.items.map((i) => [i.id, i.title]));
   const results: CheckResultItem[] = (parsed.results as CheckResultItem[]).map((r) => ({

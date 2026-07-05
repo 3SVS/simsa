@@ -88,7 +88,12 @@ export default function GitHubPage() {
       setGenPhase("idle");
       return;
     }
-    const generated = res.ok ? res.data : res.fallback;
+    if (!res.ok) {
+      setGenError(t.errors.llmUnavailable);
+      setGenPhase("idle");
+      return;
+    }
+    const generated = res.data;
     if (!generated?.items?.length) {
       setGenError(t.github.generateItemsError);
       setGenPhase("idle");

@@ -166,6 +166,7 @@ export type Dictionary = {
     rateLimited: string;
   };
   errors: {
+    llmUnavailable: string;
     generic: string;
     network: string;
     timeout: string;

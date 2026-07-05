@@ -191,7 +191,17 @@ async function callAnthropic(
 ): Promise<string> {
   const data = (await anthropicMessages(
     apiKey,
-    { model: "claude-haiku-4-5-20251001", max_tokens: 8000, messages: [{ role: "user", content: prompt }] },
+    {
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 8000,
+      // Assistant prefill: the reply MUST continue from "{" — a refusal or a
+      // prose preamble becomes impossible. (Live 2026-07-05: the KO prompt
+      // consistently got a 222-char text answer instead of JSON.)
+      messages: [
+        { role: "user", content: prompt },
+        { role: "assistant", content: "{" },
+      ],
+    },
     timeoutMs,
   )) as {
     content?: Array<{ type: string; text?: string }>;
@@ -204,7 +214,7 @@ async function callAnthropic(
     `[workspace/generate] blocks=${(data.content ?? []).map((b) => b.type).join(",") || "none"}` +
       ` textLen=${text.length} stop=${data.stop_reason ?? "?"}`,
   );
-  return text;
+  return "{" + text;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -501,7 +511,7 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
 export async function generateIdeaToSpecDraft(
   req: IdeaToSpecDraftRequest,
   anthropicApiKey: string | undefined,
-): Promise<IdeaToSpecDraftResponse> {
+): Promise<IdeaToSpecDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.idea?.trim()) {
     return { ...buildMockFallback(req), warnings: ["아이디어를 입력해주세요."] };
   }
@@ -516,28 +526,29 @@ export async function generateIdeaToSpecDraft(
     rawText = await callAnthropic(anthropicApiKey, prompt);
   } catch (err) {
     console.error("[workspace/generate] LLM call failed:", err);
-    return buildMockFallback(req);
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
   // Extract JSON — LLM sometimes wraps in code fences despite instructions
   const cleaned = rawText.replace(/```(?:json)?/g, "").trim();
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    console.warn("[workspace/generate] LLM returned non-JSON, falling back");
-    return buildMockFallback(req);
+    // Head of the model text (ops diagnostic — this only fires on failure).
+    console.warn("[workspace/generate] LLM returned non-JSON. head:", cleaned.slice(0, 200));
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch {
-    console.warn("[workspace/generate] JSON parse failed, falling back");
-    return buildMockFallback(req);
+    console.warn("[workspace/generate] JSON parse failed. head:", cleaned.slice(0, 200));
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
   if (!isValidResponse(parsed)) {
-    console.warn("[workspace/generate] Response failed shape validation, falling back");
-    return buildMockFallback(req);
+    console.warn("[workspace/generate] Response failed shape validation");
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
   // Ensure all items have status: "not_started"
