@@ -38,7 +38,7 @@ import {
 import { overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
 import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
-import { nextProjectAction } from "@/lib/project-steps.mjs";
+import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 
@@ -243,9 +243,44 @@ function CommandCenterCard({
 
   if (!c && !showExplainer) return null;
 
+  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun, entryPath });
+  const stepLabel: Record<string, string> = {
+    prepare: t.stepsNav.prepare,
+    review: t.stepsNav.review,
+    results: t.stepsNav.results,
+  };
+
   return (
     <div className="card mb-8 p-5">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t.commandCenter.title}</p>
+
+      {/* Compact "you are here" progress — the body's own axis, next to the CTA
+          (the sidebar map is nav; this is the at-a-glance status). */}
+      <ol className="mt-3 flex items-center gap-1.5">
+        {steps.map((step, i) => {
+          const done = step.status === "done";
+          const current = step.status === "current";
+          return (
+            <li key={step.key} className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className={`grid h-5 w-5 flex-shrink-0 place-items-center rounded-full text-[10px] font-bold ${
+                  done ? "bg-green-100 text-green-700"
+                    : current ? "bg-brand-600 text-white"
+                    : "bg-gray-100 text-gray-400"
+                }`}
+              >
+                {done ? "✓" : i + 1}
+              </span>
+              <span className={`text-xs ${current ? "font-semibold text-gray-900" : done ? "text-gray-600" : "text-gray-400"}`}>
+                {stepLabel[step.key]}
+              </span>
+              {i < steps.length - 1 && <span aria-hidden className="mx-0.5 h-px w-4 bg-gray-200" />}
+            </li>
+          );
+        })}
+      </ol>
+
       {c && next && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-700">{c.desc}</p>
