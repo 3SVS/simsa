@@ -26,11 +26,23 @@ export type AnthropicMessagesData = {
 /** POST /v1/messages with bounded retries. Throws on final failure. */
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/**
+ * Base URL for the Anthropic Messages API. When CF_AI_GATEWAY_ANTHROPIC_URL is
+ * set (e.g. https://gateway.ai.cloudflare.com/v1/{acct}/{gw}/anthropic) the
+ * call routes through Cloudflare AI Gateway, which sidesteps the direct
+ * Worker→api.anthropic.com egress that intermittently 403s.
+ */
+export function anthropicEndpoint(baseUrl?: string): string {
+  const base = (baseUrl ?? "").trim().replace(/\/$/, "");
+  return base ? `${base}/v1/messages` : "https://api.anthropic.com/v1/messages";
+}
+
 export async function anthropicMessages(
   apiKey: string,
   body: AnthropicMessagesBody,
   timeoutMs: number,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
+  endpoint: string = anthropicEndpoint(),
 ): Promise<AnthropicMessagesData> {
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -38,7 +50,7 @@ export async function anthropicMessages(
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let resp: Response | null = null;
     try {
-      resp = await fetchImpl("https://api.anthropic.com/v1/messages", {
+      resp = await fetchImpl(endpoint, {
         method: "POST",
         signal: ctrl.signal,
         headers: {

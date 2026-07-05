@@ -226,7 +226,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     let result;
     try {
-      result = await generateIdeaToSpecDraft(input, c.env.ANTHROPIC_API_KEY);
+      result = await generateIdeaToSpecDraft(input, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL);
     } catch (err) {
       console.error("[workspace] unexpected generate error:", err);
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), {
@@ -493,7 +493,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     let result;
     try {
-      result = await generateFixSuggestion(req as WorkspaceFixSuggestionRequest, c.env.ANTHROPIC_API_KEY);
+      result = await generateFixSuggestion(req as WorkspaceFixSuggestionRequest, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL);
     } catch (err) {
       console.error("[workspace/fix-suggestion] error:", err);
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });

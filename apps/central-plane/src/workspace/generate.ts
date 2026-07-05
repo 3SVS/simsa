@@ -3,7 +3,7 @@
  * idea-to-spec draft. Falls back to inline mock data on any failure
  * so the user-facing flow never breaks.
  */
-import { anthropicMessages } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -187,6 +187,7 @@ ${SCHEMA_DESCRIPTION_EN}`;
 async function callAnthropic(
   apiKey: string,
   prompt: string,
+  baseUrl: string | undefined,
   timeoutMs = 120000, // document-scale prompts (up to 80k chars) need generous time
 ): Promise<string> {
   const data = (await anthropicMessages(
@@ -203,6 +204,8 @@ async function callAnthropic(
       ],
     },
     timeoutMs,
+    undefined,
+    anthropicEndpoint(baseUrl),
   )) as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
@@ -511,6 +514,7 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
 export async function generateIdeaToSpecDraft(
   req: IdeaToSpecDraftRequest,
   anthropicApiKey: string | undefined,
+  anthropicBaseUrl?: string,
 ): Promise<IdeaToSpecDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.idea?.trim()) {
     return { ...buildMockFallback(req), warnings: ["아이디어를 입력해주세요."] };
@@ -523,7 +527,7 @@ export async function generateIdeaToSpecDraft(
   const prompt = buildPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt);
+    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
   } catch (err) {
     console.error("[workspace/generate] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };

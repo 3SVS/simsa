@@ -177,7 +177,7 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
 
     let result;
     try {
-      result = await generateIdeaToSpecDraft({ idea: input, locale }, c.env.ANTHROPIC_API_KEY);
+      result = await generateIdeaToSpecDraft({ idea: input, locale }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL);
     } catch (err) {
       console.error("[workspace/document-intake] unexpected generate error:", err);
       return c.json({ ok: false, error: "internal_error" }, 500);

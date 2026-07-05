@@ -960,6 +960,7 @@ export function createWorkspaceGitHubRoutes(
         },
         c.env.ANTHROPIC_API_KEY,
         fetchImpl,
+        c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
       );
       if (reviewResult.warnings?.length) warnings.push(...reviewResult.warnings);
     } catch (err) {

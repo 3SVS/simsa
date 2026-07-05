@@ -6,7 +6,7 @@
  * LLM failure → heuristic fallback (diff-aware: matching filenames lean toward "통과").
  */
 import type { CheckableItem, ProductSpecForCheck, CheckResultItem } from "./check.js";
-import { anthropicMessages } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
 import type { PullRequestMeta, PullRequestFile } from "./github-pr.js";
 import { buildDiffSummary } from "./github-pr.js";
 import type { FetchLike } from "../github.js";
@@ -105,12 +105,14 @@ async function callAnthropic(
   prompt: string,
   timeoutMs = 25000,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
+  baseUrl?: string,
 ): Promise<{ text: string; tokens: number | null }> {
   const data = (await anthropicMessages(
     apiKey,
     { model: REVIEW_MODEL, max_tokens: 6000, messages: [{ role: "user", content: prompt }] },
     timeoutMs,
     fetchImpl,
+    anthropicEndpoint(baseUrl),
   )) as {
     content?: Array<{ type: string; text?: string }>;
     usage?: { input_tokens?: number; output_tokens?: number };
@@ -290,6 +292,7 @@ export async function reviewPRAgainstItems(
   req: PRReviewRequest,
   anthropicApiKey: string | undefined,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
+  anthropicBaseUrl?: string,
 ): Promise<PRReviewResponse> {
   if (!req.items?.length) {
     return {
@@ -310,7 +313,7 @@ export async function reviewPRAgainstItems(
   let rawText = "";
   let tokensConsumed: number | null = null;
   try {
-    const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl);
+    const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl, anthropicBaseUrl);
     rawText = out.text;
     tokensConsumed = out.tokens;
   } catch (err) {
