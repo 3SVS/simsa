@@ -41,7 +41,8 @@ export function loadDraft(): WorkflowDraft | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     return raw ? (JSON.parse(raw) as WorkflowDraft) : null;
-  } catch {
+  } catch (err) {
+    console.error("[workflow-store] corrupt localStorage entry — data hidden from UI:", err);
     return null;
   }
 }
@@ -68,7 +69,8 @@ export function loadLocalProjects(): Project[] {
   try {
     const raw = localStorage.getItem(PROJECTS_KEY);
     return raw ? (JSON.parse(raw) as Project[]) : [];
-  } catch {
+  } catch (err) {
+    console.error("[workflow-store] corrupt localStorage entry — data hidden from UI:", err);
     return [];
   }
 }
@@ -127,7 +129,8 @@ export function loadExtendedProjectData(projectId: string): ExtendedProjectData 
   try {
     const raw = localStorage.getItem(EXT_KEY(projectId));
     return raw ? (JSON.parse(raw) as ExtendedProjectData) : null;
-  } catch {
+  } catch (err) {
+    console.error("[workflow-store] corrupt localStorage entry — data hidden from UI:", err);
     return null;
   }
 }
@@ -162,7 +165,8 @@ export function loadOutcomes(projectId: string): BuilderPackOutcome[] {
   try {
     const raw = localStorage.getItem(OUTCOMES_KEY(projectId));
     return raw ? (JSON.parse(raw) as BuilderPackOutcome[]) : [];
-  } catch {
+  } catch (err) {
+    console.error("[workflow-store] corrupt localStorage entry — data hidden from UI:", err);
     return [];
   }
 }

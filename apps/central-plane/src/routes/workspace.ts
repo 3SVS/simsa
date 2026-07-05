@@ -238,6 +238,15 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     // Increment rate-limit counter after successful generation (non-fatal)
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
+    // Honest failure (2026-07-05): the LLM being down must LOOK down — a 503
+    // the client renders as "다시 시도해주세요", never a fabricated draft.
+    if (result.ok === false) {
+      return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), {
+        status: 503,
+        headers: { "content-type": "application/json", ...headers },
+      });
+    }
+
     // Record usage event (non-fatal)
     await insertUsageEvent(c.env, {
       userKey: typeof (body as Record<string, unknown>)["userKey"] === "string"
@@ -423,6 +432,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
+    if (result.ok === false) {
+      return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
+    }
+
     // Best-effort persist check run to D1 — only into projects the caller owns.
     if (req.projectId && checkProjectOwned) {
       saveCheckRun(c.env, req.projectId, result.source, result).catch(() => undefined);
@@ -488,6 +501,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
+    if (result.ok === false) {
+      return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
+    }
+
     if (req.projectId && fixProjectOwned) {
       saveFixSuggestionToDb(c.env, req.projectId, req.item.id, result.suggestion).catch(() => undefined);
     }
@@ -547,7 +564,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
           items: Array.isArray(dbProj.items) ? dbProj.items : [],
         };
       } catch (err) {
-        console.warn("[workspace/export] D1 load failed:", err);
+        // Honest failure: a DB error must not become an empty "successful"
+        // export (ok:true, fileCount:0) — say it failed so the user retries.
+        console.error("[workspace/export] D1 load failed:", err);
+        return new Response(JSON.stringify({ ok: false, error: "project_load_failed" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
       }
     }
 

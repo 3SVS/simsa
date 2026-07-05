@@ -193,9 +193,8 @@ function NewProjectInner() {
     } else if (res.error === "rate_limited") {
       setRateLimitMsg(t.common.rateLimited);
     } else {
-      setResult(res.fallback);
-      setIsFallback(true);
-      setStep(2);
+      // Honest failure: no fabricated draft — say it failed, let them retry.
+      setRateLimitMsg(t.errors.llmUnavailable);
     }
     setIsLoading(false);
   }
@@ -216,9 +215,7 @@ function NewProjectInner() {
     } else if (res.error === "rate_limited") {
       setRateLimitMsg(t.common.rateLimited);
     } else {
-      setSpecResult(res.fallback);
-      setIsFallback(true);
-      setStep(4);
+      setRateLimitMsg(t.errors.llmUnavailable);
     }
     setIsGeneratingSpec(false);
   }
@@ -239,9 +236,7 @@ function NewProjectInner() {
     } else if (res.error === "rate_limited") {
       setRateLimitMsg(t.common.rateLimited);
     } else {
-      setSpecResult(res.fallback);
-      setIsFallback(true);
-      setStep(4);
+      setRateLimitMsg(t.errors.llmUnavailable);
     }
     setIsLoading(false);
   }
@@ -260,8 +255,10 @@ function NewProjectInner() {
     let generated: IdeaToSpecDraftResponse | null = null;
     if (codeDesc.trim()) {
       const res = await callWorkspaceApi({ idea: codeDesc.trim() });
+      // Honest failure: if generation fails the project is simply created
+      // without draft items (normal for this branch) — never with mock items
+      // silently saved as if they were real.
       if (res.ok) generated = res.data;
-      else if (res.error !== "rate_limited") generated = res.fallback;
     }
 
     const id = generateProjectId();

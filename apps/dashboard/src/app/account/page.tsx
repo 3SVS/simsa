@@ -7,7 +7,8 @@
 // scaffold): the requiresSignIn/planned badge farm and the "공개 가입이
 // 아닙니다" copy are gone — sign-up IS open, login is a first-class flow, and
 // this page is where "who am I / how do I sign out" must be obvious.
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -22,6 +23,14 @@ import type { MembershipBridge, ClaimResult } from "@/lib/auth-client.mjs";
 import { getUserKey } from "@/lib/workflow-store";
 
 export default function AccountPage() {
+  return (
+    <Suspense fallback={null}>
+      <AccountInner />
+    </Suspense>
+  );
+}
+
+function AccountInner() {
   const { t } = useI18n();
   const a = t.account;
   const [displayName, setDisplayName] = useState("");
@@ -32,6 +41,8 @@ export default function AccountPage() {
   const [membership, setMembership] = useState<MembershipBridge | null>(null);
   const [claimPhase, setClaimPhase] = useState<"idle" | "working" | "done" | "error">("idle");
   const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
+  const searchParams = useSearchParams();
+  const claimFailedRedirect = searchParams?.get("claim") === "failed";
 
   useEffect(() => {
     setDisplayName(readDisplayName(typeof window !== "undefined" ? window.localStorage : null, ""));
@@ -99,6 +110,12 @@ export default function AccountPage() {
       {/* Sign-in state — the first thing this page must answer. */}
       <section className="card mt-6 p-5">
         <p className="section-title">{a.auth.heading}</p>
+
+        {claimFailedRedirect && claimPhase === "idle" && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {a.auth.claimError}
+          </p>
+        )}
 
         {authStatus.status === "loading" && (
           <p className="mt-3 text-sm text-gray-500">{a.auth.loading}</p>

@@ -46,6 +46,7 @@ export function errorText(t, codeOrMessage, fallbackKey = "generic") {
   const fallback = errors[fallbackKey] ?? errors.generic ?? "Something went wrong.";
   if (!codeOrMessage || typeof codeOrMessage !== "string") return fallback;
 
+  if (codeOrMessage === "llm_unavailable") return errors.llmUnavailable ?? fallback;
   const raw = codeOrMessage.trim();
   const lower = raw.toLowerCase();
 

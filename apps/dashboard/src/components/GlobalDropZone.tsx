@@ -83,6 +83,8 @@ export function GlobalDropZone() {
             );
           }
         } catch {
+          setNotice(t.dropzone.readError);
+          window.setTimeout(() => setNotice(null), 6000);
           return;
         }
         router.push("/projects/new?path=spec&dropped=1");

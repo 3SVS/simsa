@@ -20,7 +20,8 @@ export type GitHubUser = { login: string; name?: string; avatarUrl?: string };
 
 export type GitHubStatusResponse =
   | { ok: true; connected: false }
-  | { ok: true; connected: true; user: GitHubUser };
+  | { ok: true; connected: true; user: GitHubUser }
+  | { ok: false; error: string };
 
 export type GitHubRepo = {
   id: string;
@@ -84,10 +85,11 @@ export async function fetchGitHubStatus(userKey: string): Promise<GitHubStatusRe
       `${CENTRAL_PLANE_URL}/workspace/github/status?userKey=${encodeURIComponent(userKey)}`,
       { signal: AbortSignal.timeout(8000) },
     );
-    if (!resp.ok) return { ok: true, connected: false };
+    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
     return (await resp.json()) as GitHubStatusResponse;
   } catch {
-    return { ok: true, connected: false };
+    // Honest failure: an error is not "disconnected" — callers show a retry.
+    return { ok: false, error: "network" };
   }
 }
 

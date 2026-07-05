@@ -219,7 +219,7 @@ function isValidFixResponse(v: unknown): v is { plainSummary: string; builderBri
 export async function generateFixSuggestion(
   req: WorkspaceFixSuggestionRequest,
   anthropicApiKey: string | undefined,
-): Promise<WorkspaceFixSuggestionResponse> {
+): Promise<WorkspaceFixSuggestionResponse | { ok: false; error: "llm_unavailable" }> {
   if (!anthropicApiKey) {
     console.warn("[workspace/fix] no API key — using mock fallback");
     return buildMockFixFallback(req);
@@ -231,20 +231,27 @@ export async function generateFixSuggestion(
     rawText = await callAnthropic(anthropicApiKey, prompt);
   } catch (err) {
     console.error("[workspace/fix] LLM call failed:", err);
-    return buildMockFixFallback(req);
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return buildMockFixFallback(req);
+  if (!jsonMatch) {
+    console.warn("[workspace/fix] LLM returned non-JSON. head:", rawText.slice(0, 200));
+    return { ok: false as const, error: "llm_unavailable" as const };
+  }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch {
-    return buildMockFixFallback(req);
+    console.warn("[workspace/fix] JSON parse failed");
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
-  if (!isValidFixResponse(parsed)) return buildMockFixFallback(req);
+  if (!isValidFixResponse(parsed)) {
+    console.warn("[workspace/fix] response failed shape validation");
+    return { ok: false as const, error: "llm_unavailable" as const };
+  }
 
   const p = parsed as FixSuggestion;
   return {

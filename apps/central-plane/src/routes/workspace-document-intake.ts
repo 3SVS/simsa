@@ -168,8 +168,8 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
     }
 
     // ── Generate via the SAME path as idea-to-spec-draft ────────────────────
-    // generateIdeaToSpecDraft degrades to a deterministic mock-fallback when
-    // ANTHROPIC_API_KEY is absent or the LLM call fails — preserved here.
+    // generateIdeaToSpecDraft keeps the keyless dev mock, but an LLM FAILURE
+    // now surfaces as 503 llm_unavailable (honest-failures policy).
     const input = buildDocumentDraftPrompt(extracted.text, {
       title: project.title,
       idea: typeof project.idea === "string" ? project.idea : "",
@@ -184,6 +184,11 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
     }
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
+
+    // Honest failure: never hand a fabricated draft for a real document.
+    if (result.ok === false) {
+      return c.json({ ok: false, error: "llm_unavailable" }, 503);
+    }
 
     // Record usage event (non-fatal)
     await insertUsageEvent(c.env, {

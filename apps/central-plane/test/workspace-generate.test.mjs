@@ -82,16 +82,15 @@ describe("generateIdeaToSpecDraft", () => {
     assert.ok(Array.isArray(result.warnings));
   });
 
-  it("returns mock-fallback when Anthropic returns non-JSON", async () => {
-    // Simulate malformed LLM response via a fake API key that hits a mock
-    // We test the fallback path by passing a key that will get a network error
+  it("returns an EXPLICIT llm_unavailable error when the LLM call fails (honest-failures policy)", async () => {
+    // 2026-07-05: a failing LLM must never fabricate a draft that looks real.
+    // A bad key exhausts the retry helper and surfaces as an explicit error.
     const result = await generateIdeaToSpecDraft(
       { idea: "테스트 아이디어" },
       "fake-key-will-fail",
     );
-    // Should still return valid shape (fallback)
-    assert.equal(result.ok, true);
-    assertValidResponse(result);
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "llm_unavailable");
   });
 
   it("items all have status not_started", async () => {

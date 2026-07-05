@@ -312,7 +312,7 @@ function isValidCheckResponse(v: unknown): v is { results: CheckResultItem[] } {
 export async function generateCheckDraft(
   req: WorkspaceCheckDraftRequest,
   anthropicApiKey: string | undefined,
-): Promise<WorkspaceCheckDraftResponse> {
+): Promise<WorkspaceCheckDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.items?.length) {
     return {
       ok: true,
@@ -334,20 +334,26 @@ export async function generateCheckDraft(
     rawText = await callAnthropic(anthropicApiKey, prompt);
   } catch (err) {
     console.error("[workspace/check] LLM call failed:", err);
-    return buildMockCheckFallback(req);
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return buildMockCheckFallback(req);
+  if (!jsonMatch) {
+    console.warn("[workspace/check] LLM returned non-JSON. head:", rawText.slice(0, 200));
+    return { ok: false as const, error: "llm_unavailable" as const };
+  }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch {
-    return buildMockCheckFallback(req);
+    return { ok: false as const, error: "llm_unavailable" as const };
   }
 
-  if (!isValidCheckResponse(parsed)) return buildMockCheckFallback(req);
+  if (!isValidCheckResponse(parsed)) {
+    console.warn("[workspace/check] response failed shape validation");
+    return { ok: false as const, error: "llm_unavailable" as const };
+  }
 
   const resultMap = new Map(req.items.map((i) => [i.id, i.title]));
   const results: CheckResultItem[] = (parsed.results as CheckResultItem[]).map((r) => ({

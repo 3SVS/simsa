@@ -45,7 +45,15 @@ function LoginInner() {
   // 로그인됨 ≠ 데이터연결됨 — the single post-login path: claim FIRST, then go.
   const claimAndGo = useCallback(async () => {
     setPhase("claiming");
-    await claimWorkspace(getUserKey()).catch(() => undefined);
+    const claim = await claimWorkspace(getUserKey()).catch(() => null);
+    if (!claim || claim.ok !== true) {
+      // Honest failure: the whole point of logging in was linking this
+      // browser's projects — a silent claim failure defeats it. The account
+      // page can retry; navigation continues so the user isn't stranded.
+      console.error("[login] claim failed after sign-in", claim);
+      router.replace(`/account?claim=failed`);
+      return;
+    }
     router.replace(nextPath);
   }, [router, nextPath]);
 

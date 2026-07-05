@@ -38,7 +38,7 @@ export default function SettingsPage() {
   const justConnected = searchParams?.get("github") === "connected";
   const { t, locale } = useI18n();
 
-  const [phase, setPhase] = useState<"loading" | "disconnected" | "connected" | "selecting">("loading");
+  const [phase, setPhase] = useState<"loading" | "disconnected" | "status_error" | "connected" | "selecting">("loading");
   const [ghUser, setGhUser] = useState<GitHubUser | null>(null);
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [reposPhase, setReposPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -223,7 +223,11 @@ export default function SettingsPage() {
       fetchProjectRepo(id, getUserKey()),
     ]);
 
-    if (statusRes.connected) {
+    if (statusRes.ok === false) {
+      // A transient status failure must not read as "not connected" — the user
+      // would re-run OAuth for nothing. Distinct error state + retry.
+      setPhase("status_error");
+    } else if (statusRes.connected) {
       setGhUser(statusRes.user);
       setPhase("connected");
     } else {
@@ -352,6 +356,15 @@ export default function SettingsPage() {
       )}
 
       {/* Not connected */}
+      {phase === "status_error" && (
+        <div className="card p-8 text-center">
+          <p className="mb-4 text-sm text-gray-600">{t.github.connectionLoadError}</p>
+          <button onClick={() => void loadStatus()} className="btn btn-md btn-primary">
+            {t.common.retry}
+          </button>
+        </div>
+      )}
+
       {phase === "disconnected" && (
         <div className="card p-8 text-center">
           {disconnectPhase === "done" && (
