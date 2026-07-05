@@ -201,6 +201,62 @@ export async function startGithubLogin(callbackURL, fetchImpl) {
 }
 
 /**
+ * Start Google social login (D3). Many non-developers have a Google account, so
+ * this is the first-class social option. Returns the provider redirect URL — the
+ * caller navigates to it. Dormant server-side until AUTH_GOOGLE_* is configured
+ * (then this returns an error the UI degrades on). Never throws.
+ * @param {string} callbackURL where Better Auth lands the browser after OAuth
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ ok: true, url: string } | { ok: false, error: string }>}
+ */
+export async function startGoogleLogin(callbackURL, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "no_fetch" };
+  try {
+    const res = await f(SIGN_IN_SOCIAL_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "google", callbackURL }),
+    });
+    const data = res ? await res.json().catch(() => null) : null;
+    if (res && res.ok && data && typeof data.url === "string" && data.url) {
+      return { ok: true, url: data.url };
+    }
+    return { ok: false, error: data && typeof data.message === "string" ? data.message : `http_${res ? res.status : 0}` };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+/**
+ * Re-send the email-verification link (D2 soft-auth). Uses Better Auth's built-in
+ * endpoint. Verifying is what unlocks the workspace claim (cross-device sync);
+ * it never blocks sign-in. Never throws.
+ * @param {string} email
+ * @param {string} [callbackURL] where to land after the user clicks the link
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ */
+export async function sendVerificationEmail(email, callbackURL, fetchImpl) {
+  const f = fetchImpl || (typeof fetch !== "undefined" ? fetch : null);
+  if (!f) return { ok: false, error: "no_fetch" };
+  try {
+    const res = await f("/api/auth/send-verification-email", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, ...(callbackURL ? { callbackURL } : {}) }),
+    });
+    if (res && res.ok) return { ok: true };
+    const data = res ? await res.json().catch(() => null) : null;
+    return { ok: false, error: data && typeof data.message === "string" ? data.message : `http_${res ? res.status : 0}` };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+/**
  * Resolve a UI auth status from a session fetch result. Pure + deterministic.
  * @param {{ loading?: boolean, error?: boolean, session?: any }} input
  * @returns {{ status: "loading" | "error" | "signed_in" | "signed_out", email: string | null }}

@@ -79,6 +79,24 @@ export function resolveGithubLoginProvider(
   return { clientId, clientSecret };
 }
 
+/**
+ * Google social-login provider config (D3). Many non-developers have a Google
+ * account, so this is the first-class social option for the open beta (Kakao is
+ * deferred until post-open — its email scope requires a Kakao Biz app / identity
+ * verification). DORMANT until BOTH AUTH_GOOGLE_CLIENT_ID and
+ * AUTH_GOOGLE_CLIENT_SECRET are set (fail-safe: partial config yields no
+ * provider). Pure + exported so the gating is unit-testable.
+ */
+export function resolveGoogleLoginProvider(
+  env: Partial<Env> | undefined,
+): { clientId: string; clientSecret: string } | null {
+  const e = env ?? {};
+  const clientId = typeof e.AUTH_GOOGLE_CLIENT_ID === "string" ? e.AUTH_GOOGLE_CLIENT_ID.trim() : "";
+  const clientSecret = typeof e.AUTH_GOOGLE_CLIENT_SECRET === "string" ? e.AUTH_GOOGLE_CLIENT_SECRET.trim() : "";
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret };
+}
+
 export function createBetterAuthRuntime(env: Partial<Env> | undefined) {
   if (resolveAuthRuntimeGate(env) !== "ready") return null;
   const e = env ?? {};
@@ -90,6 +108,11 @@ export function createBetterAuthRuntime(env: Partial<Env> | undefined) {
   // options identical to before (origin derived from the request). Never activates auth.
   const topology = resolveAuthTopologyConfig(e);
   const github = resolveGithubLoginProvider(e);
+  const google = resolveGoogleLoginProvider(e);
+  const socialProviders = {
+    ...(github ? { github } : {}),
+    ...(google ? { google } : {}),
+  };
   // D2 soft-auth: send a verification email on sign-up ONLY when Resend is
   // configured (else we couldn't deliver it). `emailAndPassword` deliberately
   // does NOT set requireEmailVerification — sign-in is never blocked; the
@@ -113,7 +136,7 @@ export function createBetterAuthRuntime(env: Partial<Env> | undefined) {
           },
         }
       : {}),
-    ...(github ? { socialProviders: { github } } : {}),
+    ...(Object.keys(socialProviders).length > 0 ? { socialProviders } : {}),
     ...(topology.baseURL ? { baseURL: topology.baseURL } : {}),
     ...(topology.trustedOrigins ? { trustedOrigins: topology.trustedOrigins } : {}),
   });

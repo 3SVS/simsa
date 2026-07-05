@@ -311,6 +311,17 @@ export interface Env {
   AUTH_GH_CLIENT_ID?: string;
   AUTH_GH_CLIENT_SECRET?: string;
   /**
+   * D3 — Google SOCIAL LOGIN (Better Auth socialProviders.google). Many
+   * non-developers have a Google account, so this is the first-class social
+   * option for the open beta. Callback lives on the DASHBOARD origin
+   * (https://app.trysimsa.com/api/auth/callback/google via the /api/auth proxy).
+   * Dormant until BOTH are set. Secret via the set-worker-secrets workflow —
+   * never local wrangler. (Kakao is deferred post-open: its email scope needs a
+   * Kakao Biz app / identity verification.)
+   */
+  AUTH_GOOGLE_CLIENT_ID?: string;
+  AUTH_GOOGLE_CLIENT_SECRET?: string;
+  /**
    * Stage 241 — auth sign-up exposure guard. Controls whether the public
    * `POST /api/auth/sign-up/*` endpoint is allowed, INDEPENDENTLY of AUTH_ENABLED.
    * Fail-closed: default (unset / unknown) = "disabled" → sign-up is blocked (403

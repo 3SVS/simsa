@@ -22,6 +22,7 @@ import {
   signInEmail,
   signUpEmail,
   startGithubLogin,
+  startGoogleLogin,
   claimWorkspace,
 } from "@/lib/auth-client.mjs";
 
@@ -42,6 +43,7 @@ function LoginInner() {
   const [phase, setPhase] = useState<"idle" | "working" | "claiming">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [ghUnavailable, setGhUnavailable] = useState(false);
+  const [googleUnavailable, setGoogleUnavailable] = useState(false);
 
   // 로그인됨 ≠ 데이터연결됨 — the single post-login path: claim FIRST, then go.
   const claimAndGo = useCallback(async () => {
@@ -55,6 +57,13 @@ function LoginInner() {
     if (typeof window !== "undefined") window.dispatchEvent(new Event("simsa:auth-changed"));
     const claim = await claimWorkspace(getUserKey()).catch(() => null);
     if (!claim || claim.ok !== true) {
+      // D2 soft-auth: an unverified email doesn't block using Simsa — only the
+      // cross-device claim. Route to the "verify to sync" guidance, not the
+      // generic claim-failed banner.
+      if (claim && claim.ok === false && claim.error === "email_unverified") {
+        router.replace(`/account?verify=1`);
+        return;
+      }
       // Honest failure: the whole point of logging in was linking this
       // browser's projects — a silent claim failure defeats it. The account
       // page can retry; navigation continues so the user isn't stranded.
@@ -88,6 +97,19 @@ function LoginInner() {
     setPhase("idle");
   }
 
+  async function handleGoogle() {
+    setErrorMsg("");
+    setPhase("working");
+    const res = await startGoogleLogin(`/login?next=${encodeURIComponent(nextPath)}`);
+    if (res.ok) {
+      window.location.href = res.url;
+      return;
+    }
+    // Provider not configured yet (dormant) or transient failure — degrade to email.
+    setGoogleUnavailable(true);
+    setPhase("idle");
+  }
+
   async function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (phase !== "idle") return;
@@ -118,12 +140,25 @@ function LoginInner() {
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.login.title}</h1>
         <p className="mb-8 mt-2 text-sm text-gray-500">{t.login.subtitle}</p>
 
+        {/* Google is the first-class social option for the non-developer beta
+            audience; GitHub is secondary (for the developer path). */}
         <button
-          onClick={handleGithub}
+          onClick={handleGoogle}
           disabled={phase !== "idle"}
           className="btn btn-primary w-full py-3"
         >
-          {phase === "claiming" ? t.login.linking : t.login.github}
+          {phase === "claiming" ? t.login.linking : t.login.google}
+        </button>
+        {googleUnavailable && (
+          <p className="mt-2 text-xs text-amber-600">{t.login.googleUnavailable}</p>
+        )}
+
+        <button
+          onClick={handleGithub}
+          disabled={phase !== "idle"}
+          className="btn btn-secondary mt-2 w-full py-3"
+        >
+          {t.login.github}
         </button>
         {ghUnavailable && (
           <p className="mt-2 text-xs text-amber-600">{t.login.githubUnavailable}</p>

@@ -18,7 +18,7 @@ import {
   displayInitial,
   DISPLAY_NAME_MAX,
 } from "@/lib/account-preferences.mjs";
-import { getAuthSession, signOutAuth, resolveAuthStatus, getMembership, claimWorkspace } from "@/lib/auth-client.mjs";
+import { getAuthSession, signOutAuth, resolveAuthStatus, getMembership, claimWorkspace, sendVerificationEmail } from "@/lib/auth-client.mjs";
 import type { MembershipBridge, ClaimResult } from "@/lib/auth-client.mjs";
 import { getUserKey, setActiveAccountNamespace, clearActiveAccount } from "@/lib/workflow-store";
 
@@ -41,8 +41,24 @@ function AccountInner() {
   const [membership, setMembership] = useState<MembershipBridge | null>(null);
   const [claimPhase, setClaimPhase] = useState<"idle" | "working" | "done" | "error">("idle");
   const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
+  const [resendPhase, setResendPhase] = useState<"idle" | "working" | "done" | "error">("idle");
   const searchParams = useSearchParams();
   const claimFailedRedirect = searchParams?.get("claim") === "failed";
+  const verifyRequested = searchParams?.get("verify") === "1";
+
+  // D2 soft-auth: the session carries emailVerified. Show the "verify to sync
+  // across devices" banner when signed in but not yet verified (or when the
+  // login claim bounced here with ?verify=1). Verifying never blocks usage.
+  const sessionUser = (authSession as { user?: { email?: string; emailVerified?: boolean } } | null)?.user;
+  const sessionEmail = typeof sessionUser?.email === "string" ? sessionUser.email : "";
+  const emailUnverified = sessionUser?.emailVerified === false;
+
+  async function onResendVerification() {
+    if (!sessionEmail) return;
+    setResendPhase("working");
+    const res = await sendVerificationEmail(sessionEmail, "/account");
+    setResendPhase(res.ok ? "done" : "error");
+  }
 
   useEffect(() => {
     setDisplayName(readDisplayName(typeof window !== "undefined" ? window.localStorage : null, ""));
@@ -164,6 +180,30 @@ function AccountInner() {
               </button>
               {authError && <p className="mt-1 text-xs text-red-500">{a.auth.signOutError}</p>}
             </div>
+
+            {/* D2 soft-auth: guidance (not a block) to verify for cross-device sync. */}
+            {(emailUnverified || verifyRequested) && (
+              <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3">
+                <p className="text-xs font-semibold text-blue-900">{a.auth.verifyTitle}</p>
+                <p className="mt-1 text-xs text-blue-800">{a.auth.verifyDesc}</p>
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={onResendVerification}
+                    disabled={resendPhase === "working" || !sessionEmail}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    {resendPhase === "working" ? a.auth.verifySending : a.auth.verifyResend}
+                  </button>
+                </div>
+                {resendPhase === "done" && (
+                  <p className="mt-2 text-xs text-green-700">{a.auth.verifySent}</p>
+                )}
+                {resendPhase === "error" && (
+                  <p className="mt-2 text-xs text-red-600">{a.auth.verifyError}</p>
+                )}
+              </div>
+            )}
 
             {/* Claim: attach this browser's userKey-scoped data to the account. */}
             {membership?.canClaimProjects && (

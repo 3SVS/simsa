@@ -125,6 +125,13 @@ const EN = {
         "Sign-in worked. We just couldn't link this browser's projects to your account. Your projects are safe on this device; try linking again.",
       claimRetry: "Link my projects",
       claimRetryFailed: "Still couldn't link. Check your connection and try once more.",
+      verifyTitle: "Verify your email to sync across devices",
+      verifyDesc:
+        "You can keep using Simsa in this browser. Verify your email to link your projects to your account and see them on other devices.",
+      verifyResend: "Resend verification email",
+      verifySending: "Sending…",
+      verifySent: "Sent — check your inbox for the verification link.",
+      verifyError: "Couldn't send the email. Try again in a moment.",
     },
     badges: {
       local: "Local",
@@ -279,6 +286,8 @@ const EN = {
   login: {
     title: "Sign in to Simsa",
     subtitle: "Keep your projects and review results — on any device, in any browser.",
+    google: "Continue with Google",
+    googleUnavailable: "Google sign-in isn't available right now — use email below.",
     github: "Continue with GitHub",
     githubUnavailable: "GitHub sign-in isn't available right now — use email below.",
     or: "or",
@@ -2330,6 +2339,13 @@ const KO = {
         "로그인은 정상적으로 됐어요. 이 브라우저의 프로젝트를 계정에 연결하는 것만 실패했습니다. 프로젝트는 이 기기에 그대로 있으니, 아래에서 다시 연결해 주세요.",
       claimRetry: "프로젝트 연결하기",
       claimRetryFailed: "여전히 연결하지 못했어요. 연결 상태를 확인하고 한 번 더 시도해 주세요.",
+      verifyTitle: "다른 기기에서도 보려면 이메일을 인증하세요",
+      verifyDesc:
+        "인증 전에도 이 브라우저에서는 그대로 사용하실 수 있어요. 이메일을 인증하면 프로젝트가 계정에 연결되어 다른 기기에서도 볼 수 있습니다.",
+      verifyResend: "인증 메일 다시 보내기",
+      verifySending: "보내는 중…",
+      verifySent: "보냈어요 — 받은 편지함에서 인증 링크를 확인해주세요.",
+      verifyError: "메일을 보내지 못했어요. 잠시 후 다시 시도해주세요.",
     },
     badges: {
       local: "로컬",
@@ -2481,6 +2497,8 @@ const KO = {
   login: {
     title: "Simsa 로그인",
     subtitle: "프로젝트와 확인 결과를 계정에 보관하세요 — 어떤 기기, 어떤 브라우저에서도 유지돼요.",
+    google: "Google로 계속하기",
+    googleUnavailable: "지금은 Google 로그인을 쓸 수 없어요 — 아래 이메일로 로그인해주세요.",
     github: "GitHub으로 계속하기",
     githubUnavailable: "지금은 GitHub 로그인을 쓸 수 없어요 — 아래 이메일로 로그인해주세요.",
     or: "또는",
