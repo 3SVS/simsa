@@ -26,6 +26,12 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatCard } from "@/components/StatCard";
 import type { ItemStatus } from "@/lib/labels";
+import {
+  buildReviewVerdict,
+  severityChipClass,
+  severityCode,
+  isActionableStatus,
+} from "@/lib/review-severity.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import { statusLabel } from "@/i18n/dictionary.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
@@ -41,6 +47,9 @@ export default function ChecksPage() {
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [results, setResults] = useState<CheckDraftResponse | null>(null);
   const [rateLimitMsg, setRateLimitMsg] = useState<string | null>(null);
+  // Collapsible findings: actionable (non-passed) cards default open; passed
+  // cards collapse so the report doesn't become a wall of green.
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
   // ── PR code check state ───────────────────────────────────────────────────
   const [linkedPulls, setLinkedPulls] = useState<LinkedPull[]>([]);
@@ -54,6 +63,21 @@ export default function ChecksPage() {
       setPhase("done");
     }
   }, [id]);
+
+  // Seed the open set whenever results change: actionable findings expanded.
+  useEffect(() => {
+    if (!results) return;
+    setOpenIds(new Set(results.results.filter((r) => isActionableStatus(r.status)).map((r) => r.itemId)));
+  }, [results]);
+
+  const toggleOpen = useCallback((itemId: string) => {
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }, []);
 
   // Load linked PRs and their latest review runs
   useEffect(() => {
@@ -151,16 +175,28 @@ export default function ChecksPage() {
             <p className="mt-0.5 text-xs text-gray-500">{t.checks.draftDesc}</p>
           </div>
           {phase === "done" && (
-            <button onClick={runCheck} className="flex-shrink-0 text-xs font-medium text-brand-700 hover:text-brand-800">
+            <button onClick={runCheck} className="btn btn-sm btn-secondary flex-shrink-0">
               {t.checks.reRun}
             </button>
           )}
         </div>
 
+        {/* In-progress: Vercel deploy-dot pattern — a pulsing ● + a live counter,
+            so system status is visible rather than a bare spinner (Nielsen H1). */}
         {phase === "loading" && (
-          <div className="my-4 flex items-center gap-2.5 text-sm text-gray-500">
-            <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-brand-300 border-t-brand-600" />
-            {t.checks.checking}
+          <div className="my-4 flex items-center gap-2.5 text-sm text-gray-600">
+            <span className="relative flex h-2.5 w-2.5 flex-shrink-0" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75 motion-reduce:animate-none" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-600" />
+            </span>
+            <span>
+              {t.checks.checking}
+              {project.requirements.length > 0 && (
+                <span className="ml-1 text-gray-400">
+                  ({project.requirements.length} {t.checks.itemsChecked})
+                </span>
+              )}
+            </span>
           </div>
         )}
 
@@ -174,17 +210,13 @@ export default function ChecksPage() {
 
         {results && (
           <>
-            <div className="my-4 flex items-baseline gap-3">
-              <p className={`text-xl font-semibold tracking-tight ${needsAction === 0 ? "text-green-600" : "text-gray-900"}`}>
-                {needsAction === 0
-                  ? t.checks.verdictAllPassed
-                  : t.checks.verdictNeedsAction.replace("{n}", String(needsAction))}
-              </p>
-              <span className="text-xs text-gray-400">{results.results.length} {t.checks.itemsChecked}</span>
-              {results.source === "mock-fallback" && (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-600">{t.checks.draftTag}</span>
-              )}
-            </div>
+            {/* Verdict banner — triple-encoded (icon + colour + text) so it stays
+                colourblind-safe (CodeRabbit/Graphite grammar). */}
+            <VerdictBanner
+              t={t}
+              summary={results.summary}
+              isDraft={results.source === "mock-fallback"}
+            />
             <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label={statusLabel(t, "passed")} value={results.summary.passed} colorClass="text-green-600" />
               <StatCard label={statusLabel(t, "failed")} value={results.summary.failed} colorClass="text-red-600" />
@@ -222,10 +254,33 @@ export default function ChecksPage() {
         )}
 
         {results && (
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{t.checks.itemDetails}</p>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{t.checks.itemDetails}</p>
+              {results.results.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenIds((prev) =>
+                      prev.size === results.results.length
+                        ? new Set()
+                        : new Set(results.results.map((r) => r.itemId)),
+                    )
+                  }
+                  className="text-xs font-medium text-gray-500 hover:text-gray-800"
+                >
+                  {openIds.size === results.results.length ? t.interaction.collapseAll : t.interaction.expandAll}
+                </button>
+              )}
+            </div>
             {results.results.map((r) => (
-              <CheckResultCard key={r.itemId} t={t} result={r} />
+              <CheckResultCard
+                key={r.itemId}
+                t={t}
+                result={r}
+                open={openIds.has(r.itemId)}
+                onToggle={() => toggleOpen(r.itemId)}
+              />
             ))}
           </div>
         )}
@@ -327,30 +382,113 @@ export default function ChecksPage() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function CheckResultCard({ t, result }: { t: Dictionary; result: CheckResultItem }) {
+/** Tinted severity chip (P0/P1/P2) — never a solid fill. */
+function SeverityChip({ status }: { status: string }) {
+  const code = severityCode(status);
+  if (!code) return null;
   return (
-    <div className="card p-5">
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <p className="text-sm font-medium text-gray-800">{result.title}</p>
+    <span className={`inline-flex flex-shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${severityChipClass(status)}`}>
+      {code}
+    </span>
+  );
+}
+
+/**
+ * Collapsible finding card. Collapsed row = severity chip + one-line title +
+ * status. Expanded = reason (what/why) + evidence + next step (how).
+ */
+function CheckResultCard({
+  t,
+  result,
+  open,
+  onToggle,
+}: {
+  t: Dictionary;
+  result: CheckResultItem;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const passed = result.status === "passed";
+  return (
+    <div className="card overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="row-hover flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        {passed ? (
+          <span className="inline-flex flex-shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700" aria-hidden>
+            ✓
+          </span>
+        ) : (
+          <SeverityChip status={result.status} />
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{result.title}</span>
         <StatusBadge status={result.status as ItemStatus} />
-      </div>
-      <p className="mb-2 text-xs leading-relaxed text-gray-600">{result.reason}</p>
-      {result.evidence.length > 0 && (
-        <div className="mb-2 rounded-lg bg-gray-50 px-3 py-2">
-          <p className="mb-1 text-xs font-medium text-gray-500">{t.items.evidence}</p>
-          <ul className="space-y-0.5">
-            {result.evidence.map((e, i) => (
-              <li key={i} className="flex gap-1.5 text-xs text-gray-500">
-                <span className="mt-px text-gray-300">-</span> {e}
-              </li>
-            ))}
-          </ul>
+        <span className={`flex-shrink-0 text-xs text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-gray-100 px-4 pb-4 pt-3">
+          <p className="mb-2 text-xs leading-relaxed text-gray-600">{result.reason}</p>
+          {result.evidence.length > 0 && (
+            <div className="mb-2 rounded-lg bg-gray-50 px-3 py-2">
+              <p className="mb-1 text-xs font-medium text-gray-500">{t.items.evidence}</p>
+              <ul className="space-y-0.5">
+                {result.evidence.map((e, i) => (
+                  <li key={i} className="flex gap-1.5 text-xs text-gray-500">
+                    <span className="mt-px text-gray-300">-</span> {e}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.status !== "passed" && result.nextAction && (
+            <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+              <span className="font-medium">{t.checks.nextStep}:</span> {result.nextAction}
+            </p>
+          )}
         </div>
       )}
-      {result.status !== "passed" && result.nextAction && (
-        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-          <span className="font-medium">{t.checks.nextStep}:</span> {result.nextAction}
+    </div>
+  );
+}
+
+/** Pass/fail verdict banner. Triple-encoded: glyph + colour + text + count. */
+function VerdictBanner({
+  t,
+  summary,
+  isDraft,
+}: {
+  t: Dictionary;
+  summary: { passed: number; failed: number; inconclusive: number; needsDecision: number };
+  isDraft: boolean;
+}) {
+  const verdict = buildReviewVerdict(summary);
+  const pass = verdict.tone === "pass";
+  const tone = pass
+    ? "border-green-200 bg-green-50 text-green-800"
+    : "border-red-200 bg-red-50 text-red-800";
+  const dot = pass ? "bg-green-500" : "bg-red-500";
+  return (
+    <div className={`my-4 flex items-center gap-3 rounded-lg border px-4 py-3 ${tone}`}>
+      <span className={`grid h-6 w-6 flex-shrink-0 place-items-center rounded-full text-sm font-bold text-white ${dot}`} aria-hidden>
+        {pass ? "✓" : "!"}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">
+          {pass ? t.interaction.verdictPassTitle : t.interaction.verdictFailTitle}
         </p>
+        <p className="text-xs opacity-80">
+          {verdict.passed} / {verdict.total} {t.interaction.verdictPassed}
+        </p>
+      </div>
+      {isDraft && (
+        <span className="flex-shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+          {t.checks.draftTag}
+        </span>
       )}
     </div>
   );
