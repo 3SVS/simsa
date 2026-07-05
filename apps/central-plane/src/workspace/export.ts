@@ -68,6 +68,11 @@ export type ExportFixSuggestion = {
 
 export type WorkspaceExportBuilderPackRequest = {
   projectId?: string;
+  /** D1-b regression loop: resolved app base URL (e.g. https://app.trysimsa.com).
+   *  Passed in by the route so the pure generator stays env-free. When present
+   *  together with projectId, the pack embeds a `/p/{projectId}/connect`
+   *  re-entry instruction; when either is absent, the block is omitted cleanly. */
+  appBaseUrl?: string;
   project?: {
     title: string;
     idea?: string;
@@ -516,6 +521,31 @@ function genCodexPrompt(
   ].join("\n");
 }
 
+// ─── D1-b regression hook ─────────────────────────────────────────────────────
+
+/**
+ * Fixed closing instruction that closes the idea-only loop: it tells the
+ * building agent to self-check against the acceptance criteria and then send
+ * the user back to Simsa with their deployed URL, via a project-scoped deep
+ * link. Deterministic and English (it is an instruction to a coding agent).
+ *
+ * Returns null when projectId or baseUrl is missing so the pack never emits a
+ * broken `/p//connect` link. The base URL is normalised (trailing slashes
+ * stripped) to avoid `//p/...`.
+ */
+export function regressionHookBlock(projectId?: string, appBaseUrl?: string): string | null {
+  const pid = (projectId ?? "").trim();
+  const base = (appBaseUrl ?? "").trim().replace(/\/+$/, "");
+  if (!pid || !base) return null;
+  const connectUrl = `${base}/p/${encodeURIComponent(pid)}/connect`;
+  return [
+    "## After building",
+    "",
+    "After you finish building, self-check the result against the acceptance criteria above.",
+    `Then tell the user to paste their deployed app URL at \`${connectUrl}\` so Simsa can review the live app.`,
+  ].join("\n");
+}
+
 // ─── Main export function ─────────────────────────────────────────────────────
 
 export function generateBuilderPack(
@@ -570,11 +600,15 @@ export function generateBuilderPack(
         )
       : fixSuggestions;
 
+  // ── D1-b regression hook (omitted cleanly when projectId/baseUrl absent) ───
+  const hook = regressionHookBlock(req.projectId, req.appBaseUrl);
+  const hookSuffix = hook ? `\n\n${hook}` : "";
+
   // ── Generate files ────────────────────────────────────────────────────────
   const baseFiles: ExportFile[] = [
     {
       path: "conclave-build-pack/README.md",
-      content: genReadme(title, target, allItems.length, effectiveItems.length),
+      content: genReadme(title, target, allItems.length, effectiveItems.length) + hookSuffix,
     },
     {
       path: "conclave-build-pack/product.md",
@@ -597,13 +631,15 @@ export function generateBuilderPack(
   if (target !== "codex") {
     baseFiles.push({
       path: "conclave-build-pack/CLAUDE_CODE_PROMPT.md",
-      content: genClaudeCodePrompt(title, effectiveItems, allItems.length),
+      content: genClaudeCodePrompt(title, effectiveItems, allItems.length) + hookSuffix,
     });
   }
   if (target !== "claude_code") {
     baseFiles.push({
       path: "conclave-build-pack/CODEX_PROMPT.md",
-      content: genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions),
+      content:
+        genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions) +
+        hookSuffix,
     });
   }
 

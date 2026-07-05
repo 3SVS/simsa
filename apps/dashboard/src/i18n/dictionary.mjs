@@ -2116,6 +2116,26 @@ const EN = {
       latestLabel: "Latest inspection",
     },
   },
+  // D1-b — project-scoped re-entry deep link (/p/{id}/connect). The builder pack
+  // sends the user here with their deployed URL so Simsa can review the live app.
+  connectReentry: {
+    title: "Connect your live app",
+    subtitle:
+      "Paste the address where your app is deployed. Simsa connects it and opens a visual check of the live app.",
+    projectLabel: "Project",
+    urlLabel: "Deployed app URL",
+    urlPlaceholder: "https://your-app.vercel.app",
+    urlHint: "The public web address where your finished app is running.",
+    submit: "Connect and review",
+    submitting: "Connecting…",
+    errInvalidUrl: "Enter a valid web address starting with http:// or https://.",
+    errConnectFailed: "We couldn't connect that address. Please try again.",
+    retry: "Try again",
+    success: "Connected. Opening the visual check…",
+    deviceNoteTitle: "This link is device-scoped",
+    deviceNoteBody:
+      "This project was created in another browser or device, so its details aren't stored here. You can still connect your deployed URL below. Sign in to sync your projects across devices.",
+  },
   // Stage 262 — project sources (연결): website, GitHub repo, uploaded documents.
   sources: {
     title: "Sources",
@@ -4304,6 +4324,26 @@ const KO = {
       viewReport: "리포트 보기",
       latestLabel: "최근 검수",
     },
+  },
+  // D1-b — 프로젝트별 재진입 딥링크 (/p/{id}/connect). 만들기 패키지가 배포된
+  // URL과 함께 사용자를 여기로 보내면 Simsa가 라이브 앱을 검수해요.
+  connectReentry: {
+    title: "라이브 앱 연결하기",
+    subtitle:
+      "앱이 배포된 주소를 붙여넣으세요. Simsa가 연결한 뒤 라이브 앱의 시각 검수를 바로 열어드려요.",
+    projectLabel: "프로젝트",
+    urlLabel: "배포된 앱 주소",
+    urlPlaceholder: "https://your-app.vercel.app",
+    urlHint: "완성된 앱이 돌아가고 있는 공개 웹 주소예요.",
+    submit: "연결하고 검수하기",
+    submitting: "연결 중…",
+    errInvalidUrl: "http:// 또는 https:// 로 시작하는 올바른 주소를 입력해주세요.",
+    errConnectFailed: "주소를 연결하지 못했어요. 다시 시도해주세요.",
+    retry: "다시 시도",
+    success: "연결됐어요. 시각 검수를 여는 중…",
+    deviceNoteTitle: "이 링크는 기기 전용이에요",
+    deviceNoteBody:
+      "이 프로젝트는 다른 브라우저나 기기에서 만들어져 여기에는 세부 정보가 저장돼 있지 않아요. 그래도 아래에서 배포된 주소를 연결할 수 있어요. 로그인하면 기기 간에 프로젝트가 동기화돼요.",
   },
   // Stage 262 — 연결(프로젝트 소스): 웹사이트 · GitHub 저장소 · 문서 업로드.
   sources: {

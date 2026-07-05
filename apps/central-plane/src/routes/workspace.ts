@@ -36,6 +36,7 @@ import {
   generateBuilderPack,
   type WorkspaceExportBuilderPackRequest,
 } from "../workspace/export.js";
+import { BRAND } from "../workspace/brand.js";
 import {
   saveOutcome,
   listOutcomes,
@@ -571,8 +572,14 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       }
     }
 
+    // D1-b: thread projectId + resolved app base URL so the pack can embed the
+    // `/p/{projectId}/connect` re-entry link. Env is resolved here (route) to
+    // keep generateBuilderPack pure. Omitted cleanly when projectId is absent.
+    const appBaseUrl = c.env.DASHBOARD_BASE_URL ?? BRAND.appUrl;
     const result = generateBuilderPack({
       project,
+      projectId: req.projectId,
+      appBaseUrl,
       target: req.target,
       format: req.format ?? "json",
       locale: req.locale ?? "ko",

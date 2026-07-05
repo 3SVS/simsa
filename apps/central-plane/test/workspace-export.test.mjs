@@ -280,3 +280,88 @@ describe("workspace export-builder-pack (Stage 7: selectedItemIds)", () => {
     assert.ok(readme.content.includes(`${MOCK_ITEMS.length}개 중`), "total item count missing from README");
   });
 });
+
+// ─── D1-b: regression re-entry hook ──────────────────────────────────────────
+
+describe("workspace export-builder-pack (D1-b: regression hook)", () => {
+  const HOOK_FILES = ["README.md", "CLAUDE_CODE_PROMPT.md", "CODEX_PROMPT.md"];
+
+  function filesEndingWith(res, suffixes) {
+    return res.bundle.files.filter((f) => suffixes.some((s) => f.path.endsWith(s)));
+  }
+
+  it("embeds the /p/{projectId}/connect link when projectId + appBaseUrl are given", () => {
+    const res = generateBuilderPack({
+      ...makeReq("both"),
+      projectId: "proj_abc123",
+      appBaseUrl: "https://app.trysimsa.com",
+    });
+    const expected = "https://app.trysimsa.com/p/proj_abc123/connect";
+    for (const file of filesEndingWith(res, HOOK_FILES)) {
+      assert.ok(file.content.includes(expected), `connect link missing from ${file.path}`);
+      assert.ok(file.content.includes("## After building"), `hook heading missing from ${file.path}`);
+    }
+  });
+
+  it("omits the hook cleanly when projectId is absent (no broken /p//connect)", () => {
+    const res = generateBuilderPack({
+      ...makeReq("both"),
+      appBaseUrl: "https://app.trysimsa.com",
+    });
+    for (const file of res.bundle.files) {
+      assert.ok(!file.content.includes("/p//connect"), `broken link in ${file.path}`);
+      assert.ok(!file.content.includes("/connect"), `hook should be absent in ${file.path}`);
+      assert.ok(!file.content.includes("## After building"), `hook heading leaked in ${file.path}`);
+    }
+  });
+
+  it("omits the hook cleanly when appBaseUrl is absent", () => {
+    const res = generateBuilderPack({
+      ...makeReq("both"),
+      projectId: "proj_abc123",
+    });
+    for (const file of res.bundle.files) {
+      assert.ok(!file.content.includes("/connect"), `hook should be absent in ${file.path}`);
+    }
+  });
+
+  it("never emits /p//connect even if projectId is blank", () => {
+    const res = generateBuilderPack({
+      ...makeReq("both"),
+      projectId: "   ",
+      appBaseUrl: "https://app.trysimsa.com",
+    });
+    for (const file of res.bundle.files) {
+      assert.ok(!file.content.includes("/p//connect"), `broken link in ${file.path}`);
+      assert.ok(!file.content.includes("/connect"), `hook should be absent in ${file.path}`);
+    }
+  });
+
+  it("strips a trailing slash from appBaseUrl (no double slash)", () => {
+    const res = generateBuilderPack({
+      ...makeReq("both"),
+      projectId: "proj_abc123",
+      appBaseUrl: "https://app.trysimsa.com/",
+    });
+    const readme = res.bundle.files.find((f) => f.path.endsWith("README.md"));
+    assert.ok(readme, "README.md missing");
+    assert.ok(
+      readme.content.includes("https://app.trysimsa.com/p/proj_abc123/connect"),
+      "trailing slash not normalised",
+    );
+    assert.ok(!readme.content.includes(".com//p/"), "double slash present");
+  });
+
+  it("hook introduces no banned developer terms", () => {
+    const res = generateBuilderPack({
+      ...makeReq("both", { checkResults: MOCK_CHECK_RESULTS, fixSuggestions: MOCK_FIX }),
+      projectId: "proj_abc123",
+      appBaseUrl: "https://app.trysimsa.com",
+    });
+    for (const file of res.bundle.files) {
+      for (const term of BANNED_USER_FACING_TERMS) {
+        assert.ok(!file.content.includes(term), `Banned term "${term}" found in ${file.path}`);
+      }
+    }
+  });
+});
