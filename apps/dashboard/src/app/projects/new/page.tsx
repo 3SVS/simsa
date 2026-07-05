@@ -19,8 +19,8 @@ import type {
 } from "@/lib/workspace-types";
 // Stage 267 — draft rendering shared with the document-intake draft page.
 import { UnderstoodCard, SpecDraftBody } from "@/components/SpecDraftView";
-import { DROPPED_DOC_KEY, DROPPED_DOC_NAME_KEY } from "@/components/GlobalDropZone";
-import { extractDocumentText, SUPPORTED_ACCEPT } from "@/lib/document-extract";
+import { DROPPED_DOC_KEY, DROPPED_DOC_NAME_KEY, DROPPED_DOC_SKIPPED_KEY } from "@/components/GlobalDropZone";
+import { extractDocumentsText, SUPPORTED_ACCEPT } from "@/lib/document-extract";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 
@@ -111,6 +111,7 @@ function NewProjectInner() {
   // A document dropped anywhere on the site (GlobalDropZone) lands here:
   // prefill the paste box from the sessionStorage hand-off, once.
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
+  const [skippedFiles, setSkippedFiles] = useState<string | null>(null);
   useEffect(() => {
     if (searchParams.get("path") !== "spec") return;
     try {
@@ -118,31 +119,41 @@ function NewProjectInner() {
       if (text) {
         setIdeaText(text);
         setLoadedFileName(window.sessionStorage.getItem(DROPPED_DOC_NAME_KEY));
+        setSkippedFiles(window.sessionStorage.getItem(DROPPED_DOC_SKIPPED_KEY));
         window.sessionStorage.removeItem(DROPPED_DOC_KEY);
         window.sessionStorage.removeItem(DROPPED_DOC_NAME_KEY);
+        window.sessionStorage.removeItem(DROPPED_DOC_SKIPPED_KEY);
       }
     } catch {
       /* storage unavailable */
     }
   }, [searchParams]);
 
-  async function handleSpecFile(file: File | undefined) {
-    if (!file) return;
+  async function handleSpecFiles(fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+    if (files.length === 0) return;
     setRateLimitMsg(t.dropzone.reading);
-    const res = await extractDocumentText(file);
-    if (!res.ok) {
+    setSkippedFiles(null);
+    const res = await extractDocumentsText(files);
+    if (!res.text) {
+      const err = res.skipped[0]?.error ?? "read_error";
       const msg =
-        res.error === "media" ? t.dropzone.media
-        : res.error === "hwp_binary" ? t.dropzone.hwpBinary
-        : res.error === "scanned_pdf" ? t.dropzone.scannedPdf
-        : res.error === "empty" ? t.dropzone.empty
-        : res.error === "unsupported" ? t.dropzone.unsupported
+        err === "media" ? t.dropzone.media
+        : err === "hwp_binary" ? t.dropzone.hwpBinary
+        : err === "scanned_pdf" ? t.dropzone.scannedPdf
+        : err === "empty" ? t.dropzone.empty
+        : err === "unsupported" ? t.dropzone.unsupported
         : t.dropzone.readError;
       setRateLimitMsg(msg);
       return;
     }
     setIdeaText(res.text);
-    setLoadedFileName(res.fileName);
+    setLoadedFileName(
+      res.readNames.length > 1
+        ? t.dropzone.multiName.replace("{first}", res.readNames[0]!).replace("{n}", String(res.readNames.length - 1))
+        : res.readNames[0]!,
+    );
+    setSkippedFiles(res.skipped.length > 0 ? res.skipped.map((sk) => sk.fileName).join(", ") : null);
     setRateLimitMsg(null);
   }
 
@@ -464,15 +475,21 @@ function NewProjectInner() {
                   {t.branch.uploadFile}
                   <input
                     type="file"
+                    multiple
                     accept={SUPPORTED_ACCEPT}
                     className="hidden"
-                    onChange={(e) => void handleSpecFile(e.target.files?.[0])}
+                    onChange={(e) => void handleSpecFiles(e.target.files)}
                   />
                 </label>
                 <span className="text-xs text-gray-500">{t.branch.uploadHint}</span>
                 {loadedFileName && (
                   <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs text-green-700">
                     ✓ {loadedFileName}
+                  </span>
+                )}
+                {skippedFiles && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                    {t.dropzone.skippedNote.replace("{names}", skippedFiles)}
                   </span>
                 )}
               </div>

@@ -13,10 +13,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/i18n/I18nProvider";
-import { extractDocumentText } from "@/lib/document-extract";
+import { extractDocumentsText } from "@/lib/document-extract";
 
 export const DROPPED_DOC_KEY = "simsa:dropped-doc";
 export const DROPPED_DOC_NAME_KEY = "simsa:dropped-doc-name";
+export const DROPPED_DOC_SKIPPED_KEY = "simsa:dropped-doc-skipped";
 export function GlobalDropZone() {
   const { t } = useI18n();
   const router = useRouter();
@@ -57,19 +58,30 @@ export function GlobalDropZone() {
       e.preventDefault();
       depthRef.current = 0;
       setDragging(false);
-      const file = e.dataTransfer?.files?.[0];
-      if (!file) return;
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (files.length === 0) return;
       setNotice(t.dropzone.reading);
-      void extractDocumentText(file).then((res) => {
-        if (!res.ok) {
-          setNotice(noticeFor(res.error));
+      void extractDocumentsText(files).then((res) => {
+        if (!res.text) {
+          // Nothing readable — explain the FIRST cause instead of going quiet.
+          setNotice(noticeFor(res.skipped[0]?.error ?? "read_error"));
           window.setTimeout(() => setNotice(null), 8000);
           return;
         }
         setNotice(null);
+        const label =
+          res.readNames.length > 1
+            ? t.dropzone.multiName.replace("{first}", res.readNames[0]!).replace("{n}", String(res.readNames.length - 1))
+            : res.readNames[0]!;
         try {
           window.sessionStorage.setItem(DROPPED_DOC_KEY, res.text);
-          window.sessionStorage.setItem(DROPPED_DOC_NAME_KEY, res.fileName);
+          window.sessionStorage.setItem(DROPPED_DOC_NAME_KEY, label);
+          if (res.skipped.length > 0) {
+            window.sessionStorage.setItem(
+              DROPPED_DOC_SKIPPED_KEY,
+              res.skipped.map((sk) => sk.fileName).join(", "),
+            );
+          }
         } catch {
           return;
         }

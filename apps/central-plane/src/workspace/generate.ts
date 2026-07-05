@@ -3,6 +3,7 @@
  * idea-to-spec draft. Falls back to inline mock data on any failure
  * so the user-facing flow never breaks.
  */
+import { anthropicMessages } from "./anthropic-fetch.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,37 +187,24 @@ ${SCHEMA_DESCRIPTION_EN}`;
 async function callAnthropic(
   apiKey: string,
   prompt: string,
-  timeoutMs = 20000,
+  timeoutMs = 120000, // document-scale prompts (up to 80k chars) need generous time
 ): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  let resp: Response;
-  try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 3000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!resp.ok) {
-    const tail = await resp.text().catch(() => "");
-    throw new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
-  }
-  const data = (await resp.json()) as {
+  const data = (await anthropicMessages(
+    apiKey,
+    { model: "claude-haiku-4-5-20251001", max_tokens: 8000, messages: [{ role: "user", content: prompt }] },
+    timeoutMs,
+  )) as {
     content?: Array<{ type: string; text?: string }>;
+    stop_reason?: string;
   };
-  return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
+  const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
+  // Operational diagnostics (no user content): production fell back with
+  // "non-JSON" and this is the only way to see WHY from a tail.
+  console.log(
+    `[workspace/generate] blocks=${(data.content ?? []).map((b) => b.type).join(",") || "none"}` +
+      ` textLen=${text.length} stop=${data.stop_reason ?? "?"}`,
+  );
+  return text;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -532,7 +520,8 @@ export async function generateIdeaToSpecDraft(
   }
 
   // Extract JSON — LLM sometimes wraps in code fences despite instructions
-  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  const cleaned = rawText.replace(/```(?:json)?/g, "").trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     console.warn("[workspace/generate] LLM returned non-JSON, falling back");
     return buildMockFallback(req);

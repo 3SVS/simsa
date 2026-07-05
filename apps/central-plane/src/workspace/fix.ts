@@ -5,6 +5,7 @@
  * Produces: plain summary + spec patch + builder brief (개발 AI에게 줄 지시서).
  * LLM failure → deterministic mock fallback.
  */
+import { anthropicMessages } from "./anthropic-fetch.js";
 
 export type WorkspaceFixSuggestionRequest = {
   projectId?: string;
@@ -101,32 +102,11 @@ ${JSON.stringify(req.productSpec, null, 2).slice(0, 800)}
 // ─── Anthropic call ───────────────────────────────────────────────────────────
 
 async function callAnthropic(apiKey: string, prompt: string, timeoutMs = 20000): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  let resp: Response;
-  try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 3000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!resp.ok) {
-    const tail = await resp.text().catch(() => "");
-    throw new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
-  }
-  const data = (await resp.json()) as { content?: Array<{ type: string; text?: string }> };
+  const data = (await anthropicMessages(
+    apiKey,
+    { model: "claude-haiku-4-5-20251001", max_tokens: 3000, messages: [{ role: "user", content: prompt }] },
+    timeoutMs,
+  )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
 

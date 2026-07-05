@@ -5,6 +5,7 @@
  * This is NOT a code review — it checks the spec document only.
  * LLM failure → deterministic mock fallback via heuristics.
  */
+import { anthropicMessages } from "./anthropic-fetch.js";
 
 export type CheckableItem = {
   id: string;
@@ -157,32 +158,11 @@ ${itemsText}
 // ─── Anthropic call ───────────────────────────────────────────────────────────
 
 async function callAnthropic(apiKey: string, prompt: string, timeoutMs = 20000): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  let resp: Response;
-  try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 4000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!resp.ok) {
-    const tail = await resp.text().catch(() => "");
-    throw new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
-  }
-  const data = (await resp.json()) as { content?: Array<{ type: string; text?: string }> };
+  const data = (await anthropicMessages(
+    apiKey,
+    { model: "claude-haiku-4-5-20251001", max_tokens: 4000, messages: [{ role: "user", content: prompt }] },
+    timeoutMs,
+  )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
 
@@ -196,7 +176,11 @@ function checkItemHeuristic(
 
   // Check excluded features — require full phrase OR ≥2 content words to match
   // to avoid false positives from common nouns appearing in unrelated items.
-  const conflictsExcluded = spec.excluded.some((ex) => {
+  // Partial client specs ({} from the QA/code-branch path) crashed here with
+  // "Cannot read properties of undefined (reading 'some')" — normalize first.
+  const specExcluded = Array.isArray(spec.excluded) ? spec.excluded : [];
+  const specOpenQuestions = Array.isArray(spec.openQuestions) ? spec.openQuestions : [];
+  const conflictsExcluded = specExcluded.some((ex) => {
     const exLower = ex.toLowerCase();
     if (titleLower.includes(exLower)) return true; // full phrase match
     const words = exLower.split(/[\s,·]+/).filter((w) => w.length >= 2);
@@ -218,7 +202,7 @@ function checkItemHeuristic(
   }
 
   // Check open questions — same 2-word minimum to avoid generic word false positives
-  const matchesOpenQuestion = spec.openQuestions.some((q) => {
+  const matchesOpenQuestion = specOpenQuestions.some((q) => {
     const qLower = q.toLowerCase();
     if (titleLower.includes(qLower)) return true;
     const words = qLower.split(/[\s,·]+/).filter((w) => w.length >= 2);
