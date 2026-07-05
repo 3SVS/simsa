@@ -822,26 +822,28 @@ function ApiQuestionCard({
             {opt}
           </button>
         ))}
-        {question.allowLater && (
-          <button
-            onClick={() => onAnswer("defer")}
-            className={`rounded-lg border px-4 py-2 text-sm transition-all ${
-              answer === "defer" ? "border-gray-300 bg-gray-200 text-gray-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            {t.np.decideLater}
-          </button>
-        )}
-        {question.allowCustom && (
-          <button
-            onClick={() => onAnswer("custom")}
-            className={`rounded-lg border px-4 py-2 text-sm transition-all ${
-              answer === "custom" ? "border-gray-800 bg-gray-800 text-white" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            {t.np.customInput}
-          </button>
-        )}
+        {/* Freeform + skip are offered on every question — a chip set never
+            covers every real answer, and users were getting stranded when none
+            fit. The server flags (allowCustom / allowLater) only ever widened
+            the choices, so always showing both is a superset that never
+            regresses the flagged case. The answer representation ("custom" →
+            freeform input, "defer" → skip) is unchanged. */}
+        <button
+          onClick={() => onAnswer("defer")}
+          className={`rounded-lg border px-4 py-2 text-sm transition-all ${
+            answer === "defer" ? "border-gray-300 bg-gray-200 text-gray-700" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          {t.np.decideLater}
+        </button>
+        <button
+          onClick={() => onAnswer("custom")}
+          className={`rounded-lg border px-4 py-2 text-sm transition-all ${
+            answer === "custom" ? "border-gray-800 bg-gray-800 text-white" : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          {t.np.customInput}
+        </button>
       </div>
       {answer === "custom" && (
         <input
