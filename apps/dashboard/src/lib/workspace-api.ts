@@ -64,7 +64,7 @@ export async function callWorkspaceApi(
         locale: "ko",
         mode: "standard",
       }),
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(75000), // document-scale drafts take longer than short ideas
     });
   } catch (err) {
     console.warn("[workspace-api] network error, using mock fallback:", err);

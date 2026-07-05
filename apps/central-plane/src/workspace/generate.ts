@@ -186,7 +186,7 @@ ${SCHEMA_DESCRIPTION_EN}`;
 async function callAnthropic(
   apiKey: string,
   prompt: string,
-  timeoutMs = 20000,
+  timeoutMs = 60000, // document-scale prompts (15k chars) need more than 20s
 ): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);

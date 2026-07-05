@@ -213,7 +213,11 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     // ── Generate ─────────────────────────────────────────────────────────────
     const input: IdeaToSpecDraftRequest = {
-      idea: req.idea.trim().slice(0, 1000),
+      // 15k chars ≈ a real PRD/spec document. The old 1,000-char cap silently
+      // discarded uploaded documents and made the draft look like a mock
+      // ("실제 파일을 넣었는데 예시가 나와" — 2026-07-05). Haiku handles this
+      // input size comfortably within the generation budget.
+      idea: req.idea.trim().slice(0, 15_000),
       mode: req.mode ?? "standard",
       answers: Array.isArray(req.answers) ? req.answers : [],
       locale: req.locale ?? "ko",

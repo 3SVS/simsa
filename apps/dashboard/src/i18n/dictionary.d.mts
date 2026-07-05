@@ -286,6 +286,8 @@ export type Dictionary = {
     examplesLabel: string;
     generateSpec: string;
     reading: string;
+    multiName: string;
+    skippedNote: string;
     understood: string;
     mainUsers: string;
     mainFlow: string;
@@ -779,6 +781,8 @@ export type Dictionary = {
     scannedPdf: string;
     empty: string;
     reading: string;
+    multiName: string;
+    skippedNote: string;
     readError: string;
   };
   nf: {
