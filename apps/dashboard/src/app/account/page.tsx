@@ -20,7 +20,7 @@ import {
 } from "@/lib/account-preferences.mjs";
 import { getAuthSession, signOutAuth, resolveAuthStatus, getMembership, claimWorkspace } from "@/lib/auth-client.mjs";
 import type { MembershipBridge, ClaimResult } from "@/lib/auth-client.mjs";
-import { getUserKey } from "@/lib/workflow-store";
+import { getUserKey, setActiveAccountNamespace, clearActiveAccount } from "@/lib/workflow-store";
 
 export default function AccountPage() {
   return (
@@ -50,7 +50,12 @@ function AccountInner() {
     let active = true;
     getAuthSession()
       .then((s) => {
-        if (active) setAuthSession(s);
+        if (!active) return;
+        setAuthSession(s);
+        // Reconcile local storage to the signed-in identity so this browser's
+        // project list is this account's — not whoever was here before.
+        const email = (s as { user?: { email?: string } } | null)?.user?.email;
+        setActiveAccountNamespace(typeof email === "string" ? email : null);
       })
       .finally(() => {
         if (active) setAuthLoading(false);
@@ -82,6 +87,10 @@ function AccountInner() {
       setMembership(null);
       setClaimPhase("idle");
       setClaimResult(null);
+      // Return local storage to the (empty) anonymous bucket and tell the
+      // sidebar to drop its stale signed-in identity immediately.
+      clearActiveAccount();
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("simsa:auth-changed"));
     } else {
       setAuthError(true);
     }
@@ -111,10 +120,22 @@ function AccountInner() {
       <section className="card mt-6 p-5">
         <p className="section-title">{a.auth.heading}</p>
 
-        {claimFailedRedirect && claimPhase === "idle" && (
-          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            {a.auth.claimError}
-          </p>
+        {claimFailedRedirect && claimPhase !== "done" && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+            <p className="font-semibold">{a.auth.claimFailedTitle}</p>
+            <p className="mt-1">{a.auth.claimError}</p>
+            <button
+              type="button"
+              onClick={onClaim}
+              disabled={claimPhase === "working"}
+              className="btn btn-secondary btn-sm mt-2"
+            >
+              {claimPhase === "working" ? a.auth.claimWorking : a.auth.claimRetry}
+            </button>
+            {claimPhase === "error" && (
+              <p className="mt-2 text-red-600">{a.auth.claimRetryFailed}</p>
+            )}
+          </div>
         )}
 
         {authStatus.status === "loading" && (

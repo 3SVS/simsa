@@ -55,7 +55,13 @@ const EN = {
     title: "Account",
     subtitle:
       "Local preferences for this browser. Sign-in, teams, and connected-account management are planned.",
-    openLabel: "Open account settings",
+    openLabel: "Open account menu",
+    menu: {
+      settings: "Account settings",
+      signOut: "Sign out",
+      signingOut: "Signing out…",
+      signIn: "Sign in",
+    },
     sections: {
       profile: "Profile",
       preferences: "Preferences",
@@ -114,7 +120,11 @@ const EN = {
       claimDone: "Linked {n} project(s) to your account.",
       claimAlreadyDone: "Already linked to your account — any new projects were included.",
       claimTakenError: "This browser's data is already linked to a different account.",
-      claimError: "Could not link. Please try again.",
+      claimFailedTitle: "You're signed in — but your projects aren't linked yet",
+      claimError:
+        "Sign-in worked. We just couldn't link this browser's projects to your account. Your projects are safe on this device; try linking again.",
+      claimRetry: "Link my projects",
+      claimRetryFailed: "Still couldn't link. Check your connection and try once more.",
     },
     badges: {
       local: "Local",
@@ -283,6 +293,7 @@ const EN = {
     linking: "Linking your projects to your account…",
     signInFailed: "Email or password doesn't match.",
     signUpFailed: "Couldn't create the account. Try a different email or a longer password.",
+    invalidEmail: "Please enter a real email address.",
     keepsLocal: "No account? You can keep using Simsa in this browser.",
     skip: "Maybe later",
   },
@@ -2218,7 +2229,13 @@ const KO = {
     // Stage 170 — 로컬 계정 설정 스텁(인증 없음).
     title: "계정",
     subtitle: "이 브라우저의 로컬 환경설정입니다. 로그인·팀·연결 계정 관리는 예정되어 있습니다.",
-    openLabel: "계정 설정 열기",
+    openLabel: "계정 메뉴 열기",
+    menu: {
+      settings: "계정 설정",
+      signOut: "로그아웃",
+      signingOut: "로그아웃 중…",
+      signIn: "로그인",
+    },
     sections: {
       profile: "프로필",
       preferences: "환경설정",
@@ -2277,7 +2294,11 @@ const KO = {
       claimDone: "프로젝트 {n}개를 계정에 연결했어요.",
       claimAlreadyDone: "이미 계정에 연결되어 있어요 — 새 프로젝트가 있으면 함께 연결했습니다.",
       claimTakenError: "이 브라우저의 데이터는 이미 다른 계정에 연결되어 있어요.",
-      claimError: "연결하지 못했어요. 다시 시도해주세요.",
+      claimFailedTitle: "로그인은 됐어요 — 다만 프로젝트가 아직 계정에 연결되지 않았어요",
+      claimError:
+        "로그인은 정상적으로 됐어요. 이 브라우저의 프로젝트를 계정에 연결하는 것만 실패했습니다. 프로젝트는 이 기기에 그대로 있으니, 아래에서 다시 연결해 주세요.",
+      claimRetry: "프로젝트 연결하기",
+      claimRetryFailed: "여전히 연결하지 못했어요. 연결 상태를 확인하고 한 번 더 시도해 주세요.",
     },
     badges: {
       local: "로컬",
@@ -2443,6 +2464,7 @@ const KO = {
     linking: "프로젝트를 계정에 연결하는 중…",
     signInFailed: "이메일 또는 비밀번호가 맞지 않아요.",
     signUpFailed: "계정을 만들지 못했어요. 다른 이메일이나 더 긴 비밀번호로 시도해주세요.",
+    invalidEmail: "실제 사용하는 이메일 주소를 입력해주세요.",
     keepsLocal: "계정 없이도 이 브라우저에서는 계속 쓸 수 있어요.",
     skip: "나중에 하기",
   },

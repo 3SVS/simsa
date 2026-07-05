@@ -15,7 +15,8 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/i18n/I18nProvider";
-import { getUserKey } from "@/lib/workflow-store";
+import { getUserKey, setActiveAccountNamespace } from "@/lib/workflow-store";
+import { isPlausibleEmail } from "@/lib/email-validate.mjs";
 import {
   getAuthSession,
   signInEmail,
@@ -45,6 +46,13 @@ function LoginInner() {
   // 로그인됨 ≠ 데이터연결됨 — the single post-login path: claim FIRST, then go.
   const claimAndGo = useCallback(async () => {
     setPhase("claiming");
+    // Bind local storage to this identity so the next/previous account never
+    // sees these projects (moving anon→account claims pre-sign-in work). Then
+    // tell the sidebar its session changed so it refreshes reactively.
+    const session = await getAuthSession().catch(() => null);
+    const email = (session as { user?: { email?: string } } | null)?.user?.email ?? null;
+    setActiveAccountNamespace(typeof email === "string" ? email : null);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("simsa:auth-changed"));
     const claim = await claimWorkspace(getUserKey()).catch(() => null);
     if (!claim || claim.ok !== true) {
       // Honest failure: the whole point of logging in was linking this
@@ -84,6 +92,13 @@ function LoginInner() {
     e.preventDefault();
     if (phase !== "idle") return;
     setErrorMsg("");
+    // Soft email check on sign-up (beta: verification is off, so at least reject
+    // obviously fake addresses like a@a.com). Sign-in doesn't re-validate — the
+    // account already exists.
+    if (mode === "signup" && !isPlausibleEmail(email)) {
+      setErrorMsg(t.login.invalidEmail);
+      return;
+    }
     setPhase("working");
     const res =
       mode === "signup"
