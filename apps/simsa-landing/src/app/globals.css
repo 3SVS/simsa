@@ -617,6 +617,10 @@ body::after {
   box-shadow: var(--shadow-card);
   overflow: hidden;
   transition: transform 150ms ease, box-shadow 150ms ease;
+  /* the whole card is a link (→ /demo); keep it visually a card, not a text link */
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 .feat:hover {
@@ -970,6 +974,23 @@ body::after {
 
 .foot-links a:hover {
   color: var(--fg);
+}
+
+.foot-contact {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  color: var(--faint);
+  text-align: center;
+}
+
+.foot-contact a {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.foot-contact a:hover {
+  text-decoration: underline;
 }
 
 .foot-tag {
