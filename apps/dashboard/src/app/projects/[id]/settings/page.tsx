@@ -635,7 +635,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSaveEmSettings}
               disabled={!emConfigured || !emAddress.trim() || emSavePhase === "saving"}
-              className="btn btn-md btn-primary"
+              className="btn btn-md btn-secondary"
             >
               {emSavePhase === "saving" ? t.emailNotify.saving : t.common.save}
             </button>
@@ -711,7 +711,7 @@ export default function SettingsPage() {
             <button
               onClick={handleSaveTgSettings}
               disabled={!tgEnabled || !tgChatId.trim() || tgSavePhase === "saving"}
-              className="btn btn-md btn-primary"
+              className="btn btn-md btn-secondary"
             >
               {tgSavePhase === "saving" ? t.telegram.saving : t.common.save}
             </button>

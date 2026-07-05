@@ -31,7 +31,7 @@ export default function SpecPage() {
       {!spec.goal && spec.included.length === 0 ? (
         <div className="empty-state">
           <p className="text-sm text-gray-600">{t.spec.emptyBody}</p>
-          <a href={`/projects/${id}`} className="btn btn-md btn-primary mt-4">
+          <a href={`/projects/${id}`} className="btn btn-md btn-secondary mt-4">
             {t.common.goOverview}
           </a>
         </div>
