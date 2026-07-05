@@ -22,7 +22,7 @@ export interface LandingDict {
   forWhom: { title: string; body: string; contactLead: string };
   joinBeta: { title: string; p1: string; p2: string; ctaStart: string; ctaFeedback: string };
   faq: { title: string; items: { q: string; a: string }[] };
-  footer: { demo: string; privacy: string; terms: string; contact: string; tag: string };
+  footer: { demo: string; privacy: string; terms: string; contact: string; partnership: string; tag: string };
 }
 
 export declare const LANDING_DICT: { en: LandingDict; ko: LandingDict };

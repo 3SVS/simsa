@@ -9,9 +9,9 @@ import { useEffect, useState } from "react";
 import { LANDING_DICT, LANG_STORAGE_KEY, resolveInitialLang } from "../lib/dictionary.mjs";
 
 const APP_URL = "https://app.trysimsa.com";
-// Real contact mailbox (operator-provided). No trysimsa.com mailbox is wired
-// yet — do not invent hi@trysimsa.com until it exists.
-const CONTACT_EMAIL = "seunghunbae@b2w.kr";
+// Partnership / contact mailbox — 3SVS (operator's company). No trysimsa.com
+// mailbox is wired yet — do not invent hi@trysimsa.com until it exists.
+const CONTACT_EMAIL = "seunghunbae@3svs.com";
 
 // Feedback channel for beta members — mailto only, no backend / DB / provider.
 const FEEDBACK_SUBJECT = "Simsa beta feedback";
@@ -269,7 +269,7 @@ export default function Home() {
           <p>{t.creates.body}</p>
           <div className="bento">
             {t.creates.outputs.map((output, i) => (
-              <div className="feat" key={output}>
+              <Link className="feat" href="/demo" key={output}>
                 <div className="feat-head">
                   <h3>{output}</h3>
                   <span className="feat-arrow" aria-hidden>→</span>
@@ -290,7 +290,7 @@ export default function Home() {
                     <Image className="feat-shot fs-pack" src="/shots/shot-export.webp" alt="" width={1800} height={1200} />
                   )}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -315,10 +315,6 @@ export default function Home() {
         <div className="container reveal">
           <h2>{t.forWhom.title}</h2>
           <p className="note">{t.forWhom.body}</p>
-          <p>{t.forWhom.contactLead}</p>
-          <a className="contact-link" href={`mailto:${CONTACT_EMAIL}`}>
-            {CONTACT_EMAIL}
-          </a>
         </div>
       </section>
 
@@ -365,8 +361,11 @@ export default function Home() {
             <Link href="/demo">{t.footer.demo}</Link>
             <Link href="/privacy">{t.footer.privacy}</Link>
             <Link href="/terms">{t.footer.terms}</Link>
-            <a href={`mailto:${CONTACT_EMAIL}`}>{t.footer.contact}</a>
           </nav>
+          <p className="foot-contact">
+            {t.footer.partnership} · 3SVS ·{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+          </p>
           <p className="foot-tag">{t.footer.tag}</p>
         </div>
       </footer>

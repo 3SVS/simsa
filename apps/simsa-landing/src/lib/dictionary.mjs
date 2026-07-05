@@ -88,7 +88,7 @@ export const LANDING_DICT = {
       items: [
         { q: "Is it free?", a: "Yes — Simsa is free during the open beta. No card, no limits beyond a light daily cap." },
         { q: "How is my data handled?", a: "Your work stays in your browser and your account. Reviews are only kept if you opt in, under an anonymized ID — we share patterns, never people." },
-        { q: "Which AI tools does it support?", a: "Anything you built with — Lovable, v0, Bolt, Cursor, Claude Code, Replit, Windsurf, and more. You can also just paste a plan or connect a GitHub repo." },
+        { q: "Which AI tools does it support?", a: "Anything you built with — Claude Code, Codex, Lovable, v0, Bolt, Cursor, Replit, Windsurf, and more. You can also just paste a plan or connect a GitHub repo." },
         { q: "Do I need to know how to code?", a: "No. Simsa is built for non-developers — describe what your app should do in plain language and it checks the result for you." },
         { q: "How do I get in touch?", a: "Use the in-app feedback button (bug, question, or idea) — we read every note." },
       ],
@@ -98,6 +98,7 @@ export const LANDING_DICT = {
       privacy: "Privacy",
       terms: "Terms",
       contact: "Contact",
+      partnership: "Partnerships",
       tag: "The checking layer for AI-built apps.",
     },
   },
@@ -163,7 +164,7 @@ export const LANDING_DICT = {
       items: [
         { q: "무료인가요?", a: "네 — 오픈 베타 기간에는 무료예요. 카드도 필요 없고, 가벼운 하루 사용량 제한 외에는 한도도 없어요." },
         { q: "제 데이터는 어떻게 처리되나요?", a: "작업물은 브라우저와 계정 안에 있어요. 확인 결과는 동의하실 때만 익명 ID로 보관돼요 — 패턴은 공유해도 개인은 절대 아니에요." },
-        { q: "어떤 AI 도구를 지원하나요?", a: "Lovable, v0, Bolt, Cursor, Claude Code, Replit, Windsurf 등 무엇으로 만드셨든 괜찮아요. 기획서를 붙여넣거나 GitHub 저장소를 연결해도 돼요." },
+        { q: "어떤 AI 도구를 지원하나요?", a: "Claude Code, Codex, Lovable, v0, Bolt, Cursor, Replit, Windsurf 등 무엇으로 만드셨든 괜찮아요. 기획서를 붙여넣거나 GitHub 저장소를 연결해도 돼요." },
         { q: "코드를 몰라도 되나요?", a: "네. Simsa는 비개발자를 위해 만들었어요 — 앱이 무엇을 해야 하는지 말로 알려주시면 결과를 대신 확인해드려요." },
         { q: "문의는 어떻게 하나요?", a: "앱 안의 피드백 버튼(버그·질문·제안)을 눌러주세요 — 모든 메모를 읽어요." },
       ],
@@ -173,6 +174,7 @@ export const LANDING_DICT = {
       privacy: "개인정보 처리방침",
       terms: "이용약관",
       contact: "문의",
+      partnership: "제휴문의",
       tag: "AI로 만든 앱을 위한 확인 레이어.",
     },
   },
