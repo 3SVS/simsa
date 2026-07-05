@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { loadLocalProjects, loadExtendedProjectData, getUserKey } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
-import { buildBetaFeedbackMailto } from "@/lib/beta-feedback.mjs";
+import { FeedbackModal } from "@/components/FeedbackModal";
 import { getAuthSession } from "@/lib/auth-client.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
@@ -32,6 +32,7 @@ export function AppSidebar() {
   // menu button that opens the SAME expanded body as an overlay drawer. Without
   // this the fixed w-60 rail left ~120px of content on a 360px phone.
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   // Signed-in identity for the bottom profile block (null = signed out/unknown).
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -76,6 +77,13 @@ export function AppSidebar() {
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  // Any FeedbackLink anywhere in the app opens the single shared modal.
+  useEffect(() => {
+    const open = () => setFeedbackOpen(true);
+    window.addEventListener("simsa:open-feedback", open);
+    return () => window.removeEventListener("simsa:open-feedback", open);
+  }, []);
 
   function toggleCollapse() {
     setCollapsed((c) => {
@@ -304,12 +312,13 @@ export function AppSidebar() {
 
       {/* Profile + plan (bottom) — links to local account settings */}
       <div className="border-t border-gray-100 p-2">
-        <a
-          href={buildBetaFeedbackMailto({ route: pathname, section: "Dashboard" })}
-          className="mb-1 block rounded-md px-2.5 py-1.5 text-[12px] text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+        <button
+          type="button"
+          onClick={() => setFeedbackOpen(true)}
+          className="mb-1 block w-full rounded-md px-2.5 py-1.5 text-left text-[12px] text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
         >
           {t.nav.feedback}
-        </a>
+        </button>
         <Link href="/account" aria-label={t.account.openLabel} className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-gray-50">
           <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white">
             {(authEmail?.[0] ?? initial).toUpperCase()}
@@ -378,6 +387,7 @@ export function AppSidebar() {
           <Link href="/projects" aria-label={t.nav.allProjects} className="grid h-8 w-8 place-items-center rounded-md text-gray-500 hover:bg-gray-50">▦</Link>
           <Link href="/account" aria-label={t.account.openLabel} className="mt-auto grid h-8 w-8 place-items-center rounded-full bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700">{initial}</Link>
         </aside>
+        <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       </>
     );
   }
@@ -389,6 +399,7 @@ export function AppSidebar() {
       <aside className="sticky top-0 hidden h-screen w-60 flex-shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
         {expandedBody}
       </aside>
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   );
 }

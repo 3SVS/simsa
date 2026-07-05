@@ -18,6 +18,7 @@ export const DRAFT_ERROR_CODES = [
   "source_not_found",
   "document_not_found",
   "rate_limited",
+  "llm_unavailable",
   "evidence_storage_unconfigured",
 ];
 

@@ -153,6 +153,20 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="section">
+        <div className="container">
+          <h2>{t.faq.title}</h2>
+          <dl className="faq">
+            {t.faq.items.map((item) => (
+              <div className="faq-item" key={item.q}>
+                <dt>{item.q}</dt>
+                <dd>{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
       <footer className="foot">
         <div className="container">
           <nav className="foot-links">

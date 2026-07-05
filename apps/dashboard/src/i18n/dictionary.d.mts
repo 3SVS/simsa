@@ -151,6 +151,12 @@ export type Dictionary = {
   };
   fix: { title: string; subtitle: string };
   common: {
+    feedback: {
+      title: string; subtitle: string;
+      kindBug: string; kindQuestion: string; kindSuggestion: string;
+      placeholder: string; contextNote: string;
+      send: string; sending: string; thanks: string; done: string; error: string; close: string;
+    };
     syncFailed: string;
     dismiss: string;
     goOverview: string;
@@ -2021,6 +2027,7 @@ export type Dictionary = {
         source_not_found: string;
         document_not_found: string;
         rate_limited: string;
+        llm_unavailable: string;
         evidence_storage_unconfigured: string;
         generic: string;
       };
