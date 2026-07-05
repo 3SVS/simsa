@@ -371,7 +371,7 @@ export default function GitHubPage() {
               </a>
               {repo.defaultBranch && <span className="ml-2 text-xs text-gray-500">→ {repo.defaultBranch}</span>}
             </div>
-            <button onClick={handleLoadPulls} disabled={pullsPhase === "loading"} className="btn btn-md btn-primary">
+            <button onClick={handleLoadPulls} disabled={pullsPhase === "loading"} className="btn btn-md btn-secondary">
               {pullsPhase === "loading" ? t.common.loading : t.github.loadPulls}
             </button>
           </div>

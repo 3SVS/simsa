@@ -194,7 +194,7 @@ export default function VisualChecksPage() {
         <button
           onClick={handleRun}
           disabled={submitting || buttonState.disabled}
-          className="btn btn-primary btn-sm mt-3 disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn btn-primary btn-md mt-3 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? t.visualChecks.runSubmitting : t.visualChecks.runButton}
         </button>

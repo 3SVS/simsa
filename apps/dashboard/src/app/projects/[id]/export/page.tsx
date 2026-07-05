@@ -356,7 +356,7 @@ export default function ExportPage() {
               {TARGET_VALUES.map((value) => (
                 <button key={value} onClick={() => handleTargetChange(value)}
                   disabled={phase === "loading"}
-                  className={`flex-1 text-sm px-3 py-2 rounded-lg border font-medium transition-all disabled:opacity-50 ${target === value ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300"}`}>
+                  className={`flex-1 text-sm px-3 py-2 rounded-lg border font-medium transition-all disabled:opacity-50 ${target === value ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-700 border-gray-200 hover:border-brand-300"}`}>
                   {targetOptionLabel(t, value)}
                 </button>
               ))}
@@ -367,7 +367,7 @@ export default function ExportPage() {
             <div className="flex gap-2">
               {(["all", "selected"] as const).map((mode) => (
                 <button key={mode} onClick={() => setSelectionMode(mode)}
-                  className={`flex-1 text-sm px-3 py-2 rounded-lg border font-medium transition-all ${selectionMode === mode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300"}`}>
+                  className={`flex-1 text-sm px-3 py-2 rounded-lg border font-medium transition-all ${selectionMode === mode ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-700 border-gray-200 hover:border-brand-300"}`}>
                   {mode === "all" ? t.exportPage.scopeAll : t.exportPage.scopeSelected}
                 </button>
               ))}
@@ -425,7 +425,7 @@ export default function ExportPage() {
           </div>
           <div className="mt-4 flex items-center justify-end">
             <button onClick={handleGenerate} disabled={phase === "loading"}
-              className="text-sm px-4 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              className="btn btn-md btn-primary">
               {phase === "loading" ? t.exportPage.generating : t.exportPage.generate}
             </button>
           </div>
@@ -468,7 +468,7 @@ export default function ExportPage() {
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={handleZipDownload} disabled={isZipping}
-                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+                className="btn btn-sm btn-primary">
                 {isZipping ? t.exportPage.zipping : t.exportPage.downloadZip}
               </button>
               <button onClick={handleCopyAll}
@@ -616,7 +616,7 @@ function OutcomeRecorder({
             className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
           />
           <button onClick={onSave} disabled={!outcomeStatus || savePhase === "saving"}
-            className="text-sm px-4 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            className="btn btn-md btn-secondary">
             {savePhase === "saving" ? t.exportPage.saving : t.exportPage.save}
           </button>
         </>

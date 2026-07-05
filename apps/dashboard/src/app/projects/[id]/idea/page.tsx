@@ -28,7 +28,7 @@ export default function IdeaPage() {
       {isEmpty && (
         <div className="empty-state mb-6">
           <p className="text-sm text-gray-600">{t.idea.emptyBody}</p>
-          <a href={`/projects/${id}`} className="btn btn-md btn-primary mt-4">
+          <a href={`/projects/${id}`} className="btn btn-md btn-secondary mt-4">
             {t.common.goOverview}
           </a>
         </div>
