@@ -6,6 +6,7 @@
  * LLM failure → heuristic fallback (diff-aware: matching filenames lean toward "통과").
  */
 import type { CheckableItem, ProductSpecForCheck, CheckResultItem } from "./check.js";
+import { anthropicMessages } from "./anthropic-fetch.js";
 import type { PullRequestMeta, PullRequestFile } from "./github-pr.js";
 import { buildDiffSummary } from "./github-pr.js";
 import type { FetchLike } from "../github.js";
@@ -105,32 +106,12 @@ async function callAnthropic(
   timeoutMs = 25000,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
 ): Promise<{ text: string; tokens: number | null }> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  let resp: Response;
-  try {
-    resp = await fetchImpl("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: REVIEW_MODEL,
-        max_tokens: 6000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!resp.ok) {
-    const tail = await resp.text().catch(() => "");
-    throw new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
-  }
-  const data = (await resp.json()) as {
+  const data = (await anthropicMessages(
+    apiKey,
+    { model: REVIEW_MODEL, max_tokens: 6000, messages: [{ role: "user", content: prompt }] },
+    timeoutMs,
+    fetchImpl,
+  )) as {
     content?: Array<{ type: string; text?: string }>;
     usage?: { input_tokens?: number; output_tokens?: number };
   };

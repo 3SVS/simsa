@@ -3,6 +3,7 @@
  * idea-to-spec draft. Falls back to inline mock data on any failure
  * so the user-facing flow never breaks.
  */
+import { anthropicMessages } from "./anthropic-fetch.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -188,32 +189,11 @@ async function callAnthropic(
   prompt: string,
   timeoutMs = 120000, // document-scale prompts (up to 80k chars) need generous time
 ): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  let resp: Response;
-  try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 8000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!resp.ok) {
-    const tail = await resp.text().catch(() => "");
-    throw new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
-  }
-  const data = (await resp.json()) as {
+  const data = (await anthropicMessages(
+    apiKey,
+    { model: "claude-haiku-4-5-20251001", max_tokens: 8000, messages: [{ role: "user", content: prompt }] },
+    timeoutMs,
+  )) as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
   };
