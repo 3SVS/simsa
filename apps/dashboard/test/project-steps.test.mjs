@@ -12,19 +12,37 @@ import { computeProjectSteps, nextScreenSlug } from "../src/lib/project-steps.mj
 
 const byKey = (steps) => Object.fromEntries(steps.map((s) => [s.key, s]));
 
-test("fresh project (no items confirmed): step1 current, step2+3 locked with hints", () => {
-  const s = byKey(computeProjectSteps({ hasItems: false, hasRepo: false, hasReviewRun: false }));
+test("fresh builder project (no items, no repo, no deploy URL): step1 current, step2+3 locked", () => {
+  const s = byKey(computeProjectSteps({ hasItems: false, hasRepo: false, hasReviewRun: false, hasDeployUrl: false }));
   assert.equal(s.prepare.status, "current");
   assert.equal(s.review.status, "locked");
   assert.equal(s.review.lockReason, "need_items");
   assert.equal(s.results.status, "locked");
-  assert.equal(s.results.lockReason, "need_code"); // "코드를 먼저 연결하세요"
+  assert.equal(s.results.lockReason, "need_build"); // "팩 받아 만들고 URL 연결" — NOT a GitHub dead end
 });
 
-test("items done, no repo: step2 unlocks (current), step3 still locked on code", () => {
-  const s = byKey(computeProjectSteps({ hasItems: true, hasRepo: false, hasReviewRun: false }));
+test("items done, no repo, no deploy URL: step2 current, step3 locked on need_build (not GitHub)", () => {
+  const s = byKey(computeProjectSteps({ hasItems: true, hasRepo: false, hasReviewRun: false, hasDeployUrl: false }));
   assert.equal(s.prepare.status, "done"); // auto-checked — no rework
   assert.equal(s.review.status, "current");
+  assert.equal(s.results.status, "locked");
+  assert.equal(s.results.lockReason, "need_build");
+});
+
+test("builder path: a deploy URL unlocks results (no GitHub) — the dead-end fix", () => {
+  const s = byKey(computeProjectSteps({ hasItems: true, hasRepo: false, hasReviewRun: false, hasDeployUrl: true }));
+  assert.equal(s.results.status, "todo"); // reachable via the deploy URL
+  assert.equal(s.results.lockReason, null);
+});
+
+test("builder path: deploy URL + a visual-check run → review done, results current", () => {
+  const s = byKey(computeProjectSteps({ hasItems: true, hasRepo: false, hasReviewRun: true, hasDeployUrl: true }));
+  assert.equal(s.review.status, "done"); // connected via URL + run happened
+  assert.equal(s.results.status, "current");
+});
+
+test("CODE branch keeps the GitHub gate: no repo → results locked need_code", () => {
+  const s = byKey(computeProjectSteps({ hasItems: true, hasRepo: false, hasReviewRun: false, hasDeployUrl: false, entryPath: "code" }));
   assert.equal(s.results.status, "locked");
   assert.equal(s.results.lockReason, "need_code");
 });
@@ -85,10 +103,30 @@ test("IDEA/SPEC branches unchanged: no items still locks review", () => {
 
 // ─── STEP 4: command center — shortest path to the activation moment ────────
 
-test("activation path: items ready + no repo → connect_code (the next real step)", async () => {
+test("activation path (builder): items ready, no repo/URL → get_pack (not the GitHub dead end)", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
   assert.deepEqual(
-    nextProjectAction({ hasItems: true, hasRepo: false, hasReviewRun: false }),
+    nextProjectAction({ hasItems: true, hasRepo: false, hasReviewRun: false, hasDeployUrl: false }),
+    { action: "get_pack", slug: "export" },
+  );
+});
+
+test("activation path (builder): deploy URL connected, no run → run_review via visual-checks", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: false, hasReviewRun: false, hasDeployUrl: true }),
+    { action: "run_review", slug: "visual-checks" },
+  );
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: false, hasReviewRun: true, hasDeployUrl: true }),
+    { action: "view_results", slug: "checks" },
+  );
+});
+
+test("activation path (code branch): items ready + no repo → connect_code (GitHub stays for devs)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: false, hasReviewRun: false, entryPath: "code" }),
     { action: "connect_code", slug: "settings" },
   );
 });

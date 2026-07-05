@@ -245,6 +245,10 @@ export type Dictionary = {
     createItemsDesc: string;
     connectCode: string;
     connectCodeDesc: string;
+    getPack: string;
+    getPackDesc: string;
+    alreadyBuilt: string;
+    connectUrl: string;
     runReview: string;
     runReviewDesc: string;
     viewResults: string;
@@ -256,6 +260,7 @@ export type Dictionary = {
     results: string;
     lockNeedItems: string;
     lockNeedCode: string;
+    lockNeedBuild: string;
     next: string;
     optionalTag: string;
   };
