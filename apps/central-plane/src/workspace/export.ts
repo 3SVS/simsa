@@ -444,6 +444,29 @@ const NONDEV_WORKFLOW_GUIDANCE: string = [
 ].join("\n");
 
 /**
+ * "Deploy in one shot with YOUR OWN connected tools" directive (prep-layer
+ * option A). The user builds with an agent that has its own Vercel/GitHub MCP or
+ * CLI authenticated in their editor — so the agent should deploy + push itself,
+ * in one shot, and NEVER handle raw deploy tokens. Simsa never sees a token; the
+ * only thing collected in Simsa is guidance, so the prompt reinforces the
+ * token-safety invariant on the agent side too.
+ */
+const DEPLOY_VIA_MCP_GUIDANCE: string = [
+  "## 한 번에 배포 — 네게 연결된 도구로 네가 직접",
+  "",
+  "이 사용자는 배포를 직접 손으로 하기 어렵다. 가능하면 **네게 연결된 배포·저장소 도구(예: Vercel·GitHub의 MCP 또는 CLI)를 사용해 네가 직접 배포와 저장소 푸시를 끝내라.** 사용자를 여러 화면으로 왕복시키지 말고, 한 번에 실제 배포 URL이 나오게 하라.",
+  "",
+  "**토큰·비밀 취급 (반드시 지킬 것):**",
+  "- 배포·저장소 토큰이나 비밀 키를 코드·커밋·파일·이 지시서 어디에도 하드코딩하거나 기록하지 마라.",
+  "- 사용자에게 배포 토큰이나 개인 액세스 토큰(PAT) 같은 raw 비밀을 붙여넣으라고 요구하지 마라. 그 인증은 사용자 에디터에 연결된 도구가 이미 갖고 있다고 가정한다.",
+  "- 도구가 아직 연결돼 있지 않으면, 토큰을 물어보지 말고 **\"에디터에서 Vercel(또는 GitHub) 연결을 한 번 해주세요\"**라고 그 도구를 연결(로그인)하는 방법만 한 단계 안내한 뒤, 연결되면 네가 배포를 이어간다.",
+  "",
+  "**저장소:** 코드를 GitHub에 올릴 때도 같은 방식 — 연결된 GitHub 도구로 네가 푸시하고, 사용자에게 토큰을 묻지 마라.",
+  "",
+  "**배포 후:** 실제 배포된 URL을 사용자에게 그대로 알려주고, 그 URL을 Simsa에 다시 넣어 확인받게 안내한다(아래 참고). 연결된 도구가 전혀 없어 자동 배포가 정말 불가능한 경우에만, 위 '초보자 안내' 방식의 수동 배포로 대체한다.",
+].join("\n");
+
+/**
  * Closing "bring it back to Simsa" guidance, appended after the beginner setup
  * block. Broader than the deep-link hook: reminds the agent that the user can
  * return with a deployed URL OR the project files/spec for another review.
@@ -499,6 +522,8 @@ function genClaudeCodePrompt(
     BEGINNER_SETUP_GUIDANCE,
     "",
     NONDEV_WORKFLOW_GUIDANCE,
+    "",
+    DEPLOY_VIA_MCP_GUIDANCE,
     "",
     RETURN_TO_SIMSA_GUIDANCE,
     "",
@@ -608,6 +633,8 @@ function genCodexPrompt(
     BEGINNER_SETUP_GUIDANCE,
     "",
     NONDEV_WORKFLOW_GUIDANCE,
+    "",
+    DEPLOY_VIA_MCP_GUIDANCE,
     "",
     RETURN_TO_SIMSA_GUIDANCE,
     "",
