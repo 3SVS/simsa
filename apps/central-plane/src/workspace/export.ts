@@ -32,6 +32,31 @@ export type ExportItem = {
   criteria: string[];
 };
 
+/**
+ * A single environment variable the app needs (prep layer). `value` is the real
+ * value the in-Simsa setup UI collected IN THE BROWSER and passes at export time
+ * — it is NEVER stored server-side (no-store, Rule 3). It lands only in the
+ * generated `.env.local` (gitignored). `.env.example` always uses `example`/a
+ * placeholder, never the real value. `secret: true` = server-only (e.g. a
+ * Supabase service_role key) — must never go in the frontend.
+ */
+export type BuilderPackEnvVar = {
+  key: string;
+  description: string;
+  secret?: boolean;
+  example?: string;
+  value?: string;
+};
+
+/** An external service the app connects to (database, hosting, auth, …). */
+export type BuilderPackService = {
+  id: string;
+  label: string;
+  setupUrl?: string;
+  setupSteps?: string[];
+  envVars: BuilderPackEnvVar[];
+};
+
 export type ExportCheckResult = {
   itemId: string;
   status: string;
@@ -85,6 +110,11 @@ export type WorkspaceExportBuilderPackRequest = {
    *  product.md always contains the full product context.
    *  If empty or omitted, all items are included. */
   selectedItemIds?: string[];
+  /** Prep layer (in-Simsa setup): external services + their env vars. When present
+   *  and non-empty, the pack gets `.env.example` + `SETUP.md` (+ `.env.local` when
+   *  the setup UI supplied real values). No-store: values arrive here per-export
+   *  and are only written into the pack, never persisted server-side (Rule 3). */
+  services?: BuilderPackService[];
   target: ExportTarget;
   format: ExportFormat;
   locale?: "ko" | "en";
@@ -624,6 +654,72 @@ export function regressionHookBlock(projectId?: string, appBaseUrl?: string): st
   ].join("\n");
 }
 
+// ─── Prep layer: .env + SETUP.md generation ──────────────────────────────────
+
+/** `.env.example` — every key with a PLACEHOLDER only. Never a real value, even
+ *  when the setup UI supplied one. Safe to commit. */
+function genEnvExample(services: BuilderPackService[]): string {
+  const lines: string[] = [
+    "# 환경변수 예시 — 이 파일은 커밋해도 안전합니다(실제 값 없음).",
+    "# 실제 값은 .env.local 에 넣으세요(커밋 금지).",
+  ];
+  for (const svc of services) {
+    lines.push("", `# ${svc.label}`);
+    for (const v of svc.envVars) {
+      const note = v.secret ? ` (서버 전용 · 절대 프론트엔드/브라우저에 넣지 마세요)` : "";
+      lines.push(`# ${v.description}${note}`);
+      lines.push(`${v.key}=${v.example ?? ""}`);
+    }
+  }
+  return lines.join("\n") + "\n";
+}
+
+/** `.env.local` — real values the setup UI collected. Returns null when NO value
+ *  was supplied (so an empty secret file is never emitted). Gitignored; loud
+ *  never-commit/never-share warning at the top. */
+function genEnvLocal(services: BuilderPackService[]): string | null {
+  const withValue = services.flatMap((s) => s.envVars.filter((v) => typeof v.value === "string" && v.value.length > 0));
+  if (withValue.length === 0) return null;
+  const lines: string[] = [
+    "# 주의: 실제 비밀 값입니다. 절대 커밋하거나 공유하지 마세요.",
+    "# 이 파일은 .gitignore 에 포함되어야 하며, service_role 같은 관리자 키는 서버에서만 사용하세요.",
+  ];
+  for (const svc of services) {
+    const vals = svc.envVars.filter((v) => typeof v.value === "string" && v.value.length > 0);
+    if (vals.length === 0) continue;
+    lines.push("", `# ${svc.label}`);
+    for (const v of vals) lines.push(`${v.key}=${v.value}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+/** `SETUP.md` — human guide: what each service is, exactly where to get each key,
+ *  where the value goes, with security warnings. Reuses the beginner hand-holding
+ *  style so the agent/user can finish anything the UI didn't pre-fill. */
+function genSetupMd(services: BuilderPackService[], hasValues: boolean): string {
+  const lines: string[] = [
+    "# 서비스·환경변수 설정",
+    "",
+    hasValues
+      ? "Simsa에서 입력하신 값은 `.env.local` 에 이미 채워져 있습니다. 아래는 각 값이 무엇이고 어디서 온 것인지, 그리고 채우지 못한 것을 마저 채우는 방법입니다."
+      : "이 앱은 아래 서비스가 필요합니다. 각 항목의 안내대로 가입·키 발급 후 `.env.local` 에 넣으세요.",
+    "",
+    "> **보안:** `.env.local` 은 절대 커밋하거나 공유하지 마세요(.gitignore 포함). `service_role` 같은 관리자 키는 **서버에서만** 쓰고 프론트엔드/브라우저에 넣지 마세요.",
+  ];
+  for (const svc of services) {
+    lines.push("", `## ${svc.label}`);
+    if (svc.setupUrl) lines.push("", `- 가입·설정: ${svc.setupUrl}`);
+    for (const step of svc.setupSteps ?? []) lines.push(`- ${step}`);
+    lines.push("", "필요한 값:");
+    for (const v of svc.envVars) {
+      const filled = typeof v.value === "string" && v.value.length > 0 ? " — [입력됨 · .env.local]" : "";
+      const secret = v.secret ? " · **서버 전용, 프론트 금지**" : "";
+      lines.push(`- \`${v.key}\` — ${v.description}${secret}${filled}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 // ─── Main export function ─────────────────────────────────────────────────────
 
 export function generateBuilderPack(
@@ -705,6 +801,23 @@ export function generateBuilderPack(
       content: genFixesMd(effectiveItems, effectiveFixSuggestions),
     },
   ];
+
+  // ── Prep layer: env + setup files (only when the setup UI provided services) ─
+  const services = req.services ?? [];
+  if (services.length > 0) {
+    baseFiles.push({
+      path: "conclave-build-pack/.env.example",
+      content: genEnvExample(services),
+    });
+    const envLocal = genEnvLocal(services);
+    if (envLocal) {
+      baseFiles.push({ path: "conclave-build-pack/.env.local", content: envLocal });
+    }
+    baseFiles.push({
+      path: "conclave-build-pack/SETUP.md",
+      content: genSetupMd(services, envLocal !== null),
+    });
+  }
 
   if (target !== "codex") {
     baseFiles.push({
