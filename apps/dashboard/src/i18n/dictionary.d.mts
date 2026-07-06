@@ -883,6 +883,9 @@ export type Dictionary = {
     savedOn: string;
     savedOff: string;
     saveError: string;
+    joinCta: string;
+    laterCta: string;
+    manageInSettings: string;
   };
   github: {
     connectTitle: string;
