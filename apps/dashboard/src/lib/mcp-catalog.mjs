@@ -17,11 +17,15 @@
  * @property {string} id
  * @property {string} label
  * @property {string} purpose      // why a non-dev needs this, one plain sentence
- * @property {string} connectHint  // how to connect it once, in their editor
  * @property {string} authNote     // the "we never see your token" reassurance
- * @property {string} connectCommand // the exact CLI command the user pastes to connect (Claude Code)
- * @property {string} authStep     // the one-time login step after running connectCommand
+ * @property {string} mcpName      // the MCP server name to register it under
+ * @property {string} serverUrl    // the official remote MCP server URL (agent-agnostic, stable)
  * @property {string} [docsUrl]
+ *
+ * The exact "how to connect" is resolved PER AGENT via agent-registry
+ * (resolveMcpConnect): Claude Code gets a `claude mcp add …` command; other
+ * agents get the serverUrl to add in their own MCP settings. The server URL is
+ * the stable fact and lives here; the command is not hardcoded to Claude Code.
  */
 
 /** @type {McpTool[]} */
@@ -30,10 +34,9 @@ export const MCP_CATALOG = [
     id: "github",
     label: "GitHub — 코드 저장소",
     purpose: "만든 코드를 저장하고 올려두는 곳입니다. 개발 AI가 여기에 코드를 올려야 나중에 Simsa에서 확인할 수 있어요.",
-    connectHint: "아래 명령을 개발 AI(Claude Code)에 한 번 붙여넣어 GitHub를 연결하세요. 그러면 개발 AI가 코드를 알아서 올립니다.",
     // Official GitHub remote MCP server (OAuth). Verified 2026-07.
-    connectCommand: "claude mcp add --transport http github https://api.githubcopilot.com/mcp/",
-    authStep: "명령을 실행한 뒤 Claude Code에서 `/mcp` 를 입력하면 GitHub 로그인 창이 열립니다. 한 번만 로그인하면 됩니다.",
+    mcpName: "github",
+    serverUrl: "https://api.githubcopilot.com/mcp/",
     authNote: "로그인은 에디터에서 한 번만 하면 됩니다. 토큰이나 비밀번호를 Simsa에 넣지 마세요 — 저희는 받지도, 저장하지도 않습니다.",
     docsUrl: "https://github.com/github/github-mcp-server",
   },
@@ -41,10 +44,9 @@ export const MCP_CATALOG = [
     id: "vercel",
     label: "Vercel — 인터넷에 배포",
     purpose: "만든 앱을 인터넷에 올려 접속 주소(URL)를 만드는 곳입니다. 개발 AI가 여기로 배포하면 바로 주소가 나와요.",
-    connectHint: "아래 명령을 개발 AI(Claude Code)에 한 번 붙여넣어 Vercel을 연결하세요. 그러면 \"배포해줘\" 한 번으로 배포까지 끝납니다.",
     // Official Vercel remote MCP server (OAuth, public beta). Verified 2026-07.
-    connectCommand: "claude mcp add --transport http vercel https://mcp.vercel.com",
-    authStep: "명령을 실행한 뒤 Claude Code에서 `/mcp` 를 입력하면 Vercel 로그인 창이 열립니다. 한 번만 로그인하면 됩니다.",
+    mcpName: "vercel",
+    serverUrl: "https://mcp.vercel.com",
     authNote: "로그인은 에디터에서 한 번만. 배포 토큰을 Simsa에 넣지 마세요 — 저희는 받지도, 저장하지도 않습니다.",
     docsUrl: "https://vercel.com/docs/mcp/vercel-mcp",
   },

@@ -9,6 +9,7 @@ import { detectServices, hasAnyValue } from "@/lib/service-catalog.mjs";
 import type { CatalogService } from "@/lib/service-catalog.mjs";
 import { detectMcpTools } from "@/lib/mcp-catalog.mjs";
 import type { McpTool } from "@/lib/mcp-catalog.mjs";
+import { primaryAgentForTarget, agentLabel, resolveMcpConnect } from "@/lib/agent-registry.mjs";
 import {
   getLocalProject,
   loadExtendedProjectData,
@@ -392,7 +393,7 @@ export default function ExportPage() {
       />
 
       {/* ── Prep: connect deploy tools (option A) — guidance only, no tokens ── */}
-      <McpSetupPanel tools={deployTools} />
+      <McpSetupPanel tools={deployTools} agentId={primaryAgentForTarget(target)} />
 
       {/* ── Config: target + selection mode ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -623,15 +624,16 @@ export default function ExportPage() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function McpSetupPanel({ tools }: { tools: McpTool[] }) {
+function McpSetupPanel({ tools, agentId }: { tools: McpTool[]; agentId: string }) {
   const { t } = useI18n();
   const d = t.exportPage.deployTools;
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   if (tools.length === 0) return null;
+  const label = agentLabel(agentId);
 
-  async function copyCommand(id: string, command: string) {
-    await copyText(command);
+  async function copyCommand(id: string, text: string) {
+    await copyText(text);
     setCopiedCmd(id);
     setTimeout(() => setCopiedCmd(null), 2000);
   }
@@ -640,45 +642,57 @@ function McpSetupPanel({ tools }: { tools: McpTool[] }) {
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <h2 className="text-sm font-semibold text-gray-800 mb-1">{d.title}</h2>
       <p className="text-sm text-gray-500 mb-3">{d.intro}</p>
-      <p className="text-xs text-brand-700 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 mb-4">{d.whatIsMcp}</p>
+      <p className="text-xs text-brand-700 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 mb-4">
+        {d.whatIsMcp.replace("{agent}", label)}
+      </p>
 
       <div className="space-y-3">
-        {tools.map((tool) => (
-          <div key={tool.id} className="border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <span className="text-sm font-medium text-gray-800">{tool.label}</span>
-              {tool.docsUrl && (
-                <a href={tool.docsUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs px-3 py-1 rounded-lg font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 transition-colors flex-shrink-0">
-                  {d.docsLabel} ↗
-                </a>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mb-3">{tool.purpose}</p>
-
-            {/* The exact connect command the user pastes into Claude Code */}
-            <div className="mb-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{d.commandLabel}</p>
-              <div className="flex items-stretch gap-2">
-                <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap bg-gray-900 text-gray-100 rounded-lg px-3 py-2 text-xs font-mono">
-                  {tool.connectCommand}
-                </code>
-                <button onClick={() => copyCommand(tool.id, tool.connectCommand)}
-                  className="flex-shrink-0 text-xs px-3 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-                  {copiedCmd === tool.id ? t.exportPage.copied : t.exportPage.copy}
-                </button>
+        {tools.map((tool) => {
+          // Connect instructions follow the agent the user picked: Claude Code
+          // gets the exact `claude mcp add` command; others get the server URL to
+          // add in their own MCP settings (never a wrong command).
+          const conn = resolveMcpConnect(agentId, { mcpName: tool.mcpName, serverUrl: tool.serverUrl });
+          const isCommand = conn.style === "command";
+          const copyValue = isCommand ? conn.command! : conn.serverUrl!;
+          const authStep = (isCommand ? d.authStepCommand : d.authStepSettings).replace("{agent}", label);
+          return (
+            <div key={tool.id} className="border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <span className="text-sm font-medium text-gray-800">{tool.label}</span>
+                {tool.docsUrl && (
+                  <a href={tool.docsUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-xs px-3 py-1 rounded-lg font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 transition-colors flex-shrink-0">
+                    {d.docsLabel} ↗
+                  </a>
+                )}
               </div>
-              <p className="mt-1.5 text-xs text-gray-600">
-                <span className="font-medium text-gray-700">{d.authStepLabel}:</span> {tool.authStep}
-              </p>
-            </div>
+              <p className="text-xs text-gray-500 mb-3">{tool.purpose}</p>
 
-            <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-600 mb-0.5">{d.safetyLabel}</p>
-              <p className="text-xs text-brand-700">{tool.authNote}</p>
+              <div className="mb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+                  {isCommand ? d.commandLabel : d.serverUrlLabel}
+                </p>
+                <div className="flex items-stretch gap-2">
+                  <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap bg-gray-900 text-gray-100 rounded-lg px-3 py-2 text-xs font-mono">
+                    {copyValue}
+                  </code>
+                  <button onClick={() => copyCommand(tool.id, copyValue)}
+                    className="flex-shrink-0 text-xs px-3 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+                    {copiedCmd === tool.id ? t.exportPage.copied : t.exportPage.copy}
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs text-gray-600">
+                  <span className="font-medium text-gray-700">{d.authStepLabel}:</span> {authStep}
+                </p>
+              </div>
+
+              <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-600 mb-0.5">{d.safetyLabel}</p>
+                <p className="text-xs text-brand-700">{tool.authNote}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
