@@ -572,6 +572,14 @@ export type Dictionary = {
       docsLabel: string;
     };
   };
+  share: {
+    starGithub: string;
+    badgeTitle: string;
+    badgeIntro: string;
+    markdownLabel: string;
+    htmlLabel: string;
+    previewLabel: string;
+  };
   adminUsage: {
     title: string;
     viewCreditPreview: string;

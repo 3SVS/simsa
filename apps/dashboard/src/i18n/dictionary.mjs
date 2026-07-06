@@ -645,6 +645,14 @@ const EN = {
       docsLabel: "Official guide",
     },
   },
+  share: {
+    starGithub: "Star on GitHub",
+    badgeTitle: "Show you reviewed with Simsa",
+    badgeIntro: "Add this badge to your repo's README — it shows visitors your app was reviewed with Simsa and links back here.",
+    markdownLabel: "Markdown",
+    htmlLabel: "HTML",
+    previewLabel: "Preview",
+  },
   adminUsage: {
     title: "Admin — Usage",
     viewCreditPreview: "View credit preview →",
@@ -2919,6 +2927,14 @@ const KO = {
       safetyLabel: "키는 사용자에게만",
       docsLabel: "공식 안내",
     },
+  },
+  share: {
+    starGithub: "GitHub에서 별 주기",
+    badgeTitle: "Simsa로 검수했다고 알리기",
+    badgeIntro: "저장소 README에 이 뱃지를 붙이세요 — 방문자에게 이 앱이 Simsa로 검수됐음을 보여주고 여기로 연결됩니다.",
+    markdownLabel: "Markdown",
+    htmlLabel: "HTML",
+    previewLabel: "미리보기",
   },
   adminUsage: {
     title: "Admin — 사용 현황",
