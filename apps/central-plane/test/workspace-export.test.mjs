@@ -109,6 +109,18 @@ describe("workspace export-builder-pack", () => {
       assert.ok(p.includes("병합") && p.includes("PR"), "no branch/merge/PR questions");
       // finish = a running result, not a git-strategy menu
       assert.match(p, /마무리 — 질문이 아니라 결과물/);
+      // deploy-via-MCP (option A): agent deploys with its own connected tools,
+      // one shot, and NEVER handles raw tokens
+      assert.match(p, /한 번에 배포 — 네게 연결된 도구로 네가 직접/);
+      assert.ok(p.includes("MCP") && p.includes("CLI"), "names the connected deploy tools");
+      assert.ok(
+        p.includes("raw 비밀을 붙여넣으라고 요구하지 마라"),
+        "never ask the user for a raw token",
+      );
+      assert.ok(
+        p.includes("하드코딩하거나 기록하지 마라"),
+        "never hardcode/record tokens in code, commits, files, or the prompt",
+      );
     }
   });
 
