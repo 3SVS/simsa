@@ -48,15 +48,23 @@ function buildRecommendPrompt(req: WorkspaceRecommendAnswerRequest): string {
   if (req.targetUsers && req.targetUsers.length > 0) ctx.push(`Target users: ${req.targetUsers.join(", ")}`);
   const context = ctx.length > 0 ? ctx.join("\n") : "(no extra context)";
 
-  // English scaffolding is DELIBERATE even when the answer must be Korean.
-  // Verified live via `wrangler tail`: a fully-Korean prompt makes
-  // claude-haiku-4-5 hallucinate an "인코딩 오류로 읽을 수 없습니다" refusal, but
-  // mixing English framing with Korean content reliably engages it
-  // (KO-template+EN-content and EN-template+KO-content both returned 200 while
-  // KO-template+KO-content failed 3/3). So we always frame in English and just
-  // require the OUTPUT values in the user's language. Earlier attempts (반말
-  // command, check-draft-style 존댓말 + brackets, a few-shot example) all still
-  // triggered the refusal because the prompt was fully Korean.
+  // Why the scaffolding is English while the output is Korean:
+  //
+  // HONEST HISTORY (do not "fix" this back to a fully-Korean prompt without
+  // reading this). During live verification the Korean path appeared to fail —
+  // the model reported the input as "corrupted/인코딩 오류". That was NOT a real
+  // model or prompt bug: the manual test harness (Windows Git Bash `curl -d`)
+  // was sending the Korean body as mojibake, and the model correctly reported
+  // the garbled bytes. With a proper UTF-8 payload every prompt variant works.
+  // Three prompt PRs (#286 few-shot, #287 check-draft-style, #288 this English
+  // scaffold) were merged chasing that phantom before it was isolated.
+  //
+  // We KEEP the English scaffold (decision, 2026-07-07): it is verified live to
+  // produce high-quality Korean ("90일" + sensible reason + options), and
+  // English framing + localized output is a standard, defensible technique. A
+  // pure-Korean prompt would also work now — this is a preference, not a fix.
+  // The context labels are English; the VALUES stay in the user's language, and
+  // langLine forces the OUTPUT into it. See gotcha-windows-gitbash-curl-utf8.
   const langLine = ko
     ? "Write recommendation, reason, and every option value in natural Korean (한국어)."
     : "Write recommendation, reason, and options in English.";
