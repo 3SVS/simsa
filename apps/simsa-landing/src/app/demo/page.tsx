@@ -3,6 +3,7 @@
 // backend). It shows the transformation: AI-built draft -> staged acceptance.
 import type { Metadata } from "next";
 import Link from "next/link";
+import { StampMark } from "../../components/StampMark";
 
 const APP_URL = "https://app.trysimsa.com";
 const CONTACT_EMAIL = "seunghunbae@b2w.kr";
@@ -46,10 +47,24 @@ const OUTPUT = [
 export default function Demo() {
   return (
     <main>
+      <header className="nav">
+        <div className="container nav-inner">
+          <Link className="nav-brand" href="/">
+            <StampMark size={26} id="nav" />
+            Simsa
+          </Link>
+          <div className="nav-actions">
+            <a className="nav-cta" href={APP_URL}>
+              Open Simsa
+            </a>
+          </div>
+        </div>
+      </header>
+
       <section className="hero">
         <div className="container">
           <span className="demo-label">Public demo · Fictional example</span>
-          <h1 className="tagline">
+          <h1 className="demo-title">
             From AI-built draft to staged acceptance workflow.
           </h1>
           <p className="lede">
@@ -193,6 +208,9 @@ export default function Demo() {
 
       <footer className="foot">
         <div className="container">
+          <div className="foot-mark" aria-hidden>
+            <StampMark size={36} rough id="foot" />
+          </div>
           <nav className="foot-links">
             <Link href="/">Home</Link>
             <Link href="/privacy">Privacy</Link>

@@ -1068,6 +1068,37 @@ body::after {
   margin-bottom: 1rem;
 }
 
+/* Demo intro heading — section-scale, NOT the marketing hero .tagline scale */
+.demo-title {
+  font-size: clamp(1.9rem, 4.6vw, 2.9rem);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  margin: 0 auto 1.1rem;
+  max-width: 16em;
+  word-break: keep-all;
+  text-wrap: balance;
+  color: var(--fg);
+}
+
+/* Demo list blocks (acceptance items / Simsa output) — quiet card rows */
+.outputs {
+  list-style: none;
+  margin: 1.1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.outputs li {
+  padding: 0.85rem 1.1rem;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
+  font-size: 0.97rem;
+  color: var(--fg);
+}
+
 .demo-card {
   border: none;
   border-radius: var(--radius-md);
@@ -1145,13 +1176,15 @@ body::after {
   padding: 3rem 0 4rem;
 }
 
+/* Quiet text-link back to the landing (matches footer link treatment) */
 .back {
   display: inline-block;
   margin-bottom: 1.5rem;
   font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--muted);
+  font-weight: 500;
+  color: var(--faint);
   text-decoration: none;
+  transition: color 120ms ease;
 }
 
 .back:hover {

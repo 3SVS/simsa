@@ -2,7 +2,9 @@
 // Not a final/lawyer-reviewed agreement; no paid plans or billing terms.
 import type { Metadata } from "next";
 import Link from "next/link";
+import { StampMark } from "../../components/StampMark";
 
+const APP_URL = "https://app.trysimsa.com";
 const CONTACT_EMAIL = "seunghunbae@b2w.kr";
 
 export const metadata: Metadata = {
@@ -13,6 +15,20 @@ export const metadata: Metadata = {
 export default function Terms() {
   return (
     <main>
+      <header className="nav">
+        <div className="container nav-inner">
+          <Link className="nav-brand" href="/">
+            <StampMark size={26} id="nav" />
+            Simsa
+          </Link>
+          <div className="nav-actions">
+            <a className="nav-cta" href={APP_URL}>
+              Open Simsa
+            </a>
+          </div>
+        </div>
+      </header>
+
       <article className="legal container">
         <Link className="back" href="/">
           ← Simsa
@@ -60,6 +76,9 @@ export default function Terms() {
 
       <footer className="foot">
         <div className="container">
+          <div className="foot-mark" aria-hidden>
+            <StampMark size={36} rough id="foot" />
+          </div>
           <nav className="foot-links">
             <Link href="/privacy">Privacy</Link>
             <Link href="/terms">Terms</Link>
