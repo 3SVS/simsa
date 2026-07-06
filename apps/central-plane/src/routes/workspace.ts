@@ -583,6 +583,9 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       target: req.target,
       format: req.format ?? "json",
       locale: req.locale ?? "ko",
+      // Prep layer: the in-Simsa setup UI sends the collected services/env values
+      // per-export. Passed straight into the pack (.env), never stored server-side.
+      ...(req.services ? { services: req.services } : {}),
     });
 
     // Record usage event (non-fatal)

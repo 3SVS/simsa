@@ -47,7 +47,7 @@ const MOCK_FIX = {
   },
 };
 
-function makeReq(target, overrides = {}) {
+function makeReq(target, overrides = {}, reqOverrides = {}) {
   return {
     project: {
       title: MOCK_SPEC.productName,
@@ -58,6 +58,7 @@ function makeReq(target, overrides = {}) {
     target,
     format: "json",
     locale: "ko",
+    ...reqOverrides,
   };
 }
 
@@ -164,6 +165,59 @@ describe("workspace export-builder-pack", () => {
         );
       }
     }
+  });
+
+  const MOCK_SERVICES = [
+    {
+      id: "supabase",
+      label: "Supabase (데이터베이스)",
+      setupUrl: "https://supabase.com",
+      setupSteps: ["New project → Project Settings → API"],
+      envVars: [
+        { key: "NEXT_PUBLIC_SUPABASE_URL", description: "프로젝트 URL", example: "https://xxxx.supabase.co", value: "https://real.supabase.co" },
+        { key: "SUPABASE_SERVICE_ROLE_KEY", description: "관리자 키", secret: true, value: "svc_real_key" },
+      ],
+    },
+  ];
+
+  it("no prep files when services are absent (backward compatible)", () => {
+    const res = generateBuilderPack(makeReq("both"));
+    const paths = res.bundle.files.map((f) => f.path);
+    assert.ok(!paths.some((p) => p.endsWith(".env.example")));
+    assert.ok(!paths.some((p) => p.endsWith(".env.local")));
+    assert.ok(!paths.some((p) => p.endsWith("SETUP.md")));
+  });
+
+  it("services → .env.example + SETUP.md; example NEVER holds real values (security)", () => {
+    const res = generateBuilderPack(makeReq("both", {}, { services: MOCK_SERVICES }));
+    const example = res.bundle.files.find((f) => f.path.endsWith(".env.example"));
+    const setup = res.bundle.files.find((f) => f.path.endsWith("SETUP.md"));
+    assert.ok(example && setup, ".env.example + SETUP.md generated");
+    // keys + placeholders present, but NO real value leaks into the committable example
+    assert.ok(example.content.includes("NEXT_PUBLIC_SUPABASE_URL="));
+    assert.ok(example.content.includes("https://xxxx.supabase.co")); // placeholder
+    assert.ok(!example.content.includes("https://real.supabase.co"), "real value must not be in .env.example");
+    assert.ok(!example.content.includes("svc_real_key"), "real secret must not be in .env.example");
+    // secret var carries the server-only warning
+    assert.ok(example.content.includes("프론트엔드") || example.content.includes("서버 전용"));
+    assert.ok(setup.content.includes("https://supabase.com"), "setup URL in SETUP.md");
+  });
+
+  it("services WITH values → .env.local holds the real values (and is warned)", () => {
+    const res = generateBuilderPack(makeReq("both", {}, { services: MOCK_SERVICES }));
+    const local = res.bundle.files.find((f) => f.path.endsWith(".env.local"));
+    assert.ok(local, ".env.local generated when values supplied");
+    assert.ok(local.content.includes("SUPABASE_SERVICE_ROLE_KEY=svc_real_key"));
+    assert.ok(local.content.includes("https://real.supabase.co"));
+    assert.ok(local.content.includes("커밋") && local.content.includes("공유"), "never-commit/share warning");
+  });
+
+  it("services with NO values → no .env.local (never an empty secret file)", () => {
+    const noVals = [{ id: "x", label: "X", envVars: [{ key: "K", description: "d" }] }];
+    const res = generateBuilderPack(makeReq("both", {}, { services: noVals }));
+    const paths = res.bundle.files.map((f) => f.path);
+    assert.ok(paths.some((p) => p.endsWith(".env.example")), "example still generated");
+    assert.ok(!paths.some((p) => p.endsWith(".env.local")), "no .env.local without values");
   });
 
   it("returns empty files when no project provided", () => {
