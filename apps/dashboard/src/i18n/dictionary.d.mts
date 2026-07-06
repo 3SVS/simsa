@@ -1826,6 +1826,7 @@ export type Dictionary = {
     saving: string;
     refreshing: string;
     waitHint: string;
+    waitHintLong: string;
   };
   planMap: {
     title: string;

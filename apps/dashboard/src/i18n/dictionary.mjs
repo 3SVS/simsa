@@ -1940,6 +1940,7 @@ const EN = {
     saving: "Saving…",
     refreshing: "Refreshing…",
     waitHint: "Usually 20–30 seconds — keep this window open.",
+    waitHintLong: "Usually 30 seconds to a minute — keep this window open.",
   },
   // Stage 183 — Plan Map ("심사 지도") read-only preview copy. Honest, generated, no
   // multi-user / certification claims.
@@ -4202,6 +4203,7 @@ const KO = {
     saving: "저장하는 중…",
     refreshing: "새로고침하는 중…",
     waitHint: "보통 20~30초 걸려요 — 창을 닫지 마세요.",
+    waitHintLong: "보통 30초~1분 걸려요 — 창을 닫지 마세요.",
   },
   // Stage 183 — Plan Map (심사 지도) 읽기 전용 미리보기 카피.
   planMap: {
