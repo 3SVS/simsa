@@ -619,6 +619,16 @@ const EN = {
       valuePlaceholder: "Paste the value here",
       note: "Fill in any values and they'll be written to .env.local in the pack (kept out of git). Leave them blank to still get a .env.example template plus a setup guide.",
     },
+    returnStep: {
+      title: "Built it? Come back and connect it",
+      intro: "Once your dev AI has finished and you've deployed, connect what it made — then run a real check on the actual code and live app.",
+      repoTitle: "Connect GitHub repo & check code",
+      repoDesc: "Link the repository your AI pushed to, then review the pull request against your items.",
+      repoCta: "Go to Code changes",
+      siteTitle: "Connect the deployed website",
+      siteDesc: "Add your live app URL to run a visual check of the finished screens.",
+      siteCta: "Connect app URL",
+    },
   },
   adminUsage: {
     title: "Admin — Usage",
@@ -2157,6 +2167,10 @@ const EN = {
     deviceNoteTitle: "This link is device-scoped",
     deviceNoteBody:
       "This project was created in another browser or device, so its details aren't stored here. You can still connect your deployed URL below. Sign in to sync your projects across devices.",
+    orLabel: "Or connect the code your AI pushed",
+    repoTitle: "Connect your GitHub repository",
+    repoBody: "If your dev AI pushed code to GitHub, connect the repo to review the actual pull request against your items.",
+    repoLink: "Go to Code changes",
   },
   // Stage 262 — project sources (연결): website, GitHub repo, uploaded documents.
   sources: {
@@ -2862,6 +2876,16 @@ const KO = {
       secretBadge: "서버 전용",
       valuePlaceholder: "여기에 값을 붙여넣으세요",
       note: "값을 입력하면 팩의 .env.local 에 기록됩니다(깃에는 올라가지 않습니다). 비워 두면 .env.example 템플릿과 설정 안내서만 만들어집니다.",
+    },
+    returnStep: {
+      title: "다 만드셨나요? 돌아와서 연결하세요",
+      intro: "개발 AI가 완성하고 배포까지 마쳤다면, 만들어진 결과물을 연결한 뒤 실제 코드와 라이브 앱으로 다시 확인하세요.",
+      repoTitle: "GitHub 저장소 연결하고 코드 확인",
+      repoDesc: "AI가 올린 저장소를 연결한 뒤, 항목 기준으로 PR을 확인합니다.",
+      repoCta: "코드 변경으로 가기",
+      siteTitle: "배포된 웹사이트 연결",
+      siteDesc: "배포된 앱 주소를 넣어 완성된 화면을 시각 검수합니다.",
+      siteCta: "앱 주소 연결하기",
     },
   },
   adminUsage: {
@@ -4388,6 +4412,10 @@ const KO = {
     deviceNoteTitle: "이 링크는 기기 전용이에요",
     deviceNoteBody:
       "이 프로젝트는 다른 브라우저나 기기에서 만들어져 여기에는 세부 정보가 저장돼 있지 않아요. 그래도 아래에서 배포된 주소를 연결할 수 있어요. 로그인하면 기기 간에 프로젝트가 동기화돼요.",
+    orLabel: "또는 AI가 올린 코드를 연결하세요",
+    repoTitle: "GitHub 저장소 연결하기",
+    repoBody: "개발 AI가 GitHub에 코드를 올렸다면, 저장소를 연결해 항목 기준으로 실제 PR을 확인하세요.",
+    repoLink: "코드 변경으로 가기",
   },
   // Stage 262 — 연결(프로젝트 소스): 웹사이트 · GitHub 저장소 · 문서 업로드.
   sources: {

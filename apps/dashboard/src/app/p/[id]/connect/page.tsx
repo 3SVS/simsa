@@ -160,6 +160,18 @@ export default function ConnectReentryPage() {
             )}
           </button>
         </form>
+
+        {/* Return hub: the deep link now also routes to repo connect + code
+            re-check, not just the website URL — so "come back and connect it"
+            covers both halves of what the user built. */}
+        <div className="mt-6 border-t border-gray-100 pt-5">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{c.orLabel}</p>
+          <p className="mt-2 text-sm font-medium text-gray-800">{c.repoTitle}</p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-500">{c.repoBody}</p>
+          <Link href={`/projects/${id}/github`} className="btn btn-secondary btn-sm mt-3">
+            {c.repoLink}
+          </Link>
+        </div>
       </section>
     </div>
   );

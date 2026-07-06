@@ -533,6 +533,26 @@ export default function ExportPage() {
             </ol>
           </div>
 
+          {/* Return-to-review: the missing signpost for "built it → come back and connect it" */}
+          <div className="bg-brand-50 border border-brand-100 rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-brand-900 mb-1">{t.exportPage.returnStep.title}</h2>
+            <p className="text-sm text-brand-700 mb-4">{t.exportPage.returnStep.intro}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Link href={`/projects/${id}/github`}
+                className="block bg-white rounded-xl border border-brand-200 p-4 hover:border-brand-400 transition-colors">
+                <p className="text-sm font-medium text-gray-800 mb-1">{t.exportPage.returnStep.repoTitle}</p>
+                <p className="text-xs text-gray-500 mb-3">{t.exportPage.returnStep.repoDesc}</p>
+                <span className="text-xs font-medium text-brand-700">{t.exportPage.returnStep.repoCta} →</span>
+              </Link>
+              <Link href={`/p/${id}/connect`}
+                className="block bg-white rounded-xl border border-brand-200 p-4 hover:border-brand-400 transition-colors">
+                <p className="text-sm font-medium text-gray-800 mb-1">{t.exportPage.returnStep.siteTitle}</p>
+                <p className="text-xs text-gray-500 mb-3">{t.exportPage.returnStep.siteDesc}</p>
+                <span className="text-xs font-medium text-brand-700">{t.exportPage.returnStep.siteCta} →</span>
+              </Link>
+            </div>
+          </div>
+
           {/* File browser */}
           <div className="flex gap-4 h-[500px]">
             <div className="w-48 flex-shrink-0 bg-white rounded-xl border border-gray-200 overflow-y-auto">
