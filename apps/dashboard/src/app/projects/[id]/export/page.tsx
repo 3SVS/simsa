@@ -33,6 +33,7 @@ import { downloadBuildPackZip } from "@/lib/zip-utils";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
 import Link from "next/link";
+import { buildSimsaBadgeMarkdown, buildSimsaBadgeHtml, SIMSA_BADGE_IMG } from "@/lib/simsa-share.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import { statusLabel } from "@/i18n/dictionary.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
@@ -616,6 +617,9 @@ export default function ExportPage() {
 
           {/* ── Past outcomes ── */}
           {outcomes.length > 0 && <OutcomeHistory outcomes={outcomes} projectId={id} />}
+
+          {/* ── Show you reviewed with Simsa (repo badge) ── */}
+          <SimsaBadgePanel />
         </>
       )}
     </div>
@@ -623,6 +627,50 @@ export default function ExportPage() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SimsaBadgePanel() {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState<"md" | "html" | null>(null);
+  const md = buildSimsaBadgeMarkdown();
+  const html = buildSimsaBadgeHtml();
+
+  async function copy(which: "md" | "html", text: string) {
+    await copyText(text);
+    setCopied(which);
+    setTimeout(() => setCopied(null), 2000);
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <h2 className="text-sm font-semibold text-gray-800 mb-1">{t.share.badgeTitle}</h2>
+      <p className="text-sm text-gray-500 mb-3">{t.share.badgeIntro}</p>
+
+      <div className="mb-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{t.share.previewLabel}</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={SIMSA_BADGE_IMG} alt="Reviewed with Simsa" className="h-5" />
+      </div>
+
+      {([
+        { which: "md" as const, label: t.share.markdownLabel, value: md },
+        { which: "html" as const, label: t.share.htmlLabel, value: html },
+      ]).map(({ which, label, value }) => (
+        <div key={which} className="mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{label}</p>
+          <div className="flex items-stretch gap-2">
+            <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap bg-gray-900 text-gray-100 rounded-lg px-3 py-2 text-xs font-mono">
+              {value}
+            </code>
+            <button onClick={() => copy(which, value)}
+              className="flex-shrink-0 text-xs px-3 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+              {copied === which ? t.exportPage.copied : t.exportPage.copy}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function McpSetupPanel({ tools, agentId }: { tools: McpTool[]; agentId: string }) {
   const { t } = useI18n();

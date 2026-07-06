@@ -12,6 +12,7 @@ import { Tooltip } from "@/components/Tooltip";
 import { getAuthSession, signOutAuth } from "@/lib/auth-client.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
+import { SIMSA_REPO_URL } from "@/lib/simsa-share.mjs";
 
 const MOCK_IDS = new Set(MOCK_PROJECTS.map((p) => p.id));
 
@@ -381,6 +382,17 @@ export function AppSidebar() {
         >
           {t.nav.feedback}
         </button>
+        <a
+          href={SIMSA_REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mb-1 flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+        >
+          <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 flex-shrink-0" fill="currentColor">
+            <path d="M8 .25l2.06 4.17 4.6.67-3.33 3.24.79 4.58L8 10.94l-4.12 2.17.79-4.58L1.34 5.09l4.6-.67L8 .25z" />
+          </svg>
+          {t.share.starGithub}
+        </a>
         <div ref={accountMenuRef} className="relative">
           <button
             type="button"
