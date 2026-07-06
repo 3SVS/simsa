@@ -340,7 +340,7 @@ function NewProjectInner() {
     router.push(`/projects/${id}/settings`);
   }
 
-  function handleSave() {
+  async function handleSave() {
     const spec = specResult ?? result;
     if (!spec) return;
     const id = generateProjectId();
@@ -369,7 +369,12 @@ function NewProjectInner() {
       itemCriteria: Object.fromEntries(spec.items.map((i) => [i.id, i.criteria ?? []])),
       entryPath: entryPath ?? "idea",
     });
-    saveProjectToDb({
+    // Await the D1 persist BEFORE navigating (was fire-and-forget). Same race
+    // #258 fixed on the code branch: navigating first leaves the project row
+    // uncommitted, so a later repo-link (ownership-gated) 404s forever and the
+    // user hits the reconnect loop. Awaiting means the row is in D1 by the time
+    // they reach settings to connect a repo.
+    const saveRes = await saveProjectToDb({
       id,
       userKey: getUserKey(),
       title: spec.productSpec.productName,
@@ -383,9 +388,8 @@ function NewProjectInner() {
           : undefined,
       // The branch the user chose at the single entry (idea/code/spec).
       entryPath: entryPath ?? "idea",
-    })
-      .then((res) => { if (!res || res.ok !== true) { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); } })
-      .catch(() => { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); });
+    }).catch(() => null);
+    if (!saveRes || saveRes.ok !== true) { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); }
     router.push(`/projects/${id}`);
   }
 

@@ -146,15 +146,21 @@ export default function GitHubPage() {
 
   const loadInitial = useCallback(async () => {
     setLoadPhase("loading");
-    const [repoRes, linkedRes] = await Promise.all([
-      fetchProjectRepo(id, getUserKey()),
-      fetchLinkedPulls(id, getUserKey()),
-    ]);
+    // Read-after-write: a just-linked repo can briefly read back as null while
+    // D1 propagates. Retry a few times before concluding "no repo" — otherwise a
+    // user who just connected gets funneled back to /settings to reconnect what
+    // is already connected, which reads as an infinite loop (무한 도돌이표).
+    let repoRes = await fetchProjectRepo(id, getUserKey());
+    for (let attempt = 0; attempt < 3 && repoRes.ok && !repoRes.repo; attempt++) {
+      await new Promise((r) => setTimeout(r, 700));
+      repoRes = await fetchProjectRepo(id, getUserKey());
+    }
+    const linkedRes = await fetchLinkedPulls(id, getUserKey());
     if (repoRes.ok && repoRes.repo) {
       setRepo(repoRes.repo);
       setLoadPhase("ready");
     } else if (repoRes.ok) {
-      // Confirmed: genuinely no repo linked.
+      // Confirmed after retries: genuinely no repo linked.
       setLoadPhase("no_repo");
     } else {
       // Transient fetch failure ≠ "not connected" — a user WITH a linked repo
@@ -341,12 +347,16 @@ export default function GitHubPage() {
         <div className="card p-8 text-center">
           <p className="mb-4 text-sm text-gray-600">{t.github.connectRepoFirst}</p>
           <div className="flex items-center justify-center gap-2">
-            <Link href={`/projects/${id}/settings`} className="btn btn-md btn-primary">
-              {t.github.goConnectRepo}
-            </Link>
-            <button onClick={() => void loadInitial()} className="btn btn-md btn-secondary">
+            {/* Retry is PRIMARY: if the repo was just connected and briefly read
+                as null, one re-check recovers it — so the reflexive click keeps
+                the user here instead of looping back to reconnect. Connecting is
+                the secondary path for a genuinely un-linked project. */}
+            <button onClick={() => void loadInitial()} className="btn btn-md btn-primary">
               {t.common.retry}
             </button>
+            <Link href={`/projects/${id}/settings`} className="btn btn-md btn-secondary">
+              {t.github.goConnectRepo}
+            </Link>
           </div>
         </div>
       )}
