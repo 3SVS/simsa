@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
 import { detectServices, hasAnyValue, allCatalogServices, catalogServiceById } from "@/lib/service-catalog.mjs";
+import { loadServiceValues, saveServiceValues } from "@/lib/service-values-store.mjs";
 import type { CatalogService } from "@/lib/service-catalog.mjs";
 import { detectMcpTools } from "@/lib/mcp-catalog.mjs";
 import type { McpTool } from "@/lib/mcp-catalog.mjs";
@@ -152,9 +153,12 @@ export default function ExportPage() {
   const [outcomeSavePhase, setOutcomeSavePhase] = useState<"idle" | "saving" | "saved_remote" | "saved_local">("idle");
 
   // ── Prep layer: detected services + in-browser key values ─────────────────
-  // Values live only in this component's state and are sent per-export; they are
-  // never persisted server-side (no-store, Rule 3).
+  // Values are sent per-export and never persisted server-side (no-store, Rule 3).
+  // They ARE kept in browser sessionStorage so they survive navigation to/from
+  // the prep step (A2) and a refresh — cleared when the tab closes.
   const [services, setServices] = useState<CatalogService[]>(() => {
+    const stored = loadServiceValues(id) as CatalogService[] | null;
+    if (stored && stored.length > 0) return stored;
     const e = loadExtendedProjectData(id);
     return detectServices({
       oneLine: e?.productSpec?.oneLine ?? project?.description,
@@ -166,6 +170,8 @@ export default function ExportPage() {
   });
   const servicesRef = useRef<CatalogService[]>(services);
   useEffect(() => { servicesRef.current = services; }, [services]);
+  // Persist collected values (browser-only) so they carry across the prep flow.
+  useEffect(() => { saveServiceValues(id, services); }, [id, services]);
 
   function setEnvValue(serviceId: string, key: string, value: string) {
     setServices((prev) =>
