@@ -24,6 +24,7 @@ import { extractDocumentsText, SUPPORTED_ACCEPT } from "@/lib/document-extract";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import { Spinner } from "@/components/Spinner";
+import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 import { useToast } from "@/components/Toast";
 import { BranchGlyph } from "@/components/brand/BranchGlyph";
 import { buildStepper, rotatingWaitLine } from "@/lib/wizard-steps.mjs";
@@ -679,14 +680,19 @@ function NewProjectInner() {
                 >
                   {isGeneratingSpec ? (
                     <>
-                      <Spinner /> {t.np.generating}
+                      <SimsaStampThinking variant="compact" label={t.np.generating} /> {t.np.generating}
                     </>
                   ) : (
                     `${t.np.generateSpec} (${answeredCount}/${questions.length}) →`
                   )}
                 </button>
               </div>
-              {isGeneratingSpec && waitLine && <WaitLine text={waitLine} />}
+              {isGeneratingSpec && (
+                <div className="mt-2 space-y-1 text-center">
+                  {waitLine && <WaitLine text={waitLine} />}
+                  <p className="text-xs text-gray-400">{t.loading.waitHint}</p>
+                </div>
+              )}
             </div>
           )}
 
