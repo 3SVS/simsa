@@ -425,7 +425,11 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     let result;
     try {
-      result = await generateCheckDraft({ productSpec: req.productSpec, items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" }, c.env.ANTHROPIC_API_KEY);
+      // Route through the Cloudflare AI Gateway like every other LLM call —
+      // direct Worker→Anthropic egress ~90% 403s, which surfaced as the
+      // recurring "확인 중 오류가 발생했습니다". This was the ONE LLM route that
+      // omitted the gateway URL.
+      result = await generateCheckDraft({ productSpec: req.productSpec, items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL);
     } catch (err) {
       console.error("[workspace/check-draft] error:", err);
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
