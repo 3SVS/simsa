@@ -8,6 +8,7 @@ import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { useI18n } from "@/i18n/I18nProvider";
 import { statusLabel } from "@/i18n/dictionary.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
+import { StampMark } from "@/components/brand/StampMark";
 
 export default function ProjectsPage() {
   const { t } = useI18n();
@@ -36,13 +37,11 @@ export default function ProjectsPage() {
           ))}
         </div>
       ) : localProjects.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
+        <div className="card flex flex-col items-center px-6 py-16 text-center">
+          <StampMark size={40} className="mb-4 opacity-90" />
           <h2 className="text-base font-semibold text-gray-900">{t.projects.emptyTitle}</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">{t.projects.emptyBody}</p>
-          <Link
-            href="/projects/new"
-            className="mt-5 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-          >
+          <Link href="/projects/new" className="btn btn-primary btn-md mt-5">
             + {t.projects.newProject}
           </Link>
         </div>
@@ -82,7 +81,7 @@ function ProjectCard({
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="block rounded-xl border border-gray-200 bg-white p-6 transition-all hover:border-indigo-300 hover:shadow-sm"
+      className="card card-select block p-6"
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>

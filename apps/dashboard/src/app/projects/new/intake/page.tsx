@@ -394,7 +394,7 @@ export default function IntakePage() {
       <div className="w-full max-w-2xl">
         <Link
           href="/projects/new"
-          className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900"
+          className="mb-6 inline-flex items-center gap-1 text-sm text-gray-500 transition-colors hover:text-gray-800"
         >
           <span aria-hidden>←</span> {tr.branch.backToChooser}
         </Link>
@@ -564,6 +564,10 @@ export default function IntakePage() {
                 </button>
               )}
             </div>
+            {/* Disabled-reason helper (§1-3): say WHY the primary is inert. */}
+            {!rawInput.trim() && (
+              <p className="mt-1.5 text-xs text-gray-400">{ic.createDisabledHint}</p>
+            )}
           </div>
         )}
 

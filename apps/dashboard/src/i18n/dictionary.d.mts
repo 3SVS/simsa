@@ -1607,6 +1607,7 @@ export type Dictionary = {
     };
     page: {
       createDraftButton: string;
+      createDisabledHint: string;
       useExampleUrl: string;
       useExampleRepo: string;
       useExampleApp: string;
