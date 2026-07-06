@@ -46,28 +46,47 @@ function buildRecommendPrompt(req: WorkspaceRecommendAnswerRequest): string {
   if (req.targetUsers && req.targetUsers.length > 0) ctx.push(`대상 사용자: ${req.targetUsers.join(", ")}`);
   const context = ctx.length > 0 ? ctx.join("\n") : "(추가 맥락 없음)";
 
-  // The instruction is deterministic; only the decision + context vary. Ask for
-  // a concrete, non-developer-friendly default the user can accept in one click.
+  // The instruction is deterministic; only the decision + context vary. A filled
+  // few-shot example anchors the format AND stops small models (haiku) from
+  // hallucinating a "can't read the input" refusal on the Korean prompt — an
+  // earlier version without the example produced exactly that. The KO rules are
+  // kept parallel to the EN ones (the EN path was reliable); the extra
+  // "실제 값을 지어내지 말고" line that pushed the model toward refusing is gone.
+  const example = ko
+    ? [
+        "예시 (형식 참고용):",
+        "질문: 사용자 파일 업로드 최대 크기를 얼마로 할지",
+        '{ "recommendation": "10MB", "reason": "대부분의 문서·이미지에 충분하면서 서버 부담이 적어요.", "options": ["5MB", "10MB", "50MB"] }',
+      ].join("\n")
+    : [
+        "Example (format only):",
+        "Question: What should the max file upload size be?",
+        '{ "recommendation": "10MB", "reason": "Enough for most documents and images without straining the server.", "options": ["5MB", "10MB", "50MB"] }',
+      ].join("\n");
+
   return [
     ko
       ? "너는 비개발자가 만드는 앱의 제품 결정을 돕는 조력자다. 아래 '아직 결정하지 못한 사항' 하나에 대해, 대부분의 경우에 무난한 기본값을 하나 추천하라."
       : "You help a non-developer decide one open product question. Recommend one sensible default that works for most cases.",
     "",
-    "제품 맥락:",
+    example,
+    "",
+    ko ? "이제 아래 실제 질문에 같은 형식으로 답하라." : "Now answer the real question below in the same format.",
+    "",
+    ko ? "제품 맥락:" : "Product context:",
     context,
     "",
-    "아직 결정하지 못한 사항:",
+    ko ? "아직 결정하지 못한 사항:" : "Open question:",
     req.question,
     "",
     ko
       ? [
           "규칙:",
-          "- recommendation: 사용자가 그대로 채택할 수 있는 짧고 구체적인 답 (예: \"30일\", \"무료로 제공\").",
+          "- recommendation: 사용자가 그대로 채택할 수 있는 짧고 구체적인 답.",
           "- reason: 왜 이게 무난한지 한 줄, 전문용어 없이.",
           "- options: 사용자가 대신 고를 수 있는 구체적 대안 2~4개.",
-          "- 개발/기술 용어를 쓰지 마라. 실제 값을 지어내지 말고, 결정의 성격에 맞는 합리적 기본을 제시하라.",
           "",
-          "아래 JSON 형식으로만 답하라(설명 문장 없이):",
+          "위 예시처럼 JSON만 출력하라(설명 문장 없이):",
         ].join("\n")
       : [
           "Rules:",
@@ -75,7 +94,7 @@ function buildRecommendPrompt(req: WorkspaceRecommendAnswerRequest): string {
           "- reason: one line, no jargon, why it is sensible.",
           "- options: 2–4 concrete alternatives.",
           "",
-          "Reply with ONLY this JSON (no prose):",
+          "Reply with ONLY this JSON, like the example (no prose):",
         ].join("\n"),
     '{ "recommendation": "...", "reason": "...", "options": ["...", "..."] }',
   ].join("\n");
