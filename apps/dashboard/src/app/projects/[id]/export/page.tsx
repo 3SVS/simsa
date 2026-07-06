@@ -414,7 +414,7 @@ export default function ExportPage() {
             {filteredItems.map((item) => (
               <label key={item.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer group">
                 <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleItem(item.id)}
-                  className="w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0" />
+                  className="w-4 h-4 rounded accent-brand-600 cursor-pointer flex-shrink-0" />
                 <span className="flex-1 text-sm text-gray-700">{item.title}</span>
                 <StatusBadge status={item.checkStatus} />
               </label>
@@ -435,7 +435,7 @@ export default function ExportPage() {
       {/* ── Loading / Error ── */}
       {phase === "loading" && (
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+          <div className="w-5 h-5 border-2 border-brand-300 border-t-brand-600 rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm text-gray-500">{t.exportPage.generatingPack}</p>
         </div>
       )}
@@ -450,20 +450,20 @@ export default function ExportPage() {
       {phase === "done" && result && (
         <>
           {/* Summary bar */}
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+          <div className="bg-brand-50 border border-brand-100 rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-4 flex-wrap text-sm">
-              <span className="font-medium text-indigo-900">{t.exportPage.filesGenerated.replace("{n}", String(result.summary.fileCount))}</span>
-              <span className="text-xs text-indigo-600">
+              <span className="font-medium text-brand-900">{t.exportPage.filesGenerated.replace("{n}", String(result.summary.fileCount))}</span>
+              <span className="text-xs text-brand-600">
                 {t.exportPage.includedItems.replace("{n}", String(result.summary.selectedItems))}
                 {result.summary.selectedItems < result.summary.totalItems
                   ? t.exportPage.ofTotal.replace("{total}", String(result.summary.totalItems))
                   : t.exportPage.ofTotalAll}
               </span>
               {result.bundle.files.some((f) => f.path.endsWith("CLAUDE_CODE_PROMPT.md")) && (
-                <span className="text-xs bg-white text-indigo-600 border border-indigo-200 rounded-full px-2 py-0.5">{t.exportPage.claudeInstr}</span>
+                <span className="text-xs bg-white text-brand-600 border border-brand-200 rounded-full px-2 py-0.5">{t.exportPage.claudeInstr}</span>
               )}
               {result.bundle.files.some((f) => f.path.endsWith("CODEX_PROMPT.md")) && (
-                <span className="text-xs bg-white text-indigo-600 border border-indigo-200 rounded-full px-2 py-0.5">{t.exportPage.codexInstr}</span>
+                <span className="text-xs bg-white text-brand-600 border border-brand-200 rounded-full px-2 py-0.5">{t.exportPage.codexInstr}</span>
               )}
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -472,7 +472,7 @@ export default function ExportPage() {
                 {isZipping ? t.exportPage.zipping : t.exportPage.downloadZip}
               </button>
               <button onClick={handleCopyAll}
-                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition-colors">
+                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 transition-colors">
                 {copiedPath === "__all__" ? t.exportPage.copiedAll : t.exportPage.copyAll}
               </button>
               <button onClick={() => downloadMarkdownBundle(result.bundle.files, project.name)}
@@ -486,11 +486,11 @@ export default function ExportPage() {
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t.exportPage.howToTitle}</p>
             <ol className="space-y-2 text-sm text-gray-600">
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">1.</span><span>{t.exportPage.step1}</span></li>
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">2.</span><span>{t.exportPage.step2}</span></li>
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">3.</span><span>{t.exportPage.step3}</span></li>
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">4.</span><span>{t.exportPage.step4}</span></li>
-              <li className="flex gap-2.5"><span className="text-indigo-500 font-semibold flex-shrink-0">5.</span><span>{t.exportPage.step5}</span></li>
+              <li className="flex gap-2.5"><span className="text-brand-500 font-semibold flex-shrink-0">1.</span><span>{t.exportPage.step1}</span></li>
+              <li className="flex gap-2.5"><span className="text-brand-500 font-semibold flex-shrink-0">2.</span><span>{t.exportPage.step2}</span></li>
+              <li className="flex gap-2.5"><span className="text-brand-500 font-semibold flex-shrink-0">3.</span><span>{t.exportPage.step3}</span></li>
+              <li className="flex gap-2.5"><span className="text-brand-500 font-semibold flex-shrink-0">4.</span><span>{t.exportPage.step4}</span></li>
+              <li className="flex gap-2.5"><span className="text-brand-500 font-semibold flex-shrink-0">5.</span><span>{t.exportPage.step5}</span></li>
             </ol>
           </div>
 
@@ -502,7 +502,7 @@ export default function ExportPage() {
                 {result.bundle.files.map((f) => (
                   <li key={f.path}>
                     <button onClick={() => setSelectedFile(f.path)}
-                      className={`w-full text-left px-4 py-2 text-xs transition-colors ${selectedFile === f.path ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-600 hover:bg-gray-50"}`}>
+                      className={`w-full text-left px-4 py-2 text-xs transition-colors ${selectedFile === f.path ? "bg-brand-50 text-brand-700 font-medium" : "text-gray-600 hover:bg-gray-50"}`}>
                       {filename(f.path)}
                     </button>
                   </li>
@@ -613,7 +613,7 @@ function OutcomeRecorder({
             onChange={(e) => onNoteChange(e.target.value)}
             placeholder={t.exportPage.notePlaceholder}
             rows={2}
-            className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+            className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 mb-3 focus:outline-none focus:ring-2 focus:ring-brand-300 resize-none"
           />
           <button onClick={onSave} disabled={!outcomeStatus || savePhase === "saving"}
             className="btn btn-md btn-secondary">
@@ -649,7 +649,7 @@ function OutcomeHistory({
             <Link
               href={`/projects/${projectId}/checks`}
               title={t.exportPage.recheckTooltip}
-              className="flex-shrink-0 text-indigo-500 hover:text-indigo-700 font-medium"
+              className="flex-shrink-0 text-brand-500 hover:text-brand-700 font-medium"
             >
               {t.exportPage.recheck}
             </Link>

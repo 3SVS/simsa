@@ -518,7 +518,7 @@ export default function GitHubPage() {
                           {lp.selectedItemIds.map((itemId) => {
                             const item = allItems.find((i) => i.id === itemId);
                             return item ? (
-                              <span key={itemId} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2 py-0.5 truncate max-w-[200px]">
+                              <span key={itemId} className="text-xs bg-brand-50 text-brand-700 border border-brand-200 rounded-full px-2 py-0.5 truncate max-w-[200px]">
                                 {item.title}
                               </span>
                             ) : null;
@@ -683,7 +683,7 @@ function ReviewResultPanel({ run, onRerun }: { run: ReviewRun; onRerun: () => vo
                     </div>
                   )}
                   {r.nextAction && (
-                    <p className="text-xs text-indigo-700 bg-indigo-50 rounded px-2 py-1.5">
+                    <p className="text-xs text-brand-700 bg-brand-50 rounded px-2 py-1.5">
                       {t.review.nextLabel}: {r.nextAction}
                     </p>
                   )}

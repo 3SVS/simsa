@@ -215,7 +215,7 @@ export default function BenchmarkPage() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.benchmark.title}</h2>
         <p className="mt-0.5 text-sm text-gray-500">{t.benchmark.subtitle}</p>
-        <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">{t.benchmark.intro}</p>
+        <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">{t.benchmark.intro}</p>
       </div>
 
       {phase === "loading" && (
@@ -270,7 +270,7 @@ export default function BenchmarkPage() {
                         </div>
                         <button
                           onClick={() => addCandidate(run)}
-                          className="flex-shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                          className="flex-shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-medium text-brand-700 transition-colors hover:bg-brand-100"
                         >
                           {t.benchmark.addCandidate}
                         </button>
@@ -302,14 +302,14 @@ export default function BenchmarkPage() {
                             value={c.label}
                             onChange={(e) => updateCandidate(c.runId, { label: e.target.value })}
                             aria-label={t.benchmark.labelField}
-                            className="mb-2 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                            className="mb-2 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
                           />
                           <div className="flex gap-2">
                             <select
                               value={c.mode}
                               onChange={(e) => updateCandidate(c.runId, { mode: e.target.value as CandidateMode })}
                               aria-label={t.benchmark.modeField}
-                              className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                              className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
                             >
                               {CANDIDATE_MODES.map((m) => (
                                 <option key={m} value={m}>{modeLabel(t, m)}</option>
@@ -319,7 +319,7 @@ export default function BenchmarkPage() {
                               value={c.source}
                               onChange={(e) => updateCandidate(c.runId, { source: e.target.value as CandidateSource })}
                               aria-label={t.benchmark.sourceField}
-                              className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                              className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
                             >
                               {CANDIDATE_SOURCES.map((s) => (
                                 <option key={s} value={s}>{sourceLabel(t, s)}</option>
@@ -360,7 +360,7 @@ export default function BenchmarkPage() {
                   {ranked.map(({ candidate, metrics }) => (
                     <div
                       key={candidate.id}
-                      className={`rounded-xl border p-4 ${candidate.id === winnerId ? "border-indigo-300 bg-indigo-50/40" : "border-gray-200 bg-white"}`}
+                      className={`rounded-xl border p-4 ${candidate.id === winnerId ? "border-brand-300 bg-brand-50/40" : "border-gray-200 bg-white"}`}
                     >
                       <div className="mb-2 flex items-center justify-between">
                         <p className="text-sm font-semibold text-gray-800">{candidate.label}</p>
@@ -396,7 +396,7 @@ export default function BenchmarkPage() {
                   </thead>
                   <tbody>
                     {ranked.map(({ candidate, metrics }) => (
-                      <tr key={candidate.id} className={`border-t border-gray-100 ${candidate.id === winnerId ? "bg-indigo-50/40" : ""}`}>
+                      <tr key={candidate.id} className={`border-t border-gray-100 ${candidate.id === winnerId ? "bg-brand-50/40" : ""}`}>
                         <td className="px-4 py-2.5 font-medium text-gray-800">{candidate.label}</td>
                         <td className="px-4 py-2.5 text-right text-gray-700">{pct(metrics.acceptancePassRate)}</td>
                         <td className="px-4 py-2.5 text-right text-gray-700">{metrics.passed} / {metrics.totalItems}</td>
@@ -414,7 +414,7 @@ export default function BenchmarkPage() {
                 <h3 className="text-sm font-semibold text-gray-800">{t.benchmark.recommendationTitle}</h3>
                 {winnerId ? (
                   <>
-                    <p className="mt-1 text-sm font-semibold text-indigo-700">
+                    <p className="mt-1 text-sm font-semibold text-brand-700">
                       {t.benchmark.winnerLabel.replace("{label}", candidates.find((c) => c.id === winnerId)?.label ?? "")}
                     </p>
                     <ul className="mt-2 space-y-1">
@@ -467,12 +467,12 @@ export default function BenchmarkPage() {
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder={t.benchmark.titlePlaceholder}
                     maxLength={120}
-                    className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
                   />
                   <button
                     onClick={handleSave}
                     disabled={!canSaveBenchmark(configs.length) || savePhase === "saving"}
-                    className="flex-shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+                    className="flex-shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
                   >
                     {savePhase === "saving" ? t.benchmark.saving : t.benchmark.save}
                   </button>

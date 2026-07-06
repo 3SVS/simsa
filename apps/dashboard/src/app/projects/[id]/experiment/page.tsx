@@ -310,7 +310,7 @@ export default function ExperimentPage() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.experiment.title}</h2>
         <p className="mt-0.5 text-sm text-gray-500">{t.experiment.subtitle}</p>
-        <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">{t.experiment.purposeNote}</p>
+        <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">{t.experiment.purposeNote}</p>
       </div>
 
       {/* Template selector */}
@@ -321,7 +321,7 @@ export default function ExperimentPage() {
             <button
               key={tpl.id}
               onClick={() => setSelectedId(tpl.id)}
-              className={`rounded-xl border p-4 text-left transition-colors ${tpl.id === selectedId ? "border-indigo-300 bg-indigo-50/50" : "border-gray-200 bg-white hover:border-indigo-200"}`}
+              className={`rounded-xl border p-4 text-left transition-colors ${tpl.id === selectedId ? "border-brand-300 bg-brand-50/50" : "border-gray-200 bg-white hover:border-brand-200"}`}
             >
               <p className="text-sm font-semibold text-gray-800">{templateTitle(t, tpl.id)}</p>
               <p className="mt-1 text-xs text-gray-500">{templateDesc(t, tpl.id)}</p>
@@ -357,7 +357,7 @@ export default function ExperimentPage() {
               </div>
               <button
                 onClick={() => copy(c.id, c.prompt)}
-                className="flex-shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                className="flex-shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 text-[11px] font-medium text-brand-700 transition-colors hover:bg-brand-100"
               >
                 {copiedKey === c.id ? t.experiment.copied : t.experiment.copyPrompt}
               </button>
@@ -383,12 +383,12 @@ export default function ExperimentPage() {
             onChange={(e) => setTitleInput(e.target.value)}
             placeholder={t.experiment.titlePlaceholder}
             maxLength={120}
-            className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
           />
           <button
             onClick={handleSaveExperiment}
             disabled={!canSaveExperiment(titleInput, template.id) || savePhase === "saving"}
-            className="flex-shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+            className="flex-shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
           >
             {savePhase === "saving" ? t.experiment.saving : t.experiment.saveExperiment}
           </button>
@@ -421,7 +421,7 @@ export default function ExperimentPage() {
 
       {/* Candidate linking for the opened experiment */}
       {openExp && (
-        <section className="rounded-xl border border-indigo-200 bg-white p-5">
+        <section className="rounded-xl border border-brand-200 bg-white p-5">
           <h3 className="text-sm font-semibold text-gray-800">{openExp.title}</h3>
           <p className="mt-0.5 text-xs text-gray-500">{templateTitle(t, openExp.templateId)}</p>
           <div className="mt-3 space-y-3">
@@ -450,7 +450,7 @@ export default function ExperimentPage() {
                     <button
                       onClick={handleCreateBenchmark}
                       disabled={benchPhase === "creating"}
-                      className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+                      className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
                     >
                       {benchPhase === "creating" ? t.experiment.creatingBenchmark : t.experiment.createBenchmarkFromExperiment}
                     </button>
@@ -491,7 +491,7 @@ export default function ExperimentPage() {
         <ol className="mt-2 space-y-1.5 text-sm text-gray-600">
           {steps.map((step, i) => (
             <li key={i} className="flex gap-2.5">
-              <span className="flex-shrink-0 font-semibold text-indigo-500">{i + 1}.</span>
+              <span className="flex-shrink-0 font-semibold text-brand-500">{i + 1}.</span>
               <span>{step}</span>
             </li>
           ))}
@@ -504,7 +504,7 @@ export default function ExperimentPage() {
         <p className="mt-0.5 text-xs text-gray-500">{t.experiment.benchmarkHint}</p>
         <Link
           href={`/projects/${id}/benchmark`}
-          className="mt-2 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
+          className="mt-2 inline-block rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-brand-700"
         >
           {t.experiment.openBenchmark}
         </Link>
@@ -601,7 +601,7 @@ function DecisionSection({
               onChange={(e) => setNotes((p) => ({ ...p, [c.candidateId]: e.target.value }))}
               placeholder={t.experiment.candidateNotePlaceholder}
               maxLength={300}
-              className="mt-2 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              className="mt-2 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
             />
           </div>
         ))}
@@ -612,13 +612,13 @@ function DecisionSection({
         onChange={(e) => setDecisionNote(e.target.value)}
         rows={2}
         maxLength={1000}
-        className="mt-0.5 w-full resize-none rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        className="mt-0.5 w-full resize-none rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
       />
       <div className="mt-2 flex items-center gap-2">
         <button
           onClick={save}
           disabled={phase === "saving"}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+          className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
         >
           {phase === "saving" ? t.experiment.savingDecision : t.experiment.saveDecision}
         </button>
@@ -674,7 +674,7 @@ function CandidateLinkCard({
             min={1}
             value={pr}
             onChange={(e) => setPr(e.target.value)}
-            className="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            className="w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
           />
         </div>
         <div className="flex-1">
@@ -682,7 +682,7 @@ function CandidateLinkCard({
           <select
             value={runId}
             onChange={(e) => setRunId(e.target.value)}
-            className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
           >
             <option value="">{t.experiment.selectReviewRun}</option>
             {reviewRuns.map((r) => (
@@ -1114,7 +1114,7 @@ function OutcomeQualitySection({
                 type="button"
                 onClick={handleGenerate}
                 disabled={packPhase === "generating"}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+                className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
               >
                 {t.evolution.generate}
               </button>
@@ -1131,7 +1131,7 @@ function OutcomeQualitySection({
                 type="button"
                 onClick={handleSave}
                 disabled={savePhase === "saving"}
-                className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-50 disabled:opacity-40"
+                className="rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-50 disabled:opacity-40"
               >
                 {savePhase === "saving"
                   ? t.evolution.saving
@@ -1152,7 +1152,7 @@ function OutcomeQualitySection({
               <div className="mt-3 space-y-3">
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="font-medium text-gray-500">{t.evolution.recommendedAction}:</span>
-                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                  <span className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
                     {pack.title}
                   </span>
                   {pack.targetCandidateId && (
@@ -1328,7 +1328,7 @@ function OutcomeQualitySection({
                                   ? "border-gray-200 bg-gray-50 text-gray-500"
                                   : p.followupStatus === "not_started"
                                     ? "border-gray-200 bg-white text-gray-500"
-                                    : "border-indigo-200 bg-indigo-50 text-indigo-700"
+                                    : "border-brand-200 bg-brand-50 text-brand-700"
                             }`}
                           >
                             {t.evolution[followupStatusLabelKey(p.followupStatus) as keyof typeof t.evolution]}
@@ -1356,7 +1356,7 @@ function OutcomeQualitySection({
 
             {/* Stage 77 + Stage 78: opened saved pack detail with follow-up tracking */}
             {openedPack && openPhase === "ready" && (
-              <div className="mt-4 rounded-lg border border-indigo-100 bg-white p-3">
+              <div className="mt-4 rounded-lg border border-brand-100 bg-white p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-xs font-semibold text-gray-800">{t.evolution.serverGenerated}</p>
@@ -1367,7 +1367,7 @@ function OutcomeQualitySection({
                       type="button"
                       onClick={handleMarkCopied}
                       disabled={followupPhase === "saving"}
-                      className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-50 disabled:opacity-40"
+                      className="rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-50 disabled:opacity-40"
                     >
                       {t.evolution.markCopied}
                     </button>
@@ -1382,7 +1382,7 @@ function OutcomeQualitySection({
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                   <span className="font-medium text-gray-500">{t.evolution.recommendedAction}:</span>
-                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                  <span className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
                     {openedPack.title}
                   </span>
                   {openedPack.pack.targetCandidateId && (
@@ -1475,7 +1475,7 @@ function OutcomeQualitySection({
                       type="button"
                       onClick={handleSaveFollowup}
                       disabled={followupPhase === "saving"}
-                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
                     >
                       {followupPhase === "saving"
                         ? t.evolution.savingFollowup

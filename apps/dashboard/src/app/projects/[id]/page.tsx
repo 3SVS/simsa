@@ -753,7 +753,7 @@ function badgeClassForEventType(type: string): string {
     case "impact_inconclusive":
       return "border-amber-200 bg-amber-50 text-amber-700";
     case "decision_recorded":
-      return "border-indigo-200 bg-indigo-50 text-indigo-700";
+      return "border-brand-200 bg-brand-50 text-brand-700";
     case "benchmark_created":
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "experiment_created":

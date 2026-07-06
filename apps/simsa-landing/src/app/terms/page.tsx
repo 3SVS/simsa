@@ -5,7 +5,7 @@ import Link from "next/link";
 import { StampMark } from "../../components/StampMark";
 
 const APP_URL = "https://app.trysimsa.com";
-const CONTACT_EMAIL = "seunghunbae@b2w.kr";
+const CONTACT_EMAIL = "seunghunbae@3svs.com";
 
 export const metadata: Metadata = {
   title: "Terms Note — Simsa",

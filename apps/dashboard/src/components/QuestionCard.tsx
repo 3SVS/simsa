@@ -31,11 +31,11 @@ export function QuestionCard({ question, index, total, answer, onAnswer }: Props
         {question.question}
       </p>
 
-      <div className="bg-indigo-50 rounded-lg px-4 py-3 mb-5">
-        <p className="text-xs font-semibold text-indigo-700 mb-0.5">
+      <div className="bg-brand-50 rounded-lg px-4 py-3 mb-5">
+        <p className="text-xs font-semibold text-brand-700 mb-0.5">
           {t.np.recommended}: {question.recommendation}
         </p>
-        <p className="text-xs text-indigo-600 leading-relaxed">
+        <p className="text-xs text-brand-600 leading-relaxed">
           {question.recommendationReason}
         </p>
       </div>
@@ -47,8 +47,8 @@ export function QuestionCard({ question, index, total, answer, onAnswer }: Props
             onClick={() => onAnswer(opt.value)}
             className={`text-sm px-4 py-2 rounded-lg border transition-all ${
               answer === opt.value
-                ? "bg-indigo-600 text-white border-indigo-600"
-                : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50"
+                ? "bg-brand-600 text-white border-brand-600"
+                : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
             }`}
           >
             {opt.label}
@@ -71,7 +71,7 @@ export function QuestionCard({ question, index, total, answer, onAnswer }: Props
           autoFocus
           type="text"
           placeholder={t.np.typeYourOwn}
-          className="mt-3 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          className="mt-3 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-300"
           onBlur={(e) => e.target.value && onAnswer(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

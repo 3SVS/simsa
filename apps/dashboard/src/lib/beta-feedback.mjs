@@ -8,7 +8,7 @@
 
 // Existing public contact email used across the product surfaces. Do NOT invent
 // hi@/support@/feedback@ addresses without explicit approval.
-const FEEDBACK_EMAIL = "seunghunbae@b2w.kr";
+const FEEDBACK_EMAIL = "seunghunbae@3svs.com";
 const DEFAULT_SUBJECT_PREFIX = "[Simsa beta feedback]";
 
 function str(x) {

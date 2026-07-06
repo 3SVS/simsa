@@ -12,7 +12,7 @@ function decoded(url) {
 test("builds a mailto to the existing public contact email", () => {
   const url = buildBetaFeedbackMailto({});
   assert.ok(url.startsWith(`mailto:${FEEDBACK_EMAIL}?`));
-  assert.equal(FEEDBACK_EMAIL, "seunghunbae@b2w.kr");
+  assert.equal(FEEDBACK_EMAIL, "seunghunbae@3svs.com");
 });
 
 test("subject carries the Simsa beta feedback prefix", () => {

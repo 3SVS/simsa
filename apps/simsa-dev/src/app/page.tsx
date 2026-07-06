@@ -5,7 +5,7 @@
 const APP_URL = "https://app.trysimsa.com";
 const REPO_URL = "https://github.com/3SVS/simsa"; // public repo
 // Real contact mailbox (operator-provided), shared with the trysimsa.com surface.
-const CONTACT_EMAIL = "seunghunbae@b2w.kr";
+const CONTACT_EMAIL = "seunghunbae@3svs.com";
 // Stage 97: mailto-based early access — no backend / DB / email provider.
 const EARLY_ACCESS_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
   "Simsa early access request",
