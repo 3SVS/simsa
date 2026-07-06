@@ -108,6 +108,8 @@ describe("workspace export-builder-pack", () => {
       assert.ok(p.includes("병합") && p.includes("PR"), "no branch/merge/PR questions");
       // finish = a running result, not a git-strategy menu
       assert.match(p, /마무리 — 질문이 아니라 결과물/);
+      // and not a chore list dumped on the user — do what you can, hand-hold the rest
+      assert.ok(p.includes("할 일 목록") && p.includes("직접 끝까지 해라"), "no chore-list finish");
     }
   });
 
