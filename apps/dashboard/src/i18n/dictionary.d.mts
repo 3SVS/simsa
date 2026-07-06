@@ -561,7 +561,10 @@ export type Dictionary = {
       intro: string;
       whatIsMcp: string;
       commandLabel: string;
+      serverUrlLabel: string;
       authStepLabel: string;
+      authStepCommand: string;
+      authStepSettings: string;
       connectLabel: string;
       safetyLabel: string;
       docsLabel: string;
