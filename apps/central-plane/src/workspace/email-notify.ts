@@ -43,12 +43,15 @@ export function maskEmailAddress(email: string): string {
 export type SendEmailResult = { ok: boolean; error?: string };
 
 /**
- * Send a plain-text email via Resend. Never throws.
+ * Send an email via Resend. Never throws. Plain-text `text` is always sent (the
+ * deliverable fallback); an optional minimal-brand `html` (see email-brand.ts)
+ * is included when provided so clients that render HTML get the light brand
+ * touch, while text-only clients still read fine.
  * Missing RESEND_API_KEY → { ok: false, error: "not_configured" }.
  */
 export async function sendWorkspaceEmail(
   env: Env,
-  input: { to: string; subject: string; text: string },
+  input: { to: string; subject: string; text: string; html?: string },
   fetchImpl?: FetchLike,
 ): Promise<SendEmailResult> {
   const apiKey = env.RESEND_API_KEY;
@@ -67,6 +70,7 @@ export async function sendWorkspaceEmail(
         to: [input.to],
         subject: input.subject,
         text: input.text,
+        ...(input.html ? { html: input.html } : {}),
       }),
     });
     if (!res.ok) {

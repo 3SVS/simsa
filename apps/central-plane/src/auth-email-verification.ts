@@ -15,6 +15,7 @@
  * unit-testable without a live Better Auth runtime or Resend.
  */
 import type { Env } from "./env.js";
+import { wrapBrandedEmail } from "./workspace/email-brand.js";
 
 /**
  * Whether the workspace-claim step should require a verified email. True only
@@ -38,20 +39,18 @@ export function emailVerificationRequired(env: Partial<Env> | undefined): boolea
 export function buildVerificationEmail(
   url: string,
   opts?: { appName?: string },
-): { subject: string; text: string } {
+): { subject: string; text: string; html: string } {
   const appName = opts?.appName ?? "Simsa";
   const subject = `${appName} 이메일 인증 · verify your email`;
-  const text = [
-    `${appName} 가입을 완료하려면 아래 링크로 이메일을 인증해 주세요.`,
-    `인증하면 다른 기기에서도 프로젝트를 볼 수 있어요. (인증 전에도 이 브라우저에서는 그대로 사용하실 수 있습니다.)`,
-    ``,
-    url,
-    ``,
-    `— — —`,
-    `Verify your email to finish setting up ${appName} and sync your projects across devices.`,
-    `You can keep using ${appName} in this browser before verifying.`,
-    ``,
-    url,
-  ].join("\n");
-  return { subject, text };
+  const { html, text } = wrapBrandedEmail({
+    heading: "이메일을 인증해 주세요 · Verify your email",
+    paragraphs: [
+      `${appName} 가입을 완료하려면 아래 버튼으로 이메일을 인증해 주세요. 인증하면 다른 기기에서도 프로젝트를 볼 수 있어요.`,
+      `Verify your email to finish setting up ${appName} and sync your projects across devices.`,
+    ],
+    cta: { label: "이메일 인증 · Verify email", url },
+    footnote:
+      "인증 전에도 이 브라우저에서는 그대로 사용하실 수 있어요. You can keep using Simsa in this browser before verifying.",
+  });
+  return { subject, text, html };
 }

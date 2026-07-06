@@ -15,6 +15,7 @@ import type { Env } from "../env.js";
 import { ALLOWED_ORIGINS } from "./cors.js";
 import { sendWorkspaceTelegramMessage } from "../workspace/telegram-notify.js";
 import { sendWorkspaceEmail } from "../workspace/email-notify.js";
+import { wrapBrandedEmail } from "../workspace/email-brand.js";
 
 const KINDS = new Set(["bug", "question", "suggestion"]);
 const MAX_MESSAGE = 4000;
@@ -52,10 +53,15 @@ async function notifyAdmin(env: Env, summary: string): Promise<void> {
       if (r.ok) return;
     }
     if (env.ADMIN_FEEDBACK_EMAIL && env.RESEND_API_KEY) {
+      const { html, text } = wrapBrandedEmail({
+        heading: "New feedback · 새 피드백",
+        paragraphs: summary.split("\n").filter((line) => line.trim().length > 0),
+      });
       await sendWorkspaceEmail(env, {
         to: env.ADMIN_FEEDBACK_EMAIL,
         subject: "Simsa — new feedback",
-        text: summary,
+        text,
+        html,
       });
     }
   } catch (err) {

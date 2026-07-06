@@ -128,10 +128,10 @@ export function createBetterAuthRuntime(env: Partial<Env> | undefined) {
             sendOnSignUp: true,
             autoSignInAfterVerification: true,
             sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
-              const { subject, text } = buildVerificationEmail(url);
+              const { subject, text, html } = buildVerificationEmail(url);
               // sendWorkspaceEmail never throws; swallow its result so a mail
               // hiccup never breaks sign-up.
-              await sendWorkspaceEmail(e as Env, { to: user.email, subject, text });
+              await sendWorkspaceEmail(e as Env, { to: user.email, subject, text, html });
             },
           },
         }
