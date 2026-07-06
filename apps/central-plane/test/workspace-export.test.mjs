@@ -244,6 +244,25 @@ describe("workspace export-builder-pack", () => {
     assert.ok(!paths.some((p) => p.endsWith(".env.local")), "no .env.local without values");
   });
 
+  it("KEY NO-STORE: a real secret value lands ONLY in .env.local, in NO other pack file", () => {
+    // The single most important guarantee of the prep layer: a user's real key
+    // is baked into the local, gitignored .env.local and appears NOWHERE else —
+    // not the committable .env.example, not SETUP.md, not the prompts/README,
+    // not product/items/checks/fixes. If it leaks into any other file it would
+    // be committed or handed to the agent verbatim.
+    const SECRET_URL = "https://real.supabase.co";
+    const SECRET_KEY = "svc_real_key";
+    const res = generateBuilderPack(makeReq("both", {}, { services: MOCK_SERVICES }));
+    const envLocal = res.bundle.files.find((f) => f.path.endsWith(".env.local"));
+    assert.ok(envLocal, ".env.local generated");
+    assert.ok(envLocal.content.includes(SECRET_KEY) && envLocal.content.includes(SECRET_URL), "values ARE in .env.local");
+    for (const f of res.bundle.files) {
+      if (f.path.endsWith(".env.local")) continue;
+      assert.ok(!f.content.includes(SECRET_KEY), `secret key leaked into ${f.path}`);
+      assert.ok(!f.content.includes(SECRET_URL), `secret url leaked into ${f.path}`);
+    }
+  });
+
   it("returns empty files when no project provided", () => {
     const res = generateBuilderPack({ target: "both", format: "json" });
     assert.equal(res.ok, true);
