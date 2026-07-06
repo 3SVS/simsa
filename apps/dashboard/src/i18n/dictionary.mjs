@@ -420,6 +420,7 @@ const EN = {
     editQuestions: "Edit answers",
     saveNote: "Once saved, you can revisit it any time from the project page.",
     customInput: "Custom",
+    useRecommendation: "Not sure — use the recommendation",
   },
   spec: {
     emptyBody: "No plan yet — this project started from code. Reviews use your checking items, so you can keep going from the overview.",
@@ -2704,6 +2705,7 @@ const KO = {
     editQuestions: "질문 수정",
     saveNote: "저장하면 프로젝트 페이지에서 언제든 확인할 수 있습니다.",
     customInput: "직접 입력",
+    useRecommendation: "잘 모르겠어요, 추천대로 할게요",
   },
   spec: {
     emptyBody: "아직 기획 내용이 없어요 — 이 프로젝트는 코드에서 시작했어요. 검수는 확인 항목 기준으로 진행되니, 개요에서 계속 진행하시면 돼요.",

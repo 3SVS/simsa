@@ -347,6 +347,7 @@ export type Dictionary = {
     editQuestions: string;
     saveNote: string;
     customInput: string;
+    useRecommendation: string;
   };
   spec: {
     emptyBody: string;
