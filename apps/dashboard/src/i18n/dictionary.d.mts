@@ -556,6 +556,16 @@ export type Dictionary = {
       siteDesc: string;
       siteCta: string;
     };
+    deployTools: {
+      title: string;
+      intro: string;
+      whatIsMcp: string;
+      commandLabel: string;
+      authStepLabel: string;
+      connectLabel: string;
+      safetyLabel: string;
+      docsLabel: string;
+    };
   };
   adminUsage: {
     title: string;
