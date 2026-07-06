@@ -387,13 +387,17 @@ function NewProjectInner() {
 
   return (
     <div className="flex flex-col">
-      {showStepper ? (
-        <WizardStepper t={t} step={step} />
-      ) : (
-        <div className="h-0.5 bg-gray-100">
-          <div className="h-0.5 bg-brand-600 transition-all duration-500" style={{ width: progressWidth }} />
-        </div>
-      )}
+      {/* Progress only after a branch is chosen — on the chooser step (step 0)
+          the hairline bar rendered a stray oxblood sliver top-left (no progress
+          to show yet). */}
+      {entryPath !== null &&
+        (showStepper ? (
+          <WizardStepper t={t} step={step} />
+        ) : (
+          <div className="h-0.5 bg-gray-100">
+            <div className="h-0.5 bg-brand-600 transition-all duration-500" style={{ width: progressWidth }} />
+          </div>
+        ))}
 
       <main className="flex flex-1 justify-center px-4 py-12">
         <div className="w-full max-w-2xl">
