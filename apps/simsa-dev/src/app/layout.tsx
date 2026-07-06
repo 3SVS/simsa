@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://simsa.dev"),
   title: "Simsa for Developers",
   description:
     "Developer docs for Simsa — review, compare, and accept AI-built software with evidence.",
