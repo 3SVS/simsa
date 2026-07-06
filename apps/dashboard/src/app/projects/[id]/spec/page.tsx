@@ -3,9 +3,16 @@
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject } from "@/lib/workflow-store";
+import {
+  getLocalProject,
+  getUserKey,
+  loadExtendedProjectData,
+  saveExtendedProjectData,
+} from "@/lib/workflow-store";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
+import { OpenQuestionCard } from "@/components/OpenQuestionCard";
 import { useI18n } from "@/i18n/I18nProvider";
 import { StepNextButton } from "@/components/StepNextButton";
 
@@ -13,6 +20,24 @@ export default function SpecPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useI18n();
   const project = getLocalProject(id) ?? getProject(id);
+
+  // C2: answers the user settled for open decisions (kept in extended data, not
+  // the core spec, so example projects aren't mutated). Hydrated client-side.
+  const [resolved, setResolved] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setResolved(loadExtendedProjectData(id)?.resolvedOpenDecisions ?? {});
+  }, [id]);
+
+  function resolveOpenDecision(question: string, answer: string) {
+    setResolved((prev) => {
+      const next = { ...prev };
+      if (answer) next[question] = answer;
+      else delete next[question];
+      saveExtendedProjectData(id, { resolvedOpenDecisions: next });
+      return next;
+    });
+  }
+
   if (!project) return <ProjectNotFound />;
 
   const { spec } = project;
@@ -65,13 +90,21 @@ export default function SpecPage() {
 
         {spec.openDecisions.length > 0 && (
           <Section title={t.spec.openDecisions}>
-            <ul className="space-y-2">
+            <p className="mb-3 text-xs text-gray-500">{t.np.openQIntro}</p>
+            <div className="space-y-2">
               {spec.openDecisions.map((d, i) => (
-                <li key={i} className="flex gap-2 text-sm text-slate-700">
-                  <span className="mt-0.5 text-slate-400">!</span> {d}
-                </li>
+                <OpenQuestionCard
+                  key={i}
+                  question={d}
+                  productName={project.name}
+                  oneLine={spec.goal}
+                  projectId={id}
+                  userKey={getUserKey()}
+                  resolvedAnswer={resolved[d]}
+                  onResolved={resolveOpenDecision}
+                />
               ))}
-            </ul>
+            </div>
           </Section>
         )}
       </div>

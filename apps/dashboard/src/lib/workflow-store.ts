@@ -204,6 +204,10 @@ export type ExtendedProjectData = {
   /** Which branch this project entered through — the progress map adapts to it
    *  (code branch: prepare step is optional, review never locks on items). */
   entryPath?: "idea" | "code" | "spec";
+  /** C2 (openQuestions 질문화): answers the user settled for spec.openDecisions,
+   *  keyed by the decision text. Kept out of the core spec so example projects
+   *  aren't mutated — the spec page reads this to mark a decision "resolved". */
+  resolvedOpenDecisions?: Record<string, string>;
 };
 
 const EXT_KEY = (id: string) => `conclave_wf_ext_${id}`;
