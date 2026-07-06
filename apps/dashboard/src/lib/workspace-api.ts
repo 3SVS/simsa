@@ -111,6 +111,91 @@ export async function callWorkspaceApi(
   return { ok: true, data };
 }
 
+// ─── C2: recommend an answer for one open decision ────────────────────────────
+
+export type RecommendAnswerInput = {
+  question: string;
+  productName?: string;
+  oneLine?: string;
+  targetUsers?: string[];
+  projectId?: string;
+  userKey?: string;
+};
+
+/**
+ * Honest by contract (Bae ②): there is NO mock fallback. A rate limit surfaces
+ * its own notice; every other failure (503 llm_unavailable, network, bad body)
+ * collapses to { ok:false, error:"llm_unavailable" } so the card shows
+ * "추천을 못 가져왔어요, 다시 시도" — never a fabricated default.
+ */
+export type RecommendAnswerResult =
+  | { ok: true; recommendation: string; reason: string; options: string[] }
+  | { ok: false; error: "rate_limited"; message: string; retryAfterSeconds?: number }
+  | { ok: false; error: "llm_unavailable" };
+
+export async function recommendAnswer(
+  input: RecommendAnswerInput,
+): Promise<RecommendAnswerResult> {
+  const url = `${CENTRAL_PLANE_URL}/workspace/recommend-answer`;
+
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        question: input.question,
+        productName: input.productName,
+        oneLine: input.oneLine,
+        targetUsers: input.targetUsers,
+        projectId: input.projectId,
+        userKey: input.userKey,
+        locale: "ko",
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (err) {
+    console.warn("[workspace-api] recommend-answer network error:", err);
+    return { ok: false, error: "llm_unavailable" };
+  }
+
+  if (resp.status === 429) {
+    let retryAfterSeconds: number | undefined;
+    let message = "잠시 후 다시 시도해주세요. 요청이 많이 발생했어요.";
+    try {
+      const body = (await resp.json()) as { message?: string; retryAfterSeconds?: number };
+      if (body.message) message = body.message;
+      if (body.retryAfterSeconds) retryAfterSeconds = body.retryAfterSeconds;
+    } catch { /* use default */ }
+    return { ok: false, error: "rate_limited", message, retryAfterSeconds };
+  }
+
+  if (!resp.ok) {
+    // 503 llm_unavailable or any other server error → honest, no fabrication.
+    return { ok: false, error: "llm_unavailable" };
+  }
+
+  try {
+    const data = (await resp.json()) as {
+      ok?: boolean;
+      recommendation?: string;
+      reason?: string;
+      options?: string[];
+    };
+    if (!data.ok || typeof data.recommendation !== "string" || data.recommendation.trim().length === 0) {
+      return { ok: false, error: "llm_unavailable" };
+    }
+    return {
+      ok: true,
+      recommendation: data.recommendation,
+      reason: typeof data.reason === "string" ? data.reason : "",
+      options: Array.isArray(data.options) ? data.options.filter((o): o is string => typeof o === "string") : [],
+    };
+  } catch {
+    return { ok: false, error: "llm_unavailable" };
+  }
+}
+
 // ─── Local mock fallback ──────────────────────────────────────────────────────
 
 function buildLocalFallback(input: WorkspaceApiInput): IdeaToSpecDraftResponse {

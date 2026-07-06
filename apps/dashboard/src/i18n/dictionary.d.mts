@@ -348,6 +348,13 @@ export type Dictionary = {
     saveNote: string;
     customInput: string;
     useRecommendation: string;
+    openQIntro: string;
+    openQGet: string;
+    openQThinking: string;
+    openQUse: string;
+    openQFailed: string;
+    openQDecided: string;
+    openQChange: string;
   };
   spec: {
     emptyBody: string;
