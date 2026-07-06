@@ -175,11 +175,15 @@ export function AppSidebar() {
     },
     review: {
       label: t.stepsNav.review,
-      items: [["github", t.nav.github]],
+      // 검수·준비 단계: 저장소 연결 + 빌더팩 다운로드(위로 올림). 서비스/키·알림은
+      // 준비 계층(P1)에서 이 단계에 추가된다.
+      items: [["github", t.nav.github], ["export", t.nav.export]],
     },
     results: {
       label: t.stepsNav.results,
-      items: [["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks], ["fixes", t.nav.fixes], ["export", t.nav.export]],
+      // 결과·수정: 사전확인/검수 결과. 수정지시서(fixes)는 빌더팩에 포함되어 중복이라
+      // 여기서 제거(설계 2026-07-06). /fixes 라우트 자체는 유지(직접 접근·이력용).
+      items: [["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks]],
     },
   };
   const lockHint = (reason: "need_items" | "need_code" | "need_build" | null) =>
