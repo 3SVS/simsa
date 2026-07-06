@@ -54,6 +54,19 @@ describe("every LLM route goes through the AI Gateway", () => {
     }
   });
 
+  it("recommend-answer (generateRecommendedAnswer) routes through the gateway", () => {
+    // C2's route call is multi-line, so assert the gateway URL appears within
+    // the call region (from the call to its closing `);`), like reviewPRAgainstItems.
+    const idx = src.indexOf("generateRecommendedAnswer(");
+    assert.ok(idx !== -1, "generateRecommendedAnswer call not found in workspace.ts");
+    const end = src.indexOf(");", idx);
+    const region = src.slice(idx, end === -1 ? idx + 600 : end);
+    assert.ok(
+      region.includes("CF_AI_GATEWAY_ANTHROPIC_URL"),
+      "recommend-answer bypasses the AI Gateway",
+    );
+  });
+
   it("PR review (reviewPRAgainstItems) routes through the gateway", () => {
     // reviewPRAgainstItems is a multi-line call; assert the gateway URL appears
     // within the call region (from the call to its closing `);`). This was the

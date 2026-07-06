@@ -25,6 +25,10 @@ import {
   type WorkspaceFixSuggestionRequest,
 } from "../workspace/fix.js";
 import {
+  generateRecommendedAnswer,
+  type WorkspaceRecommendAnswerRequest,
+} from "../workspace/recommend.js";
+import {
   upsertProject,
   getProject,
   getOwnedProject,
@@ -453,6 +457,71 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         : "anonymous",
       projectId: req.projectId,
       eventType: "workspace_check_draft_run",
+      metadata: { source: result.source },
+    });
+
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json", ...headers } });
+  });
+
+  // ── POST /workspace/recommend-answer ─────────────────────────────────────────
+  // C2 (openQuestions 질문화): recommend a default answer for one open decision.
+  // Stateless (no project write), rate-limited (LLM call), gateway-routed. Honest
+  // by contract: no key / throw / bad shape → 503 llm_unavailable so the UI shows
+  // "추천을 못 가져왔어요, 다시 시도" — never a silently fabricated default (Bae ②).
+  app.post("/workspace/recommend-answer", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const headers = corsHeaders(origin);
+
+    const limitPerHour = parseInt(c.env.WORKSPACE_GENERATION_LIMIT_PER_HOUR ?? "", 10) || DEFAULT_LIMIT_PER_HOUR;
+    const rawIp = c.req.header("cf-connecting-ip") ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ?? "unknown";
+    const ipHash = await sha256Hex(`workspace-recommend::${rawIp}`);
+    const hourUtc = currentHourUtc();
+    const count = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
+    if (count >= limitPerHour) {
+      return new Response(JSON.stringify({ ok: false, error: "rate_limited", message: "잠시 후 다시 시도해주세요. 요청이 너무 많이 발생했어요.", retryAfterSeconds: secondsUntilNextHour() }), { status: 429, headers: { "content-type": "application/json", "retry-after": String(secondsUntilNextHour()), ...headers } });
+    }
+
+    let body: unknown;
+    try { body = await c.req.json(); } catch {
+      return new Response(JSON.stringify({ ok: false, error: "invalid_json" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+    const req = body as Partial<WorkspaceRecommendAnswerRequest>;
+    if (typeof req.question !== "string" || req.question.trim().length === 0) {
+      return new Response(JSON.stringify({ ok: false, error: "question_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    let result;
+    try {
+      result = await generateRecommendedAnswer(
+        {
+          question: req.question,
+          productName: req.productName,
+          oneLine: req.oneLine,
+          targetUsers: req.targetUsers,
+          locale: req.locale ?? "ko",
+        },
+        c.env.ANTHROPIC_API_KEY,
+        c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+      );
+    } catch (err) {
+      console.error("[workspace/recommend-answer] error:", err);
+      return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
+
+    if (result.ok === false) {
+      return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    await insertUsageEvent(c.env, {
+      userKey: typeof (body as Record<string, unknown>)["userKey"] === "string"
+        ? String((body as Record<string, unknown>)["userKey"])
+        : "anonymous",
+      projectId: typeof (body as Record<string, unknown>)["projectId"] === "string"
+        ? String((body as Record<string, unknown>)["projectId"])
+        : undefined,
+      eventType: "workspace_recommend_answer_run",
       metadata: { source: result.source },
     });
 
