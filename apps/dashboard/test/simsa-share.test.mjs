@@ -14,7 +14,8 @@ describe("simsa-share", () => {
       assert.match(u, /^https:\/\/\S+$/);
     }
     assert.ok(SIMSA_REPO_URL.includes("github.com/3SVS/simsa"));
-    assert.ok(SIMSA_SITE_URL.includes("trysimsa.com"));
+    // Links to the live public landing (simsa.dev). trysimsa.com apex 403s.
+    assert.ok(SIMSA_SITE_URL.includes("simsa.dev"));
   });
 
   it("badge uses the brand oxblood and links back to Simsa", () => {
