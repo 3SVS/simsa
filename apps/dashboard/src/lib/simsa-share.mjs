@@ -14,8 +14,9 @@ import { BRAND } from "./brand.mjs";
 /** The public GitHub repository users can star. */
 export const SIMSA_REPO_URL = "https://github.com/3SVS/simsa";
 
-/** The public marketing site the badge links to. */
-export const SIMSA_SITE_URL = `https://${BRAND.primaryDomain}`;
+/** The public site the badge links to. Uses the developer domain (simsa.dev),
+ *  which is the live public landing; the trysimsa.com apex is not serving yet. */
+export const SIMSA_SITE_URL = `https://${BRAND.developerDomain}`;
 
 /** shields.io static badge — "Reviewed with · Simsa" in brand oxblood (#8e2c39)
  *  on a zinc label. Agent-agnostic, nothing to host. */
