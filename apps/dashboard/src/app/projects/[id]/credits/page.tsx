@@ -118,7 +118,7 @@ export default function CreditsPage() {
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
       {/* Back link */}
       <div className="flex items-center gap-2">
-        <Link href={`/projects/${id}/github`} className="text-sm text-indigo-600 hover:underline">
+        <Link href={`/projects/${id}/github`} className="text-sm text-brand-600 hover:underline">
           {t.creditsPage.back}
         </Link>
       </div>
@@ -149,7 +149,7 @@ export default function CreditsPage() {
           {creditsPhase === "done" && credits && (
             <div className="space-y-4">
               <div className="flex items-baseline gap-3">
-                <span className="text-4xl font-bold text-indigo-700">{reviewBalance}</span>
+                <span className="text-4xl font-bold text-brand-700">{reviewBalance}</span>
                 <span className="text-sm text-gray-500">{t.creditsPage.reviewCredit}</span>
               </div>
 
@@ -165,7 +165,7 @@ export default function CreditsPage() {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-indigo-500 h-2 rounded-full transition-all"
+                      className="bg-brand-500 h-2 rounded-full transition-all"
                       style={{ width: `${Math.min(100, (allowance.usedThisPeriod / allowance.includedRuns) * 100)}%` }}
                     />
                   </div>
@@ -187,7 +187,7 @@ export default function CreditsPage() {
               )}
 
               {credits.actualDebitsEnabled && (
-                <p className="text-xs text-indigo-600">
+                <p className="text-xs text-brand-600">
                   {credits.actualDebitAllowedForUser
                     ? t.creditsPage.actualDebitOn
                     : t.creditsPage.dryRunMode}
@@ -212,8 +212,8 @@ export default function CreditsPage() {
           )}
 
           {openRequests >= 3 ? (
-            <div className="border border-indigo-200 bg-indigo-50 rounded-lg px-4 py-3">
-              <p className="text-sm text-indigo-700">
+            <div className="border border-brand-200 bg-brand-50 rounded-lg px-4 py-3">
+              <p className="text-sm text-brand-700">
                 {t.creditsPage.pendingRequests.replace("{n}", String(openRequests))}
               </p>
             </div>
@@ -258,7 +258,7 @@ export default function CreditsPage() {
               <button
                 type="submit"
                 disabled={submitPhase === "submitting"}
-                className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                className="bg-brand-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
               >
                 {submitPhase === "submitting" ? t.creditsPage.submitting : t.creditsPage.submit}
               </button>
@@ -273,7 +273,7 @@ export default function CreditsPage() {
           <h2 className="font-semibold text-gray-700 text-sm">{t.creditsPage.historyTitle}</h2>
           <button
             onClick={loadRequests}
-            className="text-xs text-indigo-600 hover:underline"
+            className="text-xs text-brand-600 hover:underline"
           >
             {t.creditsPage.refresh}
           </button>
@@ -302,7 +302,7 @@ export default function CreditsPage() {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-indigo-700">
+                      <span className="font-mono text-sm font-semibold text-brand-700">
                         +{req.requestedAmount}
                       </span>
                       <span className="text-xs text-gray-500">{t.creditsPage.reviewCredit}</span>
@@ -313,7 +313,7 @@ export default function CreditsPage() {
                     <p className="text-xs text-gray-500 mt-1">{req.note}</p>
                   )}
                   {req.adminNote && (
-                    <p className="text-xs text-indigo-600 mt-1">{t.creditsPage.adminNote} {req.adminNote}</p>
+                    <p className="text-xs text-brand-600 mt-1">{t.creditsPage.adminNote} {req.adminNote}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
                     {req.createdAt.slice(0, 10)}

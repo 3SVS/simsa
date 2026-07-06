@@ -145,7 +145,7 @@ function ResultCard({ item }: { item: ReviewResultItem }) {
         </div>
       )}
       {item.status !== "passed" && item.nextAction && (
-        <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2">
+        <p className="text-xs text-brand-600 bg-brand-50 rounded-lg px-3 py-2">
           <span className="font-medium">{t.runDetail.nextStep}:</span> {item.nextAction}
         </p>
       )}
@@ -249,13 +249,13 @@ function FixPackPanel({
       <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-800">{t.runDetail.fpTitle}</p>
-          <p className="text-xs text-indigo-600 mt-0.5">
+          <p className="text-xs text-brand-600 mt-0.5">
             {t.runDetail.fpBuilt.replace("{n}", String(result.selectedItemIds.length))}
           </p>
         </div>
         <button
           onClick={copyAll}
-          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          className="text-xs text-brand-600 hover:text-brand-800 font-medium"
         >
           {copied ? t.runDetail.copied : t.runDetail.fpCopyAll}
         </button>
@@ -275,7 +275,7 @@ function FixPackPanel({
               onClick={() => setSelectedFileIdx(i)}
               className={`text-xs px-3 py-2 flex-shrink-0 border-b-2 transition-colors ${
                 i === selectedFileIdx
-                  ? "border-indigo-500 text-indigo-700 font-medium"
+                  ? "border-brand-500 text-brand-700 font-medium"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -534,13 +534,13 @@ function ComparisonPanel({ cmp, newRunId, projectId, selectedCount }: {
         <div>
           <p className="text-sm font-semibold text-gray-800">{t.runDetail.cmpTitle}</p>
           {typeof selectedCount === "number" && selectedCount > 0 && (
-            <p className="text-xs text-indigo-600 mt-0.5">{t.runDetail.rerunDoneCount.replace("{n}", String(selectedCount))}</p>
+            <p className="text-xs text-brand-600 mt-0.5">{t.runDetail.rerunDoneCount.replace("{n}", String(selectedCount))}</p>
           )}
           <p className="text-xs text-gray-500 mt-0.5">{cmp.summaryText}</p>
         </div>
         <Link
           href={`/projects/${projectId}/github/history/${newRunId}`}
-          className="text-xs text-indigo-600 font-medium hover:text-indigo-800 flex-shrink-0"
+          className="text-xs text-brand-600 font-medium hover:text-brand-800 flex-shrink-0"
         >
           {t.runDetail.viewNewRun}
         </Link>
@@ -672,7 +672,7 @@ function AutoCompareGroup({ title, description, color, items }: {
               <p className="text-[11px] text-gray-500 mt-0.5 truncate">{t.runDetail.acCurrentEvidence}: {item.currentEvidence}</p>
             )}
             {item.currentNextAction && (
-              <p className="text-[11px] text-indigo-500 mt-0.5 truncate">{t.runDetail.acNextAction}: {item.currentNextAction}</p>
+              <p className="text-[11px] text-brand-500 mt-0.5 truncate">{t.runDetail.acNextAction}: {item.currentNextAction}</p>
             )}
           </div>
         ))}
@@ -752,7 +752,7 @@ function AutoComparisonPanel({ state, hasLineage, onSendToComment }: {
         {hasLineage && onSendToComment ? (
           <button
             onClick={onSendToComment}
-            className="text-xs font-medium border border-indigo-200 text-indigo-700 bg-indigo-50 rounded-lg px-3 py-1.5 hover:bg-indigo-100 transition-colors"
+            className="text-xs font-medium border border-brand-200 text-brand-700 bg-brand-50 rounded-lg px-3 py-1.5 hover:bg-brand-100 transition-colors"
           >
             {t.runDetail.acSendToComment}
           </button>
@@ -790,7 +790,7 @@ function RerunItemRow({ item, checked, onToggle }: {
         </div>
         {evidence && <p className="text-[11px] text-gray-500 mt-0.5 truncate">{evidence}</p>}
         {item.status !== "passed" && item.nextAction && (
-          <p className="text-[11px] text-indigo-500 mt-0.5 truncate">{t.runDetail.next}: {item.nextAction}</p>
+          <p className="text-[11px] text-brand-500 mt-0.5 truncate">{t.runDetail.next}: {item.nextAction}</p>
         )}
       </div>
     </label>
@@ -863,7 +863,7 @@ function ReviewItemSelectionPanel({
 
       <div className="border-t border-gray-100 bg-gray-50 px-4 py-2.5 flex items-center justify-between gap-2">
         {selectedItemIds.length > 0 ? (
-          <p className="text-xs text-indigo-600">{t.runDetail.selSelected.replace("{n}", String(selectedItemIds.length))}</p>
+          <p className="text-xs text-brand-600">{t.runDetail.selSelected.replace("{n}", String(selectedItemIds.length))}</p>
         ) : (
           <p className="text-xs text-amber-600">
             {t.runDetail.selHint}
@@ -1110,7 +1110,7 @@ export default function RunDetailPage() {
   if (phase === "not_found") {
     return (
       <div className="max-w-3xl space-y-4">
-        <Link href={historyUrl} className="text-xs text-gray-500 hover:text-indigo-600 inline-block">
+        <Link href={historyUrl} className="text-xs text-gray-500 hover:text-brand-600 inline-block">
           {t.runDetail.backToHistory}
         </Link>
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
@@ -1124,7 +1124,7 @@ export default function RunDetailPage() {
   if (phase === "error" || !detail) {
     return (
       <div className="max-w-3xl space-y-4">
-        <Link href={historyUrl} className="text-xs text-gray-500 hover:text-indigo-600 inline-block">
+        <Link href={historyUrl} className="text-xs text-gray-500 hover:text-brand-600 inline-block">
           {t.runDetail.backToHistory}
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
@@ -1155,7 +1155,7 @@ export default function RunDetailPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href={historyUrl} className="text-xs text-gray-500 hover:text-indigo-600 mb-2 inline-block">
+          <Link href={historyUrl} className="text-xs text-gray-500 hover:text-brand-600 mb-2 inline-block">
             {t.runDetail.backToHistory}
           </Link>
           <h2 className="text-lg font-bold text-gray-900">{t.runDetail.title}</h2>
@@ -1171,13 +1171,13 @@ export default function RunDetailPage() {
 
       {/* ── Lineage badge ── */}
       {run.rerunOfReviewRunId && (
-        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5">
-          <span className="text-xs font-medium text-indigo-700 bg-indigo-100 border border-indigo-200 rounded-full px-2 py-0.5">
+        <div className="flex items-center gap-2 bg-brand-50 border border-brand-100 rounded-xl px-4 py-2.5">
+          <span className="text-xs font-medium text-brand-700 bg-brand-100 border border-brand-200 rounded-full px-2 py-0.5">
             {t.runDetail.rerunBadge}
           </span>
           <Link
             href={`/projects/${id}/github/history/${run.rerunOfReviewRunId}`}
-            className="text-xs text-indigo-600 hover:text-indigo-800"
+            className="text-xs text-brand-600 hover:text-brand-800"
           >
             {t.runDetail.viewPrevRun}
           </Link>

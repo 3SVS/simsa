@@ -114,7 +114,7 @@ function BalanceTable({ balances }: { balances: CreditBalance[] }) {
         {balances.map((b) => (
           <tr key={b.creditType} className="border-b last:border-0">
             <td className="py-1">{creditTypeLabel(t, b.creditType)}</td>
-            <td className="py-1 text-right font-mono font-bold text-indigo-700">{b.balance}</td>
+            <td className="py-1 text-right font-mono font-bold text-brand-700">{b.balance}</td>
             <td className="py-1 text-right text-gray-500">{b.updatedAt.slice(0, 10)}</td>
           </tr>
         ))}
@@ -395,10 +395,10 @@ function PreviewTable({ preview }: { preview: PreviewResult }) {
       )}
 
       {preview.allowanceSummary && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2 text-xs text-indigo-700 flex gap-6">
+        <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-2 text-xs text-brand-700 flex gap-6">
           <span>{t.adminCredits.allowanceFreeCover}<strong>{preview.allowanceSummary.totalCoveredByAllowance}</strong>{t.adminCredits.allowanceFreeCoverSuffix.replace("{n}", "")}</span>
           <span>{t.adminCredits.allowanceBillableCandidate}<strong>{preview.allowanceSummary.totalBillableAfterAllowance}</strong>{t.adminCredits.allowanceBillableCandidateSuffix.replace("{n}", "")}</span>
-          <span className="text-indigo-500">{preview.allowanceSummary.rule}</span>
+          <span className="text-brand-500">{preview.allowanceSummary.rule}</span>
         </div>
       )}
 
@@ -476,11 +476,11 @@ function MonthlyPreviewSection({ data }: { data: MonthlyCreditPreviewResult }) {
   const { t } = useI18n();
   return (
     <div className="space-y-4">
-      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
-        <p className="text-sm font-semibold text-indigo-800">
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3">
+        <p className="text-sm font-semibold text-brand-800">
           {t.adminCredits.monthlySimNotice}
         </p>
-        <p className="text-xs text-indigo-600 mt-0.5">
+        <p className="text-xs text-brand-600 mt-0.5">
           {data.month} · {t.adminCredits.monthlyFreePerUser.replace("{n}", String(data.allowanceRule.includedRuns))} · actualDebitsEnabled: false
         </p>
       </div>
@@ -885,7 +885,7 @@ export default function AdminCreditsPage() {
             placeholder={t.adminCredits.adminKeyPlaceholder}
             value={adminKey}
             onChange={(e) => setAdminKey(e.target.value)}
-            className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
       </SectionCard>
@@ -916,19 +916,19 @@ export default function AdminCreditsPage() {
               </div>
               {/* Stage 31: limited rollout allowlist */}
               {creditConfig.limitedRollout !== undefined && (
-                <div className={`text-xs font-mono px-2 py-1 rounded ${creditConfig.limitedRollout.allowedUserKeyCount > 0 ? "bg-indigo-50 text-indigo-700" : "bg-gray-100 text-gray-600"}`}>
+                <div className={`text-xs font-mono px-2 py-1 rounded ${creditConfig.limitedRollout.allowedUserKeyCount > 0 ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-600"}`}>
                   <div>
                     ACTUAL_DEBIT_ALLOWED_USER_KEYS: {creditConfig.envFlags.ACTUAL_DEBIT_ALLOWED_USER_KEYS ?? "(unset)"}
                     {" "}→ {t.adminCredits.rolloutRegistered.replace("{n}", String(creditConfig.limitedRollout.allowedUserKeyCount))}
                   </div>
                   {creditConfig.limitedRollout.allowedUserKeysPreview.length > 0 && (
-                    <div className="mt-1 text-indigo-600">
+                    <div className="mt-1 text-brand-600">
                       {t.adminCredits.rolloutPreview}{creditConfig.limitedRollout.allowedUserKeysPreview.join(", ")}
                       {creditConfig.limitedRollout.allowedUserKeyCount > 5 ? " ..." : ""}
                     </div>
                   )}
                   {creditConfig.limitedRollout.enabled ? (
-                    <div className="mt-1 text-indigo-700 font-semibold">{t.adminCredits.rolloutLimitedActive}</div>
+                    <div className="mt-1 text-brand-700 font-semibold">{t.adminCredits.rolloutLimitedActive}</div>
                   ) : creditConfig.actualDebitsEnabled && creditConfig.limitedRollout.allowedUserKeyCount === 0 ? (
                     <div className="mt-1 text-amber-600 font-semibold">{t.adminCredits.rolloutWarningEmptyAllowlist}</div>
                   ) : null}
@@ -968,14 +968,14 @@ export default function AdminCreditsPage() {
               placeholder={t.adminCredits.userKeyPlaceholder}
               value={userKey}
               onChange={(e) => setUserKey(e.target.value)}
-              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
           <div className="flex gap-2">
             <button
               onClick={handleFetchBalances}
               disabled={loading}
-              className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
+              className="bg-brand-600 text-white px-4 py-2 rounded text-sm hover:bg-brand-700 disabled:opacity-50"
             >
               {t.adminCredits.fetchBalance}
             </button>
@@ -1011,12 +1011,12 @@ export default function AdminCreditsPage() {
               placeholder={t.adminCredits.grantUserKeyPlaceholder}
               value={grantUserKey}
               onChange={(e) => setGrantUserKey(e.target.value)}
-              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <select
               value={grantType}
               onChange={(e) => setGrantType(e.target.value as CreditType)}
-              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               <option value="review">{t.adminCredits.creditTypeReview}</option>
               <option value="fix">{t.adminCredits.creditTypeFix}</option>
@@ -1029,7 +1029,7 @@ export default function AdminCreditsPage() {
               placeholder={t.adminCredits.amountPlaceholder}
               value={grantAmount}
               onChange={(e) => setGrantAmount(e.target.value)}
-              className="w-24 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-24 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
           <div className="flex gap-2">
@@ -1038,7 +1038,7 @@ export default function AdminCreditsPage() {
               placeholder={t.adminCredits.grantReasonPlaceholder}
               value={grantReason}
               onChange={(e) => setGrantReason(e.target.value)}
-              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <button
               onClick={handleGrant}
@@ -1061,7 +1061,7 @@ export default function AdminCreditsPage() {
             <select
               value={range}
               onChange={(e) => setRange(e.target.value as UsageRange)}
-              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               {(["24h", "7d", "30d"] as UsageRange[]).map((r) => (
                 <option key={r} value={r}>{rangeLabel(t, r)}</option>
@@ -1072,7 +1072,7 @@ export default function AdminCreditsPage() {
               placeholder={t.adminCredits.userKeyFilterOptional}
               value={userKey}
               onChange={(e) => setUserKey(e.target.value)}
-              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <button
               onClick={handlePreview}
@@ -1098,19 +1098,19 @@ export default function AdminCreditsPage() {
               placeholder={t.adminCredits.monthPlaceholder}
               value={monthInput}
               onChange={(e) => setMonthInput(e.target.value)}
-              className="w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <input
               type="text"
               placeholder={t.adminCredits.userKeyFilterOptional}
               value={monthlyUserKey}
               onChange={(e) => setMonthlyUserKey(e.target.value)}
-              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 min-w-40 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
             <button
               onClick={handleMonthlyPreview}
               disabled={loading}
-              className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
+              className="bg-brand-600 text-white px-4 py-2 rounded text-sm hover:bg-brand-700 disabled:opacity-50 whitespace-nowrap"
             >
               {t.adminCredits.monthlyLookup}
             </button>
@@ -1231,7 +1231,7 @@ export default function AdminCreditsPage() {
             <button
               onClick={handleFetchTopUpRequests}
               disabled={loading}
-              className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
+              className="bg-brand-600 text-white px-4 py-2 rounded text-sm hover:bg-brand-700 disabled:opacity-50"
             >
               {t.adminCredits.fetchTopUpList}
             </button>
@@ -1252,7 +1252,7 @@ export default function AdminCreditsPage() {
                       <div>
                         <div className="flex items-center gap-2 text-sm">
                           <span className="font-mono text-gray-700">{req.userKey}</span>
-                          <span className="font-bold text-indigo-700">+{req.requestedAmount}</span>
+                          <span className="font-bold text-brand-700">+{req.requestedAmount}</span>
                           <span className="text-gray-500 text-xs">{req.creditType}</span>
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${
                             req.status === "requested"
@@ -1268,7 +1268,7 @@ export default function AdminCreditsPage() {
                           <p className="text-xs text-gray-500 mt-1">{t.adminCredits.topUpNoteLabel}{req.note}</p>
                         )}
                         {req.adminNote && (
-                          <p className="text-xs text-indigo-600 mt-0.5">{t.adminCredits.topUpAdminNoteLabel}{req.adminNote}</p>
+                          <p className="text-xs text-brand-600 mt-0.5">{t.adminCredits.topUpAdminNoteLabel}{req.adminNote}</p>
                         )}
                         <p className="text-xs text-gray-500 mt-1">
                           {t.adminCredits.topUpRequestedAt}{req.createdAt.slice(0, 10)}
@@ -1327,9 +1327,9 @@ export default function AdminCreditsPage() {
       </SectionCard>
 
       {/* Free allowance policy notice */}
-      <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
-        <p className="text-sm font-medium text-indigo-700 mb-1">{t.adminCredits.allowanceNoticeTitle}</p>
-        <ul className="text-xs text-indigo-600 space-y-0.5 list-disc list-inside">
+      <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-brand-700 mb-1">{t.adminCredits.allowanceNoticeTitle}</p>
+        <ul className="text-xs text-brand-600 space-y-0.5 list-disc list-inside">
           <li>{t.adminCredits.allowanceNotice1}</li>
           <li>{t.adminCredits.allowanceNotice2}</li>
           <li>{t.adminCredits.allowanceNotice3}</li>

@@ -27,7 +27,7 @@ function billingStatusLabel(t: Dictionary, s: BillingStatus): string {
 const BILLING_STATUS_COLORS: Record<BillingStatus, string> = {
   billable_candidate: "bg-amber-100 text-amber-700",
   included: "bg-green-100 text-green-700",
-  future_billable: "bg-indigo-100 text-indigo-700",
+  future_billable: "bg-brand-100 text-brand-700",
   ignored: "bg-gray-100 text-gray-500",
 };
 
@@ -80,7 +80,7 @@ export default function AdminUsagePage() {
           <h1 className="text-2xl font-bold text-gray-900">{t.adminUsage.title}</h1>
           <a
             href="/admin/credits"
-            className="text-xs text-indigo-600 hover:underline whitespace-nowrap mt-1"
+            className="text-xs text-brand-600 hover:underline whitespace-nowrap mt-1"
           >
             {t.adminUsage.viewCreditPreview}
           </a>
@@ -99,7 +99,7 @@ export default function AdminUsagePage() {
               onChange={(e) => setAdminKey(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleLoad()}
               placeholder={t.adminUsage.adminKeyPlaceholder}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
           <div>
@@ -107,7 +107,7 @@ export default function AdminUsagePage() {
             <select
               value={range}
               onChange={(e) => setRange(e.target.value as UsageRange)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               {(["24h", "7d", "30d"] as UsageRange[]).map((r) => (
                 <option key={r} value={r}>{rangeLabel(t, r)}</option>
@@ -117,7 +117,7 @@ export default function AdminUsagePage() {
           <button
             onClick={handleLoad}
             disabled={loading}
-            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="px-5 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
           >
             {loading ? t.adminUsage.loading : t.adminUsage.load}
           </button>

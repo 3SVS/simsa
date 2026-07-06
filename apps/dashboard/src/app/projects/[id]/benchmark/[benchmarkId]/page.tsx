@@ -145,7 +145,7 @@ export default function BenchmarkDetailPage() {
   if (phase === "not_found" || phase === "error" || !data) {
     return (
       <div className="max-w-3xl space-y-4">
-        <Link href={backUrl} className="text-xs text-gray-500 hover:text-indigo-600">{t.benchmark.detailBack}</Link>
+        <Link href={backUrl} className="text-xs text-gray-500 hover:text-brand-600">{t.benchmark.detailBack}</Link>
         <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
           {phase === "not_found" ? t.benchmark.notFoundDetail : t.benchmark.loadErrorDetail}
         </div>
@@ -306,7 +306,7 @@ export default function BenchmarkDetailPage() {
     <div className="max-w-4xl space-y-6">
       {/* Header */}
       <div>
-        <Link href={backUrl} className="text-xs text-gray-500 hover:text-indigo-600">{t.benchmark.detailBack}</Link>
+        <Link href={backUrl} className="text-xs text-gray-500 hover:text-brand-600">{t.benchmark.detailBack}</Link>
         <div className="mt-2 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.benchmark.detailTitle}</h2>
@@ -327,7 +327,7 @@ export default function BenchmarkDetailPage() {
         <span>{t.benchmark.createdLabel}: {formatDate(data.createdAt, locale)}</span>
         <span>{t.benchmark.detailCandidates}: {data.candidateCount}</span>
         {data.sourceExperimentId && (
-          <Link href={`/projects/${id}/experiment?experiment=${encodeURIComponent(data.sourceExperimentId)}`} className="text-indigo-600 hover:underline">
+          <Link href={`/projects/${id}/experiment?experiment=${encodeURIComponent(data.sourceExperimentId)}`} className="text-brand-600 hover:underline">
             {t.benchmark.sourceExperiment}: {t.benchmark.openExperiment}
           </Link>
         )}
@@ -346,14 +346,14 @@ export default function BenchmarkDetailPage() {
 
       {/* Ready to decide? (Stage 74) */}
       {data.sourceExperimentId && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-indigo-800">{t.benchmark.readyToDecide}</p>
-            <p className="mt-0.5 text-xs text-indigo-600">{t.benchmark.readyToDecideDesc}</p>
+            <p className="text-sm font-semibold text-brand-800">{t.benchmark.readyToDecide}</p>
+            <p className="mt-0.5 text-xs text-brand-600">{t.benchmark.readyToDecideDesc}</p>
           </div>
           <Link
             href={`/projects/${id}/experiment?experiment=${encodeURIComponent(data.sourceExperimentId)}`}
-            className="flex-shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
+            className="flex-shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-brand-700"
           >
             {t.benchmark.recordDecision}
           </Link>
@@ -362,11 +362,11 @@ export default function BenchmarkDetailPage() {
 
       {/* Recommendation */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">{t.benchmark.intro}</p>
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">{t.benchmark.intro}</p>
         {winner ? (
           <>
             <h3 className="mt-3 text-sm font-semibold text-gray-800">{t.benchmark.recommendedCandidate}</h3>
-            <p className="mt-1 text-sm font-semibold text-indigo-700">{winner.label}</p>
+            <p className="mt-1 text-sm font-semibold text-brand-700">{winner.label}</p>
             <p className="mt-1 text-xs text-gray-500">{t.benchmark.recommendedBody}</p>
             {winner.reviewRunId && (
               <Link
@@ -419,7 +419,7 @@ export default function BenchmarkDetailPage() {
             </thead>
             <tbody>
               {ranked.map(({ candidate, metrics }) => (
-                <tr key={candidate.id} className={`border-t border-gray-100 ${candidate.id === winnerId ? "bg-indigo-50/40" : ""}`}>
+                <tr key={candidate.id} className={`border-t border-gray-100 ${candidate.id === winnerId ? "bg-brand-50/40" : ""}`}>
                   <td className="px-4 py-2.5 font-medium text-gray-800">{candidate.label}</td>
                   <td className="px-4 py-2.5 text-gray-600">{modeLabel(t, candidate.mode)}</td>
                   <td className="px-4 py-2.5 text-gray-600">{sourceLabel(t, candidate.source)}</td>
@@ -429,7 +429,7 @@ export default function BenchmarkDetailPage() {
                   <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{metrics.score}</td>
                   <td className="px-4 py-2.5 text-right">
                     {candidate.reviewRunId ? (
-                      <Link href={`/projects/${id}/github/history/${candidate.reviewRunId}`} className="text-xs text-indigo-600 hover:underline">
+                      <Link href={`/projects/${id}/github/history/${candidate.reviewRunId}`} className="text-xs text-brand-600 hover:underline">
                         {candidate.pullRequestNumber ? `PR #${candidate.pullRequestNumber}` : t.benchmark.openReviewRun}
                       </Link>
                     ) : (
@@ -448,7 +448,7 @@ export default function BenchmarkDetailPage() {
         <h3 className="mb-3 text-sm font-semibold text-gray-700">{t.benchmark.metricsTitle}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           {ranked.map(({ candidate, metrics }) => (
-            <div key={candidate.id} className={`rounded-xl border p-4 ${candidate.id === winnerId ? "border-indigo-300 bg-indigo-50/40" : "border-gray-200 bg-white"}`}>
+            <div key={candidate.id} className={`rounded-xl border p-4 ${candidate.id === winnerId ? "border-brand-300 bg-brand-50/40" : "border-gray-200 bg-white"}`}>
               <p className="mb-2 text-sm font-semibold text-gray-800">{candidate.label}</p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <Stat label={t.benchmark.acceptancePassRate} value={pct(metrics.acceptancePassRate)} strong />
@@ -530,7 +530,7 @@ export default function BenchmarkDetailPage() {
                 {c.pullRequestNumber ? ` · PR #${c.pullRequestNumber}` : ""}
               </span>
               {c.reviewRunId && (
-                <Link href={`/projects/${id}/github/history/${c.reviewRunId}`} className="flex-shrink-0 text-indigo-600 hover:underline">
+                <Link href={`/projects/${id}/github/history/${c.reviewRunId}`} className="flex-shrink-0 text-brand-600 hover:underline">
                   {t.benchmark.openReviewRun}
                 </Link>
               )}
@@ -626,7 +626,7 @@ function MatrixSection({
               type="checkbox"
               checked={differentOnly}
               onChange={(e) => setDifferentOnly(e.target.checked)}
-              className="accent-indigo-600"
+              className="accent-brand-600"
             />
             {t.benchmark.showDifferentOnly}
           </label>
@@ -662,7 +662,7 @@ function MatrixSection({
                       </div>
                       <button
                         onClick={() => setExpanded(expanded === row.itemId ? null : row.itemId)}
-                        className="mt-0.5 text-[11px] text-indigo-600 hover:underline"
+                        className="mt-0.5 text-[11px] text-brand-600 hover:underline"
                       >
                         {expanded === row.itemId ? t.benchmark.hideEvidence : t.benchmark.viewEvidence}
                       </button>
