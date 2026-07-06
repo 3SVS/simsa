@@ -7,6 +7,8 @@ import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
 import { detectServices, hasAnyValue } from "@/lib/service-catalog.mjs";
 import type { CatalogService } from "@/lib/service-catalog.mjs";
+import { detectMcpTools } from "@/lib/mcp-catalog.mjs";
+import type { McpTool } from "@/lib/mcp-catalog.mjs";
 import {
   getLocalProject,
   loadExtendedProjectData,
@@ -172,6 +174,9 @@ export default function ExportPage() {
       ),
     );
   }
+
+  // Deploy tools (option A) — pure guidance, no state, no tokens collected.
+  const deployTools: McpTool[] = detectMcpTools();
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const ext = loadExtendedProjectData(id);
@@ -385,6 +390,9 @@ export default function ExportPage() {
         onApply={handleGenerate}
         applying={phase === "loading"}
       />
+
+      {/* ── Prep: connect deploy tools (option A) — guidance only, no tokens ── */}
+      <McpSetupPanel tools={deployTools} />
 
       {/* ── Config: target + selection mode ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -614,6 +622,47 @@ export default function ExportPage() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function McpSetupPanel({ tools }: { tools: McpTool[] }) {
+  const { t } = useI18n();
+  const d = t.exportPage.deployTools;
+
+  if (tools.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <h2 className="text-sm font-semibold text-gray-800 mb-1">{d.title}</h2>
+      <p className="text-sm text-gray-500 mb-4">{d.intro}</p>
+
+      <div className="space-y-3">
+        {tools.map((tool) => (
+          <div key={tool.id} className="border border-gray-200 rounded-xl p-4">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="text-sm font-medium text-gray-800">{tool.label}</span>
+              {tool.docsUrl && (
+                <a href={tool.docsUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs px-3 py-1 rounded-lg font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 transition-colors flex-shrink-0">
+                  {d.docsLabel} ↗
+                </a>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mb-3">{tool.purpose}</p>
+            <div className="space-y-2">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-0.5">{d.connectLabel}</p>
+                <p className="text-xs text-gray-600">{tool.connectHint}</p>
+              </div>
+              <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-600 mb-0.5">{d.safetyLabel}</p>
+                <p className="text-xs text-brand-700">{tool.authNote}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ServiceSetupPanel({
   services,
