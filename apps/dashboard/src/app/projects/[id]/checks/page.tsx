@@ -24,6 +24,7 @@ import {
   type LinkedPull,
 } from "@/lib/workspace-github-api";
 import { StatusBadge } from "@/components/StatusBadge";
+import { checksPrimaryCta } from "@/lib/checks-cta.mjs";
 import { StatCard } from "@/components/StatCard";
 import type { ItemStatus } from "@/lib/labels";
 import {
@@ -160,6 +161,16 @@ export default function ChecksPage() {
     ? linkedPulls.find((lp) => lp.number === latestPrReview.prNumber)
     : undefined;
 
+  // Exactly ONE filled primary on the page (UIUX #5 / #2), state-driven — see
+  // checksPrimaryCta. The real code review outranks the draft spec pre-check.
+  const primaryCta = checksPrimaryCta({
+    prReviewLoaded: prLoadPhase === "done",
+    hasPrReview: Boolean(latestPrReview),
+    prNeedsAction,
+    draftNeedsAction: needsAction,
+  });
+  const btnClass = (isPrimary: boolean) => (isPrimary ? "btn btn-md btn-primary" : "btn btn-md btn-secondary");
+
   return (
     <div className="max-w-3xl space-y-10">
       <div>
@@ -231,7 +242,7 @@ export default function ChecksPage() {
         {results && needsAction > 0 && (
           <div className="mb-6 flex items-center justify-between rounded-lg border border-brand-100 bg-brand-50 px-5 py-4">
             <p className="text-sm text-brand-800">{needsAction} {t.checks.needsAction}</p>
-            <Link href={`/projects/${id}/fixes`} className="btn btn-md btn-primary">
+            <Link href={`/projects/${id}/fixes`} className={btnClass(primaryCta === "draft_fix")}>
               {t.checks.viewRemaining} →
             </Link>
           </div>
@@ -305,7 +316,7 @@ export default function ChecksPage() {
           <div className="card p-8 text-center">
             <p className="mb-1 text-sm text-gray-600">{t.checks.noPrReview}</p>
             <p className="mb-4 text-xs text-gray-500">{t.checks.noPrReviewDesc}</p>
-            <Link href={`/projects/${id}/github`} className="btn btn-md btn-primary">
+            <Link href={`/projects/${id}/github`} className={btnClass(primaryCta === "connect_pr")}>
               {t.checks.connectPr} →
             </Link>
           </div>
@@ -362,7 +373,7 @@ export default function ChecksPage() {
             {/* CTA */}
             <div className="flex flex-wrap items-center gap-3">
               {prNeedsAction > 0 && (
-                <Link href={`/projects/${id}/github`} className="btn btn-md btn-primary">
+                <Link href={`/projects/${id}/github`} className={btnClass(primaryCta === "pr_fix")}>
                   {t.github.createFixInstructions} →
                 </Link>
               )}
