@@ -17,6 +17,10 @@ const docSrc = readFileSync(
   fileURLToPath(new URL("../src/routes/workspace-document-intake.ts", import.meta.url)),
   "utf8",
 );
+const githubSrc = readFileSync(
+  fileURLToPath(new URL("../src/routes/workspace-github.ts", import.meta.url)),
+  "utf8",
+);
 
 const GENERATORS = [
   "generateIdeaToSpecDraft",
@@ -48,5 +52,20 @@ describe("every LLM route goes through the AI Gateway", () => {
     for (const l of callLines) {
       assert.ok(l.includes("CF_AI_GATEWAY_ANTHROPIC_URL"), `document-intake bypasses the gateway: ${l.trim()}`);
     }
+  });
+
+  it("PR review (reviewPRAgainstItems) routes through the gateway", () => {
+    // reviewPRAgainstItems is a multi-line call; assert the gateway URL appears
+    // within the call region (from the call to its closing `);`). This was the
+    // 5th Worker-side callAnthropic site audited after check-draft was found
+    // bypassing the gateway.
+    const idx = githubSrc.indexOf("await reviewPRAgainstItems(");
+    assert.ok(idx !== -1, "reviewPRAgainstItems call not found in workspace-github.ts");
+    const end = githubSrc.indexOf(");", idx);
+    const region = githubSrc.slice(idx, end === -1 ? idx + 600 : end);
+    assert.ok(
+      region.includes("CF_AI_GATEWAY_ANTHROPIC_URL"),
+      "PR review bypasses the AI Gateway",
+    );
   });
 });
