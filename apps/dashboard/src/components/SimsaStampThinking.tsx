@@ -18,9 +18,12 @@ export interface SimsaStampThinkingProps {
   label?: string;
   stepLabels?: string[];
   className?: string;
+  /** Optional reassurance shown under the label in the panel variant — e.g.
+   *  "usually 20–30 seconds" so a non-dev doesn't think a slow generation died. */
+  hint?: string;
 }
 
-export function SimsaStampThinking({ variant, label, stepLabels, className }: SimsaStampThinkingProps) {
+export function SimsaStampThinking({ variant, label, stepLabels, className, hint }: SimsaStampThinkingProps) {
   const cfg = resolveStampThinking({ variant, label, stepLabels });
   const isPanel = cfg.variant === "panel";
 
@@ -70,6 +73,10 @@ export function SimsaStampThinking({ variant, label, stepLabels, className }: Si
 
       {/* Status label — visible for panel, screen-reader-only for compact */}
       <span className={isPanel ? "text-sm text-gray-600" : "sr-only"}>{cfg.label}</span>
+
+      {/* Wait reassurance — panel only. Keeps a non-dev from bailing on a slow
+          (20–30s) generation thinking it hung. */}
+      {isPanel && hint && <span className="text-xs text-gray-400">{hint}</span>}
     </span>
   );
 }

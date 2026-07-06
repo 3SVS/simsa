@@ -1825,6 +1825,7 @@ export type Dictionary = {
     finalizingReview: string;
     saving: string;
     refreshing: string;
+    waitHint: string;
   };
   planMap: {
     title: string;
