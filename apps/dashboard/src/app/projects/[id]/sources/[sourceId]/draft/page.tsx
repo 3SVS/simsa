@@ -162,7 +162,7 @@ export default function DocumentDraftPage() {
           variant="panel"
           stepLabels={loadingSteps}
           label={t.sources.draft.generating}
-          hint={t.loading.waitHint}
+          hint={t.loading.waitHintLong}
         />
       )}
 
