@@ -30,11 +30,15 @@ export function StepNextButton() {
     fixes: t.nav.fixes,
   };
 
+  // Secondary weight on purpose: this is the flow "next" nav, not the screen's
+  // hero action. Each step screen's own key action (connect repo, generate
+  // items, run review, …) is the single filled primary; "다음 →" recedes so it
+  // never competes with — or outshouts — that primary (UIUX #5).
   return (
     <div className="mt-10 flex justify-end border-t border-gray-100 pt-4">
       <Link
         href={`/projects/${seg[1]}/${next}`}
-        className="btn btn-md btn-primary"
+        className="btn btn-md btn-secondary"
       >
         {t.stepsNav.next}: {labels[next] ?? next} →
       </Link>
