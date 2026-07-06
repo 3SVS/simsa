@@ -164,7 +164,7 @@ function genReadme(
   const lines = [
     `# 만들기 패키지 — ${title}`,
     "",
-    "이 패키지는 Simsa Workspace에서 내보낸 제품 설명서와 개발 지시서입니다.",
+    "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트 하나만 넘기면, 구현부터 서비스 설정·실행 확인·인터넷 배포·접속 주소 전달까지 **한 번에 알아서** 끝냅니다.",
     "",
   ];
 
@@ -480,6 +480,30 @@ const RETURN_TO_SIMSA_GUIDANCE: string = [
   "이렇게 하면 남은 문제를 Simsa가 다시 잡아주고, 다음 패키지로 이어갈 수 있다.",
 ].join("\n");
 
+/**
+ * The spine that turns the pack from an "implement these items" checklist into a
+ * self-driving, one-shot runbook. From Bae's dogfooding: a user should be able
+ * to download the pack, drop it into their agent, and have the WHOLE thing —
+ * build → service setup → run → deploy → hand back the live URL — finish on its
+ * own, without babysitting or dev-ceremony questions. Placed FIRST in both
+ * prompts so the agent reads the end-to-end mission before the detailed steps;
+ * the guidance blocks below are the "how" for each phase.
+ */
+const ONE_SHOT_RUNBOOK: string = [
+  "## 이 지시 하나로 끝까지 — 사용자는 개발자가 아니다",
+  "",
+  "너는 이 사용자를 대신해 **처음부터 끝까지 한 번에** 진행한다. 목표는 '항목 구현'이 아니라 **실제로 돌아가는, 인터넷에 배포된 앱과 그 접속 주소(URL)를 사용자 손에 쥐여주는 것**이다. 아래 순서를 스스로 끝까지 밟아라. 중간에 개발 절차를 사용자에게 되묻지 말고, 배포된 결과가 나올 때까지 멈추지 마라.",
+  "",
+  "1. **이해** — 이 폴더의 파일을 모두 읽는다(`product.md`·`items.md`·`checks.md`·`fixes.md`, 그리고 있으면 `SETUP.md`·`.env.example`).",
+  "2. **구현** — 짧은 계획을 세우고, 이번 패키지에 포함된 항목만 구현한다.",
+  "3. **서비스 설정** — 외부 서비스가 필요하면 `SETUP.md`를 따라 설정한다. 가입·키 발급처럼 사용자만 할 수 있는 일만 아래 '초보자 안내'처럼 한 단계씩 손잡아 부탁하고, 받은 값은 `.env.local`에 넣는다(코드에 하드코딩 금지). 그 외는 네가 알아서 한다.",
+  "4. **실행 확인** — 앱을 실제로 실행해 각 항목의 완성 기준을 스스로 점검하고, 안 되는 부분은 될 때까지 고친다.",
+  "5. **배포 + 저장소** — 아래 '한 번에 배포' 원칙대로, 네게 연결된 도구로 **네가 직접** 배포하고 코드를 GitHub에 올린다(토큰 무취급).",
+  "6. **전달** — 배포된 실제 URL을 사용자에게 알려주고, 그 URL을 Simsa에 다시 넣어 확인받으라고 안내한다.",
+  "",
+  "**멈추지 않기:** 각 단계에서 막히면 스스로 해결을 시도하라. 정말 사용자만 할 수 있는 것(가입·키 입력, 도구 최초 연결)만 콕 집어 부탁하고 곧바로 이어간다. '어떻게 마무리할까요(병합/PR/브랜치)?' 같은 선택지로 끝내지 마라 — 끝은 언제나 '배포된 URL + 다음 한 가지 행동'이다.",
+].join("\n");
+
 function genClaudeCodePrompt(
   title: string,
   effectiveItems: ExportItem[],
@@ -501,7 +525,11 @@ function genClaudeCodePrompt(
     "",
     "---",
     "",
-    "## 지시사항",
+    ONE_SHOT_RUNBOOK,
+    "",
+    "---",
+    "",
+    "## 세부 지시사항",
     "",
     "1. 먼저 `product.md`를 읽어 전체 맥락을 이해한다.",
     `2. \`items.md\`에서 이번에 포함된 항목만 확인한다. (총 ${effectiveItems.length}개)`,
@@ -579,6 +607,10 @@ function genCodexPrompt(
     `# Codex용 지시서 — ${title}`,
     "",
     "이 파일 내용을 Codex 대화창에 그대로 붙여넣으세요.",
+    "",
+    "---",
+    "",
+    ONE_SHOT_RUNBOOK,
     "",
     "---",
     "",

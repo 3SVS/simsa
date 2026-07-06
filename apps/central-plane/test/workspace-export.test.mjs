@@ -121,6 +121,18 @@ describe("workspace export-builder-pack", () => {
         p.includes("하드코딩하거나 기록하지 마라"),
         "never hardcode/record tokens in code, commits, files, or the prompt",
       );
+      // one-shot runbook: the pack drives the WHOLE thing to a deployed result,
+      // doesn't stop for dev-ceremony, and finishes with the live URL
+      assert.match(p, /이 지시 하나로 끝까지/);
+      assert.ok(
+        p.includes("배포된 결과가 나올 때까지 멈추지 마라"),
+        "don't stop until there's a deployed result",
+      );
+      assert.ok(p.includes("멈추지 않기"), "explicit don't-stop section");
+      assert.ok(
+        p.includes("배포된 실제 URL을 사용자에게 알려주고"),
+        "finish by handing back the live URL",
+      );
     }
   });
 
