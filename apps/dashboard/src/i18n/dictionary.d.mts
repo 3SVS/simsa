@@ -534,6 +534,28 @@ export type Dictionary = {
     recheck: string;
     recheckTooltip: string;
     historyNote: string;
+    prep: {
+      title: string;
+      intro: string;
+      noStore: string;
+      optional: string;
+      signup: string;
+      stepsShow: string;
+      stepsHide: string;
+      secretBadge: string;
+      valuePlaceholder: string;
+      note: string;
+    };
+    returnStep: {
+      title: string;
+      intro: string;
+      repoTitle: string;
+      repoDesc: string;
+      repoCta: string;
+      siteTitle: string;
+      siteDesc: string;
+      siteCta: string;
+    };
   };
   adminUsage: {
     title: string;
@@ -1996,6 +2018,10 @@ export type Dictionary = {
     success: string;
     deviceNoteTitle: string;
     deviceNoteBody: string;
+    orLabel: string;
+    repoTitle: string;
+    repoBody: string;
+    repoLink: string;
   };
   sources: {
     title: string;
