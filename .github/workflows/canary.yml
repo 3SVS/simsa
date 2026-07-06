@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Probe production
         id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           fails=""
@@ -58,6 +60,29 @@ jobs:
           err=$(printf '%s' "$gen" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')
           if [ "$src" != "llm" ]; then
             fails="$fails\n- generation NOT real: source=${src:-none} error=${err:-none}"
+          fi
+
+          # 5. Deploy freshness — "merged but never deployed" has bitten us twice
+          #    (deploy-central-plane is manual). Flag when main is ahead of the
+          #    deployed Worker AND the oldest undeployed commit is >12h old.
+          #    Fail-safe: any ambiguity (unknown sha / API hiccup) → no alert.
+          deployed=$(curl -sS --max-time 20 "$BASE/healthz" | sed -n 's/.*"deployedSha":"\([^"]*\)".*/\1/p')
+          if [ -n "$deployed" ] && [ "$deployed" != "unknown" ]; then
+            head=$(curl -sS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" \
+                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/main" | jq -r '.sha // empty')
+            if [ -n "$head" ] && [ "$head" != "$deployed" ]; then
+              cmp=$(curl -sS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" \
+                   "https://api.github.com/repos/${GITHUB_REPOSITORY}/compare/${deployed}...${head}")
+              ahead=$(printf '%s' "$cmp" | jq -r '.ahead_by // 0')
+              oldest=$(printf '%s' "$cmp" | jq -r '.commits[0].commit.committer.date // empty')
+              if [ "${ahead:-0}" -gt 0 ] && [ -n "$oldest" ]; then
+                age=$(( $(date -u +%s) - $(date -u -d "$oldest" +%s) ))
+                if [ "$age" -gt 43200 ]; then
+                  hrs=$(( age / 3600 ))
+                  fails="$fails\n- deploy stale: main is ${ahead} commit(s) ahead of the deployed Worker (oldest undeployed ~${hrs}h old). Run deploy-central-plane."
+                fi
+              fi
+            fi
           fi
 
           if [ -n "$fails" ]; then
