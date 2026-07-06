@@ -40,36 +40,26 @@ export type WorkspaceRecommendAnswerResponse =
 
 function buildRecommendPrompt(req: WorkspaceRecommendAnswerRequest): string {
   const ko = (req.locale ?? "ko") !== "en";
+  // Context labels are English on purpose (see the language note below); the
+  // VALUES stay in whatever language the user wrote (usually Korean).
   const ctx: string[] = [];
-  if (req.productName) ctx.push(`제품 이름: ${req.productName}`);
-  if (req.oneLine) ctx.push(`한 줄 설명: ${req.oneLine}`);
-  if (req.targetUsers && req.targetUsers.length > 0) ctx.push(`대상 사용자: ${req.targetUsers.join(", ")}`);
-  const context = ctx.length > 0 ? ctx.join("\n") : "(추가 맥락 없음)";
+  if (req.productName) ctx.push(`Product name: ${req.productName}`);
+  if (req.oneLine) ctx.push(`One-liner: ${req.oneLine}`);
+  if (req.targetUsers && req.targetUsers.length > 0) ctx.push(`Target users: ${req.targetUsers.join(", ")}`);
+  const context = ctx.length > 0 ? ctx.join("\n") : "(no extra context)";
 
-  // Framing mirrors check-draft's prompt, which is the ONE workspace generator
-  // proven reliable in Korean with this same model (haiku-4-5). Earlier recommend
-  // prompts (반말 command + loose "제품 맥락:" labels, with and without a few-shot
-  // example) made haiku hallucinate an "인코딩 오류로 읽을 수 없습니다" refusal in
-  // Korean while English worked. The winning pattern, copied here: polite framing
-  // (~해주세요), bracketed [섹션] delimiters so the model reads the Korean as data,
-  // and "마크다운·설명 없이" before a JSON template.
-  if (ko) {
-    return `아직 결정하지 못한 제품 사항 하나에 대해, 비개발자가 그대로 채택할 수 있는 무난한 기본값을 추천해주세요.
-
-[제품 맥락]
-${context}
-
-[결정할 질문]
-${req.question}
-
-규칙:
-- recommendation: 그대로 채택할 수 있는 짧고 구체적인 답 (예: "30일", "무료로 제공")
-- reason: 왜 이게 무난한지 한국어 1문장, 전문용어 없이
-- options: 사용자가 대신 고를 수 있는 구체적 대안 2~4개
-
-다음 JSON 형식으로만 응답 (마크다운·설명 없이):
-{ "recommendation": "...", "reason": "...", "options": ["...", "..."] }`;
-  }
+  // English scaffolding is DELIBERATE even when the answer must be Korean.
+  // Verified live via `wrangler tail`: a fully-Korean prompt makes
+  // claude-haiku-4-5 hallucinate an "인코딩 오류로 읽을 수 없습니다" refusal, but
+  // mixing English framing with Korean content reliably engages it
+  // (KO-template+EN-content and EN-template+KO-content both returned 200 while
+  // KO-template+KO-content failed 3/3). So we always frame in English and just
+  // require the OUTPUT values in the user's language. Earlier attempts (반말
+  // command, check-draft-style 존댓말 + brackets, a few-shot example) all still
+  // triggered the refusal because the prompt was fully Korean.
+  const langLine = ko
+    ? "Write recommendation, reason, and every option value in natural Korean (한국어)."
+    : "Write recommendation, reason, and options in English.";
 
   return `Recommend one sensible default a non-developer can accept as-is for a single undecided product question.
 
@@ -80,9 +70,10 @@ ${context}
 ${req.question}
 
 Rules:
-- recommendation: a short concrete answer the user can accept as-is (e.g. "30 days")
-- reason: one sentence, no jargon, why it is sensible
-- options: 2-4 concrete alternatives
+- recommendation: a short concrete answer the user can accept as-is (e.g. "30 days").
+- reason: one sentence, no jargon, why it is sensible.
+- options: 2-4 concrete alternatives.
+- ${langLine}
 
 Reply with ONLY this JSON (no markdown, no prose):
 { "recommendation": "...", "reason": "...", "options": ["...", "..."] }`;
