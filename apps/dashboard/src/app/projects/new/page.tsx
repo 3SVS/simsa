@@ -311,7 +311,13 @@ function NewProjectInner() {
         : {}),
       entryPath: "code",
     });
-    saveProjectToDb({
+    // Persist the project server-side BEFORE navigating to connect a repo.
+    // This was fire-and-forget + an immediate router.push, so the project row
+    // could still be uncommitted when the user linked a repo on the next screen
+    // — orphaning the link and later showing the "connect a repo again" card
+    // (the reported bug). Await it; on failure still navigate (local-first) and
+    // mark the sync so settings can surface it.
+    const saveRes = await saveProjectToDb({
       id,
       userKey: getUserKey(),
       title: name,
@@ -324,9 +330,11 @@ function NewProjectInner() {
           ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
           : undefined,
       entryPath: "code",
-    })
-      .then((res) => { if (!res || res.ok !== true) { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); } })
-      .catch(() => { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); });
+    }).catch(() => null);
+    if (!saveRes || saveRes.ok !== true) {
+      markProjectSyncFailed(id);
+      toast.error(t.interaction.syncFailedSaved);
+    }
     // Straight to code connect — that IS this branch's step 1.
     router.push(`/projects/${id}/settings`);
   }

@@ -334,13 +334,20 @@ export default function GitHubPage() {
         </div>
       )}
 
-      {/* No repo */}
+      {/* No repo. The reload button recovers a just-connected repo that a
+          persistence race briefly reported as null — so a real connection is
+          never lost behind a terminal "connect again" card. */}
       {loadPhase === "no_repo" && (
         <div className="card p-8 text-center">
           <p className="mb-4 text-sm text-gray-600">{t.github.connectRepoFirst}</p>
-          <Link href={`/projects/${id}/settings`} className="btn btn-md btn-primary">
-            {t.github.goConnectRepo}
-          </Link>
+          <div className="flex items-center justify-center gap-2">
+            <Link href={`/projects/${id}/settings`} className="btn btn-md btn-primary">
+              {t.github.goConnectRepo}
+            </Link>
+            <button onClick={() => void loadInitial()} className="btn btn-md btn-secondary">
+              {t.common.retry}
+            </button>
+          </div>
         </div>
       )}
 
