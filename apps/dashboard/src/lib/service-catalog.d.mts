@@ -12,6 +12,8 @@ export interface CatalogEnvVar {
 export interface CatalogService {
   id: string;
   label: string;
+  /** why a non-dev might need this, one plain sentence */
+  why?: string;
   setupUrl?: string;
   setupSteps?: string[];
   envVars: CatalogEnvVar[];
@@ -35,3 +37,5 @@ export declare function detectServices(
 ): CatalogService[];
 
 export declare function hasAnyValue(services: CatalogService[]): boolean;
+
+export declare function allCatalogServices(): CatalogService[];
