@@ -477,6 +477,7 @@ export type Dictionary = {
   exportPage: {
     title: string;
     intro: string;
+    prepMoved: string;
     chooseAi: string;
     scope: string;
     targetClaude: string;

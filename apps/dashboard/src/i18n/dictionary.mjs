@@ -550,6 +550,7 @@ const EN = {
   exportPage: {
     title: "Builder pack for your dev AI",
     intro: "Bundle the product brief, review results, and items to fix into files you can hand straight to Claude Code or Codex. (Fix instructions cover one review's remaining issues; this pack covers the whole product.)",
+    prepMoved: "Set up services + deploy tools in the Prep step",
     chooseAi: "Choose dev AI",
     scope: "Scope",
     targetClaude: "For Claude Code",
@@ -2833,6 +2834,7 @@ const KO = {
   exportPage: {
     title: "개발 AI에게 넘길 만들기 패키지",
     intro: "제품 설명서, 확인 결과, 고쳐야 할 항목을 Claude Code 또는 Codex에 바로 넘길 수 있는 파일로 만듭니다. (수정 지시서는 한 번의 확인에서 남은 문제만, 이 패키지는 제품 전체를 다룹니다.)",
+    prepMoved: "서비스·배포 도구 설정은 준비 단계에서",
     chooseAi: "개발 AI 선택",
     scope: "포함 범위",
     targetClaude: "Claude Code용",

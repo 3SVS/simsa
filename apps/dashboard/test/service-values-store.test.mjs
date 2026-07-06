@@ -4,6 +4,7 @@ import {
   saveServiceValues,
   loadServiceValues,
   clearServiceValues,
+  seedServiceSetup,
 } from "../src/lib/service-values-store.mjs";
 
 // Minimal sessionStorage mock on globalThis.window.
@@ -55,5 +56,21 @@ describe("service-values-store (browser-only, sessionStorage)", () => {
   it("survives corrupt stored JSON (returns null, no throw)", () => {
     globalThis.window.sessionStorage.setItem("conclave:service-values:proj_1", "{not json");
     assert.equal(loadServiceValues("proj_1"), null);
+  });
+
+  // A2b safety check 1: values entered in prep survive the move to export.
+  it("seedServiceSetup returns the STORED values when present (survives the move)", () => {
+    const stored = [{ id: "supabase", envVars: [{ key: "SUPABASE_SERVICE_ROLE_KEY", value: "svc_real" }] }];
+    saveServiceValues("proj_1", stored);
+    const seeded = seedServiceSetup("proj_1", { oneLine: "무엇이든" });
+    assert.deepEqual(seeded, stored);
+  });
+
+  // A2b safety check 2: spec detection still reaches the panel on its new screen.
+  it("seedServiceSetup falls back to spec detection when nothing is stored", () => {
+    const seeded = seedServiceSetup("proj_new", { oneLine: "가입하면 인증 메일을 보내는 앱" });
+    const ids = seeded.map((s) => s.id);
+    assert.ok(ids.includes("app-url"), "always detects app-url");
+    assert.ok(ids.includes("resend"), "email spec → Resend reaches the panel");
   });
 });

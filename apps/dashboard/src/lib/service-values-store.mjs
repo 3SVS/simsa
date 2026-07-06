@@ -12,6 +12,8 @@
  * never lingers on the device indefinitely. Keyed per project.
  */
 
+import { detectServices } from "./service-catalog.mjs";
+
 const KEY_PREFIX = "conclave:service-values:";
 
 function storage() {
@@ -67,4 +69,23 @@ export function clearServiceValues(projectId) {
   } catch {
     /* non-fatal */
   }
+}
+
+/**
+ * The single seed used by BOTH the prep (settings) panel and the builder-pack
+ * export: reuse the user's stored values when present, otherwise fall back to
+ * fresh keyword detection from the product spec. Shared so moving the panel
+ * (A2b) can't drop the two things that break in a move:
+ *   1. values entered in prep survive to export (stored wins),
+ *   2. spec detection (email→Resend, error→Sentry, …) still reaches the panel
+ *      on its new screen (detection fallback).
+ *
+ * @param {string} projectId
+ * @param {Parameters<typeof detectServices>[0]} spec
+ * @returns {unknown[]}
+ */
+export function seedServiceSetup(projectId, spec) {
+  const stored = loadServiceValues(projectId);
+  if (Array.isArray(stored) && stored.length > 0) return stored;
+  return detectServices(spec);
 }
