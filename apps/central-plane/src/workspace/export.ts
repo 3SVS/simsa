@@ -504,10 +504,49 @@ const ONE_SHOT_RUNBOOK: string = [
   "**멈추지 않기:** 각 단계에서 막히면 스스로 해결을 시도하라. 정말 사용자만 할 수 있는 것(가입·키 입력, 도구 최초 연결)만 콕 집어 부탁하고 곧바로 이어간다. '어떻게 마무리할까요(병합/PR/브랜치)?' 같은 선택지로 끝내지 마라 — 끝은 언제나 '배포된 URL + 다음 한 가지 행동'이다.",
 ].join("\n");
 
+/**
+ * "이미 준비된 서비스" — a prompt-facing REFERENCE block for the services the
+ * user set up in Simsa. Lists service names + env var KEYS + where the value
+ * lives (`.env.local`), and points the agent at code-side `process.env` access.
+ *
+ * SECURITY (B): this string must NEVER contain a real secret value. Only
+ * `v.key`, `v.description`, `v.secret`, `svc.label`, `svc.setupUrl` are read —
+ * `v.value` is deliberately untouched. The pasted-into-chat prompt is a leak
+ * surface; values live only in the gitignored `.env.local`. Enforced by
+ * builder-pack-prompt-no-secret.test.mjs (the prompt version of the #271 guard).
+ */
+function genServicesContext(services: BuilderPackService[]): string {
+  if (services.length === 0) return "";
+  const lines: string[] = [
+    "## 이미 준비된 서비스 (키 값은 지시서에 없음)",
+    "",
+    "사용자가 Simsa에서 아래 서비스를 미리 설정했다. **실제 키 값은 이 지시서에 들어있지 않다** — 팩의 `.env.local` 파일에 이미 채워져 있고(gitignore됨), 이 대화창에도 절대 붙지 않는다.",
+    "- 코드에서는 값을 하드코딩하지 말고 `process.env.<KEY>`(또는 프레임워크 규칙)로 읽어라.",
+    "- 실제 키 값을 이 대화, 코드, 커밋, 로그 어디에도 노출하지 마라.",
+    "",
+  ];
+  for (const svc of services) {
+    lines.push(`### ${svc.label}`);
+    if (svc.setupUrl) lines.push(`- 서비스: ${svc.setupUrl}`);
+    lines.push("- 사용할 환경변수 (값은 `.env.local`에서 읽음):");
+    for (const v of svc.envVars) {
+      const secret = v.secret ? " · 서버 전용(프론트/브라우저 금지)" : "";
+      lines.push(`  - \`${v.key}\` — ${v.description}${secret}`);
+    }
+    lines.push("");
+  }
+  lines.push(
+    "- 자세한 설정과 아직 비어 있는 값을 채우는 법은 `SETUP.md`를 참고하라.",
+    "- 값이 비어 있는 키가 있으면 `SETUP.md`/`.env.example` 안내대로 사용자에게 발급을 부탁하고 곧바로 이어가라.",
+  );
+  return lines.join("\n");
+}
+
 function genClaudeCodePrompt(
   title: string,
   effectiveItems: ExportItem[],
   totalItems: number,
+  services: BuilderPackService[] = [],
 ): string {
   const isFiltered = effectiveItems.length < totalItems;
   const itemList = effectiveItems.map((i) => `- [ ] ${i.title}`).join("\n");
@@ -546,6 +585,7 @@ function genClaudeCodePrompt(
     "- `product.md`의 '이번 버전에서 제외' 항목은 절대 구현하지 않는다.",
     "- 전체 제품을 한 번에 만들지 않는다. 이번 패키지 범위만 구현한다.",
     "- 애매한 점이 있으면 코드 작성 전에 질문한다.",
+    ...(services.length > 0 ? ["", genServicesContext(services)] : []),
     "",
     BEGINNER_SETUP_GUIDANCE,
     "",
@@ -567,6 +607,7 @@ function genCodexPrompt(
   effectiveItems: ExportItem[],
   totalItems: number,
   fixSuggestions?: Record<string, ExportFixSuggestion>,
+  services: BuilderPackService[] = [],
 ): string {
   const isFiltered = effectiveItems.length < totalItems;
 
@@ -626,6 +667,7 @@ function genCodexPrompt(
     "",
     "이번 버전에 포함할 기능:",
     ...spec.included.map((i) => `- ${i}`),
+    ...(services.length > 0 ? ["", genServicesContext(services)] : []),
     "",
     "## Selected tasks",
     "",
@@ -881,14 +923,14 @@ export function generateBuilderPack(
   if (target !== "codex") {
     baseFiles.push({
       path: "conclave-build-pack/CLAUDE_CODE_PROMPT.md",
-      content: genClaudeCodePrompt(title, effectiveItems, allItems.length) + hookSuffix,
+      content: genClaudeCodePrompt(title, effectiveItems, allItems.length, services) + hookSuffix,
     });
   }
   if (target !== "claude_code") {
     baseFiles.push({
       path: "conclave-build-pack/CODEX_PROMPT.md",
       content:
-        genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions) +
+        genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions, services) +
         hookSuffix,
     });
   }
