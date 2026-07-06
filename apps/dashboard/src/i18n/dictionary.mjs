@@ -1719,6 +1719,7 @@ const EN = {
     // Non-developer copy pass — plain-language strings for the intake workflow page.
     page: {
       createDraftButton: "Create draft plan",
+      createDisabledHint: "Type or paste something above to begin.",
       useExampleUrl: "Use an example link",
       useExampleRepo: "Use an example repository",
       useExampleApp: "Use an example app",
@@ -3943,6 +3944,7 @@ const KO = {
     // Non-developer copy pass — 인테이크 워크플로우 페이지 일반 사용자용 문구.
     page: {
       createDraftButton: "초안 만들기",
+      createDisabledHint: "위에 내용을 입력하면 시작할 수 있어요.",
       useExampleUrl: "예시 링크 사용",
       useExampleRepo: "예시 저장소 사용",
       useExampleApp: "예시 앱 사용",

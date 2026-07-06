@@ -401,7 +401,7 @@ function NewProjectInner() {
               Asks the user's situation, not a "type" — no jargon. The choice
               sets entry_path (idea/code/spec) which persists to the P1 envelope. */}
           {entryPath === null && (
-            <div>
+            <div className="mx-auto flex min-h-[60vh] max-w-[34rem] flex-col justify-center">
               <Link href="/projects" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
                 <span aria-hidden>←</span> {t.nav.allProjects}
               </Link>

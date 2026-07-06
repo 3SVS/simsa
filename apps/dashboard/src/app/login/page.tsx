@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getUserKey, setActiveAccountNamespace } from "@/lib/workflow-store";
 import { isPlausibleEmail } from "@/lib/email-validate.mjs";
+import { StampMark } from "@/components/brand/StampMark";
 import {
   getAuthSession,
   signInEmail,
@@ -135,8 +136,9 @@ function LoginInner() {
   }
 
   return (
-    <main className="flex flex-1 justify-center px-4 py-16">
-      <div className="w-full max-w-sm">
+    <main className="flex flex-1 items-center justify-center px-4 py-16">
+      <div className="card w-full max-w-sm p-8">
+        <StampMark size={30} className="mb-4" />
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.login.title}</h1>
         <p className="mb-8 mt-2 text-sm text-gray-500">{t.login.subtitle}</p>
 
@@ -186,7 +188,7 @@ function LoginInner() {
             <input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
           </div>
           {errorMsg && <p className="text-xs text-red-600">{errorMsg}</p>}
-          <button type="submit" disabled={phase !== "idle"} className="btn btn-secondary w-full py-2.5">
+          <button type="submit" disabled={phase !== "idle"} className="btn btn-primary w-full py-2.5">
             {phase === "claiming"
               ? t.login.linking
               : phase === "working"
