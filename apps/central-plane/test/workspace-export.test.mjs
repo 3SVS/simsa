@@ -101,6 +101,13 @@ describe("workspace export-builder-pack", () => {
       // return-to-Simsa: either the deployed URL or the project files
       assert.match(p, /Simsa로 다시 확인받기/);
       assert.ok(p.includes("배포된 앱 URL") && p.includes("프로젝트 파일"), "URL or files re-entry");
+      // deploy hygiene: never hardcode localhost; derive from runtime origin
+      assert.ok(p.includes("localhost") && p.includes("window.location.origin"), "no-hardcoded-localhost directive");
+      // non-dev workflow: don't ask dev-ceremony questions
+      assert.match(p, /작업 방식 — 비개발자 우선/);
+      assert.ok(p.includes("병합") && p.includes("PR"), "no branch/merge/PR questions");
+      // finish = a running result, not a git-strategy menu
+      assert.match(p, /마무리 — 질문이 아니라 결과물/);
     }
   });
 

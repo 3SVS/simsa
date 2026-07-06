@@ -385,6 +385,32 @@ const BEGINNER_SETUP_GUIDANCE: string = [
   "- **Supabase (데이터베이스)**: https://supabase.com 가입 → `New project` 생성 → 왼쪽 하단 `Project Settings`(톱니바퀴) → `API` → `Project URL`과 `anon public` 키를 복사. 관리자 키가 필요하면 `API Keys` 탭 → `service_role` → `Reveal` 클릭 → 복사. **`service_role` 키는 관리자용이라 절대 프론트엔드/브라우저에 넣지 말라고 사용자에게 경고**하고, 서버 환경변수로만 쓰게 한다.",
   "- **Vercel (배포)**: https://vercel.com 에 GitHub 계정으로 로그인 → `Add New → Project` → 저장소 선택 → `Environment Variables`에 위에서 복사한 키를 이름 그대로 추가 → `Deploy`. 배포가 끝나면 나오는 URL을 사용자에게 그대로 알려준다.",
   "- 그 외 서비스(이메일·결제 등)도 같은 순서로: **가입 URL → 키를 찾는 정확한 위치 → 붙여넣을 곳** 순으로 상세히 안내한다.",
+  "",
+  "**배포 대응(중요):** 앱이 스스로를 가리키는 주소 — 짧은 링크의 앞부분, 공유 URL, 리다이렉트 대상, API 주소 등 — 를 절대 `http://localhost:3000` 같은 개발용 주소로 하드코딩하지 마라. 런타임 origin에서 가져와라(브라우저는 `window.location.origin`, 서버는 요청 host 또는 `NEXT_PUBLIC_APP_URL` 같은 환경변수). 그래야 로컬에서도, 배포 후에도 주소가 자동으로 맞는다. 이걸 안 하면 배포했을 때 사용자에게 보이는 링크가 `localhost`로 깨진다.",
+].join("\n");
+
+/**
+ * "Build like it's for a non-developer, and finish with a RESULT" directive.
+ * From dogfooding: the agent dragged the user through developer ceremony
+ * (branches, migrations, TDD) and ended by ASKING "merge to master / open a PR /
+ * discard?" instead of delivering a working app. A non-dev can't answer those
+ * and just wants the outcome.
+ */
+const NONDEV_WORKFLOW_GUIDANCE: string = [
+  "## 작업 방식 — 비개발자 우선",
+  "",
+  "이 사용자는 개발자가 아니다. 개발 절차 자체를 사용자에게 결정하게 하지 마라:",
+  "- **묻지 말 것**: 브랜치를 딸지, 커밋을 어떻게 나눌지, main/master에 병합할지, PR을 만들지 같은 개발 프로세스 선택. 이런 건 네가 알아서 처리하거나 생략하라. 사용자에게 이런 선택 메뉴를 던지면 막힌다.",
+  "- **손잡고 안내할 것은 딱 하나**: 외부 서비스 가입·키처럼 사용자만 할 수 있는 일. 위 '초보자 안내' 방식으로 단계별로.",
+  "- 진행 상황은 개발 용어 없이 '지금 무엇을 만들고 있고, 다음에 무엇이 필요한지'로만 알린다.",
+  "",
+  "## 마무리 — 질문이 아니라 결과물",
+  "",
+  "다 만들었으면 절대 '어떻게 마무리할까요(병합/PR/브랜치/폐기)?'처럼 개발 절차를 나열해 묻지 마라. 대신 이렇게 끝맺어라:",
+  "1. 앱을 실제로 **실행해서 동작하는 모습을 보여준다** (예: 개발 서버를 켠 뒤 접속할 로컬 주소를 알려준다).",
+  "2. 실제로 쓰려면 어떻게 **배포**하는지 위 '초보자 안내' 방식으로 단계별 안내한다(Vercel 등).",
+  "3. 배포된 URL(또는 프로젝트 파일)을 **Simsa에 다시 넣어 확인받게** 안내한다(아래 참고).",
+  "끝은 언제나 '완성된 결과물 + 다음에 할 한 가지 행동'이어야 한다. 개발 절차 선택 메뉴로 끝내지 마라.",
 ].join("\n");
 
 /**
@@ -441,6 +467,8 @@ function genClaudeCodePrompt(
     "- 애매한 점이 있으면 코드 작성 전에 질문한다.",
     "",
     BEGINNER_SETUP_GUIDANCE,
+    "",
+    NONDEV_WORKFLOW_GUIDANCE,
     "",
     RETURN_TO_SIMSA_GUIDANCE,
     "",
@@ -548,6 +576,8 @@ function genCodexPrompt(
     "## Final response format",
     "",
     BEGINNER_SETUP_GUIDANCE,
+    "",
+    NONDEV_WORKFLOW_GUIDANCE,
     "",
     RETURN_TO_SIMSA_GUIDANCE,
     "",
