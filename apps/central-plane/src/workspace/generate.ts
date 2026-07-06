@@ -149,9 +149,11 @@ function buildPrompt(req: IdeaToSpecDraftRequest): string {
 다음 규칙을 반드시 따르세요:
 - 모든 사용자 대상 텍스트는 자연스러운 한국어로 작성
 - PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE 같은 개발자 용어 사용 금지
-- 질문은 이 아이디어에 맞춤형으로 3~5개만 생성 (단순 템플릿 반복 금지)
-- 좋은 질문: 답변에 따라 실제 제품이 달라지는 것 (구현 범위, 사용자 흐름, 데이터 보관, 권한, 외부 연동)
-- 나쁜 질문: "장기 비전은?", "사용자 경험은 어떤 느낌?" 같은 추상적 질문
+- 질문은 이 아이디어에 맞춤형으로 4~6개 생성 (단순 템플릿 반복 금지). 그중 **최소 1개는 화면·디자인(UIUX)** 에 관한 것.
+- 좋은 질문 = 답에 따라 제품이 실제로 달라지는 구체적 질문. 아래 축을 폭넓게 살펴 이 아이디어에 맞는 것을 고른다:
+  구현 범위 · 사용자 흐름 · 데이터 보관 · 로그인/권한 · 외부 연동 · 대상 사용자 숙련도 · 성공 기준 ·
+  **화면·디자인(UIUX)**: 참고하는 앱이나 느낌(예: Linear처럼 미니멀 / Notion처럼 정돈 / 밝고 친근하게), 핵심 화면이 몇 개이고 무엇이 먼저 보여야 하는지, 주로 모바일인지 데스크톱인지
+- 나쁜 질문 = 답이 제품을 바꾸지 않는 추상적 질문("장기 비전은?", "전반적으로 어떤 느낌?"). 단, 위처럼 **구체적인 UIUX 질문은 좋은 질문**이다.
 - 꼭 들어가야 할 항목은 8~10개, 각 항목마다 완성 기준 2~4개
 - 완성 기준은 확인 가능한 구체적 동작으로 작성
 
@@ -171,9 +173,11 @@ Idea: ${req.idea}${answersText}
 Follow these rules strictly:
 - Write all user-facing text in natural, plain English
 - Do NOT use developer jargon like PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE
-- Generate only 3-5 questions tailored to this idea (no repetitive templates)
-- Good questions change the actual product depending on the answer (scope, user flow, data retention, permissions, integrations)
-- Bad questions are abstract ("what's the long-term vision?", "how should the UX feel?")
+- Generate 4-6 questions tailored to this idea (no repetitive templates). At least ONE must be about screens/design (UI/UX).
+- Good questions = concrete questions whose answers actually change the product. Draw broadly from these axes, picking what fits this idea:
+  scope · user flow · data retention · login/permissions · integrations · target-user skill level · success criteria ·
+  **screens/design (UI/UX)**: a reference app or feel (e.g. minimal like Linear / tidy like Notion / bright & friendly), how many key screens there are and what should appear first, mainly mobile or desktop
+- Bad questions = abstract ones whose answers don't change the product ("what's the long-term vision?", "overall feel?"). But concrete UI/UX questions like the above ARE good.
 - Include 8-10 must-have items, each with 2-4 acceptance criteria
 - Acceptance criteria must be concrete, verifiable behaviors
 
