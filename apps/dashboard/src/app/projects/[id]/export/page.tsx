@@ -2,9 +2,11 @@
 
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
+import { detectServices, hasAnyValue } from "@/lib/service-catalog.mjs";
+import type { CatalogService } from "@/lib/service-catalog.mjs";
 import {
   getLocalProject,
   loadExtendedProjectData,
@@ -145,6 +147,32 @@ export default function ExportPage() {
   const [outcomeNote, setOutcomeNote] = useState("");
   const [outcomeSavePhase, setOutcomeSavePhase] = useState<"idle" | "saving" | "saved_remote" | "saved_local">("idle");
 
+  // ── Prep layer: detected services + in-browser key values ─────────────────
+  // Values live only in this component's state and are sent per-export; they are
+  // never persisted server-side (no-store, Rule 3).
+  const [services, setServices] = useState<CatalogService[]>(() => {
+    const e = loadExtendedProjectData(id);
+    return detectServices({
+      oneLine: e?.productSpec?.oneLine ?? project?.description,
+      problem: e?.productSpec?.problem ?? project?.spec?.goal,
+      productName: e?.productSpec?.productName ?? project?.name,
+      included: e?.productSpec?.included ?? project?.spec?.included,
+      userFlow: e?.productSpec?.userFlow,
+    });
+  });
+  const servicesRef = useRef<CatalogService[]>(services);
+  useEffect(() => { servicesRef.current = services; }, [services]);
+
+  function setEnvValue(serviceId: string, key: string, value: string) {
+    setServices((prev) =>
+      prev.map((s) =>
+        s.id === serviceId
+          ? { ...s, envVars: s.envVars.map((v) => (v.key === key ? { ...v, value } : v)) }
+          : s,
+      ),
+    );
+  }
+
   // ── Derived ──────────────────────────────────────────────────────────────
   const ext = loadExtendedProjectData(id);
   const checkResultMap = new Map(
@@ -222,6 +250,9 @@ export default function ExportPage() {
           fixSuggestions: Object.keys(fixSuggestions).length > 0 ? fixSuggestions : undefined,
         },
         selectedItemIds: sel && sel.size > 0 ? Array.from(sel) : undefined,
+        // Prep layer: detected services + any keys the user pasted in the browser.
+        // Sent per-export so the pack can bake .env; never stored server-side.
+        services: servicesRef.current.length > 0 ? servicesRef.current : undefined,
         target: t,
       });
 
@@ -346,6 +377,14 @@ export default function ExportPage() {
         <h1 className="text-xl font-bold text-gray-900 mb-1">{t.exportPage.title}</h1>
         <p className="text-sm text-gray-500">{t.exportPage.intro}</p>
       </div>
+
+      {/* ── Prep: detected services + in-browser key entry ── */}
+      <ServiceSetupPanel
+        services={services}
+        onEnvChange={setEnvValue}
+        onApply={handleGenerate}
+        applying={phase === "loading"}
+      />
 
       {/* ── Config: target + selection mode ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -555,6 +594,109 @@ export default function ExportPage() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function ServiceSetupPanel({
+  services,
+  onEnvChange,
+  onApply,
+  applying,
+}: {
+  services: CatalogService[];
+  onEnvChange: (serviceId: string, key: string, value: string) => void;
+  onApply: () => void;
+  applying: boolean;
+}) {
+  const { t } = useI18n();
+  const p = t.exportPage.prep;
+  const [openSteps, setOpenSteps] = useState<Set<string>>(new Set());
+
+  if (services.length === 0) return null;
+  const anyValue = hasAnyValue(services);
+
+  function toggleSteps(sid: string) {
+    setOpenSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid); else next.add(sid);
+      return next;
+    });
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <h2 className="text-sm font-semibold text-gray-800">{p.title}</h2>
+        <span className="text-xs text-gray-400 flex-shrink-0">{p.optional}</span>
+      </div>
+      <p className="text-sm text-gray-500 mb-3">{p.intro}</p>
+      <p className="text-xs text-brand-700 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 mb-4">{p.noStore}</p>
+
+      <div className="space-y-3">
+        {services.map((s) => (
+          <div key={s.id} className="border border-gray-200 rounded-xl p-4">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="text-sm font-medium text-gray-800">{s.label}</span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {s.setupUrl && (
+                  <a href={s.setupUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-xs px-3 py-1 rounded-lg font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 transition-colors">
+                    {p.signup} ↗
+                  </a>
+                )}
+                {s.setupSteps && s.setupSteps.length > 0 && (
+                  <button onClick={() => toggleSteps(s.id)}
+                    className="text-xs px-3 py-1 rounded-lg font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+                    {openSteps.has(s.id) ? p.stepsHide : p.stepsShow}
+                  </button>
+                )}
+              </div>
+            </div>
+            {openSteps.has(s.id) && s.setupSteps && (
+              <ol className="space-y-1 text-xs text-gray-600 mb-3 pl-1">
+                {s.setupSteps.map((step, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-brand-500 font-semibold flex-shrink-0">{i + 1}.</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <div className="space-y-2.5">
+              {s.envVars.map((v) => (
+                <div key={v.key}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <code className="text-xs font-mono text-gray-700">{v.key}</code>
+                    {v.secret && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium">{p.secretBadge}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mb-1.5">{v.description}</p>
+                  <input
+                    type={v.secret ? "password" : "text"}
+                    value={v.value ?? ""}
+                    onChange={(e) => onEnvChange(s.id, v.key, e.target.value)}
+                    placeholder={v.example ?? p.valuePlaceholder}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-brand-300"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-gray-500 mt-4">{p.note}</p>
+      {anyValue && (
+        <div className="mt-3 flex justify-end">
+          <button onClick={onApply} disabled={applying} className="btn btn-sm btn-primary">
+            {applying ? t.exportPage.generating : t.exportPage.generate}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OutcomeRecorder({
   selectedItemCount,

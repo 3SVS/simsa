@@ -42,6 +42,22 @@ export type ExportBuilderPackInput = {
   };
   /** When provided, only these item IDs are included in items/checks/fixes/prompts. */
   selectedItemIds?: string[];
+  /** Prep layer: collected external services + env values. Values are gathered in
+   *  the browser and sent per-export so the pack can bake .env; never persisted
+   *  server-side (no-store, Rule 3). Omit when the user set nothing up. */
+  services?: Array<{
+    id: string;
+    label: string;
+    setupUrl?: string;
+    setupSteps?: string[];
+    envVars: Array<{
+      key: string;
+      description: string;
+      secret?: boolean;
+      example?: string;
+      value?: string;
+    }>;
+  }>;
   target: ExportTarget;
 };
 

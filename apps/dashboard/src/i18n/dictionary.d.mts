@@ -534,6 +534,18 @@ export type Dictionary = {
     recheck: string;
     recheckTooltip: string;
     historyNote: string;
+    prep: {
+      title: string;
+      intro: string;
+      noStore: string;
+      optional: string;
+      signup: string;
+      stepsShow: string;
+      stepsHide: string;
+      secretBadge: string;
+      valuePlaceholder: string;
+      note: string;
+    };
   };
   adminUsage: {
     title: string;
