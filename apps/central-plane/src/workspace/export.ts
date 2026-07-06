@@ -361,6 +361,46 @@ function genFixesMd(
   return lines.join("\n");
 }
 
+/**
+ * Beginner hand-holding directive shared by both agent prompts. The end user may
+ * be a complete non-developer, so the building agent must never say "set this up
+ * yourself" for external services / API keys / env vars — it walks them through
+ * signup URLs and exact click-paths, one step at a time. Korean, matching the
+ * surrounding prompt and the KO-first audience.
+ */
+const BEGINNER_SETUP_GUIDANCE: string = [
+  "## 사용자 안내 원칙 — 완전 초보자 가정",
+  "",
+  "이 프로젝트의 사용자는 개발 경험이 전혀 없는 비개발자일 수 있다. 외부 서비스(데이터베이스·호스팅·인증·결제 등)나 API 키, 환경변수, 터미널 명령이 필요한 순간에는 절대 \"알아서 준비하세요\"라고 넘기지 말고, 다음처럼 손을 잡고 안내하라:",
+  "",
+  "- 왜 필요한지 한 문장으로 쉽게 설명한다. (예: \"데이터를 저장하려면 무료 데이터베이스가 필요해요.\")",
+  "- 가입·설정 URL을 전체 주소 그대로 준다.",
+  "- 화면에서 **어디를 눌러야 하는지 단계별로, 한 번에 하나씩** 안내한다. 전문용어(API 키, 환경변수, .env 등)는 그때그때 한 줄로 풀어 설명한다.",
+  "- 복사한 값을 **어디에 붙여넣는지(예: `.env` 파일의 어떤 줄)**까지 알려주고, 사용자가 \"했어요\"라고 확인하면 다음 단계로 넘어간다.",
+  "- 키·비밀번호는 절대 코드나 로그에 하드코딩하지 말고 환경변수로만 안내한다.",
+  "- 사용자가 막히면 \"지금 화면에 뭐가 보이세요?\"라고 묻거나 스크린샷을 요청해 다음 단계를 맞춘다.",
+  "",
+  "자주 쓰는 서비스 예시 (UI가 바뀌었으면 현재 화면에 맞게 조정하되, 이 정도로 상세하게):",
+  "",
+  "- **Supabase (데이터베이스)**: https://supabase.com 가입 → `New project` 생성 → 왼쪽 하단 `Project Settings`(톱니바퀴) → `API` → `Project URL`과 `anon public` 키를 복사. 관리자 키가 필요하면 `API Keys` 탭 → `service_role` → `Reveal` 클릭 → 복사. **`service_role` 키는 관리자용이라 절대 프론트엔드/브라우저에 넣지 말라고 사용자에게 경고**하고, 서버 환경변수로만 쓰게 한다.",
+  "- **Vercel (배포)**: https://vercel.com 에 GitHub 계정으로 로그인 → `Add New → Project` → 저장소 선택 → `Environment Variables`에 위에서 복사한 키를 이름 그대로 추가 → `Deploy`. 배포가 끝나면 나오는 URL을 사용자에게 그대로 알려준다.",
+  "- 그 외 서비스(이메일·결제 등)도 같은 순서로: **가입 URL → 키를 찾는 정확한 위치 → 붙여넣을 곳** 순으로 상세히 안내한다.",
+].join("\n");
+
+/**
+ * Closing "bring it back to Simsa" guidance, appended after the beginner setup
+ * block. Broader than the deep-link hook: reminds the agent that the user can
+ * return with a deployed URL OR the project files/spec for another review.
+ */
+const RETURN_TO_SIMSA_GUIDANCE: string = [
+  "## 완성한 뒤 — Simsa로 다시 확인받기",
+  "",
+  "구현·자가 점검이 끝나면 사용자에게 이렇게 안내하라:",
+  "- **배포까지 했다면**: 배포된 앱 URL을 Simsa에 다시 넣어 라이브 화면을 검수받게 한다.",
+  "- **아직 배포 전이라면**: 프로젝트 파일(또는 기획서)을 Simsa에 다시 넣어 이번 결과를 재확인받게 한다.",
+  "이렇게 하면 남은 문제를 Simsa가 다시 잡아주고, 다음 패키지로 이어갈 수 있다.",
+].join("\n");
+
 function genClaudeCodePrompt(
   title: string,
   effectiveItems: ExportItem[],
@@ -399,6 +439,10 @@ function genClaudeCodePrompt(
     "- `product.md`의 '이번 버전에서 제외' 항목은 절대 구현하지 않는다.",
     "- 전체 제품을 한 번에 만들지 않는다. 이번 패키지 범위만 구현한다.",
     "- 애매한 점이 있으면 코드 작성 전에 질문한다.",
+    "",
+    BEGINNER_SETUP_GUIDANCE,
+    "",
+    RETURN_TO_SIMSA_GUIDANCE,
     "",
     "## 포함된 항목 목록",
     "",
@@ -502,6 +546,10 @@ function genCodexPrompt(
     "- 아직 결정이 필요한 사항(product.md)이 구현에 영향을 미치지 않았는지 확인한다.",
     "",
     "## Final response format",
+    "",
+    BEGINNER_SETUP_GUIDANCE,
+    "",
+    RETURN_TO_SIMSA_GUIDANCE,
     "",
     "완료 시 다음 형식으로 보고하라:",
     "",

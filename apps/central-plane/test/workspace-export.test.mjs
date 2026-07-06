@@ -85,6 +85,25 @@ describe("workspace export-builder-pack", () => {
     assert.ok(!paths.some((p) => p.endsWith("CLAUDE_CODE_PROMPT.md")), "CLAUDE_CODE_PROMPT.md should not be present");
   });
 
+  it("both prompts hand-hold a beginner through external-service setup + return-to-Simsa", () => {
+    const res = generateBuilderPack(makeReq("both"));
+    const prompts = res.bundle.files
+      .filter((f) => f.path.endsWith("CLAUDE_CODE_PROMPT.md") || f.path.endsWith("CODEX_PROMPT.md"))
+      .map((f) => f.content);
+    assert.equal(prompts.length, 2);
+    for (const p of prompts) {
+      // beginner setup guidance: signup URLs + exact key-finding path + warning
+      assert.match(p, /완전 초보자 가정/);
+      assert.ok(p.includes("https://supabase.com"), "Supabase signup URL");
+      assert.ok(p.includes("service_role") && p.includes("Reveal"), "exact service_role key path");
+      assert.ok(p.includes("https://vercel.com"), "Vercel signup URL");
+      assert.match(p, /환경변수/); // don't hardcode keys
+      // return-to-Simsa: either the deployed URL or the project files
+      assert.match(p, /Simsa로 다시 확인받기/);
+      assert.ok(p.includes("배포된 앱 URL") && p.includes("프로젝트 파일"), "URL or files re-entry");
+    }
+  });
+
   it("both target includes both prompt files", () => {
     const res = generateBuilderPack(makeReq("both"));
     const paths = res.bundle.files.map((f) => f.path);
