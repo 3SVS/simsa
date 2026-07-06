@@ -31,7 +31,7 @@ export function QuestionCard({ question, index, total, answer, onAnswer }: Props
         {question.question}
       </p>
 
-      <div className="bg-brand-50 rounded-lg px-4 py-3 mb-5">
+      <div className="bg-brand-50 rounded-lg px-4 py-3 mb-3">
         <p className="text-xs font-semibold text-brand-700 mb-0.5">
           {t.np.recommended}: {question.recommendation}
         </p>
@@ -39,6 +39,22 @@ export function QuestionCard({ question, index, total, answer, onAnswer }: Props
           {question.recommendationReason}
         </p>
       </div>
+
+      {/* "Not sure — use the recommendation": one-click accept of the already-
+          generated recommendation. No new LLM call (and so no failure mode) —
+          the recommendation was produced honestly with the question. */}
+      {question.recommendation && (
+        <button
+          onClick={() => onAnswer(question.recommendation)}
+          className={`mb-5 w-full text-sm px-4 py-2 rounded-lg border font-medium transition-all ${
+            answer === question.recommendation
+              ? "bg-brand-600 text-white border-brand-600"
+              : "bg-white text-brand-700 border-brand-200 hover:bg-brand-50"
+          }`}
+        >
+          {t.np.useRecommendation}
+        </button>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {question.options.map((opt) => (

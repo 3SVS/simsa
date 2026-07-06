@@ -834,10 +834,24 @@ function ApiQuestionCard({
         {answer === "defer" && <span className="text-xs text-gray-500">{t.np.decideLater}</span>}
       </div>
       <p className="mb-4 text-base font-medium leading-snug text-gray-900">{question.question}</p>
-      <div className="mb-5 rounded-lg bg-brand-50 px-4 py-3">
+      <div className="mb-3 rounded-lg bg-brand-50 px-4 py-3">
         <p className="mb-0.5 text-xs font-semibold text-brand-700">{t.np.recommended}: {question.recommendation}</p>
         <p className="text-xs leading-relaxed text-brand-600">{question.reason}</p>
       </div>
+      {/* One-click accept of the already-generated recommendation — no new LLM
+          call, no failure mode; the recommendation came honestly with the question. */}
+      {question.recommendation && (
+        <button
+          onClick={() => onAnswer(question.recommendation)}
+          className={`mb-5 w-full rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
+            answer === question.recommendation
+              ? "border-brand-600 bg-brand-600 text-white"
+              : "border-brand-200 bg-white text-brand-700 hover:bg-brand-50"
+          }`}
+        >
+          {t.np.useRecommendation}
+        </button>
+      )}
       <div className="flex flex-wrap gap-2">
         {question.options.map((opt, i) => (
           <button
