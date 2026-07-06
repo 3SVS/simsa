@@ -7,6 +7,14 @@ export interface Env {
   DB: D1Database;
   ENVIRONMENT: string;
   /**
+   * Git commit SHA this Worker was deployed from. Injected at deploy time by
+   * deploy-central-plane.yml (`wrangler deploy --var DEPLOYED_SHA:$GITHUB_SHA`)
+   * and surfaced on /healthz so the canary can flag "main is ahead of the
+   * deployed Worker" — i.e. catch a merge that never got deployed. Absent on
+   * local dev and on any deploy predating this var.
+   */
+  DEPLOYED_SHA?: string;
+  /**
    * Public GitHub OAuth App client_id (vars, not secret — it's public by nature).
    * Required by the /oauth/device/* routes. Leave empty / set to placeholder
    * while the central plane is run without OAuth integration.

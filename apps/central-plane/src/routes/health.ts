@@ -61,6 +61,9 @@ healthRoutes.get("/healthz", async (c) => {
     ok: dbStatus !== "down",
     service: "conclave-central-plane",
     version: "0.13.15",
+    // Commit this Worker was deployed from — the canary compares it to main
+    // HEAD to catch "merged but never deployed" (see canary.yml freshness step).
+    deployedSha: c.env.DEPLOYED_SHA ?? "unknown",
     environment: c.env.ENVIRONMENT ?? "unknown",
     db: dbStatus,
     time: new Date().toISOString(),
