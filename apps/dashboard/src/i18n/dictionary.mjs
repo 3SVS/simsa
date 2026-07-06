@@ -629,6 +629,13 @@ const EN = {
       siteDesc: "Add your live app URL to run a visual check of the finished screens.",
       siteCta: "Connect app URL",
     },
+    deployTools: {
+      title: "Let your AI deploy it in one shot",
+      intro: "Connect these tools once in your editor. Then your dev AI can push the code and put the app online by itself — no copy-pasting keys, and Simsa never sees your tokens.",
+      connectLabel: "How to connect",
+      safetyLabel: "Your keys stay with you",
+      docsLabel: "Official guide",
+    },
   },
   adminUsage: {
     title: "Admin — Usage",
@@ -2886,6 +2893,13 @@ const KO = {
       siteTitle: "배포된 웹사이트 연결",
       siteDesc: "배포된 앱 주소를 넣어 완성된 화면을 시각 검수합니다.",
       siteCta: "앱 주소 연결하기",
+    },
+    deployTools: {
+      title: "AI가 한 번에 배포까지 하도록",
+      intro: "아래 도구를 에디터에서 한 번만 연결해 두세요. 그러면 개발 AI가 코드를 올리고 앱을 인터넷에 배포하는 것까지 알아서 합니다 — 키를 복사해 붙일 필요 없고, Simsa는 토큰을 절대 보지 않습니다.",
+      connectLabel: "연결 방법",
+      safetyLabel: "키는 사용자에게만",
+      docsLabel: "공식 안내",
     },
   },
   adminUsage: {

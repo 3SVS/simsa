@@ -556,6 +556,13 @@ export type Dictionary = {
       siteDesc: string;
       siteCta: string;
     };
+    deployTools: {
+      title: string;
+      intro: string;
+      connectLabel: string;
+      safetyLabel: string;
+      docsLabel: string;
+    };
   };
   adminUsage: {
     title: string;
