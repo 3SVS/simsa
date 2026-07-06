@@ -545,6 +545,8 @@ export type Dictionary = {
       secretBadge: string;
       valuePlaceholder: string;
       note: string;
+      addMore: string;
+      remove: string;
     };
     returnStep: {
       title: string;

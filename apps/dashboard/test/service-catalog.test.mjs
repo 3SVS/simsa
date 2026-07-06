@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { allCatalogServices } from "../src/lib/service-catalog.mjs";
 import {
   SERVICE_CATALOG,
   catalogServiceById,
@@ -111,5 +112,38 @@ describe("service-catalog", () => {
     const services = detectServices({ oneLine: "글을 저장하는 앱" });
     services[1].envVars[0].value = "   ";
     assert.equal(hasAnyValue(services), false);
+  });
+
+  it("every service carries a plain-language 'why'", () => {
+    for (const s of SERVICE_CATALOG) {
+      assert.ok(typeof s.why === "string" && s.why.length > 0, `${s.id} missing why`);
+    }
+    // clones carry it too
+    assert.ok(catalogServiceById("supabase").why.length > 0);
+  });
+
+  it("catalog includes resend (email) and sentry (error tracking)", () => {
+    assert.ok(catalogServiceById("resend"));
+    assert.ok(catalogServiceById("sentry"));
+    // RESEND_API_KEY is server-only secret; SENTRY DSN is public
+    assert.equal(catalogServiceById("resend").envVars.find((v) => v.key === "RESEND_API_KEY").secret, true);
+    assert.notEqual(catalogServiceById("sentry").envVars.find((v) => v.key === "NEXT_PUBLIC_SENTRY_DSN").secret, true);
+  });
+
+  it("detectServices suggests resend on email keywords, sentry on error keywords", () => {
+    const email = detectServices({ oneLine: "가입하면 인증 메일을 보내는 앱" });
+    assert.ok(email.some((s) => s.id === "resend"));
+    const err = detectServices({ oneLine: "an app with error monitoring" });
+    assert.ok(err.some((s) => s.id === "sentry"));
+    // a plain calculator triggers neither
+    const plain = detectServices({ oneLine: "간단한 계산기" });
+    assert.ok(!plain.some((s) => s.id === "resend" || s.id === "sentry"));
+  });
+
+  it("allCatalogServices returns every service as a fresh clone", () => {
+    const all = allCatalogServices();
+    assert.deepEqual(all.map((s) => s.id).sort(), ["app-url", "resend", "sentry", "supabase"]);
+    all[0].label = "mutated";
+    assert.notEqual(SERVICE_CATALOG[0].label, "mutated");
   });
 });

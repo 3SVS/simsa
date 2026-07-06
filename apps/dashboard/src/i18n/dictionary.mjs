@@ -618,6 +618,8 @@ const EN = {
       secretBadge: "Server-only",
       valuePlaceholder: "Paste the value here",
       note: "Fill in any values and they'll be written to .env.local in the pack (kept out of git). Leave them blank to still get a .env.example template plus a setup guide.",
+      addMore: "Add a service",
+      remove: "Remove",
     },
     returnStep: {
       title: "Built it? Come back and connect it",
@@ -2891,6 +2893,8 @@ const KO = {
       secretBadge: "서버 전용",
       valuePlaceholder: "여기에 값을 붙여넣으세요",
       note: "값을 입력하면 팩의 .env.local 에 기록됩니다(깃에는 올라가지 않습니다). 비워 두면 .env.example 템플릿과 설정 안내서만 만들어집니다.",
+      addMore: "서비스 추가",
+      remove: "제거",
     },
     returnStep: {
       title: "다 만드셨나요? 돌아와서 연결하세요",

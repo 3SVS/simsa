@@ -5,7 +5,7 @@ import { ProjectNotFound } from "@/components/ProjectNotFound";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { getProject } from "@/lib/mock-data";
-import { detectServices, hasAnyValue } from "@/lib/service-catalog.mjs";
+import { detectServices, hasAnyValue, allCatalogServices, catalogServiceById } from "@/lib/service-catalog.mjs";
 import type { CatalogService } from "@/lib/service-catalog.mjs";
 import { detectMcpTools } from "@/lib/mcp-catalog.mjs";
 import type { McpTool } from "@/lib/mcp-catalog.mjs";
@@ -175,6 +175,20 @@ export default function ExportPage() {
       ),
     );
   }
+
+  function addService(serviceId: string) {
+    setServices((prev) => {
+      if (prev.some((s) => s.id === serviceId)) return prev;
+      const svc = catalogServiceById(serviceId);
+      return svc ? [...prev, svc] : prev;
+    });
+  }
+  function removeService(serviceId: string) {
+    setServices((prev) => prev.filter((s) => s.id !== serviceId));
+  }
+  const addableServices = allCatalogServices().filter(
+    (c) => !services.some((s) => s.id === c.id),
+  );
 
   // Deploy tools (option A) — pure guidance, no state, no tokens collected.
   const deployTools: McpTool[] = detectMcpTools();
@@ -387,7 +401,10 @@ export default function ExportPage() {
       {/* ── Prep: detected services + in-browser key entry ── */}
       <ServiceSetupPanel
         services={services}
+        addable={addableServices}
         onEnvChange={setEnvValue}
+        onAdd={addService}
+        onRemove={removeService}
         onApply={handleGenerate}
         applying={phase === "loading"}
       />
@@ -700,12 +717,18 @@ function McpSetupPanel({ tools, agentId }: { tools: McpTool[]; agentId: string }
 
 function ServiceSetupPanel({
   services,
+  addable,
   onEnvChange,
+  onAdd,
+  onRemove,
   onApply,
   applying,
 }: {
   services: CatalogService[];
+  addable: CatalogService[];
   onEnvChange: (serviceId: string, key: string, value: string) => void;
+  onAdd: (serviceId: string) => void;
+  onRemove: (serviceId: string) => void;
   onApply: () => void;
   applying: boolean;
 }) {
@@ -713,7 +736,7 @@ function ServiceSetupPanel({
   const p = t.exportPage.prep;
   const [openSteps, setOpenSteps] = useState<Set<string>>(new Set());
 
-  if (services.length === 0) return null;
+  if (services.length === 0 && addable.length === 0) return null;
   const anyValue = hasAnyValue(services);
 
   function toggleSteps(sid: string) {
@@ -751,8 +774,13 @@ function ServiceSetupPanel({
                     {openSteps.has(s.id) ? p.stepsHide : p.stepsShow}
                   </button>
                 )}
+                <button onClick={() => onRemove(s.id)} title={p.remove} aria-label={p.remove}
+                  className="text-xs px-2 py-1 rounded-lg font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                  ✕
+                </button>
               </div>
             </div>
+            {s.why && <p className="text-xs text-gray-500 mb-2">{s.why}</p>}
             {openSteps.has(s.id) && s.setupSteps && (
               <ol className="space-y-1 text-xs text-gray-600 mb-3 pl-1">
                 {s.setupSteps.map((step, i) => (
@@ -788,6 +816,19 @@ function ServiceSetupPanel({
           </div>
         ))}
       </div>
+
+      {/* Picker: let the user add services beyond what we detected */}
+      {addable.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-400">{p.addMore}:</span>
+          {addable.map((c) => (
+            <button key={c.id} onClick={() => onAdd(c.id)}
+              className="text-xs px-3 py-1 rounded-lg font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 transition-colors">
+              + {c.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <p className="text-xs text-gray-500 mt-4">{p.note}</p>
       {anyValue && (
