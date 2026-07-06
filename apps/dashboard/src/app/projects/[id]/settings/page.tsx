@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { getUserKey } from "@/lib/workflow-store";
+import { getUserKey, loadExtendedProjectData, getLocalProject } from "@/lib/workflow-store";
+import { ServiceMcpSetup } from "@/components/ServiceMcpSetup";
 import { useI18n } from "@/i18n/I18nProvider";
 import {
   fetchGitHubStatus,
@@ -594,6 +595,22 @@ export default function SettingsPage() {
       {linkPhase === "error" && (
         <p className="callout callout-error">{t.github.linkFailed}</p>
       )}
+
+      {/* ─── Services + deploy tools (prep layer A2) ──────────────────────── */}
+      <div className="mt-10">
+        {(() => {
+          const ext = loadExtendedProjectData(id);
+          const proj = getLocalProject(id);
+          const spec = {
+            oneLine: ext?.productSpec?.oneLine ?? proj?.description,
+            problem: ext?.productSpec?.problem ?? proj?.spec?.goal,
+            productName: ext?.productSpec?.productName ?? proj?.name,
+            included: ext?.productSpec?.included ?? proj?.spec?.included,
+            userFlow: ext?.productSpec?.userFlow,
+          };
+          return <ServiceMcpSetup projectId={id} spec={spec} />;
+        })()}
+      </div>
 
       {/* ─── Email notifications (simple default) ────────────────────────── */}
       <div className="mt-10">
