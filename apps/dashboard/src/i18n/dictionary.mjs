@@ -989,6 +989,9 @@ const EN = {
     savedOn: "Thanks — your reviews will help improve Simsa.",
     savedOff: "Turned off. New reviews won't be kept.",
     saveError: "Could not save your choice. Please try again.",
+    joinCta: "Join in",
+    laterCta: "Maybe later",
+    manageInSettings: "Change anytime in Settings",
   },
   github: {
     connectTitle: "Connect your code",
@@ -3281,6 +3284,9 @@ const KO = {
     savedOn: "감사합니다 — 보내주신 확인이 Simsa 개선에 도움이 돼요.",
     savedOff: "껐어요. 이후 확인은 보관되지 않아요.",
     saveError: "선택을 저장하지 못했어요. 잠시 후 다시 시도해주세요.",
+    joinCta: "참여하기",
+    laterCta: "나중에",
+    manageInSettings: "설정에서 언제든 바꿀 수 있어요",
   },
   github: {
     connectTitle: "코드 저장소 연결",
