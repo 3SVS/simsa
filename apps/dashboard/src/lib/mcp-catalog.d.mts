@@ -7,6 +7,10 @@ export interface McpTool {
   connectHint: string;
   /** the "we never see your token" reassurance */
   authNote: string;
+  /** the exact CLI command the user pastes to connect the tool (Claude Code) */
+  connectCommand: string;
+  /** the one-time login step after running connectCommand */
+  authStep: string;
   docsUrl?: string;
 }
 

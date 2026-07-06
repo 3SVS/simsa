@@ -632,6 +632,9 @@ const EN = {
     deployTools: {
       title: "Let your AI deploy it in one shot",
       intro: "Connect these tools once in your editor. Then your dev AI can push the code and put the app online by itself — no copy-pasting keys, and Simsa never sees your tokens.",
+      whatIsMcp: "MCP is how you connect a tool to your dev AI. Paste each command below into Claude Code once and sign in when the browser opens — then paste the builder pack prompt and your AI can deploy on its own.",
+      commandLabel: "Connect command",
+      authStepLabel: "Sign in",
       connectLabel: "How to connect",
       safetyLabel: "Your keys stay with you",
       docsLabel: "Official guide",
@@ -2897,6 +2900,9 @@ const KO = {
     deployTools: {
       title: "AI가 한 번에 배포까지 하도록",
       intro: "아래 도구를 에디터에서 한 번만 연결해 두세요. 그러면 개발 AI가 코드를 올리고 앱을 인터넷에 배포하는 것까지 알아서 합니다 — 키를 복사해 붙일 필요 없고, Simsa는 토큰을 절대 보지 않습니다.",
+      whatIsMcp: "MCP는 개발 AI에 '도구'를 연결하는 방법입니다. 아래 명령을 Claude Code에 한 번씩 붙여넣고, 브라우저가 열리면 로그인만 하세요. 그다음 빌더팩 프롬프트를 붙여넣으면 개발 AI가 알아서 배포까지 합니다.",
+      commandLabel: "연결 명령",
+      authStepLabel: "로그인",
       connectLabel: "연결 방법",
       safetyLabel: "키는 사용자에게만",
       docsLabel: "공식 안내",

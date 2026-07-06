@@ -626,13 +626,21 @@ export default function ExportPage() {
 function McpSetupPanel({ tools }: { tools: McpTool[] }) {
   const { t } = useI18n();
   const d = t.exportPage.deployTools;
+  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   if (tools.length === 0) return null;
+
+  async function copyCommand(id: string, command: string) {
+    await copyText(command);
+    setCopiedCmd(id);
+    setTimeout(() => setCopiedCmd(null), 2000);
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <h2 className="text-sm font-semibold text-gray-800 mb-1">{d.title}</h2>
-      <p className="text-sm text-gray-500 mb-4">{d.intro}</p>
+      <p className="text-sm text-gray-500 mb-3">{d.intro}</p>
+      <p className="text-xs text-brand-700 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2 mb-4">{d.whatIsMcp}</p>
 
       <div className="space-y-3">
         {tools.map((tool) => (
@@ -647,15 +655,27 @@ function McpSetupPanel({ tools }: { tools: McpTool[] }) {
               )}
             </div>
             <p className="text-xs text-gray-500 mb-3">{tool.purpose}</p>
-            <div className="space-y-2">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-0.5">{d.connectLabel}</p>
-                <p className="text-xs text-gray-600">{tool.connectHint}</p>
+
+            {/* The exact connect command the user pastes into Claude Code */}
+            <div className="mb-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">{d.commandLabel}</p>
+              <div className="flex items-stretch gap-2">
+                <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap bg-gray-900 text-gray-100 rounded-lg px-3 py-2 text-xs font-mono">
+                  {tool.connectCommand}
+                </code>
+                <button onClick={() => copyCommand(tool.id, tool.connectCommand)}
+                  className="flex-shrink-0 text-xs px-3 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+                  {copiedCmd === tool.id ? t.exportPage.copied : t.exportPage.copy}
+                </button>
               </div>
-              <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-600 mb-0.5">{d.safetyLabel}</p>
-                <p className="text-xs text-brand-700">{tool.authNote}</p>
-              </div>
+              <p className="mt-1.5 text-xs text-gray-600">
+                <span className="font-medium text-gray-700">{d.authStepLabel}:</span> {tool.authStep}
+              </p>
+            </div>
+
+            <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-600 mb-0.5">{d.safetyLabel}</p>
+              <p className="text-xs text-brand-700">{tool.authNote}</p>
             </div>
           </div>
         ))}

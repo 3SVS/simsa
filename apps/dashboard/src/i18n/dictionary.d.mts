@@ -559,6 +559,9 @@ export type Dictionary = {
     deployTools: {
       title: string;
       intro: string;
+      whatIsMcp: string;
+      commandLabel: string;
+      authStepLabel: string;
       connectLabel: string;
       safetyLabel: string;
       docsLabel: string;
