@@ -945,6 +945,8 @@ export type Dictionary = {
     checkingConnection: string;
     connectRepoFirst: string;
     goConnectRepo: string;
+    bridgeTitle: string;
+    bridgeBody: string;
     loadPulls: string;
     pullsLoadError: string;
     openPulls: string;
