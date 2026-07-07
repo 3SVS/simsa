@@ -8,6 +8,7 @@
 // ever go to a server here.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { hasAnyValue, allCatalogServices, catalogServiceById } from "@/lib/service-catalog.mjs";
 import type { CatalogService } from "@/lib/service-catalog.mjs";
 import { detectMcpTools } from "@/lib/mcp-catalog.mjs";
@@ -95,12 +96,20 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
         onRemove={removeService}
       />
       <McpSetupPanel tools={deployTools} agentId={agentId} onAgentChange={setAgentId} />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button onClick={handleSave} className="btn btn-md btn-primary">
           {t.exportPage.prep.save}
         </button>
         <span className="text-xs text-gray-400">{t.exportPage.prep.savedHint}</span>
       </div>
+      {/* Forward exit: saving used to dead-end with just a toast (Bae). Point at
+          the builder pack — that's where these values are consumed next. */}
+      <Link
+        href={`/projects/${projectId}/export`}
+        className="inline-flex text-sm font-medium text-brand-600 hover:text-brand-700"
+      >
+        {t.exportPage.prep.next}
+      </Link>
     </div>
   );
 }
