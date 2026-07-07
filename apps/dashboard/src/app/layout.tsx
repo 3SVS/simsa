@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/Toast";
 import { AppSidebar } from "@/components/AppSidebar";
 import { GlobalDropZone } from "@/components/GlobalDropZone";
 import { ImproveSimsaPrompt } from "@/components/ImproveSimsaPrompt";
+import { BackspaceNavGuard } from "@/components/BackspaceNavGuard";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { BRAND } from "@/lib/brand.mjs";
 
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <I18nProvider>
           <ToastProvider>
             <GlobalDropZone />
+            <BackspaceNavGuard />
             <ImproveSimsaPrompt />
             {/* App shell: slim left sidebar (like an AI-platform workspace) + spacious main */}
             <div className="flex min-h-screen">
