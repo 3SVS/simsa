@@ -185,6 +185,10 @@ export type Dictionary = {
     viewAll: string;
     more: string;
     rateLimited: string;
+    edit: string;
+    saved: string;
+    addLine: string;
+    removeLine: string;
   };
   errors: {
     llmUnavailable: string;
