@@ -332,6 +332,16 @@ export default function GitHubPage() {
         </Link>
       </div>
 
+      {/* Bridge: frame WHY this screen exists so arriving from the checks step
+          isn't an abrupt jump ("suddenly connect a code repo?"). Only shown
+          while a repo isn't linked yet — once connected it's just noise. */}
+      {loadPhase !== "ready" && (
+        <div className="rounded-lg border border-brand-100 bg-brand-50 p-4">
+          <p className="text-sm font-semibold text-brand-800">{t.github.bridgeTitle}</p>
+          <p className="mt-1 text-sm leading-relaxed text-brand-700">{t.github.bridgeBody}</p>
+        </div>
+      )}
+
       {/* Loading */}
       {loadPhase === "loading" && (
         <div className="card p-6 text-center">
