@@ -629,6 +629,9 @@ const EN = {
       note: "Fill in any values and they'll be written to .env.local in the pack (kept out of git). Leave them blank to still get a .env.example template plus a setup guide.",
       addMore: "Add a service",
       remove: "Remove",
+      save: "Save setup",
+      saved: "Setup saved. It'll be in the pack you download.",
+      savedHint: "Saved as you type — this just confirms it.",
     },
     returnStep: {
       title: "Built it? Come back and connect it",
@@ -2924,6 +2927,9 @@ const KO = {
       note: "값을 입력하면 팩의 .env.local 에 기록됩니다(깃에는 올라가지 않습니다). 비워 두면 .env.example 템플릿과 설정 안내서만 만들어집니다.",
       addMore: "서비스 추가",
       remove: "제거",
+      save: "작성하고 저장하기",
+      saved: "저장했어요. 다운로드하는 팩에 함께 들어갑니다.",
+      savedHint: "입력하는 대로 저장돼요 — 이 버튼은 확인용이에요.",
     },
     returnStep: {
       title: "다 만드셨나요? 돌아와서 연결하세요",

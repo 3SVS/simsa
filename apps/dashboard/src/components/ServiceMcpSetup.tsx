@@ -15,6 +15,7 @@ import type { McpTool } from "@/lib/mcp-catalog.mjs";
 import { agentLabel, resolveMcpConnect, DEV_AGENTS } from "@/lib/agent-registry.mjs";
 import { seedServiceSetup, saveServiceValues } from "@/lib/service-values-store.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useToast } from "@/components/Toast";
 
 async function copyText(text: string): Promise<void> {
   try {
@@ -39,6 +40,8 @@ type SpecLike = {
 };
 
 export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: SpecLike }) {
+  const { t } = useI18n();
+  const toast = useToast();
   // Seed from the store (values entered earlier) or fresh detection from the
   // spec — the single shared seed both this panel and export use.
   const [services, setServices] = useState<CatalogService[]>(
@@ -46,6 +49,14 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
   );
   // Persist every change (browser-only) so the values reach the builder pack.
   useEffect(() => { saveServiceValues(projectId, services); }, [projectId, services]);
+
+  // Explicit save: the panel already auto-persists on every keystroke, but users
+  // had no signal it was saved (Bae's feedback). This button makes the save
+  // tangible — a confirmed write + toast — without changing the storage path.
+  function handleSave() {
+    saveServiceValues(projectId, services);
+    toast.success(t.exportPage.prep.saved);
+  }
 
   // Which agent's MCP connect steps to show (settings has no target selector).
   const [agentId, setAgentId] = useState<string>("claude_code");
@@ -84,6 +95,12 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
         onRemove={removeService}
       />
       <McpSetupPanel tools={deployTools} agentId={agentId} onAgentChange={setAgentId} />
+      <div className="flex items-center gap-3">
+        <button onClick={handleSave} className="btn btn-md btn-primary">
+          {t.exportPage.prep.save}
+        </button>
+        <span className="text-xs text-gray-400">{t.exportPage.prep.savedHint}</span>
+      </div>
     </div>
   );
 }
