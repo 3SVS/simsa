@@ -10,6 +10,7 @@
 // lib/stamp-thinking.mjs. (Supersedes the Stage 160~166 wax-seal component.)
 import { resolveStampThinking } from "@/lib/stamp-thinking.mjs";
 import type { StampThinkingVariant } from "@/lib/stamp-thinking.d.mts";
+import { StampMark } from "@/components/brand/StampMark";
 
 export type SimsaStampThinkingVariant = StampThinkingVariant;
 
@@ -27,7 +28,7 @@ export function SimsaStampThinking({ variant, label, stepLabels, className, hint
   const cfg = resolveStampThinking({ variant, label, stepLabels });
   const isPanel = cfg.variant === "panel";
 
-  const stampSize = isPanel ? "h-10 w-10 text-base" : "h-5 w-5 text-[10px]";
+  const stampPx = isPanel ? 40 : 20;
   const dotSize = isPanel ? "h-1.5 w-1.5" : "h-1 w-1";
 
   // Root is a <span> (not <div>) so the compact variant is valid phrasing content
@@ -46,17 +47,17 @@ export function SimsaStampThinking({ variant, label, stepLabels, className, hint
         .join(" ")
         .trim()}
     >
-      {/* Review stamp: a rounded-square ink imprint (red ink on a light face), pressed at
-          a slight angle for a hand-stamped review trace. Self-contained light face so it
-          reads on both a dark primary button and a light secondary button. */}
+      {/* Review stamp: the Simsa 심사 seal (the app's brand mark, shared with the
+          sidebar/landing) pressed at a slight angle for a hand-stamped review
+          trace — a review TRACE, not an "approved" mark. Replaces the earlier
+          plain "S" glyph so the loading motion uses the same icon as the rest of
+          the product. */}
       <span aria-hidden="true" className="relative inline-grid place-items-center">
         {/* Ink spread / settle — panel only (kept out of compact so it never overflows a
             button). Blooms on the press impact, then is absorbed. */}
         {isPanel && <span className="simsa-stamp-ink pointer-events-none absolute inset-0 rounded-full bg-brand-500" />}
-        <span
-          className={`simsa-stamp-motion relative grid ${stampSize} place-items-center rounded-md bg-brand-50 font-semibold text-brand-700 shadow-[0_1px_2px_rgba(43,8,13,0.28)] ring-2 ring-inset ring-brand-500/70`}
-        >
-          <span className="relative leading-none tracking-tight">S</span>
+        <span className="simsa-stamp-motion relative inline-grid place-items-center">
+          <StampMark size={stampPx} className="rounded-md shadow-[0_1px_2px_rgba(43,8,13,0.28)]" />
         </span>
       </span>
 
