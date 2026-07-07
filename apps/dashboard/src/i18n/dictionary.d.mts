@@ -556,6 +556,9 @@ export type Dictionary = {
       note: string;
       addMore: string;
       remove: string;
+      save: string;
+      saved: string;
+      savedHint: string;
     };
     returnStep: {
       title: string;
