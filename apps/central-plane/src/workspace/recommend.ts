@@ -99,6 +99,7 @@ async function callAnthropic(
     timeoutMs,
     undefined,
     anthropicEndpoint(baseUrl),
+    "recommend",
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }

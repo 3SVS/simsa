@@ -215,6 +215,7 @@ async function callAnthropic(
     timeoutMs,
     undefined,
     anthropicEndpoint(baseUrl),
+    "generate",
   )) as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
