@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 
 const { langfuseConfigured, buildIngestionBatch, sendLangfuseGeneration } =
   await import("../dist/workspace/langfuse.js");
-const { generateIdeaToSpecDraft } = await import("../dist/workspace/generate.js");
+const { generateIdeaToSpecDraft, toClientDraft } = await import("../dist/workspace/generate.js");
+const { createApp } = await import("../dist/router.js");
 
 const ENV = {
   LANGFUSE_HOST: "https://langfuse.example.test/",
@@ -113,5 +114,100 @@ describe("generate llmUsage exposure", () => {
     assert.equal(res.ok, true);
     assert.equal(res.source, "mock-fallback");
     assert.equal(res.llmUsage, undefined);
+  });
+});
+
+describe("toClientDraft — operator fields never reach the client", () => {
+  it("strips llmUsage, keeps the user-facing draft, does not mutate the input", () => {
+    const full = {
+      ok: true,
+      source: "llm",
+      understood: { summary: "s", targetUsers: [], mainFlow: [] },
+      questions: [],
+      productSpec: { productName: "P" },
+      items: [],
+      specVerification: { ok: true, coverage: 1 },
+      warnings: ["w"],
+      llmUsage: {
+        model: "m",
+        inputTokens: 1,
+        outputTokens: 2,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+        latencyMs: 3,
+      },
+    };
+    const client = toClientDraft(full);
+    assert.equal("llmUsage" in client, false, "token/latency must not reach the client");
+    assert.equal(client.source, "llm");
+    assert.equal(client.productSpec.productName, "P");
+    assert.ok(client.specVerification, "user-facing fields survive");
+    assert.deepEqual(client.warnings, ["w"]);
+    assert.equal("llmUsage" in full, true, "original object is not mutated");
+  });
+
+  it("is a no-op shape when there is no llmUsage (mock path)", () => {
+    const client = toClientDraft({ ok: true, source: "mock-fallback", productSpec: {}, items: [] });
+    assert.equal("llmUsage" in client, false);
+    assert.equal(client.source, "mock-fallback");
+  });
+});
+
+describe("route strips llmUsage from the LLM-path response", () => {
+  it("the HTTP response carries the draft but never llmUsage (operator-only observability)", async () => {
+    // Build a valid draft the stubbed model will "continue" from the "{" prefill.
+    const draft = {
+      understood: { summary: "s", targetUsers: [], mainFlow: [] },
+      questions: [],
+      productSpec: {
+        productName: "테스트",
+        oneLine: "o",
+        targetUsers: [],
+        problem: "",
+        included: [],
+        excluded: [],
+        userFlow: [],
+        decisions: [],
+        openQuestions: [],
+      },
+      items: [
+        { id: "req_001", title: "a", status: "not_started", criteria: ["c"] },
+        { id: "req_002", title: "b", status: "not_started", criteria: ["c"] },
+        { id: "req_003", title: "c", status: "not_started", criteria: ["c"] },
+      ],
+    };
+    const afterBrace = JSON.stringify(draft).slice(1); // model continues after the "{" prefill
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          content: [{ type: "text", text: afterBrace }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 111, output_tokens: 222 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    try {
+      const app = createApp();
+      // DB:{} → rate-limit/usage helpers are fail-open; ANTHROPIC_API_KEY set → LLM path;
+      // ctx.waitUntil provided so the Langfuse forward (a no-op without LANGFUSE_*) doesn't throw.
+      const res = await app.fetch(
+        new Request("http://localhost/workspace/idea-to-spec-draft", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idea: "테스트 앱", locale: "ko", userKey: "uk_t" }),
+        }),
+        { DB: {}, ENVIRONMENT: "test", ANTHROPIC_API_KEY: "sk-test" },
+        { waitUntil() {}, passThroughOnException() {} },
+      );
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.source, "llm", "LLM path was taken (usage exists to strip)");
+      assert.equal("llmUsage" in body, false, "token counts + latency must NOT reach the client");
+      assert.ok(body.productSpec, "the draft itself still ships");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

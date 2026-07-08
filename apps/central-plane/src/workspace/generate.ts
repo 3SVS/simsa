@@ -75,6 +75,22 @@ export type LlmCallUsage = {
   latencyMs: number;
 };
 
+/** The draft as it goes to the (non-developer) client — without operator-only fields. */
+export type ClientIdeaToSpecDraft = Omit<IdeaToSpecDraftResponse, "llmUsage">;
+
+/**
+ * Strip operator-only observability from a draft before it reaches the client.
+ * `llmUsage` (token counts + latency) belongs in Langfuse and logs only — a
+ * non-developer user must never see it, and the per-token cost structure must
+ * not leak in the API response body. This is the single boundary where the
+ * field is removed; the route must serialize the result of this function, not
+ * the raw draft. (2026-07-09, per Bae — audit "결과부터 평이하게".)
+ */
+export function toClientDraft(result: IdeaToSpecDraftResponse): ClientIdeaToSpecDraft {
+  const { llmUsage: _internal, ...clientResult } = result;
+  return clientResult;
+}
+
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
 const SCHEMA_DESCRIPTION = `{

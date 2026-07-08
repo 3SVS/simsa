@@ -13,7 +13,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env.js";
 import { ALLOWED_ORIGINS } from "./cors.js";
-import { generateIdeaToSpecDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
+import { generateIdeaToSpecDraft, toClientDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { classifyTopics } from "../workspace/topic-tags.js";
@@ -286,7 +286,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       );
     }
 
-    return new Response(JSON.stringify(result), {
+    // llmUsage (token counts + latency) is operator observability: it was sent
+    // to Langfuse + logged above, and toClientDraft() strips it here so it never
+    // reaches the non-dev client or leaks the cost structure in the response.
+    return new Response(JSON.stringify(toClientDraft(result)), {
       status: 200,
       headers: { "content-type": "application/json", ...headers },
     });
