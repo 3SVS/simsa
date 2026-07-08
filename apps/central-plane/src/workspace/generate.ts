@@ -4,6 +4,7 @@
  * so the user-facing flow never breaks.
  */
 import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
+import { verifySpecAgainstUserWords, type SpecVerification } from "./verify-spec.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,10 @@ export type IdeaToSpecDraftResponse = {
   productSpec: ProductSpec;
   items: RequirementItem[];
   warnings?: string[];
+  /** Deterministic verify-against-user-words result (audit v2 P0-honesty).
+   *  Present on every successful draft; ok:false means the draft did not
+   *  reflect enough of the user's own words and a loud warning was attached. */
+  specVerification?: SpecVerification;
 };
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
@@ -267,6 +272,16 @@ function extractAnswerFlags(answers: IdeaToSpecDraftRequest["answers"]): {
   };
 }
 
+/** Everything the user actually typed — the reference text for the gate. */
+function userWordsOf(req: IdeaToSpecDraftRequest): string {
+  return [req.idea, ...(req.answers ?? []).map((a) => a.answer)].join(" ");
+}
+
+/** The draft surfaces the gate inspects (title/spec/flow/items — what the user reads). */
+function gateDraftOf(res: IdeaToSpecDraftResponse): unknown {
+  return { understood: res.understood, productSpec: res.productSpec, items: res.items };
+}
+
 function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse {
   const isMeeting = /회의|녹음|요약|linear|미팅/i.test(req.idea);
   const flags = extractAnswerFlags(req.answers);
@@ -302,7 +317,7 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
           ],
         };
 
-    return {
+    const meetingDraft: IdeaToSpecDraftResponse = {
       ok: true,
       source: "mock-fallback",
       understood: {
@@ -382,6 +397,16 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
       ],
       warnings: hasAnswers ? undefined : ["임시 초안입니다. 다시 시도하면 더 맞춤형 결과를 받을 수 있습니다."],
     };
+
+    // Verify-against-user-words gate (P0-honesty): the canned meeting draft is
+    // only allowed out when it actually reflects the user's own words. A common
+    // word alone ("요약" in "리뷰를 요약해줘") must NOT produce an unrelated
+    // meeting-notes product — fall through to the generic draft, which quotes
+    // the user's idea verbatim and fabricates nothing.
+    const meetingGate = verifySpecAgainstUserWords(userWordsOf(req), gateDraftOf(meetingDraft));
+    if (meetingGate.ok) {
+      return { ...meetingDraft, specVerification: meetingGate };
+    }
   }
 
   const shortIdea = req.idea.slice(0, 30).trim();
@@ -515,6 +540,32 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
 
 // ─── Main entry ───────────────────────────────────────────────────────────────
 
+/** Loud, non-silent notice attached whenever a draft fails the user-words gate. */
+function coverageWarning(v: SpecVerification, locale?: "ko" | "en"): string {
+  const pct = Math.round(v.coverage * 100);
+  const missing = v.missingWords.slice(0, 8).join(", ");
+  return locale === "en"
+    ? `This draft may not reflect what you typed — only ${pct}% of your words appear in it. Not reflected: ${missing}. Please review the draft carefully or try again.`
+    : `초안이 입력하신 내용을 충분히 반영하지 못했을 수 있어요 (입력하신 단어의 ${pct}%만 반영됨). 반영되지 않은 단어: ${missing}. 초안을 그대로 믿지 마시고 내용을 확인하거나 다시 시도해주세요.`;
+}
+
+/** Attach the gate result (and a loud warning on failure) to a finished draft. */
+function withVerification(
+  req: IdeaToSpecDraftRequest,
+  res: IdeaToSpecDraftResponse,
+): IdeaToSpecDraftResponse {
+  const v = res.specVerification ?? verifySpecAgainstUserWords(userWordsOf(req), gateDraftOf(res));
+  if (v.ok) return { ...res, specVerification: v };
+  console.warn(
+    `[workspace/generate] user-words gate failed: source=${res.source} coverage=${v.coverage.toFixed(2)} missing=${v.missingWords.slice(0, 8).join("|")}`,
+  );
+  return {
+    ...res,
+    specVerification: v,
+    warnings: [...(res.warnings ?? []), coverageWarning(v, req.locale)],
+  };
+}
+
 export async function generateIdeaToSpecDraft(
   req: IdeaToSpecDraftRequest,
   anthropicApiKey: string | undefined,
@@ -525,7 +576,7 @@ export async function generateIdeaToSpecDraft(
   }
   if (!anthropicApiKey) {
     console.warn("[workspace/generate] ANTHROPIC_API_KEY not set — using mock fallback");
-    return buildMockFallback(req);
+    return withVerification(req, buildMockFallback(req));
   }
 
   const prompt = buildPrompt(req);
@@ -563,5 +614,8 @@ export async function generateIdeaToSpecDraft(
   const data = parsed as Omit<IdeaToSpecDraftResponse, "ok" | "source">;
   data.items = data.items.map((item) => ({ ...item, status: "not_started" as const }));
 
-  return { ok: true, source: "llm", ...data };
+  // The LLM can fabricate too — same deterministic gate as the mock path.
+  // On failure the draft still ships, but with a loud "not reflected: …"
+  // warning (never a silent rejection, never silent fabrication).
+  return withVerification(req, { ok: true, source: "llm", ...data });
 }
