@@ -113,6 +113,7 @@ async function callAnthropic(
     timeoutMs,
     fetchImpl,
     anthropicEndpoint(baseUrl),
+    "pr-review",
   )) as {
     content?: Array<{ type: string; text?: string }>;
     usage?: { input_tokens?: number; output_tokens?: number };

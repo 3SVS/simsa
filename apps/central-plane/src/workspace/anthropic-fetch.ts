@@ -21,7 +21,44 @@ export type AnthropicMessagesBody = {
 export type AnthropicMessagesData = {
   content?: Array<{ type: string; text?: string }>;
   stop_reason?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 };
+
+/**
+ * One structured JSON line per successful LLM call — the minimal cost/usage
+ * observability layer (2026-07-08 ADR: prompt caching deferred; these fields
+ * are the evidence base for re-evaluating it, and tomorrow's Langfuse wiring
+ * ingests this exact shape). Never throws: observability must not break the
+ * user-facing call.
+ */
+export function logAnthropicUsage(
+  callSite: string,
+  model: string,
+  usage: AnthropicMessagesData["usage"],
+  latencyMs: number,
+): void {
+  try {
+    console.log(
+      JSON.stringify({
+        event: "anthropic_usage",
+        call_site: callSite,
+        model,
+        input_tokens: usage?.input_tokens ?? 0,
+        output_tokens: usage?.output_tokens ?? 0,
+        cache_creation_input_tokens: usage?.cache_creation_input_tokens ?? 0,
+        cache_read_input_tokens: usage?.cache_read_input_tokens ?? 0,
+        latency_ms: latencyMs,
+      }),
+    );
+  } catch {
+    // never let logging break the call
+  }
+}
 
 /** POST /v1/messages with bounded retries. Throws on final failure. */
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -43,8 +80,11 @@ export async function anthropicMessages(
   timeoutMs: number,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
   endpoint: string = anthropicEndpoint(),
+  /** Which workspace feature made this call (generate·check·fix·pr-review·recommend). */
+  callSite = "unknown",
 ): Promise<AnthropicMessagesData> {
   let lastErr: unknown = null;
+  const startedAt = Date.now();
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -68,7 +108,12 @@ export async function anthropicMessages(
       clearTimeout(timer);
     }
     if (resp) {
-      if (resp.ok) return (await resp.json()) as AnthropicMessagesData;
+      if (resp.ok) {
+        const data = (await resp.json()) as AnthropicMessagesData;
+        // latency_ms is wall time including retries — what the user waited.
+        logAnthropicUsage(callSite, body.model, data.usage, Date.now() - startedAt);
+        return data;
+      }
       const tail = await resp.text().catch(() => "");
       lastErr = new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
       if (!RETRYABLE.has(resp.status)) throw lastErr;

@@ -108,6 +108,7 @@ async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | u
     timeoutMs,
     undefined,
     anthropicEndpoint(baseUrl),
+    "fix",
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
