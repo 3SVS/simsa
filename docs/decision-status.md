@@ -29,7 +29,7 @@ Legend:
 | 10 | Gemini SDK → `@google/genai` | ✅ | `packages/agent-gemini` |
 | 11 | MCP tool protocol | ✅ | `packages/cli/src/commands/mcp-server.ts` |
 | 12 | Zod → JSON Schema | ✅ | `packages/core/src/schema.ts` + per-agent `review-schema.ts` |
-| 13 | Observability → self-hosted Langfuse | 🔄 | `packages/observability-langfuse` (Node/Conclave). **Divergence 2026-07-09 (Bae 승인):** Simsa flow(central-plane Worker)는 **Langfuse Cloud**로 시작 — `workspace/langfuse.ts`가 공개 ingestion API 직결(#309). 근거: 측정 시작 가치 > self-hosted 원칙, 이관 비용 ≈ env 3종 교체. 데이터 리전: (가입 시 기록). self-hosted 이관은 트래픽/규정 필요 시점에 재평가 |
+| 13 | Observability → self-hosted Langfuse | 🔄 | `packages/observability-langfuse` (Node/Conclave). **Divergence 2026-07-09 (Bae 승인):** Simsa flow(central-plane Worker)는 **Langfuse Cloud**로 시작 — `workspace/langfuse.ts`가 공개 ingestion API 직결(#309). 근거: 측정 시작 가치 > self-hosted 원칙, 이관 비용 ≈ env 3종 교체. **데이터 리전: EU (`cloud.langfuse.com`).** **LIVE·실증 2026-07-09** (별칭 #312 + allowlist #313 + set-worker-secrets 3종 반영 → 프로덕션 trace 2건 UI 확인). self-hosted 이관은 트래픽/규정 필요 시점에 재평가 |
 | 14 | Workflow engine → GitHub Actions | ✅ | `.github/workflows/` |
 | 15 | Native pixel diff → odiff | ✅ | `packages/visual-review/src/odiff-diff.ts` (opt-in) |
 | 16 | Config loader → cosmiconfig | ✅ | `packages/cli/src/lib/config.ts` |
