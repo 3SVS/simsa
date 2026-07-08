@@ -125,6 +125,9 @@ export interface Env {
    * secrets — set via Actions "set-worker-secrets" workflow (CF rule).
    */
   LANGFUSE_HOST?: string;
+  /** Alias for LANGFUSE_HOST. Either name works so a secret set as
+   *  LANGFUSE_BASE_URL (common Langfuse convention) doesn't silently no-op. */
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
   /**

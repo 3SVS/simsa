@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 // call via the public ingestion API. Env-gated, fail-open, metadata only —
 // user content must never appear in the payload.
 
-const { langfuseConfigured, buildIngestionBatch, sendLangfuseGeneration } =
+const { langfuseConfigured, buildIngestionBatch, sendLangfuseGeneration, resolveLangfuseHost } =
   await import("../dist/workspace/langfuse.js");
 const { generateIdeaToSpecDraft, toClientDraft } = await import("../dist/workspace/generate.js");
 const { createApp } = await import("../dist/router.js");
@@ -33,6 +33,25 @@ describe("langfuseConfigured", () => {
     assert.equal(langfuseConfigured(ENV), true);
     assert.equal(langfuseConfigured({}), false);
     assert.equal(langfuseConfigured({ ...ENV, LANGFUSE_SECRET_KEY: undefined }), false);
+  });
+
+  it("accepts LANGFUSE_BASE_URL as the host alias (no LANGFUSE_HOST needed)", () => {
+    const aliasEnv = {
+      LANGFUSE_BASE_URL: "https://us.cloud.langfuse.com",
+      LANGFUSE_PUBLIC_KEY: "pk",
+      LANGFUSE_SECRET_KEY: "sk",
+    };
+    assert.equal(langfuseConfigured(aliasEnv), true);
+    assert.equal(resolveLangfuseHost(aliasEnv), "https://us.cloud.langfuse.com");
+    // keys without any host → still not configured
+    assert.equal(langfuseConfigured({ LANGFUSE_PUBLIC_KEY: "pk", LANGFUSE_SECRET_KEY: "sk" }), false);
+  });
+
+  it("prefers LANGFUSE_HOST over the alias when both are set", () => {
+    assert.equal(
+      resolveLangfuseHost({ LANGFUSE_HOST: "https://cloud.langfuse.com", LANGFUSE_BASE_URL: "https://other" }),
+      "https://cloud.langfuse.com",
+    );
   });
 });
 
@@ -82,6 +101,21 @@ describe("sendLangfuseGeneration", () => {
     assert.ok(calls[0].init.headers.authorization.startsWith("Basic "));
     const body = JSON.parse(calls[0].init.body);
     assert.equal(body.batch.length, 2);
+  });
+
+  it("posts to the LANGFUSE_BASE_URL host when only the alias is set", async () => {
+    const aliasEnv = {
+      LANGFUSE_BASE_URL: "https://us.cloud.langfuse.com/",
+      LANGFUSE_PUBLIC_KEY: "pk",
+      LANGFUSE_SECRET_KEY: "sk",
+    };
+    let url = "";
+    const ok = await sendLangfuseGeneration(aliasEnv, REC, async (u) => {
+      url = u;
+      return new Response("{}", { status: 207 });
+    });
+    assert.equal(ok, true);
+    assert.equal(url, "https://us.cloud.langfuse.com/api/public/ingestion");
   });
 
   it("is a no-op when env is not configured", async () => {
