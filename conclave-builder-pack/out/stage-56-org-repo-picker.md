@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 56 — Org repo picker (dashboard repo 연결 개선)
 
 dashboard repo picker가 조직(org) repo도 연결할 수 있게 개선. 새 PR review 기능 없음. private repo full support·OAuth scope 확대 없음.

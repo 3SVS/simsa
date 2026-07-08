@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 53 — Dashboard Vercel Deployment Setup
 
 `apps/dashboard`를 Vercel Production에 배포해 live dashboard URL을 확보하기 위한 설정/검증. 새 제품 기능 없음.

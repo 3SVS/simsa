@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Conclave 베타 — 피드백 폼
 
 > 복사해서 채운 뒤 Bae에게 보내주세요. 모두 채우지 않아도 됩니다 — 아는 만큼만.

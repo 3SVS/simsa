@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 62 — MCP Workspace packaging, billing semantics, docs
 
 Stage 61에서 만든 `packages/mcp-workspace`를 **실제 운영 가능한 MCP 제품 표면**으로 정리. 새 tool/workflow 추가 없음 — 설치·설정·보안·과금 의미·문서·패키징만.

@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 67 — Benchmark PR Comment Evidence
 
 저장된 benchmark evidence를 copy summary뿐 아니라 **GitHub PR comment**로도 공유. preview-first + explicit-confirm safety model 유지. **dashboard 전용**(기존 comment POST 엔드포인트 재사용 → 백엔드·OAuth·MCP·billing 무변경).

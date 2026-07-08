@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 52 — Bae 수동 브라우저 QA 패키지
 
 라이브 dashboard에서 PR review workflow를 **직접 클릭하며** 검증하는 체크리스트. 에이전트가 못 하는 브라우저/OAuth/comment-post 부분을 Bae가 한 번 실행.

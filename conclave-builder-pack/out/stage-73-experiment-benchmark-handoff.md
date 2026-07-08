@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 73 — Experiment → Benchmark Handoff
 
 Stage 72의 저장된 experiment를 Stage 65~70 benchmark workflow와 연결: experiment의 linked review run들로 **바로 benchmark 생성** + 결과를 experiment에 역링크. end-to-end evidence workflow 완성.

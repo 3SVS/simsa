@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 69 — Benchmark Item Matrix
 
 Stage 68에서 저장되기 시작한 `itemOutcomesByCandidate`로 benchmark detail에 **후보 × acceptance item matrix**를 추가: "어떤 후보가 어떤 검수 항목을 만족했는지" 한눈에 비교 + 후보 간 결과가 다른 항목 강조. **dashboard 전용**(백엔드 무변경).

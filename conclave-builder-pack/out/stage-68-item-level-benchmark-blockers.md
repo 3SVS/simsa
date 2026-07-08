@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 68 — Item-level Benchmark Blockers
 
 benchmark evidence를 status **count** 비교에서 acceptance **item 단위**로 강화: "어떤 검수 항목이 아직 막혀 있는지"를 항목 제목·상태·근거·후보 단위로 설명. central-plane canonical + dashboard mirror + 공유 golden fixture로 lock-step.

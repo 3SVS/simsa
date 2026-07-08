@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 59 — UI/UX + I18N polish (베타 발송 전 제품 표면 정리)
 
 core workflow는 Stage 55~57에서 라이브 검증됨. 이번 단계는 **새 기능 없이** dashboard를 "AI가 만든 내부툴" 느낌에서 **영어 기본 / 한국어 선택 가능한 차분한 SaaS 표면**으로 정리. backend/DB/enum/workflow 무변경.

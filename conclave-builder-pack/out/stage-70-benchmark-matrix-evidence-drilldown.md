@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 70 — Benchmark Matrix Evidence Drilldown
 
 Stage 69의 item matrix를 실용적 evidence view로 발전: 후보 간 결과가 다른 항목만 필터, row를 펼쳐 후보별 evidence 비교, copy summary·PR comment에 아주 작은 matrix insight 추가. **dashboard 전용**(백엔드 무변경).

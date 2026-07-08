@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 44 — 선택 항목 client-side 영속화 (Selected-range persistence)
 
 목표: run detail에서 고른 `selectedItemIds`를 **같은 run에 대해 client-side로 복원**. 새로고침/재진입해도 직전 선택이 살아 있고, 복원된 선택을 다시 확인·Fix Pack·PR comment가 사용. 서버 DB 저장·자동 수정 없음.

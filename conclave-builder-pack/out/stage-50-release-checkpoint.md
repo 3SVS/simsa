@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 50 — Release Checkpoint (PR Review Workflow, Stage 33~49)
 
 새 기능 추가 없이 Stage 33~49를 하나의 release checkpoint로 안정화. 라이브 smoke, 수동 QA, 운영 확인, known issues 정리.

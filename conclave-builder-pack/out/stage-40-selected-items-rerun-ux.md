@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 40 — 다시 확인할 항목 선택 UX (Selected-items re-run)
 
 목표: 특정 PR 확인 기록에서 **다시 확인할 항목을 사용자가 직접 골라** 그 항목만으로 re-run을 실행한다. 자동 수정·patch·commit 생성은 하지 않는다.

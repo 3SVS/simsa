@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 109 — Agent Workflow Train Planning
 
 **Date:** 2026-06-23 · **Branch:** `docs/stage-109-agent-workflow-planning` · base `main` `4bcdb6e`

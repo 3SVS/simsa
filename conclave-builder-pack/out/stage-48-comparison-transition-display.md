@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 48 — 비교 상태 전환 표시 (Comparison transition display)
 
 목표: AutoComparisonPanel에서 각 항목의 **이전 상태 → 현재 상태** 전환을 직관적으로 표시. backend/comment body/자동 수정 변경 없음 — dashboard display 개선만.

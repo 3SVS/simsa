@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 74 — Experiment Outcome Decision
 
 Experiment → Benchmark 이후 사용자가 **어떤 candidate를 채택/거절/수정 대상으로 판단했는지** 기록·재방문하는 decision layer. Conclave는 결과만 비교하지 않고 **수락 결정을 내리고 기록**하도록 돕는다.

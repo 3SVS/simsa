@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 63 — Dashboard 깊은 화면 i18n / copy / UX (pass 1)
 
 베타 사용자가 밟는 dashboard 깊은 화면의 남은 한글 본문을 dict화하고 브랜드(옥스블러드/파치먼트, Linear) 스타일로 정리. 새 기능/엔드포인트/마이그레이션 없음.

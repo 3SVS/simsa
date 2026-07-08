@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 57 — Dashboard 직접입력 repo UI 배포 + 라이브 검증
 
 Stage 56에서 구현한 org repo 직접입력 UI를 production dashboard에 배포하고, 라이브에서 동작을 검증. 새 기능/엔드포인트/마이그레이션 없음.
