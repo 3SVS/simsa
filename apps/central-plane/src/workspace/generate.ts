@@ -60,6 +60,19 @@ export type IdeaToSpecDraftResponse = {
    *  Present on every successful draft; ok:false means the draft did not
    *  reflect enough of the user's own words and a loud warning was attached. */
   specVerification?: SpecVerification;
+  /** 2026-07-09 Langfuse wiring — token/latency record of the LLM call that
+   *  produced this draft (absent on the mock path). Additive and safe to
+   *  expose; the route forwards it to Langfuse via waitUntil. */
+  llmUsage?: LlmCallUsage;
+};
+
+export type LlmCallUsage = {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  latencyMs: number;
 };
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
@@ -193,16 +206,19 @@ ${SCHEMA_DESCRIPTION_EN}`;
 
 // ─── Anthropic fetch ──────────────────────────────────────────────────────────
 
+const GENERATE_MODEL = "claude-haiku-4-5-20251001";
+
 async function callAnthropic(
   apiKey: string,
   prompt: string,
   baseUrl: string | undefined,
   timeoutMs = 120000, // document-scale prompts (up to 80k chars) need generous time
-): Promise<string> {
+): Promise<{ text: string; usage: LlmCallUsage }> {
+  const startedAt = Date.now();
   const data = (await anthropicMessages(
     apiKey,
     {
-      model: "claude-haiku-4-5-20251001",
+      model: GENERATE_MODEL,
       max_tokens: 8000,
       // Assistant prefill: the reply MUST continue from "{" — a refusal or a
       // prose preamble becomes impossible. (Live 2026-07-05: the KO prompt
@@ -219,6 +235,12 @@ async function callAnthropic(
   )) as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
   };
   const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
   // Operational diagnostics (no user content): production fell back with
@@ -227,7 +249,17 @@ async function callAnthropic(
     `[workspace/generate] blocks=${(data.content ?? []).map((b) => b.type).join(",") || "none"}` +
       ` textLen=${text.length} stop=${data.stop_reason ?? "?"}`,
   );
-  return "{" + text;
+  return {
+    text: "{" + text,
+    usage: {
+      model: GENERATE_MODEL,
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+      cacheCreationInputTokens: data.usage?.cache_creation_input_tokens ?? 0,
+      cacheReadInputTokens: data.usage?.cache_read_input_tokens ?? 0,
+      latencyMs: Date.now() - startedAt,
+    },
+  };
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -582,8 +614,11 @@ export async function generateIdeaToSpecDraft(
 
   const prompt = buildPrompt(req);
   let rawText = "";
+  let llmUsage: LlmCallUsage | undefined;
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
+    const call = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
+    rawText = call.text;
+    llmUsage = call.usage;
   } catch (err) {
     console.error("[workspace/generate] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };
@@ -618,5 +653,5 @@ export async function generateIdeaToSpecDraft(
   // The LLM can fabricate too — same deterministic gate as the mock path.
   // On failure the draft still ships, but with a loud "not reflected: …"
   // warning (never a silent rejection, never silent fabrication).
-  return withVerification(req, { ok: true, source: "llm", ...data });
+  return withVerification(req, { ok: true, source: "llm", ...data, llmUsage });
 }
