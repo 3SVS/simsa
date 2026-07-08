@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 45 — fromRunId 기반 비교 자동 표시 (Auto comparison)
 
 목표: quick re-run 후 새 run detail에서 `?fromRunId=<sourceRunId>`를 활용해 **source run vs current run 비교를 자동 표시**. 서버 DB·endpoint 추가·자동 수정 없음.

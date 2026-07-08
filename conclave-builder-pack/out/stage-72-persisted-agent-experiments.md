@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 72 — Persisted Multi-Agent Experiments
 
 Stage 71의 일회성 prompt generator를 **저장·재방문·candidate PR/review run 추적**이 가능한 project-level workflow로 발전. central-plane D1 persist + 후보별 링크 추적. 실제 agent 실행 없음.

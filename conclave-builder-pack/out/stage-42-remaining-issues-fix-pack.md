@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 42 — 남은 문제 Fix Pack (Remaining-issues Fix Pack)
 
 목표: PR 확인 기록에서 **남은 문제만 기준으로 Fix Pack(수정 지시서) 생성 흐름에 바로 진입**. 자동 수정·patch·commit 없음 — Claude/Codex에게 줄 지시서를 만들 뿐.

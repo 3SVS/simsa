@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 32 — 내부 Actual Debit 테스트 실행 가이드
 
 > **목적:** allowlist 등록된 내부 userKey로 actual debit 흐름 전체(allowance 계산 → 차감 → ledger → balance)를 안전하게 검증한다.  

@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 52 — 베타 사용자 테스트 시나리오
 
 실제 베타 사용자가 Conclave PR review workflow를 처음부터 끝까지 써보는 시나리오. 제품 사용자 관점.

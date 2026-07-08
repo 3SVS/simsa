@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 60 — Core workflow UX + I18N pass (Linear-grade neutral redesign)
 
 Stage 59 i18n 기반 위에, Bae가 고른 **Linear형 미니멀 / neutral-first / 차분한 딥그린 액센트 / B2B acceptance workspace** 방향으로 비주얼을 재정의하고 핵심 GitHub flow의 copy/i18n을 심화. 새 기능/엔드포인트/마이그레이션/enum 변경 없음.

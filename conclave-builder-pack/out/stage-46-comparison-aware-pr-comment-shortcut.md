@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 46 — 비교 결과 PR comment shortcut (Comparison-aware comment)
 
 목표: run detail에서 source vs current 비교가 표시된 상태일 때, 그 비교 결과를 **바로 GitHub PR comment로 남기는 shortcut** 제공. 기존 backend `includeRerunComparison`(Stage 38) 재사용, 신규 endpoint·서버 DB 변경 없음.

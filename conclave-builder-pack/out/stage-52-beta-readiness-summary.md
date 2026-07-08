@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 52 — 베타 준비 상태 요약 (Beta Readiness)
 
 Conclave PR review workflow(Stage 33~49)를 베타 사용자 테스트에 넣기 위한 준비 상태 한 장 요약.

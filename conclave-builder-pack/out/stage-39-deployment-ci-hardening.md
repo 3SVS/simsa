@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 39 — Deployment & CI Hardening
 
 목표: 새 제품 기능 추가 없이, Stage 33~38 변경분이 production/deploy 환경에 안전하게 반영됐는지 확인하고 GitHub Actions / dashboard 배포 리스크를 정리한다.

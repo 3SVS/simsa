@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 65 — Persisted Multi-Agent Build Benchmark
 
 Stage 64의 dashboard-only 벤치마크를 **central-plane persisted, ownership-검증, cross-device** evidence artifact로 발전. 실 에이전트 실행 없이 기존 review run을 candidate로 저장·조회·재방문.

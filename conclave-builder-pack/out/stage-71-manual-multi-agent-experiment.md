@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 71 — Manual Multi-Agent Experiment
 
 Conclave 안에서 single-agent vs multi-agent **개발 실험을 계획**하고, 각 에이전트에게 줄 역할별 prompt를 복사한 뒤, 결과 PR들을 benchmark로 비교하는 productized **manual protocol**. 실제 agent 자동 실행 아님. **dashboard 전용**(백엔드/benchmark 저장 로직 무변경).

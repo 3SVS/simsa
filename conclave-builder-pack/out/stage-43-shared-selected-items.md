@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 43 — 공유 selectedItemIds (Shared item selection)
 
 목표: run detail page에서 **한 번 선택한 항목을 다시 확인 · Fix Pack · PR comment가 공통으로 사용**. 자동 수정·patch·commit 없음.

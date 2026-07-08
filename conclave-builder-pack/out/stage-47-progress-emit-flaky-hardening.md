@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 47 — progress-emit flaky 테스트 안정화
 
 목표: `progress-emit.test.mjs`의 "emits in parallel" 테스트에서 관찰된 타이밍 의존 flaky 제거. 제품 기능 변경 없음 — 테스트 hardening만.

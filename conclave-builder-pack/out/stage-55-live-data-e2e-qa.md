@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 55 — Live-data E2E QA (PR review workflow)
 
 실제 userKey/projectId/repo/PR로 라이브 dashboard backend를 통해 PR 확인 → history → Fix Pack → quick re-run → 자동 비교 → PR comment까지 실데이터로 검증. 에이전트가 라이브 API(브라우저 UI가 호출하는 것과 동일한 호출)로 D~L을 직접 닫음.

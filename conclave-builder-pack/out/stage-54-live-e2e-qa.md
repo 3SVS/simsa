@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 54 — Live E2E QA (PR review workflow)
 
 라이브 dashboard에서 새 프로젝트 → PR 확인 → history → Fix Pack → quick re-run → 자동 비교 → PR comment까지 한 바퀴 검증. 새 기능/엔드포인트/마이그레이션 없음. P0/P1만 최소 수정.

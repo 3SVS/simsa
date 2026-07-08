@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 41 — History List 빠른 다시 확인 (Quick re-run)
 
 목표: PR 확인 기록 목록에서 각 run의 **남은 문제만 바로 다시 확인**. 세부 항목 편집이 필요하면 상세 페이지(Stage 40 picker)로 이동. 자동 수정·patch·commit 없음.

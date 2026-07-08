@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 64 — Multi-Agent Build Benchmark
 
 Conclave가 여러 AI 개발 에이전트의 결과물을 **acceptance 기준**으로 비교할 수 있는 최소 결정적 구조. 실제 에이전트 실행 없이, 기존 PR review run을 candidate로 선택해 single-agent vs multi-agent 결과를 비교한다.

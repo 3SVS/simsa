@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 49 — 비교 상태 전환을 PR comment body에 표시
 
 목표: rerun comparison을 포함한 PR comment body의 `다시 확인 결과 비교` 섹션에 각 항목의 **이전 상태 → 현재 상태** 전환을 표시. 신규 endpoint·서버 DB·dashboard UI·request shape 변경 없음.

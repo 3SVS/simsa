@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 51 — Live End-to-End QA (PR Review Workflow)
 
 QA/validation 단계. 새 기능 없음. Stage 33~49 흐름을 라이브에서 검증.

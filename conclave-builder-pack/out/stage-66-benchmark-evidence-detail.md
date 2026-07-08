@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 66 — Benchmark Evidence Detail
 
 Stage 65에서 저장 가능해진 Multi-Agent Build Benchmark를 **다시 열어보고·이해하고·공유**할 수 있는 evidence artifact로 완성. dashboard 전용(Stage 65 엔드포인트 재사용, 백엔드·MCP·billing 무변경, 실 에이전트 실행 없음).

@@ -1,3 +1,5 @@
+> **SUPERSEDED** — 이 문서는 Conclave 시대 가정 하에 작성되었습니다. 제품은 Simsa로 전환되었고, 최신 방향·우선순위는 `docs/simsa-research-audit-2026-07.md` (감사 v2)를 보세요.
+
 # Stage 52 — 피드백 / 이슈 분류 기준 (Triage)
 
 베타 QA·피드백에서 나온 이슈를 일관되게 분류·우선순위화하는 기준. Bae 수동 QA(`stage-52-bae-manual-ui-qa-pack.md`)와 피드백 템플릿(`stage-52-feedback-template.md`)이 이 기준을 참조.
