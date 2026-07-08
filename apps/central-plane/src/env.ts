@@ -118,6 +118,16 @@ export interface Env {
   OPENAI_API_KEY?: string;
   GEMINI_API_KEY?: string;
   /**
+   * 2026-07-09 — Langfuse minimal wiring (Simsa flow observability).
+   * All three must be set for traces to be sent; otherwise the workspace
+   * routes silently skip Langfuse (fail-open — never blocks a user call).
+   * HOST is not a secret (wrangler.toml [vars] is fine); the keys are
+   * secrets — set via Actions "set-worker-secrets" workflow (CF rule).
+   */
+  LANGFUSE_HOST?: string;
+  LANGFUSE_PUBLIC_KEY?: string;
+  LANGFUSE_SECRET_KEY?: string;
+  /**
    * Tasks #51 — per-deploy salt mixed into the IP hash for the
    * /saas/demo/review rate-limit table. Rotate to invalidate all
    * demo rate-limit rows. Optional — defaults to a fixed string when

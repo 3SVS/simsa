@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import type { Env } from "../env.js";
 import { ALLOWED_ORIGINS } from "./cors.js";
 import { generateIdeaToSpecDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
+import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { classifyTopics } from "../workspace/topic-tags.js";
 import {
@@ -260,6 +261,30 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       eventType: "workspace_idea_to_spec_generated",
       metadata: { source: result.source },
     });
+
+    // Langfuse (2026-07-09 minimal wiring): forward the LLM call's usage off
+    // the response path. No-op when LANGFUSE_* env is absent; metadata only,
+    // never user content. waitUntil keeps it out of the user's latency.
+    if (result.llmUsage) {
+      c.executionCtx.waitUntil(
+        sendLangfuseGeneration(c.env, {
+          traceName: "workspace/idea-to-spec-draft",
+          callSite: "generate",
+          model: result.llmUsage.model,
+          inputTokens: result.llmUsage.inputTokens,
+          outputTokens: result.llmUsage.outputTokens,
+          cacheCreationInputTokens: result.llmUsage.cacheCreationInputTokens,
+          cacheReadInputTokens: result.llmUsage.cacheReadInputTokens,
+          latencyMs: result.llmUsage.latencyMs,
+          metadata: {
+            source: result.source,
+            locale: input.locale,
+            verification_ok: result.specVerification?.ok,
+            verification_coverage: result.specVerification?.coverage,
+          },
+        }),
+      );
+    }
 
     return new Response(JSON.stringify(result), {
       status: 200,
