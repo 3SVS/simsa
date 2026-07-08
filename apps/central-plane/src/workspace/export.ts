@@ -164,7 +164,7 @@ function genReadme(
   const lines = [
     `# 만들기 패키지 — ${title}`,
     "",
-    "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트 하나만 넘기면, 구현부터 서비스 설정·실행 확인·인터넷 배포·접속 주소 전달까지 **한 번에 알아서** 끝냅니다.",
+    "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트를 넘기면 구현과 실행 확인까지 진행하도록 지시합니다. **인터넷 배포까지 자동으로 이어지려면 개발 AI에 배포 도구(예: Vercel·GitHub의 MCP 또는 CLI)가 연결돼 있어야 하고**, 연결돼 있지 않으면 개발 AI가 배포 방법을 단계별로 안내하는 방식으로 대신합니다.",
     "",
   ];
 
@@ -211,6 +211,11 @@ function genReadme(
     "- 범위를 벗어난 기능은 구현하지 마세요.",
     "- 확인 결과는 제품 설명서 기준의 사전 점검입니다. 실제 코드나 GitHub PR을 확인한 결과가 아닙니다.",
     "- 애매한 점이 있으면 구현 전에 질문하세요.",
+    "",
+    "## 이 패키지가 보장하지 않는 것",
+    "",
+    "- **배포 자동 완료**: 개발 AI에 배포 도구가 연결돼 있지 않으면 배포는 수동 안내로 진행됩니다. 개발 AI의 안내를 따라 마무리해주세요.",
+    "- **결과 검증**: Simsa는 개발 AI가 실제로 무엇을 만들었는지 직접 확인하지 않습니다. 완성되면 배포된 주소(또는 프로젝트 파일)를 Simsa에 다시 넣어 확인받으세요.",
   );
 
   return lines.join("\n");
@@ -492,7 +497,7 @@ const RETURN_TO_SIMSA_GUIDANCE: string = [
 const ONE_SHOT_RUNBOOK: string = [
   "## 이 지시 하나로 끝까지 — 사용자는 개발자가 아니다",
   "",
-  "너는 이 사용자를 대신해 **처음부터 끝까지 한 번에** 진행한다. 목표는 '항목 구현'이 아니라 **실제로 돌아가는, 인터넷에 배포된 앱과 그 접속 주소(URL)를 사용자 손에 쥐여주는 것**이다. 아래 순서를 스스로 끝까지 밟아라. 중간에 개발 절차를 사용자에게 되묻지 말고, 배포된 결과가 나올 때까지 멈추지 마라.",
+  "너는 이 사용자를 대신해 **처음부터 끝까지 한 번에** 진행한다. 목표는 '항목 구현'이 아니라 **실제로 돌아가는, 인터넷에 배포된 앱과 그 접속 주소(URL)를 사용자 손에 쥐여주는 것**이다. 아래 순서를 스스로 끝까지 밟아라. 중간에 개발 절차를 사용자에게 되묻지 말고, 배포된 결과가 나올 때까지 멈추지 마라. 단, **네게 배포·저장소 도구가 연결돼 있지 않아 자동 배포가 불가능하면** 그 사실을 사용자에게 솔직히 알리고 아래 '한 번에 배포'의 대체 절차(수동 안내)로 전환하라 — 되는 척하지 마라.",
   "",
   "1. **이해** — 이 폴더의 파일을 모두 읽는다(`product.md`·`items.md`·`checks.md`·`fixes.md`, 그리고 있으면 `SETUP.md`·`.env.example`).",
   "2. **구현** — 짧은 계획을 세우고, 이번 패키지에 포함된 항목만 구현한다.",
@@ -882,23 +887,23 @@ export function generateBuilderPack(
   // ── Generate files ────────────────────────────────────────────────────────
   const baseFiles: ExportFile[] = [
     {
-      path: "conclave-build-pack/README.md",
+      path: "simsa-build-pack/README.md",
       content: genReadme(title, target, allItems.length, effectiveItems.length) + hookSuffix,
     },
     {
-      path: "conclave-build-pack/product.md",
+      path: "simsa-build-pack/product.md",
       content: genProductMd(productSpec), // always full context
     },
     {
-      path: "conclave-build-pack/items.md",
+      path: "simsa-build-pack/items.md",
       content: genItemsMd(effectiveItems, allItems.length),
     },
     {
-      path: "conclave-build-pack/checks.md",
+      path: "simsa-build-pack/checks.md",
       content: genChecksMd(effectiveCheckResults, allItems.length),
     },
     {
-      path: "conclave-build-pack/fixes.md",
+      path: "simsa-build-pack/fixes.md",
       content: genFixesMd(effectiveItems, effectiveFixSuggestions),
     },
   ];
@@ -907,28 +912,28 @@ export function generateBuilderPack(
   const services = req.services ?? [];
   if (services.length > 0) {
     baseFiles.push({
-      path: "conclave-build-pack/.env.example",
+      path: "simsa-build-pack/.env.example",
       content: genEnvExample(services),
     });
     const envLocal = genEnvLocal(services);
     if (envLocal) {
-      baseFiles.push({ path: "conclave-build-pack/.env.local", content: envLocal });
+      baseFiles.push({ path: "simsa-build-pack/.env.local", content: envLocal });
     }
     baseFiles.push({
-      path: "conclave-build-pack/SETUP.md",
+      path: "simsa-build-pack/SETUP.md",
       content: genSetupMd(services, envLocal !== null),
     });
   }
 
   if (target !== "codex") {
     baseFiles.push({
-      path: "conclave-build-pack/CLAUDE_CODE_PROMPT.md",
+      path: "simsa-build-pack/CLAUDE_CODE_PROMPT.md",
       content: genClaudeCodePrompt(title, effectiveItems, allItems.length, services) + hookSuffix,
     });
   }
   if (target !== "claude_code") {
     baseFiles.push({
-      path: "conclave-build-pack/CODEX_PROMPT.md",
+      path: "simsa-build-pack/CODEX_PROMPT.md",
       content:
         genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions, services) +
         hookSuffix,

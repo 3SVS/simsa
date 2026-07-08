@@ -100,11 +100,12 @@ describe("generatePRFixBrief — basic shape", () => {
     assert.ok(paths.some((p) => p.includes("CODEX_FIX_PROMPT.md")));
   });
 
-  it("all files are under conclave-pr-fix-pack/ root", () => {
+  it("all files are under simsa-pr-fix-pack/ root", () => {
     const res = generatePRFixBrief(buildReq());
     assert.ok(res.ok);
     for (const f of res.brief.files) {
-      assert.ok(f.path.startsWith("conclave-pr-fix-pack/"), `unexpected path: ${f.path}`);
+      assert.ok(f.path.startsWith("simsa-pr-fix-pack/"), `unexpected path: ${f.path}`);
+      assert.ok(!f.path.toLowerCase().includes("conclave"), `old brand in path: ${f.path}`);
     }
   });
 });

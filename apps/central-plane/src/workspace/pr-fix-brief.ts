@@ -494,7 +494,7 @@ export function generatePRFixBrief(req: FixBriefRequest): FixBriefResponse {
     })
     .filter((i) => fixableStatuses().includes(i.status));
 
-  const root = "conclave-pr-fix-pack";
+  const root = "simsa-pr-fix-pack";
   const files: FixBriefFile[] = [];
 
   files.push({ path: `${root}/README.md`, content: genReadme(req.productSpec.productName, req.prMeta, req.repoFullName, req.target, selectedItems.length) });

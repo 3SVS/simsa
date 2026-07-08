@@ -9,7 +9,7 @@ import type { ExportFile } from "./workspace-export-api";
 
 /**
  * Generate a zip Blob from the export bundle files.
- * File paths are used as-is within the zip (includes the conclave-build-pack/ prefix).
+ * File paths are used as-is within the zip (includes the simsa-build-pack/ prefix).
  */
 export async function buildPackToZip(files: ExportFile[]): Promise<Blob> {
   const JSZip = (await import("jszip")).default;
@@ -26,7 +26,7 @@ export async function downloadBuildPackZip(files: ExportFile[], projectTitle: st
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `conclave-build-pack.zip`;
+  a.download = `simsa-build-pack.zip`;
   a.click();
   URL.revokeObjectURL(url);
 }

@@ -10,10 +10,10 @@ import { isSecretFile, filesForTextBundle, hasSecretFiles } from "../src/lib/pac
 const SECRET = "SUPABASE_SERVICE_ROLE_KEY=eyJZQX-REAL-SECRET-do-not-leak-42";
 
 const PACK = [
-  { path: "conclave-build-pack/README.md", content: "readme" },
-  { path: "conclave-build-pack/.env.example", content: "SUPABASE_SERVICE_ROLE_KEY=" }, // placeholder → safe
-  { path: "conclave-build-pack/.env.local", content: `# secrets\n${SECRET}\n` },
-  { path: "conclave-build-pack/CLAUDE_CODE_PROMPT.md", content: "prompt" },
+  { path: "simsa-build-pack/README.md", content: "readme" },
+  { path: "simsa-build-pack/.env.example", content: "SUPABASE_SERVICE_ROLE_KEY=" }, // placeholder → safe
+  { path: "simsa-build-pack/.env.local", content: `# secrets\n${SECRET}\n` },
+  { path: "simsa-build-pack/CLAUDE_CODE_PROMPT.md", content: "prompt" },
 ];
 
 describe("pack text bundles never contain the real .env.local secret", () => {
