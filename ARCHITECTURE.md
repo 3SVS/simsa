@@ -1,5 +1,17 @@
 # Conclave AI Architecture
 
+> ⚠️ **[제품 정체성 안내 — 2026-07-08]** 이 문서는 **Conclave**(개발자용 멀티에이전트
+> PR리뷰 협의체)를 서술합니다. 현재 출시·활성 제품은 **Simsa**(비개발자용 수용
+> 레이어)이며, 그 방향·현황·격차는 [`docs/simsa-research-audit-2026-07.md`](docs/simsa-research-audit-2026-07.md)
+> 와 [`docs/onboarding-feasibility-layer.md`](docs/onboarding-feasibility-layer.md)가
+> 최신 진실입니다. 아래 7층 아키텍처·협의체·효율게이트·메모리 해자는 `packages/*`에
+> 존재하나 **Simsa 유저 플로우를 구동하지 않습니다**(Simsa는 `apps/central-plane/src/workspace/*`
+> 에서 Anthropic을 직접 호출). **Simsa 작업 시 감사 문서를 우선하세요.** 이 문서를
+> "source of truth"로 신뢰하기 전에 위 감사를 읽으세요.
+>
+> *7층 프레임을 유지할지 / 강등할지 / Simsa 위로 재배선할지는 CEO급 전략 결정이며,
+> P0~P4 코드 로드맵이 아니라 별도 트랙입니다(감사 §1, 메타평가 반영).*
+
 **Status:** architecture finalized 2026-04-19. Decisions 1–34 are locked; do
 not re-litigate without explicit reopen. This document is the source of
 truth for scaffolding.

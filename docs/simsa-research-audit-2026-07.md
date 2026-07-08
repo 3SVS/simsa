@@ -39,6 +39,53 @@
 
 ---
 
+## 0.5 메타평가 반영 · 교차검증 (v2, 2026-07-08)
+
+이 감사에 대한 독립 메타평가(등급 A−)를 받아, 지적된 약점을 검증·반영했다.
+
+**도전받은 주장의 실제 검증 (원 감사엔 교차검증이 없었음 — 메타평가 정당):**
+| 주장 | 검증 | 정정 |
+|---|---|---|
+| `generate.ts:271` 날조가 유저 도달 | mock은 **키 없을 때만** 반환(LLM throw는 정직 503). prod은 키 세팅 → 날조 사실상 **prod 미도달** | #298은 라이브 사고 아닌 **방어·정확성**으로 격하. 진짜 해법=아래 verify 게이트 |
+| Langfuse가 Simsa 구동 | 워크스페이스 플로우에 langfuse **0건** | 확인 — **P0 fix 효과 측정 불가**. Langfuse 배선이 선행 필요 |
+| 모델 ID | `claude-haiku-4-5-20251001` (현행 최신) | **조치 불필요** |
+| prompt caching | `cache_control` **0건** | 즉효 절감 기회(아키텍처 결정 무관) |
+
+**두 축 정의(원 감사 누락):** **축 A** = 유저 의도를 파악해 결과(스펙·항목·빌더팩/핸드오프)로
+보여주기. **축 B** = 이미 만든 것의 문제를 찾아 평이하게 알려주고 고쳐주기.
+
+**심각도 재분류(P0를 3티어로 — pager 울릴 건 시크릿뿐):**
+- **P0-security (오늘, 회귀 테스트 동봉 필수):** `.env.local` 시크릿이 ZIP·"전체복사"·
+  마크다운 번들에 섞이는 것 제외 + `assert(!bundle.includes("SECRET_"))` 회귀.
+- **P0-honesty (오늘):** README "한 번에 끝납니다" 정직화 · C2 답을 productSpec 병합 ·
+  generate **verify-against-user-words 게이트**(mock/LLM 무관하게 원문 단어 최소 N% 등장 —
+  #298의 mock 트리거 좁히기보다 근본).
+- **P0-clarity (오늘, 30분):** **P0.0** ARCHITECTURE.md·CLAUDE.md 상단 승계 배너(✅ v2에서
+  반영) + stage-1~85 docs redirect 배너. 이거 없으면 다음 컨트리뷰터가 옛 아키텍처 따라감.
+- **P0에서 뺄 것:** `conclave-build-pack` 파일명은 **rename 실수(Stage 84/85)**, 데드엔드는
+  **아키텍처 결함** — 같은 티어 금지. 파일명은 P0-clarity(브랜드), 데드엔드는 P1-nav.
+
+**로그인 벽 재배치(메타평가 지적):** "실패 → 확인 못 함" **리포트측 정직화만 P0**(저비용,
+#299로 완료). **테스트 계정 입력·요청 트래킹·관리자 UX = 자격증명 검수는 P1**(하루 이상).
+
+**"7층 해자 미구동"은 P4가 아니라 CEO급 전략 결정:** 코드로 못 푼다. 세 옵션 —
+(a) Conclave 유산으로 인정·문서 강등, (b) Simsa를 7층 위로 재배선(분기 프로젝트),
+(c) Simsa-first 해자 3개 재선정·나머지 optional. **왜 direct Haiku로 갔는지(비용/지연/속도)**를
+Langfuse 비용 트래킹으로 먼저 규명해야 답이 나옴.
+
+**메타평가가 추가한 P1(아키텍처 결정 무관·즉효):** prompt caching(스키마 프리픽스 캐시) ·
+Langfuse 배선(측정 가능성) · 세션당 비용 트래킹 · verify-against-user-words 게이트 ·
+Simsa 유저 플로우를 end-to-end 커버하는 테스트가 몇 개인지 감사(현재 1134+191 중 불명).
+
+**CEO급 결정(코드 아님, 오늘 하는 게 유리):** ① Conclave EOL·유저 이관 여부 ② 7층 해자
+유지/강등/재배선 ③ `simsa` CLI alias·`@Simsa_AI` 봇 이관·Simsa 상표/도메인/핸들 확보.
+
+**감사 시점 caveat:** 이 감사는 Stage 85(브랜드 rename) 전후 경계에서 수행 — 브랜드 findings에
+낡은 항목 섞일 수 있어 Stage 84/85 인벤토리와 cross-check 필요(ZIP 파일명·봇 username·GitHub App
+display name 포함).
+
+---
+
 ## 1. 뿌리 문제 — 두 제품 포크 (먼저 정리)
 
 | 문서(intent) | 서술 대상 | 실제 코드 |

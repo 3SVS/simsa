@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> ⚠️ **[제품 정체성 안내 — 2026-07-08]** 아래 "Conclave AI" 서술은 **개발자용 원(原)
+> 제품**입니다. 현재 출시·활성 제품은 **Simsa**(비개발자가 AI로 만든 결과물을
+> 심사·수용하는 레이어)이며, `apps/central-plane/src/workspace/*` + `apps/dashboard`에
+> 삽니다. Simsa의 방향·현황·격차·우선순위는 [`docs/simsa-research-audit-2026-07.md`](docs/simsa-research-audit-2026-07.md)
+> 가 최신 진실입니다. 아래 협의체·효율게이트·메모리 설명은 `packages/*`의 Conclave
+> 기계장치를 가리키며 **Simsa 유저 플로우를 구동하지 않습니다**. Simsa 작업 시 감사
+> 문서를 우선하세요. (모노레포 규칙·빌드·배포·시크릿 안전 섹션은 두 제품 모두에 유효.)
+
 ## Repository
 
 Conclave AI — a multi-agent council that reviews AI-generated code, debates blockers across up to 3 rounds, auto-fixes via a worker agent, and learns from merge/reject outcomes. pnpm + Turbo monorepo, TypeScript strict, ESM-only (`"type": "module"`), Node ≥ 20, pnpm ≥ 9.
