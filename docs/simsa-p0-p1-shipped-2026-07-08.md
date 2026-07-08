@@ -49,6 +49,22 @@
 **재평가 시 주의:** KO 프롬프트 구조는 Haiku 거부 이슈로 3회 수정된 민감 지점(#286~288) —
 정적 부분의 system 블록 재배치는 반드시 회귀 테스트와 함께.
 
+## 보고-실제 불일치 정정 (2026-07-08 밤 추가)
+
+- **원인 한 줄:** 이전 세션이 세션 종료 요약과 감사 v2 "변경 이력"에 **"PR 오픈"을
+  "완료"로 집계**했다(#298·#299). 커밋된 핸드오프 #301은 OPEN으로 정확히 표기했었음.
+  재발 방지 규칙: **추적표의 "완료"는 머지 커밋 확인 후에만 표기.** (감사 v2에 정정 주석 추가됨)
+- **#299 (로그인 벽):** 2026-07-08 03:05 머지 없이 CLOSED, **코멘트·사유 기록 없음** —
+  의도(P1 강등)인지 사고인지 배님 확인 필요. 내용상으로는 메타평가가 "자격증명 검수=P1"로
+  재배치했으므로 강등이 합리적. 어느 쪽이든 **P1 백로그 정식 등재 필요**(감사 finding이
+  사라지면 안 됨).
+- **#298 (날조 mock 트리거):** #303에 완전 superseded 아님 — **유니크 가치 확인.**
+  #298은 mock 트리거를 "회의/미팅/녹음 **AND** 요약/할일/정리/linear"로 좁혀 canned 초안
+  생성 자체를 차단(벨트), #303 게이트는 생성된 초안을 사후 검증(서스펜더). 예: "linear에
+  보내는 앱"은 게이트를 통과하지만(사용자가 linear 명시) #298이면 회의록 mock 자체가 안
+  나감. 같은 라인(generate.ts `isMeeting`) 수정이라 **rebase 필수** — rebase 후 머지 권고,
+  결정은 내일 세션.
+
 ## 발견한 이슈
 
 - Vercel CLI를 worktree에서 실행하면 `.vercel/project.json`(gitignored)이 없어 미링크
@@ -56,13 +72,18 @@
   루트에서 실행 (프로젝트 Root Directory=`apps/dashboard` 설정이라 루트 실행 필수).
 - generate LLM latency 36~42s 실측 (기존 ~23s 관측 대비 상승) — Langfuse에서 추세 확인 권장.
 
-## 남은 것 / 내일
+## 남은 것 / 내일 (배님 확정 순서)
 
-1. **Langfuse 배선 (내일 첫 작업)** — `anthropic_usage` JSON 라인이 ingest 포맷.
+1. **추적표 정정 확인** — #298/#299 실상태 반영(이 문서·감사 v2 정정 주석) 리뷰. (10분)
+2. **#298 처리 결정** — rebase 후 머지(권고) vs close-superseded. 위 정정 절 참고. (30분)
+3. **Langfuse 배선** — `anthropic_usage` JSON 라인이 ingest 포맷 그대로.
    `packages/observability-langfuse` 확인 → generate 진입점부터 trace.
-2. #295·#296·#298·#301 열림 (배님 배치 판단). #298은 verify 게이트(#303)와 같은 문제의식
-   — 머지 시 generate.ts 충돌 여부 확인 필요.
-3. #299 CLOSED — 로그인 벽 "확인 못 함" 정직화는 미반영. 재개 여부 배님 판단.
-4. 사람 육안 잔여(1분): 브라우저에서 export ZIP 클릭 다운로드 파일명 = `simsa-build-pack.zip`,
+4. **Latency 가설 검증** — 실측 output 5196tok @ 39.5s ≈ 130 tok/s는 Haiku 생성 속도로
+   정상 → latency 증가는 인프라가 아니라 **output이 길어진 것**일 가능성(유력: #303의
+   C2 decisions 병합으로 spec 출력 증가). Langfuse로 #303 배포 전후 output_tokens 평균
+   비교; output 원인이면 대응은 최적화가 아니라 spec 출력 상한/요약.
+5. 여유 시: P1 백로그 정리 — 로그인 벽(#299 후속) 정식 등재 + 감사 P1 트랙 우선순위.
+6. 사람 육안 잔여(1분): 브라우저에서 export ZIP 클릭 다운로드 파일명 = `simsa-build-pack.zip`,
    GitHub UI에서 stage doc 1~2개 렌더 확인, dashboard EN/KO 토글.
-5. Non-goals 유지: 포크 재구현(Q1)·7층 재배선·봇/npm rename frozen.
+7. #295·#296·#301 열림(배님 배치 판단). Non-goals 유지: 포크 재구현(Q1)·7층 재배선·
+   봇/npm rename frozen.
