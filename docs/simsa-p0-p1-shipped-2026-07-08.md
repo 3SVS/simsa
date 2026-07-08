@@ -72,16 +72,29 @@
   루트에서 실행 (프로젝트 Root Directory=`apps/dashboard` 설정이라 루트 실행 필수).
 - generate LLM latency 36~42s 실측 (기존 ~23s 관측 대비 상승) — Langfuse에서 추세 확인 권장.
 
+## Langfuse LIVE — 2026-07-09 (실증 완료)
+
+Langfuse 배선이 프로덕션에 라이브·실증됐다(원래 "내일 첫 작업"을 당겨 완료).
+- **경로:** `workspace/langfuse.ts`(Workers-safe fetch·env-gated·fail-open·`waitUntil`·
+  콘텐츠 무전송) #309 → `LANGFUSE_BASE_URL` 별칭+전송로그 #312(코드가 `LANGFUSE_HOST`만
+  읽어 조용히 no-op이던 것 해소) → set-worker-secrets allowlist #313 → 3종 Worker 반영
+  ("Done: 3 pushed").
+- **실증:** 프로덕션 generate 호출 → **Langfuse UI에 trace 2건 확인(2026-07-09 KST 22:44·22:47)**.
+  리전 **EU**(`cloud.langfuse.com`). 어제 usage 로그(#306) → 오늘 trace까지 데이터 파이프 E2E.
+- **gotcha:** `wrangler tail`이 이 환경에서 스트림 캡처 실패(인증 정상, `whoami` OK) → 자체확인
+  대신 **유저 Langfuse UI가 ground truth**. 앞으로 trace 확인은 UI 또는 `/_diag` 엔드포인트.
+- **#311 반영 유지:** 응답에서 `llmUsage` strip(operator 전용) — trace/로그로만, 유저 응답엔 없음.
+
 ## 남은 것 / 내일 (배님 확정 순서)
 
 1. **추적표 정정 확인** — #298/#299 실상태 반영(이 문서·감사 v2 정정 주석) 리뷰. (10분)
 2. **#298 처리 결정** — rebase 후 머지(권고) vs close-superseded. 위 정정 절 참고. (30분)
-3. **Langfuse 배선** — `anthropic_usage` JSON 라인이 ingest 포맷 그대로.
-   `packages/observability-langfuse` 확인 → generate 진입점부터 trace.
-4. **Latency 가설 검증** — 실측 output 5196tok @ 39.5s ≈ 130 tok/s는 Haiku 생성 속도로
-   정상 → latency 증가는 인프라가 아니라 **output이 길어진 것**일 가능성(유력: #303의
-   C2 decisions 병합으로 spec 출력 증가). Langfuse로 #303 배포 전후 output_tokens 평균
-   비교; output 원인이면 대응은 최적화가 아니라 spec 출력 상한/요약.
+3. **★Latency = 출력길이 (Langfuse 첫 쿼리)** — 실측 4점 모두 output ~5.2~5.4k tok @ ~40s
+   ≈ **130 tok/s = Haiku 정상속도**. 즉 **"latency 회귀"가 아님** — 출력이 5k+ 토큰으로 긴 것
+   자체가 관측·UX 대상. Langfuse 첫 쿼리: **#303(C2 decisions 병합) 배포 전후 `output_tokens`
+   평균**이 실제 뛰었는지. 뛰었으면 대응은 성능 최적화가 아니라 **spec 출력 길이 상한/요약** —
+   **비개발자에게 5k 토큰 spec은 그 자체로 UX 과부하**(감사 "한 화면 한 질문" 원칙과 충돌).
+   즉 이건 성능 문제가 아니라 UX 상한 문제로 다룰 것.
 5. 여유 시: P1 백로그 정리 — 로그인 벽(#299 후속) 정식 등재 + 감사 P1 트랙 우선순위.
 6. 사람 육안 잔여(1분): 브라우저에서 export ZIP 클릭 다운로드 파일명 = `simsa-build-pack.zip`,
    GitHub UI에서 stage doc 1~2개 렌더 확인, dashboard EN/KO 토글.
