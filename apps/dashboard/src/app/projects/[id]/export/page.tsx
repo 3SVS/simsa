@@ -27,6 +27,7 @@ import {
   type RemoteOutcome,
 } from "@/lib/workspace-export-api";
 import { downloadBuildPackZip } from "@/lib/zip-utils";
+import { filesForTextBundle, hasSecretFiles } from "@/lib/pack-bundle.mjs";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
 import Link from "next/link";
@@ -91,7 +92,9 @@ function filename(path: string): string {
 }
 
 function downloadMarkdownBundle(files: ExportFile[], projectTitle: string): void {
-  const content = files
+  // Never fold the real-secret file (.env.local) into a single markdown blob —
+  // that would drop plaintext keys into a committable .md. Secrets stay in the ZIP.
+  const content = filesForTextBundle(files)
     .map((f) => `<!-- FILE: ${f.path} -->\n\n${f.content}`)
     .join("\n\n---\n\n");
   const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
@@ -290,7 +293,8 @@ export default function ExportPage() {
 
   async function handleCopyAll() {
     if (!result) return;
-    const all = result.bundle.files.map((f) => `<!-- ${f.path} -->\n\n${f.content}`).join("\n\n---\n\n");
+    // Exclude .env.local — real keys must not land on the clipboard.
+    const all = filesForTextBundle(result.bundle.files).map((f) => `<!-- ${f.path} -->\n\n${f.content}`).join("\n\n---\n\n");
     await copyText(all);
     setCopiedPath("__all__");
     setTimeout(() => setCopiedPath(null), 2000);
@@ -503,6 +507,9 @@ export default function ExportPage() {
                 {t.exportPage.mdBundle}
               </button>
             </div>
+            {hasSecretFiles(result.bundle.files) && (
+              <p className="mt-2 text-xs text-amber-700">{t.exportPage.secretsZipOnly}</p>
+            )}
           </div>
 
           {/* Step-by-step guide */}
