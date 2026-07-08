@@ -172,11 +172,28 @@ describe("workspace export-builder-pack", () => {
     assert.ok(fixFile.content.includes("완성 기준을 추가하면 됩니다"), "fix summary not in fixes.md");
   });
 
-  it("all files use conclave-build-pack/ path prefix", () => {
+  it("all files use simsa-build-pack/ path prefix", () => {
     const res = generateBuilderPack(makeReq("both"));
     for (const f of res.bundle.files) {
-      assert.ok(f.path.startsWith("conclave-build-pack/"), `${f.path} does not start with conclave-build-pack/`);
+      assert.ok(f.path.startsWith("simsa-build-pack/"), `${f.path} does not start with simsa-build-pack/`);
     }
+  });
+
+  it("no 'conclave' string anywhere in pack paths or content (Stage 84/85 rename regression)", () => {
+    const res = generateBuilderPack(makeReq("both", { checkResults: MOCK_CHECK_RESULTS, fixSuggestions: MOCK_FIX }));
+    for (const f of res.bundle.files) {
+      assert.ok(!f.path.toLowerCase().includes("conclave"), `old brand in path: ${f.path}`);
+      assert.ok(!f.content.toLowerCase().includes("conclave"), `old brand in content of ${f.path}`);
+    }
+  });
+
+  it("README does not overclaim one-shot deploy and states the deploy-tool condition", () => {
+    const res = generateBuilderPack(makeReq("both"));
+    const readme = res.bundle.files.find((f) => f.path.endsWith("README.md"));
+    assert.ok(readme, "README.md missing");
+    assert.ok(!readme.content.includes("한 번에 알아서"), "overclaim copy still in README");
+    assert.ok(readme.content.includes("배포 도구"), "deploy-tool condition not stated in README");
+    assert.ok(readme.content.includes("보장하지 않는 것"), "honesty section missing in README");
   });
 
   it("no banned developer terms in generated file content", () => {

@@ -101,7 +101,7 @@ function downloadMarkdownBundle(files: ExportFile[], projectTitle: string): void
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `conclave-build-pack-${projectTitle.replace(/[^a-zA-Z0-9가-힣]/g, "-").slice(0, 40)}.md`;
+  a.download = `simsa-build-pack-${projectTitle.replace(/[^a-zA-Z0-9가-힣]/g, "-").slice(0, 40)}.md`;
   a.click();
   URL.revokeObjectURL(url);
 }
