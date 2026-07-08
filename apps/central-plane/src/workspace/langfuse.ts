@@ -17,9 +17,17 @@
 
 export type LangfuseEnv = {
   LANGFUSE_HOST?: string;
+  /** Alias for LANGFUSE_HOST — the region base URL (not a secret). Accepting
+   *  both names avoids a silent no-op when the value is set as LANGFUSE_BASE_URL. */
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
 };
+
+/** The Langfuse base URL — LANGFUSE_HOST, or its LANGFUSE_BASE_URL alias. */
+export function resolveLangfuseHost(env: LangfuseEnv): string | undefined {
+  return (env.LANGFUSE_HOST ?? env.LANGFUSE_BASE_URL) || undefined;
+}
 
 /** The observability record for one LLM call — same fields as the
  *  `anthropic_usage` console line, plus a trace name and safe metadata. */
@@ -37,7 +45,7 @@ export type LlmUsageRecord = {
 };
 
 export function langfuseConfigured(env: LangfuseEnv): boolean {
-  return Boolean(env.LANGFUSE_HOST && env.LANGFUSE_PUBLIC_KEY && env.LANGFUSE_SECRET_KEY);
+  return Boolean(resolveLangfuseHost(env) && env.LANGFUSE_PUBLIC_KEY && env.LANGFUSE_SECRET_KEY);
 }
 
 /** Pure batch builder (Langfuse public ingestion envelope) — unit-testable. */
@@ -105,7 +113,7 @@ export async function sendLangfuseGeneration(
 ): Promise<boolean> {
   if (!langfuseConfigured(env)) return false;
   try {
-    const host = (env.LANGFUSE_HOST ?? "").trim().replace(/\/+$/, "");
+    const host = (resolveLangfuseHost(env) ?? "").trim().replace(/\/+$/, "");
     const body = buildIngestionBatch(
       rec,
       {
@@ -124,7 +132,13 @@ export async function sendLangfuseGeneration(
       },
       body: JSON.stringify(body),
     });
-    if (!resp.ok && resp.status !== 207) {
+    // Observable outcome so `wrangler tail` can prove traces flow. Only fires
+    // on the configured path — absence of this line means Langfuse is off
+    // (intentional no-op), which is the diagnostic for "keys not set yet".
+    console.log(
+      JSON.stringify({ event: "langfuse_send", call_site: rec.callSite, status: resp.status, ok: resp.ok }),
+    );
+    if (!resp.ok) {
       console.warn(`[langfuse] ingestion ${resp.status} — trace dropped (fail-open)`);
       return false;
     }
