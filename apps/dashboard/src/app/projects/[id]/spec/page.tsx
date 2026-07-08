@@ -15,6 +15,7 @@ import {
   markProjectSyncFailed,
 } from "@/lib/workflow-store";
 import type { WorkspaceProductSpec } from "@/lib/workspace-types";
+import { applyResolvedDecision } from "@/lib/spec-decisions.mjs";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { OpenQuestionCard } from "@/components/OpenQuestionCard";
@@ -46,13 +47,54 @@ export default function SpecPage() {
   const [dExcluded, setDExcluded] = useState<string[]>([]);
 
   function resolveOpenDecision(question: string, answer: string) {
-    setResolved((prev) => {
-      const next = { ...prev };
-      if (answer) next[question] = answer;
-      else delete next[question];
-      saveExtendedProjectData(id, { resolvedOpenDecisions: next });
-      return next;
-    });
+    if (!project) return;
+    const next = { ...resolved };
+    if (answer) next[question] = answer;
+    else delete next[question];
+
+    // C2 → productSpec merge (P0-honesty, audit 2.3): the answer must reach the
+    // productSpec that checks/export/builder-pack actually read — the answered
+    // question moves out of openQuestions and into decisions as "질문 — 답".
+    // Un-answering reverses it. resolvedOpenDecisions stays as the UI's record
+    // of which card was answered.
+    const ext = loadExtendedProjectData(id);
+    const base: WorkspaceProductSpec = ext?.productSpec ?? {
+      productName: project.name,
+      oneLine: project.spec.goal,
+      targetUsers: [],
+      problem: "",
+      included: project.spec.included,
+      excluded: project.spec.excluded,
+      userFlow: [],
+      decisions: [],
+      openQuestions: project.spec.openDecisions ?? [],
+    };
+    const nextProductSpec = applyResolvedDecision(base, question, answer);
+    saveExtendedProjectData(id, { resolvedOpenDecisions: next, productSpec: nextProductSpec });
+
+    // Best-effort server sync (sticky upsert) so a DB-side export sees the
+    // merged spec too — same pattern as saveSpec below.
+    saveProjectToDb({
+      id,
+      userKey: getUserKey(),
+      title: project.name,
+      idea: project.description ?? "",
+      understood: {},
+      productSpec: nextProductSpec,
+      items: project.requirements.map((r) => ({
+        id: r.id,
+        title: r.title,
+        status: r.status,
+        criteria: ext?.itemCriteria?.[r.id] ?? [],
+        note: ext?.itemNotes?.[r.id] || undefined,
+      })),
+    })
+      .then((res) => {
+        if (!res || res.ok !== true) markProjectSyncFailed(id);
+      })
+      .catch(() => markProjectSyncFailed(id));
+
+    setResolved(next);
   }
 
   if (!project) return <ProjectNotFound />;
