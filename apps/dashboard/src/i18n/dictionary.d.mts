@@ -519,6 +519,7 @@ export type Dictionary = {
     copiedAll: string;
     copyAll: string;
     mdBundle: string;
+    secretsZipOnly: string;
     howToTitle: string;
     step1: string;
     step2: string;
