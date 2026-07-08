@@ -25,6 +25,32 @@ export interface VisualCheckInput {
   decision: string;
   /** Optional per-step flow outcomes (label + whether the step visibly succeeded). */
   steps?: Array<{ label: string; ok: boolean; note?: string }>;
+  /** Set by the inspector when the app gates everything behind a login/signup
+   *  wall it can't pass. When true (or when the URL clearly lands on a login
+   *  page), the check reports "확인 못 함 (로그인 필요)" instead of a false
+   *  failure — a login-first app is not a broken app. */
+  loginWall?: boolean;
+}
+
+/**
+ * A login/signup wall blocks the check when the inspector flags it OR the page it
+ * lands on is clearly a login screen. Login-first apps (most real apps) must NOT
+ * be reported as "failed" just because the checker can't sign in (Bae's report).
+ */
+export function isLoginBlocked(input: VisualCheckInput): boolean {
+  if (input.loginWall === true) return true;
+  const LOGIN_URL = /\/(log-?in|sign-?in|sign-?up|auth|account\/login|users\/sign_in)(\b|\/|\?|$)/i;
+  return LOGIN_URL.test(input.routeAfterClick ?? "") || LOGIN_URL.test(input.targetUrl ?? "");
+}
+
+function loginBlockedFinding(input: VisualCheckInput): NonDevFinding {
+  return {
+    severity: "info",
+    what: "이 앱은 로그인이 필요해서, 로그인 뒤 화면은 확인하지 못했어요.",
+    why: "앱을 열자마자 로그인(또는 회원가입) 화면이 나와서, 심사가 로그인 뒤의 실제 기능까지는 들어가지 못했어요. 이건 '앱이 고장났다'는 뜻이 아니에요.",
+    how: "로그인 뒤 화면까지 확인하려면 테스트용 계정(아이디·비밀번호)을 알려주세요. 또는 로그인 없이 볼 수 있는 페이지 주소를 알려주시면 그 부분을 확인해드릴게요.",
+    evidence: input.routeAfterClick ?? input.targetUrl ?? null,
+  };
 }
 
 /** One finding, written for a non-developer. `evidence` is the raw developer-only detail. */
@@ -79,6 +105,25 @@ export function decisionToWorks(decision: string): boolean | null {
  * 각 finding 은 무엇/왜/어떻게 를 평범한 한국어로 담고, 원본 기술 문자열은 evidence 에만 둔다.
  */
 export function classifyFindings(input: VisualCheckInput): NonDevFinding[] {
+  // Login wall: don't report the "no primary action found" / "step failed" false
+  // defects — say honestly that the check couldn't get past login, and ask for a
+  // test account. (A hard network/server error still surfaces below the wall.)
+  if (isLoginBlocked(input)) {
+    const findings: NonDevFinding[] = [loginBlockedFinding(input)];
+    const netText = input.networkFailures.join(" ");
+    const conText = input.consoleErrors.join(" ");
+    if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|getaddrinfo|\bHTTP 5\d\d\b|status 5\d\d/i.test(netText + " " + conText)) {
+      findings.push({
+        severity: "high",
+        what: "로그인 화면 자체에서도 서버 오류가 보였어요.",
+        why: "로그인 페이지가 뜨긴 했지만, 그 화면이 부르는 서버 요청이 실패했어요.",
+        how: "백엔드 주소·상태를 먼저 확인하세요. 로그인 뒤 확인은 테스트 계정을 주시면 이어서 할게요.",
+        evidence: firstMatch(input.networkFailures, /ERR_NAME_NOT_RESOLVED|5\d\d/) ?? input.networkFailures[0] ?? null,
+      });
+    }
+    return findings;
+  }
+
   const findings: NonDevFinding[] = [];
   const netText = input.networkFailures.join(" ");
   const conText = input.consoleErrors.join(" ");
@@ -175,25 +220,34 @@ function firstMatch(arr: string[], re: RegExp): string | null {
 /** 비개발자용 한국어 리포트 조립. 결정론적, 절대 throw 안 함. 숫자 점수 없음. */
 export function buildNonDevReport(input: VisualCheckInput): NonDevReport {
   const findings = classifyFindings(input);
-  const works = decisionToWorks(input.decision);
-  const verdict = decisionToKorean(input.decision);
+  const loginBlocked = isLoginBlocked(input);
+  // Login wall → honest "확인 못 함" (works=null), never a failure verdict, even
+  // if the upstream decision said "Needs Fix". A login-first app isn't broken.
+  const works = loginBlocked ? null : decisionToWorks(input.decision);
+  const verdict = loginBlocked ? "확인 못 했어요 — 로그인이 필요해요" : decisionToKorean(input.decision);
 
-  const oneLine =
-    works === true
+  const oneLine = loginBlocked
+    ? "앱을 열자 로그인 화면이 나와서, 로그인 뒤 기능은 아직 확인하지 못했어요. 테스트 계정을 주시면 이어서 확인할게요."
+    : works === true
       ? "핵심 흐름이 눈으로 확인한 범위에서 정상 동작했어요."
       : works === false
         ? `핵심 흐름이 지금은 작동하지 않아요. ${findings[0]?.what ?? ""}`.trim()
         : `아직 '작동한다'고 확정하기엔 확인이 더 필요해요. ${findings[0]?.what ?? ""}`.trim();
 
   const nextSteps: string[] = [];
-  const topFinding = findings[0];
-  if (topFinding) {
-    nextSteps.push(`가장 급한 것부터: ${topFinding.how}`);
+  if (loginBlocked) {
+    nextSteps.push("로그인 뒤 화면까지 확인하려면 테스트용 계정(아이디·비밀번호)을 알려주세요.");
+    nextSteps.push("또는 로그인 없이 볼 수 있는 페이지 주소가 있으면 그 주소로 다시 검수해보세요.");
+  } else {
+    const topFinding = findings[0];
+    if (topFinding) {
+      nextSteps.push(`가장 급한 것부터: ${topFinding.how}`);
+    }
+    if (works === null && input.primaryActionFound === false) {
+      nextSteps.push("사용자가 처음에 눌러야 할 버튼/검색창을 분명히 만든 뒤 다시 검수하세요.");
+    }
+    nextSteps.push("고친 뒤 이 검수를 한 번 더 돌려서, 아래 스크린샷이 정상 화면으로 바뀌는지 눈으로 확인하세요.");
   }
-  if (works === null && input.primaryActionFound === false) {
-    nextSteps.push("사용자가 처음에 눌러야 할 버튼/검색창을 분명히 만든 뒤 다시 검수하세요.");
-  }
-  nextSteps.push("고친 뒤 이 검수를 한 번 더 돌려서, 아래 스크린샷이 정상 화면으로 바뀌는지 눈으로 확인하세요.");
 
   return {
     title: "Simsa 검수 리포트",
