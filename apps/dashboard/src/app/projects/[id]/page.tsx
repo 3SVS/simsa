@@ -42,6 +42,7 @@ import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
+import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
 
 // Stage 272 — verdict/status chip tones on the overview inspection card
@@ -228,8 +229,8 @@ function CommandCenterCard({
   useEffect(() => {
     let cancelled = false;
     const uk = getUserKey();
-    fetchProjectRepo(projectId, uk)
-      .then((res) => { if (!cancelled) setHasRepo(res.ok ? Boolean(res.repo) : null); })
+    fetchProjectRepoSettled(fetchProjectRepo, projectId, uk)
+      .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
       .catch(() => {});
     listProjectReviewHistory(projectId, uk, { limit: 1 })
       .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
