@@ -433,6 +433,7 @@ export type Dictionary = {
     noPrReview: string;
     noPrReviewDesc: string;
     connectPr: string;
+    prLoadError: string;
     reviewedPr: string;
     viewComparison: string;
     toGithub: string;
@@ -1765,6 +1766,9 @@ export type Dictionary = {
       showArchived: string;
       refreshButton: string;
       refreshHint: string;
+      listLoadError: string;
+      detailLoadError: string;
+      retryButton: string;
       openButton: string;
       restoreButton: string;
       archiveButton: string;
@@ -2107,6 +2111,7 @@ export type Dictionary = {
       forbidden: string;
       generic: string;
       loadFailed: string;
+      disconnectFailed: string;
     };
     draft: {
       cta: string;

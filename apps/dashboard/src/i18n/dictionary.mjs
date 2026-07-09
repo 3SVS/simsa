@@ -506,6 +506,7 @@ const EN = {
     noPrReview: "No GitHub code review yet.",
     noPrReviewDesc: "Connect your project's code on GitHub, choose the change to check, then run a review.",
     connectPr: "Connect and review code changes",
+    prLoadError: "Couldn't load your connected code changes. This is a loading problem, not a sign that nothing is connected.",
     reviewedPr: "Reviewed PR",
     viewComparison: "View comparison in GitHub",
     toGithub: "Go to code review",
@@ -1877,6 +1878,9 @@ const EN = {
       showArchived: "Show archived",
       refreshButton: "Refresh",
       refreshHint: "Press Refresh to load your saved workflow plans.",
+      listLoadError: "Couldn't load your saved plans. This is a loading problem, not a sign you have none.",
+      detailLoadError: "Couldn't open this plan. Please try again.",
+      retryButton: "Try again",
       openButton: "Open",
       restoreButton: "Restore",
       archiveButton: "Archive",
@@ -2257,6 +2261,7 @@ const EN = {
       forbidden: "You do not have access to this project.",
       generic: "Something went wrong. Please try again.",
       loadFailed: "Could not load sources. Please try again.",
+      disconnectFailed: "Could not disconnect this source. Please try again.",
     },
     // Stage 267 — document → spec draft flow.
     draft: {
@@ -2812,6 +2817,7 @@ const KO = {
     noPrReview: "아직 GitHub 코드 확인 결과가 없어요.",
     noPrReviewDesc: "GitHub의 코드 저장소와 확인할 코드 변경(PR)을 연결한 뒤 확인을 실행할 수 있습니다.",
     connectPr: "코드 변경(PR) 연결하고 확인하기",
+    prLoadError: "연결된 코드 변경을 불러오지 못했어요. 연결된 게 없다는 뜻이 아니라 불러오기 문제예요.",
     reviewedPr: "확인된 PR",
     viewComparison: "GitHub에서 비교 결과 보기",
     toGithub: "코드 확인 화면으로",
@@ -4176,6 +4182,9 @@ const KO = {
       showArchived: "보관된 플랜 표시",
       refreshButton: "새로고침",
       refreshHint: "새로고침을 누르면 저장된 워크플로우 플랜을 불러옵니다.",
+      listLoadError: "저장된 플랜을 불러오지 못했어요. 플랜이 없다는 뜻이 아니라 불러오기 문제예요.",
+      detailLoadError: "이 플랜을 열지 못했어요. 다시 시도해주세요.",
+      retryButton: "다시 시도",
       openButton: "열기",
       restoreButton: "복원",
       archiveButton: "보관",
@@ -4550,6 +4559,7 @@ const KO = {
       forbidden: "이 프로젝트에 접근할 권한이 없어요.",
       generic: "문제가 발생했어요. 다시 시도해주세요.",
       loadFailed: "연결된 소스를 불러오지 못했어요. 다시 시도해주세요.",
+      disconnectFailed: "이 소스의 연결을 해제하지 못했어요. 다시 시도해주세요.",
     },
     // Stage 267 — 문서 → 제품 설명서 초안 흐름.
     draft: {

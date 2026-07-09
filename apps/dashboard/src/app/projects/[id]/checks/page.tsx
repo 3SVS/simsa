@@ -55,7 +55,8 @@ export default function ChecksPage() {
   // ── PR code check state ───────────────────────────────────────────────────
   const [linkedPulls, setLinkedPulls] = useState<LinkedPull[]>([]);
   const [prReviews, setPrReviews] = useState<Record<number, ReviewRun>>({});
-  const [prLoadPhase, setPrLoadPhase] = useState<"idle" | "loading" | "done">("idle");
+  const [prLoadPhase, setPrLoadPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [prReloadNonce, setPrReloadNonce] = useState(0);
 
   useEffect(() => {
     const ext = loadExtendedProjectData(id);
@@ -87,7 +88,10 @@ export default function ChecksPage() {
       setPrLoadPhase("loading");
       const linkedRes = await fetchLinkedPulls(id, getUserKey());
       if (cancelled) return;
-      if (!linkedRes.ok) { setPrLoadPhase("done"); return; }
+      // A failed load must NOT collapse into the "no PR review yet → connect a PR"
+      // empty state — that misdirects a user who already connected a PR into
+      // re-connecting it. Surface a distinct error state with retry instead.
+      if (!linkedRes.ok) { setPrLoadPhase("error"); return; }
       setLinkedPulls(linkedRes.pulls);
       const reviews: Record<number, ReviewRun> = {};
       await Promise.all(
@@ -103,7 +107,7 @@ export default function ChecksPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, prReloadNonce]);
 
   const runCheck = useCallback(async () => {
     if (!project) return;
@@ -309,6 +313,15 @@ export default function ChecksPage() {
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
             {t.checks.prLoading}
+          </div>
+        )}
+
+        {prLoadPhase === "error" && (
+          <div className="card p-8 text-center">
+            <p className="mb-4 text-sm text-gray-600">{t.checks.prLoadError}</p>
+            <button type="button" onClick={() => setPrReloadNonce((n) => n + 1)} className="btn btn-md btn-secondary">
+              {t.common.retry}
+            </button>
           </div>
         )}
 

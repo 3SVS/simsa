@@ -445,6 +445,7 @@ function EvolutionLearningCard({ projectId, t }: { projectId: string; t: Diction
   const [learning, setLearning] = useState<ProjectEvolutionLearningSignals | null>(null);
   const [phase, setPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [userKey, setUserKey] = useState<string>("");
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     setUserKey(getUserKey());
@@ -467,13 +468,20 @@ function EvolutionLearningCard({ projectId, t }: { projectId: string; t: Diction
     return () => {
       cancelled = true;
     };
-  }, [projectId, userKey]);
+  }, [projectId, userKey, reloadNonce]);
 
   if (phase === "loading") {
     return <p className="card p-5 text-xs text-gray-500">{t.outcome.loading}</p>;
   }
   if (phase === "error") {
-    return <p className="card p-5 text-xs text-red-600">{t.errors.loadFailed}</p>;
+    return (
+      <div className="card flex items-center justify-between gap-3 p-5">
+        <p className="text-xs text-red-600">{t.errors.loadFailed}</p>
+        <button type="button" onClick={() => setReloadNonce((n) => n + 1)} className="btn btn-sm btn-secondary flex-shrink-0">
+          {t.common.retry}
+        </button>
+      </div>
+    );
   }
   if (!learning) {
     return <p className="card p-5 text-xs text-gray-500">{t.evolution.learningEmpty}</p>;
@@ -633,6 +641,7 @@ function EvolutionTimelineCard({ projectId, t }: { projectId: string; t: Diction
   const [timeline, setTimeline] = useState<ProjectEvolutionTimeline | null>(null);
   const [phase, setPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [userKey, setUserKey] = useState<string>("");
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
     setUserKey(getUserKey());
@@ -655,13 +664,20 @@ function EvolutionTimelineCard({ projectId, t }: { projectId: string; t: Diction
     return () => {
       cancelled = true;
     };
-  }, [projectId, userKey]);
+  }, [projectId, userKey, reloadNonce]);
 
   if (phase === "loading") {
     return <p className="card p-5 text-xs text-gray-500">{t.outcome.loading}</p>;
   }
   if (phase === "error") {
-    return <p className="card p-5 text-xs text-red-600">{t.errors.loadFailed}</p>;
+    return (
+      <div className="card flex items-center justify-between gap-3 p-5">
+        <p className="text-xs text-red-600">{t.errors.loadFailed}</p>
+        <button type="button" onClick={() => setReloadNonce((n) => n + 1)} className="btn btn-sm btn-secondary flex-shrink-0">
+          {t.common.retry}
+        </button>
+      </div>
+    );
   }
   if (!timeline) {
     return <p className="card p-5 text-xs text-gray-500">{t.evolution.timelineEmpty}</p>;
