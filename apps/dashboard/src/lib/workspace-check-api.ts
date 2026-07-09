@@ -105,6 +105,10 @@ export async function deleteProjectFromDb(
       `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(id)}?userKey=${encodeURIComponent(userKey)}`,
       { method: "DELETE", signal: AbortSignal.timeout(10000) },
     );
+    // A local-first project may never have been mirrored to D1 — a 404 (missing
+    // or not-owned) means there is nothing to clean up server-side, which for an
+    // idempotent delete is success, not a failure to surface.
+    if (resp.status === 404) return { ok: true };
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     return { ok: true };
   } catch (err) {

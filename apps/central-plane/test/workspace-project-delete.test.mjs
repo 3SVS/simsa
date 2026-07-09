@@ -11,6 +11,7 @@ import { deleteProject } from "../dist/workspace/db.js";
 function makeEnv() {
   const deletedR2 = [];
   const batched = [];
+  const sequence = [];
   const db = {
     prepare(sql) {
       return {
@@ -41,15 +42,17 @@ function makeEnv() {
     },
     async batch(stmts) {
       for (const s of stmts) batched.push(s._sql);
+      sequence.push("batch");
       return stmts.map(() => ({ success: true }));
     },
   };
   const EVIDENCE = {
     async delete(key) {
+      sequence.push("r2");
       deletedR2.push(key);
     },
   };
-  return { env: { DB: db, EVIDENCE }, deletedR2, batched };
+  return { env: { DB: db, EVIDENCE }, deletedR2, batched, sequence };
 }
 
 const PROJECT_SCOPED = [
@@ -116,6 +119,16 @@ describe("deleteProject — cascade boundary", () => {
     const { env, deletedR2 } = makeEnv();
     await deleteProject(env, "proj_x");
     assert.deepEqual([...deletedR2].sort(), ["doc-key-1", "vis-1", "vis-2"].sort());
+  });
+
+  it("commits the D1 transaction BEFORE deleting R2 (no dangling references on partial failure)", async () => {
+    const { env, sequence } = makeEnv();
+    await deleteProject(env, "proj_x");
+    const firstBatch = sequence.indexOf("batch");
+    const firstR2 = sequence.indexOf("r2");
+    assert.ok(firstBatch >= 0, "D1 batch must run");
+    assert.ok(firstR2 >= 0, "R2 delete must run");
+    assert.ok(firstBatch < firstR2, "D1 rows must be gone before their R2 objects are deleted");
   });
 
   it("tolerates a missing EVIDENCE binding (R2 cleanup is best-effort)", async () => {

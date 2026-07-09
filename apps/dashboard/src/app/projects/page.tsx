@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { MOCK_PROJECTS, getProjectStats, type Project } from "@/lib/mock-data";
 import { loadLocalProjects, deleteProject, getUserKey } from "@/lib/workflow-store";
 import { deleteProjectFromDb } from "@/lib/workspace-check-api";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useToast } from "@/components/Toast";
 import { statusLabel } from "@/i18n/dictionary.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import { StampMark } from "@/components/brand/StampMark";
@@ -87,17 +88,34 @@ function ProjectCard({
   onDeleted?: (id: string) => void;
 }) {
   const stats = getProjectStats(project);
-  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
+  const titleId = useId();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
 
-  async function handleDelete() {
-    if (deleting) return;
-    if (!window.confirm(t.projects.deleteConfirm.replace("{name}", project.name))) return;
-    setDeleting(true);
+  function openConfirm() {
+    setAcknowledged(false);
+    setConfirmOpen(true);
+  }
+  function closeConfirm() {
+    setConfirmOpen(false);
+    setAcknowledged(false);
+  }
+
+  function confirmDelete() {
+    if (!acknowledged) return;
+    const { id, name } = project;
     // localStorage is authoritative for the list — remove it there first so the
-    // card disappears immediately, then mirror the delete to D1/R2 best-effort.
-    deleteProject(project.id);
-    void deleteProjectFromDb(project.id, getUserKey()).catch(() => {});
-    onDeleted?.(project.id);
+    // card disappears immediately (optimistic), then mirror to D1/R2. A mirror
+    // failure is surfaced (not swallowed): the local delete already succeeded, so
+    // this only tells the user server-side cleanup didn't finish.
+    deleteProject(id);
+    onDeleted?.(id);
+    deleteProjectFromDb(id, getUserKey())
+      .then((res) => {
+        if (!res.ok) toast.error(t.projects.deleteMirrorFailed.replace("{name}", name));
+      })
+      .catch(() => toast.error(t.projects.deleteMirrorFailed.replace("{name}", name)));
   }
 
   return (
@@ -142,17 +160,65 @@ function ProjectCard({
       {onDeleted && (
         <button
           type="button"
-          onClick={handleDelete}
-          disabled={deleting}
+          onClick={openConfirm}
           aria-label={t.projects.deleteAria.replace("{name}", project.name)}
           title={t.projects.deleteLabel}
-          className="absolute right-3 top-3 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-red-500 disabled:opacity-50"
+          className="absolute right-3 top-3 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-red-500"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
             <path d="M10 11v6M14 11v6" />
           </svg>
         </button>
+      )}
+
+      {onDeleted && confirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          onClick={closeConfirm}
+          onKeyDown={(e) => { if (e.key === "Escape") closeConfirm(); }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id={titleId} className="text-base font-semibold text-gray-900">
+              {t.projects.deleteModalTitle}
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              {t.projects.deleteModalBody.replace("{name}", project.name)}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-red-600">
+              {t.projects.deleteModalIrreversible}
+            </p>
+            <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-0.5 h-4 w-4 flex-shrink-0 accent-red-600"
+                autoFocus
+              />
+              <span>{t.projects.deleteAck}</span>
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={closeConfirm} className="btn btn-secondary btn-md">
+                {t.projects.deleteCancel}
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={!acknowledged}
+                className="btn btn-md bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t.projects.deleteConfirmBtn}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
