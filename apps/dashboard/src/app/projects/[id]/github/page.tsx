@@ -23,6 +23,7 @@ import {
   type CreditEnforcementDryRun,
   type CreditEnforcementResult,
 } from "@/lib/workspace-github-api";
+import { fetchProjectRepoSettled } from "@/lib/repo-settle.mjs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusText } from "@/components/StatusText";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -150,11 +151,7 @@ export default function GitHubPage() {
     // D1 propagates. Retry a few times before concluding "no repo" — otherwise a
     // user who just connected gets funneled back to /settings to reconnect what
     // is already connected, which reads as an infinite loop (무한 도돌이표).
-    let repoRes = await fetchProjectRepo(id, getUserKey());
-    for (let attempt = 0; attempt < 3 && repoRes.ok && !repoRes.repo; attempt++) {
-      await new Promise((r) => setTimeout(r, 700));
-      repoRes = await fetchProjectRepo(id, getUserKey());
-    }
+    const repoRes = await fetchProjectRepoSettled(fetchProjectRepo, id, getUserKey());
     const linkedRes = await fetchLinkedPulls(id, getUserKey());
     if (repoRes.ok && repoRes.repo) {
       setRepo(repoRes.repo);

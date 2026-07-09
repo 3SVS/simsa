@@ -12,6 +12,7 @@ import { Tooltip } from "@/components/Tooltip";
 import { getAuthSession, signOutAuth } from "@/lib/auth-client.mjs";
 import { computeProjectSteps } from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
+import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { SIMSA_REPO_URL } from "@/lib/simsa-share.mjs";
 
 const MOCK_IDS = new Set(MOCK_PROJECTS.map((p) => p.id));
@@ -110,8 +111,8 @@ export function AppSidebar() {
     setHasRepo(null);
     setHasReviewRun(null);
     const uk = getUserKey();
-    fetchProjectRepo(projectId, uk)
-      .then((res) => { if (!cancelled) setHasRepo(res.ok ? Boolean(res.repo) : null); })
+    fetchProjectRepoSettled(fetchProjectRepo, projectId, uk)
+      .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
       .catch(() => {});
     listProjectReviewHistory(projectId, uk, { limit: 1 })
       .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
