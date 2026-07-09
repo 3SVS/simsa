@@ -2158,6 +2158,7 @@ export type Dictionary = {
     verdictPassTitle: string;
     verdictFailTitle: string;
     verdictPassed: string;
+    verdictPreCheckCaveat: string;
     reviewInProgress: string;
     expandAll: string;
     collapseAll: string;
