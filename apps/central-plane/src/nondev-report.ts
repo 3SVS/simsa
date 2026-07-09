@@ -1,13 +1,24 @@
 /**
- * nondev-report.ts — Stage 260A (Simsa 비개발자용 한국어 검수 리포트).
+ * nondev-report.ts — Simsa 비개발자용 검수 리포트 (EN/KO).
  *
  * Pure, deterministic. Turns the visual completion-check evidence (facts a real browser observed)
- * into a plain-Korean report a non-developer can read: 무엇이 / 왜 / 어떻게 고치나. Developer-only
+ * into a plain-language report a non-developer can read: what / why / how to fix. Developer-only
  * technical strings (e.g. ERR_NAME_NOT_RESOLVED) are kept in a separate `evidence` field, never in
- * the human-facing 무엇/왜/어떻게 text. NO numeric score (Simsa policy §20). Absent evidence → "확인 못 함".
+ * the human-facing text. NO numeric score (Simsa policy §20). Absent evidence → "Not Verified".
+ *
+ * i18n (PRD §2 / audit B6): every user-facing string is localized EN + KO via a `locale` param
+ * (default "ko" for backward compatibility). English users previously had no explanation layer.
  *
  * NO network / DB / env / LLM — same input always yields the same report.
  */
+
+export type ReportLocale = "ko" | "en";
+
+function loc(locale: ReportLocale | undefined): ReportLocale {
+  return locale === "en" ? "en" : "ko";
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Normalized, tool-agnostic input for one visual completion check. */
 export interface VisualCheckInput {
@@ -30,137 +41,203 @@ export interface VisualCheckInput {
 /** One finding, written for a non-developer. `evidence` is the raw developer-only detail. */
 export interface NonDevFinding {
   severity: "high" | "medium" | "low" | "info";
-  what: string; // 무엇이 문제인가요
-  why: string; // 왜 그런가요
-  how: string; // 어떻게 고치나요
-  evidence: string | null; // 개발자용 기술 정보 (사람 말 아님)
+  what: string;
+  why: string;
+  how: string;
+  evidence: string | null; // developer-only technical detail (not human prose)
 }
 
 export interface NonDevReport {
   title: string;
   target: string;
   intent: string;
-  verdict: string; // 한국어 판정
-  oneLine: string; // 한 줄 요약
-  works: boolean | null; // 작동하나요? (true/false/null=확인못함)
+  verdict: string;
+  oneLine: string;
+  works: boolean | null; // true / false / null = not verified
   findings: NonDevFinding[];
   nextSteps: string[];
-  notes: string[]; // 한계 안내 (한국어)
+  notes: string[];
 }
 
-/** 판정(영문 decision state) → 비개발자용 한국어 라벨. */
-const DECISION_KO: Record<string, string> = {
-  Ready: "정상 작동해요",
-  "Conditionally Ready": "대체로 되지만 확인이 필요해요",
-  "Needs Fix": "작동 안 해요 — 고쳐야 해요",
-  "Not Verified": "확인 못 했어요",
-  "Needs Clarification": "무엇을 확인해야 할지 애매해요",
-  "Needs Evidence": "판단할 근거가 부족해요",
-  "Needs Expert Review": "전문가 확인이 필요해요",
-  "User Acceptance Required": "직접 눈으로 확인이 필요해요",
-  "Do Not Build Yet": "아직 만들 때가 아니에요",
-  "Not Applicable": "해당 없음",
-  "Not Judged": "판단하지 않았어요",
+// ─── Decision labels ────────────────────────────────────────────────────────────
+
+/** decision state → user-facing label, per locale. */
+const DECISION_LABEL: Record<ReportLocale, Record<string, string>> = {
+  ko: {
+    Ready: "정상 작동해요",
+    "Conditionally Ready": "대체로 되지만 확인이 필요해요",
+    "Needs Fix": "작동 안 해요 — 고쳐야 해요",
+    "Not Verified": "확인 못 했어요",
+    "Needs Clarification": "무엇을 확인해야 할지 애매해요",
+    "Needs Evidence": "판단할 근거가 부족해요",
+    "Needs Expert Review": "전문가 확인이 필요해요",
+    "User Acceptance Required": "직접 눈으로 확인이 필요해요",
+    "Do Not Build Yet": "아직 만들 때가 아니에요",
+    "Not Applicable": "해당 없음",
+    "Not Judged": "판단하지 않았어요",
+  },
+  en: {
+    Ready: "It works",
+    "Conditionally Ready": "Mostly works, but needs a check",
+    "Needs Fix": "It doesn't work — needs a fix",
+    "Not Verified": "Couldn't verify",
+    "Needs Clarification": "Unclear what to verify",
+    "Needs Evidence": "Not enough evidence to judge",
+    "Needs Expert Review": "Needs an expert's review",
+    "User Acceptance Required": "You need to confirm it with your own eyes",
+    "Do Not Build Yet": "Not ready to build yet",
+    "Not Applicable": "Not applicable",
+    "Not Judged": "Not judged",
+  },
 };
 
-export function decisionToKorean(decision: string): string {
-  return DECISION_KO[decision] ?? "확인 못 했어요";
+export function decisionLabel(decision: string, locale: ReportLocale = "ko"): string {
+  const table = DECISION_LABEL[loc(locale)];
+  return table[decision] ?? (loc(locale) === "en" ? "Couldn't verify" : "확인 못 했어요");
 }
 
-/** true=작동, false=작동 안 함, null=확인 못 함. */
+/** Backward-compatible Korean label helper (existing callers). */
+export function decisionToKorean(decision: string): string {
+  return decisionLabel(decision, "ko");
+}
+
+/** true=works, false=broken, null=not verified. */
 export function decisionToWorks(decision: string): boolean | null {
   if (decision === "Ready") return true;
   if (decision === "Needs Fix") return false;
   return null;
 }
 
+// ─── Finding text (per locale) ───────────────────────────────────────────────────
+
+type WWH = { what: string; why: string; how: string };
+
+const FIND: Record<ReportLocale, {
+  dns: WWH;
+  server5xx: WWH;
+  brokenRoute: WWH;
+  genericNet: WWH;
+  consoleErr: WWH;
+  noPrimary: WWH;
+  stepFailed: (label: string, note?: string) => WWH;
+}> = {
+  ko: {
+    dns: {
+      what: "앱이 데이터를 가져오는 서버 주소를 찾지 못했어요.",
+      why: "앱이 연결하려는 백엔드(데이터베이스/API) 주소가 살아있지 않거나 잘못 적혀 있어요. 그래서 목록·검색 결과 같은 실제 내용이 안 떠요.",
+      how: "백엔드 주소(예: 데이터베이스 URL 환경변수)가 올바른지, 그 서비스가 켜져 있는지 확인하세요. 서비스가 꺼졌거나 삭제됐다면 다시 켜거나 새 주소로 바꿔야 해요.",
+    },
+    server5xx: {
+      what: "서버가 오류를 돌려줬어요.",
+      why: "백엔드 코드나 설정에 문제가 있어 요청을 제대로 처리하지 못했어요.",
+      how: "서버 로그에서 어떤 요청이 500번대 오류를 냈는지 확인하고, 그 부분의 코드/설정을 고치세요.",
+    },
+    brokenRoute: {
+      what: "버튼을 눌렀더니 깨진 화면으로 갔어요.",
+      why: "그 버튼이 가리키는 이동 주소가 잘못됐어요.",
+      how: "버튼의 링크(이동 주소)가 실제로 존재하는 화면을 가리키도록 고치세요.",
+    },
+    genericNet: {
+      what: "필요한 데이터를 불러오지 못했어요.",
+      why: "화면에 내용을 채우려는 데이터 요청이 실패했어요.",
+      how: "실패한 요청의 주소·권한(키)·서버 상태를 확인하세요.",
+    },
+    consoleErr: {
+      what: "화면에서 코드 오류가 났어요.",
+      why: "자바스크립트 실행 중 문제가 생겼어요. 일부 기능이 안 될 수 있어요.",
+      how: "브라우저 콘솔의 오류 메시지를 그대로 복사해 개발 도구(또는 이 리포트의 '개발자용' 칸)를 참고해 고치세요.",
+    },
+    noPrimary: {
+      what: "처음 화면에서 무엇을 눌러 시작해야 할지 못 찾았어요.",
+      why: "의도한 핵심 동작(예: 시작하기, 검색)으로 이어지는 버튼이나 입력창이 눈에 띄지 않았어요.",
+      how: "사용자가 가장 먼저 해야 할 행동(버튼·검색창)을 첫 화면에 크고 분명하게 배치하세요.",
+    },
+    stepFailed: (label, note) => ({
+      what: `'${label}' 단계가 끝까지 되지 않았어요.`,
+      why: note ? `이유: ${note}` : "그 단계에서 기대한 다음 화면/결과가 나타나지 않았어요.",
+      how: "그 단계에서 무엇이 나와야 하는지 정하고, 눌렀을 때 그 결과가 실제로 뜨는지 확인하세요.",
+    }),
+  },
+  en: {
+    dns: {
+      what: "The app couldn't find the server address it fetches data from.",
+      why: "The backend (database/API) address the app tries to reach is not live or is wrong, so real content like lists and search results never loads.",
+      how: "Check that the backend address (e.g. the database URL environment variable) is correct and that the service is running. If the service was stopped or deleted, restart it or point to a new address.",
+    },
+    server5xx: {
+      what: "The server returned an error.",
+      why: "Something in the backend code or configuration failed to handle the request.",
+      how: "Check the server logs to see which request returned a 500-range error, and fix that code or configuration.",
+    },
+    brokenRoute: {
+      what: "Pressing the button led to a broken screen.",
+      why: "The destination address that button points to is wrong.",
+      how: "Fix the button's link so it points to a screen that actually exists.",
+    },
+    genericNet: {
+      what: "The app couldn't load the data it needs.",
+      why: "A data request meant to fill the screen with content failed.",
+      how: "Check the failed request's address, permissions (keys), and the server's status.",
+    },
+    consoleErr: {
+      what: "A code error occurred on the screen.",
+      why: "Something went wrong while JavaScript was running. Some features may not work.",
+      how: "Copy the error message from the browser console and fix it using your dev tool (or the 'for developers' section in this report).",
+    },
+    noPrimary: {
+      what: "On the first screen, it wasn't clear what to press to get started.",
+      why: "No obvious button or input led to the intended core action (e.g. start, search).",
+      how: "Place the first action the user should take (a button or search box) large and clear on the first screen.",
+    },
+    stepFailed: (label, note) => ({
+      what: `The '${label}' step didn't complete.`,
+      why: note ? `Reason: ${note}` : "The expected next screen/result didn't appear at that step.",
+      how: "Decide what should appear at that step, and confirm the result actually shows when pressed.",
+    }),
+  },
+};
+
 /**
  * 원시 증거(콘솔/네트워크 문자열, 상태코드, 라우트)를 비개발자용 finding 들로 번역.
- * 각 finding 은 무엇/왜/어떻게 를 평범한 한국어로 담고, 원본 기술 문자열은 evidence 에만 둔다.
+ * 각 finding 은 what/why/how 를 평범한 언어로 담고, 원본 기술 문자열은 evidence 에만 둔다.
  */
-export function classifyFindings(input: VisualCheckInput): NonDevFinding[] {
+export function classifyFindings(input: VisualCheckInput, locale: ReportLocale = "ko"): NonDevFinding[] {
+  const t = FIND[loc(locale)];
   const findings: NonDevFinding[] = [];
   const netText = input.networkFailures.join(" ");
   const conText = input.consoleErrors.join(" ");
 
-  // 1) 백엔드 주소 미해결 (DNS) — golf-now 가 맞은 그 실패.
   if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|getaddrinfo/i.test(netText + " " + conText)) {
     findings.push({
       severity: "high",
-      what: "앱이 데이터를 가져오는 서버 주소를 찾지 못했어요.",
-      why: "앱이 연결하려는 백엔드(데이터베이스/API) 주소가 살아있지 않거나 잘못 적혀 있어요. 그래서 목록·검색 결과 같은 실제 내용이 안 떠요.",
-      how: "백엔드 주소(예: 데이터베이스 URL 환경변수)가 올바른지, 그 서비스가 켜져 있는지 확인하세요. 서비스가 꺼졌거나 삭제됐다면 다시 켜거나 새 주소로 바꿔야 해요.",
+      ...t.dns,
       evidence: firstMatch(input.networkFailures, /ERR_NAME_NOT_RESOLVED|ENOTFOUND/i) ?? firstMatch(input.consoleErrors, /ERR_NAME_NOT_RESOLVED/i),
     });
   }
 
-  // 2) 서버 5xx 오류.
   if (/\bHTTP 5\d\d\b|status 5\d\d/i.test(netText)) {
-    findings.push({
-      severity: "high",
-      what: "서버가 오류를 돌려줬어요.",
-      why: "백엔드 코드나 설정에 문제가 있어 요청을 제대로 처리하지 못했어요.",
-      how: "서버 로그에서 어떤 요청이 500번대 오류를 냈는지 확인하고, 그 부분의 코드/설정을 고치세요.",
-      evidence: firstMatch(input.networkFailures, /5\d\d/),
-    });
+    findings.push({ severity: "high", ...t.server5xx, evidence: firstMatch(input.networkFailures, /5\d\d/) });
   }
 
-  // 3) 눌렀는데 깨진/없는 화면으로 이동.
   if (input.interacted && input.routeAfterClick && /\/undefined|\/null|\/404|not-found|error/i.test(input.routeAfterClick)) {
-    findings.push({
-      severity: "high",
-      what: "버튼을 눌렀더니 깨진 화면으로 갔어요.",
-      why: "그 버튼이 가리키는 이동 주소가 잘못됐어요.",
-      how: "버튼의 링크(이동 주소)가 실제로 존재하는 화면을 가리키도록 고치세요.",
-      evidence: input.routeAfterClick,
-    });
+    findings.push({ severity: "high", ...t.brokenRoute, evidence: input.routeAfterClick });
   }
 
-  // 4) 일반 네트워크 실패 (위 특수 케이스에 안 걸린 경우).
-  if (input.networkFailures.length > 0 && findings.every((f) => f.severity !== "high" || !/서버 주소|서버가 오류/.test(f.what))) {
-    if (!/ERR_NAME_NOT_RESOLVED|5\d\d/i.test(netText)) {
-      findings.push({
-        severity: "high",
-        what: "필요한 데이터를 불러오지 못했어요.",
-        why: "화면에 내용을 채우려는 데이터 요청이 실패했어요.",
-        how: "실패한 요청의 주소·권한(키)·서버 상태를 확인하세요.",
-        evidence: input.networkFailures[0] ?? null,
-      });
-    }
+  if (input.networkFailures.length > 0 && !/ERR_NAME_NOT_RESOLVED|5\d\d/i.test(netText)) {
+    findings.push({ severity: "high", ...t.genericNet, evidence: input.networkFailures[0] ?? null });
   }
 
-  // 5) 콘솔 오류 (네트워크와 별개의 코드 오류).
   if (input.consoleErrors.length > 0 && !/ERR_NAME_NOT_RESOLVED/i.test(conText)) {
-    findings.push({
-      severity: "medium",
-      what: "화면에서 코드 오류가 났어요.",
-      why: "자바스크립트 실행 중 문제가 생겼어요. 일부 기능이 안 될 수 있어요.",
-      how: "브라우저 콘솔의 오류 메시지를 그대로 복사해 개발 도구(또는 이 리포트의 '개발자용' 칸)를 참고해 고치세요.",
-      evidence: input.consoleErrors[0] ?? null,
-    });
+    findings.push({ severity: "medium", ...t.consoleErr, evidence: input.consoleErrors[0] ?? null });
   }
 
-  // 6) 첫 화면에서 핵심 동작(시작 버튼/검색 등)을 못 찾음.
   if (!input.primaryActionFound && !input.interacted) {
-    findings.push({
-      severity: "medium",
-      what: "처음 화면에서 무엇을 눌러 시작해야 할지 못 찾았어요.",
-      why: "의도한 핵심 동작(예: 시작하기, 검색)으로 이어지는 버튼이나 입력창이 눈에 띄지 않았어요.",
-      how: "사용자가 가장 먼저 해야 할 행동(버튼·검색창)을 첫 화면에 크고 분명하게 배치하세요.",
-      evidence: null,
-    });
+    findings.push({ severity: "medium", ...t.noPrimary, evidence: null });
   }
 
-  // 7) 실패한 플로우 단계.
   for (const s of input.steps ?? []) {
     if (!s.ok) {
-      findings.push({
-        severity: "medium",
-        what: `'${s.label}' 단계가 끝까지 되지 않았어요.`,
-        why: s.note ? `이유: ${s.note}` : "그 단계에서 기대한 다음 화면/결과가 나타나지 않았어요.",
-        how: "그 단계에서 무엇이 나와야 하는지 정하고, 눌렀을 때 그 결과가 실제로 뜨는지 확인하세요.",
-        evidence: s.note ?? null,
-      });
+      findings.push({ severity: "medium", ...t.stepFailed(s.label, s.note), evidence: s.note ?? null });
     }
   }
 
@@ -172,31 +249,67 @@ function firstMatch(arr: string[], re: RegExp): string | null {
   return null;
 }
 
-/** 비개발자용 한국어 리포트 조립. 결정론적, 절대 throw 안 함. 숫자 점수 없음. */
-export function buildNonDevReport(input: VisualCheckInput): NonDevReport {
-  const findings = classifyFindings(input);
-  const works = decisionToWorks(input.decision);
-  const verdict = decisionToKorean(input.decision);
+// ─── Report assembly (per locale) ────────────────────────────────────────────────
 
+const REPORT_STR: Record<ReportLocale, {
+  title: string;
+  oneLineWorks: string;
+  oneLineBroken: (firstWhat: string) => string;
+  oneLineUnverified: (firstWhat: string) => string;
+  nextTop: (how: string) => string;
+  nextNoPrimary: string;
+  nextRerun: string;
+  notes: string[];
+}> = {
+  ko: {
+    title: "Simsa 검수 리포트",
+    oneLineWorks: "핵심 흐름이 눈으로 확인한 범위에서 정상 동작했어요.",
+    oneLineBroken: (w) => `핵심 흐름이 지금은 작동하지 않아요. ${w}`.trim(),
+    oneLineUnverified: (w) => `아직 '작동한다'고 확정하기엔 확인이 더 필요해요. ${w}`.trim(),
+    nextTop: (how) => `가장 급한 것부터: ${how}`,
+    nextNoPrimary: "사용자가 처음에 눌러야 할 버튼/검색창을 분명히 만든 뒤 다시 검수하세요.",
+    nextRerun: "고친 뒤 이 검수를 한 번 더 돌려서, 아래 스크린샷이 정상 화면으로 바뀌는지 눈으로 확인하세요.",
+    notes: [
+      "이 검수는 실제 브라우저로 앱을 열어 눈에 보이는 것을 확인한 결과예요. 모든 버그를 찾았다는 뜻은 아니에요.",
+      "'무엇이/왜/어떻게'는 사람이 읽기 쉬운 설명이고, 정확한 기술 원인은 각 항목의 '개발자용' 정보에 있어요.",
+      "화면 스크린샷을 함께 보면 어디서 막혔는지 눈으로 바로 알 수 있어요.",
+    ],
+  },
+  en: {
+    title: "Simsa Review Report",
+    oneLineWorks: "The core flow worked correctly within what we could observe.",
+    oneLineBroken: (w) => `The core flow doesn't work right now. ${w}`.trim(),
+    oneLineUnverified: (w) => `More checking is needed before we can confirm it "works". ${w}`.trim(),
+    nextTop: (how) => `Most urgent first: ${how}`,
+    nextNoPrimary: "Make the first button/search box the user should press clear, then run the review again.",
+    nextRerun: "After fixing, run this review once more and confirm with your own eyes that the screenshots below turn into a working screen.",
+    notes: [
+      "This review opened the app in a real browser and checked what was visible. It does not mean every bug was found.",
+      "The what/why/how is a plain-language explanation; the exact technical cause is in each item's 'for developers' detail.",
+      "Looking at the screenshots makes it immediately obvious where things got stuck.",
+    ],
+  },
+};
+
+/** 비개발자용 리포트 조립. 결정론적, 절대 throw 안 함. 숫자 점수 없음. */
+export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale = "ko"): NonDevReport {
+  const L = loc(locale);
+  const s = REPORT_STR[L];
+  const findings = classifyFindings(input, L);
+  const works = decisionToWorks(input.decision);
+  const verdict = decisionLabel(input.decision, L);
+
+  const firstWhat = findings[0]?.what ?? "";
   const oneLine =
-    works === true
-      ? "핵심 흐름이 눈으로 확인한 범위에서 정상 동작했어요."
-      : works === false
-        ? `핵심 흐름이 지금은 작동하지 않아요. ${findings[0]?.what ?? ""}`.trim()
-        : `아직 '작동한다'고 확정하기엔 확인이 더 필요해요. ${findings[0]?.what ?? ""}`.trim();
+    works === true ? s.oneLineWorks : works === false ? s.oneLineBroken(firstWhat) : s.oneLineUnverified(firstWhat);
 
   const nextSteps: string[] = [];
-  const topFinding = findings[0];
-  if (topFinding) {
-    nextSteps.push(`가장 급한 것부터: ${topFinding.how}`);
-  }
-  if (works === null && input.primaryActionFound === false) {
-    nextSteps.push("사용자가 처음에 눌러야 할 버튼/검색창을 분명히 만든 뒤 다시 검수하세요.");
-  }
-  nextSteps.push("고친 뒤 이 검수를 한 번 더 돌려서, 아래 스크린샷이 정상 화면으로 바뀌는지 눈으로 확인하세요.");
+  if (findings[0]) nextSteps.push(s.nextTop(findings[0].how));
+  if (works === null && input.primaryActionFound === false) nextSteps.push(s.nextNoPrimary);
+  nextSteps.push(s.nextRerun);
 
   return {
-    title: "Simsa 검수 리포트",
+    title: s.title,
     target: input.targetUrl,
     intent: input.intentAnchor,
     verdict,
@@ -204,90 +317,143 @@ export function buildNonDevReport(input: VisualCheckInput): NonDevReport {
     works,
     findings,
     nextSteps,
-    notes: [
-      "이 검수는 실제 브라우저로 앱을 열어 눈에 보이는 것을 확인한 결과예요. 모든 버그를 찾았다는 뜻은 아니에요.",
-      "'무엇이/왜/어떻게'는 사람이 읽기 쉬운 설명이고, 정확한 기술 원인은 각 항목의 '개발자용' 정보에 있어요.",
-      "화면 스크린샷을 함께 보면 어디서 막혔는지 눈으로 바로 알 수 있어요.",
-    ],
+    notes: s.notes,
   };
 }
 
-/** severity → 비개발자용 한국어 라벨. */
-const SEVERITY_KO: Record<NonDevFinding["severity"], string> = {
-  high: "높음",
-  medium: "중간",
-  low: "낮음",
-  info: "참고",
+// ─── Agent fix prompt (per locale) ───────────────────────────────────────────────
+
+const SEVERITY_LABEL: Record<ReportLocale, Record<NonDevFinding["severity"], string>> = {
+  ko: { high: "높음", medium: "중간", low: "낮음", info: "참고" },
+  en: { high: "High", medium: "Medium", low: "Low", info: "Info" },
+};
+
+const PROMPT_STR: Record<ReportLocale, {
+  intro: string[];
+  target: string;
+  urlL: string; flowL: string; verdictL: string;
+  observed: string;
+  statusL: string; primaryL: string; interactedL: string; routeL: (changed: string) => string;
+  yes: string; no: string; notObserved: string; none: string;
+  netN: (n: number) => string; netNone: string; conN: (n: number) => string; conNone: string;
+  stepsHead: string; stepOk: string; stepBad: string;
+  problems: string; noProblems: string;
+  causeL: string; fixL: string; evidenceL: string;
+  rules: string[];
+}> = {
+  ko: {
+    intro: [
+      "당신은 이 프로젝트의 코드를 수정하는 개발 에이전트입니다.",
+      "아래는 Simsa가 실제 브라우저로 이 앱을 열어 관찰한 사실입니다. 여기 적힌 증거만 근거로 진단하고 수정하세요.",
+      "증거에 없는 문제를 추측으로 만들어내지 마세요.",
+    ],
+    target: "[대상]",
+    urlL: "URL", flowL: "검수한 사용자 플로우", verdictL: "판정",
+    observed: "[브라우저 관찰 사실]",
+    statusL: "첫 화면 HTTP 상태", primaryL: "핵심 동작 요소(버튼/입력) 발견", interactedL: "실제 상호작용(클릭/입력) 수행",
+    routeL: (c) => `상호작용 후 주소: {ROUTE} (주소 변경: ${c})`,
+    yes: "예", no: "아니오", notObserved: "관찰 안 됨", none: "없음",
+    netN: (n) => `네트워크 실패 ${n}건:`, netNone: "네트워크 실패: 없음",
+    conN: (n) => `콘솔 오류 ${n}건:`, conNone: "콘솔 오류: 없음",
+    stepsHead: "플로우 단계 결과:", stepOk: "성공", stepBad: "실패",
+    problems: "[고칠 문제 — 우선순위순]",
+    noProblems: "- 고칠 문제가 관찰되지 않았습니다. 아래 규칙의 검증 절차만 수행해 결과를 보고하세요.",
+    causeL: "원인 설명", fixL: "수정 방향", evidenceL: "증거",
+    rules: [
+      "[작업 규칙]",
+      "- 재현 먼저: 앱을 로컬에서 실행해 위 플로우를 그대로 밟아 같은 실패를 확인한 뒤 수정하세요.",
+      "- 최소 수정: 증거가 가리키는 원인만 고치고, 무관한 리팩터링은 하지 마세요.",
+      "- 비밀값 금지: API 키·백엔드 주소 같은 환경값을 코드에 하드코딩하지 마세요.",
+      "- 검증: 수정 후 같은 플로우에서 네트워크 실패 0건, 콘솔 오류 0건인지 확인하세요.",
+      "- 보고: 무엇을/왜/어떻게 바꿨는지와 검증 결과를 5줄 이내로 보고하세요.",
+    ],
+  },
+  en: {
+    intro: [
+      "You are a development agent editing this project's code.",
+      "Below are facts Simsa observed by opening this app in a real browser. Diagnose and fix using only the evidence stated here.",
+      "Do not invent problems that aren't in the evidence.",
+    ],
+    target: "[Target]",
+    urlL: "URL", flowL: "Reviewed user flow", verdictL: "Verdict",
+    observed: "[Observed in the browser]",
+    statusL: "First-screen HTTP status", primaryL: "Core action element (button/input) found", interactedL: "Actual interaction (click/type) performed",
+    routeL: (c) => `Address after interaction: {ROUTE} (address changed: ${c})`,
+    yes: "yes", no: "no", notObserved: "not observed", none: "none",
+    netN: (n) => `${n} network failure(s):`, netNone: "Network failures: none",
+    conN: (n) => `${n} console error(s):`, conNone: "Console errors: none",
+    stepsHead: "Flow step results:", stepOk: "ok", stepBad: "failed",
+    problems: "[Problems to fix — by priority]",
+    noProblems: "- No problems were observed. Only run the verification procedure in the rules below and report the result.",
+    causeL: "Cause", fixL: "Fix direction", evidenceL: "Evidence",
+    rules: [
+      "[Working rules]",
+      "- Reproduce first: run the app locally, walk the flow above, and confirm the same failure before fixing.",
+      "- Minimal fix: fix only the cause the evidence points to; do no unrelated refactoring.",
+      "- No secrets: do not hardcode env values like API keys or backend addresses into the code.",
+      "- Verify: after the fix, confirm 0 network failures and 0 console errors on the same flow.",
+      "- Report: in 5 lines or fewer, state what/why/how you changed and the verification result.",
+    ],
+  },
 };
 
 /**
  * 검수 증거를 개발 에이전트(Claude Code, Cursor 등)에 그대로 붙여넣을 수 있는 수정 지시문으로 조립.
- * 결정론적: 같은 입력 → 같은 지시문, LLM 호출 없음. 비개발자용 본문과 달리 원본 기술 문자열
- * (네트워크/콘솔 원문)이 그대로 들어간다 — 받는 쪽이 에이전트이므로. 관찰된 사실만 담고,
- * 증거 밖 추측을 금지하는 작업 규칙을 함께 명시한다.
+ * 결정론적. 원본 기술 문자열(네트워크/콘솔 원문)이 그대로 들어간다 — 받는 쪽이 에이전트이므로.
  */
-export function buildAgentFixPrompt(input: VisualCheckInput): string {
-  const findings = classifyFindings(input);
-  const yn = (b: boolean) => (b ? "예" : "아니오");
+export function buildAgentFixPrompt(input: VisualCheckInput, locale: ReportLocale = "ko"): string {
+  const L = loc(locale);
+  const p = PROMPT_STR[L];
+  const findings = classifyFindings(input, L);
+  const yn = (b: boolean) => (b ? p.yes : p.no);
   const lines: string[] = [
-    "당신은 이 프로젝트의 코드를 수정하는 개발 에이전트입니다.",
-    "아래는 Simsa가 실제 브라우저로 이 앱을 열어 관찰한 사실입니다. 여기 적힌 증거만 근거로 진단하고 수정하세요.",
-    "증거에 없는 문제를 추측으로 만들어내지 마세요.",
+    ...p.intro,
     "",
-    "[대상]",
-    `- URL: ${input.targetUrl}`,
-    `- 검수한 사용자 플로우: ${input.intentAnchor}`,
-    `- 판정: ${input.decision} (${decisionToKorean(input.decision)})`,
+    p.target,
+    `- ${p.urlL}: ${input.targetUrl}`,
+    `- ${p.flowL}: ${input.intentAnchor}`,
+    `- ${p.verdictL}: ${input.decision} (${decisionLabel(input.decision, L)})`,
     "",
-    "[브라우저 관찰 사실]",
-    `- 첫 화면 HTTP 상태: ${input.loadStatus ?? "관찰 안 됨"}`,
-    `- 핵심 동작 요소(버튼/입력) 발견: ${yn(input.primaryActionFound)}`,
-    `- 실제 상호작용(클릭/입력) 수행: ${yn(input.interacted)}`,
-    `- 상호작용 후 주소: ${input.routeAfterClick ?? "없음"} (주소 변경: ${yn(input.routeChanged)})`,
+    p.observed,
+    `- ${p.statusL}: ${input.loadStatus ?? p.notObserved}`,
+    `- ${p.primaryL}: ${yn(input.primaryActionFound)}`,
+    `- ${p.interactedL}: ${yn(input.interacted)}`,
+    `- ${p.routeL(yn(input.routeChanged)).replace("{ROUTE}", input.routeAfterClick ?? p.none)}`,
   ];
 
   if (input.networkFailures.length) {
-    lines.push(`- 네트워크 실패 ${input.networkFailures.length}건:`);
+    lines.push(`- ${p.netN(input.networkFailures.length)}`);
     input.networkFailures.forEach((s, i) => lines.push(`  ${i + 1}. ${s}`));
   } else {
-    lines.push("- 네트워크 실패: 없음");
+    lines.push(`- ${p.netNone}`);
   }
   if (input.consoleErrors.length) {
-    lines.push(`- 콘솔 오류 ${input.consoleErrors.length}건:`);
+    lines.push(`- ${p.conN(input.consoleErrors.length)}`);
     input.consoleErrors.forEach((s, i) => lines.push(`  ${i + 1}. ${s}`));
   } else {
-    lines.push("- 콘솔 오류: 없음");
+    lines.push(`- ${p.conNone}`);
   }
   const steps = input.steps ?? [];
   if (steps.length) {
-    lines.push("- 플로우 단계 결과:");
-    for (const s of steps) lines.push(`  - ${s.label}: ${s.ok ? "성공" : "실패"}${s.note ? ` — ${s.note}` : ""}`);
+    lines.push(`- ${p.stepsHead}`);
+    for (const s of steps) lines.push(`  - ${s.label}: ${s.ok ? p.stepOk : p.stepBad}${s.note ? ` — ${s.note}` : ""}`);
   }
 
-  lines.push("", "[고칠 문제 — 우선순위순]");
+  lines.push("", p.problems);
   if (findings.length) {
     findings.forEach((f, i) => {
       lines.push(
-        `${i + 1}. [${SEVERITY_KO[f.severity]}] ${f.what}`,
-        `   - 원인 설명: ${f.why}`,
-        `   - 수정 방향: ${f.how}`,
-        `   - 증거: ${f.evidence ?? "없음"}`,
+        `${i + 1}. [${SEVERITY_LABEL[L][f.severity]}] ${f.what}`,
+        `   - ${p.causeL}: ${f.why}`,
+        `   - ${p.fixL}: ${f.how}`,
+        `   - ${p.evidenceL}: ${f.evidence ?? p.none}`,
       );
     });
   } else {
-    lines.push("- 고칠 문제가 관찰되지 않았습니다. 아래 규칙의 검증 절차만 수행해 결과를 보고하세요.");
+    lines.push(p.noProblems);
   }
 
-  lines.push(
-    "",
-    "[작업 규칙]",
-    "- 재현 먼저: 앱을 로컬에서 실행해 위 플로우를 그대로 밟아 같은 실패를 확인한 뒤 수정하세요.",
-    "- 최소 수정: 증거가 가리키는 원인만 고치고, 무관한 리팩터링은 하지 마세요.",
-    "- 비밀값 금지: API 키·백엔드 주소 같은 환경값을 코드에 하드코딩하지 마세요.",
-    "- 검증: 수정 후 같은 플로우에서 네트워크 실패 0건, 콘솔 오류 0건인지 확인하세요.",
-    "- 보고: 무엇을/왜/어떻게 바꿨는지와 검증 결과를 5줄 이내로 보고하세요.",
-  );
-
+  lines.push("", ...p.rules);
   return lines.join("\n");
 }
 
@@ -302,39 +468,82 @@ export interface ReportShot {
   src: string;
 }
 
+// ─── HTML chrome (per locale) ────────────────────────────────────────────────────
+
+const HTML_STR: Record<ReportLocale, {
+  subtitle: string;
+  chipOk: string; chipBad: string; chipWarn: string;
+  metaTarget: string; metaIntent: string;
+  rowWhat: string; rowWhy: string; rowHow: string; devDetail: string;
+  hFindings: string; empty: string; hShots: string; hVideo: string;
+  hFix: string; fixDesc: string; copyBtn: string; copiedBtn: string;
+  hNext: string; hNotes: string; foot: string;
+}> = {
+  ko: {
+    subtitle: "검수 리포트",
+    chipOk: "작동해요", chipBad: "작동 안 해요", chipWarn: "확인 필요",
+    metaTarget: "대상", metaIntent: "확인하려던 것",
+    rowWhat: "무엇이 문제인가요", rowWhy: "왜 그런가요", rowHow: "어떻게 고치나요", devDetail: "개발자용 기술 정보",
+    hFindings: "무엇을 발견했나요", empty: "특별히 막히는 지점을 찾지 못했어요.",
+    hShots: "화면으로 보기", hVideo: "진행 영상",
+    hFix: "바로 고치게 하기",
+    fixDesc: "개발자가 없어도 됩니다. 아래 지시문을 복사해 AI 개발 도구(Claude Code, Cursor 등)에 붙여넣으면, 이 리포트의 증거를 근거로 수정 작업을 바로 시작합니다.",
+    copyBtn: "지시문 복사", copiedBtn: "복사됨",
+    hNext: "다음에 해볼 것", hNotes: "안내",
+    foot: "Simsa 검수 · 실제 브라우저 관찰 기반 · 점수 없음 · 모든 버그를 찾았다는 뜻은 아닙니다.",
+  },
+  en: {
+    subtitle: "Review Report",
+    chipOk: "Works", chipBad: "Doesn't work", chipWarn: "Needs a check",
+    metaTarget: "Target", metaIntent: "What we checked for",
+    rowWhat: "What's the problem", rowWhy: "Why it happens", rowHow: "How to fix it", devDetail: "For developers (technical detail)",
+    hFindings: "What we found", empty: "We didn't find any particular blocker.",
+    hShots: "See the screens", hVideo: "Flow video",
+    hFix: "Get it fixed right away",
+    fixDesc: "No developer needed. Copy the prompt below and paste it into an AI dev tool (Claude Code, Cursor, etc.) — it will start fixing based on the evidence in this report.",
+    copyBtn: "Copy prompt", copiedBtn: "Copied",
+    hNext: "What to try next", hNotes: "Notes",
+    foot: "Simsa review · based on real browser observation · no score · does not mean every bug was found.",
+  },
+};
+
 /**
- * Render a SELF-CONTAINED Korean HTML report a non-developer can double-click and read: verdict at
- * the top, each finding as 무엇/왜/어떻게 cards (with a collapsible 개발자용 detail), the screenshots
- * inline so they can SEE where it broke, an optional flow video, and (when provided) a copy-ready
- * agent fix prompt so the reader can hand the repair to Claude Code/Cursor in one paste.
+ * Render a SELF-CONTAINED HTML report a non-developer can double-click and read: verdict at the top,
+ * each finding as what/why/how cards (with a collapsible developer detail), screenshots inline, an
+ * optional flow video, and (when provided) a copy-ready agent fix prompt. Locale-aware (EN/KO); the
+ * report's own strings (verdict/findings/notes) are already localized by buildNonDevReport — this
+ * only localizes the surrounding chrome + the <html lang> attribute.
  *
- * Visual language mirrors the dashboard brand system (parchment surface, stone neutrals, deep
- * oxblood accent, antique gold, hairline borders, no emoji). No numeric score.
+ * Visual language mirrors the dashboard brand system (parchment surface, stone neutrals, deep oxblood
+ * accent, antique gold, hairline borders, no emoji). No numeric score.
  */
 export function renderNonDevReportHtml(
   report: NonDevReport,
   shots: ReportShot[] = [],
   videoSrc?: string | null,
   agentPrompt?: string | null,
+  locale: ReportLocale = "ko",
 ): string {
+  const L = loc(locale);
+  const h = HTML_STR[L];
   const chip =
     report.works === true
-      ? '<span class="chip chip-ok">작동해요</span>'
+      ? `<span class="chip chip-ok">${h.chipOk}</span>`
       : report.works === false
-        ? '<span class="chip chip-bad">작동 안 해요</span>'
-        : '<span class="chip chip-warn">확인 필요</span>';
+        ? `<span class="chip chip-bad">${h.chipBad}</span>`
+        : `<span class="chip chip-warn">${h.chipWarn}</span>`;
 
   const findingCards = report.findings
     .map(
       (f) => `
     <article class="card finding">
       <header class="finding-head">
-        <span class="chip chip-sev-${esc(f.severity)}">${esc(SEVERITY_KO[f.severity])}</span>
+        <span class="chip chip-sev-${esc(f.severity)}">${esc(SEVERITY_LABEL[L][f.severity])}</span>
       </header>
-      <div class="row"><span class="lbl">무엇이 문제인가요</span><span class="val what">${esc(f.what)}</span></div>
-      <div class="row"><span class="lbl">왜 그런가요</span><span class="val">${esc(f.why)}</span></div>
-      <div class="row"><span class="lbl">어떻게 고치나요</span><span class="val">${esc(f.how)}</span></div>
-      ${f.evidence ? `<details><summary>개발자용 기술 정보</summary><code>${esc(f.evidence)}</code></details>` : ""}
+      <div class="row"><span class="lbl">${h.rowWhat}</span><span class="val what">${esc(f.what)}</span></div>
+      <div class="row"><span class="lbl">${h.rowWhy}</span><span class="val">${esc(f.why)}</span></div>
+      <div class="row"><span class="lbl">${h.rowHow}</span><span class="val">${esc(f.how)}</span></div>
+      ${f.evidence ? `<details><summary>${h.devDetail}</summary><code>${esc(f.evidence)}</code></details>` : ""}
     </article>`,
     )
     .join("\n");
@@ -348,24 +557,30 @@ export function renderNonDevReportHtml(
 
   const promptSection = agentPrompt
     ? `
-  <h2>바로 고치게 하기</h2>
+  <h2>${h.hFix}</h2>
   <section class="card prompt-card">
-    <p class="prompt-desc">개발자가 없어도 됩니다. 아래 지시문을 복사해 AI 개발 도구(Claude Code, Cursor 등)에 붙여넣으면, 이 리포트의 증거를 근거로 수정 작업을 바로 시작합니다.</p>
-    <div class="prompt-actions"><button type="button" class="btn-copy" onclick="simsaCopyPrompt(this)">지시문 복사</button></div>
+    <p class="prompt-desc">${h.fixDesc}</p>
+    <div class="prompt-actions"><button type="button" class="btn-copy" data-copy="${esc(h.copyBtn)}" data-copied="${esc(h.copiedBtn)}" onclick="simsaCopyPrompt(this)">${h.copyBtn}</button></div>
     <pre id="agent-prompt">${esc(agentPrompt)}</pre>
   </section>
   <script>
   function simsaCopyPrompt(btn){
     var pre=document.getElementById("agent-prompt");var txt=pre.textContent;
-    function done(){btn.textContent="복사됨";btn.classList.add("copied");setTimeout(function(){btn.textContent="지시문 복사";btn.classList.remove("copied");},2000);}
+    var idle=btn.getAttribute("data-copy");var ok=btn.getAttribute("data-copied");
+    function done(){btn.textContent=ok;btn.classList.add("copied");setTimeout(function(){btn.textContent=idle;btn.classList.remove("copied");},2000);}
     function fallback(){var r=document.createRange();r.selectNodeContents(pre);var s=window.getSelection();s.removeAllRanges();s.addRange(r);try{document.execCommand("copy");done();}catch(e){}s.removeAllRanges();}
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done,fallback);}else{fallback();}
   }
   </script>`
     : "";
 
+  const bodyFont =
+    L === "en"
+      ? `ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif`
+      : `"Pretendard","Apple SD Gothic Neo",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif`;
+
   return `<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<html lang="${L}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${esc(report.title)}</title>
 <style>
   :root{
@@ -380,7 +595,7 @@ export function renderNonDevReportHtml(
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
-    font-family:"Pretendard","Apple SD Gothic Neo",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-family:${bodyFont};
     font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
   .wrap{max-width:820px;margin:0 auto;padding:48px 24px 72px}
   .eyebrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line)}
@@ -434,27 +649,27 @@ export function renderNonDevReportHtml(
   .foot{color:var(--ink-4);font-size:12px;margin-top:44px;padding-top:14px;border-top:1px solid var(--line)}
 </style></head>
 <body><div class="wrap">
-  <div class="eyebrow"><div class="wordmark">SIMSA<span>검수 리포트</span></div>${chip}</div>
+  <div class="eyebrow"><div class="wordmark">SIMSA<span>${h.subtitle}</span></div>${chip}</div>
   <h1>${esc(report.verdict)}</h1>
   <p class="lead">${esc(report.oneLine)}</p>
   <dl class="meta">
-    <dt>대상</dt><dd>${esc(report.target)}</dd>
-    <dt>확인하려던 것</dt><dd>${esc(report.intent)}</dd>
+    <dt>${h.metaTarget}</dt><dd>${esc(report.target)}</dd>
+    <dt>${h.metaIntent}</dt><dd>${esc(report.intent)}</dd>
   </dl>
 
-  <h2>무엇을 발견했나요</h2>
-  ${report.findings.length ? findingCards : '<p class="empty">특별히 막히는 지점을 찾지 못했어요.</p>'}
+  <h2>${h.hFindings}</h2>
+  ${report.findings.length ? findingCards : `<p class="empty">${h.empty}</p>`}
 
-  ${shots.length ? `<h2>화면으로 보기</h2>${shotEls}` : ""}
-  ${videoSrc ? `<h2>진행 영상</h2><video controls src="${esc(videoSrc)}"></video>` : ""}
+  ${shots.length ? `<h2>${h.hShots}</h2>${shotEls}` : ""}
+  ${videoSrc ? `<h2>${h.hVideo}</h2><video controls src="${esc(videoSrc)}"></video>` : ""}
   ${promptSection}
 
-  <h2>다음에 해볼 것</h2>
+  <h2>${h.hNext}</h2>
   <ul>${nextEls}</ul>
 
-  <h2>안내</h2>
+  <h2>${h.hNotes}</h2>
   <ul>${noteEls}</ul>
 
-  <p class="foot">Simsa 검수 · 실제 브라우저 관찰 기반 · 점수 없음 · 모든 버그를 찾았다는 뜻은 아닙니다.</p>
+  <p class="foot">${h.foot}</p>
 </div></body></html>`;
 }

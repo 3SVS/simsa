@@ -80,7 +80,7 @@ export function decideFromEvidence(e, steps) {
  * where `name` is the Stage 261 evidence name (screenshots/*.png | video/flow.webm)
  * and `path` is the absolute file path inside the container.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery = "서울" }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery = "서울", locale = "ko" }) {
   const shotsDir = join(outDir, "screenshots");
   const videoDir = join(outDir, "video");
   mkdirSync(shotsDir, { recursive: true });
@@ -215,8 +215,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery = "
     decision,
     steps: stepOutcomes,
   };
-  const report = buildNonDevReport(reportInput);
-  const agentPrompt = buildAgentFixPrompt(reportInput);
+  const report = buildNonDevReport(reportInput, locale);
+  const agentPrompt = buildAgentFixPrompt(reportInput, locale);
 
   return { report, agentPrompt, decision, works: report.works, evidenceFiles };
 }
