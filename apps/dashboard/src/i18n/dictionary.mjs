@@ -204,6 +204,10 @@ const EN = {
     examplesTitle: "Example projects",
     examplesNote: "Read-only samples that show what a reviewed project looks like — not your data.",
     exampleBadge: "Example",
+    deleteLabel: "Delete project",
+    deleteAria: "Delete {name}",
+    deleteConfirm: "Delete “{name}”? This removes the project and its review data, and can't be undone.",
+    deleteFailed: "Couldn't delete this project. Please try again.",
   },
   actions: {
     startProject: "Start a project",
@@ -2518,6 +2522,10 @@ const KO = {
     examplesTitle: "예시 프로젝트",
     examplesNote: "검수가 진행된 프로젝트가 어떻게 보이는지 보여주는 읽기 전용 샘플이에요 — 내 데이터가 아닙니다.",
     exampleBadge: "예시",
+    deleteLabel: "프로젝트 삭제",
+    deleteAria: "{name} 삭제",
+    deleteConfirm: "‘{name}’ 프로젝트를 삭제할까요? 프로젝트와 검수 데이터가 함께 삭제되며 되돌릴 수 없어요.",
+    deleteFailed: "프로젝트를 삭제하지 못했어요. 다시 시도해주세요.",
   },
   actions: {
     startProject: "프로젝트 시작",

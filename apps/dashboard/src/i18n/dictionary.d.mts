@@ -154,6 +154,10 @@ export type Dictionary = {
     examplesTitle: string;
     examplesNote: string;
     exampleBadge: string;
+    deleteLabel: string;
+    deleteAria: string;
+    deleteConfirm: string;
+    deleteFailed: string;
   };
   actions: {
     startProject: string;

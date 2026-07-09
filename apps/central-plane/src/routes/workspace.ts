@@ -33,6 +33,7 @@ import {
   upsertProject,
   getProject,
   getOwnedProject,
+  deleteProject,
   listProjectsByUser,
   saveCheckRun,
   saveFixSuggestion as saveFixSuggestionToDb,
@@ -413,6 +414,31 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     } catch (err) {
       console.error("[workspace/projects] fetch failed:", err);
       return new Response(JSON.stringify({ ok: false, error: "fetch_failed" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
+    }
+  });
+
+  // ── DELETE /workspace/projects/:id ───────────────────────────────────────────
+  // Hard-delete a project and every project-scoped row + R2 object it owns.
+  // Ownership is enforced via getOwnedProject → 404 for both missing and
+  // not-owned (so ids can't be probed). User-scoped data (GitHub auth, credit
+  // wallet/ledger, notification settings) is deliberately preserved — see
+  // deleteProject() in workspace/db.ts.
+  app.delete("/workspace/projects/:id", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "GET, DELETE, OPTIONS" };
+    const id = c.req.param("id");
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) {
+      return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+    try {
+      const project = await getOwnedProject(c.env, id, userKey);
+      if (!project) return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404, headers: { "content-type": "application/json", ...headers } });
+      await deleteProject(c.env, id);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", ...headers } });
+    } catch (err) {
+      console.error("[workspace/projects DELETE] failed:", err);
+      return new Response(JSON.stringify({ ok: false, error: "delete_failed" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
     }
   });
 

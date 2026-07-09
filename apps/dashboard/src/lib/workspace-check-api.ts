@@ -89,6 +89,29 @@ export async function saveProjectToDb(payload: {
   }
 }
 
+/**
+ * Best-effort server mirror of a project delete. The localStorage delete is
+ * authoritative for the UI (the list reads local only); this removes the D1 rows
+ * + R2 objects so an account never keeps an orphaned copy. Ownership is enforced
+ * server-side; a 404 (never mirrored, or not owned) is reported but not fatal —
+ * callers delete locally regardless.
+ */
+export async function deleteProjectFromDb(
+  id: string,
+  userKey: string,
+): Promise<{ ok: true } | ApiError> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(id)}?userKey=${encodeURIComponent(userKey)}`,
+      { method: "DELETE", signal: AbortSignal.timeout(10000) },
+    );
+    if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: "network", message: String(err) };
+  }
+}
+
 // ─── check-draft ─────────────────────────────────────────────────────────────
 
 export type CheckDraftInput = {

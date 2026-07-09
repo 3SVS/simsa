@@ -132,6 +132,35 @@ export function loadLocalProjects(): Project[] {
 }
 
 /**
+ * Delete a project and every local sibling blob it owns: its extended data
+ * (`conclave_wf_ext_*`), builder-pack outcomes (`conclave_outcomes_*`), and its
+ * entry in the sync-failed list. The projects list is authoritative for the UI,
+ * so removing it from the active namespace bucket makes the project vanish
+ * immediately. Server-side D1/R2 cleanup is a separate best-effort mirror call.
+ * Returns true if a project with that id was present and removed.
+ */
+export function deleteProject(id: string): boolean {
+  if (typeof window === "undefined") return false;
+  const key = projectsKeyFor(activeNamespace());
+  const projects = readProjectsAt(key);
+  const remaining = projects.filter((p) => p.id !== id);
+  const existed = remaining.length !== projects.length;
+  localStorage.setItem(key, JSON.stringify(remaining));
+  // Sibling blobs keyed by project id — leaving these would orphan storage.
+  try { localStorage.removeItem(EXT_KEY(id)); } catch { /* storage unavailable */ }
+  try { localStorage.removeItem(OUTCOMES_KEY(id)); } catch { /* storage unavailable */ }
+  // Drop from the sync-failed list so a deleted project never re-surfaces a banner.
+  try {
+    const raw = localStorage.getItem(SYNC_FAILED_KEY);
+    if (raw) {
+      const list = (JSON.parse(raw) as string[]).filter((x) => x !== id);
+      localStorage.setItem(SYNC_FAILED_KEY, JSON.stringify(list));
+    }
+  } catch { /* storage unavailable or corrupt — nothing else to do */ }
+  return existed;
+}
+
+/**
  * Reconcile the active namespace to a signed-in identity. Call on every
  * confirmed sign-in (with the account email/id) and on sign-out (with null).
  * Moving FROM anonymous TO an account "claims" the anonymous projects into the
