@@ -34,7 +34,7 @@ export function corsHeaders(origin: string | null): Record<string, string> {
       : (ALLOWED_ORIGINS[0] as string);
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key, X-Simsa-User-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",

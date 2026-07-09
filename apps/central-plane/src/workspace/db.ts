@@ -198,6 +198,96 @@ export async function listProjectsByUser(
   }));
 }
 
+/**
+ * Project-scoped tables that a project delete must cascade. Every entry has a
+ * genuine `project_id` column (verified against the migrations). USER-scoped
+ * tables are deliberately EXCLUDED — deleting one project must never touch data
+ * shared across a user's other projects:
+ *   - workspace_github_connections / workspace_oauth_states  (user's GitHub auth)
+ *   - workspace_credit_balances                              (user's credit wallet)
+ *   - workspace_credit_ledger                                (financial audit trail)
+ *   - workspace_notification_settings                        (user's chat wiring)
+ * These are constant identifiers we control (never user input), so interpolating
+ * them into the DELETE is injection-safe; the project id is always bound.
+ */
+const PROJECT_SCOPED_TABLES = [
+  "workspace_items",
+  "workspace_check_runs",
+  "workspace_fix_suggestions",
+  "builder_pack_outcomes",
+  "workspace_project_repos",
+  "workspace_project_pull_requests",
+  "workspace_pr_review_runs",
+  "workspace_pr_comments",
+  "workspace_usage_events",
+  "workspace_notifications",
+  "workspace_agent_benchmarks",
+  "workspace_agent_experiments",
+  "workspace_evolution_action_packs",
+  "workspace_agent_workflow_records",
+  "project_sources",
+  "workspace_visual_checks",
+  "workspace_repair_jobs",
+  "workspace_feedback",
+] as const;
+
+/**
+ * Hard-delete a project and every project-scoped row + R2 object it owns.
+ * The CALLER must confirm ownership first (getOwnedProject) — this helper does
+ * not re-check, it just executes the cascade for the given id.
+ *
+ * Order matters: R2 keys are read BEFORE their rows are deleted; the whole D1
+ * cascade runs as one batched transaction so a failure leaves nothing partial.
+ * R2 deletes are best-effort (an orphaned object is storage cost, not a
+ * correctness or privacy leak once its DB row is gone).
+ */
+export async function deleteProject(env: Env, id: string): Promise<void> {
+  // 1. Collect R2 evidence keys before the rows referencing them are deleted:
+  //    uploaded documents (user content — must be removed) + visual-check shots.
+  const r2Keys: string[] = [];
+  try {
+    const docs = await env.DB.prepare(
+      `SELECT reference FROM project_sources WHERE project_id = ? AND type = 'document' AND reference != 'pending'`,
+    )
+      .bind(id)
+      .all<{ reference: string }>();
+    for (const row of docs.results ?? []) if (row.reference) r2Keys.push(row.reference);
+  } catch (err) {
+    console.error("[workspace/db deleteProject] source R2 scan failed:", err);
+  }
+  try {
+    const vis = await env.DB.prepare(
+      `SELECT evidence_keys_json FROM workspace_visual_checks WHERE project_id = ?`,
+    )
+      .bind(id)
+      .all<{ evidence_keys_json: string }>();
+    for (const row of vis.results ?? []) {
+      const keys = safeJson(row.evidence_keys_json ?? "[]");
+      if (Array.isArray(keys)) for (const k of keys) if (typeof k === "string") r2Keys.push(k);
+    }
+  } catch (err) {
+    console.error("[workspace/db deleteProject] visual R2 scan failed:", err);
+  }
+
+  // 2. Delete R2 objects (best-effort, in parallel).
+  if (env.EVIDENCE && r2Keys.length) {
+    await Promise.all(r2Keys.map((k) => env.EVIDENCE!.delete(k).catch(() => {})));
+  }
+
+  // 3. Cascade-delete all D1 rows in one transaction. Experiment candidates key
+  //    by experiment_id, so they go first via a subquery (before the experiment
+  //    rows they reference are deleted). The project row itself goes last.
+  const stmts = [
+    env.DB.prepare(
+      `DELETE FROM workspace_agent_experiment_candidates
+       WHERE experiment_id IN (SELECT id FROM workspace_agent_experiments WHERE project_id = ?)`,
+    ).bind(id),
+    ...PROJECT_SCOPED_TABLES.map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE project_id = ?`).bind(id)),
+    env.DB.prepare(`DELETE FROM workspace_projects WHERE id = ?`).bind(id),
+  ];
+  await env.DB.batch(stmts);
+}
+
 // ─── Check runs ───────────────────────────────────────────────────────────────
 
 export async function saveCheckRun(
