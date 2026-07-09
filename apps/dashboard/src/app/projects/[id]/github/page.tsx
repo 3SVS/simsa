@@ -730,15 +730,13 @@ function CreditDryRunBanner({ t, dryRun, projectId }: { t: Dictionary; dryRun: C
   const enforcement = dryRun as CreditEnforcementResult;
   const blocked = enforcement.actualDebitsEnabled === true && enforcement.blocked === true;
 
-  // Beta: actual debits are OFF. The "이번 달 0/5 · 5회 무료 남음" counter is a
-  // post-beta pricing SIMULATION and read like a real limit ("5번 무료?" — Bae).
-  // While debits are off, say the one true thing and nothing else.
+  // Beta: actual debits are OFF, so there is no credit fact to state at the point
+  // of action. The old "이번 달 0/5 · 5회 무료 남음" counter — even softened to a
+  // "무료예요" line — introduced billing/pricing to a non-developer who never opted
+  // into it, and read like a real limit ("5번 무료?" — Bae). While debits are off,
+  // show nothing here; the dedicated credits page still carries the honest detail.
   if (enforcement.actualDebitsEnabled !== true) {
-    return (
-      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-        <p className="text-xs text-slate-600">{t.credit.disabledBeta}</p>
-      </div>
-    );
+    return null;
   }
 
   // Product-friendly: hide internal billing flags (dry-run, rollout, debit ledger).
