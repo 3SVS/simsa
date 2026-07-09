@@ -120,6 +120,8 @@ export default function IntakePage() {
   const [listLoading, setListLoading] = useState(false);
   const [openRecord, setOpenRecord] = useState<WorkflowRecord | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [listError, setListError] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   // Stage 118 — saved workflow management (archive / restore / delete).
   const [showArchived, setShowArchived] = useState(false);
   const [manageBusyId, setManageBusyId] = useState<string | null>(null);
@@ -310,8 +312,13 @@ export default function IntakePage() {
 
   async function refreshSavedList(includeArchived = showArchived) {
     setListLoading(true);
+    setListError(false);
     const res = await listWorkflowRecords(getUserKey(), { includeArchived });
-    setSavedList(res.ok ? res.records : []);
+    // A failed fetch must not be coerced to [] — that renders the "no saved
+    // records" empty state and falsely tells a user with saved plans they have
+    // none. Keep the prior list and surface a distinct error + retry.
+    if (res.ok) setSavedList(res.records);
+    else setListError(true);
     setListLoading(false);
   }
 
@@ -323,9 +330,11 @@ export default function IntakePage() {
 
   async function openSavedRecord(id: string) {
     setDetailLoading(true);
+    setDetailError(null);
     setOpenRecord(null);
     const res = await getWorkflowRecord(id, getUserKey());
     if (res.ok) setOpenRecord(res.record);
+    else setDetailError(id);
     setDetailLoading(false);
   }
 
@@ -1139,12 +1148,24 @@ export default function IntakePage() {
             <p className="mt-2 text-xs text-gray-500">{manageMsg}</p>
           )}
 
-          {savedList === null && (
+          {listError && (
+            <div className="mt-3 flex items-center gap-3">
+              <p className="text-sm text-red-600">{ic.listLoadError}</p>
+              <button
+                type="button"
+                onClick={() => void refreshSavedList()}
+                className="text-xs font-medium text-brand-700 hover:underline"
+              >
+                {ic.retryButton}
+              </button>
+            </div>
+          )}
+          {!listError && savedList === null && (
             <p className="mt-3 text-sm text-gray-500">
               {ic.refreshHint}
             </p>
           )}
-          {savedList !== null && savedList.length === 0 && (
+          {!listError && savedList !== null && savedList.length === 0 && (
             <p className="mt-3 text-sm text-gray-500">{ob.emptyStates.noSavedRecords}</p>
           )}
           {savedList !== null && savedList.length > 0 && !openRecord && !detailLoading && (
@@ -1221,6 +1242,19 @@ export default function IntakePage() {
               label={tr.loading.reviewingEvidence}
               className="mt-3"
             />
+          )}
+
+          {detailError && !detailLoading && (
+            <div className="mt-3 flex items-center gap-3">
+              <p className="text-sm text-red-600">{ic.detailLoadError}</p>
+              <button
+                type="button"
+                onClick={() => void openSavedRecord(detailError)}
+                className="text-xs font-medium text-brand-700 hover:underline"
+              >
+                {ic.retryButton}
+              </button>
+            </div>
           )}
 
           {openRecord && (

@@ -56,6 +56,7 @@ export default function SourcesPage() {
 
   const [phase, setPhase] = useState<"loading" | "done" | "error">("loading");
   const [sources, setSources] = useState<ProjectSource[]>([]);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
 
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [websiteBusy, setWebsiteBusy] = useState(false);
@@ -137,8 +138,12 @@ export default function SourcesPage() {
 
   async function handleDisconnect(sourceId: string) {
     if (!window.confirm(t.sources.confirmDisconnect)) return;
+    setDisconnectError(null);
     const res = await deleteProjectSource(id, sourceId, userKey);
     if (res.ok) await load();
+    // A swallowed failure leaves the source in the list with no signal that the
+    // disconnect didn't take — tell the user and keep the row so they can retry.
+    else setDisconnectError(t.sources.errors.disconnectFailed);
   }
 
   return (
@@ -237,7 +242,20 @@ export default function SourcesPage() {
         )}
 
         {phase === "error" && (
-          <div className="callout callout-error">{t.sources.errors.loadFailed}</div>
+          <div className="callout callout-error flex items-center justify-between gap-3">
+            <span>{t.sources.errors.loadFailed}</span>
+            <button
+              type="button"
+              onClick={() => { setPhase("loading"); void load(); }}
+              className="btn btn-sm btn-secondary flex-shrink-0"
+            >
+              {t.common.retry}
+            </button>
+          </div>
+        )}
+
+        {disconnectError && (
+          <div className="callout callout-error">{disconnectError}</div>
         )}
 
         {phase === "done" && sources.length === 0 && (
