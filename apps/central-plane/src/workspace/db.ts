@@ -269,14 +269,13 @@ export async function deleteProject(env: Env, id: string): Promise<void> {
     console.error("[workspace/db deleteProject] visual R2 scan failed:", err);
   }
 
-  // 2. Delete R2 objects (best-effort, in parallel).
-  if (env.EVIDENCE && r2Keys.length) {
-    await Promise.all(r2Keys.map((k) => env.EVIDENCE!.delete(k).catch(() => {})));
-  }
-
-  // 3. Cascade-delete all D1 rows in one transaction. Experiment candidates key
-  //    by experiment_id, so they go first via a subquery (before the experiment
-  //    rows they reference are deleted). The project row itself goes last.
+  // 2. Cascade-delete all D1 rows in one transaction FIRST. Experiment
+  //    candidates key by experiment_id, so they go first via a subquery (before
+  //    the experiment rows they reference are deleted). The project row goes last.
+  //    D1 before R2 is deliberate: if this batch throws nothing is deleted (clean
+  //    retry, no half-state); once it commits, the rows that referenced the R2
+  //    objects are already gone, so a failed R2 delete can only orphan storage —
+  //    never leave a live row pointing at a deleted object.
   const stmts = [
     env.DB.prepare(
       `DELETE FROM workspace_agent_experiment_candidates
@@ -286,6 +285,12 @@ export async function deleteProject(env: Env, id: string): Promise<void> {
     env.DB.prepare(`DELETE FROM workspace_projects WHERE id = ?`).bind(id),
   ];
   await env.DB.batch(stmts);
+
+  // 3. Delete R2 objects (best-effort, in parallel) — now that no DB row refers
+  //    to them, an orphan here is pure storage cost, not a dangling reference.
+  if (env.EVIDENCE && r2Keys.length) {
+    await Promise.all(r2Keys.map((k) => env.EVIDENCE!.delete(k).catch(() => {})));
+  }
 }
 
 // ─── Check runs ───────────────────────────────────────────────────────────────

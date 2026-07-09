@@ -156,8 +156,13 @@ export type Dictionary = {
     exampleBadge: string;
     deleteLabel: string;
     deleteAria: string;
-    deleteConfirm: string;
-    deleteFailed: string;
+    deleteModalTitle: string;
+    deleteModalBody: string;
+    deleteModalIrreversible: string;
+    deleteAck: string;
+    deleteCancel: string;
+    deleteConfirmBtn: string;
+    deleteMirrorFailed: string;
   };
   actions: {
     startProject: string;
