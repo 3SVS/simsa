@@ -495,6 +495,12 @@ function VerdictBanner({
         <p className="text-xs opacity-80">
           {verdict.passed} / {verdict.total} {t.interaction.verdictPassed}
         </p>
+        {/* Honesty (audit 5.4 / PRD §5·§9.3): a green "통과" reads as "my app
+            works". Carry the "pre-check, not live" caveat at verdict weight so
+            it can't be mistaken for a live confirmation. */}
+        <p className="mt-1.5 text-xs font-medium opacity-95">
+          {t.interaction.verdictPreCheckCaveat}
+        </p>
       </div>
       {isDraft && (
         <span className="flex-shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
