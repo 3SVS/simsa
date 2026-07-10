@@ -176,3 +176,18 @@ test("nextScreenSlug walks the canonical order and ends cleanly", () => {
   assert.equal(nextScreenSlug("fixes"), null); // last — no forced next
   assert.equal(nextScreenSlug("benchmark"), null); // advanced screens stay out of the walk
 });
+
+test("nextScreenSlug: the CODE branch walks repo-connect FIRST (이미 만든 앱 직행)", () => {
+  // Someone who said "이미 만든 앱이 있어요" connects code before curating
+  // items — marching them through 준비 first read as an abrupt jump (Bae).
+  assert.equal(nextScreenSlug("settings", "code"), "github");
+  assert.equal(nextScreenSlug("github", "code"), "items");
+  assert.equal(nextScreenSlug("items", "code"), "checks");
+  assert.equal(nextScreenSlug("checks", "code"), "fixes");
+  assert.equal(nextScreenSlug("fixes", "code"), null);
+  // idea/spec are not on the code walk at all
+  assert.equal(nextScreenSlug("idea", "code"), null);
+  // other entries keep the canonical order
+  assert.equal(nextScreenSlug("items", "idea"), "settings");
+  assert.equal(nextScreenSlug("items", null), "settings");
+});

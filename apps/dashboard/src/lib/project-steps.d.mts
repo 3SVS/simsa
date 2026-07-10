@@ -14,7 +14,10 @@ export function computeProjectSteps(
   facts: ProjectStepFacts,
 ): Array<{ key: StepKey; status: StepStatus; lockReason: StepLockReason; optional: boolean }>;
 
-export function nextScreenSlug(slug: string): string | null;
+export function nextScreenSlug(
+  slug: string,
+  entryPath?: "idea" | "code" | "spec" | null,
+): string | null;
 
 export type NextProjectAction =
   | "create_items"

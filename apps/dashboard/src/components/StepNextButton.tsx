@@ -10,6 +10,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/i18n/I18nProvider";
 import { nextScreenSlug } from "@/lib/project-steps.mjs";
+import { loadExtendedProjectData } from "@/lib/workflow-store";
 
 export function StepNextButton() {
   const { t } = useI18n();
@@ -17,7 +18,9 @@ export function StepNextButton() {
   const seg = pathname.split("/").filter(Boolean);
   if (seg[0] !== "projects" || !seg[1] || seg[1] === "new") return null;
   const slug = seg[2] ?? "";
-  const next = nextScreenSlug(slug);
+  // Code-branch projects walk repo-connect first — see nextScreenSlug.
+  const entryPath = loadExtendedProjectData(seg[1])?.entryPath ?? null;
+  const next = nextScreenSlug(slug, entryPath);
   if (!next) return null;
 
   const labels: Record<string, string> = {

@@ -946,6 +946,9 @@ export type Dictionary = {
     repoStatusNotSaved: string;
     exampleReadOnly: string;
     exampleReadOnlyCta: string;
+    popupConnected: string;
+    popupCloseHint: string;
+    popupBackToApp: string;
     runReview: string;
     reRunRemaining: string;
     createFixInstructions: string;

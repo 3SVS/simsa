@@ -77,6 +77,27 @@ export function startGitHubOAuth(userKey: string, returnTo?: string): void {
   window.location.href = buildOAuthStartUrl(userKey, rt);
 }
 
+/** postMessage type the OAuth popup sends its opener on success. */
+export const GITHUB_CONNECTED_MESSAGE = "simsa:github-connected";
+
+/**
+ * GitHub OAuth in a POPUP: the flow lands on /github/connected, which
+ * postMessages the opener and closes itself — so connecting an account and
+ * picking a repo become ONE uninterrupted flow instead of a full-page round
+ * trip (Bae, 2026-07-10). Returns null when the browser blocked the popup;
+ * callers fall back to startGitHubOAuth (full-page redirect).
+ * returnTo must be ABSOLUTE — the callback prepends the backend's default
+ * dashboard URL (no DNS) to relative paths.
+ */
+export function startGitHubOAuthPopup(userKey: string): Window | null {
+  const returnTo = `${window.location.origin}/github/connected`;
+  return window.open(
+    buildOAuthStartUrl(userKey, returnTo),
+    "simsa_gh_oauth",
+    "popup=yes,width=640,height=760",
+  );
+}
+
 // ─── Connection status ────────────────────────────────────────────────────────
 
 export async function fetchGitHubStatus(userKey: string): Promise<GitHubStatusResponse> {

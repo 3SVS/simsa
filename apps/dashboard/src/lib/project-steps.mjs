@@ -145,11 +145,20 @@ export function nextProjectAction(facts) {
  * The canonical screen order inside the flow, used by the bottom "다음 →"
  * button so a user finishing one screen is walked to the next without
  * scanning the sidebar. Pure lookup; unknown slugs return null.
+ *
+ * The CODE branch ("이미 만든 앱이 있어요") walks repo-connect FIRST: someone
+ * who already has an app connects their code before curating check items —
+ * being marched through 준비 screens and only then "suddenly" sent to the
+ * repo read as an abrupt jump (Bae, 2026-07-10 live feedback).
  * @param {string} slug current screen slug ("" = overview)
+ * @param {"idea" | "code" | "spec" | null} [entryPath] the branch this project entered through
  * @returns {string | null} next slug, or null when there is no obvious next
  */
-export function nextScreenSlug(slug) {
-  const order = ["idea", "spec", "items", "settings", "github", "checks", "fixes"];
+export function nextScreenSlug(slug, entryPath) {
+  const order =
+    entryPath === "code"
+      ? ["settings", "github", "items", "checks", "fixes"]
+      : ["idea", "spec", "items", "settings", "github", "checks", "fixes"];
   const i = order.indexOf(slug);
   if (i === -1 || i === order.length - 1) return null;
   return order[i + 1];
