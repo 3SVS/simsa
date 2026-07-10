@@ -15,6 +15,8 @@ import {
   linkProjectRepo,
   fetchProjectRepo,
   startGitHubOAuth,
+  startGitHubOAuthPopup,
+  GITHUB_CONNECTED_MESSAGE,
   disconnectGitHub,
   type GitHubUser,
   type GitHubRepo,
@@ -268,6 +270,24 @@ export default function SettingsPage() {
     }
   }
 
+  // Popup OAuth landing: the popup postMessages us on success — refresh the
+  // connection status and open the repo picker immediately, so connecting an
+  // account and choosing a repo are one uninterrupted flow.
+  useEffect(() => {
+    function onPopupConnected(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if ((e.data as { type?: string } | null)?.type !== GITHUB_CONNECTED_MESSAGE) return;
+      void (async () => {
+        await loadStatus();
+        await loadRepos();
+      })();
+    }
+    window.addEventListener("message", onPopupConnected);
+    return () => window.removeEventListener("message", onPopupConnected);
+    // loadRepos is re-created per render (not memoized) — subscribing per
+    // render is harmless and keeps the closure fresh.
+  });
+
   async function handleLinkRepo(repo: GitHubRepo) {
     setLinkPhase("saving");
     setLinkError("");
@@ -320,10 +340,14 @@ export default function SettingsPage() {
   }
 
   function handleConnectGitHub() {
-    // Pass the ABSOLUTE current URL as returnTo. A relative path makes the OAuth
-    // callback prepend the backend's DEFAULT_DASHBOARD_URL (dashboard.conclave-ai.dev,
-    // which has no DNS) → NXDOMAIN after authorize. The absolute origin is already on
-    // the central-plane return allowlist, so the callback returns here unchanged.
+    // Popup-first: auth + repo pick as ONE flow — the popup lands on
+    // /github/connected, postMessages us, and the listener below jumps straight
+    // into repo selection (Bae, 2026-07-10). Popup blocked → full-page redirect.
+    const popup = startGitHubOAuthPopup(userKey);
+    if (popup) return;
+    // Fallback: pass the ABSOLUTE current URL as returnTo. A relative path makes
+    // the OAuth callback prepend the backend's DEFAULT_DASHBOARD_URL
+    // (dashboard.conclave-ai.dev, which has no DNS) → NXDOMAIN after authorize.
     const returnTo =
       typeof window !== "undefined" ? window.location.href : `/projects/${id}/settings`;
     startGitHubOAuth(userKey, returnTo);
