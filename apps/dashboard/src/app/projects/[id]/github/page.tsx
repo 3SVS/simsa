@@ -5,7 +5,8 @@ import { ProjectNotFound } from "@/components/ProjectNotFound";
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getProject } from "@/lib/mock-data";
+import { getProject, isExampleProject } from "@/lib/mock-data";
+import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData, markProjectSyncFailed, applyReviewResultsToLocalProject } from "@/lib/workflow-store";
 import { callWorkspaceApi } from "@/lib/workspace-api";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
@@ -39,8 +40,14 @@ export default function GitHubPage() {
   const { t, locale } = useI18n();
   const project = getLocalProject(id) ?? getProject(id);
   const userKey = getUserKey();
+  // Example projects are shared read-only fixtures — repo connect/review can
+  // never succeed on them (their id is never mirrored under this user's key).
+  const isExample = isExampleProject(id);
 
   const [loadPhase, setLoadPhase] = useState<"loading" | "no_repo" | "load_error" | "ready">("loading");
+  // "not_saved" = the ownership gate 404'd (project row missing in D1) — a
+  // PERMANENT condition until re-mirrored, so it must not wear transient copy.
+  const [loadErrorKind, setLoadErrorKind] = useState<"transient" | "not_saved">("transient");
   const [repo, setRepo] = useState<LinkedRepo | null>(null);
   const [pulls, setPulls] = useState<GitHubPull[]>([]);
   const [pullsPhase, setPullsPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -151,7 +158,14 @@ export default function GitHubPage() {
     // D1 propagates. Retry a few times before concluding "no repo" — otherwise a
     // user who just connected gets funneled back to /settings to reconnect what
     // is already connected, which reads as an infinite loop (무한 도돌이표).
-    const repoRes = await fetchProjectRepoSettled(fetchProjectRepo, id, getUserKey());
+    let repoRes = await fetchProjectRepoSettled(fetchProjectRepo, id, getUserKey());
+    // Ownership-gate 404 = the project's D1 mirror row is missing (NOT
+    // transient — retrying alone can never fix it). All the data is still
+    // local, so self-heal: re-mirror the project, then re-check once.
+    if (!repoRes.ok && repoRes.error === "HTTP 404" && !isExample) {
+      const healed = await mirrorLocalProjectToDb(id);
+      if (healed) repoRes = await fetchProjectRepoSettled(fetchProjectRepo, id, getUserKey());
+    }
     const linkedRes = await fetchLinkedPulls(id, getUserKey());
     if (repoRes.ok && repoRes.repo) {
       setRepo(repoRes.repo);
@@ -160,8 +174,10 @@ export default function GitHubPage() {
       // Confirmed after retries: genuinely no repo linked.
       setLoadPhase("no_repo");
     } else {
-      // Transient fetch failure ≠ "not connected" — a user WITH a linked repo
-      // must not be sent to settings to "connect" what is already connected.
+      // Fetch failure ≠ "not connected" — a user WITH a linked repo must not
+      // be sent to settings to "connect" what is already connected. A 404 that
+      // survived the self-heal gets its own honest copy (not "일시적").
+      setLoadErrorKind(repoRes.error === "HTTP 404" ? "not_saved" : "transient");
       setLoadPhase("load_error");
     }
     setLinkedLoadFailed(!linkedRes.ok);
@@ -195,7 +211,7 @@ export default function GitHubPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  useEffect(() => { loadInitial(); }, [loadInitial]);
+  useEffect(() => { if (!isExample) loadInitial(); }, [loadInitial, isExample]);
 
   async function handleLoadPulls() {
     if (!repo) return;
@@ -329,10 +345,20 @@ export default function GitHubPage() {
         </Link>
       </div>
 
+      {/* Example projects: read-only — repo connect/review can never succeed here. */}
+      {isExample && (
+        <div className="card p-8 text-center">
+          <p className="mb-4 text-sm text-gray-600">{t.github.exampleReadOnly}</p>
+          <Link href="/projects/new" className="btn btn-md btn-primary">
+            {t.github.exampleReadOnlyCta} →
+          </Link>
+        </div>
+      )}
+
       {/* Bridge: frame WHY this screen exists so arriving from the checks step
           isn't an abrupt jump ("suddenly connect a code repo?"). Only shown
           while a repo isn't linked yet — once connected it's just noise. */}
-      {loadPhase !== "ready" && (
+      {!isExample && loadPhase !== "ready" && (
         <div className="rounded-lg border border-brand-100 bg-brand-50 p-4">
           <p className="text-sm font-semibold text-brand-800">{t.github.bridgeTitle}</p>
           <p className="mt-1 text-sm leading-relaxed text-brand-700">{t.github.bridgeBody}</p>
@@ -340,7 +366,7 @@ export default function GitHubPage() {
       )}
 
       {/* Loading */}
-      {loadPhase === "loading" && (
+      {!isExample && loadPhase === "loading" && (
         <div className="card p-6 text-center">
           <div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
           <p className="text-sm text-gray-500">{t.github.checkingConnection}</p>
@@ -350,7 +376,7 @@ export default function GitHubPage() {
       {/* No repo. The reload button recovers a just-connected repo that a
           persistence race briefly reported as null — so a real connection is
           never lost behind a terminal "connect again" card. */}
-      {loadPhase === "no_repo" && (
+      {!isExample && loadPhase === "no_repo" && (
         <div className="card p-8 text-center">
           <p className="mb-4 text-sm text-gray-600">{t.github.connectRepoFirst}</p>
           <div className="flex items-center justify-center gap-2">
@@ -368,10 +394,14 @@ export default function GitHubPage() {
         </div>
       )}
 
-      {/* Transient load failure — retry, don't misdirect to settings */}
-      {loadPhase === "load_error" && (
+      {/* Load failure — retry, don't misdirect to settings. A permanent
+          ownership-404 (project not saved server-side) says so honestly
+          instead of wearing "usually temporary" copy. */}
+      {!isExample && loadPhase === "load_error" && (
         <div className="card p-8 text-center">
-          <p className="mb-4 text-sm text-gray-600">{t.github.connectionLoadError}</p>
+          <p className="mb-4 text-sm text-gray-600">
+            {loadErrorKind === "not_saved" ? t.github.repoStatusNotSaved : t.github.connectionLoadError}
+          </p>
           <button onClick={() => void loadInitial()} className="btn btn-md btn-primary">
             {t.common.retry}
           </button>
@@ -379,7 +409,7 @@ export default function GitHubPage() {
       )}
 
       {/* Ready */}
-      {loadPhase === "ready" && repo && (
+      {!isExample && loadPhase === "ready" && repo && (
         <>
           {/* Repo info */}
           <div className="card flex items-center justify-between p-4">

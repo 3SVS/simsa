@@ -6,6 +6,8 @@
  * Network/server errors → local heuristic fallback where possible.
  */
 
+import { isExampleProject } from "./mock-data";
+
 const CENTRAL_PLANE_URL =
   process.env.NEXT_PUBLIC_CENTRAL_PLANE_URL ??
   "https://conclave-ai.seunghunbae.workers.dev";
@@ -74,6 +76,11 @@ export async function saveProjectToDb(payload: {
   builtWith?: unknown;
   entryPath?: "idea" | "code" | "spec";
 }): Promise<{ ok: true; id: string } | ApiError> {
+  // Example projects are shared demo fixtures — never mirror them. Writing the
+  // fixed shared id would claim it globally (first-writer-owns) and permanently
+  // 404 every other user's repo-link on the example. There is nothing to sync
+  // for a demo, so "nothing to do" is success (no sync-failed banner).
+  if (isExampleProject(payload.id)) return { ok: true, id: payload.id };
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/projects`, {
       method: "POST",

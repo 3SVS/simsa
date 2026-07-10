@@ -50,6 +50,15 @@ export type DbFixSuggestion = {
   createdAt: string;
 };
 
+/**
+ * Dashboard example-fixture project ids (read-only demos shipped to every
+ * browser with the same fixed id). Server-side writes on these are rejected:
+ * the first-writer-owns guard would otherwise hand one user global ownership
+ * of the shared id and 404 everyone else's project-scoped calls on it.
+ * Keep in sync with apps/dashboard/src/lib/mock-data.ts MOCK_PROJECTS.
+ */
+export const EXAMPLE_PROJECT_IDS: ReadonlySet<string> = new Set(["proj_mjx1"]);
+
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
 export async function upsertProject(

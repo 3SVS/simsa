@@ -54,7 +54,7 @@ import { captureTrainingRecord, computeRecheckOutcome, updateTrainingRecordOutco
 import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { detectContentLang } from "../workspace/topic-tags.js";
-import { getProject, getOwnedProject, listProjectsByUser } from "../workspace/db.js";
+import { getProject, getOwnedProject, listProjectsByUser, EXAMPLE_PROJECT_IDS } from "../workspace/db.js";
 import { consumeUserHourlyLimit, consumeUserDailyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
 import { betaReviewDailyLimit, BETA_REVIEW_DAILY_BUCKET } from "../workspace/beta-limits.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
@@ -518,6 +518,11 @@ export function createWorkspaceGitHubRoutes(
     if (!userKey) return json({ ok: false, error: "userKey_required" }, 400, origin);
     if (!repo || typeof repo["fullName"] !== "string") {
       return json({ ok: false, error: "repo.fullName_required" }, 400, origin);
+    }
+    // Example fixtures are read-only demos — a link on them can never be valid.
+    // A clear 400 beats the indistinguishable ownership-404.
+    if (EXAMPLE_PROJECT_IDS.has(projectId)) {
+      return json({ ok: false, error: "example_project_readonly" }, 400, origin);
     }
 
     const denied = await denyUnlessOwnedProject(c.env, projectId, userKey, origin);
