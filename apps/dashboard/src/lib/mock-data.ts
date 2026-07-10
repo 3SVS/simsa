@@ -106,6 +106,17 @@ export function getProject(id: string): Project | undefined {
   return MOCK_PROJECTS.find((p) => p.id === id);
 }
 
+/**
+ * Example projects are read-only demo fixtures shipped to EVERY user with a
+ * FIXED shared id. They must never reach the server: the first user to write
+ * `proj_mjx1` to D1 would own it globally (first-writer-owns guard), making
+ * every other user's repo-link / save on the example 404 forever — the exact
+ * "연결이 계속 풀려요" trap found in the 2026-07-10 live incident.
+ */
+export function isExampleProject(id: string): boolean {
+  return MOCK_PROJECTS.some((p) => p.id === id);
+}
+
 export function getProjectStats(project: Project) {
   const total = project.requirements.length;
   const passed = project.requirements.filter((r) => r.status === "passed").length;

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getUserKey, loadExtendedProjectData, getLocalProject } from "@/lib/workflow-store";
+import { isExampleProject } from "@/lib/mock-data";
+import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { ServiceMcpSetup } from "@/components/ServiceMcpSetup";
 import { useI18n } from "@/i18n/I18nProvider";
 import {
@@ -38,6 +40,9 @@ export default function SettingsPage() {
   const searchParams = useSearchParams();
   const justConnected = searchParams?.get("github") === "connected";
   const { t, locale } = useI18n();
+  // Example projects are shared read-only fixtures — the connect flow can never
+  // succeed on them (their id is never mirrored under this user's key).
+  const isExample = isExampleProject(id);
 
   const [phase, setPhase] = useState<"loading" | "disconnected" | "status_error" | "connected" | "selecting">("loading");
   const [ghUser, setGhUser] = useState<GitHubUser | null>(null);
@@ -45,6 +50,9 @@ export default function SettingsPage() {
   const [reposPhase, setReposPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(null);
   const [linkPhase, setLinkPhase] = useState<"idle" | "saving" | "done" | "error">("idle");
+  // Distinguishes the ownership-404 ("project row missing in D1") from generic
+  // link failures — the fixes differ (re-save vs plain retry), so the copy must.
+  const [linkError, setLinkError] = useState("");
   const [repoSearch, setRepoSearch] = useState("");
   // Stage 56: direct "owner/repo" entry for org/collaborator repos not in the listing.
   const [directInput, setDirectInput] = useState("");
@@ -262,12 +270,21 @@ export default function SettingsPage() {
 
   async function handleLinkRepo(repo: GitHubRepo) {
     setLinkPhase("saving");
-    const res = await linkProjectRepo(id, userKey, repo);
+    setLinkError("");
+    let res = await linkProjectRepo(id, userKey, repo);
+    // Ownership-gate 404 = the project's D1 mirror row is missing (mirror write
+    // failed or never ran), so the link can NEVER save — the 2026-07-10 live
+    // 도돌이표. All project data is still local: re-mirror, then retry once.
+    if (!res.ok && res.error === "HTTP 404") {
+      const healed = await mirrorLocalProjectToDb(id);
+      if (healed) res = await linkProjectRepo(id, userKey, repo);
+    }
     if (res.ok) {
       setLinkedRepo(res.repo);
       setLinkPhase("done");
       setPhase("connected");
     } else {
+      setLinkError(res.error === "HTTP 404" ? t.github.linkFailedNotSaved : t.github.linkFailed);
       setLinkPhase("error");
     }
   }
@@ -341,15 +358,25 @@ export default function SettingsPage() {
         <p className="page-subtitle">{t.github.connectIntro}</p>
       </div>
 
+      {/* Example projects: read-only — the connect flow can never succeed here. */}
+      {isExample && (
+        <div className="card p-8 text-center">
+          <p className="mb-4 text-sm text-gray-600">{t.github.exampleReadOnly}</p>
+          <Link href="/projects/new" className="btn btn-md btn-primary">
+            {t.github.exampleReadOnlyCta} →
+          </Link>
+        </div>
+      )}
+
       {/* Just connected banner */}
-      {justConnected && (
+      {!isExample && justConnected && (
         <div className="callout border-green-200 bg-green-50 text-green-700">
           {t.github.connected}
         </div>
       )}
 
       {/* Loading */}
-      {phase === "loading" && (
+      {!isExample && phase === "loading" && (
         <div className="card p-8 text-center">
           <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
           <p className="text-sm text-gray-500">{t.common.loading}</p>
@@ -357,7 +384,7 @@ export default function SettingsPage() {
       )}
 
       {/* Not connected */}
-      {phase === "status_error" && (
+      {!isExample && phase === "status_error" && (
         <div className="card p-8 text-center">
           <p className="mb-4 text-sm text-gray-600">{t.github.connectionLoadError}</p>
           <button onClick={() => void loadStatus()} className="btn btn-md btn-primary">
@@ -366,7 +393,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {phase === "disconnected" && (
+      {!isExample && phase === "disconnected" && (
         <div className="card p-8 text-center">
           {disconnectPhase === "done" && (
             <p className="mx-auto mb-3 max-w-sm text-xs text-green-600">{t.github.disconnectDone}</p>
@@ -411,7 +438,7 @@ export default function SettingsPage() {
       )}
 
       {/* Connected — show user + linked repo */}
-      {(phase === "connected" || phase === "selecting") && ghUser && (
+      {!isExample && (phase === "connected" || phase === "selecting") && ghUser && (
         <div className="card p-5">
           <div className="mb-4 flex items-center gap-3">
             {ghUser.avatarUrl && (
@@ -495,7 +522,7 @@ export default function SettingsPage() {
       )}
 
       {/* Repo selector */}
-      {phase === "selecting" && (
+      {!isExample && phase === "selecting" && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {repos.length > 0 && (
             <>
@@ -584,7 +611,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {linkPhase === "done" && (
+      {!isExample && linkPhase === "done" && (
         <div className="callout border-green-200 bg-green-50 text-green-700">
           {t.github.connectedRepo} ✓
           <Link href={`/projects/${id}/export`} className="ml-3 text-green-700 underline">
@@ -592,8 +619,8 @@ export default function SettingsPage() {
           </Link>
         </div>
       )}
-      {linkPhase === "error" && (
-        <p className="callout callout-error">{t.github.linkFailed}</p>
+      {!isExample && linkPhase === "error" && (
+        <p className="callout callout-error">{linkError || t.github.linkFailed}</p>
       )}
 
       {/* ─── Services + deploy tools (prep layer A2) ──────────────────────── */}

@@ -942,6 +942,10 @@ export type Dictionary = {
     connect: string;
     finding: string;
     linkFailed: string;
+    linkFailedNotSaved: string;
+    repoStatusNotSaved: string;
+    exampleReadOnly: string;
+    exampleReadOnlyCta: string;
     runReview: string;
     reRunRemaining: string;
     createFixInstructions: string;

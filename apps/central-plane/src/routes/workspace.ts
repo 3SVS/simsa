@@ -35,6 +35,7 @@ import {
   getOwnedProject,
   deleteProject,
   listProjectsByUser,
+  EXAMPLE_PROJECT_IDS,
   saveCheckRun,
   saveFixSuggestion as saveFixSuggestionToDb,
 } from "../workspace/db.js";
@@ -308,6 +309,13 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     const b = body as Record<string, unknown>;
     if (!b["userKey"] || !b["title"]) {
       return new Response(JSON.stringify({ ok: false, error: "userKey_and_title_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+    // Example-fixture ids ship to EVERY browser with the same fixed value. If
+    // one user's client ever writes it, the first-writer-owns guard below hands
+    // that user global ownership and 404s everyone else's repo-link on the
+    // example forever (2026-07-10 live incident). Reject at the door.
+    if (typeof b["id"] === "string" && EXAMPLE_PROJECT_IDS.has(b["id"])) {
+      return new Response(JSON.stringify({ ok: false, error: "example_project_readonly" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
     try {
       // Overwrite-IDOR guard: a client-supplied id that already exists and
