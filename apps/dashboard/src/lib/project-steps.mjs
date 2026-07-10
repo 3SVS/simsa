@@ -155,10 +155,16 @@ export function nextProjectAction(facts) {
  * @returns {string | null} next slug, or null when there is no obvious next
  */
 export function nextScreenSlug(slug, entryPath) {
+  // Idea/spec entries have NO CODE YET: their walk ends at the builder pack
+  // (go build it), never marching into repo-connect/PR screens — that funnel
+  // only makes sense AFTER the app exists (2026-07-10 live walkthrough: an
+  // idea-branch user was walked settings→github→history in a loop with
+  // nothing to connect). The post-build return path (/p/:id/connect, checks)
+  // is reachable from the export screen and the sidebar, not a forced walk.
   const order =
     entryPath === "code"
       ? ["settings", "github", "items", "checks", "fixes"]
-      : ["idea", "spec", "items", "settings", "github", "checks", "fixes"];
+      : ["idea", "spec", "items", "export"];
   const i = order.indexOf(slug);
   if (i === -1 || i === order.length - 1) return null;
   return order[i + 1];

@@ -29,6 +29,7 @@ export function StepNextButton() {
     items: t.nav.items,
     settings: t.nav.settings,
     github: t.nav.github,
+    export: t.nav.export,
     checks: t.nav.checks,
     fixes: t.nav.fixes,
   };
