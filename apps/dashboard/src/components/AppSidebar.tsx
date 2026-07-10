@@ -186,9 +186,13 @@ export function AppSidebar() {
     },
     review: {
       label: t.stepsNav.review,
-      // 검수·준비 단계: 저장소 연결 + 빌더팩 다운로드(위로 올림). 서비스/키·알림은
-      // 준비 계층(P1)에서 이 단계에 추가된다.
-      items: [["github", t.nav.github], ["export", t.nav.export]],
+      // 검수·준비 단계: 빌더팩이 기본. "코드 변경"(GitHub) 탭은 코드 갈래이거나
+      // repo가 실제로 연결된 뒤에만 보인다 — 아이디어 갈래 유저에게 repo는 아직
+      // 존재하지도, 알 필요도 없는 개념이다 (배님 2026-07-10 라이브 워크스루).
+      items:
+        entryPath === "code" || hasRepo === true
+          ? [["github", t.nav.github], ["export", t.nav.export]]
+          : [["export", t.nav.export]],
     },
     results: {
       label: t.stepsNav.results,
