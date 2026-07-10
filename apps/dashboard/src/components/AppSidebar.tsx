@@ -76,6 +76,15 @@ export function AppSidebar() {
     return () => window.removeEventListener("simsa:auth-changed", onAuthChanged);
   }, [syncSession]);
 
+  // A project created on /projects/new must appear in this list without a full
+  // page reload — client-side navigation never remounts the layout sidebar, so
+  // re-read the local bucket on every route change (localStorage is sync/cheap).
+  // Live finding 2026-07-10: idea-branch users landed on their new project with
+  // the sidebar still not showing it.
+  useEffect(() => {
+    setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
+  }, [pathname]);
+
   // Close the account menu on outside click / Escape.
   useEffect(() => {
     if (!accountMenuOpen) return;

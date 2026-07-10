@@ -166,14 +166,15 @@ test("idea branch with confirmed-no items → create_items first", async () => {
   );
 });
 
-test("nextScreenSlug walks the canonical order and ends cleanly", () => {
+test("nextScreenSlug: idea/spec entries walk to the builder pack and STOP (no code yet)", () => {
+  // Pre-build users must never be marched into repo-connect/PR screens —
+  // that funnel only exists after the app does (2026-07-10 live walkthrough).
   assert.equal(nextScreenSlug("idea"), "spec");
   assert.equal(nextScreenSlug("spec"), "items");
-  assert.equal(nextScreenSlug("items"), "settings");
-  assert.equal(nextScreenSlug("settings"), "github");
-  assert.equal(nextScreenSlug("github"), "checks");
-  assert.equal(nextScreenSlug("checks"), "fixes");
-  assert.equal(nextScreenSlug("fixes"), null); // last — no forced next
+  assert.equal(nextScreenSlug("items"), "export");
+  assert.equal(nextScreenSlug("export"), null); // go build — return path is explicit, not a forced walk
+  assert.equal(nextScreenSlug("settings"), null); // repo screens are outside the pre-build walk
+  assert.equal(nextScreenSlug("github"), null);
   assert.equal(nextScreenSlug("benchmark"), null); // advanced screens stay out of the walk
 });
 
@@ -187,7 +188,7 @@ test("nextScreenSlug: the CODE branch walks repo-connect FIRST (이미 만든 �
   assert.equal(nextScreenSlug("fixes", "code"), null);
   // idea/spec are not on the code walk at all
   assert.equal(nextScreenSlug("idea", "code"), null);
-  // other entries keep the canonical order
-  assert.equal(nextScreenSlug("items", "idea"), "settings");
-  assert.equal(nextScreenSlug("items", null), "settings");
+  // other entries walk to the builder pack (pre-build — no repo screens)
+  assert.equal(nextScreenSlug("items", "idea"), "export");
+  assert.equal(nextScreenSlug("items", null), "export");
 });
