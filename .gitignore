@@ -57,3 +57,4 @@ packages/smoke-verifier/marketplace-*.mjs
 apps/central-plane/.wrangler/
 
 .vercel
+tools/simsa-completion-loop-spike/smoke-shots/
