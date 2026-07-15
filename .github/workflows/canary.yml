@@ -20,6 +20,9 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    permissions:
+      contents: read
+      issues: write
     env:
       BASE: https://conclave-ai.seunghunbae.workers.dev
       APP: https://app.trysimsa.com
@@ -96,6 +99,42 @@ jobs:
             exit 1
           fi
           echo "All canary checks passed."
+
+      # Loud, secret-free alert channel. Email alone failed us: the canary
+      # ran red for 5 straight days (2026-07-10 → 07-15) and nobody noticed,
+      # because GitHub's failure email is easy to skim past. An OPEN issue is
+      # a standing red flag on the repo until someone acts; it auto-closes on
+      # the first green run so it can never go stale in the other direction.
+      - name: Open tracking issue (on failure, secret-free)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MSG: ${{ steps.probe.outputs.summary }}
+        run: |
+          gh label create canary --repo "$GITHUB_REPOSITORY" \
+            --description "Production canary alerts" --color B60205 2>/dev/null || true
+          open_issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --label canary \
+            --state open --json number --jq '.[0].number // empty')
+          body=$(printf '%s\n\nRun: %s/%s/actions/runs/%s\n(auto-filed by canary; closes itself on the first green run)' \
+            "${MSG:-🔴 Simsa canary failed.}" \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+          if [ -z "$open_issue" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --label canary \
+              --title "🔴 Production canary failing" --body "$body"
+          else
+            echo "Canary issue #$open_issue already open — not spamming."
+          fi
+
+      - name: Close tracking issue (on recovery)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --repo "$GITHUB_REPOSITORY" --label canary \
+                     --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" \
+              --comment "✅ Canary green again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          done
 
       - name: Telegram alert (optional)
         if: failure()
