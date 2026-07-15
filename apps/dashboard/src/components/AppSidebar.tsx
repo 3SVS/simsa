@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { loadLocalProjects, loadExtendedProjectData, getUserKey, setActiveAccountNamespace, clearActiveAccount } from "@/lib/workflow-store";
+import { loadLocalProjects, loadExtendedProjectData, getUserKey, setActiveAccountNamespace, clearActiveAccount, PROJECTS_CHANGED_EVENT } from "@/lib/workflow-store";
 import { MOCK_PROJECTS, type Project } from "@/lib/mock-data";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { StampMark } from "@/components/brand/StampMark";
@@ -84,6 +84,16 @@ export function AppSidebar() {
   useEffect(() => {
     setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
   }, [pathname]);
+
+  // Mutations on the SAME route (e.g. deleting a card on /projects) never
+  // change pathname — the store fires this event so the list updates in place.
+  // Live finding 2026-07-15: a deleted project's sidebar entry survived until
+  // the next navigation.
+  useEffect(() => {
+    const onProjectsChanged = () => setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
+    window.addEventListener(PROJECTS_CHANGED_EVENT, onProjectsChanged);
+    return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, onProjectsChanged);
+  }, []);
 
   // Close the account menu on outside click / Escape.
   useEffect(() => {

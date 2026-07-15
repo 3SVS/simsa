@@ -113,6 +113,20 @@ export function clearDraft(): void {
   localStorage.removeItem(draftKeyFor(activeNamespace()));
 }
 
+/**
+ * Fired on window whenever the projects bucket changes (save/delete), so
+ * always-mounted listeners (AppSidebar) can re-read without a route change.
+ * Live finding 2026-07-15: deleting on /projects left the sidebar entry
+ * behind until the next navigation — same class as the 2026-07-10 create
+ * bug, fixed at the store level this time so every future mutator is covered.
+ */
+export const PROJECTS_CHANGED_EVENT = "simsa:projects-changed";
+
+function notifyProjectsChanged(): void {
+  if (typeof window === "undefined") return;
+  try { window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT)); } catch { /* non-DOM env */ }
+}
+
 export function saveProject(project: Project): void {
   if (typeof window === "undefined") return;
   const projects = loadLocalProjects();
@@ -123,6 +137,7 @@ export function saveProject(project: Project): void {
     projects.unshift(project);
   }
   localStorage.setItem(projectsKeyFor(activeNamespace()), JSON.stringify(projects));
+  notifyProjectsChanged();
 }
 
 export function loadLocalProjects(): Project[] {
@@ -157,6 +172,7 @@ export function deleteProject(id: string): boolean {
       localStorage.setItem(SYNC_FAILED_KEY, JSON.stringify(list));
     }
   } catch { /* storage unavailable or corrupt — nothing else to do */ }
+  notifyProjectsChanged();
   return existed;
 }
 
