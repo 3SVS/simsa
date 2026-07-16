@@ -250,32 +250,58 @@ const PROJECT_SCOPED_TABLES = [
  * R2 deletes are best-effort (an orphaned object is storage cost, not a
  * correctness or privacy leak once its DB row is gone).
  */
-export async function deleteProject(env: Env, id: string): Promise<void> {
+/**
+ * Every R2 key under `prefix`, following the truncation cursor. R2 caps a list
+ * page at 1000 objects, so a project with more evidence than that would leak
+ * the tail if we only read the first page.
+ */
+async function listKeysByPrefix(bucket: R2Bucket, prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
+    for (const obj of page.objects) keys.push(obj.key);
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return keys;
+}
+
+export async function deleteProject(env: Env, id: string, userKey: string): Promise<void> {
   // 1. Collect R2 evidence keys before the rows referencing them are deleted:
   //    uploaded documents (user content — must be removed) + visual-check shots.
-  const r2Keys: string[] = [];
+  const r2Keys = new Set<string>();
   try {
     const docs = await env.DB.prepare(
       `SELECT reference FROM project_sources WHERE project_id = ? AND type = 'document' AND reference != 'pending'`,
     )
       .bind(id)
       .all<{ reference: string }>();
-    for (const row of docs.results ?? []) if (row.reference) r2Keys.push(row.reference);
+    for (const row of docs.results ?? []) if (row.reference) r2Keys.add(row.reference);
   } catch (err) {
     console.error("[workspace/db deleteProject] source R2 scan failed:", err);
   }
-  try {
-    const vis = await env.DB.prepare(
-      `SELECT evidence_keys_json FROM workspace_visual_checks WHERE project_id = ?`,
-    )
-      .bind(id)
-      .all<{ evidence_keys_json: string }>();
-    for (const row of vis.results ?? []) {
-      const keys = safeJson(row.evidence_keys_json ?? "[]");
-      if (Array.isArray(keys)) for (const k of keys) if (typeof k === "string") r2Keys.push(k);
+
+  // Visual-check evidence is NOT enumerable from D1: the upload writes the full
+  // key `checks/{userKey}/{projectId}/{runId}/{name}` but records only the
+  // relative `name` (the read path in workspace-visual-checks.ts reconstructs
+  // the rest). Feeding those names straight to R2.delete() deleted keys that
+  // never existed — and R2 resolves a delete of a missing key successfully, so
+  // it failed silently and every screenshot/video survived every project
+  // delete.
+  //
+  // Enumerate by prefix instead of rebuilding keys from the manifest. Both
+  // project-scoped prefixes embed `{userKey}/{projectId}/`, so this is exactly
+  // scoped — it cannot reach another user's or another project's objects — and
+  // it also sweeps objects the manifest never knew about (a `put` that landed
+  // while its D1 append failed, or a document stuck at reference='pending').
+  if (env.EVIDENCE && userKey) {
+    for (const prefix of [`checks/${userKey}/${id}/`, `docs/${userKey}/${id}/`]) {
+      try {
+        for (const k of await listKeysByPrefix(env.EVIDENCE, prefix)) r2Keys.add(k);
+      } catch (err) {
+        console.error(`[workspace/db deleteProject] R2 prefix scan failed (${prefix}):`, err);
+      }
     }
-  } catch (err) {
-    console.error("[workspace/db deleteProject] visual R2 scan failed:", err);
   }
 
   // 2. Cascade-delete all D1 rows in one transaction FIRST. Experiment
@@ -297,8 +323,16 @@ export async function deleteProject(env: Env, id: string): Promise<void> {
 
   // 3. Delete R2 objects (best-effort, in parallel) — now that no DB row refers
   //    to them, an orphan here is pure storage cost, not a dangling reference.
-  if (env.EVIDENCE && r2Keys.length) {
-    await Promise.all(r2Keys.map((k) => env.EVIDENCE!.delete(k).catch(() => {})));
+  if (env.EVIDENCE && r2Keys.size) {
+    await Promise.all(
+      [...r2Keys].map((k) =>
+        env.EVIDENCE!.delete(k).catch((err) => {
+          // Still best-effort, but no longer silent: an orphan is pure storage
+          // cost, and the only way we learn it happened is this line.
+          console.error(`[workspace/db deleteProject] R2 delete failed (${k}):`, err);
+        }),
+      ),
+    );
   }
 }
 

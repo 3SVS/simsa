@@ -442,7 +442,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     try {
       const project = await getOwnedProject(c.env, id, userKey);
       if (!project) return new Response(JSON.stringify({ ok: false, error: "not_found" }), { status: 404, headers: { "content-type": "application/json", ...headers } });
-      await deleteProject(c.env, id);
+      await deleteProject(c.env, id, userKey);
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", ...headers } });
     } catch (err) {
       console.error("[workspace/projects DELETE] failed:", err);
