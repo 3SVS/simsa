@@ -74,13 +74,33 @@ export function decideFromEvidence(e, steps) {
   return "Not Verified";
 }
 
+/** Step NOTES. Like the step labels, these are quoted into the report prose. */
+const STEP_NOTES = {
+  ko: {
+    unsafeSkipped: (cat) => `안전하지 않아 건너뜀 (${cat})`,
+    noResults: "검색 결과/내용이 확인되지 않음 (또는 데이터 요청 실패)",
+    networkFailed: "데이터 요청 실패가 관찰됨",
+    actionFailed: (err) => `동작 실패: ${err}`,
+  },
+  en: {
+    unsafeSkipped: (cat) => `Skipped — not safe to run (${cat})`,
+    noResults: "No results/content appeared (or the data request failed)",
+    networkFailed: "A data request was observed failing",
+    actionFailed: (err) => `Action failed: ${err}`,
+  },
+};
+
 /**
  * Execute one inspection. Returns:
  *   { report, agentPrompt, decision, works, evidenceFiles: [{ name, path }] }
  * where `name` is the Stage 261 evidence name (screenshots/*.png | video/flow.webm)
  * and `path` is the absolute file path inside the container.
+ *
+ * sampleQuery has NO default here on purpose: planVisualFlow picks one from the
+ * locale, and a default at this seam would silently win over it.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery = "서울", locale = "ko" }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko" }) {
+  const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
   const shotsDir = join(outDir, "screenshots");
   const videoDir = join(outDir, "video");
   mkdirSync(shotsDir, { recursive: true });
@@ -142,6 +162,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery = "
       inputs,
       forbidden: FORBIDDEN_ACTIONS,
       sampleQuery,
+      locale,
     });
     evidence.primaryActionFound = plan.some((s) => s.action === "click" || s.action === "type");
 
@@ -153,7 +174,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery = "
         if (step.action === "click") {
           const safety = classifyActionSafety(step.targetText);
           if (!safety.safe) {
-            stepOutcomes.push({ label: step.label, ok: false, note: `안전하지 않아 건너뜀 (${safety.category})` });
+            stepOutcomes.push({ label: step.label, ok: false, note: N.unsafeSkipped(safety.category) });
             continue;
           }
           await page.getByText(step.targetText, { exact: true }).first().click({ timeout: 8000 });
@@ -174,14 +195,14 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery = "
           // Did results/content appear? Heuristic: page text grew and no fresh network failure.
           const bodyLen = (await page.locator("body").innerText().catch(() => "")).length;
           const ok = bodyLen > 200 && networkFailures.length === 0;
-          stepOutcomes.push({ label: step.label, ok, note: ok ? undefined : "검색 결과/내용이 확인되지 않음 (또는 데이터 요청 실패)" });
+          stepOutcomes.push({ label: step.label, ok, note: ok ? undefined : N.noResults });
         } else {
           await snap(shotName);
-          stepOutcomes.push({ label: step.label, ok: networkFailures.length === 0, note: networkFailures.length ? "데이터 요청 실패가 관찰됨" : undefined });
+          stepOutcomes.push({ label: step.label, ok: networkFailures.length === 0, note: networkFailures.length ? N.networkFailed : undefined });
         }
       } catch (err) {
         await snap(shotName);
-        stepOutcomes.push({ label: step.label, ok: false, note: `동작 실패: ${String(err).slice(0, 100)}` });
+        stepOutcomes.push({ label: step.label, ok: false, note: N.actionFailed(String(err).slice(0, 100)) });
       }
     }
   } finally {
