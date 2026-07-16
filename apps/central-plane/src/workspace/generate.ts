@@ -332,7 +332,15 @@ function gateDraftOf(res: IdeaToSpecDraftResponse): unknown {
 }
 
 function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse {
-  const isMeeting = /회의|녹음|요약|linear|미팅/i.test(req.idea);
+  // Honesty guard: this LLM-unavailable fallback must NOT fabricate a specific,
+  // unrelated product from a single common word. The old trigger
+  // (/회의|녹음|요약|linear|미팅/) fired on "요약" or "linear" ALONE, so "리뷰를
+  // 요약하는 앱" or "회의실 예약 앱" got a canned "회의록 → Linear 전송" spec that
+  // had nothing to do with the user's idea. Now it only fires for a genuine
+  // meeting-NOTES idea: a meeting-context word (회의/미팅/녹음) AND a
+  // summarize/tasks word. Everything else gets the generic, idea-echoing draft.
+  const isMeeting =
+    /회의|미팅|녹음/i.test(req.idea) && /요약|할\s*일|정리|linear/i.test(req.idea);
   const flags = extractAnswerFlags(req.answers);
 
   if (isMeeting) {
