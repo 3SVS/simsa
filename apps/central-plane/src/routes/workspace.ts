@@ -230,6 +230,20 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       mode: req.mode ?? "standard",
       answers: Array.isArray(req.answers) ? req.answers : [],
       locale: req.locale ?? "ko",
+      // Extra context (D2) + rejected-question steer (D3). Both optional and
+      // defensively bounded — they cross the wire from an untrusted client.
+      ...(typeof req.context === "string" && req.context.trim()
+        ? { context: req.context.trim().slice(0, 4_000) }
+        : {}),
+      ...(Array.isArray(req.rejectedQuestions)
+        ? {
+            rejectedQuestions: req.rejectedQuestions
+              .filter((r): r is { question: string; reason: string } =>
+                !!r && typeof r.question === "string" && typeof r.reason === "string")
+              .slice(0, 6)
+              .map((r) => ({ question: r.question.slice(0, 300), reason: r.reason.slice(0, 300) })),
+          }
+        : {}),
     };
 
     let result;
