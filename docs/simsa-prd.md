@@ -127,10 +127,16 @@ publicLaunchTouched · visualEvidenceMissing · acceptanceCriteriaMissing · use
 
 ## 6. 축 A — 온보딩 → 스펙 → 준비 → 빌더팩
 
-### 6.1 실현가능성/온보딩 (P1) — [부분 미결: 통합 스펙]
-> [미결] 감사가 P1 근거로 이름 댄 `onboarding-feasibility-layer.md`는 **부재**. P1 방향은 감사
-> §2c/§5c + prep-layer + operating-model에 **흩어져** 있음. 아래는 그 방향의 요약이며, **P1
-> 착수 전 이 절을 단일 P1 스펙으로 확정**해야 한다(T-DESIGN).
+### 6.1 실현가능성/온보딩 (P1) — [부분 미결: Bae 확정 대기]
+> [정정 2026-07-16] 이 절은 `onboarding-feasibility-layer.md`가 **부재**하다고 적고 있었으나,
+> 사실이 아니었다 — 그 문서는 **머지되지 않은 PR #296에 갇혀 있었고**, 그래서 repo에 없는 것으로
+> 취급됐다. #296을 머지해 이제 [`onboarding-feasibility-layer.md`](onboarding-feasibility-layer.md)에
+> 있다(PISTA 사례 · 온보딩 인터뷰 5문항 · web_buildable/mobile_handoff/other_handoff 분류 ·
+> 코딩레벨 3단계 · 데이터모델 · Phase 1~4).
+>
+> [미결 유지] **아직 T-DESIGN이 끝난 것은 아니다.** 그 문서는 2026-07-07~08 작성분이고 이 PRD가
+> 더 나중(07-09)이다. 이 PRD가 단일 진실인 이상, 그 문서를 **THE P1 스펙으로 승격할지는 Bae
+> 확정 사항**이다. P1 착수 전 두 서술을 대조해 확정할 것. 아래는 그때까지의 요약이다.
 - 입구 = **세 개의 문 + 예시**(빈 입력창 금지), "모르겠어요"는 capability-menu. (감사 §2c)
 - **다섯 슬롯을 한 화면 한 질문**, 객관식 우선, PRD에서 추론→확인. 되비추기 카드 + 승인 게이트
   (그 승인 체크리스트가 후에 검수 rubric이 됨).
@@ -311,8 +317,12 @@ acceptance-graph Visual 노드, product-boundary. 코드: `nondev-report.ts`, `v
 
 ## 15. 알려진 격차 / 미결 (open — 지어내지 않고 표시)
 
-1. **P1 온보딩/실현가능성 통합 스펙 부재** — `onboarding-feasibility-layer.md` 없음; 방향만 흩어짐
-   (§6.1). **P1 착수 전 단일 스펙 확정 필요**(T-DESIGN).
+1. **P1 온보딩/실현가능성 스펙 — 문서는 존재, 승격은 미결** *(2026-07-16 정정)*
+   이 항목은 원래 "`onboarding-feasibility-layer.md` 없음"이었으나 **틀린 기록**이었다. 문서는
+   내내 존재했고 **머지되지 않은 PR #296에** 있었다 — 대화에만 살아 있는 지시서가 조용히
+   빠지는 그 실패 모드. #296 머지로 이제 repo에 있다(§6.1).
+   **남은 미결:** 그 문서(07-07~08)와 이 PRD(07-09) 중 어느 쪽이 P1의 단일 스펙인지 **Bae 확정
+   필요**(T-DESIGN). 문서 존재 ≠ 스펙 확정.
 2. **스테이지 번호 문서 간 불일치** — 258A/260A가 문서마다 다른 것을 지칭(operating §19의 258A=
    Artifact Alignment Gate vs loop 문서=External Spike). **"번호 아닌 계약"으로 참조**, 재조정은
    별도.
