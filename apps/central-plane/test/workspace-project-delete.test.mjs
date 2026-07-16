@@ -199,6 +199,45 @@ describe("deleteProject — cascade boundary", () => {
     assert.ok(bucket[`checks/uk_stranger/${PROJECT}/vc_9/screenshots/step-01.png`], "other user must survive");
   });
 
+  // The whole safety of a prefix sweep rests on the trailing "/". Without it,
+  // deleting proj_x would also wipe proj_x2 and proj_x_backup — an irreversible
+  // cross-project data loss, and the objects are gone before anyone notices.
+  // Nothing else in the suite would fail if the slash were dropped.
+  it("a project id that is a PREFIX of another id must not drag the other one's evidence with it", async () => {
+    const bucket = {
+      [`checks/${USER}/proj_x/vc_1/screenshots/a.png`]: 1,
+      [`checks/${USER}/proj_x2/vc_1/screenshots/a.png`]: 1,
+      [`checks/${USER}/proj_x_backup/vc_1/screenshots/a.png`]: 1,
+      [`docs/${USER}/proj_x2/src_1/spec.pdf`]: 1,
+    };
+    const { env } = makeEnv({ bucket });
+    await deleteProject(env, "proj_x", USER);
+    assert.deepEqual(
+      Object.keys(bucket).sort(),
+      [
+        `checks/${USER}/proj_x2/vc_1/screenshots/a.png`,
+        `checks/${USER}/proj_x_backup/vc_1/screenshots/a.png`,
+        `docs/${USER}/proj_x2/src_1/spec.pdf`,
+      ].sort(),
+      "only proj_x's own object may be deleted — ids that merely share its prefix must survive",
+    );
+  });
+
+  // Same hazard on the userKey segment.
+  it("a userKey that is a prefix of another userKey must not reach the other user's evidence", async () => {
+    const bucket = {
+      [`checks/uk_a/${PROJECT}/vc_1/screenshots/a.png`]: 1,
+      [`checks/uk_ab/${PROJECT}/vc_1/screenshots/a.png`]: 1,
+    };
+    const { env } = makeEnv({ bucket });
+    await deleteProject(env, PROJECT, "uk_a");
+    assert.deepEqual(
+      Object.keys(bucket),
+      [`checks/uk_ab/${PROJECT}/vc_1/screenshots/a.png`],
+      "uk_ab's evidence must survive uk_a's delete",
+    );
+  });
+
   it("follows the R2 list cursor — evidence past the first page is not left behind", async () => {
     // R2 caps a real page at 1000 objects; squeeze it to 2 to force pagination.
     const { env, deletedR2 } = makeEnv({ listLimit: 2 });
