@@ -61,6 +61,12 @@ function NewProjectInner() {
   const toast = useToast();
   const [step, setStep] = useState<Step>(1);
   const [ideaText, setIdeaText] = useState("");
+  // D2 (2026-07-16): free-text "anything else Simsa should know" beside the idea.
+  const [extraContext, setExtraContext] = useState("");
+  // D3: questions the user marked "not right for my case" (question + reason),
+  // fed back into the next generation so it steers away instead of re-asking.
+  const [rejectedQuestions, setRejectedQuestions] = useState<Array<{ question: string; reason: string }>>([]);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isFallback, setIsFallback] = useState(false);
   const [rateLimitMsg, setRateLimitMsg] = useState<string | null>(null);
@@ -206,7 +212,11 @@ function NewProjectInner() {
     setIsLoading(true);
     setIsFallback(false);
     setRateLimitMsg(null);
-    const res = await callWorkspaceApi({ idea: ideaText });
+    const res = await callWorkspaceApi({
+      idea: ideaText,
+      context: extraContext,
+      ...(rejectedQuestions.length ? { rejectedQuestions } : {}),
+    });
     if (res.ok) {
       setResult(res.data);
       setIsFallback(res.data.source === "mock-fallback");
@@ -220,6 +230,35 @@ function NewProjectInner() {
     setIsLoading(false);
   }
 
+  // D3: the user says a question doesn't fit. Record it (question + reason),
+  // regenerate with that steer folded in, and STAY on step 3 with the fresh
+  // set. Answers already given survive (they're keyed by question id in
+  // `answers`); the rejected question's own answer is cleared since it's gone.
+  async function handleRejectQuestion(rejected: WorkspaceQuestion, reason: string) {
+    const nextRejected = [...rejectedQuestions, { question: rejected.question, reason }];
+    setRejectedQuestions(nextRejected);
+    setAnswers((prev) => {
+      const { [rejected.id]: _dropped, ...rest } = prev;
+      return rest;
+    });
+    setIsRegenerating(true);
+    setRateLimitMsg(null);
+    const res = await callWorkspaceApi({
+      idea: ideaText,
+      context: extraContext,
+      rejectedQuestions: nextRejected,
+    });
+    if (res.ok) {
+      setResult(res.data);
+      setIsFallback(res.data.source === "mock-fallback");
+    } else if (res.error === "rate_limited") {
+      setRateLimitMsg(t.common.rateLimited);
+    } else {
+      setRateLimitMsg(t.errors.llmUnavailable);
+    }
+    setIsRegenerating(false);
+  }
+
   async function handleGenerateSpec() {
     if (!result) return;
     setIsGeneratingSpec(true);
@@ -228,7 +267,7 @@ function NewProjectInner() {
       questionId,
       answer,
     }));
-    const res = await callWorkspaceApi({ idea: ideaText, answers: answerArray });
+    const res = await callWorkspaceApi({ idea: ideaText, answers: answerArray, context: extraContext });
     if (res.ok) {
       setSpecResult(res.data);
       setIsFallback(res.data.source === "mock-fallback");
@@ -591,7 +630,7 @@ function NewProjectInner() {
                 rows={5}
                 className="input resize-none rounded-lg"
               />
-              <div className="mb-8 mt-4">
+              <div className="mt-4">
                 <p className="mb-2 text-xs text-gray-500">{t.np.examplesLabel}</p>
                 <div className="flex flex-col gap-2">
                   {t.np.examples.map((ex, i) => (
@@ -604,6 +643,21 @@ function NewProjectInner() {
                     </button>
                   ))}
                 </div>
+              </div>
+              {/* D2: extra context. Optional — a place for "I'm the only user",
+                  "must work offline", references, so Simsa doesn't have to guess. */}
+              <div className="mb-8 mt-4">
+                <label htmlFor="np-extra-context" className="mb-1.5 block text-xs font-medium text-gray-600">
+                  {t.np.extraContextLabel}
+                </label>
+                <textarea
+                  id="np-extra-context"
+                  value={extraContext}
+                  onChange={(e) => setExtraContext(e.target.value)}
+                  placeholder={t.np.extraContextPlaceholder}
+                  rows={2}
+                  className="input resize-none rounded-lg"
+                />
               </div>
               <button
                 onClick={handleGenerateUnderstanding}
@@ -657,7 +711,10 @@ function NewProjectInner() {
               <h2 className="text-xl font-semibold tracking-tight text-gray-900">{t.np.step3Title}</h2>
               <p className="mb-8 mt-1 text-sm text-gray-500">{t.np.step3Sub}</p>
 
-              <div className="mb-8 space-y-4">
+              {isRegenerating && (
+                <div className="callout mb-4 border-brand-100 bg-brand-50 text-xs text-brand-700">{t.np.regenerating}</div>
+              )}
+              <div className="mb-8 space-y-4" aria-busy={isRegenerating}>
                 {questions.map((q, i) => (
                   <ApiQuestionCard
                     key={q.id}
@@ -666,7 +723,9 @@ function NewProjectInner() {
                     index={i}
                     total={questions.length}
                     answer={answers[q.id]}
+                    disabled={isRegenerating}
                     onAnswer={(val) => setAnswers((prev) => ({ ...prev, [q.id]: val }))}
+                    onReject={(reason) => handleRejectQuestion(q, reason)}
                   />
                 ))}
               </div>
@@ -817,17 +876,24 @@ function ApiQuestionCard({
   index,
   total,
   answer,
+  disabled,
   onAnswer,
+  onReject,
 }: {
   t: Dictionary;
   question: WorkspaceQuestion;
   index: number;
   total: number;
   answer: string | undefined;
+  disabled?: boolean;
   onAnswer: (v: string) => void;
+  onReject: (reason: string) => void;
 }) {
+  // D3: local state for the "이 질문 안 맞아요" reason input.
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
   return (
-    <div className="card p-6">
+    <div className={`card p-6${disabled ? " pointer-events-none opacity-60" : ""}`}>
       <div className="mb-4 flex items-center gap-2">
         <span className="font-mono text-xs text-gray-500">{index + 1} / {total}</span>
         {answer && answer !== "defer" && <span className="text-xs font-medium text-green-600">✓ {t.np.answered}</span>}
@@ -904,6 +970,46 @@ function ApiQuestionCard({
           }}
         />
       )}
+      {/* D3: "this question doesn't fit my case". Opens a reason box; submitting
+          feeds {question, reason} back so the next generation steers away and
+          replaces it — instead of the user rewriting the whole idea. */}
+      <div className="mt-4 border-t border-gray-100 pt-3">
+        {!rejecting ? (
+          <button
+            onClick={() => setRejecting(true)}
+            className="text-xs text-gray-400 underline hover:text-gray-600"
+          >
+            {t.np.rejectQuestion}
+          </button>
+        ) : (
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-gray-600">{t.np.rejectReasonLabel}</p>
+            <textarea
+              autoFocus
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={t.np.rejectReasonPlaceholder}
+              rows={2}
+              className="input resize-none rounded-lg text-sm"
+            />
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => reason.trim() && onReject(reason.trim())}
+                disabled={!reason.trim()}
+                className="btn btn-secondary px-3 py-1.5 text-xs"
+              >
+                {t.np.rejectSubmit}
+              </button>
+              <button
+                onClick={() => { setRejecting(false); setReason(""); }}
+                className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-600"
+              >
+                {t.np.cancel}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
