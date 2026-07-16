@@ -26,6 +26,11 @@ const CENTRAL_PLANE_URL =
 export type WorkspaceApiInput = {
   idea: string;
   answers?: Array<{ questionId: string; answer: string }>;
+  /** "Anything else Simsa should know" — extra context beyond the one-line idea. */
+  context?: string;
+  /** Questions the user marked "not right for my case", with the reason, so the
+   *  next generation steers away instead of the user rewriting the whole idea. */
+  rejectedQuestions?: Array<{ question: string; reason: string }>;
 };
 
 /** Rate limit hit — no fallback, show gentle notice to user */
@@ -63,6 +68,8 @@ export async function callWorkspaceApi(
         answers: input.answers ?? [],
         locale: "ko",
         mode: "standard",
+        ...(input.context?.trim() ? { context: input.context.trim() } : {}),
+        ...(input.rejectedQuestions?.length ? { rejectedQuestions: input.rejectedQuestions } : {}),
       }),
       signal: AbortSignal.timeout(150000), // document-scale drafts (up to 80k chars) take a while
     });

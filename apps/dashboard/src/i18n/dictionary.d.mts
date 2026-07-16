@@ -361,6 +361,14 @@ export type Dictionary = {
     saveNote: string;
     customInput: string;
     useRecommendation: string;
+    extraContextLabel: string;
+    extraContextPlaceholder: string;
+    rejectQuestion: string;
+    rejectReasonLabel: string;
+    rejectReasonPlaceholder: string;
+    rejectSubmit: string;
+    regenerating: string;
+    cancel: string;
     openQIntro: string;
     openQGet: string;
     openQThinking: string;
