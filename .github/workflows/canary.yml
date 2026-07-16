@@ -78,14 +78,24 @@ jobs:
                    "https://api.github.com/repos/${GITHUB_REPOSITORY}/compare/${deployed}...${head}")
               ahead=$(printf '%s' "$cmp" | jq -r '.ahead_by // 0')
               oldest=$(printf '%s' "$cmp" | jq -r '.commits[0].commit.committer.date // empty')
-              # Only Worker-relevant paths count. Dashboard ships via Vercel and
-              # docs ship nowhere — a docs-only merge must not page anyone about
-              # the Worker (2026-07-15: dashboard-only #327/#328 kept this red).
+              # Only paths that actually ship in the Worker bundle count.
+              # Dashboard ships via Vercel and docs ship nowhere — a docs-only
+              # merge must not page anyone about the Worker (2026-07-15:
+              # dashboard-only #327/#328 kept this red).
+              # Second exclusion (2026-07-16): tests and markdown live UNDER
+              # apps/central-plane/ and packages/, so the path prefix alone still
+              # called a test-only commit a pending deploy. wrangler bundles src/
+              # — it never bundles test/, so that alert was asking for a deploy
+              # that would change nothing. This alarm is only worth having if
+              # every firing means something; the 5-day red was alarm fatigue.
               # Fail-safe: compare API truncates files at 300, so a huge range
               # with zero listed worker files still alerts (files may be hidden).
               worker_touched=$(printf '%s' "$cmp" | jq -r '
                 if ((.files // []) | length) >= 300 then "assume"
-                else [(.files // [])[].filename | select(test("^(apps/central-plane/|packages/|pnpm-lock\\.yaml$|pnpm-workspace\\.yaml$)"))] | length
+                else [(.files // [])[].filename
+                      | select(test("^(apps/central-plane/|packages/|pnpm-lock\\.yaml$|pnpm-workspace\\.yaml$)"))
+                      | select(test("(^|/)test/|\\.test\\.[a-z]+$|\\.md$") | not)]
+                     | length
                 end')
               if [ "${ahead:-0}" -gt 0 ] && [ -n "$oldest" ] && [ "$worker_touched" != "0" ]; then
                 age=$(( $(date -u +%s) - $(date -u -d "$oldest" +%s) ))
