@@ -13,6 +13,18 @@ export type IdeaToSpecDraftRequest = {
   mode?: "quick" | "standard" | "thorough";
   answers?: Array<{ questionId: string; answer: string }>;
   locale?: "ko" | "en";
+  /**
+   * Free-text extra context beyond the one-line idea ("anything else Simsa
+   * should know"). Kept in a separate channel from `idea` so it doesn't muddy
+   * the idea, but folded into the prompt and the user-words gate all the same.
+   */
+  context?: string;
+  /**
+   * Questions the user marked "this doesn't fit my case", with their reason.
+   * Fed back into the next generation so it steers AWAY from that direction
+   * and offers a replacement, instead of the user having to rewrite the idea.
+   */
+  rejectedQuestions?: Array<{ question: string; reason: string }>;
 };
 
 export type Question = {
@@ -169,7 +181,66 @@ const SCHEMA_DESCRIPTION_EN = `{
   ]
 }`;
 
-function buildPrompt(req: IdeaToSpecDraftRequest): string {
+/**
+ * Deterministic solo-use detector. When a non-dev says an app is just for
+ * themselves, asking "who do you grant access to / is this multi-user" is
+ * nonsense — Bae's live complaint. We decide this WITHOUT the LLM (a matcher,
+ * not a judgement) so the guard is predictable and testable. Markers are a
+ * parameter, not a principle (D1): tune freely.
+ *
+ * Scans idea + extra context + the user's own answers. A multi-user marker
+ * ("팀"/"team"/"고객"/"직원"…) VETOES the solo verdict — "혼자 관리하지만 팀이
+ * 쓰는" is not solo. Requires an explicit solo phrase; silence ≠ solo.
+ */
+const SOLO_MARKERS =
+  /혼자|나\s*혼자|나만|내가?\s*쓰|개인용|개인\s*용도|본인만|자기만|로그인\s*(?:은)?\s*(?:필요\s*없|안\s*)|just\s+for\s+me|only\s+me|for\s+myself|personal\s+use|single[-\s]?user|no\s+(?:login|sign[-\s]?up|account)/i;
+const MULTIUSER_MARKERS =
+  /여러\s*(?:사람|명|사용자)|팀|조직|회사|직원|고객|손님|회원|가입자|멀티|multi[-\s]?user|team|organization|customers?|clients?|members?|employees?|users\s+(?:sign|log)/i;
+
+export function detectSoloUse(req: IdeaToSpecDraftRequest): boolean {
+  const text = [
+    req.idea,
+    req.context ?? "",
+    ...(req.answers ?? []).map((a) => a.answer),
+  ].join(" ");
+  if (MULTIUSER_MARKERS.test(text)) return false;
+  return SOLO_MARKERS.test(text);
+}
+
+/** The solo-use rule injected into the prompt (D1). Empty when not solo. */
+function soloGuard(locale: "ko" | "en" | undefined, solo: boolean): string {
+  if (!solo) return "";
+  return locale === "ko"
+    ? `\n- 이 앱은 **혼자(개인용)** 쓰는 앱이다. 권한·역할·멀티유저·사용자 구분/격리·"누구에게 접근을 허용하나" 류의 질문이나 항목은 만들지 마라 — 이 사용자에겐 무의미하다.`
+    : `\n- This app is for **solo/personal use**. Do NOT create any question or item about permissions, roles, multi-user, user separation/isolation, or "who to grant access to" — it is meaningless for this user.`;
+}
+
+/** Extra-context block (D2). Empty when the user gave none. */
+function contextBlock(locale: "ko" | "en" | undefined, context: string | undefined): string {
+  const c = (context ?? "").trim();
+  if (!c) return "";
+  return locale === "ko"
+    ? `\n사용자가 추가로 알려준 내용(반드시 반영):\n${c.slice(0, 4000)}`
+    : `\nExtra context the user provided (must be reflected):\n${c.slice(0, 4000)}`;
+}
+
+/** Rejected-question steer (D3). Empty when nothing was rejected. */
+function rejectedBlock(
+  locale: "ko" | "en" | undefined,
+  rejected: IdeaToSpecDraftRequest["rejectedQuestions"],
+): string {
+  if (!rejected || rejected.length === 0) return "";
+  const list = rejected
+    .slice(0, 6)
+    .map((r) => `- "${r.question.slice(0, 200)}" — ${(r.reason || "").slice(0, 200)}`)
+    .join("\n");
+  return locale === "ko"
+    ? `\n사용자가 아래 질문들을 "내 경우엔 맞지 않는다"고 했다(사유 포함). 같은 방향의 질문은 피하고, 대신 이 아이디어에 실제로 맞는 다른 질문으로 대체하라:\n${list}`
+    : `\nThe user marked these questions as "not right for my case" (reason included). Avoid questions in the same direction; replace them with ones that actually fit this idea:\n${list}`;
+}
+
+export function buildPrompt(req: IdeaToSpecDraftRequest): string {
+  const solo = detectSoloUse(req);
   // English-first product: generate in English unless the caller asks for Korean.
   if (req.locale === "ko") {
     const answersText =
@@ -178,7 +249,7 @@ function buildPrompt(req: IdeaToSpecDraftRequest): string {
         : "";
     return `사용자가 만들고 싶은 제품 아이디어가 있습니다. 이 아이디어를 바탕으로 구조화된 제품 설명서를 한국어로 만들어주세요.
 
-아이디어: ${req.idea}${answersText}
+아이디어: ${req.idea}${contextBlock("ko", req.context)}${answersText}${rejectedBlock("ko", req.rejectedQuestions)}
 
 다음 규칙을 반드시 따르세요:
 - 모든 사용자 대상 텍스트는 자연스러운 한국어로 작성
@@ -187,7 +258,7 @@ function buildPrompt(req: IdeaToSpecDraftRequest): string {
 - 좋은 질문 = 답에 따라 제품이 실제로 달라지는 구체적 질문. 아래 축을 폭넓게 살펴 이 아이디어에 맞는 것을 고른다:
   구현 범위 · 사용자 흐름 · 데이터 보관 · 로그인/권한 · 외부 연동 · 대상 사용자 숙련도 · 성공 기준 ·
   **화면·디자인(UIUX)**: 참고하는 앱이나 느낌(예: Linear처럼 미니멀 / Notion처럼 정돈 / 밝고 친근하게), 핵심 화면이 몇 개이고 무엇이 먼저 보여야 하는지, 주로 모바일인지 데스크톱인지
-- 나쁜 질문 = 답이 제품을 바꾸지 않는 추상적 질문("장기 비전은?", "전반적으로 어떤 느낌?"). 단, 위처럼 **구체적인 UIUX 질문은 좋은 질문**이다.
+- 나쁜 질문 = 답이 제품을 바꾸지 않는 추상적 질문("장기 비전은?", "전반적으로 어떤 느낌?"). 단, 위처럼 **구체적인 UIUX 질문은 좋은 질문**이다.${soloGuard("ko", solo)}
 - 꼭 들어가야 할 항목은 8~10개, 각 항목마다 완성 기준 2~4개
 - 완성 기준은 확인 가능한 구체적 동작으로 작성
 
@@ -202,7 +273,7 @@ ${SCHEMA_DESCRIPTION}`;
       : "";
   return `A user has a product idea they want to build. Based on this idea, create a structured product brief in English.
 
-Idea: ${req.idea}${answersText}
+Idea: ${req.idea}${contextBlock("en", req.context)}${answersText}${rejectedBlock("en", req.rejectedQuestions)}
 
 Follow these rules strictly:
 - Write all user-facing text in natural, plain English
@@ -211,7 +282,7 @@ Follow these rules strictly:
 - Good questions = concrete questions whose answers actually change the product. Draw broadly from these axes, picking what fits this idea:
   scope · user flow · data retention · login/permissions · integrations · target-user skill level · success criteria ·
   **screens/design (UI/UX)**: a reference app or feel (e.g. minimal like Linear / tidy like Notion / bright & friendly), how many key screens there are and what should appear first, mainly mobile or desktop
-- Bad questions = abstract ones whose answers don't change the product ("what's the long-term vision?", "overall feel?"). But concrete UI/UX questions like the above ARE good.
+- Bad questions = abstract ones whose answers don't change the product ("what's the long-term vision?", "overall feel?"). But concrete UI/UX questions like the above ARE good.${soloGuard("en", solo)}
 - Include 8-10 must-have items, each with 2-4 acceptance criteria
 - Acceptance criteria must be concrete, verifiable behaviors
 
@@ -323,7 +394,7 @@ function extractAnswerFlags(answers: IdeaToSpecDraftRequest["answers"]): {
 
 /** Everything the user actually typed — the reference text for the gate. */
 function userWordsOf(req: IdeaToSpecDraftRequest): string {
-  return [req.idea, ...(req.answers ?? []).map((a) => a.answer)].join(" ");
+  return [req.idea, req.context ?? "", ...(req.answers ?? []).map((a) => a.answer)].join(" ");
 }
 
 /** The draft surfaces the gate inspects (title/spec/flow/items — what the user reads). */
@@ -342,6 +413,10 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
   const isMeeting =
     /회의|미팅|녹음/i.test(req.idea) && /요약|할\s*일|정리|linear/i.test(req.idea);
   const flags = extractAnswerFlags(req.answers);
+  // D1: a solo/personal app has no multi-user story, so the generic mock must
+  // drop its "multi-user vs personal" question and its "other users' data must
+  // not be visible" item — both nonsense for one user (Bae's live complaint).
+  const solo = detectSoloUse(req);
 
   if (isMeeting) {
     const hasAnswers = (req.answers ?? []).length > 0;
@@ -498,15 +573,19 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
           allowCustom: false,
           allowLater: true,
         },
-        {
-          id: "q3",
-          question: "Is this a multi-user service or for personal use?",
-          recommendation: "Multi-user",
-          reason: "How users are separated changes data isolation, permissions, and billing.",
-          options: ["Multi-user (team/org)", "Personal, single user"],
-          allowCustom: false,
-          allowLater: true,
-        },
+        ...(solo
+          ? []
+          : [
+              {
+                id: "q3",
+                question: "Is this a multi-user service or for personal use?",
+                recommendation: "Multi-user",
+                reason: "How users are separated changes data isolation, permissions, and billing.",
+                options: ["Multi-user (team/org)", "Personal, single user"],
+                allowCustom: false,
+                allowLater: true,
+              },
+            ]),
       ],
       productSpec: {
         productName: shortIdea,
@@ -524,7 +603,9 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
         { id: "req_002", title: "Processing status is visible", status: "not_started", criteria: ["A loading or progress indicator shows while processing", "A notification or screen change on completion"] },
         { id: "req_003", title: "The result can be reviewed", status: "not_started", criteria: ["A result list or detail view is shown", "Basic info like date and status is displayed"] },
         { id: "req_004", title: "Results can be exported or shared to an external tool", status: "not_started", criteria: ["An export or integration button is provided", "Success/failure of the send is shown"] },
-        { id: "req_005", title: "Other users' data is not visible", status: "not_started", criteria: ["Only the signed-in user's data is shown", "Entering a URL directly cannot access another user's data"] },
+        ...(solo
+          ? []
+          : [{ id: "req_005", title: "Other users' data is not visible", status: "not_started" as const, criteria: ["Only the signed-in user's data is shown", "Entering a URL directly cannot access another user's data"] }]),
         { id: "req_006", title: "Invalid input explains why", status: "not_started", criteria: ["Unsupported formats show a clear message", "Missing required fields show what is missing"] },
         { id: "req_007", title: "Failures can be retried", status: "not_started", criteria: ["An error message and retry button are shown", "The retry result is reflected on the same screen"] },
         { id: "req_008", title: "Past activity can be reviewed", status: "not_started", criteria: ["A history list is provided in date order", "Each record shows its status (done/failed, etc.)"] },
@@ -560,15 +641,19 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
         allowCustom: false,
         allowLater: true,
       },
-      {
-        id: "q3",
-        question: "여러 사용자가 쓰는 서비스인가요, 개인용인가요?",
-        recommendation: "여러 사용자",
-        reason: "사용자를 어떻게 구분하느냐에 따라 데이터 분리, 권한, 요금 방식이 달라져요.",
-        options: ["여러 사용자(팀/조직)", "개인, 단일 사용자"],
-        allowCustom: false,
-        allowLater: true,
-      },
+      ...(solo
+        ? []
+        : [
+            {
+              id: "q3",
+              question: "여러 사용자가 쓰는 서비스인가요, 개인용인가요?",
+              recommendation: "여러 사용자",
+              reason: "사용자를 어떻게 구분하느냐에 따라 데이터 분리, 권한, 요금 방식이 달라져요.",
+              options: ["여러 사용자(팀/조직)", "개인, 단일 사용자"],
+              allowCustom: false,
+              allowLater: true,
+            },
+          ]),
     ],
     productSpec: {
       productName: shortIdea,
@@ -586,7 +671,9 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
       { id: "req_002", title: "처리 상태가 보여야 함", status: "not_started", criteria: ["처리 중에는 로딩/진행 표시가 나타남", "완료 시 알림 또는 화면 전환이 있음"] },
       { id: "req_003", title: "결과를 확인할 수 있어야 함", status: "not_started", criteria: ["결과 목록 또는 상세 화면이 보임", "날짜·상태 같은 기본 정보가 표시됨"] },
       { id: "req_004", title: "결과를 내보내거나 외부 도구로 공유할 수 있어야 함", status: "not_started", criteria: ["내보내기 또는 연동 버튼이 제공됨", "전송 성공/실패가 표시됨"] },
-      { id: "req_005", title: "다른 사용자의 데이터가 보이면 안 됨", status: "not_started", criteria: ["로그인한 사용자의 데이터만 보임", "URL을 직접 입력해도 다른 사용자 데이터에 접근할 수 없음"] },
+      ...(solo
+        ? []
+        : [{ id: "req_005", title: "다른 사용자의 데이터가 보이면 안 됨", status: "not_started" as const, criteria: ["로그인한 사용자의 데이터만 보임", "URL을 직접 입력해도 다른 사용자 데이터에 접근할 수 없음"] }]),
       { id: "req_006", title: "잘못된 입력은 이유를 알려줘야 함", status: "not_started", criteria: ["지원하지 않는 형식은 명확한 안내가 나옴", "필수 항목이 빠지면 무엇이 빠졌는지 표시됨"] },
       { id: "req_007", title: "실패한 작업은 다시 시도할 수 있어야 함", status: "not_started", criteria: ["오류 메시지와 다시 시도 버튼이 표시됨", "다시 시도 결과가 같은 화면에 반영됨"] },
       { id: "req_008", title: "지난 활동을 다시 볼 수 있어야 함", status: "not_started", criteria: ["날짜순 기록 목록이 제공됨", "각 기록의 상태(완료/실패 등)가 표시됨"] },
