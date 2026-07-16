@@ -295,11 +295,13 @@ function RepairSection({
   runId,
   userKey,
   t,
+  locale,
 }: {
   projectId: string;
   runId: string;
   userKey: string;
   t: Dictionary;
+  locale: Locale;
 }) {
   const s = t.visualChecks.repair;
   const router = useRouter();
@@ -370,7 +372,7 @@ function RepairSection({
     if (recheckSubmitting) return;
     setRecheckSubmitting(true);
     setRecheckNotice(null);
-    const res = await runVisualCheck(projectId, { userKey });
+    const res = await runVisualCheck(projectId, { userKey, locale });
     if (res.ok && res.dispatched) {
       // Keep the button disabled while the navigation happens.
       router.push(`/projects/${projectId}/visual-checks/${res.check.id}`);
@@ -766,7 +768,7 @@ export default function VisualCheckDetailPage() {
           {/* Stage 269 — "[고치기]": only a finished run that did NOT verify
               as working can dispatch a repair (draft fix-brief PR). */}
           {canRepair(check) && (
-            <RepairSection projectId={id} runId={runId} userKey={userKey} t={t} />
+            <RepairSection projectId={id} runId={runId} userKey={userKey} t={t} locale={locale} />
           )}
 
           {/* Copy-ready agent fix prompt */}

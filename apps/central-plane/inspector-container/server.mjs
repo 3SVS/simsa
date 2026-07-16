@@ -123,6 +123,9 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
 
 async function runJob(payload) {
   const { runId, projectId, userKey, targetUrl, intent, baseUrl, callbackUrl, callbackToken, runningUrl } = payload;
+  // Report language, dispatched with the job. Older Workers won't send it —
+  // fall back to "ko" rather than trusting an arbitrary value off the wire.
+  const locale = payload.locale === "en" ? "en" : "ko";
   const start = Date.now();
   console.log(`[run ${runId}] start (target host: ${safeHost(targetUrl)})`);
 
@@ -143,7 +146,7 @@ async function runJob(payload) {
     // not exceed ~4 minutes. On timeout the run is reported failed; the
     // leaked browser (if any) dies with the container's sleepAfter.
     const result = await withTimeout(
-      runInspection({ targetUrl, intent, outDir }),
+      runInspection({ targetUrl, intent, outDir, locale }),
       INSPECTION_TIMEOUT_MS,
       `inspection timed out after ${Math.round(INSPECTION_TIMEOUT_MS / 1000)}s`,
     );

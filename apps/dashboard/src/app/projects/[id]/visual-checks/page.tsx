@@ -152,6 +152,7 @@ export default function VisualChecksPage() {
     const trimmedIntent = intent.trim();
     const res = await runVisualCheck(id, {
       userKey,
+      locale,
       ...(trimmedIntent ? { intent: trimmedIntent } : {}),
     });
     setSubmitting(false);
