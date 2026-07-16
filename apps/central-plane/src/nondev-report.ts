@@ -31,7 +31,12 @@ export interface VisualCheckInput {
   routeAfterClick: string | null;
   routeChanged: boolean;
   consoleErrors: string[];
+  /** Network failures that matter — the app's own domain + its backend (Supabase,
+   *  Firebase, any API it calls). Drives the "data didn't load" finding. */
   networkFailures: string[];
+  /** Analytics/ads/fonts/telemetry failures — noise, shown only as an info note.
+   *  Optional: old callers that don't split still work (no noise finding). */
+  noiseFailures?: string[];
   /** One of the spike's decision states, e.g. "Needs Fix" / "Needs Clarification". */
   decision: string;
   /** Optional per-step flow outcomes (label + whether the step visibly succeeded). */
@@ -112,12 +117,43 @@ export function decisionToWorks(decision: string): boolean | null {
 
 type WWH = { what: string; why: string; how: string };
 
+/**
+ * Known analytics / ads / fonts / telemetry / social hosts — NOISE, not the
+ * app's own data plane. A failure here (e.g. vercel-scripts.com 403 when a
+ * headless browser is bot-blocked) says nothing about whether the app works, so
+ * it must NOT drive the verdict. Live 2026-07-16: vercel.com was falsely called
+ * "broken" because its analytics 403 + console noise were counted as defects.
+ *
+ * Crucially, the app's REAL backend (its own domain, or Supabase/Firebase/an
+ * unknown API it fetches from) is NOT on this list and still counts — that's the
+ * Potemkin signal we must keep catching.
+ */
+const NOISE_HOSTS =
+  /(?:^|\.)(?:google-analytics|googletagmanager|googlesyndication|doubleclick|adservice|adsystem|segment|sentry|hotjar|mixpanel|amplitude|fullstory|logrocket|smartlook|mouseflow|intercom|drift|zendesk|cloudflareinsights|vercel-scripts|vercel-insights|newrelic|nr-data|datadoghq|bugsnag|clarity|facebook|fbcdn|twitter|linkedin|tiktok|snapchat|pinterest|hs-scripts|hsubspot|recaptcha|gstatic|fontawesome)\b|fonts\.(?:googleapis|gstatic)|\.(?:analytics|vitals)\b/i;
+
+/** True when `url` is a known analytics/ads/fonts/telemetry host (i.e. noise). */
+export function isNoiseResource(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    return NOISE_HOSTS.test(new URL(url).hostname);
+  } catch {
+    return NOISE_HOSTS.test(url);
+  }
+}
+
+/** First http(s) URL in a raw network-failure log line, or null. */
+export function extractUrl(s: string | null | undefined): string | null {
+  const m = /(https?:\/\/[^\s)"']+)/i.exec(s ?? "");
+  return m ? m[1]! : null;
+}
+
 const FIND: Record<ReportLocale, {
   dns: WWH;
   server5xx: WWH;
   brokenRoute: WWH;
   genericNet: WWH;
   consoleErr: WWH;
+  noiseInfo: WWH;
   noPrimary: WWH;
   stepFailed: (label: string, note?: string) => WWH;
 }> = {
@@ -146,6 +182,11 @@ const FIND: Record<ReportLocale, {
       what: "화면에서 코드 오류가 났어요.",
       why: "자바스크립트 실행 중 문제가 생겼어요. 일부 기능이 안 될 수 있어요.",
       how: "브라우저 콘솔의 오류 메시지를 그대로 복사해 개발 도구(또는 이 리포트의 '개발자용' 칸)를 참고해 고치세요.",
+    },
+    noiseInfo: {
+      what: "외부 스크립트 일부가 불러와지지 않았어요 (앱 자체 문제는 아니에요).",
+      why: "광고·통계·폰트 같은 외부 서비스 요청이 실패했지만, 앱의 핵심 동작과는 무관해요. (자동 검수가 봇으로 차단됐을 때도 이렇게 보여요.)",
+      how: "특별히 고칠 필요는 없어요. 신경 쓰이면 안 쓰는 외부 스크립트를 정리하세요.",
     },
     noPrimary: {
       what: "처음 화면에서 무엇을 눌러 시작해야 할지 못 찾았어요.",
@@ -184,6 +225,11 @@ const FIND: Record<ReportLocale, {
       why: "Something went wrong while JavaScript was running. Some features may not work.",
       how: "Copy the error message from the browser console and fix it using your dev tool (or the 'for developers' section in this report).",
     },
+    noiseInfo: {
+      what: "Some external scripts didn't load (not a problem with your app).",
+      why: "Requests to third-party services like ads, analytics, or fonts failed, but they're unrelated to your app's core behavior. (This also shows up when the automated review is bot-blocked.)",
+      how: "No action needed. If it bothers you, remove third-party scripts you don't use.",
+    },
     noPrimary: {
       what: "On the first screen, it wasn't clear what to press to get started.",
       why: "No obvious button or input led to the intended core action (e.g. start, search).",
@@ -196,6 +242,44 @@ const FIND: Record<ReportLocale, {
     }),
   },
 };
+
+/** Evidence the decision ladder reads (a subset of what the inspector gathers). */
+export interface DecisionEvidence {
+  loadStatus: number | null;
+  /** NOISE-FILTERED network failures — app domain + backend only (never analytics). */
+  networkFailures: string[];
+  interacted: boolean;
+  routeAfterClick: string | null;
+  primaryActionFound: boolean;
+}
+
+/**
+ * Deterministic verdict from the deep-flow evidence. Lives here (not in the
+ * container's inspector-run.mjs) so it's unit-testable and can't drift from the
+ * finding logic it must agree with.
+ *
+ * P0-B (2026-07-16): driven by REAL failure signals only. `networkFailures` is
+ * already noise-filtered, so a remaining failure is the app's own domain or its
+ * backend (Supabase/Firebase/an API) — the Potemkin signal, which still fails.
+ * Console errors do NOT force a fail (they fire constantly on healthy sites from
+ * third-party scripts). A step that couldn't complete WITH no backend failure is
+ * "couldn't confirm", not "broken" — a complex SPA's click timeout is an
+ * inspector limitation, so we ask a human rather than false-fail (the vercel.com
+ * false-negative).
+ */
+export function decideFromEvidence(
+  e: DecisionEvidence,
+  steps: Array<{ ok: boolean }>,
+): string {
+  if (e.loadStatus && e.loadStatus >= 500) return "Needs Fix";
+  if (e.loadStatus && e.loadStatus >= 400) return "Not Verified";
+  if (e.networkFailures.length) return "Needs Fix";
+  if (e.interacted && e.routeAfterClick && /\/undefined|\/null|\/404|not-found|error/i.test(e.routeAfterClick)) return "Needs Fix";
+  if (steps.some((s) => !s.ok)) return e.interacted ? "User Acceptance Required" : "Needs Clarification";
+  if (!e.primaryActionFound) return "Needs Clarification";
+  if (e.interacted) return "User Acceptance Required";
+  return "Not Verified";
+}
 
 /**
  * 원시 증거(콘솔/네트워크 문자열, 상태코드, 라우트)를 비개발자용 finding 들로 번역.
@@ -227,8 +311,17 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
     findings.push({ severity: "high", ...t.genericNet, evidence: input.networkFailures[0] ?? null });
   }
 
+  // Console errors are noisy and hard to attribute (third-party scripts throw
+  // constantly on healthy sites), so they're INFORMATIONAL only — they never
+  // drive the verdict (see decideFromEvidence) and are low severity here.
   if (input.consoleErrors.length > 0 && !/ERR_NAME_NOT_RESOLVED/i.test(conText)) {
-    findings.push({ severity: "medium", ...t.consoleErr, evidence: input.consoleErrors[0] ?? null });
+    findings.push({ severity: "low", ...t.consoleErr, evidence: input.consoleErrors[0] ?? null });
+  }
+
+  // Noise (analytics/ads/fonts) failed — say so honestly, but as info, so the
+  // user isn't alarmed by a "broken" reading that's really a blocked tracker.
+  if ((input.noiseFailures?.length ?? 0) > 0) {
+    findings.push({ severity: "info", ...t.noiseInfo, evidence: input.noiseFailures![0] ?? null });
   }
 
   if (!input.primaryActionFound && !input.interacted) {

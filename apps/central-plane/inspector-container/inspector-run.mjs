@@ -23,7 +23,7 @@ import { chromium } from "playwright";
 import { mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { planVisualFlow } from "./dist/visual-flow-plan.js";
-import { buildNonDevReport, buildAgentFixPrompt } from "./dist/nondev-report.js";
+import { buildNonDevReport, buildAgentFixPrompt, isNoiseResource, decideFromEvidence } from "./dist/nondev-report.js";
 import { classifyActionSafety } from "./safety.mjs";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
@@ -63,16 +63,7 @@ async function collectInputs(page) {
   );
 }
 
-/** Deterministic decision ladder from the deep-flow evidence (mirrors visual-run.mjs). */
-export function decideFromEvidence(e, steps) {
-  if (e.loadStatus && e.loadStatus >= 400) return "Not Verified";
-  if (e.networkFailures.length || e.consoleErrors.length) return "Needs Fix";
-  if (e.interacted && e.routeAfterClick && /\/undefined|\/null|\/404|not-found|error/i.test(e.routeAfterClick)) return "Needs Fix";
-  if (steps.some((s) => !s.ok)) return "Needs Fix";
-  if (!e.primaryActionFound) return "Needs Clarification";
-  if (e.interacted) return "User Acceptance Required"; // journey ran clean, but no visual oracle for "usable"
-  return "Not Verified";
-}
+// decideFromEvidence now lives in nondev-report.ts (shared + unit-tested).
 
 /** Step NOTES. Like the step labels, these are quoted into the report prose. */
 const STEP_NOTES = {
@@ -117,10 +108,14 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   const page = await context.newPage();
 
   const consoleErrors = [];
-  const networkFailures = [];
+  const networkFailures = []; // real: app domain + its backend (drives verdict)
+  const noiseFailures = []; // analytics/ads/fonts/telemetry (info only)
+  const recordNet = (url, line) => (isNoiseResource(url) ? noiseFailures : networkFailures).push(line);
   page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text().slice(0, 300)));
-  page.on("requestfailed", (r) => networkFailures.push(`${r.method()} ${r.url().slice(0, 200)} (${r.failure()?.errorText ?? "failed"})`));
-  page.on("response", (r) => r.status() >= 500 && networkFailures.push(`HTTP ${r.status()} ${r.url().slice(0, 200)}`));
+  page.on("requestfailed", (r) =>
+    recordNet(r.url(), `${r.method()} ${r.url().slice(0, 200)} (${r.failure()?.errorText ?? "failed"})`),
+  );
+  page.on("response", (r) => r.status() >= 500 && recordNet(r.url(), `HTTP ${r.status()} ${r.url().slice(0, 200)}`));
 
   const evidenceFiles = [];
   const stepOutcomes = [];
@@ -233,6 +228,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     routeChanged: evidence.routeChanged,
     consoleErrors,
     networkFailures,
+    noiseFailures,
     decision,
     steps: stepOutcomes,
   };
