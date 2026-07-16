@@ -207,12 +207,82 @@ export function detectSoloUse(req: IdeaToSpecDraftRequest): boolean {
   return SOLO_MARKERS.test(text);
 }
 
+/**
+ * Deterministic feasibility detector (D1, P0-A). A non-developer's coding agent
+ * builds a WEB app; when the idea is a native mobile app, a 3D/engine game, a
+ * desktop binary, hardware, or a browser extension, generating a confident web
+ * spec is dishonest — it's exactly the PISTA failure (Kotlin app → "Next.js on
+ * Vercel" shell). A matcher, not an LLM judgement, so it's predictable/testable.
+ *
+ * A plain "웹앱/website" marker VETOES — "모바일에서도 잘 보이는 웹앱" is web, not
+ * a native app. Returns the kind so the honesty message can be specific.
+ */
+const WEB_MARKERS =
+  /웹앱|웹\s*사이트|웹사이트|홈페이지|웹\s*서비스|반응형|웹\s*게임|브라우저\s*게임|브라우저에서|web\s*app|website|web\s*site|web\s*service|responsive|browser[-\s]?based|browser\s*game|in\s*the\s*browser/i;
+// "게임" alone is NOT native — browser/puzzle games are web-buildable. Only a
+// genuine native-game signal (3D / a game engine) counts; "아이폰 게임" is caught
+// by the mobile marker instead.
+const NATIVE_KIND: Array<{ kind: "mobile" | "desktop" | "game" | "hardware" | "extension"; re: RegExp }> = [
+  { kind: "game", re: /\b3d\b|3\s*d\s*게임|언리얼|유니티|unreal|unity|godot|게임\s*엔진|game\s*engine|3d\s*game/i },
+  { kind: "mobile", re: /아이폰|아이패드|안드로이드|네이티브\s*앱|모바일\s*앱|앱스토어|플레이\s*스토어|iphone|ipad|android\s*app|ios\s*app|native\s*app|mobile\s*app|app\s*store|play\s*store|swift|kotlin|react\s*native|flutter/i },
+  { kind: "desktop", re: /데스크톱\s*(?:앱|프로그램|프로그램)|윈도우\s*(?:앱|프로그램)|맥\s*앱|\.exe|설치\s*(?:형|파일)|native\s*desktop|electron\s*app|windows\s*app|mac\s*app|desktop\s*(?:app|program|application)/i },
+  { kind: "hardware", re: /아두이노|라즈베리\s*파이|펌웨어|하드웨어|IoT|사물인터넷|임베디드|arduino|raspberry\s*pi|firmware|embedded|robot|드론|drone/i },
+  { kind: "extension", re: /크롬\s*확장|브라우저\s*확장|익스텐션|chrome\s*extension|browser\s*extension|플러그인|plugin/i },
+];
+
+export function detectNonWebBuildable(
+  req: IdeaToSpecDraftRequest,
+): { hit: false } | { hit: true; kind: "mobile" | "desktop" | "game" | "hardware" | "extension" } {
+  const text = [req.idea, req.context ?? ""].join(" ");
+  // An explicit "web app / website" statement wins — the user wants web.
+  if (WEB_MARKERS.test(text)) return { hit: false };
+  for (const { kind, re } of NATIVE_KIND) {
+    if (re.test(text)) return { hit: true, kind };
+  }
+  return { hit: false };
+}
+
 /** The solo-use rule injected into the prompt (D1). Empty when not solo. */
 function soloGuard(locale: "ko" | "en" | undefined, solo: boolean): string {
   if (!solo) return "";
   return locale === "ko"
     ? `\n- 이 앱은 **혼자(개인용)** 쓰는 앱이다. 권한·역할·멀티유저·사용자 구분/격리·"누구에게 접근을 허용하나" 류의 질문이나 항목은 만들지 마라 — 이 사용자에겐 무의미하다.`
     : `\n- This app is for **solo/personal use**. Do NOT create any question or item about permissions, roles, multi-user, user separation/isolation, or "who to grant access to" — it is meaningless for this user.`;
+}
+
+/** Human-readable name of a non-web-buildable kind, per locale. */
+const FEASIBILITY_KIND_LABEL = {
+  ko: { mobile: "휴대폰 네이티브 앱", desktop: "데스크톱 설치형 프로그램", game: "3D·게임엔진 게임", hardware: "하드웨어·기기", extension: "브라우저 확장 프로그램" },
+  en: { mobile: "a native mobile app", desktop: "an installed desktop program", game: "a 3D / game-engine game", hardware: "hardware / a device", extension: "a browser extension" },
+} as const;
+
+/**
+ * Feasibility honesty rule (D1, P0-A). When the idea needs a non-web build, the
+ * coding agent (which produces a WEB app) cannot ship the real thing — say so,
+ * and scope the spec to the honest web slice + a handoff, never a confident
+ * native spec. Empty when the idea is web-buildable.
+ */
+function feasibilityGuard(
+  locale: "ko" | "en" | undefined,
+  feas: ReturnType<typeof detectNonWebBuildable>,
+): string {
+  if (!feas.hit) return "";
+  const label = FEASIBILITY_KIND_LABEL[locale === "en" ? "en" : "ko"][feas.kind];
+  return locale === "ko"
+    ? `\n- **실현가능성 정직성 (매우 중요):** 이 아이디어는 ${label}이 필요하다. 사용자가 쓰는 개발 AI(v0·Lovable·Cursor 등)는 **웹앱만** 만든다. 따라서: (1) 웹으로 되는 부분(예: 웹 프로토타입, 관리/설정 화면, 랜딩)만 included에 넣고, (2) ${label} 자체(네이티브 빌드·앱스토어 출시·3D 엔진 등)는 excluded에 넣되 "웹으로는 만들 수 없고 전문 개발이 필요"함을 openQuestions에 정직히 적어라. **네이티브 기능을 웹앱처럼 included에 넣어 '다 된다'고 하지 마라.**`
+    : `\n- **Feasibility honesty (very important):** this idea needs ${label}. The user's coding AI (v0, Lovable, Cursor…) builds **web apps only**. So: (1) put only the web-buildable slice (a web prototype, admin/config screens, a landing page) in "included", and (2) put ${label} itself (native build, app-store release, 3D engine…) in "excluded", and state honestly in openQuestions that it **cannot be built on the web and needs specialist development**. Do NOT list native features as if a web app delivers them.`;
+}
+
+/** Deterministic honesty warning surfaced to the user (D1). Empty when web-buildable. */
+export function feasibilityWarning(
+  req: IdeaToSpecDraftRequest,
+): string | null {
+  const feas = detectNonWebBuildable(req);
+  if (!feas.hit) return null;
+  const label = FEASIBILITY_KIND_LABEL[req.locale === "en" ? "en" : "ko"][feas.kind];
+  return req.locale === "en"
+    ? `Heads up: this looks like ${label}. The coding tools Simsa hands off to build web apps, so the web-buildable parts can be made now, but ${label} itself needs specialist development — the spec marks that honestly rather than pretending a web app covers it.`
+    : `참고: 이건 ${label}이 필요해 보여요. 심사가 연결하는 개발 도구는 웹앱을 만들기 때문에, 웹으로 되는 부분은 지금 만들 수 있지만 ${label} 자체는 전문 개발이 필요해요 — 설명서에는 그 점을 '다 된다'고 하지 않고 정직하게 표시했어요.`;
 }
 
 /** Extra-context block (D2). Empty when the user gave none. */
@@ -241,6 +311,7 @@ function rejectedBlock(
 
 export function buildPrompt(req: IdeaToSpecDraftRequest): string {
   const solo = detectSoloUse(req);
+  const feas = detectNonWebBuildable(req);
   // English-first product: generate in English unless the caller asks for Korean.
   if (req.locale === "ko") {
     const answersText =
@@ -258,7 +329,7 @@ export function buildPrompt(req: IdeaToSpecDraftRequest): string {
 - 좋은 질문 = 답에 따라 제품이 실제로 달라지는 구체적 질문. 아래 축을 폭넓게 살펴 이 아이디어에 맞는 것을 고른다:
   구현 범위 · 사용자 흐름 · 데이터 보관 · 로그인/권한 · 외부 연동 · 대상 사용자 숙련도 · 성공 기준 ·
   **화면·디자인(UIUX)**: 참고하는 앱이나 느낌(예: Linear처럼 미니멀 / Notion처럼 정돈 / 밝고 친근하게), 핵심 화면이 몇 개이고 무엇이 먼저 보여야 하는지, 주로 모바일인지 데스크톱인지
-- 나쁜 질문 = 답이 제품을 바꾸지 않는 추상적 질문("장기 비전은?", "전반적으로 어떤 느낌?"). 단, 위처럼 **구체적인 UIUX 질문은 좋은 질문**이다.${soloGuard("ko", solo)}
+- 나쁜 질문 = 답이 제품을 바꾸지 않는 추상적 질문("장기 비전은?", "전반적으로 어떤 느낌?"). 단, 위처럼 **구체적인 UIUX 질문은 좋은 질문**이다.${soloGuard("ko", solo)}${feasibilityGuard("ko", feas)}
 - 꼭 들어가야 할 항목은 8~10개, 각 항목마다 완성 기준 2~4개
 - 완성 기준은 확인 가능한 구체적 동작으로 작성
 
@@ -282,7 +353,7 @@ Follow these rules strictly:
 - Good questions = concrete questions whose answers actually change the product. Draw broadly from these axes, picking what fits this idea:
   scope · user flow · data retention · login/permissions · integrations · target-user skill level · success criteria ·
   **screens/design (UI/UX)**: a reference app or feel (e.g. minimal like Linear / tidy like Notion / bright & friendly), how many key screens there are and what should appear first, mainly mobile or desktop
-- Bad questions = abstract ones whose answers don't change the product ("what's the long-term vision?", "overall feel?"). But concrete UI/UX questions like the above ARE good.${soloGuard("en", solo)}
+- Bad questions = abstract ones whose answers don't change the product ("what's the long-term vision?", "overall feel?"). But concrete UI/UX questions like the above ARE good.${soloGuard("en", solo)}${feasibilityGuard("en", feas)}
 - Include 8-10 must-have items, each with 2-4 acceptance criteria
 - Acceptance criteria must be concrete, verifiable behaviors
 
@@ -698,15 +769,21 @@ function withVerification(
   req: IdeaToSpecDraftRequest,
   res: IdeaToSpecDraftResponse,
 ): IdeaToSpecDraftResponse {
+  // P0-A: the deterministic feasibility warning rides on EVERY draft (LLM or
+  // mock) — it's the honest "this needs a native build" heads-up, independent of
+  // the coverage gate. Prepended so it's the first thing the user sees.
+  const feas = feasibilityWarning(req);
+  const base = feas ? [feas] : [];
+
   const v = res.specVerification ?? verifySpecAgainstUserWords(userWordsOf(req), gateDraftOf(res));
-  if (v.ok) return { ...res, specVerification: v };
+  if (v.ok) return { ...res, specVerification: v, warnings: [...base, ...(res.warnings ?? [])] };
   console.warn(
     `[workspace/generate] user-words gate failed: source=${res.source} coverage=${v.coverage.toFixed(2)} missing=${v.missingWords.slice(0, 8).join("|")}`,
   );
   return {
     ...res,
     specVerification: v,
-    warnings: [...(res.warnings ?? []), coverageWarning(v, req.locale)],
+    warnings: [...base, ...(res.warnings ?? []), coverageWarning(v, req.locale)],
   };
 }
 

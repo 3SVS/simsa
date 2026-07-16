@@ -694,6 +694,15 @@ function NewProjectInner() {
 
               {isFallback && <div className="callout mb-5 border-amber-100 bg-amber-50 text-xs text-amber-700">{t.np.draftNote}</div>}
 
+              {/* Honest heads-ups from the server (P0-A feasibility, coverage) —
+                  the feasibility warning tells a non-dev up front when their idea
+                  needs a native build the web tools can't fully deliver. */}
+              {(result.warnings ?? []).map((w, i) => (
+                <div key={i} className="callout mb-3 border-amber-200 bg-amber-50 text-sm leading-relaxed text-amber-800">
+                  {w}
+                </div>
+              ))}
+
               <UnderstoodCard t={t} understood={result.understood} />
 
               <button onClick={() => setStep(3)} className="btn btn-primary w-full py-3">
