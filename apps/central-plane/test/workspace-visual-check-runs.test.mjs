@@ -320,6 +320,30 @@ test("run: INSPECTOR present → dispatched:true, DO named vc-<runId>, payload c
   assert.match(payload.callbackUrl, /\/internal\/visual-check-done$/);
   assert.match(payload.runningUrl, /\/internal\/visual-check-running$/);
   assert.ok(payload.baseUrl.startsWith("http"), "baseUrl for evidence uploads");
+  assert.equal(payload.locale, "ko", "no locale in the request → ko");
+});
+
+// The report prose is written by the inspector at run time and stored as-is,
+// so the reader's language must ride along with the dispatch. Before this was
+// plumbed, an EN reader's report always came back Korean: the container's
+// runInspection() defaulted locale to "ko" and the dashboard only ever renders
+// the stored report_json.
+test("run: locale rides the dispatch payload so the report is written in the reader's language", async () => {
+  const recorder = { names: [], calls: [] };
+  const env = makeEnv({ inspector: makeInspector(recorder) });
+  const r = await req(env, "POST", RUN_PATH, { userKey: USER, locale: "en" });
+  assert.equal(r.status, 202);
+  assert.equal(recorder.calls[0].body.locale, "en");
+});
+
+test("run: an unrecognized locale falls back to ko rather than reaching the container", async () => {
+  for (const locale of ["fr", "", 42, null, { evil: true }]) {
+    const recorder = { names: [], calls: [] };
+    const env = makeEnv({ inspector: makeInspector(recorder) });
+    const r = await req(env, "POST", RUN_PATH, { userKey: USER, locale });
+    assert.equal(r.status, 202, `locale ${JSON.stringify(locale)} must not break the run`);
+    assert.equal(recorder.calls[0].body.locale, "ko", `locale ${JSON.stringify(locale)} → ko`);
+  }
 });
 
 test("run: container dispatch failure → row failed immediately, dispatched:false with note", async () => {

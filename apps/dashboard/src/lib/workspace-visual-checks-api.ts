@@ -78,6 +78,13 @@ export type VisualCheckRunInput = {
   sourceId?: string;
   targetUrl?: string;
   intent?: string;
+  /**
+   * Language for the report PROSE. The report is written by the inspector at
+   * run time and stored as-is, so this must be sent when the run is queued —
+   * toggling the UI language afterwards re-labels the chrome but cannot
+   * retranslate a finished report. Omitted → "ko".
+   */
+  locale?: "ko" | "en";
 };
 
 export type VisualCheckRunCheck = {

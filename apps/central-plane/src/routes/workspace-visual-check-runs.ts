@@ -96,6 +96,7 @@ export async function dispatchInspection(
     userKey: string;
     targetUrl: string;
     intent: string;
+    locale: "ko" | "en";
     publicBaseUrl: string;
   },
 ): Promise<{ dispatched: boolean; note?: string }> {
@@ -112,6 +113,10 @@ export async function dispatchInspection(
     userKey: args.userKey,
     targetUrl: args.targetUrl,
     intent: args.intent,
+    // The container builds the non-dev report prose at inspection time, so the
+    // reader's locale has to travel WITH the job — the dashboard only renders
+    // the stored report_json and cannot retranslate it afterwards.
+    locale: args.locale,
     baseUrl: base,
     callbackUrl: `${base}/internal/visual-check-done`,
     runningUrl: `${base}/internal/visual-check-running`,
@@ -143,7 +148,13 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
   app.post("/workspace/projects/:id/visual-checks/run", async (c) => {
     const projectId = c.req.param("id");
 
-    let body: { userKey?: unknown; sourceId?: unknown; targetUrl?: unknown; intent?: unknown };
+    let body: {
+      userKey?: unknown;
+      sourceId?: unknown;
+      targetUrl?: unknown;
+      intent?: unknown;
+      locale?: unknown;
+    };
     try {
       body = await c.req.json();
     } catch {
@@ -157,6 +168,10 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const project = await getProject(c.env, projectId);
     if (!project) return c.json({ ok: false, error: "project_not_found" }, 404);
     if (project.userKey !== userKey) return c.json({ ok: false, error: "forbidden" }, 403);
+
+    // Report language. Same shape as every other workspace route
+    // (workspace-document-intake, workspace-github): unknown → "ko".
+    const locale: "ko" | "en" = body.locale === "en" ? "en" : "ko";
 
     // Intent: optional, ≤1000 chars, sensible Korean generic default.
     let intent = DEFAULT_INSPECTION_INTENT;
@@ -223,6 +238,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       userKey,
       targetUrl,
       intent,
+      locale,
       publicBaseUrl,
     });
 
