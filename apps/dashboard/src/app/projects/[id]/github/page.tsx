@@ -394,6 +394,15 @@ export default function GitHubPage() {
               {t.github.goConnectRepo}
             </Link>
           </div>
+          {/* Forward exit so a user who hasn't built yet isn't trapped bouncing
+              between this card, settings, and the PR screens (Bae's loop). Their
+              real next action is to get the pack and build. */}
+          <p className="mx-auto mt-5 max-w-md border-t border-gray-100 pt-4 text-xs text-gray-500">
+            {t.github.noRepoBuildHint}{" "}
+            <Link href={`/projects/${id}/export`} className="font-medium text-brand-600 hover:text-brand-700">
+              {t.github.getPack} →
+            </Link>
+          </p>
         </div>
       )}
 

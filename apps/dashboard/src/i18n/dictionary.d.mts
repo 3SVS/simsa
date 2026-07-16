@@ -574,6 +574,7 @@ export type Dictionary = {
       save: string;
       saved: string;
       savedHint: string;
+      next: string;
     };
     returnStep: {
       title: string;
@@ -965,6 +966,8 @@ export type Dictionary = {
     goConnectRepo: string;
     bridgeTitle: string;
     bridgeBody: string;
+    noRepoBuildHint: string;
+    getPack: string;
     loadPulls: string;
     pullsLoadError: string;
     openPulls: string;

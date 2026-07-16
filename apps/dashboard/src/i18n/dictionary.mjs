@@ -647,6 +647,7 @@ const EN = {
       save: "Save setup",
       saved: "Setup saved. It'll be in the pack you download.",
       savedHint: "Saved as you type — this just confirms it.",
+      next: "Next: get the builder pack for your AI →",
     },
     returnStep: {
       title: "Built it? Come back and connect it",
@@ -1063,6 +1064,8 @@ const EN = {
     goConnectRepo: "Connect a repository",
     bridgeTitle: "Why connect a code repo here?",
     bridgeBody: "So far you've shaped your idea and checking items. Now connect the GitHub repository your AI actually built into — Simsa then checks that real code against your items, instead of the plan alone.",
+    noRepoBuildHint: "Haven't built the app yet? Get the builder pack first and make it with your AI, then come back to connect it.",
+    getPack: "Get the builder pack",
     loadPulls: "Load code changes (PRs)",
     pullsLoadError: "We could not load the code changes.",
     openPulls: "open code changes (PRs)",
@@ -2974,6 +2977,7 @@ const KO = {
       save: "작성하고 저장하기",
       saved: "저장했어요. 다운로드하는 팩에 함께 들어갑니다.",
       savedHint: "입력하는 대로 저장돼요 — 이 버튼은 확인용이에요.",
+      next: "다음: 빌더팩을 받아 개발 AI에게 주세요 →",
     },
     returnStep: {
       title: "다 만드셨나요? 돌아와서 연결하세요",
@@ -3390,6 +3394,8 @@ const KO = {
     goConnectRepo: "저장소 연결하러 가기",
     bridgeTitle: "왜 여기서 코드 저장소를 연결하나요?",
     bridgeBody: "지금까지는 아이디어와 검수 항목을 정리했어요. 이제 AI가 실제로 만든 코드를 GitHub 저장소에 연결하면, 계획이 아니라 그 진짜 코드를 검수 항목 기준으로 확인해 드립니다.",
+    noRepoBuildHint: "아직 앱을 안 만드셨나요? 먼저 빌더팩을 받아 개발 AI로 만든 뒤, 돌아와서 연결하세요.",
+    getPack: "빌더팩 받기",
     loadPulls: "코드 변경(PR) 목록 불러오기",
     pullsLoadError: "코드 변경 목록을 불러오지 못했습니다.",
     openPulls: "개 열려 있는 코드 변경(PR)",
