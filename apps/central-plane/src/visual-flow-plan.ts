@@ -33,7 +33,41 @@ export interface FlowPlanInput {
   forbidden?: string[];
   /** Benign value typed into a search/text input. Deterministic; default a common region term. */
   sampleQuery?: string;
+  /**
+   * Language for the step LABELS. These are Simsa's own prose and they are
+   * quoted verbatim into the report ("The '…' step didn't complete"), so a
+   * Korean label lands untranslated in the middle of an English sentence.
+   * Default "ko" — the report builder's default, kept in step.
+   */
+  locale?: "ko" | "en";
 }
+
+/** Step labels. Keep every entry in both locales — see FlowPlanInput.locale. */
+const FLOW_LABELS = {
+  ko: {
+    clickCta: (text: string) => `핵심 버튼 '${text}' 누르기`,
+    observeAfterClick: "버튼을 누른 뒤 화면 확인",
+    typeQuery: (q: string) => `검색창에 '${q}' 입력하기`,
+    observeResults: "검색 결과 화면 확인",
+    observeFirstScreen: "첫 화면 확인 (안전하게 실행할 동작을 못 찾음)",
+  },
+  en: {
+    clickCta: (text: string) => `Press the main button '${text}'`,
+    observeAfterClick: "Check the screen after pressing the button",
+    typeQuery: (q: string) => `Type '${q}' into the search box`,
+    observeResults: "Check the search results screen",
+    observeFirstScreen: "Check the first screen (no action was safe to run)",
+  },
+} as const;
+
+/**
+ * The query typed into a search box. It goes into the TARGET app, so it has to
+ * suit the app's audience rather than the report's reader — but with nothing
+ * better to go on, the reader's language is the best available signal, and a
+ * Korean term in an English app returns nothing (making the flow look broken
+ * when it isn't).
+ */
+const DEFAULT_SAMPLE_QUERY = { ko: "서울", en: "Seoul" } as const;
 
 const DEFAULT_FORBIDDEN = [
   "pay",
@@ -122,7 +156,10 @@ export function ctaIsSearchLike(text: string): boolean {
  */
 export function planVisualFlow(input: FlowPlanInput): FlowStep[] {
   const forbidden = input.forbidden && input.forbidden.length ? input.forbidden : DEFAULT_FORBIDDEN;
-  const sampleQuery = input.sampleQuery && input.sampleQuery.trim() ? input.sampleQuery.trim() : "서울";
+  const locale = input.locale === "en" ? "en" : "ko";
+  const L = FLOW_LABELS[locale];
+  const sampleQuery =
+    input.sampleQuery && input.sampleQuery.trim() ? input.sampleQuery.trim() : DEFAULT_SAMPLE_QUERY[locale];
   const steps: FlowStep[] = [];
 
   const cta = pickSafeCta(input.ctas ?? [], forbidden);
@@ -135,23 +172,23 @@ export function planVisualFlow(input: FlowPlanInput): FlowStep[] {
   const preferInput = searchOriented && input0 && (!cta || !ctaIsSearchLike(cta.text));
 
   if (cta && !preferInput) {
-    steps.push({ action: "click", label: `핵심 버튼 '${cta.text}' 누르기`, selector: cta.selector, targetText: cta.text });
-    steps.push({ action: "observe", label: "버튼을 누른 뒤 화면 확인" });
+    steps.push({ action: "click", label: L.clickCta(cta.text), selector: cta.selector, targetText: cta.text });
+    steps.push({ action: "observe", label: L.observeAfterClick });
     return steps;
   }
 
   if (input0) {
     steps.push({
       action: "type",
-      label: `검색창에 '${sampleQuery}' 입력하기`,
+      label: L.typeQuery(sampleQuery),
       selector: input0.selector,
       value: sampleQuery,
       placeholder: input0.placeholder,
     });
-    steps.push({ action: "observe", label: "검색 결과 화면 확인" });
+    steps.push({ action: "observe", label: L.observeResults });
     return steps;
   }
 
-  steps.push({ action: "observe", label: "첫 화면 확인 (안전하게 실행할 동작을 못 찾음)" });
+  steps.push({ action: "observe", label: L.observeFirstScreen });
   return steps;
 }

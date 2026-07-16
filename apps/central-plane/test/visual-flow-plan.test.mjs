@@ -100,3 +100,66 @@ test("pickPrimaryInput prefers a search-like input", () => {
   ]);
   assert.equal(i.selector, "#s");
 });
+
+// Step labels are Simsa's own prose and the report quotes them verbatim
+// ("The '<label>' step didn't complete"), so a Korean label lands untranslated
+// inside an English sentence. Live 2026-07-16: an EN report came back with
+// "The '핵심 버튼 '...' 누르기' step didn't complete." — the report dictionary was
+// complete; the planner was the leak.
+const HANGUL = /[가-힣]/;
+
+test("locale 'en' plans English step labels (report quotes these verbatim)", () => {
+  const plan = planVisualFlow({
+    intentAnchor: "a visitor should be able to start the main flow",
+    ctas: [{ text: "Get started", selector: "text=Get started" }],
+    inputs: [],
+    locale: "en",
+  });
+  for (const s of plan) {
+    assert.ok(!HANGUL.test(s.label), `EN plan leaked Korean: "${s.label}"`);
+  }
+  assert.ok(plan.some((s) => s.label.includes("Get started")), "should still quote the real CTA text");
+});
+
+test("locale 'en' types an English sample query — a Korean term finds nothing in an English app", () => {
+  const plan = planVisualFlow({
+    intentAnchor: "search for something",
+    ctas: [],
+    inputs: [{ placeholder: "Search", type: "search", selector: "#s" }],
+    locale: "en",
+  });
+  const typed = plan.find((s) => s.action === "type");
+  assert.ok(typed, "should plan a type step");
+  assert.equal(typed.value, "Seoul");
+  assert.ok(!HANGUL.test(typed.label));
+});
+
+test("an explicit sampleQuery still wins over the locale default", () => {
+  const plan = planVisualFlow({
+    intentAnchor: "search for something",
+    ctas: [],
+    inputs: [{ placeholder: "Search", type: "search", selector: "#s" }],
+    locale: "en",
+    sampleQuery: "Busan",
+  });
+  assert.equal(plan.find((s) => s.action === "type").value, "Busan");
+});
+
+test("the observe-only fallback is localized too", () => {
+  const plan = planVisualFlow({ intentAnchor: "x", ctas: [], inputs: [], locale: "en" });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].action, "observe");
+  assert.ok(!HANGUL.test(plan[0].label), `leaked: "${plan[0].label}"`);
+});
+
+test("locale defaults to ko, and an unknown locale falls back to ko (no silent English for KO users)", () => {
+  for (const locale of [undefined, "fr", "", null, 42]) {
+    const plan = planVisualFlow({
+      intentAnchor: "골퍼가 확인",
+      ctas: [{ text: "시작하기", selector: "text=시작하기" }],
+      inputs: [],
+      ...(locale === undefined ? {} : { locale }),
+    });
+    assert.ok(plan.some((s) => HANGUL.test(s.label)), `locale ${JSON.stringify(locale)} should stay Korean`);
+  }
+});
