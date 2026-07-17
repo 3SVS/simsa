@@ -397,7 +397,13 @@ export default function ExportPage() {
 
       {/* ── Step 0: which agent is this pack for? ── */}
       {!agentChosen && (() => {
-        const recommended = recommendedTargetFor(ext?.builtWithTools);
+        // #296 Phase 2: an explicit "mobile" interview answer outranks the
+        // built-with mapping — a web-agent pack is only partial for a native
+        // idea; the honest recommendation is the handoff brief.
+        const recommended =
+          ext?.userProfile?.platform === "mobile"
+            ? ("handoff" as ExportTarget)
+            : recommendedTargetFor(ext?.builtWithTools);
         const ordered = recommended
           ? [recommended, ...TARGET_VALUES.filter((v) => v !== recommended)]
           : TARGET_VALUES;

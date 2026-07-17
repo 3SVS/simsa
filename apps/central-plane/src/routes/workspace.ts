@@ -244,6 +244,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
               .map((r) => ({ question: r.question.slice(0, 300), reason: r.reason.slice(0, 300) })),
           }
         : {}),
+      // #296 Phase 2: onboarding-interview platform seed (explicit user intent).
+      ...(req.platform === "web" || req.platform === "mobile" || req.platform === "unknown"
+        ? { platform: req.platform }
+        : {}),
     };
 
     let result;

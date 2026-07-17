@@ -63,6 +63,10 @@ function NewProjectInner() {
   const [ideaText, setIdeaText] = useState("");
   // D2 (2026-07-16): free-text "anything else Simsa should know" beside the idea.
   const [extraContext, setExtraContext] = useState("");
+  // #296 Phase 1 — onboarding interview (all optional, null = unanswered).
+  const [platform, setPlatform] = useState<"web" | "mobile" | "unknown" | null>(null);
+  const [githubLevel, setGithubLevel] = useState<"fluent" | "heard" | "new" | null>(null);
+  const [aiToolLevel, setAiToolLevel] = useState<"yes" | "some" | "no" | null>(null);
   // D3: questions the user marked "not right for my case" (question + reason),
   // fed back into the next generation so it steers away instead of re-asking.
   const [rejectedQuestions, setRejectedQuestions] = useState<Array<{ question: string; reason: string }>>([]);
@@ -216,6 +220,7 @@ function NewProjectInner() {
       idea: ideaText,
       context: extraContext,
       ...(rejectedQuestions.length ? { rejectedQuestions } : {}),
+      ...(platform ? { platform } : {}),
     });
     if (res.ok) {
       setResult(res.data);
@@ -247,6 +252,7 @@ function NewProjectInner() {
       idea: ideaText,
       context: extraContext,
       rejectedQuestions: nextRejected,
+      ...(platform ? { platform } : {}),
     });
     if (res.ok) {
       setResult(res.data);
@@ -267,7 +273,12 @@ function NewProjectInner() {
       questionId,
       answer,
     }));
-    const res = await callWorkspaceApi({ idea: ideaText, answers: answerArray, context: extraContext });
+    const res = await callWorkspaceApi({
+      idea: ideaText,
+      answers: answerArray,
+      context: extraContext,
+      ...(platform ? { platform } : {}),
+    });
     if (res.ok) {
       setSpecResult(res.data);
       setIsFallback(res.data.source === "mock-fallback");
@@ -409,6 +420,15 @@ function NewProjectInner() {
       itemCriteria: Object.fromEntries(spec.items.map((i) => [i.id, i.criteria ?? []])),
       entryPath: entryPath ?? "idea",
       ...(builtWithTools.length ? { builtWithTools } : {}),
+      ...(platform || githubLevel || aiToolLevel
+        ? {
+            userProfile: {
+              ...(platform ? { platform } : {}),
+              ...(githubLevel ? { githubLevel } : {}),
+              ...(aiToolLevel ? { aiToolLevel } : {}),
+            },
+          }
+        : {}),
     });
     // Await the D1 persist BEFORE navigating (was fire-and-forget). Same race
     // #258 fixed on the code branch: navigating first leaves the project row
@@ -648,7 +668,7 @@ function NewProjectInner() {
               </div>
               {/* D2: extra context. Optional — a place for "I'm the only user",
                   "must work offline", references, so Simsa doesn't have to guess. */}
-              <div className="mb-8 mt-4">
+              <div className="mt-4">
                 <label htmlFor="np-extra-context" className="mb-1.5 block text-xs font-medium text-gray-600">
                   {t.np.extraContextLabel}
                 </label>
@@ -659,6 +679,43 @@ function NewProjectInner() {
                   placeholder={t.np.extraContextPlaceholder}
                   rows={2}
                   className="input resize-none rounded-lg"
+                />
+              </div>
+              {/* #296 Phase 1: onboarding interview — compact, ALL optional.
+                  The platform answer seeds the server's honest feasibility
+                  verdict; the experience answers are captured for guidance
+                  tuning (consumed in a later phase). Never an interrogation. */}
+              <div className="mb-8 mt-4 rounded-lg border border-gray-100 bg-gray-50/60 p-4">
+                <p className="mb-3 text-xs font-medium text-gray-600">{t.np.interviewTitle}</p>
+                <InterviewChipRow
+                  label={t.np.platformQ}
+                  options={[
+                    ["web", t.np.platformWeb],
+                    ["mobile", t.np.platformMobile],
+                    ["unknown", t.np.platformUnknown],
+                  ]}
+                  value={platform}
+                  onChange={(v) => setPlatform(v as "web" | "mobile" | "unknown")}
+                />
+                <InterviewChipRow
+                  label={t.np.githubQ}
+                  options={[
+                    ["fluent", t.np.githubFluent],
+                    ["heard", t.np.githubHeard],
+                    ["new", t.np.githubNew],
+                  ]}
+                  value={githubLevel}
+                  onChange={(v) => setGithubLevel(v as "fluent" | "heard" | "new")}
+                />
+                <InterviewChipRow
+                  label={t.np.aiToolQ}
+                  options={[
+                    ["yes", t.np.aiToolYes],
+                    ["some", t.np.aiToolSome],
+                    ["no", t.np.aiToolNo],
+                  ]}
+                  value={aiToolLevel}
+                  onChange={(v) => setAiToolLevel(v as "yes" | "some" | "no")}
                 />
               </div>
               <button
@@ -889,6 +946,42 @@ function WizardStepper({ t, step }: { t: Dictionary; step: number }) {
 }
 
 /** Pulsing-dot + rotating status line for a long LLM wait (H1 system status). */
+/** #296 Phase 1 — one optional interview question as a chip row. Clicking the
+ *  selected chip again clears it (truly optional; no forced answer). */
+function InterviewChipRow({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: Array<[string, string]>;
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div className="mb-2.5 last:mb-0">
+      <p className="mb-1 text-xs text-gray-500">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map(([key, text]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(value === key ? null : key)}
+            className={`rounded-full border px-3 py-1 text-xs transition-all ${
+              value === key
+                ? "border-brand-600 bg-brand-600 text-white"
+                : "border-gray-200 bg-white text-gray-600 hover:border-brand-300"
+            }`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function WaitLine({ text }: { text: string }) {
   return (
     <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500" role="status" aria-live="polite">
