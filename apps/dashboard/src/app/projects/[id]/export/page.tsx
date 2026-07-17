@@ -139,6 +139,10 @@ export default function ExportPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [target, setTarget] = useState<ExportTarget>("claude_code");
+  // Explicit agent-chooser step (Bae 2026-07-17): the pack must be TAILORED to
+  // the agent the user actually uses — ask first, never silently default to
+  // Claude Code and generate.
+  const [agentChosen, setAgentChosen] = useState(false);
 
   // ── Export state ─────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -256,7 +260,7 @@ export default function ExportPage() {
     [id, project],
   );
 
-  useEffect(() => { generate(target, null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // No auto-generate on mount — the agent chooser below runs the first generate.
 
   function handleTargetChange(t: ExportTarget) {
     setTarget(t);
@@ -376,6 +380,25 @@ export default function ExportPage() {
         {t.exportPage.prepMoved} →
       </Link>
 
+      {/* ── Step 0: which agent is this pack for? ── */}
+      {!agentChosen && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <p className="text-base font-semibold text-gray-900 mb-1">{t.exportPage.agentChooserTitle}</p>
+          <p className="text-sm text-gray-500 mb-4">{t.exportPage.agentChooserHint}</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {TARGET_VALUES.map((value) => (
+              <button key={value}
+                onClick={() => { setTarget(value); setAgentChosen(true); generate(value, null); }}
+                className="text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-brand-400 hover:bg-brand-50 transition-all">
+                <span className="block text-sm font-semibold text-gray-900">{targetOptionLabel(t, value)}</span>
+                <span className="block text-xs text-gray-500 mt-0.5">{TARGET_LABEL[value]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {agentChosen && (<>
       {/* ── Config: target + selection mode ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex flex-col sm:flex-row gap-4">
@@ -608,6 +631,7 @@ export default function ExportPage() {
           <SimsaBadgePanel />
         </>
       )}
+      </>)}
     </div>
   );
 }

@@ -20,6 +20,7 @@ import { runCveAdvisoryMiner } from "../cve-advisory-miner.js";
 import { runMcpRegistryMiner } from "../mcp-registry-miner.js";
 import { runShadcnBlockMiner } from "../shadcn-block-miner.js";
 import { runAwesomeListMiner } from "../awesome-list-miner.js";
+import { runDeployTrendWatcher } from "../deploy-trend-watcher.js";
 
 function requireInternalToken(c: { env: Env; req: { header: (k: string) => string | undefined } }) {
   const expected = c.env.INTERNAL_CALLBACK_TOKEN;
@@ -81,6 +82,52 @@ export function createExternalIntelRoutes(): Hono<{ Bindings: Env }> {
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
     const result = await runAwesomeListMiner(c.env);
     return c.json(result);
+  });
+
+  // ── D14: deploy/service trend review queue ─────────────────────────────────
+  // The watcher only FILLS the queue; a human reviews and edits
+  // workspace/service-examples.ts, then marks rows applied/dismissed.
+
+  app.post("/admin/run-deploy-trend-watcher", async (c) => {
+    const auth = requireInternalToken(c);
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+    const result = await runDeployTrendWatcher(c.env);
+    return c.json(result);
+  });
+
+  app.get("/admin/deploy-trends", async (c) => {
+    const auth = requireInternalToken(c);
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+    const status = c.req.query("status") ?? "pending";
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM deploy_trend_suggestions WHERE status = ? ORDER BY created_at DESC LIMIT 100`,
+    )
+      .bind(status)
+      .all()
+      .catch(() => ({ results: [] }));
+    return c.json({ ok: true, status, suggestions: rows.results ?? [] });
+  });
+
+  app.post("/admin/deploy-trends/:id/status", async (c) => {
+    const auth = requireInternalToken(c);
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+    const id = c.req.param("id");
+    let body: { status?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: "invalid_json" }, 400);
+    }
+    const status = body.status;
+    if (status !== "applied" && status !== "dismissed" && status !== "pending") {
+      return c.json({ ok: false, error: "status must be applied | dismissed | pending" }, 400);
+    }
+    const r = await c.env.DB.prepare(`UPDATE deploy_trend_suggestions SET status = ? WHERE id = ?`)
+      .bind(status, id)
+      .run()
+      .catch(() => null);
+    if (!r || r.meta.changes === 0) return c.json({ ok: false, error: "not_found" }, 404);
+    return c.json({ ok: true, id, status });
   });
 
   return app;

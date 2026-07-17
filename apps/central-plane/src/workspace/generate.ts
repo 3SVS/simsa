@@ -246,8 +246,41 @@ export function detectNonWebBuildable(
 function soloGuard(locale: "ko" | "en" | undefined, solo: boolean): string {
   if (!solo) return "";
   return locale === "ko"
-    ? `\n- 이 앱은 **혼자(개인용)** 쓰는 앱이다. 권한·역할·멀티유저·사용자 구분/격리·"누구에게 접근을 허용하나" 류의 질문이나 항목은 만들지 마라 — 이 사용자에겐 무의미하다.`
-    : `\n- This app is for **solo/personal use**. Do NOT create any question or item about permissions, roles, multi-user, user separation/isolation, or "who to grant access to" — it is meaningless for this user.`;
+    ? `\n- 이 앱은 **혼자(개인용)** 쓰는 앱이다. 권한·역할·멀티유저·사용자 구분/격리·"누구에게 접근을 허용하나" 류의 질문이나 항목은 만들지 마라 — 이 사용자에겐 무의미하다. **스펙 본문(included·userFlow·항목)에도 회원가입·로그인·계정 항목을 넣지 마라** — 이 앱은 열면 바로 시작한다(사용자가 직접 로그인·잠금을 원한 경우만 예외).`
+    : `\n- This app is for **solo/personal use**. Do NOT create any question or item about permissions, roles, multi-user, user separation/isolation, or "who to grant access to" — it is meaningless for this user. **Do not put sign-up/login/account items in the spec body (included, userFlow, items) either** — the app starts right away when opened (unless the user themselves asked for a login/lock).`;
+}
+
+/**
+ * D15 (2026-07-17, Bae): the 7/16 assessment found a solo app's SPEC BODY still
+ * carried "회원가입/로그인" even though the solo guard cleaned the questions.
+ * The prompt rule above reduces it; this deterministic strip guarantees it.
+ * Veto: the user explicitly ASKING for a login/lock keeps it — but a negated
+ * mention ("로그인 필요 없어요") must not count as asking (lookahead).
+ * Matchers are parameters; the principle (a solo spec ships auth-free unless
+ * asked) is not. Items keep a floor of 3 (the response validity minimum).
+ */
+const AUTH_ARTIFACT_RE =
+  /로그인|회원\s*가입|계정|비밀번호\s*(?:설정|만들|입력)|인증\s*(?:절차|단계)|sign[\s-]?up|log[\s-]?in|account\s*(?:creation|setup)|authentication/i;
+const WANTS_AUTH_RE =
+  /(?:로그인|비밀번호|암호|계정|잠금)[^.\n]{0,12}(?:필요(?!\s*없)|넣|원해|있으면|있었으면|하고\s*싶)|want[^.\n]{0,16}(?:login|password|lock)|with\s+(?:a\s+)?(?:login|password|pin)/i;
+
+export function applySoloSpecGuard<
+  T extends {
+    productSpec: { included: string[]; userFlow: string[] };
+    items: Array<{ title: string }>;
+  },
+>(res: T, userWords: string): T {
+  if (WANTS_AUTH_RE.test(userWords)) return res;
+  const keptItems = res.items.filter((i) => !AUTH_ARTIFACT_RE.test(i.title));
+  return {
+    ...res,
+    productSpec: {
+      ...res.productSpec,
+      included: res.productSpec.included.filter((s) => !AUTH_ARTIFACT_RE.test(s)),
+      userFlow: res.productSpec.userFlow.filter((s) => !AUTH_ARTIFACT_RE.test(s)),
+    },
+    items: keptItems.length >= 3 ? keptItems : res.items,
+  };
 }
 
 /** Human-readable name of a non-web-buildable kind, per locale. */
@@ -907,6 +940,8 @@ function withVerification(
       ),
     },
   };
+  // D15: a solo app's spec body ships auth-free unless the user asked for it.
+  if (detectSoloUse(req)) res = applySoloSpecGuard(res, userWordsOf(req));
   // P0-A: the deterministic feasibility warning rides on EVERY draft (LLM or
   // mock) — it's the honest "this needs a native build" heads-up, independent of
   // the coverage gate. Prepended so it's the first thing the user sees.

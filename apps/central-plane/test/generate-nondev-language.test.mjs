@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 // the target user cannot make. Fix = prompt rule + deterministic category
 // rewrite at the single draft choke point. HANDOFF-2026-07-17 § 남은 것.
 
-const { sanitizeOpenQuestions, filterQuestionsForNonDev, buildPrompt, generateIdeaToSpecDraft } =
+const { sanitizeOpenQuestions, filterQuestionsForNonDev, applySoloSpecGuard, buildPrompt, generateIdeaToSpecDraft } =
   await import("../dist/workspace/generate.js");
 
 describe("sanitizeOpenQuestions — deterministic category rewrite", () => {
@@ -138,6 +138,58 @@ describe("the prompt forbids tool names in openQuestions (ko + en)", () => {
     const en = buildPrompt({ idea: "a budget web app", locale: "en" });
     assert.match(en, /Do NOT name developer tools or services/);
     assert.match(en, /plain language, no tool names/);
+  });
+});
+
+// D15 (2026-07-17): the 7/16 assessment found a solo app's SPEC BODY still
+// carrying 회원가입/로그인 (the solo guard only cleaned questions). Prompt rule
+// + deterministic strip; an explicit user ask for a login/lock is the veto,
+// but a NEGATED mention ("로그인 필요 없어요") is not an ask.
+describe("applySoloSpecGuard — solo spec ships auth-free", () => {
+  const draft = () => ({
+    productSpec: {
+      included: ["산책 기록", "회원가입/로그인", "사료 기록"],
+      userFlow: ["1. 로그인", "2. 기록 입력", "3. 확인"],
+    },
+    items: [
+      { title: "회원가입과 로그인이 되어야 함" },
+      { title: "산책을 기록할 수 있어야 함" },
+      { title: "사료 급여를 기록할 수 있어야 함" },
+      { title: "병원 방문을 기록할 수 있어야 함" },
+    ],
+  });
+
+  it("strips login/account artifacts from included, userFlow, items", () => {
+    const out = applySoloSpecGuard(draft(), "나 혼자 쓰는 반려견 기록 앱. 로그인 필요 없어요.");
+    assert.deepEqual(out.productSpec.included, ["산책 기록", "사료 기록"]);
+    assert.equal(out.productSpec.userFlow.some((f) => /로그인/.test(f)), false);
+    assert.equal(out.items.length, 3);
+    assert.equal(out.items.some((i) => /로그인/.test(i.title)), false);
+  });
+
+  it("an explicit ask for a login keeps it (veto)", () => {
+    const out = applySoloSpecGuard(draft(), "혼자 쓰지만 비밀번호 잠금은 있으면 좋겠어요");
+    assert.equal(out.items.length, 4);
+  });
+
+  it("never drops items below 3", () => {
+    const thin = { productSpec: { included: [], userFlow: [] }, items: [
+      { title: "로그인" }, { title: "계정 만들기" }, { title: "산책 기록" },
+    ] };
+    assert.equal(applySoloSpecGuard(thin, "혼자 쓰는 앱").items.length, 3);
+  });
+
+  it("rides the real draft path: a solo mock draft has no auth items", async () => {
+    const res = await generateIdeaToSpecDraft(
+      { idea: "나 혼자 쓰는 반려견 산책 기록 웹앱. 로그인 필요 없어요.", locale: "ko" },
+      undefined,
+    );
+    const all = [
+      ...res.productSpec.included,
+      ...res.productSpec.userFlow,
+      ...res.items.map((i) => i.title),
+    ].join(" ");
+    assert.doesNotMatch(all, /로그인|회원\s*가입/);
   });
 });
 
