@@ -25,6 +25,13 @@ export type IdeaToSpecDraftRequest = {
    * and offers a replacement, instead of the user having to rewrite the idea.
    */
   rejectedQuestions?: Array<{ question: string; reason: string }>;
+  /**
+   * #296 Phase 2 (2026-07-17): the onboarding interview's platform answer
+   * ("어디서 돌아가는 앱인가요?"). An explicit "mobile" makes the feasibility
+   * verdict mobile even when the idea text carries no native marker; an
+   * explicit "web" vetoes native detection. Absent/unknown → text detection.
+   */
+  platform?: "web" | "mobile" | "unknown";
 };
 
 export type Question = {
@@ -234,6 +241,16 @@ export function detectNonWebBuildable(
   req: IdeaToSpecDraftRequest,
 ): { hit: false } | { hit: true; kind: "mobile" | "desktop" | "game" | "hardware" | "extension" } {
   const text = [req.idea, req.context ?? ""].join(" ");
+  // #296 Phase 2: the interview answer is the user's EXPLICIT platform intent —
+  // it outranks text inference in both directions. ("잘 모르겠어요"/absent falls
+  // through to text detection.)
+  if (req.platform === "web") return { hit: false };
+  if (req.platform === "mobile") {
+    for (const { kind, re } of NATIVE_KIND) {
+      if (re.test(text)) return { hit: true, kind };
+    }
+    return { hit: true, kind: "mobile" };
+  }
   // An explicit "web app / website" statement wins — the user wants web.
   if (WEB_MARKERS.test(text)) return { hit: false };
   for (const { kind, re } of NATIVE_KIND) {

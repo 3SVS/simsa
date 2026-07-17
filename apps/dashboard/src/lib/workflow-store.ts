@@ -253,6 +253,14 @@ export type ExtendedProjectData = {
    *  e.g. "claude-code", "lovable"). Captured at creation; the export page uses
    *  it to recommend a builder-pack target (Bae 2026-07-17). */
   builtWithTools?: string[];
+  /** #296 Phase 1 — onboarding interview answers (all optional). `platform` is
+   *  explicit user intent that seeds the feasibility verdict; the experience
+   *  levels tune guidance strength in a later phase. */
+  userProfile?: {
+    platform?: "web" | "mobile" | "unknown";
+    githubLevel?: "fluent" | "heard" | "new";
+    aiToolLevel?: "yes" | "some" | "no";
+  };
   /** C2 (openQuestions 질문화): answers the user settled for spec.openDecisions,
    *  keyed by the decision text. Kept out of the core spec so example projects
    *  aren't mutated — the spec page reads this to mark a decision "resolved". */

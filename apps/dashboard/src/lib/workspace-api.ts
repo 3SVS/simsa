@@ -31,6 +31,9 @@ export type WorkspaceApiInput = {
   /** Questions the user marked "not right for my case", with the reason, so the
    *  next generation steers away instead of the user rewriting the whole idea. */
   rejectedQuestions?: Array<{ question: string; reason: string }>;
+  /** #296 Phase 2: the onboarding interview's platform answer — explicit user
+   *  intent that seeds the server's feasibility verdict. */
+  platform?: "web" | "mobile" | "unknown";
 };
 
 /** Rate limit hit — no fallback, show gentle notice to user */

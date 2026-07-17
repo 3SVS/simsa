@@ -43,6 +43,26 @@ describe("detectNonWebBuildable — deterministic, kinded", () => {
     assert.equal(detectNonWebBuildable({ idea: "웹으로 하는 단어 맞추기 게임" }).hit, false);
     assert.equal(detectNonWebBuildable({ idea: "3D 게임" }).hit, true);
   });
+
+  // #296 Phase 2 (2026-07-17): the interview's explicit platform answer
+  // outranks text inference — the PISTA idea text carried no native marker.
+  it("interview platform='mobile' → mobile verdict even with no native marker in the text", () => {
+    const r = detectNonWebBuildable({ idea: "가계부 앱", platform: "mobile" });
+    assert.equal(r.hit, true);
+    assert.equal(r.kind, "mobile");
+  });
+  it("interview platform='mobile' keeps a more specific text kind (3D game)", () => {
+    const r = detectNonWebBuildable({ idea: "유니티 3D 게임", platform: "mobile" });
+    assert.equal(r.hit, true);
+    assert.equal(r.kind, "game");
+  });
+  it("interview platform='web' vetoes native text markers", () => {
+    assert.equal(detectNonWebBuildable({ idea: "아이폰 느낌의 앱", platform: "web" }).hit, false);
+  });
+  it("platform='unknown' falls through to text detection", () => {
+    assert.equal(detectNonWebBuildable({ idea: "가계부 웹앱", platform: "unknown" }).hit, false);
+    assert.equal(detectNonWebBuildable({ idea: "안드로이드 네이티브 앱", platform: "unknown" }).hit, true);
+  });
 });
 
 describe("feasibility guard is injected into the prompt only when non-web", () => {
