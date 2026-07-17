@@ -514,6 +514,8 @@ export type Dictionary = {
     targetCodex: string;
     targetBoth: string;
     targetWebBuilder: string;
+    agentChooserTitle: string;
+    agentChooserHint: string;
     scopeAll: string;
     scopeSelected: string;
     selectTitle: string;

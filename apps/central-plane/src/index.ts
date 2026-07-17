@@ -10,6 +10,7 @@ import { promoteSeedsPass } from "./seed-promoter.js";
 import { runSourceDiscovery } from "./source-discovery.js";
 import { runOssPrMiner } from "./oss-pr-miner.js";
 import { runChangelogMonitor } from "./changelog-monitor.js";
+import { runDeployTrendWatcher } from "./deploy-trend-watcher.js";
 import { runAgentSpawner, runAutoGraduation } from "./agent-spawner.js";
 import { runCveAdvisoryMiner } from "./cve-advisory-miner.js";
 import { runMcpRegistryMiner } from "./mcp-registry-miner.js";
@@ -185,6 +186,14 @@ export default {
         );
       } catch (err) {
         console.error("[changelog-monitor] crashed:", err);
+      }
+      // D14: deploy/service trend watcher shares the Monday-07:00 pass —
+      // fills the deploy_trend_suggestions review queue (never auto-applies).
+      try {
+        const trends = await runDeployTrendWatcher(env);
+        console.log(JSON.stringify({ cron: "deploy-trend-watcher", cronExpression: event.cron, ...trends }));
+      } catch (err) {
+        console.error("[deploy-trend-watcher] crashed:", err);
       }
       return;
     }
