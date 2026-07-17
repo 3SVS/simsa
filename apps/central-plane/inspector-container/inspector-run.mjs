@@ -114,6 +114,11 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   const noiseFailures = []; // analytics/ads/fonts/telemetry (info only)
   const recordNet = (url, line) => (isNoiseResource(url) ? noiseFailures : networkFailures).push(line);
   page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text().slice(0, 300)));
+  // An UNCAUGHT exception fires "pageerror", not "console" — without this, a
+  // load-time crash that kills every handler (dead-button app) left
+  // consoleErrors empty and the D9 crash conjunction could never fire
+  // (2026-07-17 eval F4: js-crash fixture read as "확인 필요" instead of broken).
+  page.on("pageerror", (err) => consoleErrors.push(`Uncaught ${String(err).slice(0, 300)}`));
   page.on("requestfailed", (r) =>
     recordNet(r.url(), `${r.method()} ${r.url().slice(0, 200)} (${r.failure()?.errorText ?? "failed"})`),
   );
