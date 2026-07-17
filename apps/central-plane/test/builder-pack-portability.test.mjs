@@ -172,3 +172,101 @@ describe("D12 — need-based service examples", () => {
     assert.match(fileOf(res, "CODEX_PROMPT.md").content, /테스트 키로만 구현/);
   });
 });
+
+// #296 Phase 3 (2026-07-17): the onboarding interview profile branches the pack
+// prompts deterministically — githubLevel picks the deploy path the agent leads
+// with (instead of asking), aiToolLevel "no" adds first-timer pacing. No
+// profile → the neutral D11 chooser, byte-identical to pre-Phase-3 output.
+describe("#296 Phase 3 — profile-aware guidance", () => {
+  const claudePrompt = (extra) => fileOf(pack("claude_code", extra), "CLAUDE_CODE_PROMPT.md").content;
+
+  it("no profile → neutral deploy chooser (asks the user), no first-timer block", () => {
+    const p = claudePrompt({});
+    assert.match(p, /사용자 상황에 맞는 길을 먼저 물어라/);
+    assert.doesNotMatch(p, /온보딩에서 확인됨/);
+  });
+
+  it("githubLevel 'new' → leads with the no-GitHub path and never re-asks about an account", () => {
+    const p = claudePrompt({ userProfile: { githubLevel: "new" } });
+    assert.match(p, /GitHub이 처음이거나 계정이 없다/);
+    assert.match(p, /되묻지 말고/);
+    assert.match(p, /Netlify Drop/);
+    assert.doesNotMatch(p, /사용자 상황에 맞는 길을 먼저 물어라/);
+  });
+
+  it("githubLevel 'fluent' → GitHub+Vercel is the default path", () => {
+    const p = claudePrompt({ userProfile: { githubLevel: "fluent" } });
+    assert.match(p, /GitHub에 익숙하다/);
+    assert.match(p, /기본 경로/);
+    assert.doesNotMatch(p, /사용자 상황에 맞는 길을 먼저 물어라/);
+  });
+
+  it("githubLevel 'heard' → keeps the neutral chooser (asking is right when unsure)", () => {
+    const p = claudePrompt({ userProfile: { githubLevel: "heard" } });
+    assert.match(p, /사용자 상황에 맞는 길을 먼저 물어라/);
+  });
+
+  it("aiToolLevel 'no' → first-timer pacing block in BOTH CLI prompts", () => {
+    const res = pack("both", { userProfile: { aiToolLevel: "no" } });
+    for (const f of ["CLAUDE_CODE_PROMPT.md", "CODEX_PROMPT.md"]) {
+      assert.match(fileOf(res, f).content, /AI 도구로 무언가 만드는 것 자체가 처음/, f);
+    }
+  });
+
+  it("aiToolLevel 'yes' → no first-timer block", () => {
+    assert.doesNotMatch(
+      claudePrompt({ userProfile: { aiToolLevel: "yes" } }),
+      /AI 도구로 무언가 만드는 것 자체가 처음/,
+    );
+  });
+});
+
+// #296 Phase 4 (2026-07-17): the handoff brief becomes the full recipient
+// deliverable — the interview's platform answer seeds its verdict (it must not
+// contradict what generation told the user in P2), and Simsa's inspection
+// results ride along in plain language so the recipient starts from known
+// problems.
+describe("#296 Phase 4 — handoff brief: profile verdict + inspection report", () => {
+  const brief = (extra) => fileOf(pack("handoff", extra), "HANDOFF_BRIEF.md").content;
+
+  it("interview 'mobile' answer → native verdict even with marker-less text", () => {
+    // SPEC has no native markers; text detection alone says web.
+    const b = brief({ userProfile: { platform: "mobile" } });
+    assert.match(b, /휴대폰 네이티브 앱/);
+    assert.match(b, /웹앱만으로는 완전히 구현할 수 없습니다/);
+  });
+
+  it("interview 'web' answer vetoes text markers (mirrors P2)", () => {
+    const mobileSpec = { ...SPEC, oneLine: "안드로이드 앱으로 영수증을 정리합니다" };
+    const res = generateBuilderPack({
+      project: { title: SPEC.productName, productSpec: mobileSpec, items: ITEMS },
+      target: "handoff", format: "json", locale: "ko",
+      userProfile: { platform: "web" },
+    });
+    const b = fileOf(res, "HANDOFF_BRIEF.md").content;
+    assert.match(b, /\*\*웹앱\*\*으로 구현 가능/);
+  });
+
+  it("check results present → plain-language inspection report with remaining problems", () => {
+    const b = brief({
+      project: {
+        title: SPEC.productName, productSpec: SPEC, items: ITEMS,
+        checkResults: {
+          results: [
+            { itemId: "req_001", status: "passed", title: "영수증 사진을 올릴 수 있어야 함", reason: "정상 동작", evidence: [], nextAction: "" },
+            { itemId: "req_002", status: "failed", title: "월별 리포트가 이메일로 와야 함", reason: "이메일이 발송되지 않았습니다", evidence: [], nextAction: "이메일 서비스 연결 확인" },
+          ],
+          summary: { passed: 1, failed: 1, inconclusive: 0, needsDecision: 0 },
+        },
+      },
+    });
+    assert.match(b, /최근 점검 결과/);
+    assert.match(b, /통과 1 · 안 맞음 1/);
+    assert.match(b, /이메일이 발송되지 않았습니다/);
+    assert.match(b, /다음 할 일: 이메일 서비스 연결 확인/);
+  });
+
+  it("no check run → no inspection section (omitted cleanly)", () => {
+    assert.doesNotMatch(brief({}), /최근 점검 결과/);
+  });
+});

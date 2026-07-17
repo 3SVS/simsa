@@ -58,6 +58,13 @@ export type ExportBuilderPackInput = {
       value?: string;
     }>;
   }>;
+  /** #296 Phase 3: onboarding interview profile — the server branches deploy
+   *  guidance (githubLevel) and pacing (aiToolLevel) in the pack prompts. */
+  userProfile?: {
+    platform?: "web" | "mobile" | "unknown";
+    githubLevel?: "fluent" | "heard" | "new";
+    aiToolLevel?: "yes" | "some" | "no";
+  };
   target: ExportTarget;
 };
 
