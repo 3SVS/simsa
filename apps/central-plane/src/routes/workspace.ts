@@ -729,6 +729,17 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     // `/p/{projectId}/connect` re-entry link. Env is resolved here (route) to
     // keep generateBuilderPack pure. Omitted cleanly when projectId is absent.
     const appBaseUrl = c.env.DASHBOARD_BASE_URL ?? BRAND.appUrl;
+    // #296 Phase 3: interview profile — enum-whitelisted, anything else dropped.
+    const rawProfile = (body as Record<string, unknown>)["userProfile"];
+    const userProfile = (() => {
+      if (typeof rawProfile !== "object" || rawProfile === null) return undefined;
+      const p = rawProfile as Record<string, unknown>;
+      const out: { platform?: "web" | "mobile" | "unknown"; githubLevel?: "fluent" | "heard" | "new"; aiToolLevel?: "yes" | "some" | "no" } = {};
+      if (p.platform === "web" || p.platform === "mobile" || p.platform === "unknown") out.platform = p.platform;
+      if (p.githubLevel === "fluent" || p.githubLevel === "heard" || p.githubLevel === "new") out.githubLevel = p.githubLevel;
+      if (p.aiToolLevel === "yes" || p.aiToolLevel === "some" || p.aiToolLevel === "no") out.aiToolLevel = p.aiToolLevel;
+      return Object.keys(out).length > 0 ? out : undefined;
+    })();
     const result = generateBuilderPack({
       project,
       projectId: req.projectId,
@@ -739,6 +750,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       // Prep layer: the in-Simsa setup UI sends the collected services/env values
       // per-export. Passed straight into the pack (.env), never stored server-side.
       ...(req.services ? { services: req.services } : {}),
+      ...(userProfile ? { userProfile } : {}),
     });
 
     // Record usage event (non-fatal)

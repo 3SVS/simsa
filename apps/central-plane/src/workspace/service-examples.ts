@@ -43,6 +43,30 @@ export const DEPLOY_PATH_GUIDANCE: string = [
   "  3. 로그인·DB 쓰기 같은 **서버 기능이 있는 앱**은 (a)로는 안 된다 — (b) 또는 사용 중인 빌더의 내장 배포를 권하라.",
 ].join("\n");
 
+/**
+ * #296 Phase 3: when the onboarding interview captured the user's GitHub level,
+ * the deploy guidance stops asking and leads with the right path. No answer →
+ * the neutral D11 chooser above (unchanged behavior).
+ */
+export function deployPathGuidanceFor(githubLevel?: "fluent" | "heard" | "new"): string {
+  if (githubLevel === "fluent") {
+    return [
+      "- **배포 — 이 사용자는 GitHub에 익숙하다 (온보딩에서 확인됨). GitHub 경로를 기본으로 진행하라:**",
+      "  1. **기본 경로**: https://vercel.com 에 GitHub 계정으로 로그인 → `Add New → Project` → 저장소 선택 → `Environment Variables`에 키를 이름 그대로 추가 → `Deploy`. 끝나면 나오는 URL을 사용자에게 알려준다. (네게 GitHub·Vercel 도구가 연결돼 있으면 네가 직접 푸시·배포한다.)",
+      "  2. 로그인·데이터 저장이 없는 정적 앱을 빠르게만 올리고 싶어 하면, **Netlify Drop**(https://app.netlify.com/drop)에 빌드 폴더를 끌어다 놓는 지름길도 있다고만 알려준다.",
+    ].join("\n");
+  }
+  if (githubLevel === "new") {
+    return [
+      "- **배포 — 이 사용자는 GitHub이 처음이거나 계정이 없다 (온보딩에서 확인됨). 계정이 있냐고 되묻지 말고, GitHub 없이 되는 길부터 안내하라:**",
+      "  1. **지금 당장 가장 쉬운 길 (GitHub 없이)**: 로그인·데이터 저장이 없는 정적 앱이라면, 빌드 결과 폴더를 **Netlify Drop**(https://app.netlify.com/drop)에 드래그해서 놓으면 바로 인터넷 주소가 나온다. **Cloudflare Pages 직접 업로드**(dash.cloudflare.com → Workers & Pages → Create → Pages → Upload assets)도 같은 방식이다.",
+      "  2. **계속 키워갈 길 (GitHub부터, 원할 때만)**: ①https://github.com 가입 ②오른쪽 위 `+` → `New repository`로 저장소 만들기 ③코드 올리기(네게 GitHub 도구가 연결돼 있으면 네가 직접 푸시) ④https://vercel.com 에 GitHub 계정으로 로그인해 저장소를 연결하고 `Deploy`. 각 단계를 한 번에 하나씩, '했어요' 확인 후 다음으로.",
+      "  3. 로그인·DB 쓰기 같은 **서버 기능이 있는 앱**은 1번(드래그앤드롭)으로는 안 된다 — 2번 또는 사용 중인 빌더의 내장 배포를 권하라. 이때도 '어렵다'가 아니라 '한 단계씩 같이 하면 된다'는 톤을 유지한다.",
+    ].join("\n");
+  }
+  return DEPLOY_PATH_GUIDANCE;
+}
+
 /** Need-matched extra walkthroughs. Matchers are parameters — tune freely. */
 export const NEED_SERVICE_EXAMPLES: ServiceExampleNeed[] = [
   {
@@ -81,12 +105,15 @@ export const NEED_SERVICE_EXAMPLES: ServiceExampleNeed[] = [
  * Pick the walkthrough blocks for THIS product: base + whatever the spec text
  * actually needs. Deterministic, order-stable, no LLM.
  */
-export function pickServiceExampleBlocks(specText: string): string[] {
+export function pickServiceExampleBlocks(
+  specText: string,
+  githubLevel?: "fluent" | "heard" | "new",
+): string[] {
   const blocks = [...BASE_SERVICE_EXAMPLE_BLOCKS];
   for (const need of NEED_SERVICE_EXAMPLES) {
     if (need.re.test(specText)) blocks.push(need.block);
   }
-  blocks.push(DEPLOY_PATH_GUIDANCE);
+  blocks.push(deployPathGuidanceFor(githubLevel));
   blocks.push(
     "- 그 외 서비스도 같은 순서로: **가입 URL → 키를 찾는 정확한 위치 → 붙여넣을 곳** 순으로 상세히 안내한다.",
   );

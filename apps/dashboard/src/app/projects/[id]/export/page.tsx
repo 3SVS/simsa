@@ -262,6 +262,8 @@ export default function ExportPage() {
             ? (svcs as ExportBuilderPackInput["services"])
             : undefined;
         })(),
+        // #296 Phase 3: interview profile → server branches deploy path + pacing.
+        userProfile: ext?.userProfile ?? undefined,
         target: t,
       });
 
@@ -400,10 +402,13 @@ export default function ExportPage() {
         // #296 Phase 2: an explicit "mobile" interview answer outranks the
         // built-with mapping — a web-agent pack is only partial for a native
         // idea; the honest recommendation is the handoff brief.
+        // #296 Phase 3: precedence mobile > built-with tool > "AI 도구 처음".
+        // A first-timer with no tool named gets the no-install web-builder path.
         const recommended =
           ext?.userProfile?.platform === "mobile"
             ? ("handoff" as ExportTarget)
-            : recommendedTargetFor(ext?.builtWithTools);
+            : (recommendedTargetFor(ext?.builtWithTools) ??
+                (ext?.userProfile?.aiToolLevel === "no" ? ("web_builder" as ExportTarget) : null));
         const ordered = recommended
           ? [recommended, ...TARGET_VALUES.filter((v) => v !== recommended)]
           : TARGET_VALUES;

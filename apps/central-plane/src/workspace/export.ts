@@ -128,9 +128,19 @@ export type WorkspaceExportBuilderPackRequest = {
    *  the setup UI supplied real values). No-store: values arrive here per-export
    *  and are only written into the pack, never persisted server-side (Rule 3). */
   services?: BuilderPackService[];
+  /** #296 Phase 3: onboarding interview profile. githubLevel picks the deploy
+   *  path the prompts lead with; aiToolLevel "no" adds first-timer pacing.
+   *  Absent → neutral guidance (unchanged pre-Phase-3 behavior). */
+  userProfile?: ExportUserProfile;
   target: ExportTarget;
   format: ExportFormat;
   locale?: "ko" | "en";
+};
+
+export type ExportUserProfile = {
+  platform?: "web" | "mobile" | "unknown";
+  githubLevel?: "fluent" | "heard" | "new";
+  aiToolLevel?: "yes" | "some" | "no";
 };
 
 export type ExportFile = {
@@ -434,12 +444,23 @@ function genFixesMd(
  * signup URLs and exact click-paths, one step at a time. Korean, matching the
  * surrounding prompt and the KO-first audience.
  */
-function beginnerSetupGuidance(specText: string): string {
+function beginnerSetupGuidance(specText: string, profile?: ExportUserProfile): string {
   return [
     "## 사용자 안내 원칙 — 완전 초보자 가정",
     "",
     "이 프로젝트의 사용자는 개발 경험이 전혀 없는 비개발자일 수 있다. 외부 서비스(데이터베이스·호스팅·인증·결제 등)나 API 키, 환경변수, 터미널 명령이 필요한 순간에는 절대 \"알아서 준비하세요\"라고 넘기지 말고, 다음처럼 손을 잡고 안내하라:",
     "",
+    // #296 Phase 3: the interview said this user has never used an AI tool —
+    // pace the whole session for a first-timer, not just the service setup.
+    ...(profile?.aiToolLevel === "no"
+      ? [
+          "**이 사용자는 AI 도구로 무언가 만드는 것 자체가 처음이다 (온보딩에서 확인됨):**",
+          "- 첫 응답에서 앞으로의 진행 순서를 3줄 이내로 먼저 알려주고 시작하라. (예: \"①제가 앱을 만들고 → ②실행해서 보여드리고 → ③인터넷에 올리는 것까지 도와드려요.\")",
+          "- 한 번에 하나만 부탁하고, 사용자의 \"했어요\" 확인 없이는 다음 단계로 넘어가지 마라.",
+          "- 사용자가 이상한 답을 하거나 멈춰 있어도 재촉하지 말고, 지금 화면에 무엇이 보이는지부터 다시 물어라.",
+          "",
+        ]
+      : []),
     "- 왜 필요한지 한 문장으로 쉽게 설명한다. (예: \"데이터를 저장하려면 무료 데이터베이스가 필요해요.\")",
     "- 가입·설정 URL을 전체 주소 그대로 준다.",
     "- 화면에서 **어디를 눌러야 하는지 단계별로, 한 번에 하나씩** 안내한다. 전문용어(API 키, 환경변수, .env 등)는 그때그때 한 줄로 풀어 설명한다.",
@@ -449,8 +470,9 @@ function beginnerSetupGuidance(specText: string): string {
     "",
     "자주 쓰는 서비스 예시 — 이 제품에 필요한 것 기준 (UI가 바뀌었으면 현재 화면에 맞게 조정하되, 이 정도로 상세하게):",
     "",
-    // D12: base + need-matched walkthroughs + the D11 deploy-path chooser.
-    ...pickServiceExampleBlocks(specText),
+    // D12: base + need-matched walkthroughs + the D11 deploy-path chooser
+    // (#296 Phase 3: profile-aware — a known githubLevel skips the asking).
+    ...pickServiceExampleBlocks(specText, profile?.githubLevel),
     "",
     "**배포 대응(중요):** 앱이 스스로를 가리키는 주소 — 짧은 링크의 앞부분, 공유 URL, 리다이렉트 대상, API 주소 등 — 를 절대 `http://localhost:3000` 같은 개발용 주소로 하드코딩하지 마라. 런타임 origin에서 가져와라(브라우저는 `window.location.origin`, 서버는 요청 host 또는 `NEXT_PUBLIC_APP_URL` 같은 환경변수). 그래야 로컬에서도, 배포 후에도 주소가 자동으로 맞는다. 이걸 안 하면 배포했을 때 사용자에게 보이는 링크가 `localhost`로 깨진다.",
   ].join("\n");
@@ -597,6 +619,7 @@ function genClaudeCodePrompt(
   effectiveItems: ExportItem[],
   totalItems: number,
   services: BuilderPackService[] = [],
+  profile?: ExportUserProfile,
 ): string {
   const isFiltered = effectiveItems.length < totalItems;
   const itemList = effectiveItems.map((i) => `- [ ] ${i.title}`).join("\n");
@@ -637,7 +660,7 @@ function genClaudeCodePrompt(
     "- 애매한 점이 있으면 코드 작성 전에 질문한다.",
     ...(services.length > 0 ? ["", genServicesContext(services)] : []),
     "",
-    beginnerSetupGuidance(specTextOf(spec, effectiveItems)),
+    beginnerSetupGuidance(specTextOf(spec, effectiveItems), profile),
     "",
     NONDEV_WORKFLOW_GUIDANCE,
     "",
@@ -658,6 +681,7 @@ function genCodexPrompt(
   totalItems: number,
   fixSuggestions?: Record<string, ExportFixSuggestion>,
   services: BuilderPackService[] = [],
+  profile?: ExportUserProfile,
 ): string {
   const isFiltered = effectiveItems.length < totalItems;
 
@@ -754,7 +778,7 @@ function genCodexPrompt(
     "",
     "## Final response format",
     "",
-    beginnerSetupGuidance(specTextOf(spec, effectiveItems)),
+    beginnerSetupGuidance(specTextOf(spec, effectiveItems), profile),
     "",
     NONDEV_WORKFLOW_GUIDANCE,
     "",
@@ -900,8 +924,15 @@ function genHandoffBrief(
   idea: string,
   spec: ExportProductSpec,
   items: ExportItem[],
+  checkResults?: ExportCheckResults,
+  profile?: ExportUserProfile,
 ): string {
-  const feas = detectNonWebBuildable({ idea: `${idea} ${spec.oneLine} ${spec.included.join(" ")}` });
+  // #296 Phase 4: the interview's platform answer seeds the verdict here too —
+  // the brief must not contradict what generation already told the user (P2).
+  const feas = detectNonWebBuildable({
+    idea: `${idea} ${spec.oneLine} ${spec.included.join(" ")}`,
+    ...(profile?.platform ? { platform: profile.platform } : {}),
+  });
   const lines: string[] = [
     `# 전달용 브리프 — ${title}`,
     "",
@@ -943,6 +974,31 @@ function genHandoffBrief(
 
   lines.push("", "## 아직 결정 필요 (시작 전에 발주자와 확인)", "");
   lines.push(...(spec.openQuestions.length ? spec.openQuestions.map((q) => `- [ ] ${q}`) : ["- (없음)"]));
+
+  // #296 Phase 4: inspection report — what Simsa's review already found, in
+  // plain language, so the recipient starts from known problems instead of
+  // rediscovering them. Omitted cleanly when no check has run.
+  if (checkResults && checkResults.results.length > 0) {
+    const s = checkResults.summary;
+    lines.push(
+      "",
+      "## 최근 점검 결과 (Simsa 검수)",
+      "",
+      `통과 ${s.passed} · 안 맞음 ${s.failed} · 확인 부족 ${s.inconclusive} · 결정 필요 ${s.needsDecision}`,
+      "",
+    );
+    const notPassed = checkResults.results.filter((r) => r.status !== "passed");
+    if (notPassed.length > 0) {
+      lines.push("전달 시점에 남아 있던 문제:", "");
+      for (const r of notPassed) {
+        const next = r.nextAction ? ` (다음 할 일: ${r.nextAction})` : "";
+        lines.push(`- **${r.title}** — ${statusLabel(r.status)}: ${r.reason}${next}`);
+      }
+    } else {
+      lines.push("전달 시점 기준 모든 점검 항목이 통과했습니다.");
+    }
+    lines.push("", "이 결과는 전달 시점의 스냅샷입니다. 받은 분은 아래 수용 기준 체크리스트로 최종 확인해주세요.");
+  }
 
   lines.push("", "## 수용 기준 체크리스트 (이대로 되면 완성)", "");
   for (const item of items) {
@@ -1157,14 +1213,14 @@ export function generateBuilderPack(
   if (target === "claude_code" || target === "both") {
     baseFiles.push({
       path: "simsa-build-pack/CLAUDE_CODE_PROMPT.md",
-      content: genClaudeCodePrompt(title, productSpec, effectiveItems, allItems.length, services) + hookSuffix,
+      content: genClaudeCodePrompt(title, productSpec, effectiveItems, allItems.length, services, req.userProfile) + hookSuffix,
     });
   }
   if (target === "codex" || target === "both") {
     baseFiles.push({
       path: "simsa-build-pack/CODEX_PROMPT.md",
       content:
-        genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions, services) +
+        genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions, services, req.userProfile) +
         hookSuffix,
     });
   }
@@ -1178,7 +1234,7 @@ export function generateBuilderPack(
   if (target === "handoff") {
     baseFiles.push({
       path: "simsa-build-pack/HANDOFF_BRIEF.md",
-      content: genHandoffBrief(title, project.idea ?? "", productSpec, effectiveItems),
+      content: genHandoffBrief(title, project.idea ?? "", productSpec, effectiveItems, effectiveCheckResults, req.userProfile),
     });
   }
 
