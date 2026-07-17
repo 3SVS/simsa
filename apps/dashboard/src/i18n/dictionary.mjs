@@ -549,6 +549,10 @@ const EN = {
     nextStep: "Next step",
     verifiedDual: "Double-checked by 2 AIs",
     verifiedSingle: "Single check",
+    modePanel: "Standard check (2-AI verified)",
+    modeCouncil: "Council check",
+    modeCouncilLocked: "Paid plan",
+    councilLockedHint: "Council check has multiple AIs debate and agree before a verdict — a deeper review available on the paid plan. Your current plan uses the standard check with 2-AI verification.",
   },
   runStatus: { error: "Error", running: "Running", queued: "Queued" },
   credit: {
@@ -2923,6 +2927,10 @@ const KO = {
     nextStep: "다음 단계",
     verifiedDual: "AI 2중 확인됨",
     verifiedSingle: "단일 확인",
+    modePanel: "기본 검수 (AI 2중 확인)",
+    modeCouncil: "협의체 검수",
+    modeCouncilLocked: "유료 플랜",
+    councilLockedHint: "협의체 검수는 여러 AI가 토론해 합의한 뒤 판정하는 더 깊은 검수예요. 유료 플랜에서 선택할 수 있습니다. 지금 플랜에서는 기본 검수(AI 2중 확인)를 사용해요.",
   },
   runStatus: { error: "확인 실패", running: "확인 중", queued: "대기 중" },
   credit: {
