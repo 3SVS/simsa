@@ -24,6 +24,7 @@ import type {
 } from "./check.js";
 import { buildCheckPrompt } from "./check.js";
 import { anthropicEndpoint } from "./anthropic-fetch.js";
+import { logLlmUsage } from "./verify-panel.js";
 
 export type CouncilEnv = {
   ANTHROPIC_API_KEY?: string;
@@ -87,9 +88,11 @@ async function callVendor(
   prompt: string,
   opts: Required<Omit<CouncilOpts, "fetchImpl">>,
   fetchImpl: typeof fetch,
+  callSite: string,
 ): Promise<string | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+  const started = Date.now();
   try {
     if (vendor === "anthropic" && env.ANTHROPIC_API_KEY) {
       const r = await fetchImpl(anthropicEndpoint(env.CF_AI_GATEWAY_ANTHROPIC_URL), {
@@ -99,7 +102,11 @@ async function callVendor(
         signal: ctrl.signal,
       });
       if (!r.ok) return null;
-      const j = (await r.json()) as { content?: Array<{ type: string; text?: string }> };
+      const j = (await r.json()) as {
+        content?: Array<{ type: string; text?: string }>;
+        usage?: { input_tokens?: number; output_tokens?: number };
+      };
+      logLlmUsage("anthropic", callSite, opts.anthropicModel, { input: j.usage?.input_tokens, output: j.usage?.output_tokens }, Date.now() - started);
       return (j.content ?? []).find((b) => b.type === "text")?.text ?? null;
     }
     if (vendor === "openai" && env.OPENAI_API_KEY) {
@@ -112,7 +119,11 @@ async function callVendor(
         signal: ctrl.signal,
       });
       if (!r.ok) return null;
-      const j = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const j = (await r.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
+      logLlmUsage("openai", callSite, opts.openaiModel, { input: j.usage?.prompt_tokens, output: j.usage?.completion_tokens }, Date.now() - started);
       return j.choices?.[0]?.message?.content ?? null;
     }
     if (vendor === "gemini" && env.GEMINI_API_KEY) {
@@ -127,7 +138,11 @@ async function callVendor(
         signal: ctrl.signal,
       });
       if (!r.ok) return null;
-      const j = (await r.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+      const j = (await r.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      };
+      logLlmUsage("gemini", callSite, opts.geminiModel, { input: j.usageMetadata?.promptTokenCount, output: j.usageMetadata?.candidatesTokenCount }, Date.now() - started);
       return j.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? null;
     }
     return null;
@@ -225,7 +240,7 @@ export async function runCouncilCheck(
   const prompt = buildCheckPrompt(req);
   const round1 = await Promise.all(
     vendors.map(async (v) => {
-      const text = await callVendor(v, env, prompt, resolved, fetchImpl);
+      const text = await callVendor(v, env, prompt, resolved, fetchImpl, "council-round1");
       return { vendor: v, verdicts: text ? parseVerdicts(text) : null };
     }),
   );
@@ -245,7 +260,7 @@ export async function runCouncilCheck(
     const rPrompt = rebuttalPrompt(req, disagreedIds, opinions);
     const round2 = await Promise.all(
       [...opinions.keys()].map(async (v) => {
-        const text = await callVendor(v, env, rPrompt, resolved, fetchImpl);
+        const text = await callVendor(v, env, rPrompt, resolved, fetchImpl, "council-round2");
         return { vendor: v, verdicts: text ? parseVerdicts(text) : null };
       }),
     );

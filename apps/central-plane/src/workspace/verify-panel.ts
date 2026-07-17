@@ -30,6 +30,35 @@ function openaiEndpoint(baseUrl?: string): string {
   return base ? `${base}/chat/completions` : "https://api.openai.com/v1/chat/completions";
 }
 
+/**
+ * RC-5: 벤더 일반화 사용량 로그 — anthropic_usage 패턴(anthropic-fetch.ts)의
+ * 멀티벤더 판. Workers 로그에서 `event:"llm_usage"`로 집계해 단가 실측 근거.
+ * 로깅 실패가 호출을 깨지 않는다.
+ */
+export function logLlmUsage(
+  vendor: string,
+  callSite: string,
+  model: string,
+  tokens: { input?: number; output?: number },
+  latencyMs: number,
+): void {
+  try {
+    console.log(
+      JSON.stringify({
+        event: "llm_usage",
+        vendor,
+        call_site: callSite,
+        model,
+        input_tokens: tokens.input ?? 0,
+        output_tokens: tokens.output ?? 0,
+        latency_ms: latencyMs,
+      }),
+    );
+  } catch {
+    /* never let logging break the call */
+  }
+}
+
 export type VerifyPanelOpts = {
   /** 검수당 교차 확인 상한 (RC-5: 기본 5) */
   maxChecks?: number;
@@ -84,6 +113,7 @@ async function askOpenAi(
 ): Promise<SecondOpinion | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  const started = Date.now();
   try {
     const r = await fetchImpl(openaiEndpoint(baseUrl), {
       method: "POST",
@@ -96,7 +126,11 @@ async function askOpenAi(
       signal: ctrl.signal,
     });
     if (!r.ok) return null;
-    const j = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const j = (await r.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    logLlmUsage("openai", "verify-panel", model, { input: j.usage?.prompt_tokens, output: j.usage?.completion_tokens }, Date.now() - started);
     return parseOpinion(j.choices?.[0]?.message?.content ?? "");
   } catch {
     return null;
@@ -115,6 +149,7 @@ async function askAnthropic(
 ): Promise<SecondOpinion | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  const started = Date.now();
   try {
     const r = await fetchImpl(anthropicEndpoint(baseUrl), {
       method: "POST",
@@ -127,7 +162,11 @@ async function askAnthropic(
       signal: ctrl.signal,
     });
     if (!r.ok) return null;
-    const j = (await r.json()) as { content?: Array<{ type: string; text?: string }> };
+    const j = (await r.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    logLlmUsage("anthropic", "verify-panel", model, { input: j.usage?.input_tokens, output: j.usage?.output_tokens }, Date.now() - started);
     return parseOpinion((j.content ?? []).find((b) => b.type === "text")?.text ?? "");
   } catch {
     return null;
