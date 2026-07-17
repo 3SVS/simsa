@@ -166,6 +166,43 @@ export function nextScreenSlug(slug, entryPath) {
       ? ["settings", "github", "items", "checks", "fixes"]
       : ["idea", "spec", "items", "export"];
   const i = order.indexOf(slug);
-  if (i === -1 || i === order.length - 1) return null;
-  return order[i + 1];
+  if (i !== -1) return i === order.length - 1 ? null : order[i + 1];
+
+  // Post-review loop on the builder branches (Bae 2026-07-17): once a review
+  // exists the right order is 확인 결과 → 고쳐보기 → 빌더팩 — the pack is handed
+  // AFTER fixes are prepared, so it carries the fix briefs instead of an empty
+  // fixes.md. checks/fixes aren't in the base walk for these branches, so this
+  // chain only ever engages after the user reached the review screens.
+  if (entryPath !== "code") {
+    const loop = ["checks", "fixes", "export"];
+    const j = loop.indexOf(slug);
+    if (j !== -1 && j < loop.length - 1) return loop[j + 1];
+  }
+  return null;
+}
+
+/**
+ * packReadiness — should the export screen route the user through 확인 결과
+ * first? (Bae 2026-07-17: "수정을 다 마치고 빌더팩을 전달해줘야지".)
+ *
+ * A pack exported while failed check items still lack a fix suggestion ships an
+ * empty fixes.md — legal but weak. This computes that state so the export
+ * screen can lead with "확인 결과부터" (soft gate: informing + default CTA,
+ * never a hard lock — dead ends are worse than a weaker pack).
+ *
+ * @param {{ results?: Array<{ itemId: string, status: string }> } | null | undefined} checkResults
+ * @param {Record<string, unknown> | null | undefined} fixSuggestions
+ * @returns {{ state: "no_review" | "fixes_missing" | "fixes_ready", failedCount: number, missingCount: number }}
+ *   no_review: no review ran, or nothing failed — no notice needed.
+ */
+export function packReadiness(checkResults, fixSuggestions) {
+  const results = Array.isArray(checkResults?.results) ? checkResults.results : [];
+  const failed = results.filter((r) => r && r.status === "failed");
+  if (failed.length === 0) return { state: "no_review", failedCount: 0, missingCount: 0 };
+  const fs = fixSuggestions ?? {};
+  const missing = failed.filter((r) => !Object.prototype.hasOwnProperty.call(fs, r.itemId));
+  if (missing.length > 0) {
+    return { state: "fixes_missing", failedCount: failed.length, missingCount: missing.length };
+  }
+  return { state: "fixes_ready", failedCount: failed.length, missingCount: 0 };
 }

@@ -28,3 +28,13 @@ export type NextProjectAction =
 export function nextProjectAction(
   facts: ProjectStepFacts,
 ): { action: NextProjectAction; slug: string } | null;
+
+export type PackReadiness = {
+  state: "no_review" | "fixes_missing" | "fixes_ready";
+  failedCount: number;
+  missingCount: number;
+};
+export function packReadiness(
+  checkResults: { results?: Array<{ itemId: string; status: string }> } | null | undefined,
+  fixSuggestions: Record<string, unknown> | null | undefined,
+): PackReadiness;
