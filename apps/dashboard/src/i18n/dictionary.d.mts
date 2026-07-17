@@ -472,6 +472,8 @@ export type Dictionary = {
     viewComparison: string;
     toGithub: string;
     nextStep: string;
+    verifiedDual: string;
+    verifiedSingle: string;
   };
   runStatus: { error: string; running: string; queued: string };
   credit: {

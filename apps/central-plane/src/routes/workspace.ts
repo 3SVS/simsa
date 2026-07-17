@@ -19,8 +19,10 @@ import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { classifyTopics } from "../workspace/topic-tags.js";
 import {
   generateCheckDraft,
+  normalizeProductSpec,
   type WorkspaceCheckDraftRequest,
 } from "../workspace/check.js";
+import { applyVerifyPanel } from "../workspace/verify-panel.js";
 import {
   generateFixSuggestion,
   type WorkspaceFixSuggestionRequest,
@@ -523,6 +525,14 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     if (result.ok === false) {
       return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    // RC-2 검증 패널 (A, 전원): failed 판정만 교차-벤더 2차 확인. 어떤 실패에도
+    // 검수 자체를 깨지 않는다 — 패널 오류 시 원판정+single 표기로 진행.
+    try {
+      result = await applyVerifyPanel(result, normalizeProductSpec(req.productSpec), c.env);
+    } catch (err) {
+      console.error("[workspace/check-draft] verify-panel error (kept single):", err);
     }
 
     // Best-effort persist check run to D1 — only into projects the caller owns.

@@ -547,6 +547,8 @@ const EN = {
     viewComparison: "View comparison in GitHub",
     toGithub: "Go to code review",
     nextStep: "Next step",
+    verifiedDual: "Double-checked by 2 AIs",
+    verifiedSingle: "Single check",
   },
   runStatus: { error: "Error", running: "Running", queued: "Queued" },
   credit: {
@@ -2919,6 +2921,8 @@ const KO = {
     viewComparison: "GitHub에서 비교 결과 보기",
     toGithub: "코드 확인 화면으로",
     nextStep: "다음 단계",
+    verifiedDual: "AI 2중 확인됨",
+    verifiedSingle: "단일 확인",
   },
   runStatus: { error: "확인 실패", running: "확인 중", queued: "대기 중" },
   credit: {
