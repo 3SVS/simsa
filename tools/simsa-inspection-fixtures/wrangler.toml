@@ -1,0 +1,6 @@
+# simsa-inspection-fixtures — ground-truth fixture apps for the inspection
+# accuracy eval (docs/simsa-inspection-accuracy-eval-2026-07-17.md).
+# Plain static worker, no bindings, no secrets. Deploy: npx wrangler deploy
+name = "simsa-inspection-fixtures"
+main = "src/index.mjs"
+compatibility_date = "2026-01-01"

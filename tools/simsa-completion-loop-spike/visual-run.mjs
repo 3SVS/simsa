@@ -16,7 +16,10 @@ import { mkdirSync, writeFileSync, copyFileSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { planVisualFlow } from "../../apps/central-plane/dist/visual-flow-plan.js";
-import { buildNonDevReport, buildAgentFixPrompt, renderNonDevReportHtml } from "../../apps/central-plane/dist/nondev-report.js";
+// decideFromEvidence: this file used to carry its OWN pre-#347 copy (console
+// errors → Needs Fix, the exact false-negative the noise filter removed) —
+// drifted duplicates get the canonical, unit-tested ladder instead.
+import { buildNonDevReport, buildAgentFixPrompt, renderNonDevReportHtml, decideFromEvidence } from "../../apps/central-plane/dist/nondev-report.js";
 import { classifyActionSafety } from "./lib/safety.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -119,6 +122,12 @@ export async function visualRun(config, outDir) {
     evidence.plan = plan;
     evidence.primaryActionFound = plan.some((s) => s.action === "click" || s.action === "type");
 
+    // D6/D7 parity with inspector-run.mjs (2026-07-17 accuracy eval): success is
+    // change-from-baseline, and Enter is pressed only when no click step submits.
+    const bodyTextAt = async () => (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    const bodyBefore = await bodyTextAt();
+    const planHasClick = plan.some((s) => s.action === "click");
+
     let stepIdx = 0;
     for (const step of plan) {
       stepIdx += 1;
@@ -141,17 +150,19 @@ export async function visualRun(config, outDir) {
         } else if (step.action === "type") {
           const field = step.placeholder ? page.getByPlaceholder(step.placeholder).first() : page.locator("input").first();
           await field.fill(step.value, { timeout: 8000 });
-          await field.press("Enter").catch(() => {});
+          if (!planHasClick) await field.press("Enter").catch(() => {});
           evidence.interacted = true;
           await page.waitForTimeout(1800);
           await snap(shotName, `${step.label} 후 화면`);
-          // Did results/content appear? Heuristic: page text grew and no fresh network failure.
-          const bodyLen = (await page.locator("body").innerText().catch(() => "")).length;
-          const ok = bodyLen > 200 && networkFailures.length === 0;
-          stepOutcomes.push({ label: step.label, ok, note: ok ? undefined : "검색 결과/내용이 확인되지 않음 (또는 데이터 요청 실패)" });
+          stepOutcomes.push({ label: step.label, ok: true });
         } else {
           await snap(shotName, step.label);
-          stepOutcomes.push({ label: step.label, ok: networkFailures.length === 0, note: networkFailures.length ? "데이터 요청 실패가 관찰됨" : undefined });
+          const bodyNow = await bodyTextAt();
+          const visibleChange = bodyNow !== bodyBefore || evidence.routeChanged;
+          if (evidence.interacted) evidence.visibleChangeAfterAction = visibleChange;
+          const ok = networkFailures.length === 0 && (!evidence.interacted || visibleChange);
+          const note = networkFailures.length ? "데이터 요청 실패가 관찰됨" : ok ? undefined : "동작 후 화면에 아무 변화가 없음";
+          stepOutcomes.push({ label: step.label, ok, note });
         }
       } catch (err) {
         await snap(shotName, `${step.label} (실패)`);
@@ -175,6 +186,7 @@ export async function visualRun(config, outDir) {
     /* video optional */
   }
 
+  evidence.consoleErrorCount = consoleErrors.length;
   const decision = decideFromEvidence(evidence, stepOutcomes);
   const reportInput = {
     targetUrl: config.targetUrl,
@@ -199,17 +211,6 @@ export async function visualRun(config, outDir) {
   writeFileSync(join(outDir, "report.md"), toMarkdown(report));
   writeFileSync(join(outDir, "agent-prompt.md"), agentPrompt);
   return { report, reportInput, agentPrompt, decision, shots, videoRel };
-}
-
-/** Deterministic decision from the deep-flow evidence (mirrors the spike's ladder, journey-aware). */
-function decideFromEvidence(e, steps) {
-  if (e.loadStatus && e.loadStatus >= 400) return "Not Verified";
-  if (e.networkFailures.length || e.consoleErrors.length) return "Needs Fix";
-  if (e.interacted && e.routeAfterClick && /\/undefined|\/null|\/404|not-found|error/i.test(e.routeAfterClick)) return "Needs Fix";
-  if (steps.some((s) => !s.ok)) return "Needs Fix";
-  if (!e.primaryActionFound) return "Needs Clarification";
-  if (e.interacted) return "User Acceptance Required"; // journey ran clean, but no visual oracle for "usable"
-  return "Not Verified";
 }
 
 function toMarkdown(r) {

@@ -77,14 +77,18 @@ test("intent alignment: a 'check' intent prefers the search box over a non-searc
   assert.equal(plan[0].selector, "#q");
 });
 
-test("intent alignment: a search-like CTA still wins even for a check intent", () => {
+test("intent alignment: a search-like CTA still wins even for a check intent (now as type→click, D6)", () => {
   const plan = planVisualFlow({
     intentAnchor: "코스 조건을 확인하는 흐름",
     ctas: [{ text: "코스 검색", selector: "text=코스 검색" }],
     inputs: [{ placeholder: "골프장 검색", type: "text", selector: "#q" }],
   });
-  assert.equal(plan[0].action, "click"); // "코스 검색" is itself the intent action
-  assert.equal(plan[0].targetText, "코스 검색");
+  // 2026-07-17 (D6): with both an input and the search CTA, the journey is
+  // type THEN click — deeper than the old click-only plan, same CTA.
+  assert.equal(plan[0].action, "type");
+  assert.equal(plan[1].action, "click");
+  assert.equal(plan[1].targetText, "코스 검색");
+  assert.equal(plan[2].action, "observe");
 });
 
 test("no CTA and no input → single safe observe (nothing to drive)", () => {
@@ -150,6 +154,85 @@ test("the observe-only fallback is localized too", () => {
   assert.equal(plan.length, 1);
   assert.equal(plan[0].action, "observe");
   assert.ok(!HANGUL.test(plan[0].label), `leaked: "${plan[0].label}"`);
+});
+
+// ─── D5/D6/D8 (2026-07-17 accuracy eval) ─────────────────────────────────────
+// Baseline measurement: every input+button vibe app (todo/저장/계산기) collapsed
+// into "확인 필요" because their verbs scored 0 and typing never submitted.
+// docs/simsa-inspection-accuracy-eval-2026-07-17.md
+
+test("D5①: a CTA named in the intent wins ('추가 버튼을 누르면' → the 추가 button)", () => {
+  const cta = pickSafeCta(
+    [
+      { text: "둘러보기", selector: "#b" },
+      { text: "추가", selector: "#add" },
+    ],
+    [],
+    "할 일을 입력하고 추가 버튼을 누르면 목록에 나타나야 한다",
+  );
+  assert.equal(cta.selector, "#add");
+});
+
+test("D5②: common single-purpose verbs (추가/저장/계산/변환) now score — the app's one button gets clicked", () => {
+  for (const text of ["추가", "저장", "계산하기", "변환하기", "Save", "Add item"]) {
+    const cta = pickSafeCta([{ text, selector: "#x" }], []);
+    assert.ok(cta, `should pick: ${text}`);
+  }
+});
+
+test("D5③: few-CTA fallback — a single-purpose page's only safe CTA is the flow even with no vocab match", () => {
+  assert.ok(pickSafeCta([{ text: "환전 실행", selector: "#go" }], []));
+  // …but never a forbidden one
+  assert.equal(pickSafeCta([{ text: "계정 삭제", selector: "#del" }], ["삭제"]), null);
+});
+
+test("D5③ stays off on link-heavy pages (many CTAs, none matching) — no random nav click", () => {
+  const many = ["홈", "소개", "블로그", "채용", "문의", "이용약관"].map((t, i) => ({ text: t, selector: `#l${i}` }));
+  assert.equal(pickSafeCta(many, []), null);
+});
+
+test("D6: input + button app plans the form journey — type, then CLICK submits (fires the app's real action)", () => {
+  const plan = planVisualFlow({
+    intentAnchor: "고객 메모를 입력하고 저장을 누르면 목록에 나타나야 한다",
+    ctas: [{ text: "저장", selector: "text=저장" }],
+    inputs: [{ placeholder: "고객 이름과 메모", type: "text", selector: "#n" }],
+  });
+  assert.deepEqual(plan.map((s) => s.action), ["type", "click", "observe"]);
+  assert.equal(plan[1].targetText, "저장");
+});
+
+test("D6 exception preserved: search intent + unrelated non-search CTA still types WITHOUT clicking it", () => {
+  const plan = planVisualFlow({
+    intentAnchor: "코스가 지금 플레이 가능한지 확인",
+    ctas: [{ text: "보험 가입하기", selector: "#ins" }],
+    inputs: [{ placeholder: "골프장 검색", type: "text", selector: "#q" }],
+  });
+  assert.deepEqual(plan.map((s) => s.action), ["type", "observe"]);
+});
+
+test("D8: a number input gets a numeric sample value, not '서울' (fill would throw)", () => {
+  const plan = planVisualFlow({
+    intentAnchor: "숫자를 입력하고 변환하기를 누르면 결과가 보여야 한다",
+    ctas: [{ text: "변환하기", selector: "#go" }],
+    inputs: [{ placeholder: "예: 5", type: "number", selector: "#km" }],
+  });
+  const typed = plan.find((s) => s.action === "type");
+  assert.equal(typed.value, "5");
+});
+
+test("D8: non-search inputs get the '입력창' label, search inputs keep '검색창'", () => {
+  const form = planVisualFlow({
+    intentAnchor: "메모를 저장",
+    ctas: [{ text: "저장", selector: "#s" }],
+    inputs: [{ placeholder: "메모", type: "text", selector: "#m" }],
+  });
+  assert.match(form.find((s) => s.action === "type").label, /입력창/);
+  const search = planVisualFlow({
+    intentAnchor: "검색해서 확인",
+    ctas: [],
+    inputs: [{ placeholder: "골프장 검색", type: "text", selector: "#q" }],
+  });
+  assert.match(search.find((s) => s.action === "type").label, /검색창/);
 });
 
 test("locale defaults to ko, and an unknown locale falls back to ko (no silent English for KO users)", () => {
