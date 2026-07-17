@@ -124,6 +124,24 @@ describe("runCouncilCheck — RC-3", () => {
     assert.equal(r2.verification, "council_split");
   });
 
+  it("RC-5: emits vendor-tagged llm_usage lines with round-aware call_site", async (t) => {
+    const lines = [];
+    const realLog = console.log;
+    t.after(() => { console.log = realLog; });
+    console.log = (s) => { lines.push(String(s)); };
+
+    const all = { r1: "passed", r2: "failed" };
+    await runCouncilCheck(REQ, ENV3, {
+      fetchImpl: stubFetch({ anthropic: [all], openai: [all], gemini: [all] }),
+    });
+
+    const usage = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((o) => o && o.event === "llm_usage");
+    assert.equal(usage.length, 3);
+    assert.deepEqual(usage.map((u) => u.vendor).sort(), ["anthropic", "gemini", "openai"]);
+    assert.ok(usage.every((u) => u.call_site === "council-round1"));
+  });
+
   it("uses gateway URLs when configured", async () => {
     const seen = [];
     const all = { r1: "passed", r2: "failed" };

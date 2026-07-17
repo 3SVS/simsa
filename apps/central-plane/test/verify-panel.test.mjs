@@ -108,6 +108,24 @@ describe("applyVerifyPanel — RC-2", () => {
     assert.deepEqual(out, input);
   });
 
+  it("RC-5: emits a vendor-tagged llm_usage log line per second-opinion call", async (t) => {
+    const lines = [];
+    const realLog = console.log;
+    t.after(() => { console.log = realLog; });
+    console.log = (s) => { lines.push(String(s)); };
+
+    await applyVerifyPanel(
+      resp([item("a", "failed")]), SPEC, ENV,
+      { fetchImpl: stubFetch({ supported: true, note_ko: "" }) },
+    );
+
+    const usage = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((o) => o && o.event === "llm_usage");
+    assert.equal(usage.length, 1);
+    assert.equal(usage[0].vendor, "openai");
+    assert.equal(usage[0].call_site, "verify-panel");
+  });
+
   it("uses the CF AI Gateway URL when configured (Worker direct egress 403 trap)", async () => {
     const log = [];
     await applyVerifyPanel(
