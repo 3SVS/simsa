@@ -24,8 +24,8 @@ export type CheckResultItem = {
   reason: string;
   evidence: string[];
   nextAction: string;
-  /** RC-2 검증 패널: failed 판정의 교차 확인 결과 (없으면 패널 미적용 판정). */
-  verification?: "dual_confirmed" | "downgraded" | "single";
+  /** RC-2 검증 패널 / RC-3 협의체: 판정의 확인 방식 (없으면 미적용 판정). */
+  verification?: "dual_confirmed" | "downgraded" | "single" | "council_agreed" | "council_split";
 };
 
 export type CheckDraftResponse = {
@@ -34,6 +34,10 @@ export type CheckDraftResponse = {
   summary: { passed: number; failed: number; inconclusive: number; needsDecision: number };
   results: CheckResultItem[];
   warnings?: string[];
+  /** RC-3/RC-4: 이 결과를 만든 검수 방식. 생략 = panel(기본). */
+  reviewMode?: "panel" | "council";
+  /** RC-3 협의체 메타 — 참여 AI·라운드·불일치 수 (투명성). */
+  council?: { vendors: string[]; rounds: number; disagreements: number };
 };
 
 export type FixSuggestionResponse = {

@@ -478,6 +478,9 @@ export type Dictionary = {
     modeCouncil: string;
     modeCouncilLocked: string;
     councilLockedHint: string;
+    verifiedCouncil: string;
+    verifiedSplit: string;
+    councilMeta: string;
   };
   runStatus: { error: string; running: string; queued: string };
   credit: {

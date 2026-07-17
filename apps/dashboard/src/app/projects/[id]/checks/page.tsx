@@ -293,6 +293,16 @@ export default function ChecksPage() {
           </>
         )}
 
+        {/* RC-3: council transparency — who reviewed, how many rounds, splits. */}
+        {results?.council && (
+          <p className="mb-4 text-xs text-gray-500">
+            {t.checks.councilMeta
+              .replace("{n}", String(results.council.vendors.length))
+              .replace("{rounds}", String(results.council.rounds))
+              .replace("{splits}", String(results.council.disagreements))}
+          </p>
+        )}
+
         {/* Next action — right under the verdict so "so what do I do" is
             visible in the 3-second glance, not below every detail card. */}
         {results && needsAction > 0 && (
@@ -505,7 +515,7 @@ function CheckResultCard({
           <SeverityChip status={result.status} />
         )}
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{result.title}</span>
-        {/* RC-2 검증 패널 표기: 2중 확인/단일 확인을 정직하게 구분 */}
+        {/* RC-2/RC-3 표기: 확인 방식을 정직하게 구분 (2중/단일/협의체 합의/의견 갈림) */}
         {result.verification === "dual_confirmed" && (
           <span className="inline-flex flex-shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
             {t.checks.verifiedDual}
@@ -514,6 +524,16 @@ function CheckResultCard({
         {result.verification === "single" && (
           <span className="inline-flex flex-shrink-0 items-center rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">
             {t.checks.verifiedSingle}
+          </span>
+        )}
+        {result.verification === "council_agreed" && (
+          <span className="inline-flex flex-shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
+            {t.checks.verifiedCouncil}
+          </span>
+        )}
+        {result.verification === "council_split" && (
+          <span className="inline-flex flex-shrink-0 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+            {t.checks.verifiedSplit}
           </span>
         )}
         <StatusBadge status={result.status as ItemStatus} />

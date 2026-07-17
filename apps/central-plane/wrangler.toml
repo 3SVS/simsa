@@ -24,6 +24,7 @@ AUTH_SIGNUP_MODE = "open"
 # the stored Anthropic key is not needed. Base only; code appends /v1/messages.
 CF_AI_GATEWAY_ANTHROPIC_URL = "https://gateway.ai.cloudflare.com/v1/8735d5a7b0af1d7f97dd46f705ace797/simsa/anthropic"
 CF_AI_GATEWAY_OPENAI_URL = "https://gateway.ai.cloudflare.com/v1/8735d5a7b0af1d7f97dd46f705ace797/simsa/openai"
+CF_AI_GATEWAY_GOOGLE_URL = "https://gateway.ai.cloudflare.com/v1/8735d5a7b0af1d7f97dd46f705ace797/simsa/google-ai-studio"
 # Open-deploy batch (2026-07-05) — Better Auth canonical origin. Required for the
 # GitHub LOGIN OAuth app (#213): without it Better Auth derives the base URL from
 # the proxied request (workers.dev) and the GitHub callback becomes

@@ -23,6 +23,7 @@ import {
   type WorkspaceCheckDraftRequest,
 } from "../workspace/check.js";
 import { applyVerifyPanel } from "../workspace/verify-panel.js";
+import { runCouncilCheck } from "../workspace/council-review.js";
 import { resolvePlan } from "../plan.js";
 import {
   generateFixSuggestion,
@@ -64,9 +65,6 @@ import {
 
 const DEFAULT_LIMIT_PER_HOUR = 20;
 
-// RC-4/RC-3: Train 3(workspace/council-review.ts)가 엔진을 배선하면서 true가
-// 된다. 그 전까지 paid+council 요청은 정직한 503(준비 중)을 받는다.
-const councilAvailable = (): boolean => false;
 
 // ALLOWED_ORIGINS centralized in ./cors.ts (Stage 91) — imported at top.
 
@@ -527,15 +525,32 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
           message: "협의체 검수는 유료 플랜 기능이에요. 지금 플랜에서는 기본 검수(AI 2중 확인)를 사용할 수 있습니다.",
         }), { status: 402, headers: { "content-type": "application/json", ...headers } });
       }
-      // Train 3(협의체 엔진)가 이 자리를 채운다. 그 전까지 council 라벨로 panel
-      // 결과를 조용히 내보내지 않는다 (조용한 대체 금지).
-      if (!councilAvailable()) {
+      // RC-3 협의체 엔진 — 벤더 2개 미만이면 조용한 대체 대신 정직한 안내.
+      const councilResult = await runCouncilCheck(
+        { productSpec: normalizeProductSpec(req.productSpec), items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" },
+        c.env,
+      ).catch((err: unknown) => {
+        console.error("[workspace/check-draft] council error:", err);
+        return { ok: false as const, error: "council_unavailable" as const };
+      });
+      if (councilResult.ok === false) {
         return new Response(JSON.stringify({
           ok: false,
           error: "council_not_ready",
-          message: "협의체 검수를 준비하고 있어요. 지금은 기본 검수를 사용해주세요.",
+          message: "협의체 검수를 지금 진행할 수 없어요(참여 AI 부족). 기본 검수를 사용해주세요.",
         }), { status: 503, headers: { "content-type": "application/json", ...headers } });
       }
+      await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
+      if (req.projectId && checkProjectOwned) {
+        saveCheckRun(c.env, req.projectId, councilResult.source, councilResult).catch(() => undefined);
+      }
+      await insertUsageEvent(c.env, {
+        userKey: checkUserKey || "anonymous",
+        projectId: req.projectId,
+        eventType: "workspace_check_draft_run",
+        metadata: { reviewMode: "council" },
+      });
+      return new Response(JSON.stringify(councilResult), { status: 200, headers: { "content-type": "application/json", ...headers } });
     }
 
     let result;
