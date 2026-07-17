@@ -72,12 +72,14 @@ const STEP_NOTES = {
     noResults: "검색 결과/내용이 확인되지 않음 (또는 데이터 요청 실패)",
     networkFailed: "데이터 요청 실패가 관찰됨",
     actionFailed: (err) => `동작 실패: ${err}`,
+    noChange: "동작 후 화면에 아무 변화가 없음",
   },
   en: {
     unsafeSkipped: (cat) => `Skipped — not safe to run (${cat})`,
     noResults: "No results/content appeared (or the data request failed)",
     networkFailed: "A data request was observed failing",
     actionFailed: (err) => `Action failed: ${err}`,
+    noChange: "Nothing on the screen changed after the action",
   },
 };
 
@@ -129,6 +131,10 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     routeChanged: false,
     consoleErrors,
     networkFailures,
+    // D7/D9 (2026-07-17 accuracy eval): whether the driven action visibly
+    // changed anything. null until an action ran and an observe measured it.
+    visibleChangeAfterAction: null,
+    consoleErrorCount: 0,
   };
 
   async function snap(name) {
@@ -161,6 +167,16 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     });
     evidence.primaryActionFound = plan.some((s) => s.action === "click" || s.action === "type");
 
+    // D7: success is measured as CHANGE from this baseline (body text or
+    // route), never as an absolute page size — the old `bodyLen > 200` check
+    // failed every small app card regardless of actual behavior.
+    const bodyTextAt = async () => (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    const bodyBefore = await bodyTextAt();
+    // D6: when the plan submits via a CLICK step, Enter after typing would
+    // double-submit (or submit an incomplete form) — press Enter only when
+    // typing is the plan's only driver.
+    const planHasClick = plan.some((s) => s.action === "click");
+
     let stepIdx = 0;
     for (const step of plan) {
       stepIdx += 1;
@@ -183,17 +199,23 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
         } else if (step.action === "type") {
           const field = step.placeholder ? page.getByPlaceholder(step.placeholder).first() : page.locator("input").first();
           await field.fill(step.value, { timeout: 8000 });
-          await field.press("Enter").catch(() => {});
+          if (!planHasClick) await field.press("Enter").catch(() => {});
           evidence.interacted = true;
           await page.waitForTimeout(1800);
           await snap(shotName);
-          // Did results/content appear? Heuristic: page text grew and no fresh network failure.
-          const bodyLen = (await page.locator("body").innerText().catch(() => "")).length;
-          const ok = bodyLen > 200 && networkFailures.length === 0;
-          stepOutcomes.push({ label: step.label, ok, note: ok ? undefined : N.noResults });
+          // The type step itself only claims "the value went in" — whether
+          // anything HAPPENED is the observe step's job (D7 change check).
+          stepOutcomes.push({ label: step.label, ok: true });
         } else {
           await snap(shotName);
-          stepOutcomes.push({ label: step.label, ok: networkFailures.length === 0, note: networkFailures.length ? N.networkFailed : undefined });
+          // D7: judge by change, not size. An action that changed neither the
+          // body text nor the route did nothing observable.
+          const bodyNow = await bodyTextAt();
+          const visibleChange = bodyNow !== bodyBefore || evidence.routeChanged;
+          if (evidence.interacted) evidence.visibleChangeAfterAction = visibleChange;
+          const ok = networkFailures.length === 0 && (!evidence.interacted || visibleChange);
+          const note = networkFailures.length ? N.networkFailed : ok ? undefined : N.noChange;
+          stepOutcomes.push({ label: step.label, ok, note });
         }
       } catch (err) {
         await snap(shotName);
@@ -217,6 +239,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     /* video optional */
   }
 
+  evidence.consoleErrorCount = consoleErrors.length;
   const decision = decideFromEvidence(evidence, stepOutcomes);
   const reportInput = {
     targetUrl,

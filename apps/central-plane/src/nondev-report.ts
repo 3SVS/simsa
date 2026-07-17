@@ -251,6 +251,12 @@ export interface DecisionEvidence {
   interacted: boolean;
   routeAfterClick: string | null;
   primaryActionFound: boolean;
+  /** D9 (2026-07-17): did the driven action visibly change anything (body text
+   *  or route)? null/undefined = not measured (older callers stay valid). */
+  visibleChangeAfterAction?: boolean | null;
+  /** D9: console error count — NEVER a verdict driver alone (noise lesson);
+   *  only its CONJUNCTION with a dead action is a crash signal. */
+  consoleErrorCount?: number;
 }
 
 /**
@@ -275,6 +281,12 @@ export function decideFromEvidence(
   if (e.loadStatus && e.loadStatus >= 400) return "Not Verified";
   if (e.networkFailures.length) return "Needs Fix";
   if (e.interacted && e.routeAfterClick && /\/undefined|\/null|\/404|not-found|error/i.test(e.routeAfterClick)) return "Needs Fix";
+  // D9 (2026-07-17 accuracy eval): an action that visibly changed NOTHING plus a
+  // console error is a crashed app (the handler never bound — dead button), not
+  // an inspector limitation. The CONJUNCTION is the signal: a console error
+  // alone stays non-fatal (healthy sites are noisy — the vercel.com lesson), and
+  // a no-change action alone stays "couldn't confirm" (subtle UIs exist).
+  if (e.interacted && e.visibleChangeAfterAction === false && (e.consoleErrorCount ?? 0) > 0) return "Needs Fix";
   if (steps.some((s) => !s.ok)) return e.interacted ? "User Acceptance Required" : "Needs Clarification";
   if (!e.primaryActionFound) return "Needs Clarification";
   if (e.interacted) return "User Acceptance Required";

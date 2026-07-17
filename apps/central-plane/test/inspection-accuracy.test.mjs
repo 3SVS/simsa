@@ -85,6 +85,37 @@ describe("decideFromEvidence — Potemkin is STILL caught (no over-softening)", 
   });
 });
 
+describe("decideFromEvidence — D9: dead-button crash is the CONJUNCTION, never either signal alone", () => {
+  // 2026-07-17 accuracy eval F4: a load-time JS crash leaves the button dead —
+  // clickable, zero network failures, but nothing ever changes. Console error
+  // ALONE stays non-fatal (vercel lesson); no-change ALONE stays non-fatal
+  // (subtle UIs); together they are a crashed app.
+  it("action + NO visible change + console error → Needs Fix", () => {
+    const d = decideFromEvidence(
+      { ...base, interacted: true, visibleChangeAfterAction: false, consoleErrorCount: 1 },
+      [{ ok: true }, { ok: false }],
+    );
+    assert.equal(d, "Needs Fix");
+  });
+  it("console error alone (screen DID change) stays a clean acceptance ask", () => {
+    const d = decideFromEvidence(
+      { ...base, interacted: true, visibleChangeAfterAction: true, consoleErrorCount: 3 },
+      [{ ok: true }],
+    );
+    assert.equal(d, "User Acceptance Required");
+  });
+  it("no visible change alone (no console error) is 'couldn't confirm', not broken", () => {
+    const d = decideFromEvidence(
+      { ...base, interacted: true, visibleChangeAfterAction: false, consoleErrorCount: 0 },
+      [{ ok: true }, { ok: false }],
+    );
+    assert.notEqual(d, "Needs Fix");
+  });
+  it("older callers without the D9 fields keep their existing verdicts (fields optional)", () => {
+    assert.equal(decideFromEvidence({ ...base, interacted: true }, [{ ok: true }]), "User Acceptance Required");
+  });
+});
+
 describe("classifyFindings — noise is info, real failures are high, console is low", () => {
   const input = (over) => ({
     targetUrl: "https://myapp.vercel.app/", intentAnchor: "x", loadStatus: 200,

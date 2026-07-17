@@ -48,6 +48,7 @@ const FLOW_LABELS = {
     clickCta: (text: string) => `핵심 버튼 '${text}' 누르기`,
     observeAfterClick: "버튼을 누른 뒤 화면 확인",
     typeQuery: (q: string) => `검색창에 '${q}' 입력하기`,
+    typeField: (q: string) => `입력창에 '${q}' 입력하기`,
     observeResults: "검색 결과 화면 확인",
     observeFirstScreen: "첫 화면 확인 (안전하게 실행할 동작을 못 찾음)",
   },
@@ -55,6 +56,7 @@ const FLOW_LABELS = {
     clickCta: (text: string) => `Press the main button '${text}'`,
     observeAfterClick: "Check the screen after pressing the button",
     typeQuery: (q: string) => `Type '${q}' into the search box`,
+    typeField: (q: string) => `Type '${q}' into the input field`,
     observeResults: "Check the search results screen",
     observeFirstScreen: "Check the first screen (no action was safe to run)",
   },
@@ -100,7 +102,16 @@ const INTENT_CTA_PRIORITY = [
   /start|시작/i,
   /sign ?up|signup|register|가입|등록/i,
   /begin|try|continue|join|다음|계속/i,
+  // D5② (2026-07-17 accuracy eval): the common single-purpose vibe-app verbs.
+  // Before this tier, "추가/저장/계산하기…" scored 0 and the app's ONE button was
+  // never clicked — every input+button app collapsed into "확인 필요".
+  /추가|저장|기록|계산|변환|만들|생성|올리기|업로드|입력|조회|add|save|create|submit|calculate|convert|upload|record/i,
 ];
+
+/** D5③: with at most this many safe CTAs, the page is single-purpose-shaped
+ *  and the first safe CTA is the flow even when no vocabulary tier matches.
+ *  A parameter, not a principle. */
+const FEW_CTA_MAX = 4;
 
 function isForbidden(text: string, forbidden: string[]): boolean {
   const t = (text || "").toLowerCase();
@@ -115,20 +126,48 @@ function ctaScore(text: string): number {
   return 0;
 }
 
-/** Pick the best safe CTA that matches the intent, or null. Pure & deterministic. */
-export function pickSafeCta(ctas: DetectedCta[], forbidden: string[]): DetectedCta | null {
+/**
+ * Pick the best safe CTA, or null. Pure & deterministic. Three tiers (D5,
+ * 2026-07-17 accuracy eval — docs/simsa-inspection-accuracy-eval-2026-07-17.md):
+ *   ① a CTA the intent NAMES verbatim ("추가 버튼을 누르면…" → the '추가' button)
+ *   ② the action-vocabulary priority match (existing behavior, vocab broadened)
+ *   ③ few-CTA fallback: on a single-purpose-shaped page (≤ FEW_CTA_MAX safe
+ *      CTAs) the first safe CTA is the flow.
+ * The forbidden filter applies to every tier.
+ */
+export function pickSafeCta(
+  ctas: DetectedCta[],
+  forbidden: string[],
+  intentAnchor = "",
+): DetectedCta | null {
+  const safe = ctas.filter((c) => (c.text || "").trim().length > 0 && !isForbidden(c.text, forbidden));
+
+  // ① intent-named CTA — the user's own words pick the button (longest match wins).
+  let named: DetectedCta | null = null;
+  for (const c of safe) {
+    const t = c.text.trim();
+    if (t.length >= 2 && intentAnchor.includes(t) && (!named || t.length > named.text.trim().length)) {
+      named = c;
+    }
+  }
+  if (named) return named;
+
+  // ② vocabulary tiers.
   let best: DetectedCta | null = null;
   let bestScore = 0;
-  for (const c of ctas) {
+  for (const c of safe) {
     const score = ctaScore(c.text);
     if (score <= 0) continue;
-    if (isForbidden(c.text, forbidden)) continue;
     if (score > bestScore) {
       best = c;
       bestScore = score;
     }
   }
-  return best;
+  if (best) return best;
+
+  // ③ single-purpose-shaped page.
+  if (safe.length > 0 && safe.length <= FEW_CTA_MAX) return safe[0]!;
+  return null;
 }
 
 /** Pick the primary search/text input (prefers a search-like placeholder). */
@@ -148,10 +187,15 @@ export function ctaIsSearchLike(text: string): boolean {
 }
 
 /**
- * Build the deep flow plan:
- *   - If a safe intent CTA exists → click it, then observe.
- *   - Else if a search/text input exists → type a benign query into it, then observe.
- *   - Always ends by observing the result screen.
+ * Build the deep flow plan (D6, 2026-07-17 accuracy eval):
+ *   - Input AND a safe CTA → type, then CLICK the CTA (the form journey — this
+ *     is what actually fires a button-submitted app's action, e.g. a Potemkin
+ *     app's backend call), then observe.
+ *     Exception: a search-oriented intent with a non-search, un-named CTA keeps
+ *     the type→Enter path (golf-now case: don't click "보험 가입하기" after
+ *     typing a search).
+ *   - Only a CTA → click it, then observe.
+ *   - Only an input → type (Enter submits), then observe.
  * If neither exists, the plan is just a single observe (nothing safe to drive).
  */
 export function planVisualFlow(input: FlowPlanInput): FlowStep[] {
@@ -162,29 +206,44 @@ export function planVisualFlow(input: FlowPlanInput): FlowStep[] {
     input.sampleQuery && input.sampleQuery.trim() ? input.sampleQuery.trim() : DEFAULT_SAMPLE_QUERY[locale];
   const steps: FlowStep[] = [];
 
-  const cta = pickSafeCta(input.ctas ?? [], forbidden);
+  const cta = pickSafeCta(input.ctas ?? [], forbidden, input.intentAnchor ?? "");
   const input0 = pickPrimaryInput(input.inputs ?? []);
   const searchOriented = intentIsSearchOriented(input.intentAnchor);
 
   // Intent alignment: when the goal is to CHECK/SEARCH something and a search box exists, prefer
   // typing into it over clicking a non-search CTA (e.g. don't click "보험 가입하기" for a
   // "check course conditions" intent). A CTA that is itself a search/check action still wins.
-  const preferInput = searchOriented && input0 && (!cta || !ctaIsSearchLike(cta.text));
+  const ctaNamedByIntent = !!cta && (input.intentAnchor ?? "").includes(cta.text.trim());
+  const preferInput = searchOriented && input0 && (!cta || !(ctaIsSearchLike(cta.text) || ctaNamedByIntent));
+
+  // D8: a benign value the input actually accepts — "서울" in a number field
+  // throws at fill time and poisoned the whole run as "couldn't interact".
+  const typeValue = input0 && input0.type === "number" ? "5" : sampleQuery;
+  const typeLabel =
+    input0 && (input0.type === "search" || /search|검색|찾기/i.test(input0.placeholder))
+      ? L.typeQuery(typeValue)
+      : L.typeField(typeValue);
+
+  const pushType = (i: DetectedInput) =>
+    steps.push({ action: "type", label: typeLabel, selector: i.selector, value: typeValue, placeholder: i.placeholder });
+  const pushClick = (c: DetectedCta) =>
+    steps.push({ action: "click", label: L.clickCta(c.text), selector: c.selector, targetText: c.text });
+
+  if (input0 && cta && !preferInput) {
+    pushType(input0);
+    pushClick(cta);
+    steps.push({ action: "observe", label: L.observeAfterClick });
+    return steps;
+  }
 
   if (cta && !preferInput) {
-    steps.push({ action: "click", label: L.clickCta(cta.text), selector: cta.selector, targetText: cta.text });
+    pushClick(cta);
     steps.push({ action: "observe", label: L.observeAfterClick });
     return steps;
   }
 
   if (input0) {
-    steps.push({
-      action: "type",
-      label: L.typeQuery(sampleQuery),
-      selector: input0.selector,
-      value: sampleQuery,
-      placeholder: input0.placeholder,
-    });
+    pushType(input0);
     steps.push({ action: "observe", label: L.observeResults });
     return steps;
   }
