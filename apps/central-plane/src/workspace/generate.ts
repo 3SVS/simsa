@@ -357,6 +357,51 @@ export function sanitizeOpenQuestions(
   return out;
 }
 
+/**
+ * D13 (P2, 2026-07-17 target-fit eval): deterministic question filter. The live
+ * eval caught the LLM asking things the target user cannot decide — "모바일
+ * 앱(iOS/Android)으로도 만들지" (the coding AI can't build one), "데이터를
+ * 어디에 저장할지" (a storage decision), and tool-name questions. The prompt
+ * rule reduces these; this filter guarantees them. A question mentioning a term
+ * the user typed THEMSELVES is exempt (their words, their language). Never
+ * drops below 3 questions — the wizard needs something to ask.
+ */
+const NATIVE_OPTION_RE =
+  /모바일\s*앱|네이티브|앱\s*스토어|안드로이드|아이폰|아이패드|\bios\b|\bandroid\b|app\s*store|native\s*app/i;
+const STORAGE_DECISION_RE =
+  /어디에\s*(?:저장|보관)|저장\s*(?:위치|장소|방식을\s*직접)|where\s+(?:to\s+)?store/i;
+
+function questionDropMatch(text: string): RegExpExecArray | null {
+  for (const re of [NATIVE_OPTION_RE, STORAGE_DECISION_RE]) {
+    const m = re.exec(text);
+    if (m) return m;
+  }
+  for (const cat of JARGON_CATEGORIES) {
+    const m = cat.re.exec(text);
+    if (m) return m;
+  }
+  return null;
+}
+
+export function filterQuestionsForNonDev<T extends { question: string }>(
+  questions: T[],
+  userWords: string,
+): T[] {
+  const lower = userWords.toLowerCase();
+  const maxDrop = Math.max(0, questions.length - 3);
+  const out: T[] = [];
+  let dropped = 0;
+  for (const q of questions) {
+    const m = dropped < maxDrop ? questionDropMatch(q.question) : null;
+    if (m && !lower.includes(m[0].toLowerCase())) {
+      dropped++;
+      continue;
+    }
+    out.push(q);
+  }
+  return out;
+}
+
 /** Extra-context block (D2). Empty when the user gave none. */
 function contextBlock(locale: "ko" | "en" | undefined, context: string | undefined): string {
   const c = (context ?? "").trim();
@@ -398,6 +443,7 @@ export function buildPrompt(req: IdeaToSpecDraftRequest): string {
 - 모든 사용자 대상 텍스트는 자연스러운 한국어로 작성
 - PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE 같은 개발자 용어 사용 금지
 - openQuestions·decisions에도 개발 도구·서비스 이름(Firebase, AWS, Chart.js, API 등)을 쓰지 마라. "STT 서비스 선택"이 아니라 "음성 인식을 어느 수준까지 지원할지 정하기"처럼, 사용자가 실제로 내릴 수 있는 결정을 일반인 언어로 적어라. 단, 사용자가 직접 언급한 도구 이름은 그대로 써도 된다.
+- 사용자의 개발 AI는 **웹앱만** 만든다. 질문에서 "모바일 앱(iOS/Android)으로도 만들지" 같은 네이티브 앱 선택지를 제시하지 마라(사용자가 직접 꺼낸 경우 예외). "데이터를 어디에 저장할지" 같은 기술 결정도 묻지 마라 — 사용자가 실제로 내릴 수 있는 결정만 물어라.
 - 질문은 이 아이디어에 맞춤형으로 4~6개 생성 (단순 템플릿 반복 금지). 그중 **최소 1개는 화면·디자인(UIUX)** 에 관한 것.
 - 좋은 질문 = 답에 따라 제품이 실제로 달라지는 구체적 질문. 아래 축을 폭넓게 살펴 이 아이디어에 맞는 것을 고른다:
   구현 범위 · 사용자 흐름 · 데이터 보관 · 로그인/권한 · 외부 연동 · 대상 사용자 숙련도 · 성공 기준 ·
@@ -423,6 +469,7 @@ Follow these rules strictly:
 - Write all user-facing text in natural, plain English
 - Do NOT use developer jargon like PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE
 - Do NOT name developer tools or services (Firebase, AWS, Chart.js, API, …) in openQuestions/decisions either. Write the decision the user can actually make in plain words — "Decide where and how your data is kept", not "Choose Firebase vs AWS". Tools the user themselves mentioned are fine to keep.
+- The user's coding AI builds **web apps only**. Never offer a native mobile app (iOS/Android) as a question option (unless the user brought it up themselves). Don't ask technical decisions like "where should the data be stored" — ask only decisions the user can actually make.
 - Generate 4-6 questions tailored to this idea (no repetitive templates). At least ONE must be about screens/design (UI/UX).
 - Good questions = concrete questions whose answers actually change the product. Draw broadly from these axes, picking what fits this idea:
   scope · user flow · data retention · login/permissions · integrations · target-user skill level · success criteria ·
@@ -845,9 +892,12 @@ function withVerification(
 ): IdeaToSpecDraftResponse {
   // P1 non-developer language: openQuestions is the field that leaked tool
   // names in live measurement. Sanitized here — the single choke point every
-  // successful draft (LLM and mock alike) passes through.
+  // successful draft (LLM and mock alike) passes through. D13 extends the same
+  // guarantee to the interactive questions (un-decidable native/storage/tool
+  // questions are dropped, floor 3).
   res = {
     ...res,
+    questions: filterQuestionsForNonDev(res.questions, userWordsOf(req)),
     productSpec: {
       ...res.productSpec,
       openQuestions: sanitizeOpenQuestions(

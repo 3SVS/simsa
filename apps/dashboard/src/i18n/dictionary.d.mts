@@ -513,6 +513,7 @@ export type Dictionary = {
     targetClaude: string;
     targetCodex: string;
     targetBoth: string;
+    targetWebBuilder: string;
     scopeAll: string;
     scopeSelected: string;
     selectTitle: string;

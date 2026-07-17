@@ -4,16 +4,16 @@
   "date": "2026-07-17",
   "results": [
     {
-      "id": "F5",
-      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/blank",
+      "id": "F4",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/js-crash",
       "expected": "broken",
-      "intent": "방문자가 이 서비스가 무엇인지 화면에서 알 수 있어야 한다",
-      "works": null,
-      "decision": "Needs Clarification",
-      "verdict": "무엇을 확인해야 할지 애매해요",
-      "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요. 처음 화면에서 무엇을 눌러 시작해야 할지 못 찾았어요.",
+      "intent": "원화 금액을 입력하고 계산하기를 누르면 달러 금액이 보여야 한다",
+      "works": false,
+      "decision": "Needs Fix",
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 흐름이 지금은 작동하지 않아요. 화면에서 코드 오류가 났어요.",
       "runStatus": "done",
-      "score": "partial(null)"
+      "score": "correct"
     },
     {
       "id": "R1",
@@ -22,8 +22,8 @@
       "nullOk": true,
       "intent": "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다",
       "works": null,
-      "decision": "Needs Clarification",
-      "verdict": "무엇을 확인해야 할지 애매해요",
+      "decision": "User Acceptance Required",
+      "verdict": "직접 눈으로 확인이 필요해요",
       "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요. 화면에서 코드 오류가 났어요.",
       "runStatus": "done",
       "score": "correct"

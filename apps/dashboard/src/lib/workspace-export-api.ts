@@ -11,7 +11,7 @@ const CENTRAL_PLANE_URL =
 
 // ─── Types (mirrors central-plane export.ts) ──────────────────────────────────
 
-export type ExportTarget = "claude_code" | "codex" | "both";
+export type ExportTarget = "claude_code" | "codex" | "both" | "web_builder";
 
 export type ExportFile = {
   path: string;
