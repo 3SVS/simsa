@@ -3,6 +3,24 @@
   "framework": "nextjs",
   "redirects": [
     {
+      "source": "/",
+      "has": [{ "type": "host", "value": "trysimsa.com" }],
+      "destination": "https://simsa.dev/",
+      "permanent": true
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.trysimsa.com" }],
+      "destination": "https://simsa.dev/",
+      "permanent": true
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.simsa.dev" }],
+      "destination": "https://simsa.dev/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "trysimsa.com" }],
       "destination": "https://simsa.dev/:path*",
