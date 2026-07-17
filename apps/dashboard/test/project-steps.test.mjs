@@ -192,3 +192,54 @@ test("nextScreenSlug: the CODE branch walks repo-connect FIRST (이미 만든 �
   assert.equal(nextScreenSlug("items", "idea"), "export");
   assert.equal(nextScreenSlug("items", null), "export");
 });
+
+// ── Fix-first routing (Bae 2026-07-17): 확인 결과 → 고쳐보기 → 빌더팩 ─────────
+
+test("post-review walk (builder branches): checks → fixes → export", () => {
+  assert.equal(nextScreenSlug("checks", "idea"), "fixes");
+  assert.equal(nextScreenSlug("fixes", "idea"), "export");
+  assert.equal(nextScreenSlug("checks", "spec"), "fixes");
+  assert.equal(nextScreenSlug("fixes", "spec"), "export");
+  // pre-review walk unchanged: items → export is still the idea-branch end
+  assert.equal(nextScreenSlug("items", "idea"), "export");
+  assert.equal(nextScreenSlug("export", "idea"), null);
+  // code branch unchanged: its own order still ends at fixes (PR flow, not pack)
+  assert.equal(nextScreenSlug("fixes", "code"), null);
+  assert.equal(nextScreenSlug("checks", "code"), "fixes");
+});
+
+test("packReadiness: no review / nothing failed → no_review (no notice)", async () => {
+  const { packReadiness } = await import("../src/lib/project-steps.mjs");
+  assert.equal(packReadiness(undefined, undefined).state, "no_review");
+  assert.equal(packReadiness({ results: [] }, {}).state, "no_review");
+  assert.equal(
+    packReadiness({ results: [{ itemId: "a", status: "passed" }] }, {}).state,
+    "no_review",
+  );
+});
+
+test("packReadiness: failed items without fix plans → fixes_missing with counts", async () => {
+  const { packReadiness } = await import("../src/lib/project-steps.mjs");
+  const r = packReadiness(
+    { results: [
+      { itemId: "a", status: "failed" },
+      { itemId: "b", status: "failed" },
+      { itemId: "c", status: "inconclusive" },
+    ] },
+    { a: { itemId: "a" } }, // only one of two failures has a plan
+  );
+  assert.equal(r.state, "fixes_missing");
+  assert.equal(r.failedCount, 2);
+  assert.equal(r.missingCount, 1);
+});
+
+test("packReadiness: every failed item has a fix plan → fixes_ready", async () => {
+  const { packReadiness } = await import("../src/lib/project-steps.mjs");
+  const r = packReadiness(
+    { results: [{ itemId: "a", status: "failed" }] },
+    { a: { itemId: "a" } },
+  );
+  assert.equal(r.state, "fixes_ready");
+  assert.equal(r.failedCount, 1);
+  assert.equal(r.missingCount, 0);
+});

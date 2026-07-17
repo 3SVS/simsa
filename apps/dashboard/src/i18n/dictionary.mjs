@@ -691,6 +691,15 @@ const EN = {
       siteDesc: "Add your live app URL to run a visual check of the finished screens.",
       siteCta: "Connect app URL",
     },
+    fixFirst: {
+      title: "Finish the check results first",
+      descBefore: "Your review found ",
+      descFailed: " item(s) that don't pass, and ",
+      descMissing: " still have no fix plan. Create fix plans on the check-results screen first — then this package will include exact fix instructions for your dev AI.",
+      cta: "Go to check results",
+      anyway: "You can still export now, but the package will go out without fix instructions.",
+      readyBadge: "Fix instructions for every failed item are included in this package.",
+    },
     deployTools: {
       title: "Let your AI deploy it in one shot",
       intro: "Connect these tools once in your editor. Then your dev AI can push the code and put the app online by itself — no copy-pasting keys, and Simsa never sees your tokens.",
@@ -3053,6 +3062,15 @@ const KO = {
       siteTitle: "배포된 웹사이트 연결",
       siteDesc: "배포된 앱 주소를 넣어 완성된 화면을 시각 검수합니다.",
       siteCta: "앱 주소 연결하기",
+    },
+    fixFirst: {
+      title: "확인 결과부터 마치면 더 좋은 패키지가 나와요",
+      descBefore: "검수에서 안 맞음이 ",
+      descFailed: "건 나왔고, 그중 ",
+      descMissing: "건은 아직 고칠 방법이 준비되지 않았어요. 확인 결과 화면에서 고쳐보기를 먼저 만들면, 이 패키지에 개발 AI에게 줄 정확한 수정 지시가 함께 담깁니다.",
+      cta: "확인 결과로 가기",
+      anyway: "지금 그대로 내보낼 수도 있지만, 수정 지시 없이 나갑니다.",
+      readyBadge: "안 맞았던 항목 전부의 수정 지시가 이 패키지에 담깁니다.",
     },
     deployTools: {
       title: "AI가 한 번에 배포까지 하도록",

@@ -616,6 +616,15 @@ export type Dictionary = {
       siteDesc: string;
       siteCta: string;
     };
+    fixFirst: {
+      title: string;
+      descBefore: string;
+      descFailed: string;
+      descMissing: string;
+      cta: string;
+      anyway: string;
+      readyBadge: string;
+    };
     deployTools: {
       title: string;
       intro: string;

@@ -27,6 +27,7 @@ import {
   type RemoteOutcome,
 } from "@/lib/workspace-export-api";
 import { downloadBuildPackZip } from "@/lib/zip-utils";
+import { packReadiness } from "@/lib/project-steps.mjs";
 import { filesForTextBundle, hasSecretFiles } from "@/lib/pack-bundle.mjs";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
@@ -181,6 +182,8 @@ export default function ExportPage() {
   const checkResultMap = new Map(
     (ext?.checkResults?.results ?? []).map((r) => [r.itemId, r.status as ItemStatus]),
   );
+  // Fix-first routing: does this pack still miss fix plans for failed items?
+  const readiness = packReadiness(ext?.checkResults, ext?.fixSuggestions);
 
   const allItems: SelectableItem[] = (project?.requirements ?? []).map((r) => ({
     id: r.id,
@@ -396,6 +399,30 @@ export default function ExportPage() {
         className="block bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 text-sm text-brand-800 hover:bg-brand-100 transition-colors">
         {t.exportPage.prepMoved} →
       </Link>
+
+      {/* Fix-first routing (Bae 2026-07-17): when a review found failures that
+          still lack fix plans, the default path is checks → fixes → THEN the
+          pack, so it ships fix briefs instead of an empty fixes.md. Soft gate:
+          informing + primary CTA, exporting stays possible (no dead end). */}
+      {readiness.state === "fixes_missing" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+          <p className="text-sm font-semibold text-amber-900 mb-1">{t.exportPage.fixFirst.title}</p>
+          <p className="text-sm text-amber-800 mb-3">
+            {t.exportPage.fixFirst.descBefore}{readiness.failedCount}{t.exportPage.fixFirst.descFailed}{readiness.missingCount}{t.exportPage.fixFirst.descMissing}
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link href={`/projects/${id}/checks`} className="btn btn-sm btn-primary">
+              {t.exportPage.fixFirst.cta} →
+            </Link>
+            <span className="text-xs text-amber-700">{t.exportPage.fixFirst.anyway}</span>
+          </div>
+        </div>
+      )}
+      {readiness.state === "fixes_ready" && (
+        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-800">
+          {t.exportPage.fixFirst.readyBadge}
+        </div>
+      )}
 
       {/* ── Step 0: which agent is this pack for? ── */}
       {!agentChosen && (() => {
