@@ -80,6 +80,8 @@ export type CheckResultItem = {
   reason: string;
   evidence: string[];
   nextAction: string;
+  /** RC-2 검증 패널: failed 판정의 교차 확인 결과. 미실행 판정에는 없음. */
+  verification?: "dual_confirmed" | "downgraded" | "single";
 };
 
 export type WorkspaceCheckDraftRequest = {

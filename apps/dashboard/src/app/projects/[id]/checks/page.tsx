@@ -459,6 +459,17 @@ function CheckResultCard({
           <SeverityChip status={result.status} />
         )}
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{result.title}</span>
+        {/* RC-2 검증 패널 표기: 2중 확인/단일 확인을 정직하게 구분 */}
+        {result.verification === "dual_confirmed" && (
+          <span className="inline-flex flex-shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
+            {t.checks.verifiedDual}
+          </span>
+        )}
+        {result.verification === "single" && (
+          <span className="inline-flex flex-shrink-0 items-center rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px] font-medium text-gray-500">
+            {t.checks.verifiedSingle}
+          </span>
+        )}
         <StatusBadge status={result.status as ItemStatus} />
         <span className={`flex-shrink-0 text-xs text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden>
           ▾
