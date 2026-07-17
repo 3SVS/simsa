@@ -553,6 +553,9 @@ const EN = {
     modeCouncil: "Council check",
     modeCouncilLocked: "Paid plan",
     councilLockedHint: "Council check has multiple AIs debate and agree before a verdict — a deeper review available on the paid plan. Your current plan uses the standard check with 2-AI verification.",
+    verifiedCouncil: "Council agreed",
+    verifiedSplit: "AIs disagreed — check yourself",
+    councilMeta: "Council check: {n} AIs reviewed independently over {rounds} round(s); {splits} item(s) stayed split.",
   },
   runStatus: { error: "Error", running: "Running", queued: "Queued" },
   credit: {
@@ -2931,6 +2934,9 @@ const KO = {
     modeCouncil: "협의체 검수",
     modeCouncilLocked: "유료 플랜",
     councilLockedHint: "협의체 검수는 여러 AI가 토론해 합의한 뒤 판정하는 더 깊은 검수예요. 유료 플랜에서 선택할 수 있습니다. 지금 플랜에서는 기본 검수(AI 2중 확인)를 사용해요.",
+    verifiedCouncil: "협의체 합의",
+    verifiedSplit: "AI 의견 갈림 — 직접 확인",
+    councilMeta: "협의체 검수: AI {n}개가 독립 검토({rounds}라운드), 의견이 끝까지 갈린 항목 {splits}건.",
   },
   runStatus: { error: "확인 실패", running: "확인 중", queued: "대기 중" },
   credit: {

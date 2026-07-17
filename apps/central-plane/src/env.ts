@@ -232,6 +232,8 @@ export interface Env {
   CF_AI_GATEWAY_ANTHROPIC_URL?: string;
   /** RC-2 검증 패널의 교차-벤더(OpenAI) 호출용 게이트웨이 URL. Unset = direct. */
   CF_AI_GATEWAY_OPENAI_URL?: string;
+  /** RC-3 협의체의 Gemini 호출용 게이트웨이 URL (google-ai-studio). Unset = direct. */
+  CF_AI_GATEWAY_GOOGLE_URL?: string;
   BETA_PROJECT_CREATE_DAILY_LIMIT?: string;
   /**
    * In-app feedback (workspace-feedback.ts) admin notification targets.

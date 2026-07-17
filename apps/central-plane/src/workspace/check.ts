@@ -80,8 +80,8 @@ export type CheckResultItem = {
   reason: string;
   evidence: string[];
   nextAction: string;
-  /** RC-2 검증 패널: failed 판정의 교차 확인 결과. 미실행 판정에는 없음. */
-  verification?: "dual_confirmed" | "downgraded" | "single";
+  /** RC-2 검증 패널 / RC-3 협의체: 판정의 확인 방식. 미실행 판정에는 없음. */
+  verification?: "dual_confirmed" | "downgraded" | "single" | "council_agreed" | "council_split";
 };
 
 export type WorkspaceCheckDraftRequest = {
@@ -102,6 +102,10 @@ export type WorkspaceCheckDraftResponse = {
   };
   results: CheckResultItem[];
   warnings?: string[];
+  /** RC-3/RC-4: 이 결과를 만든 검수 방식. 생략 = panel(기본). */
+  reviewMode?: "panel" | "council";
+  /** RC-3 협의체 메타 — 어떤 벤더 몇 명이 몇 라운드를 거쳤는지 투명하게. */
+  council?: { vendors: string[]; rounds: number; disagreements: number };
 };
 
 const USER_LABEL: Record<CheckItemStatus, CheckResultItem["userLabel"]> = {
@@ -113,7 +117,7 @@ const USER_LABEL: Record<CheckItemStatus, CheckResultItem["userLabel"]> = {
 
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
-function buildCheckPrompt(req: WorkspaceCheckDraftRequest): string {
+export function buildCheckPrompt(req: WorkspaceCheckDraftRequest): string {
   const specText = JSON.stringify(req.productSpec, null, 2);
   const itemsText = req.items
     .map(
