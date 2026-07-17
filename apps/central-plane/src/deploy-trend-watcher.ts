@@ -155,10 +155,12 @@ export interface DeployTrendRunSummary {
   sources: number;
   releases_processed: number;
   suggestions_saved: number;
+  /** LLM 호출 실패 수 — 0건 저장이 "조용한 주"인지 "장애"인지 구분하는 유일한 신호. */
+  llm_failures: number;
 }
 
 export async function runDeployTrendWatcher(env: Env): Promise<DeployTrendRunSummary> {
-  const summary: DeployTrendRunSummary = { sources: 0, releases_processed: 0, suggestions_saved: 0 };
+  const summary: DeployTrendRunSummary = { sources: 0, releases_processed: 0, suggestions_saved: 0, llm_failures: 0 };
   for (const src of DEPLOY_TREND_SOURCES) {
     summary.sources += 1;
     const mark = await getHighWaterMark(env, src.id);
@@ -168,9 +170,15 @@ export async function runDeployTrendWatcher(env: Env): Promise<DeployTrendRunSum
       .slice(-PER_SOURCE_RELEASE_LIMIT);
 
     for (const rel of releases) {
-      summary.releases_processed += 1;
       const text = await callHaiku(env, `Platform: ${src.label} (${src.repo})\nRelease ${rel.tag_name}:\n\n${(rel.body ?? "").slice(0, 6000)}`);
-      if (text) {
+      if (text === null) {
+        // 실패한 릴리스의 마크를 전진시키면 평가 없이 영영 소실된다. 이 소스는
+        // 여기서 멈추고(뒤 릴리스를 건너뛰면 마크 순서가 깨짐) 다음 사이클에 재시도.
+        summary.llm_failures += 1;
+        break;
+      }
+      summary.releases_processed += 1;
+      {
         for (const s of parseSuggestions(text)) {
           const id = `dts_${crypto.randomUUID().slice(0, 12)}`;
           await env.DB.prepare(
