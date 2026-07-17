@@ -63,6 +63,7 @@ export type FixSuggestionResponse = {
 
 export type ApiError =
   | { ok: false; error: "rate_limited"; message: string; retryAfterSeconds?: number }
+  | { ok: false; error: "plan"; message: string }
   | { ok: false; error: "network" | "server"; message: string };
 
 // ─── save / load project ──────────────────────────────────────────────────────
@@ -133,6 +134,8 @@ export type CheckDraftInput = {
   userKey?: string;
   productSpec: unknown;
   items: Array<{ id: string; title: string; status: string; criteria: string[] }>;
+  /** RC-4: "panel"(기본) | "council"(유료 선택). 서버가 자격을 집행한다. */
+  reviewMode?: "panel" | "council";
 };
 
 export async function callCheckDraftApi(
@@ -143,7 +146,8 @@ export async function callCheckDraftApi(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...input, locale: "ko" }),
-      signal: AbortSignal.timeout(25000),
+      // council(협의체)은 다중 모델 2라운드라 기본 검수보다 오래 걸린다.
+      signal: AbortSignal.timeout(input.reviewMode === "council" ? 90000 : 25000),
     });
     if (resp.status === 429) {
       let msg = "잠시 후 다시 시도해주세요. 확인 요청이 너무 많이 발생했어요.";
@@ -155,11 +159,39 @@ export async function callCheckDraftApi(
       } catch { /* ignore */ }
       return { ok: false, error: "rate_limited", message: msg, retryAfterSeconds };
     }
+    // RC-4: 402 = 플랜 부족, 503 council_not_ready = 준비 중 — 서버 메시지를
+    // 그대로 보여준다 (일반 서버 오류로 뭉개지 않는다).
+    if (resp.status === 402 || resp.status === 503) {
+      try {
+        const b = (await resp.json()) as { error?: string; message?: string };
+        if (b.error === "plan_required" || b.error === "council_not_ready") {
+          return { ok: false, error: "plan", message: b.message ?? "이 검수 방식은 지금 플랜에서 사용할 수 없어요." };
+        }
+      } catch { /* fall through */ }
+      return { ok: false, error: "server", message: `HTTP ${resp.status}` };
+    }
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     return (await resp.json()) as CheckDraftResponse;
   } catch (err) {
     console.warn("[check-api] network error:", err);
     return { ok: false, error: "network", message: String(err) };
+  }
+}
+
+// ─── plan (RC-4) ─────────────────────────────────────────────────────────────
+
+/** Resolve the user's plan for review-mode gating. Failure → "free" (UI keeps B locked). */
+export async function callGetPlanApi(userKey: string): Promise<"free" | "paid"> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/plan?userKey=${encodeURIComponent(userKey)}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!resp.ok) return "free";
+    const b = (await resp.json()) as { ok?: boolean; plan?: string };
+    return b.ok && b.plan === "paid" ? "paid" : "free";
+  } catch {
+    return "free";
   }
 }
 

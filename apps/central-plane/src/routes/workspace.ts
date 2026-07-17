@@ -23,6 +23,7 @@ import {
   type WorkspaceCheckDraftRequest,
 } from "../workspace/check.js";
 import { applyVerifyPanel } from "../workspace/verify-panel.js";
+import { resolvePlan } from "../plan.js";
 import {
   generateFixSuggestion,
   type WorkspaceFixSuggestionRequest,
@@ -62,6 +63,10 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_LIMIT_PER_HOUR = 20;
+
+// RC-4/RC-3: Train 3(workspace/council-review.ts)가 엔진을 배선하면서 true가
+// 된다. 그 전까지 paid+council 요청은 정직한 503(준비 중)을 받는다.
+const councilAvailable = (): boolean => false;
 
 // ALLOWED_ORIGINS centralized in ./cors.ts (Stage 91) — imported at top.
 
@@ -507,6 +512,30 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
       }
       checkProjectOwned = Boolean(await getOwnedProject(c.env, req.projectId, checkUserKey).catch(() => null));
+    }
+
+    // RC-4: reviewMode — "panel"(기본, 전원) | "council"(유료 선택). 서버가
+    // 자격을 집행한다 — UI 숨김만으로 게이팅하지 않는다.
+    const rawMode = (body as Record<string, unknown>)["reviewMode"];
+    const reviewMode: "panel" | "council" = rawMode === "council" ? "council" : "panel";
+    if (reviewMode === "council") {
+      const plan = await resolvePlan(c.env, checkUserKey);
+      if (plan !== "paid") {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: "plan_required",
+          message: "협의체 검수는 유료 플랜 기능이에요. 지금 플랜에서는 기본 검수(AI 2중 확인)를 사용할 수 있습니다.",
+        }), { status: 402, headers: { "content-type": "application/json", ...headers } });
+      }
+      // Train 3(협의체 엔진)가 이 자리를 채운다. 그 전까지 council 라벨로 panel
+      // 결과를 조용히 내보내지 않는다 (조용한 대체 금지).
+      if (!councilAvailable()) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: "council_not_ready",
+          message: "협의체 검수를 준비하고 있어요. 지금은 기본 검수를 사용해주세요.",
+        }), { status: 503, headers: { "content-type": "application/json", ...headers } });
+      }
     }
 
     let result;

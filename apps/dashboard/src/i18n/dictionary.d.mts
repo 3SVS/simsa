@@ -474,6 +474,10 @@ export type Dictionary = {
     nextStep: string;
     verifiedDual: string;
     verifiedSingle: string;
+    modePanel: string;
+    modeCouncil: string;
+    modeCouncilLocked: string;
+    councilLockedHint: string;
   };
   runStatus: { error: string; running: string; queued: string };
   credit: {

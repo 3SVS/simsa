@@ -31,6 +31,7 @@ import { createSpawnedAgentsRoutes } from "./routes/spawned-agents.js";
 import { createBillingRoutes } from "./routes/billing.js";
 import { createLemonsqueezyWebhookRoutes } from "./routes/lemonsqueezy-webhook.js";
 import { createWorkspaceRoutes } from "./routes/workspace.js";
+import { createPlanRoutes } from "./plan.js";
 import { createWorkspaceGitHubRoutes } from "./routes/workspace-github.js";
 import { createWorkspaceNotificationRoutes } from "./routes/workspace-notifications.js";
 import { createWorkspaceTrainingConsentRoutes } from "./routes/workspace-training-consent.js";
@@ -146,6 +147,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // Workspace generation — free beta, no auth, CORS-enabled for dashboard.
   // POST /workspace/idea-to-spec-draft
   app.route("/", createWorkspaceRoutes());
+  // RC-4 — plan entitlement: GET /workspace/plan + admin plan-grants.
+  app.route("/", createPlanRoutes());
   // Stage 9 — Workspace GitHub OAuth + project-repo connections.
   app.route("/", createWorkspaceGitHubRoutes(fetchImpl));
   // Stage 17 — Telegram notification settings + history.

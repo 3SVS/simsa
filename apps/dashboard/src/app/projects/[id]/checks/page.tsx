@@ -14,6 +14,7 @@ import {
 } from "@/lib/workflow-store";
 import {
   callCheckDraftApi,
+  callGetPlanApi,
   type CheckDraftResponse,
   type CheckResultItem,
 } from "@/lib/workspace-check-api";
@@ -48,6 +49,11 @@ export default function ChecksPage() {
   const [phase, setPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [results, setResults] = useState<CheckDraftResponse | null>(null);
   const [rateLimitMsg, setRateLimitMsg] = useState<string | null>(null);
+  // RC-4: review mode — panel(전원 기본) | council(유료 선택). Plan은 서버가
+  // 집행하고, UI는 잠금 배지로 존재를 알린다 (숨기지 않음).
+  const [reviewMode, setReviewMode] = useState<"panel" | "council">("panel");
+  const [plan, setPlan] = useState<"free" | "paid">("free");
+  const [planMsg, setPlanMsg] = useState<string | null>(null);
   // Collapsible findings: actionable (non-passed) cards default open; passed
   // cards collapse so the report doesn't become a wall of green.
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
@@ -71,6 +77,13 @@ export default function ChecksPage() {
       setPhase("done");
     }
   }, [id]);
+
+  // RC-4: resolve the plan once — failure keeps "free" (B stays locked).
+  useEffect(() => {
+    let cancelled = false;
+    callGetPlanApi(getUserKey()).then((p) => { if (!cancelled) setPlan(p); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Seed the open set whenever results change: actionable findings expanded.
   useEffect(() => {
@@ -139,20 +152,25 @@ export default function ChecksPage() {
       criteria: ext?.itemCriteria?.[r.id] ?? [],
     }));
 
-    const res = await callCheckDraftApi({ projectId: id, userKey: getUserKey(), productSpec, items });
+    const res = await callCheckDraftApi({ projectId: id, userKey: getUserKey(), productSpec, items, reviewMode });
     if (!res.ok) {
       if (res.error === "rate_limited") {
         setRateLimitMsg(t.common.rateLimited);
+        setPhase(results ? "done" : "idle");
+      } else if (res.error === "plan") {
+        // RC-4: 자격 부족/준비 중 — 서버 메시지를 그대로, 오류 화면 아님.
+        setPlanMsg(res.message);
         setPhase(results ? "done" : "idle");
       } else {
         setPhase("error");
       }
       return;
     }
+    setPlanMsg(null);
     setResults(res);
     setPhase("done");
     saveExtendedProjectData(id, { checkResults: res });
-  }, [id, project, results, t]);
+  }, [id, project, results, t, reviewMode]);
 
   if (!project) return <ProjectNotFound />;
 
@@ -201,6 +219,34 @@ export default function ChecksPage() {
             </button>
           )}
         </div>
+
+        {/* RC-4: review-mode chooser — B(협의체) is visible to everyone but
+            locked on free (existence drives upgrades; the server enforces). */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setReviewMode("panel"); setPlanMsg(null); }}
+            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${reviewMode === "panel" ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-700 border-gray-200 hover:border-brand-300"}`}
+          >
+            {t.checks.modePanel}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (plan === "paid") { setReviewMode("council"); setPlanMsg(null); }
+              else { setPlanMsg(t.checks.councilLockedHint); }
+            }}
+            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${reviewMode === "council" ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-700 border-gray-200 hover:border-brand-300"}`}
+          >
+            {t.checks.modeCouncil}
+            {plan !== "paid" && (
+              <span className="ml-1.5 inline-block rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 align-middle">
+                {t.checks.modeCouncilLocked}
+              </span>
+            )}
+          </button>
+        </div>
+        {planMsg && <div className="callout mb-4 border-brand-200 bg-brand-50 text-brand-800">{planMsg}</div>}
 
         {/* In-progress: Vercel deploy-dot pattern — a pulsing ● + a live counter,
             so system status is visible rather than a bare spinner (Nielsen H1). */}
