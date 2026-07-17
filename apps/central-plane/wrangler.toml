@@ -105,7 +105,8 @@ enabled = true
 # Sunday=7 (NOT the POSIX 0-6 range). The dispatcher in src/index.ts
 # branches on the literal cron expression, so `0 5 * * 7` here MUST
 # match the same string in the scheduled() handler.
-crons = ["*/10 * * * *", "*/5 * * * *", "0 3 * * *", "0 */6 * * *", "0 4 * * *", "0 5 * * 7", "0 6 * * *", "0 7 * * 1", "0 8 * * 1", "0 10 * * *", "0 8 * * 3", "0 8 * * 4", "0 8 * * 5"]
+# 09:00 UTC daily — G1 reengage nudges (18:00 KST — 저녁 발송 슬롯)
+crons = ["*/10 * * * *", "*/5 * * * *", "0 3 * * *", "0 */6 * * *", "0 4 * * *", "0 5 * * 7", "0 6 * * *", "0 7 * * 1", "0 8 * * 1", "0 9 * * *", "0 10 * * *", "0 8 * * 3", "0 8 * * 4", "0 8 * * 5"]
 
 # v0.16.2 — Conclave AI sandbox container.
 #
