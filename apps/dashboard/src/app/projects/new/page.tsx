@@ -723,6 +723,26 @@ function NewProjectInner() {
               {isRegenerating && (
                 <div className="callout mb-4 border-brand-100 bg-brand-50 text-xs text-brand-700">{t.np.regenerating}</div>
               )}
+              {/* Flow-audit A (2026-07-17): one click accepts every unanswered
+                  recommendation — the per-question accept stays for overrides.
+                  Cuts the beginner path from ~6 clicks to 1. */}
+              {questions.some((q) => !answers[q.id] && q.recommendation) && (
+                <button
+                  onClick={() =>
+                    setAnswers((prev) => {
+                      const next = { ...prev };
+                      for (const q of questions) {
+                        if (!next[q.id] && q.recommendation) next[q.id] = q.recommendation;
+                      }
+                      return next;
+                    })
+                  }
+                  disabled={isRegenerating}
+                  className="btn btn-secondary mb-4 w-full py-2.5 text-sm"
+                >
+                  {t.np.useAllRecommendations}
+                </button>
+              )}
               <div className="mb-8 space-y-4" aria-busy={isRegenerating}>
                 {questions.map((q, i) => (
                   <ApiQuestionCard

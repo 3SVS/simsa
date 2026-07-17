@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { getUserKey } from "@/lib/workflow-store";
 import { fetchTrainingConsent, saveTrainingConsent } from "@/lib/workspace-training-consent-api";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -23,6 +24,11 @@ export function ImproveSimsaPrompt() {
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const pathname = usePathname();
+  // Flow-audit B-3 (2026-07-17): never show over the creation wizard — the
+  // popup physically covered the last question's options and the progress
+  // button. The invite waits until the user has a project.
+  const onWizard = pathname?.startsWith("/projects/new") ?? false;
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +75,7 @@ export function ImproveSimsaPrompt() {
     }
   }
 
-  if (!open) return null;
+  if (!open || onWizard) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 w-[calc(100%-2rem)] max-w-sm">
