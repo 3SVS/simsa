@@ -249,6 +249,10 @@ export type ExtendedProjectData = {
   /** Which branch this project entered through — the progress map adapts to it
    *  (code branch: prepare step is optional, review never locks on items). */
   entryPath?: "idea" | "code" | "spec";
+  /** Which AI tool(s) the user said they build with (canonical built-with ids,
+   *  e.g. "claude-code", "lovable"). Captured at creation; the export page uses
+   *  it to recommend a builder-pack target (Bae 2026-07-17). */
+  builtWithTools?: string[];
   /** C2 (openQuestions 질문화): answers the user settled for spec.openDecisions,
    *  keyed by the decision text. Kept out of the core spec so example projects
    *  aren't mutated — the spec page reads this to mark a decision "resolved". */

@@ -28,6 +28,13 @@ describe("isNoiseResource — allowlist the noise, count everything else", () =>
     }
   });
 
+  it("treats a failed Next.js RSC prefetch as noise (real-app eval R3: a working landing was called broken on a cross-origin _rsc CORS failure)", () => {
+    assert.equal(isNoiseResource("https://trysimsa.com/demo?_rsc=1p-R_iEY6bj0jY31"), true);
+    assert.equal(isNoiseResource("https://simsa.dev/demo?_rsc=abc&x=1"), true);
+    // …but the same path WITHOUT the prefetch marker is a real request
+    assert.equal(isNoiseResource("https://trysimsa.com/demo"), false);
+  });
+
   it("does NOT treat the app's own domain or a real backend as noise", () => {
     for (const u of [
       "https://myapp.vercel.app/api/todos",       // app's own API

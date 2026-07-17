@@ -518,8 +518,10 @@ export type Dictionary = {
     targetCodex: string;
     targetBoth: string;
     targetWebBuilder: string;
+    targetHandoff: string;
     agentChooserTitle: string;
     agentChooserHint: string;
+    recommendedBadge: string;
     scopeAll: string;
     scopeSelected: string;
     selectTitle: string;

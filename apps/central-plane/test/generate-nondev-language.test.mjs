@@ -119,6 +119,16 @@ describe("filterQuestionsForNonDev — un-decidable questions are dropped", () =
     const qs = [q("녹음 원본은 저장해야 하나요, 요약 후 삭제해야 하나요?"), ...FILLER];
     assert.equal(filterQuestionsForNonDev(qs, "회의 요약 웹앱").length, 4);
   });
+
+  it("the new D17 axes (publishing/plan/scale, Bae 2026-07-17) pass the filter", () => {
+    const qs = [
+      q("만든 앱을 누가 어디서 쓰게 할까요 — 나만 링크로, 아니면 누구나 검색해서?"),
+      q("무료 범위로 시작할까요, 월 몇천 원 정도의 유료 서비스를 쓸 의향이 있나요?"),
+      q("예상 회원 수는 어느 정도인가요 — 30명 정도, 아니면 3,000명 이상?"),
+      q("자기 주소(도메인)가 필요한가요?"),
+    ];
+    assert.equal(filterQuestionsForNonDev(qs, "필라테스 수강권 웹앱").length, 4);
+  });
 });
 
 describe("the prompt forbids native-app options and tech decisions in questions (ko + en)", () => {

@@ -33,6 +33,12 @@ const TARGETS = [
     intent: "방문자가 이 서비스가 무엇인지 화면에서 알 수 있어야 한다" },
   { id: "R1", url: "https://app.trysimsa.com", expected: "working", nullOk: true,
     intent: "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다" },
+  // 실제-타겟 확장 (2026-07-17, Bae "실유저 vibe 앱 재확인"): 빠르게 만들어
+  // 배포된 실제 작동 앱들 — false(작동 안 함)만 아니면 통과.
+  { id: "R2", url: "https://golf-now.vercel.app", expected: "working", nullOk: true,
+    intent: "골퍼가 지금 코스가 플레이 가능한지 확인하는 흐름을 시작할 수 있어야 한다" },
+  { id: "R3", url: "https://trysimsa.com", expected: "working", nullOk: true,
+    intent: "방문자가 이 서비스가 무엇인지 이해하고 시작 버튼을 찾을 수 있어야 한다" },
 ];
 
 async function api(method, path, body) {

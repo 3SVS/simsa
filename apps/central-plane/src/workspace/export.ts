@@ -9,14 +9,21 @@
  */
 
 import { pickServiceExampleBlocks } from "./service-examples.js";
+import { detectNonWebBuildable } from "./generate.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** "web_builder" (D10, 2026-07-17): one shared prompt for chat-driven web
  *  builders (Lovable / Replit / v0 / Bolt) — no file tree, no terminal, no git;
  *  secrets go in the builder's own settings UI and deploy is its Publish
- *  button. "both" keeps its original meaning (claude_code + codex). */
-export type ExportTarget = "claude_code" | "codex" | "both" | "web_builder";
+ *  button. "both" keeps its original meaning (claude_code + codex).
+ *
+ *  "handoff" (#296 Phase 4-lite, 2026-07-17): deliverables for handing the
+ *  project to a HUMAN — an outside developer, a specialist team, or a native
+ *  app shop. No agent prompt; instead a HANDOFF_BRIEF.md that states the
+ *  target platform, what's decided/undecided, what is OUT of the web-review
+ *  scope (when the idea needs a native build), and the acceptance checklist. */
+export type ExportTarget = "claude_code" | "codex" | "both" | "web_builder" | "handoff";
 export type ExportFormat = "json" | "markdown_bundle";
 
 export type ExportProductSpec = {
@@ -172,7 +179,9 @@ function genReadme(
     "",
     target === "web_builder"
       ? "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 웹 빌더(Lovable·Replit·v0·Bolt 등)의 채팅창에 지시서를 붙여넣으면 구현부터 게시(Publish)까지 빌더 안에서 진행됩니다 — 별도 설치나 터미널이 필요 없습니다."
-      : "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트를 넘기면 구현과 실행 확인까지 진행하도록 지시합니다. **인터넷 배포까지 자동으로 이어지려면 개발 AI에 배포 도구(예: Vercel·GitHub의 MCP 또는 CLI)가 연결돼 있어야 하고**, 연결돼 있지 않으면 개발 AI가 사용자 상황에 맞는 배포 길(GitHub 유무에 따라)을 단계별로 안내하는 방식으로 대신합니다.",
+      : target === "handoff"
+        ? "이 패키지는 Simsa에서 내보낸, **개발자·전문팀에게 전달하기 위한** 자료입니다. 무엇을 만들지·결정된 것·완성 기준이 담긴 `HANDOFF_BRIEF.md`를 그대로 보내면 됩니다."
+        : "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트를 넘기면 구현과 실행 확인까지 진행하도록 지시합니다. **인터넷 배포까지 자동으로 이어지려면 개발 AI에 배포 도구(예: Vercel·GitHub의 MCP 또는 CLI)가 연결돼 있어야 하고**, 연결돼 있지 않으면 개발 AI가 사용자 상황에 맞는 배포 길(GitHub 유무에 따라)을 단계별로 안내하는 방식으로 대신합니다.",
     "",
   ];
 
@@ -209,6 +218,13 @@ function genReadme(
     lines.push(
       "### Lovable / Replit / v0 / Bolt 같은 웹 빌더 사용 시",
       "`WEB_BUILDER_PROMPT.md` 파일 내용을 복사해서 빌더의 채팅창에 붙여넣으세요. 그 지시서 하나에 필요한 내용이 모두 들어 있습니다(빌더는 이 폴더의 다른 파일을 읽지 못합니다).",
+      "",
+    );
+  }
+  if (target === "handoff") {
+    lines.push(
+      "### 개발자·전문팀에 전달할 때",
+      "`HANDOFF_BRIEF.md`를 그대로 보내세요 — 무엇을 만들지, 결정된 것과 아직 결정할 것, 완성 기준이 모두 들어 있습니다.",
       "",
     );
   }
@@ -863,6 +879,91 @@ function genWebBuilderPrompt(
   ].join("\n");
 }
 
+/**
+ * #296 Phase 4-lite: the handoff brief — what you give a human (an outside
+ * developer, a team, a native-app shop) so they build the RIGHT thing. The
+ * PISTA failure was handing a web-assuming pack to a Kotlin project; this
+ * document states the platform verdict honestly, separates decided from
+ * undecided, marks what is outside Simsa's web-review scope, and carries the
+ * acceptance checklist in the user's own language.
+ */
+const HANDOFF_KIND_LABEL: Record<string, string> = {
+  mobile: "휴대폰 네이티브 앱 (iOS/Android)",
+  desktop: "데스크톱 설치형 프로그램",
+  game: "3D·게임엔진 게임",
+  hardware: "하드웨어·기기 연동",
+  extension: "브라우저 확장 프로그램",
+};
+
+function genHandoffBrief(
+  title: string,
+  idea: string,
+  spec: ExportProductSpec,
+  items: ExportItem[],
+): string {
+  const feas = detectNonWebBuildable({ idea: `${idea} ${spec.oneLine} ${spec.included.join(" ")}` });
+  const lines: string[] = [
+    `# 전달용 브리프 — ${title}`,
+    "",
+    "이 문서는 이 제품을 **개발자·전문팀에게 전달**하기 위한 자료입니다. 그대로 보내거나 인쇄해서 쓰세요. 받는 사람이 AI 코딩 도구를 쓴다면 이 문서를 통째로 붙여넣어도 됩니다.",
+    "",
+    "## 무엇을 만들어야 하나",
+    "",
+    `**${spec.productName}** — ${spec.oneLine}`,
+    "",
+    `해결하려는 문제: ${spec.problem}`,
+    `대상 사용자: ${spec.targetUsers.join(", ") || "일반 사용자"}`,
+  ];
+
+  if (feas.hit) {
+    const label = HANDOFF_KIND_LABEL[feas.kind] ?? feas.kind;
+    lines.push(
+      "",
+      "## 대상 플랫폼 (중요 — 정직한 판정)",
+      "",
+      `이 제품은 **${label}** 개발이 필요합니다. 웹앱만으로는 완전히 구현할 수 없습니다.`,
+      `- 웹으로 되는 부분(관리 화면·랜딩·프로토타입)은 Simsa가 만든 자료로 바로 진행할 수 있습니다.`,
+      `- ${label} 자체(네이티브 빌드·스토어 출시 등)는 **이 문서를 받은 전문 개발이 담당**해야 하며, Simsa의 웹 검수 범위 밖입니다.`,
+    );
+  } else {
+    lines.push(
+      "",
+      "## 대상 플랫폼",
+      "",
+      "이 제품은 **웹앱**으로 구현 가능합니다. 특정 기술을 강요하지 않습니다 — 아래 요구사항을 만족하면 스택은 받는 분이 선택하세요.",
+    );
+  }
+
+  lines.push("", "## 결정된 것", "");
+  const decided = [...spec.decisions, ...spec.included.map((i) => `포함: ${i}`)];
+  lines.push(...(decided.length ? decided.map((d) => `- ${d}`) : ["- (아직 없음)"]));
+
+  lines.push("", "## 이번 버전에서 제외 (만들지 말 것)", "");
+  lines.push(...(spec.excluded.length ? spec.excluded.map((e) => `- ${e}`) : ["- (없음)"]));
+
+  lines.push("", "## 아직 결정 필요 (시작 전에 발주자와 확인)", "");
+  lines.push(...(spec.openQuestions.length ? spec.openQuestions.map((q) => `- [ ] ${q}`) : ["- (없음)"]));
+
+  lines.push("", "## 수용 기준 체크리스트 (이대로 되면 완성)", "");
+  for (const item of items) {
+    lines.push(`### ${item.title}`);
+    for (const c of item.criteria) lines.push(`- [ ] ${c}`);
+    if (item.criteria.length === 0) lines.push("- [ ] (기준 미작성 — 발주자와 정의 필요)");
+    lines.push("");
+  }
+
+  lines.push(
+    "## 사용자 흐름",
+    "",
+    ...spec.userFlow.map((f, i) => `${i + 1}. ${f.replace(/^\s*\d+[.)]\s*/, "")}`),
+    "",
+    "---",
+    "",
+    "이 브리프는 Simsa(심사)가 사용자의 아이디어에서 만든 것입니다. 완성 후 웹으로 접근 가능한 부분은 Simsa에 주소를 넣어 검수받을 수 있습니다.",
+  );
+  return lines.join("\n");
+}
+
 // ─── D1-b regression hook ─────────────────────────────────────────────────────
 
 /**
@@ -1074,6 +1175,12 @@ export function generateBuilderPack(
         genWebBuilderPrompt(title, productSpec, effectiveItems, allItems.length, services) + hookSuffix,
     });
   }
+  if (target === "handoff") {
+    baseFiles.push({
+      path: "simsa-build-pack/HANDOFF_BRIEF.md",
+      content: genHandoffBrief(title, project.idea ?? "", productSpec, effectiveItems),
+    });
+  }
 
   const hasIssues =
     effectiveCheckResults &&
@@ -1085,7 +1192,9 @@ export function generateBuilderPack(
     ? "fixes.md에서 고쳐야 할 항목을 확인하고, 해당 지시서를 개발 AI에 넘기세요."
     : target === "web_builder"
       ? "WEB_BUILDER_PROMPT.md를 복사해서 사용 중인 웹 빌더(Lovable·Replit·v0·Bolt 등)의 채팅창에 붙여넣으세요."
-      : "CLAUDE_CODE_PROMPT.md 또는 CODEX_PROMPT.md를 복사해서 개발 AI에 붙여넣으세요.";
+      : target === "handoff"
+        ? "HANDOFF_BRIEF.md를 개발자·전문팀에게 그대로 전달하세요."
+        : "CLAUDE_CODE_PROMPT.md 또는 CODEX_PROMPT.md를 복사해서 개발 AI에 붙여넣으세요.";
 
   return {
     ok: true,

@@ -131,9 +131,21 @@ type WWH = { what: string; why: string; how: string };
 const NOISE_HOSTS =
   /(?:^|\.)(?:google-analytics|googletagmanager|googlesyndication|doubleclick|adservice|adsystem|segment|sentry|hotjar|mixpanel|amplitude|fullstory|logrocket|smartlook|mouseflow|intercom|drift|zendesk|cloudflareinsights|vercel-scripts|vercel-insights|newrelic|nr-data|datadoghq|bugsnag|clarity|facebook|fbcdn|twitter|linkedin|tiktok|snapchat|pinterest|hs-scripts|hsubspot|recaptcha|gstatic|fontawesome)\b|fonts\.(?:googleapis|gstatic)|\.(?:analytics|vitals)\b/i;
 
-/** True when `url` is a known analytics/ads/fonts/telemetry host (i.e. noise). */
+/**
+ * Framework PREFETCH noise (2026-07-17 real-app eval R3): a Next.js RSC
+ * prefetch (`?_rsc=…`) that fails — e.g. cross-origin redirect + CORS on the
+ * `rsc` header — degrades to a normal full navigation for a real user; it
+ * never breaks the flow. trysimsa.com (a working landing) was called
+ * "작동 안 해요" on exactly this. Narrow class only: the `_rsc` marker.
+ * A Potemkin backend call carries no `_rsc` and is still caught.
+ */
+const NOISE_PATHS = /[?&]_rsc=/i;
+
+/** True when `url` is a known analytics/ads/fonts/telemetry host, or a
+ *  framework prefetch request (i.e. noise). */
 export function isNoiseResource(url: string | null | undefined): boolean {
   if (!url) return false;
+  if (NOISE_PATHS.test(url)) return true;
   try {
     return NOISE_HOSTS.test(new URL(url).hostname);
   } catch {

@@ -88,6 +88,42 @@ describe("D10 — web_builder target", () => {
   });
 });
 
+// #296 Phase 4-lite (2026-07-17): the handoff deliverable — what a user gives a
+// HUMAN (outside developer / native-app shop). Must state the platform verdict
+// honestly (the PISTA failure was a web-assuming pack for a Kotlin app).
+describe("handoff target — HANDOFF_BRIEF.md for humans", () => {
+  it("emits HANDOFF_BRIEF.md and no agent prompt", () => {
+    const res = pack("handoff");
+    assert.ok(fileOf(res, "HANDOFF_BRIEF.md"));
+    assert.equal(fileOf(res, "CLAUDE_CODE_PROMPT.md"), undefined);
+    assert.equal(fileOf(res, "WEB_BUILDER_PROMPT.md"), undefined);
+    assert.match(res.summary.recommendedNextStep, /HANDOFF_BRIEF/);
+  });
+
+  it("a web idea gets an honest 'web-buildable, stack is yours' verdict + the checklist", () => {
+    const brief = fileOf(pack("handoff"), "HANDOFF_BRIEF.md").content;
+    assert.match(brief, /웹앱.*구현 가능/);
+    assert.match(brief, /수용 기준 체크리스트/);
+    assert.match(brief, /JPG\/PNG 지원/); // criteria carried
+    assert.match(brief, /법인카드 연동/); // excluded carried
+  });
+
+  it("a native idea gets the out-of-scope honesty section", () => {
+    const res = generateBuilderPack({
+      project: {
+        title: "러닝 게임",
+        idea: "아이폰에서 하는 3D 러닝 게임 앱",
+        productSpec: { ...SPEC, productName: "러닝 게임", oneLine: "아이폰 3D 러닝 게임", included: ["3D 러닝 스테이지"] },
+        items: ITEMS,
+      },
+      target: "handoff", format: "json", locale: "ko",
+    });
+    const brief = fileOf(res, "HANDOFF_BRIEF.md").content;
+    assert.match(brief, /웹앱만으로는 완전히 구현할 수 없습니다/);
+    assert.match(brief, /웹 검수 범위 밖/);
+  });
+});
+
 describe("D11 — deploy path is a choice, never a GitHub mandate", () => {
   it("CLI prompts offer the no-GitHub drag-and-drop path AND the account-first path", () => {
     const p = fileOf(pack("claude_code"), "CLAUDE_CODE_PROMPT.md").content;

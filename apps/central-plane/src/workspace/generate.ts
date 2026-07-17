@@ -477,10 +477,13 @@ export function buildPrompt(req: IdeaToSpecDraftRequest): string {
 - PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE 같은 개발자 용어 사용 금지
 - openQuestions·decisions에도 개발 도구·서비스 이름(Firebase, AWS, Chart.js, API 등)을 쓰지 마라. "STT 서비스 선택"이 아니라 "음성 인식을 어느 수준까지 지원할지 정하기"처럼, 사용자가 실제로 내릴 수 있는 결정을 일반인 언어로 적어라. 단, 사용자가 직접 언급한 도구 이름은 그대로 써도 된다.
 - 사용자의 개발 AI는 **웹앱만** 만든다. 질문에서 "모바일 앱(iOS/Android)으로도 만들지" 같은 네이티브 앱 선택지를 제시하지 마라(사용자가 직접 꺼낸 경우 예외). "데이터를 어디에 저장할지" 같은 기술 결정도 묻지 마라 — 사용자가 실제로 내릴 수 있는 결정만 물어라.
-- 질문은 이 아이디어에 맞춰 **4~8개** 생성 (단순 템플릿 반복 금지) — 단순한 아이디어는 4~6개, 결정할 것이 많은 아이디어(여러 사용자 유형·외부 연동·돈이 오가는 흐름·복잡한 화면)는 7~8개까지. 숫자를 채우려고 억지 질문을 만들지는 마라. 그중 **최소 1개는 화면·디자인(UIUX)** 에 관한 것.
+- 질문은 이 아이디어에 맞춰 **4~12개** 생성 (단순 템플릿 반복 금지) — 단순한 아이디어는 4~6개, 결정할 것이 많은 아이디어(여러 사용자 유형·외부 연동·돈이 오가는 흐름·복잡한 화면)는 10~12개까지. 사용자의 의도를 더 정확히 잡을수록 좋으니 물어볼 가치가 있으면 아끼지 마라 — 단, 숫자를 채우려고 억지 질문을 만들지는 마라. 그중 **최소 1개는 화면·디자인(UIUX)** 에 관한 것.
 - 좋은 질문 = 답에 따라 제품이 실제로 달라지는 구체적 질문. 아래 축을 폭넓게 살펴 이 아이디어에 맞는 것을 고른다:
   구현 범위 · 사용자 흐름 · 데이터 보관 · 로그인/권한 · 외부 연동 · 대상 사용자 숙련도 · 성공 기준 ·
-  **화면·디자인(UIUX)**: 참고하는 앱이나 느낌(예: Linear처럼 미니멀 / Notion처럼 정돈 / 밝고 친근하게), 핵심 화면이 몇 개이고 무엇이 먼저 보여야 하는지, 주로 모바일인지 데스크톱인지
+  **화면·디자인(UIUX)**: 참고하는 앱이나 느낌(예: Linear처럼 미니멀 / Notion처럼 정돈 / 밝고 친근하게), 핵심 화면이 몇 개이고 무엇이 먼저 보여야 하는지, 주로 모바일인지 데스크톱인지 ·
+  **공개·사용 방식**: 만든 앱을 누가 어디서 쓰게 할지 (나만 링크로? 아는 사람에게 공유? 누구나 검색해서?), 자기 주소(도메인)가 필요한지 ·
+  **비용·플랜**: 무료 범위로 시작할지, 월 몇천 원~몇만 원 정도의 유료 서비스를 쓸 의향이 있는지 (도구 이름 없이 예산 수준만) ·
+  **규모**: 예상 사용자 수나 데이터 양이 어느 정도인지 (예: 회원 30명 vs 3,000명)
 - 나쁜 질문 = 답이 제품을 바꾸지 않는 추상적 질문("장기 비전은?", "전반적으로 어떤 느낌?"). 단, 위처럼 **구체적인 UIUX 질문은 좋은 질문**이다.${soloGuard("ko", solo)}${feasibilityGuard("ko", feas)}
 - 꼭 들어가야 할 항목은 8~10개, 각 항목마다 완성 기준 2~4개
 - 완성 기준은 확인 가능한 구체적 동작으로 작성
@@ -503,10 +506,13 @@ Follow these rules strictly:
 - Do NOT use developer jargon like PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE
 - Do NOT name developer tools or services (Firebase, AWS, Chart.js, API, …) in openQuestions/decisions either. Write the decision the user can actually make in plain words — "Decide where and how your data is kept", not "Choose Firebase vs AWS". Tools the user themselves mentioned are fine to keep.
 - The user's coding AI builds **web apps only**. Never offer a native mobile app (iOS/Android) as a question option (unless the user brought it up themselves). Don't ask technical decisions like "where should the data be stored" — ask only decisions the user can actually make.
-- Generate **4-8 questions** tailored to this idea (no repetitive templates) — 4-6 for a simple idea, up to 7-8 when there is genuinely more to decide (multiple user types, integrations, money flows, complex screens). Never pad with filler questions to hit a number. At least ONE must be about screens/design (UI/UX).
+- Generate **4-12 questions** tailored to this idea (no repetitive templates) — 4-6 for a simple idea, up to 10-12 when there is genuinely more to decide (multiple user types, integrations, money flows, complex screens). The better you capture the user's intent the better the product, so don't hold back when a question is worth asking — but never pad with filler to hit a number. At least ONE must be about screens/design (UI/UX).
 - Good questions = concrete questions whose answers actually change the product. Draw broadly from these axes, picking what fits this idea:
   scope · user flow · data retention · login/permissions · integrations · target-user skill level · success criteria ·
-  **screens/design (UI/UX)**: a reference app or feel (e.g. minimal like Linear / tidy like Notion / bright & friendly), how many key screens there are and what should appear first, mainly mobile or desktop
+  **screens/design (UI/UX)**: a reference app or feel (e.g. minimal like Linear / tidy like Notion / bright & friendly), how many key screens there are and what should appear first, mainly mobile or desktop ·
+  **publishing & use**: who uses the app and from where (just you via a link? shared with people you know? anyone via search?), whether they want their own web address (domain) ·
+  **budget & plans**: start within free tiers, or willing to pay a few dollars a month for services (budget level only — no tool names) ·
+  **scale**: roughly how many users or how much data (e.g. 30 members vs 3,000)
 - Bad questions = abstract ones whose answers don't change the product ("what's the long-term vision?", "overall feel?"). But concrete UI/UX questions like the above ARE good.${soloGuard("en", solo)}${feasibilityGuard("en", feas)}
 - Include 8-10 must-have items, each with 2-4 acceptance criteria
 - Acceptance criteria must be concrete, verifiable behaviors
@@ -531,11 +537,12 @@ async function callAnthropic(
     apiKey,
     {
       model: GENERATE_MODEL,
-      // D17 (2026-07-17, Bae): up to 8 questions when the idea warrants it —
-      // headroom raised so a rich draft (8 questions + 10 items) never hits the
-      // cap. Haiku 4.5 output ceiling is 64K; the binding constraint here is
-      // latency (~130 tok/s → worst case well inside the 120s timeout).
-      max_tokens: 10000,
+      // D17 (2026-07-17, Bae ×2): up to 12 questions when the idea warrants it
+      // — headroom sized so a rich draft (12 questions + 10 items) never hits
+      // the cap. Haiku 4.5 output ceiling is 64K; the binding constraint is
+      // latency (~130 tok/s → ~14k worst case ≈ 108s, inside the 120s timeout;
+      // typical drafts stay far below).
+      max_tokens: 14000,
       // Assistant prefill: the reply MUST continue from "{" — a refusal or a
       // prose preamble becomes impossible. (Live 2026-07-05: the KO prompt
       // consistently got a 222-char text answer instead of JSON.)
