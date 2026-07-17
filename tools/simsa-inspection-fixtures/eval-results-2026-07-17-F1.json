@@ -1,0 +1,19 @@
+{
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "fixtures": "https://simsa-inspection-fixtures.seunghunbae.workers.dev",
+  "date": "2026-07-17",
+  "results": [
+    {
+      "id": "F1",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/working-todo",
+      "expected": "working",
+      "intent": "할 일을 입력하고 추가 버튼을 누르면 목록에 나타나야 한다",
+      "works": null,
+      "decision": "User Acceptance Required",
+      "verdict": "직접 눈으로 확인이 필요해요",
+      "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요.",
+      "runStatus": "done",
+      "score": "partial(null)"
+    }
+  ]
+}

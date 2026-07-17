@@ -1,0 +1,31 @@
+{
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "fixtures": "https://simsa-inspection-fixtures.seunghunbae.workers.dev",
+  "date": "2026-07-17",
+  "results": [
+    {
+      "id": "F3",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/potemkin-crm",
+      "expected": "broken",
+      "intent": "고객 메모를 입력하고 저장을 누르면 저장된 메모가 목록에 나타나야 한다",
+      "works": null,
+      "decision": "User Acceptance Required",
+      "verdict": "직접 눈으로 확인이 필요해요",
+      "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요. '검색창에 '서울' 입력하기' 단계가 끝까지 되지 않았어요.",
+      "runStatus": "done",
+      "score": "partial(null)"
+    },
+    {
+      "id": "F4",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/js-crash",
+      "expected": "broken",
+      "intent": "원화 금액을 입력하고 계산하기를 누르면 달러 금액이 보여야 한다",
+      "works": null,
+      "decision": "Needs Clarification",
+      "verdict": "무엇을 확인해야 할지 애매해요",
+      "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요. '검색창에 '서울' 입력하기' 단계가 끝까지 되지 않았어요.",
+      "runStatus": "done",
+      "score": "partial(null)"
+    }
+  ]
+}

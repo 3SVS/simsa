@@ -1,0 +1,31 @@
+{
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "fixtures": "https://simsa-inspection-fixtures.seunghunbae.workers.dev",
+  "date": "2026-07-17",
+  "results": [
+    {
+      "id": "F2",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/noisy-working",
+      "expected": "working",
+      "intent": "숫자를 입력하고 변환하기를 누르면 마일 결과가 보여야 한다",
+      "works": null,
+      "decision": "User Acceptance Required",
+      "verdict": "직접 눈으로 확인이 필요해요",
+      "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요. 화면에서 코드 오류가 났어요.",
+      "runStatus": "done",
+      "score": "partial(null)"
+    },
+    {
+      "id": "F3",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/potemkin-crm",
+      "expected": "broken",
+      "intent": "고객 메모를 입력하고 저장을 누르면 저장된 메모가 목록에 나타나야 한다",
+      "works": false,
+      "decision": "Needs Fix",
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 흐름이 지금은 작동하지 않아요. 앱이 데이터를 가져오는 서버 주소를 찾지 못했어요.",
+      "runStatus": "done",
+      "score": "correct"
+    }
+  ]
+}

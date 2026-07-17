@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 // the target user cannot make. Fix = prompt rule + deterministic category
 // rewrite at the single draft choke point. HANDOFF-2026-07-17 § 남은 것.
 
-const { sanitizeOpenQuestions, buildPrompt, generateIdeaToSpecDraft } =
+const { sanitizeOpenQuestions, filterQuestionsForNonDev, buildPrompt, generateIdeaToSpecDraft } =
   await import("../dist/workspace/generate.js");
 
 describe("sanitizeOpenQuestions — deterministic category rewrite", () => {
@@ -74,6 +74,57 @@ describe("sanitizeOpenQuestions — deterministic category rewrite", () => {
       "도서관 좌석 예약 웹앱",
     );
     assert.deepEqual(out, ["도서관 좌석 예약 규칙 정하기", "Decide the rest of the features later"]);
+  });
+});
+
+// D13 (P2, 2026-07-17 target-fit eval): the pilates case asked "모바일 앱으로도
+// 만들지"(the coding AI can't build one) and "데이터를 어디에 저장할지"(not the
+// user's decision). Prompt rule + this deterministic filter.
+describe("filterQuestionsForNonDev — un-decidable questions are dropped", () => {
+  const q = (question) => ({ question });
+  const FILLER = [q("핵심 화면에 무엇이 먼저 보여야 하나요?"), q("주로 휴대폰에서 쓰나요?"), q("성공 기준은 무엇인가요?")];
+
+  it("drops a native-app option question for a web idea", () => {
+    const out = filterQuestionsForNonDev(
+      [q("회원 조회 화면을 모바일 앱(iOS/Android)으로도 만들까요?"), ...FILLER],
+      "필라테스 수강권 관리 웹앱",
+    );
+    assert.equal(out.length, 3);
+    assert.ok(!out.some((x) => /모바일 앱/.test(x.question)));
+  });
+
+  it("keeps it when the user themselves asked for android", () => {
+    const out = filterQuestionsForNonDev(
+      [q("안드로이드 지원이 필요한가요?"), ...FILLER],
+      "안드로이드에서도 쓰고 싶은 기록 앱",
+    );
+    assert.equal(out.length, 4);
+  });
+
+  it("drops a storage-location question and a tool-name question", () => {
+    const out = filterQuestionsForNonDev(
+      [q("데이터는 어디에 저장하고 싶으신가요?"), q("Firebase 요금제를 확인하셨나요?"), ...FILLER],
+      "가계부 웹앱",
+    );
+    assert.equal(out.length, 3);
+  });
+
+  it("never drops below 3 questions", () => {
+    const bad = [q("어디에 저장할까요?"), q("Firebase를 쓸까요?"), q("모바일 앱으로 만들까요?"), q("AWS 리전은요?")];
+    const out = filterQuestionsForNonDev(bad, "메모 웹앱");
+    assert.equal(out.length, 3);
+  });
+
+  it("keeps ordinary decidable questions untouched (retention ≠ storage location)", () => {
+    const qs = [q("녹음 원본은 저장해야 하나요, 요약 후 삭제해야 하나요?"), ...FILLER];
+    assert.equal(filterQuestionsForNonDev(qs, "회의 요약 웹앱").length, 4);
+  });
+});
+
+describe("the prompt forbids native-app options and tech decisions in questions (ko + en)", () => {
+  it("ko + en prompts carry the D13 rule", () => {
+    assert.match(buildPrompt({ idea: "가계부 웹앱", locale: "ko" }), /네이티브 앱 선택지를 제시하지 마라/);
+    assert.match(buildPrompt({ idea: "a budget web app", locale: "en" }), /Never offer a native mobile app/);
   });
 });
 

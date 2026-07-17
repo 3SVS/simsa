@@ -1,0 +1,16 @@
+{
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "fixtures": "https://simsa-inspection-fixtures.seunghunbae.workers.dev",
+  "date": "2026-07-17",
+  "results": [
+    {
+      "id": "R1",
+      "url": "https://app.trysimsa.com",
+      "expected": "working",
+      "nullOk": true,
+      "intent": "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다",
+      "runStatus": "dispatch_failed(202 container returned 500: Failed to start container: Maximum number of running container instances exceeded. Try again later, or try configuring a higher value for max_instances)",
+      "score": "no-result"
+    }
+  ]
+}

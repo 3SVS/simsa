@@ -683,8 +683,8 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     }
 
     const req = body as Partial<WorkspaceExportBuilderPackRequest>;
-    if (!req.target || !["claude_code", "codex", "both"].includes(req.target)) {
-      return new Response(JSON.stringify({ ok: false, error: "target_required: claude_code | codex | both" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    if (!req.target || !["claude_code", "codex", "both", "web_builder"].includes(req.target)) {
+      return new Response(JSON.stringify({ ok: false, error: "target_required: claude_code | codex | both | web_builder" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
     if (!req.project && !req.projectId) {
       return new Response(JSON.stringify({ ok: false, error: "project_or_projectId_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });

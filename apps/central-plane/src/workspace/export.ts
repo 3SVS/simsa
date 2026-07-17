@@ -8,9 +8,15 @@
  * Stage 7: supports selectedItemIds filtering + stronger task-focus prompts.
  */
 
+import { pickServiceExampleBlocks } from "./service-examples.js";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ExportTarget = "claude_code" | "codex" | "both";
+/** "web_builder" (D10, 2026-07-17): one shared prompt for chat-driven web
+ *  builders (Lovable / Replit / v0 / Bolt) — no file tree, no terminal, no git;
+ *  secrets go in the builder's own settings UI and deploy is its Publish
+ *  button. "both" keeps its original meaning (claude_code + codex). */
+export type ExportTarget = "claude_code" | "codex" | "both" | "web_builder";
 export type ExportFormat = "json" | "markdown_bundle";
 
 export type ExportProductSpec = {
@@ -164,7 +170,9 @@ function genReadme(
   const lines = [
     `# 만들기 패키지 — ${title}`,
     "",
-    "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트를 넘기면 구현과 실행 확인까지 진행하도록 지시합니다. **인터넷 배포까지 자동으로 이어지려면 개발 AI에 배포 도구(예: Vercel·GitHub의 MCP 또는 CLI)가 연결돼 있어야 하고**, 연결돼 있지 않으면 개발 AI가 배포 방법을 단계별로 안내하는 방식으로 대신합니다.",
+    target === "web_builder"
+      ? "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 웹 빌더(Lovable·Replit·v0·Bolt 등)의 채팅창에 지시서를 붙여넣으면 구현부터 게시(Publish)까지 빌더 안에서 진행됩니다 — 별도 설치나 터미널이 필요 없습니다."
+      : "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트를 넘기면 구현과 실행 확인까지 진행하도록 지시합니다. **인터넷 배포까지 자동으로 이어지려면 개발 AI에 배포 도구(예: Vercel·GitHub의 MCP 또는 CLI)가 연결돼 있어야 하고**, 연결돼 있지 않으면 개발 AI가 사용자 상황에 맞는 배포 길(GitHub 유무에 따라)을 단계별로 안내하는 방식으로 대신합니다.",
     "",
   ];
 
@@ -183,17 +191,24 @@ function genReadme(
 
   lines.push("## 개발 AI에 넘기는 방법", "");
 
-  if (target !== "codex") {
+  if (target === "claude_code" || target === "both") {
     lines.push(
       "### Claude Code 사용 시",
       "`CLAUDE_CODE_PROMPT.md` 파일 내용을 복사해서 Claude Code 대화창에 붙여넣으세요.",
       "",
     );
   }
-  if (target !== "claude_code") {
+  if (target === "codex" || target === "both") {
     lines.push(
       "### Codex 사용 시",
       "`CODEX_PROMPT.md` 파일 내용을 복사해서 Codex 대화창에 붙여넣으세요.",
+      "",
+    );
+  }
+  if (target === "web_builder") {
+    lines.push(
+      "### Lovable / Replit / v0 / Bolt 같은 웹 빌더 사용 시",
+      "`WEB_BUILDER_PROMPT.md` 파일 내용을 복사해서 빌더의 채팅창에 붙여넣으세요. 그 지시서 하나에 필요한 내용이 모두 들어 있습니다(빌더는 이 폴더의 다른 파일을 읽지 못합니다).",
       "",
     );
   }
@@ -403,26 +418,27 @@ function genFixesMd(
  * signup URLs and exact click-paths, one step at a time. Korean, matching the
  * surrounding prompt and the KO-first audience.
  */
-const BEGINNER_SETUP_GUIDANCE: string = [
-  "## 사용자 안내 원칙 — 완전 초보자 가정",
-  "",
-  "이 프로젝트의 사용자는 개발 경험이 전혀 없는 비개발자일 수 있다. 외부 서비스(데이터베이스·호스팅·인증·결제 등)나 API 키, 환경변수, 터미널 명령이 필요한 순간에는 절대 \"알아서 준비하세요\"라고 넘기지 말고, 다음처럼 손을 잡고 안내하라:",
-  "",
-  "- 왜 필요한지 한 문장으로 쉽게 설명한다. (예: \"데이터를 저장하려면 무료 데이터베이스가 필요해요.\")",
-  "- 가입·설정 URL을 전체 주소 그대로 준다.",
-  "- 화면에서 **어디를 눌러야 하는지 단계별로, 한 번에 하나씩** 안내한다. 전문용어(API 키, 환경변수, .env 등)는 그때그때 한 줄로 풀어 설명한다.",
-  "- 복사한 값을 **어디에 붙여넣는지(예: `.env` 파일의 어떤 줄)**까지 알려주고, 사용자가 \"했어요\"라고 확인하면 다음 단계로 넘어간다.",
-  "- 키·비밀번호는 절대 코드나 로그에 하드코딩하지 말고 환경변수로만 안내한다.",
-  "- 사용자가 막히면 \"지금 화면에 뭐가 보이세요?\"라고 묻거나 스크린샷을 요청해 다음 단계를 맞춘다.",
-  "",
-  "자주 쓰는 서비스 예시 (UI가 바뀌었으면 현재 화면에 맞게 조정하되, 이 정도로 상세하게):",
-  "",
-  "- **Supabase (데이터베이스)**: https://supabase.com 가입 → `New project` 생성 → 왼쪽 하단 `Project Settings`(톱니바퀴) → `API` → `Project URL`과 `anon public` 키를 복사. 관리자 키가 필요하면 `API Keys` 탭 → `service_role` → `Reveal` 클릭 → 복사. **`service_role` 키는 관리자용이라 절대 프론트엔드/브라우저에 넣지 말라고 사용자에게 경고**하고, 서버 환경변수로만 쓰게 한다.",
-  "- **Vercel (배포)**: https://vercel.com 에 GitHub 계정으로 로그인 → `Add New → Project` → 저장소 선택 → `Environment Variables`에 위에서 복사한 키를 이름 그대로 추가 → `Deploy`. 배포가 끝나면 나오는 URL을 사용자에게 그대로 알려준다.",
-  "- 그 외 서비스(이메일·결제 등)도 같은 순서로: **가입 URL → 키를 찾는 정확한 위치 → 붙여넣을 곳** 순으로 상세히 안내한다.",
-  "",
-  "**배포 대응(중요):** 앱이 스스로를 가리키는 주소 — 짧은 링크의 앞부분, 공유 URL, 리다이렉트 대상, API 주소 등 — 를 절대 `http://localhost:3000` 같은 개발용 주소로 하드코딩하지 마라. 런타임 origin에서 가져와라(브라우저는 `window.location.origin`, 서버는 요청 host 또는 `NEXT_PUBLIC_APP_URL` 같은 환경변수). 그래야 로컬에서도, 배포 후에도 주소가 자동으로 맞는다. 이걸 안 하면 배포했을 때 사용자에게 보이는 링크가 `localhost`로 깨진다.",
-].join("\n");
+function beginnerSetupGuidance(specText: string): string {
+  return [
+    "## 사용자 안내 원칙 — 완전 초보자 가정",
+    "",
+    "이 프로젝트의 사용자는 개발 경험이 전혀 없는 비개발자일 수 있다. 외부 서비스(데이터베이스·호스팅·인증·결제 등)나 API 키, 환경변수, 터미널 명령이 필요한 순간에는 절대 \"알아서 준비하세요\"라고 넘기지 말고, 다음처럼 손을 잡고 안내하라:",
+    "",
+    "- 왜 필요한지 한 문장으로 쉽게 설명한다. (예: \"데이터를 저장하려면 무료 데이터베이스가 필요해요.\")",
+    "- 가입·설정 URL을 전체 주소 그대로 준다.",
+    "- 화면에서 **어디를 눌러야 하는지 단계별로, 한 번에 하나씩** 안내한다. 전문용어(API 키, 환경변수, .env 등)는 그때그때 한 줄로 풀어 설명한다.",
+    "- 복사한 값을 **어디에 붙여넣는지(예: `.env` 파일의 어떤 줄)**까지 알려주고, 사용자가 \"했어요\"라고 확인하면 다음 단계로 넘어간다.",
+    "- 키·비밀번호는 절대 코드나 로그에 하드코딩하지 말고 환경변수로만 안내한다.",
+    "- 사용자가 막히면 \"지금 화면에 뭐가 보이세요?\"라고 묻거나 스크린샷을 요청해 다음 단계를 맞춘다.",
+    "",
+    "자주 쓰는 서비스 예시 — 이 제품에 필요한 것 기준 (UI가 바뀌었으면 현재 화면에 맞게 조정하되, 이 정도로 상세하게):",
+    "",
+    // D12: base + need-matched walkthroughs + the D11 deploy-path chooser.
+    ...pickServiceExampleBlocks(specText),
+    "",
+    "**배포 대응(중요):** 앱이 스스로를 가리키는 주소 — 짧은 링크의 앞부분, 공유 URL, 리다이렉트 대상, API 주소 등 — 를 절대 `http://localhost:3000` 같은 개발용 주소로 하드코딩하지 마라. 런타임 origin에서 가져와라(브라우저는 `window.location.origin`, 서버는 요청 host 또는 `NEXT_PUBLIC_APP_URL` 같은 환경변수). 그래야 로컬에서도, 배포 후에도 주소가 자동으로 맞는다. 이걸 안 하면 배포했을 때 사용자에게 보이는 링크가 `localhost`로 깨진다.",
+  ].join("\n");
+}
 
 /**
  * "Build like it's for a non-developer, and finish with a RESULT" directive.
@@ -465,6 +481,7 @@ const DEPLOY_VIA_MCP_GUIDANCE: string = [
   "- 배포·저장소 토큰이나 비밀 키를 코드·커밋·파일·이 지시서 어디에도 하드코딩하거나 기록하지 마라.",
   "- 사용자에게 배포 토큰이나 개인 액세스 토큰(PAT) 같은 raw 비밀을 붙여넣으라고 요구하지 마라. 그 인증은 사용자 에디터에 연결된 도구가 이미 갖고 있다고 가정한다.",
   "- 도구가 아직 연결돼 있지 않으면, 토큰을 물어보지 말고 **\"에디터에서 Vercel(또는 GitHub) 연결을 한 번 해주세요\"**라고 그 도구를 연결(로그인)하는 방법만 한 단계 안내한 뒤, 연결되면 네가 배포를 이어간다.",
+  "- 사용자에게 **GitHub 계정 자체가 없다면 연결을 강요하지 마라** — 위 '초보자 안내'의 '배포 — 사용자 상황에 맞는 길'을 따라, GitHub 없이 되는 길(드래그앤드롭 배포)과 GitHub부터 만드는 길(계정 생성 → 저장소 생성 → 연결)을 쉽게 설명하고 사용자가 고르게 하라.",
   "",
   "**저장소:** 코드를 GitHub에 올릴 때도 같은 방식 — 연결된 GitHub 도구로 네가 푸시하고, 사용자에게 토큰을 묻지 마라.",
   "",
@@ -547,8 +564,20 @@ function genServicesContext(services: BuilderPackService[]): string {
   return lines.join("\n");
 }
 
+/** The spec text the need-matchers (D12) scan — what the product actually asks for. */
+function specTextOf(spec: ExportProductSpec, items: ExportItem[]): string {
+  return [
+    spec.oneLine,
+    spec.problem,
+    ...spec.included,
+    ...spec.userFlow,
+    ...items.map((i) => [i.title, ...i.criteria].join(" ")),
+  ].join(" ");
+}
+
 function genClaudeCodePrompt(
   title: string,
+  spec: ExportProductSpec,
   effectiveItems: ExportItem[],
   totalItems: number,
   services: BuilderPackService[] = [],
@@ -592,7 +621,7 @@ function genClaudeCodePrompt(
     "- 애매한 점이 있으면 코드 작성 전에 질문한다.",
     ...(services.length > 0 ? ["", genServicesContext(services)] : []),
     "",
-    BEGINNER_SETUP_GUIDANCE,
+    beginnerSetupGuidance(specTextOf(spec, effectiveItems)),
     "",
     NONDEV_WORKFLOW_GUIDANCE,
     "",
@@ -709,7 +738,7 @@ function genCodexPrompt(
     "",
     "## Final response format",
     "",
-    BEGINNER_SETUP_GUIDANCE,
+    beginnerSetupGuidance(specTextOf(spec, effectiveItems)),
     "",
     NONDEV_WORKFLOW_GUIDANCE,
     "",
@@ -732,6 +761,105 @@ function genCodexPrompt(
     "남은 위험:",
     "- [위험 항목 또는 없음]",
     "```",
+  ].join("\n");
+}
+
+/**
+ * D10 (P1, 2026-07-17 target-fit eval): the prompt for chat-driven WEB BUILDERS
+ * (Lovable / Replit / v0 / Bolt). These have no file tree the agent can read, no
+ * terminal, no `.env.local`, no git — so unlike the Claude Code/Codex prompts
+ * this one is FULLY SELF-CONTAINED (spec + items + criteria inlined), secrets go
+ * in the builder's own settings/Secrets UI, and deploy is the builder's Publish
+ * button. The eval measured the old CLI-shaped instructions as unusable in
+ * these environments (10/10 packs assumed .env.local/터미널/MCP).
+ */
+function genWebBuilderPrompt(
+  title: string,
+  spec: ExportProductSpec,
+  effectiveItems: ExportItem[],
+  totalItems: number,
+  services: BuilderPackService[] = [],
+): string {
+  const isFiltered = effectiveItems.length < totalItems;
+
+  const itemBlocks: string[] = [];
+  for (const item of effectiveItems) {
+    itemBlocks.push(`### ${item.title}`);
+    if (item.criteria.length > 0) {
+      itemBlocks.push("완성 기준:", ...item.criteria.map((c) => `- [ ] ${c}`));
+    }
+    itemBlocks.push("");
+  }
+
+  const serviceLines: string[] = [];
+  if (services.length > 0) {
+    serviceLines.push(
+      "",
+      "## 필요한 외부 서비스와 키",
+      "",
+      "아래 키들이 필요하다. **실제 키 값은 이 채팅에 절대 붙이지 말고**, 이 빌더의 환경변수/Secrets 설정 화면(예: Replit `Secrets`, Lovable 프로젝트 설정)에 사용자가 직접 넣게 한 뒤 코드에서는 환경변수로만 읽어라. 발급 방법은 사용자에게 '가입 URL → 키 위치 → 붙여넣을 곳' 순서로 한 단계씩 안내한다.",
+      "",
+    );
+    for (const svc of services) {
+      serviceLines.push(`### ${svc.label}`);
+      if (svc.setupUrl) serviceLines.push(`- 가입·설정: ${svc.setupUrl}`);
+      for (const v of svc.envVars) {
+        const secret = v.secret ? " · **서버 전용 — 화면 코드에 넣지 말 것**" : "";
+        serviceLines.push(`- \`${v.key}\` — ${v.description}${secret}`);
+      }
+      serviceLines.push("");
+    }
+  }
+
+  return [
+    `# 웹 빌더용 지시서 — ${title}`,
+    "",
+    "이 파일 내용을 Lovable, Replit, v0, Bolt 같은 웹 빌더의 채팅창에 그대로 붙여넣으세요.",
+    "",
+    isFiltered
+      ? `> **이번에 만들 항목: ${effectiveItems.length}개** (전체 ${totalItems}개 중) — 포함되지 않은 항목은 만들지 마세요.`
+      : `> 이번에 만들 항목: ${effectiveItems.length}개 (전체)`,
+    "",
+    "---",
+    "",
+    "## 임무 — 이 지시 하나로 끝까지",
+    "",
+    "사용자는 개발자가 아니다. 이 지시서만으로 **실제로 작동하고, 인터넷에 게시된 앱과 그 주소(URL)**까지 만들어 사용자 손에 쥐여줘라. 개발 절차(파일 구조, 기술 선택)를 사용자에게 되묻지 말고 네가 정하라. 사용자에게 부탁할 것은 딱 두 가지 — 외부 서비스 키 발급(아래 안내대로 한 단계씩)과 이 빌더의 **게시(Publish/Deploy) 버튼 누르기**뿐이다.",
+    "",
+    "1. 아래 제품 설명과 항목을 읽고 짧은 계획을 세운다.",
+    "2. 이번에 만들 항목만 구현한다 — '제외' 목록은 절대 만들지 않는다.",
+    "3. 외부 서비스가 필요하면 키 발급을 한 단계씩 안내하고, 값은 이 빌더의 **환경변수/Secrets 설정 화면**에 넣게 한다(채팅·코드에 값 노출 금지).",
+    "4. 미리보기로 각 항목의 완성 기준을 스스로 점검하고, 안 되는 부분은 될 때까지 고친다.",
+    "5. 이 빌더의 **게시(Publish/Deploy) 기능**으로 인터넷에 올리게 안내하고, 나온 URL을 확인한다.",
+    "6. 그 URL을 Simsa에 다시 넣어 검수받으라고 안내한다.",
+    "",
+    "## 제품 설명",
+    "",
+    `**${spec.productName}** — ${spec.oneLine}`,
+    "",
+    `해결하려는 문제: ${spec.problem}`,
+    `대상 사용자: ${spec.targetUsers.join(", ") || "일반 사용자"}`,
+    "",
+    "이번 버전에 포함:",
+    ...spec.included.map((i) => `- ${i}`),
+    "",
+    "이번 버전에서 제외 (절대 만들지 말 것):",
+    ...(spec.excluded.length > 0 ? spec.excluded.map((e) => `- ${e}`) : ["- (없음)"]),
+    "",
+    "사용자 흐름:",
+    ...spec.userFlow.map((f, i) => `${i + 1}. ${f}`),
+    "",
+    "## 만들 항목과 완성 기준",
+    "",
+    ...itemBlocks,
+    ...serviceLines,
+    "## 진행 방식 — 비개발자 우선",
+    "",
+    "- 진행 상황은 개발 용어 없이 '지금 무엇을 만들고 있고, 다음에 무엇이 필요한지'로만 알린다.",
+    "- 사용자가 막히면 \"지금 화면에 뭐가 보이세요?\"라고 묻고 다음 단계를 맞춘다.",
+    "- 끝은 언제나 '게시된 URL + 다음 한 가지 행동'이다. 기술 선택 메뉴로 끝내지 마라.",
+    "",
+    RETURN_TO_SIMSA_GUIDANCE,
   ].join("\n");
 }
 
@@ -925,18 +1053,25 @@ export function generateBuilderPack(
     });
   }
 
-  if (target !== "codex") {
+  if (target === "claude_code" || target === "both") {
     baseFiles.push({
       path: "simsa-build-pack/CLAUDE_CODE_PROMPT.md",
-      content: genClaudeCodePrompt(title, effectiveItems, allItems.length, services) + hookSuffix,
+      content: genClaudeCodePrompt(title, productSpec, effectiveItems, allItems.length, services) + hookSuffix,
     });
   }
-  if (target !== "claude_code") {
+  if (target === "codex" || target === "both") {
     baseFiles.push({
       path: "simsa-build-pack/CODEX_PROMPT.md",
       content:
         genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions, services) +
         hookSuffix,
+    });
+  }
+  if (target === "web_builder") {
+    baseFiles.push({
+      path: "simsa-build-pack/WEB_BUILDER_PROMPT.md",
+      content:
+        genWebBuilderPrompt(title, productSpec, effectiveItems, allItems.length, services) + hookSuffix,
     });
   }
 
@@ -948,7 +1083,9 @@ export function generateBuilderPack(
 
   const recommendedNextStep = hasIssues
     ? "fixes.md에서 고쳐야 할 항목을 확인하고, 해당 지시서를 개발 AI에 넘기세요."
-    : "CLAUDE_CODE_PROMPT.md 또는 CODEX_PROMPT.md를 복사해서 개발 AI에 붙여넣으세요.";
+    : target === "web_builder"
+      ? "WEB_BUILDER_PROMPT.md를 복사해서 사용 중인 웹 빌더(Lovable·Replit·v0·Bolt 등)의 채팅창에 붙여넣으세요."
+      : "CLAUDE_CODE_PROMPT.md 또는 CODEX_PROMPT.md를 복사해서 개발 AI에 붙여넣으세요.";
 
   return {
     ok: true,

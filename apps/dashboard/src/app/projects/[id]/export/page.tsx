@@ -48,7 +48,7 @@ type StatusFilter = "all" | "failed" | "inconclusive" | "needs_decision" | "pass
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TARGET_VALUES: ExportTarget[] = ["claude_code", "codex", "both"];
+const TARGET_VALUES: ExportTarget[] = ["claude_code", "codex", "both", "web_builder"];
 
 const OUTCOME_OPTIONS: { value: OutcomeStatus; activeColor: string }[] = [
   { value: "worked", activeColor: "bg-green-600 text-white border-transparent" },
@@ -66,11 +66,13 @@ const TARGET_LABEL: Record<ExportTarget, string> = {
   claude_code: "Claude Code",
   codex: "Codex",
   both: "Claude Code + Codex",
+  web_builder: "Lovable · Replit · v0 · Bolt",
 };
 
 function targetOptionLabel(t: Dictionary, v: ExportTarget): string {
   if (v === "claude_code") return t.exportPage.targetClaude;
   if (v === "codex") return t.exportPage.targetCodex;
+  if (v === "web_builder") return t.exportPage.targetWebBuilder;
   return t.exportPage.targetBoth;
 }
 
@@ -491,6 +493,9 @@ export default function ExportPage() {
               )}
               {result.bundle.files.some((f) => f.path.endsWith("CODEX_PROMPT.md")) && (
                 <span className="text-xs bg-white text-brand-600 border border-brand-200 rounded-full px-2 py-0.5">{t.exportPage.codexInstr}</span>
+              )}
+              {result.bundle.files.some((f) => f.path.endsWith("WEB_BUILDER_PROMPT.md")) && (
+                <span className="text-xs bg-white text-brand-600 border border-brand-200 rounded-full px-2 py-0.5">{t.exportPage.targetWebBuilder}</span>
               )}
             </div>
             <div className="flex gap-2 flex-wrap">
