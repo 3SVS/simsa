@@ -1,0 +1,591 @@
+{
+  "startedAt": "2026-07-17T05:10:26.982Z",
+  "wizard": {
+    "rounds": 9,
+    "clicks": 23
+  },
+  "tabs": [
+    {
+      "label": "project-landing(위저드 종착지)",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm",
+      "h1": [
+        "필라테스 수강권 관리 웹앱"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "시각 검수",
+        "제품 설명서 완성도",
+        "확인 결과 요약",
+        "꼭 들어가야 할 것"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/map",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/items"
+      ],
+      "bodyLen": 1294,
+      "errorish": 0
+    },
+    {
+      "label": "개요 — /projects/proj_hepck0xm",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm",
+      "h1": [
+        "필라테스 수강권 관리 웹앱"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "시각 검수",
+        "제품 설명서 완성도",
+        "확인 결과 요약",
+        "꼭 들어가야 할 것"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/map",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/items"
+      ],
+      "bodyLen": 1420,
+      "errorish": 0
+    },
+    {
+      "label": "아이디어 — /projects/proj_hepck0xm/idea",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/idea",
+      "h1": [
+        "아이디어"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "입력한 아이디어",
+        "SIMSA가 이해한 내용",
+        "포함하지 않는 것"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "수정"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/spec"
+      ],
+      "bodyLen": 1235,
+      "errorish": 0
+    },
+    {
+      "label": "보기 → — /projects/proj_hepck0xm/spec",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/spec",
+      "h1": [
+        "제품 설명서"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "목표",
+        "이번 버전에 포함",
+        "이번 버전에서 제외",
+        "아직 결정 필요"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "수정",
+        "추천 받기",
+        "추천 받기",
+        "추천 받기",
+        "추천 받기"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/items"
+      ],
+      "bodyLen": 1442,
+      "errorish": 0
+    },
+    {
+      "label": "전체 보기 → — /projects/proj_hepck0xm/items",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/items",
+      "h1": [
+        "검수 항목"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "＋ 항목 추가",
+        "수정",
+        "삭제",
+        "수정",
+        "삭제",
+        "수정",
+        "삭제",
+        "수정",
+        "삭제",
+        "수정",
+        "삭제"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/export"
+      ],
+      "bodyLen": 3018,
+      "errorish": 0
+    },
+    {
+      "label": "빌더 팩 — /projects/proj_hepck0xm/export",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/export",
+      "h1": [
+        "개발 AI에게 넘길 만들기 패키지"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "다 만드셨나요? 돌아와서 연결하세요",
+        "개발 AI에 넘긴 뒤 결과 기록하기",
+        "Simsa로 검수했다고 알리기"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "Claude Code용",
+        "Codex용",
+        "둘 다",
+        "웹 빌더용 (Lovable·Replit·v0·Bolt)",
+        "전체 항목 포함",
+        "선택한 항목만",
+        "zip으로 다운로드",
+        "전체 복사",
+        "MD 묶음",
+        "README.md",
+        "product.md"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/github",
+        "/p/proj_hepck0xm/connect"
+      ],
+      "bodyLen": 2766,
+      "errorish": 0
+    },
+    {
+      "label": "전체 보기 → — /projects/proj_hepck0xm/checks",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/checks",
+      "h1": [
+        "확인 결과"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "제품 설명서 기준 사전 확인",
+        "코드 확인 (GitHub)"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "확인 실행"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/github"
+      ],
+      "bodyLen": 767,
+      "errorish": 0
+    },
+    {
+      "label": "첫 검수 실행하기 — /projects/proj_hepck0xm/visual-checks",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/visual-checks",
+      "h1": [],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "시각 검수"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "지금 검수하기"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/sources"
+      ],
+      "bodyLen": 759,
+      "errorish": 0
+    },
+    {
+      "label": "코드 저장소 — /projects/proj_hepck0xm/settings",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/settings",
+      "h1": [
+        "코드 저장소 연결"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "앱에 필요한 서비스 준비하기",
+        "AI가 한 번에 배포까지 하도록",
+        "이메일 알림",
+        "Telegram 알림",
+        "알림 이력"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "GitHub 연결",
+        "키 찾는 방법",
+        "✕",
+        "키 찾는 방법",
+        "✕",
+        "키 찾는 방법",
+        "✕",
+        "+ Sentry (오류 추적)",
+        "Claude Code",
+        "Codex",
+        "복사"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm/export"
+      ],
+      "bodyLen": 3795,
+      "errorish": 0
+    },
+    {
+      "label": "연결 — /projects/proj_hepck0xm/sources",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/sources",
+      "h1": [],
+      "h2": [
+        "Simsa 개선에 참여하기",
+        "연결"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO",
+        "연결하기",
+        "연결하기",
+        "업로드"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources"
+      ],
+      "bodyLen": 709,
+      "errorish": 0
+    },
+    {
+      "label": "심사 지도 이 프로젝트의 전체 수락 여정입니다. 현재 위치 → — /projects/proj_hepck0xm/map",
+      "url": "https://app.trysimsa.com/projects/proj_hepck0xm/map",
+      "h1": [
+        "심사 지도"
+      ],
+      "h2": [
+        "Simsa 개선에 참여하기"
+      ],
+      "buttons": [
+        "✕",
+        "참여하기",
+        "나중에",
+        "«",
+        "고급\n+",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO"
+      ],
+      "links": [
+        "/settings",
+        "/projects",
+        "/projects/new",
+        "/projects",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_hepck0xm/idea",
+        "/projects/proj_hepck0xm/spec",
+        "/projects/proj_hepck0xm/items",
+        "/projects/proj_hepck0xm/export",
+        "/projects/proj_hepck0xm/checks",
+        "/projects/proj_hepck0xm/visual-checks",
+        "/projects/proj_hepck0xm/settings",
+        "/projects/proj_hepck0xm/sources",
+        "/projects/proj_hepck0xm"
+      ],
+      "bodyLen": 2024,
+      "errorish": 0
+    },
+    {
+      "label": "home",
+      "url": "https://app.trysimsa.com/projects",
+      "h1": [
+        "프로젝트"
+      ],
+      "h2": [
+        "필라테스 수강권 관리 웹앱",
+        "예시 프로젝트",
+        "회의록 자동 요약 앱\n예시"
+      ],
+      "buttons": [
+        "«",
+        "도움말 · 피드백",
+        "M\n워크스페이스\n로그인 →\n⌃",
+        "EN",
+        "KO"
+      ],
+      "links": [
+        "/projects",
+        "/projects/new",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_mjx1",
+        "/projects/proj_hepck0xm",
+        "/projects/proj_mjx1"
+      ],
+      "bodyLen": 487,
+      "errorish": 0
+    }
+  ],
+  "notes": [],
+  "projectId": "proj_hepck0xm",
+  "projectNav": [
+    {
+      "href": "/projects/proj_hepck0xm",
+      "text": "개요"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/idea",
+      "text": "아이디어"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/spec",
+      "text": "보기 →"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/items",
+      "text": "전체 보기 →"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/export",
+      "text": "빌더 팩"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/checks",
+      "text": "전체 보기 →"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/visual-checks",
+      "text": "첫 검수 실행하기"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/settings",
+      "text": "코드 저장소"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/sources",
+      "text": "연결"
+    },
+    {
+      "href": "/projects/proj_hepck0xm/map",
+      "text": "심사 지도 이 프로젝트의 전체 수락 여정입니다. 현재 위치 →"
+    }
+  ]
+}
