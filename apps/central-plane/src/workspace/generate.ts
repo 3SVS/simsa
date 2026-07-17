@@ -131,7 +131,7 @@ const SCHEMA_DESCRIPTION = `{
     "excluded": ["이번 버전에서 제외할 것"],
     "userFlow": ["1. 사용자 흐름 단계"],
     "decisions": ["질문 답변에 따라 결정된 사항"],
-    "openQuestions": ["아직 결정이 필요한 것"]
+    "openQuestions": ["아직 결정이 필요한 것 (도구 이름 없이 일반인 언어로)"]
   },
   "items": [
     {
@@ -169,7 +169,7 @@ const SCHEMA_DESCRIPTION_EN = `{
     "excluded": ["out of scope for this version"],
     "userFlow": ["1. user flow step"],
     "decisions": ["decisions made from the answers"],
-    "openQuestions": ["things still to decide"]
+    "openQuestions": ["things still to decide (plain language, no tool names)"]
   },
   "items": [
     {
@@ -285,6 +285,78 @@ export function feasibilityWarning(
     : `참고: 이건 ${label}이 필요해 보여요. 심사가 연결하는 개발 도구는 웹앱을 만들기 때문에, 웹으로 되는 부분은 지금 만들 수 있지만 ${label} 자체는 전문 개발이 필요해요 — 설명서에는 그 점을 '다 된다'고 하지 않고 정직하게 표시했어요.`;
 }
 
+// ─── Non-developer language (P1, 2026-07-17) ─────────────────────────────────
+
+/**
+ * openQuestions is where developer tool names leaked in live measurement
+ * (2026-07-17 assessment: 3/6 drafts named Firebase/AWS/Chart.js/API). The
+ * target user cannot decide "Firebase vs AWS" — the decision they CAN make is
+ * "where should my data live". Each category maps a jargon marker to the plain
+ * decision it stands for. A matcher, not a judgement: markers are parameters,
+ * the principle (no tool names in a non-developer's open decisions) is not.
+ */
+const JARGON_CATEGORIES: Array<{ re: RegExp; ko: string; en: string }> = [
+  {
+    re: /firebase|supabase|amazon\s*s3|\bs3\b|\baws\b|dynamodb|mongodb|postgres(?:ql)?|mysql|redis|데이터베이스|\bdb\b/i,
+    ko: "자료를 어디에 어떻게 보관할지 정하기",
+    en: "Decide where and how your data is kept",
+  },
+  {
+    re: /chart\.js|\bd3(?:\.js)?\b|recharts|highcharts/i,
+    ko: "차트·그래프를 어떤 모습으로 보여줄지 정하기",
+    en: "Decide how charts and graphs should look",
+  },
+  {
+    re: /\bstt\b|speech[-\s]?to[-\s]?text|\btts\b/i,
+    ko: "음성 인식을 어느 수준까지 지원할지 정하기",
+    en: "Decide how far speech recognition should go",
+  },
+  {
+    re: /oauth|\bjwt\b|\bsso\b/i,
+    ko: "로그인 방식을 어떻게 할지 정하기",
+    en: "Decide how sign-in works",
+  },
+  {
+    re: /\bapi\b|\bsdk\b|webhook|웹훅|graphql|엔드포인트|endpoint/i,
+    ko: "외부 서비스와 무엇을 주고받을지 정하기",
+    en: "Decide what to exchange with external services",
+  },
+  {
+    re: /vercel|netlify|cloudflare|heroku|호스팅|hosting|docker|kubernetes/i,
+    ko: "서비스를 인터넷에 올리는 방식 정하기",
+    en: "Decide how the service goes live",
+  },
+];
+
+/**
+ * Deterministic rewrite of open questions into non-developer language. A
+ * question naming a developer tool/service is replaced by the plain decision
+ * for its category; duplicates collapsing onto the same canonical question are
+ * deduped. A term the user typed THEMSELVES is exempt — their own words are
+ * their language, not a leak (and removing them would also hurt the
+ * user-words coverage gate).
+ */
+export function sanitizeOpenQuestions(
+  questions: string[],
+  locale: "ko" | "en" | undefined,
+  userWords: string,
+): string[] {
+  const lang = locale === "en" ? "en" : "ko";
+  const lowerUserWords = userWords.toLowerCase();
+  const out: string[] = [];
+  for (const q of questions) {
+    let rewritten = q;
+    for (const cat of JARGON_CATEGORIES) {
+      const m = cat.re.exec(q);
+      if (!m) continue;
+      if (!lowerUserWords.includes(m[0].toLowerCase())) rewritten = cat[lang];
+      break;
+    }
+    if (!out.includes(rewritten)) out.push(rewritten);
+  }
+  return out;
+}
+
 /** Extra-context block (D2). Empty when the user gave none. */
 function contextBlock(locale: "ko" | "en" | undefined, context: string | undefined): string {
   const c = (context ?? "").trim();
@@ -325,6 +397,7 @@ export function buildPrompt(req: IdeaToSpecDraftRequest): string {
 다음 규칙을 반드시 따르세요:
 - 모든 사용자 대상 텍스트는 자연스러운 한국어로 작성
 - PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE 같은 개발자 용어 사용 금지
+- openQuestions·decisions에도 개발 도구·서비스 이름(Firebase, AWS, Chart.js, API 등)을 쓰지 마라. "STT 서비스 선택"이 아니라 "음성 인식을 어느 수준까지 지원할지 정하기"처럼, 사용자가 실제로 내릴 수 있는 결정을 일반인 언어로 적어라. 단, 사용자가 직접 언급한 도구 이름은 그대로 써도 된다.
 - 질문은 이 아이디어에 맞춤형으로 4~6개 생성 (단순 템플릿 반복 금지). 그중 **최소 1개는 화면·디자인(UIUX)** 에 관한 것.
 - 좋은 질문 = 답에 따라 제품이 실제로 달라지는 구체적 질문. 아래 축을 폭넓게 살펴 이 아이디어에 맞는 것을 고른다:
   구현 범위 · 사용자 흐름 · 데이터 보관 · 로그인/권한 · 외부 연동 · 대상 사용자 숙련도 · 성공 기준 ·
@@ -349,6 +422,7 @@ Idea: ${req.idea}${contextBlock("en", req.context)}${answersText}${rejectedBlock
 Follow these rules strictly:
 - Write all user-facing text in natural, plain English
 - Do NOT use developer jargon like PRD, Requirement, Acceptance Criteria, FAIL, INCONCLUSIVE
+- Do NOT name developer tools or services (Firebase, AWS, Chart.js, API, …) in openQuestions/decisions either. Write the decision the user can actually make in plain words — "Decide where and how your data is kept", not "Choose Firebase vs AWS". Tools the user themselves mentioned are fine to keep.
 - Generate 4-6 questions tailored to this idea (no repetitive templates). At least ONE must be about screens/design (UI/UX).
 - Good questions = concrete questions whose answers actually change the product. Draw broadly from these axes, picking what fits this idea:
   scope · user flow · data retention · login/permissions · integrations · target-user skill level · success criteria ·
@@ -565,7 +639,7 @@ function buildMockFallback(req: IdeaToSpecDraftRequest): IdeaToSpecDraftResponse
         problem: "회의 후 내용 정리와 할 일 분배에 시간이 많이 걸립니다.",
         included: [
           "녹음 파일 업로드",
-          "STT 변환",
+          "음성을 텍스트로 변환",
           "요약 생성 (결정사항·할 일 구분)",
           "할 일 추출",
           confirmSend ? "사용자 확인 후 Linear 전송" : "처리 완료 후 Linear 자동 전송",
@@ -769,6 +843,20 @@ function withVerification(
   req: IdeaToSpecDraftRequest,
   res: IdeaToSpecDraftResponse,
 ): IdeaToSpecDraftResponse {
+  // P1 non-developer language: openQuestions is the field that leaked tool
+  // names in live measurement. Sanitized here — the single choke point every
+  // successful draft (LLM and mock alike) passes through.
+  res = {
+    ...res,
+    productSpec: {
+      ...res.productSpec,
+      openQuestions: sanitizeOpenQuestions(
+        res.productSpec.openQuestions,
+        req.locale,
+        userWordsOf(req),
+      ),
+    },
+  };
   // P0-A: the deterministic feasibility warning rides on EVERY draft (LLM or
   // mock) — it's the honest "this needs a native build" heads-up, independent of
   // the coverage gate. Prepended so it's the first thing the user sees.
