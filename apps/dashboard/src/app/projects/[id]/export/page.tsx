@@ -28,6 +28,7 @@ import {
 } from "@/lib/workspace-export-api";
 import { downloadBuildPackZip } from "@/lib/zip-utils";
 import { packReadiness } from "@/lib/project-steps.mjs";
+import { fetchNotificationSettings, saveNotificationSettings } from "@/lib/workspace-notifications-api";
 import { filesForTextBundle, hasSecretFiles } from "@/lib/pack-bundle.mjs";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
@@ -165,6 +166,32 @@ export default function ExportPage() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [isZipping, setIsZipping] = useState(false);
+
+  // ── G1: optional email capture (re-engagement + completion notify) ────────
+  const [emailState, setEmailState] = useState<"loading" | "unset" | "set" | "saved">("loading");
+  const [emailInput, setEmailInput] = useState("");
+  const [emailErr, setEmailErr] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchNotificationSettings(getUserKey(), "email").then((r) => {
+      if (cancelled) return;
+      setEmailState(r.ok && r.settings?.enabled ? "set" : "unset");
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const saveEmail = async () => {
+    const addr = emailInput.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) { setEmailErr(true); return; }
+    setEmailErr(false);
+    const r = await saveNotificationSettings({
+      userKey: getUserKey(), channel: "email", emailAddress: addr,
+      enabled: true, notifyPolicy: "problems_only",
+    });
+    if (r.ok) setEmailState("saved");
+    else setEmailErr(true);
+  };
 
   // ── Outcome state ────────────────────────────────────────────────────────
   const [outcomes, setOutcomes] = useState<(BuilderPackOutcome | RemoteOutcome)[]>([]);
@@ -643,6 +670,34 @@ export default function ExportPage() {
               </Link>
             </div>
           </div>
+
+          {/* G1: optional email capture — the only channel that can bring a
+              user back after they leave with the pack. One nudge per project,
+              stated up front (no surprise mail). */}
+          {emailState === "unset" && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-1">{t.exportPage.emailCapture.title}</p>
+              <p className="text-xs text-gray-500 mb-3">{t.exportPage.emailCapture.desc}</p>
+              <div className="flex gap-2 flex-wrap">
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder={t.exportPage.emailCapture.placeholder}
+                  className="flex-1 min-w-[220px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                />
+                <button onClick={saveEmail} className="btn btn-sm btn-secondary">
+                  {t.exportPage.emailCapture.save}
+                </button>
+              </div>
+              {emailErr && <p className="mt-2 text-xs text-red-600">{t.exportPage.emailCapture.invalid}</p>}
+            </div>
+          )}
+          {emailState === "saved" && (
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-800">
+              {t.exportPage.emailCapture.saved}
+            </div>
+          )}
 
           {/* File browser */}
           <div className="flex gap-4 h-[500px]">

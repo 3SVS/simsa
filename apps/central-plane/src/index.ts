@@ -13,6 +13,7 @@ import { runChangelogMonitor } from "./changelog-monitor.js";
 import { runDeployTrendWatcher } from "./deploy-trend-watcher.js";
 import { runAgentSpawner, runAutoGraduation } from "./agent-spawner.js";
 import { runCveAdvisoryMiner } from "./cve-advisory-miner.js";
+import { runReengageNudges } from "./workspace/reengage.js";
 import { runMcpRegistryMiner } from "./mcp-registry-miner.js";
 import { runShadcnBlockMiner } from "./shadcn-block-miner.js";
 import { runAwesomeListMiner } from "./awesome-list-miner.js";
@@ -215,6 +216,17 @@ export default {
         );
       } catch (err) {
         console.error("[agent-spawner] crashed:", err);
+      }
+      return;
+    }
+    // G1 (2026-07-18) — 복귀 이메일 넛지: 팩 받고 3~14일 미복귀+이메일 opt-in에게
+    // (user,project)당 평생 1통. 18:00 KST 발송 슬롯.
+    if (event.cron === "0 9 * * *") {
+      try {
+        const result = await runReengageNudges(env);
+        console.log(JSON.stringify({ cron: "reengage-nudges", cronExpression: event.cron, ...result }));
+      } catch (err) {
+        console.error("[reengage-nudges] crashed:", err);
       }
       return;
     }

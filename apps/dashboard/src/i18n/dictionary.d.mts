@@ -625,6 +625,14 @@ export type Dictionary = {
       siteDesc: string;
       siteCta: string;
     };
+    emailCapture: {
+      title: string;
+      desc: string;
+      placeholder: string;
+      save: string;
+      saved: string;
+      invalid: string;
+    };
     fixFirst: {
       title: string;
       descBefore: string;

@@ -700,6 +700,14 @@ const EN = {
       siteDesc: "Add your live app URL to run a visual check of the finished screens.",
       siteCta: "Connect app URL",
     },
+    emailCapture: {
+      title: "Leave an email and we'll help you finish (optional)",
+      desc: "If you stall mid-build, we'll send exactly one email a few days later with what to do next. Completion-check notifications also arrive here.",
+      placeholder: "you@example.com",
+      save: "Save",
+      saved: "Saved — we'll only email when useful, at most once per project.",
+      invalid: "That doesn't look like an email address. Please check it.",
+    },
     fixFirst: {
       title: "Finish the check results first",
       descBefore: "Your review found ",
@@ -3080,6 +3088,14 @@ const KO = {
       siteTitle: "배포된 웹사이트 연결",
       siteDesc: "배포된 앱 주소를 넣어 완성된 화면을 시각 검수합니다.",
       siteCta: "앱 주소 연결하기",
+    },
+    emailCapture: {
+      title: "이메일을 남겨두면 완성까지 도와드려요 (선택)",
+      desc: "만들다 멈추면 며칠 뒤 딱 한 번, 다음에 할 일을 알려드리는 메일을 보내드려요. 완성 검수 알림도 이 주소로 옵니다.",
+      placeholder: "you@example.com",
+      save: "저장",
+      saved: "등록됐어요 — 필요할 때만, 프로젝트당 최대 한 번만 보내드려요.",
+      invalid: "이메일 주소 형식이 맞지 않아요. 다시 확인해주세요.",
     },
     fixFirst: {
       title: "확인 결과부터 마치면 더 좋은 패키지가 나와요",

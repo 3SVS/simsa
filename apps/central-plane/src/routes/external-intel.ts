@@ -21,6 +21,7 @@ import { runMcpRegistryMiner } from "../mcp-registry-miner.js";
 import { runShadcnBlockMiner } from "../shadcn-block-miner.js";
 import { runAwesomeListMiner } from "../awesome-list-miner.js";
 import { runDeployTrendWatcher } from "../deploy-trend-watcher.js";
+import { runReengageNudges } from "../workspace/reengage.js";
 
 function requireInternalToken(c: { env: Env; req: { header: (k: string) => string | undefined } }) {
   const expected = c.env.INTERNAL_CALLBACK_TOKEN;
@@ -92,6 +93,14 @@ export function createExternalIntelRoutes(): Hono<{ Bindings: Env }> {
     const auth = requireInternalToken(c);
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
     const result = await runDeployTrendWatcher(c.env);
+    return c.json(result);
+  });
+
+  // G1 — 복귀 넛지 수동 실행 (크론과 동일 로직; 라이브 실증·캐치업용).
+  app.post("/admin/run-reengage", async (c) => {
+    const auth = requireInternalToken(c);
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
+    const result = await runReengageNudges(c.env);
     return c.json(result);
   });
 
