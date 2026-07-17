@@ -48,7 +48,7 @@ type StatusFilter = "all" | "failed" | "inconclusive" | "needs_decision" | "pass
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TARGET_VALUES: ExportTarget[] = ["claude_code", "codex", "both", "web_builder"];
+const TARGET_VALUES: ExportTarget[] = ["claude_code", "codex", "both", "web_builder", "handoff"];
 
 const OUTCOME_OPTIONS: { value: OutcomeStatus; activeColor: string }[] = [
   { value: "worked", activeColor: "bg-green-600 text-white border-transparent" },
@@ -67,13 +67,27 @@ const TARGET_LABEL: Record<ExportTarget, string> = {
   codex: "Codex",
   both: "Claude Code + Codex",
   web_builder: "Lovable · Replit · v0 · Bolt",
+  handoff: "HANDOFF_BRIEF.md",
 };
 
 function targetOptionLabel(t: Dictionary, v: ExportTarget): string {
   if (v === "claude_code") return t.exportPage.targetClaude;
   if (v === "codex") return t.exportPage.targetCodex;
   if (v === "web_builder") return t.exportPage.targetWebBuilder;
+  if (v === "handoff") return t.exportPage.targetHandoff;
   return t.exportPage.targetBoth;
+}
+
+/** Map the built-with tool ids captured at creation to a recommended pack
+ *  target (Bae 2026-07-17). Cursor/Windsurf paste the CLI prompt fine. */
+function recommendedTargetFor(builtWithTools: string[] | undefined): ExportTarget | null {
+  for (const tool of builtWithTools ?? []) {
+    if (tool === "claude-code" || tool === "cursor" || tool === "windsurf") return "claude_code";
+    if (tool === "codex") return "codex";
+    if (tool === "lovable" || tool === "replit" || tool === "v0" || tool === "bolt") return "web_builder";
+    if (tool === "hand-coded") return "handoff";
+  }
+  return null;
 }
 
 function outcomeLabel(t: Dictionary, v: OutcomeStatus): string {
@@ -382,22 +396,37 @@ export default function ExportPage() {
       </Link>
 
       {/* ── Step 0: which agent is this pack for? ── */}
-      {!agentChosen && (
+      {!agentChosen && (() => {
+        const recommended = recommendedTargetFor(ext?.builtWithTools);
+        const ordered = recommended
+          ? [recommended, ...TARGET_VALUES.filter((v) => v !== recommended)]
+          : TARGET_VALUES;
+        return (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-base font-semibold text-gray-900 mb-1">{t.exportPage.agentChooserTitle}</p>
           <p className="text-sm text-gray-500 mb-4">{t.exportPage.agentChooserHint}</p>
           <div className="grid sm:grid-cols-2 gap-3">
-            {TARGET_VALUES.map((value) => (
+            {ordered.map((value) => (
               <button key={value}
                 onClick={() => { setTarget(value); setAgentChosen(true); generate(value, null); }}
-                className="text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-brand-400 hover:bg-brand-50 transition-all">
-                <span className="block text-sm font-semibold text-gray-900">{targetOptionLabel(t, value)}</span>
+                className={`text-left px-4 py-3 rounded-xl border transition-all hover:bg-brand-50 ${
+                  value === recommended ? "border-brand-400 bg-brand-50/50" : "border-gray-200 hover:border-brand-400"
+                }`}>
+                <span className="block text-sm font-semibold text-gray-900">
+                  {targetOptionLabel(t, value)}
+                  {value === recommended && (
+                    <span className="ml-2 inline-block rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white align-middle">
+                      {t.exportPage.recommendedBadge}
+                    </span>
+                  )}
+                </span>
                 <span className="block text-xs text-gray-500 mt-0.5">{TARGET_LABEL[value]}</span>
               </button>
             ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {agentChosen && (<>
       {/* ── Config: target + selection mode ── */}

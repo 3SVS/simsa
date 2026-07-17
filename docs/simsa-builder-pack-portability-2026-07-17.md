@@ -40,6 +40,18 @@
 - **D16 에이전트 선택 단계 (Bae 지시)** — export 페이지가 조용히 Claude Code로 자동 생성하던
   것을 제거하고, 첫 화면에서 "빌더팩을 어떤 개발 AI용으로 받으시겠어요?" 명시 선택(4옵션) 후
   생성. built_with 기반 추천 프리셀렉트는 후속(로컬 프로젝트 셰이프에 built_with 부재).
+- **D16-b 추천 프리셀렉트 (같은 날 후속)** — 생성 시 `builtWithTools`를 extended 데이터에
+  저장하고, 선택 화면에서 매핑(claude-code/cursor/windsurf→claude_code, codex→codex,
+  lovable/replit/v0/bolt→web_builder, hand-coded→handoff)된 옵션을 첫 번째+「추천」 배지로.
+  명시 클릭은 유지(자동 생성 아님).
+- **D17-b 질문 확장 2차 (Bae "8개로 충분? 더 물어봐")** — 4~12개(복잡하면 10~12) +
+  질문 축 3종 추가: **공개·사용 방식**(누가 어디서, 도메인 필요?), **비용·플랜**(무료 vs
+  월 유료 의향 — 도구 이름 없이 예산 수준만), **규모**(사용자 수·데이터 양). max_tokens
+  14000(Haiku 상한 64K, 제약은 지연 ~108s < 120s 타임아웃). D13 필터 통과 테스트 동반.
+- **#296 Phase 4-lite — handoff 타겟** — `ExportTarget`에 `handoff`: 개발자·전문팀에
+  그대로 전달하는 `HANDOFF_BRIEF.md`(대상 플랫폼 정직 판정 — 네이티브면 "웹 검수 범위 밖"
+  명시, 결정됨/제외/미결정, 수용 기준 체크리스트, 사용자 흐름). 에이전트 프롬프트 없음.
+  잔여: #296 Phase 1(온보딩 인터뷰+userProfile)·Phase 2(LLM feasibility 분류)는 다음 트레인.
 
 ## 비목표
 

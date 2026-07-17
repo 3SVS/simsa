@@ -350,6 +350,7 @@ function NewProjectInner() {
           }
         : {}),
       entryPath: "code",
+      ...(builtWithTools.length ? { builtWithTools } : {}),
     });
     // Persist the project server-side BEFORE navigating to connect a repo.
     // This was fire-and-forget + an immediate router.push, so the project row
@@ -407,6 +408,7 @@ function NewProjectInner() {
       productSpec: spec.productSpec,
       itemCriteria: Object.fromEntries(spec.items.map((i) => [i.id, i.criteria ?? []])),
       entryPath: entryPath ?? "idea",
+      ...(builtWithTools.length ? { builtWithTools } : {}),
     });
     // Await the D1 persist BEFORE navigating (was fire-and-forget). Same race
     // #258 fixed on the code branch: navigating first leaves the project row

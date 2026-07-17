@@ -1,0 +1,33 @@
+{
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "fixtures": "https://simsa-inspection-fixtures.seunghunbae.workers.dev",
+  "date": "2026-07-17",
+  "results": [
+    {
+      "id": "R2",
+      "url": "https://golf-now.vercel.app",
+      "expected": "working",
+      "nullOk": true,
+      "intent": "골퍼가 지금 코스가 플레이 가능한지 확인하는 흐름을 시작할 수 있어야 한다",
+      "works": null,
+      "decision": "Needs Clarification",
+      "verdict": "무엇을 확인해야 할지 애매해요",
+      "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요. '핵심 버튼 '현재 위치 날씨 확인' 누르기' 단계가 끝까지 되지 않았어요.",
+      "runStatus": "done",
+      "score": "correct"
+    },
+    {
+      "id": "R3",
+      "url": "https://trysimsa.com",
+      "expected": "working",
+      "nullOk": true,
+      "intent": "방문자가 이 서비스가 무엇인지 이해하고 시작 버튼을 찾을 수 있어야 한다",
+      "works": false,
+      "decision": "Needs Fix",
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 흐름이 지금은 작동하지 않아요. 필요한 데이터를 불러오지 못했어요.",
+      "runStatus": "done",
+      "score": "FALSE-NEGATIVE"
+    }
+  ]
+}
