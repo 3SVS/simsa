@@ -125,3 +125,11 @@ test("inspector runner keeps the forbidden-action + headless/viewport/timeout ra
   assert.match(runMjs, /width:\s*1280,\s*height:\s*800/, "viewport must be 1280x800");
   assert.match(serverMjs, /INSPECTION_TIMEOUT_MS\s*=\s*4\s*\*\s*60\s*\*\s*1000/, "wall-clock rail must be ~4 minutes");
 });
+
+test("inspector runner captures UNCAUGHT exceptions (pageerror), not just console.error", () => {
+  // 2026-07-17 eval F4: a load-time crash fires "pageerror" — without this
+  // listener consoleErrors stays empty and the D9 dead-button conjunction
+  // can never fire, so a crashed app reads as "확인 필요" instead of broken.
+  const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
+  assert.match(runMjs, /page\.on\("pageerror"/, "runner must listen for pageerror");
+});

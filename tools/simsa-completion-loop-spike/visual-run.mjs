@@ -70,6 +70,8 @@ export async function visualRun(config, outDir) {
   const consoleErrors = [];
   const networkFailures = [];
   page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text().slice(0, 300)));
+  // Parity with inspector-run.mjs: uncaught exceptions arrive via "pageerror".
+  page.on("pageerror", (err) => consoleErrors.push(`Uncaught ${String(err).slice(0, 300)}`));
   page.on("requestfailed", (r) => networkFailures.push(`${r.method()} ${r.url().slice(0, 200)} (${r.failure()?.errorText ?? "failed"})`));
   page.on("response", (r) => r.status() >= 500 && networkFailures.push(`HTTP ${r.status()} ${r.url().slice(0, 200)}`));
 
