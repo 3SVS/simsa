@@ -52,6 +52,12 @@ export default function ChecksPage() {
   // cards collapse so the report doesn't become a wall of green.
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
+  // Flow-audit B-6 (2026-07-17): same gate as the sidebar's GitHub tab (#328)
+  // — an idea-branch project with no repo has no code to check, so the whole
+  // "코드 확인 (GitHub)" section (with its /github links) stays hidden. It
+  // appears once a repo is actually connected (a PR review implies one).
+  const entryPath = loadExtendedProjectData(id)?.entryPath ?? null;
+
   // ── PR code check state ───────────────────────────────────────────────────
   const [linkedPulls, setLinkedPulls] = useState<LinkedPull[]>([]);
   const [prReviews, setPrReviews] = useState<Record<number, ReviewRun>>({});
@@ -303,6 +309,9 @@ export default function ChecksPage() {
       </section>
 
       {/* ─── Section 2: Pull request review ─── */}
+      {/* B-6: hidden on an idea-branch project until code actually exists —
+          mirrors the sidebar GitHub-tab gate (#328). */}
+      {(entryPath !== "idea" || latestPrReview != null || linkedPulls.length > 0) && (
       <section>
         <div className="mb-3">
           <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.checks.prTitle}</h2>
@@ -400,6 +409,7 @@ export default function ChecksPage() {
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

@@ -318,6 +318,9 @@ export type Dictionary = {
     gettingStartedTitle: string;
     gettingStartedIntro: string;
     gsStep1: string;
+    gsIdeaStep1: string;
+    gsIdeaStep2: string;
+    gsIdeaStep3: string;
     gsStep2: string;
     gsStep3: string;
   };
@@ -361,6 +364,7 @@ export type Dictionary = {
     saveNote: string;
     customInput: string;
     useRecommendation: string;
+    useAllRecommendations: string;
     extraContextLabel: string;
     extraContextPlaceholder: string;
     rejectQuestion: string;

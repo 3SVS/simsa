@@ -38,9 +38,11 @@ export function UnderstoodCard({
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t.np.mainFlow}</p>
         <ol className="space-y-1">
+          {/* Flow-audit B-5: the LLM often numbers the strings itself ("1. …") —
+              strip that leading number so it doesn't double with our own. */}
           {understood.mainFlow.map((f, i) => (
             <li key={i} className="flex gap-2 text-sm text-gray-700">
-              <span className="w-4 flex-shrink-0 font-mono text-gray-300">{i + 1}.</span>{f}
+              <span className="w-4 flex-shrink-0 font-mono text-gray-300">{i + 1}.</span>{f.replace(/^\s*\d+[.)]\s*/, "")}
             </li>
           ))}
         </ol>

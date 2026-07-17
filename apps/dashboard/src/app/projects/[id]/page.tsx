@@ -311,11 +311,24 @@ function CommandCenterCard({
           </Link>
         </p>
       )}
+      {/* Flow-audit B-1 (2026-07-17): the explainer must match the BRANCH — an
+          idea project's path is builder pack → build with a dev AI → paste the
+          live URL, never "connect a GitHub repo". */}
       {showExplainer && (
         <ol className="mt-3 space-y-1.5 border-t border-gray-100 pt-3 text-xs text-gray-500">
-          <li>1. {t.overview.gsStep1}</li>
-          <li>2. {t.overview.gsStep2}</li>
-          <li>3. {t.overview.gsStep3}</li>
+          {entryPath === "idea" ? (
+            <>
+              <li>1. {t.overview.gsIdeaStep1}</li>
+              <li>2. {t.overview.gsIdeaStep2}</li>
+              <li>3. {t.overview.gsIdeaStep3}</li>
+            </>
+          ) : (
+            <>
+              <li>1. {t.overview.gsStep1}</li>
+              <li>2. {t.overview.gsStep2}</li>
+              <li>3. {t.overview.gsStep3}</li>
+            </>
+          )}
         </ol>
       )}
     </div>
