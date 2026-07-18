@@ -73,6 +73,8 @@ const STEP_NOTES = {
     networkFailed: "데이터 요청 실패가 관찰됨",
     actionFailed: (err) => `동작 실패: ${err}`,
     noChange: "동작 후 화면에 아무 변화가 없음",
+    reloadCheck: "새로고침 후에도 입력한 내용이 남아 있는지 확인",
+    notPersisted: "새로고침하니 입력한 내용이 사라짐 — 화면만 바뀌고 실제 저장은 되지 않았을 가능성",
   },
   en: {
     unsafeSkipped: (cat) => `Skipped — not safe to run (${cat})`,
@@ -80,6 +82,8 @@ const STEP_NOTES = {
     networkFailed: "A data request was observed failing",
     actionFailed: (err) => `Action failed: ${err}`,
     noChange: "Nothing on the screen changed after the action",
+    reloadCheck: "Check the entered content survives a page reload",
+    notPersisted: "The entered content disappeared after a reload — the screen changed but nothing was actually saved",
   },
 };
 
@@ -140,6 +144,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // changed anything. null until an action ran and an observe measured it.
     visibleChangeAfterAction: null,
     consoleErrorCount: 0,
+    // G4-① (2026-07-18): 입력한 내용이 새로고침을 살아남는가. null = 비적용/미측정.
+    persistedAfterReload: null,
   };
 
   async function snap(name) {
@@ -225,6 +231,37 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       } catch (err) {
         await snap(shotName);
         stepOutcomes.push({ label: step.label, ok: false, note: N.actionFailed(String(err).slice(0, 100)) });
+      }
+    }
+
+    // G4-① (2026-07-18): 지속성 확인 — 내용을 "추가"한 플로우(입력한 텍스트가
+    // 화면에 나타남 + 액션 후 변화 관찰)에서만, 새로고침 후에도 그 텍스트가
+    // 남아 있는지 본다. 낙관적 UI만 있고 저장이 없는 앱(Potemkin의 마지막
+    // 형태)을 잡는 최종 시험. 전제가 하나라도 빠지면(검색 플로우, 라우트 이동,
+    // 마커 미노출) null 유지 — 측정 안 된 것은 절대 판정에 영향을 주지 않는다.
+    const typedStep = plan.find((s) => s.action === "type");
+    if (
+      typedStep &&
+      evidence.interacted &&
+      evidence.visibleChangeAfterAction === true &&
+      !evidence.routeChanged
+    ) {
+      try {
+        const bodyAfterAction = await bodyTextAt();
+        if (bodyAfterAction.includes(typedStep.value)) {
+          await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 });
+          await page.waitForTimeout(1800);
+          await snap(`step-${String(stepIdx + 1).padStart(2, "0")}-reload.png`);
+          const bodyReload = await bodyTextAt();
+          evidence.persistedAfterReload = bodyReload.includes(typedStep.value);
+          stepOutcomes.push({
+            label: N.reloadCheck,
+            ok: evidence.persistedAfterReload,
+            note: evidence.persistedAfterReload ? undefined : N.notPersisted,
+          });
+        }
+      } catch {
+        /* best-effort — 측정 실패는 null 유지 */
       }
     }
   } finally {

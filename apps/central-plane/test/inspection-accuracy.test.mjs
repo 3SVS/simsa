@@ -123,6 +123,39 @@ describe("decideFromEvidence — D9: dead-button crash is the CONJUNCTION, never
   });
 });
 
+describe("decideFromEvidence — G4-①: persistence is the FINAL Potemkin test", () => {
+  // 낙관적 유령(F6): 화면엔 추가된 것처럼 보이는데(visible change) 새로고침하면
+  // 사라진다 — 네트워크 실패도 콘솔 에러도 없어 기존 신호가 전부 침묵하는 변종.
+  it("visible change + NOT persisted after reload → Needs Fix", () => {
+    const d = decideFromEvidence(
+      { ...base, interacted: true, visibleChangeAfterAction: true, persistedAfterReload: false },
+      [{ ok: true }, { ok: true }, { ok: false }],
+    );
+    assert.equal(d, "Needs Fix");
+  });
+  it("persisted (localStorage app survives reload) → clean acceptance ask", () => {
+    const d = decideFromEvidence(
+      { ...base, interacted: true, visibleChangeAfterAction: true, persistedAfterReload: true },
+      [{ ok: true }],
+    );
+    assert.equal(d, "User Acceptance Required");
+  });
+  it("not measured (null — search flow / route change / no marker) never drives the verdict", () => {
+    const d = decideFromEvidence(
+      { ...base, interacted: true, visibleChangeAfterAction: true, persistedAfterReload: null },
+      [{ ok: true }],
+    );
+    assert.equal(d, "User Acceptance Required");
+  });
+  it("persisted=false WITHOUT a visible change is not this rung (nothing was 'added')", () => {
+    const d = decideFromEvidence(
+      { ...base, interacted: true, visibleChangeAfterAction: false, consoleErrorCount: 0, persistedAfterReload: false },
+      [{ ok: true }],
+    );
+    assert.notEqual(d, "Needs Fix");
+  });
+});
+
 describe("classifyFindings — noise is info, real failures are high, console is low", () => {
   const input = (over) => ({
     targetUrl: "https://myapp.vercel.app/", intentAnchor: "x", loadStatus: 200,
