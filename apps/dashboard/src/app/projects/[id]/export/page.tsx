@@ -275,6 +275,8 @@ export default function ExportPage() {
       }
 
       const res = await callExportBuilderPackApi({
+        // G7 계측: userKey 없인 export 이벤트가 anonymous로 묶여 퍼널에 안 잡힘.
+        userKey: getUserKey(),
         project: {
           title: project.name,
           productSpec,

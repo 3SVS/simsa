@@ -286,8 +286,10 @@ async function funnelStageCounts(db: D1Database, cutoff: string): Promise<Array<
     FUNNEL_STAGES.map(async (s) => {
       const r = await db
         .prepare(
+          // probe_% = 운영 프로브 키(라이브 실증 도구) — 실유저 퍼널에서 제외.
           `SELECT COUNT(DISTINCT user_key) AS n FROM workspace_usage_events
-            WHERE event_type = ? AND created_at >= ? AND user_key != 'anonymous'`,
+            WHERE event_type = ? AND created_at >= ?
+              AND user_key != 'anonymous' AND user_key NOT LIKE 'probe_%'`,
         )
         .bind(s.key, cutoff)
         .first<{ n: number }>();
@@ -305,6 +307,7 @@ async function returnedAfterPackCount(db: D1Database, cutoff: string): Promise<n
          FROM workspace_usage_events e
         WHERE e.event_type = 'workspace_builder_pack_exported'
           AND e.created_at >= ? AND e.user_key != 'anonymous'
+          AND e.user_key NOT LIKE 'probe_%'
           AND EXISTS (
             SELECT 1 FROM workspace_usage_events l
              WHERE l.user_key = e.user_key
@@ -424,7 +427,11 @@ export function createWorkspaceAdminStatsRoutes(): Hono<{ Bindings: Env }> {
         range,
         cutoff,
         ...computeFunnelSummary(stages, returned),
-        notes: ["distinct userKey 기준(anonymous 제외)", "시각 검수 실행은 v1 미포함(자체 테이블)"],
+        notes: [
+          "distinct userKey 기준(anonymous·probe_* 제외)",
+          "시각 검수 실행은 v1 미포함(자체 테이블)",
+          "2026-07-19 이전 생성/팩 이벤트는 userKey 미전송으로 anonymous에 묻혀 있음 — 이후부터 정확",
+        ],
       });
     } catch (err) {
       console.error("[admin/funnel] query failed:", err);
