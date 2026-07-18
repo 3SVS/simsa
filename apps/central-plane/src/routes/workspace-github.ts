@@ -50,6 +50,8 @@ import {
 } from "../workspace/pr-review-compare.js";
 import { fetchPRFiles } from "../workspace/github-pr.js";
 import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js";
+import { applyVerifyPanelWithContext } from "../workspace/verify-panel.js";
+import { buildDiffSummary } from "../workspace/github-pr.js";
 import { captureTrainingRecord, computeRecheckOutcome, updateTrainingRecordOutcome } from "../workspace/training-store.js";
 import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
@@ -972,6 +974,24 @@ export function createWorkspaceGitHubRoutes(
       const msg = err instanceof Error ? err.message : String(err);
       await updateReviewRun(c.env, run.id, { status: "error", errorMessage: `리뷰 실행 실패: ${msg}` });
       return json({ ok: false, error: "review_failed", details: msg }, 500, origin);
+    }
+
+    // G5 (2026-07-19): PR 리뷰의 failed 판정에도 RC-2 검증 패널 — 스펙 검수와
+    // 같은 계약(동의=dual_confirmed·불일치=확인 부족 강등+양관점·실패=single).
+    // 패널 오류는 원판정 유지(fail-open).
+    try {
+      reviewResult = await applyVerifyPanelWithContext(
+        reviewResult,
+        {
+          label: "PR changes",
+          text: `PR #${prFilesResult.meta.number}: ${prFilesResult.meta.title}\n+${prFilesResult.meta.additions} -${prFilesResult.meta.deletions} (${prFilesResult.meta.changedFiles} files)\n\n${buildDiffSummary(prFilesResult.files)}`,
+          judgeRule:
+            "supported=true ONLY if the PR changes clearly fail to implement the item or clearly contradict it.",
+        },
+        c.env,
+      );
+    } catch (err) {
+      console.error("[workspace/pr-review] verify-panel error (kept single):", err);
     }
 
     // 9. Determine final status + store

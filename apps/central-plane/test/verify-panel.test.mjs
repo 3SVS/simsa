@@ -126,6 +126,24 @@ describe("applyVerifyPanel — RC-2", () => {
     assert.equal(usage[0].call_site, "verify-panel");
   });
 
+  it("G5: context-generalized panel works on PR-review-shaped responses (usage field survives)", async () => {
+    const { applyVerifyPanelWithContext } = await import("../dist/workspace/verify-panel.js");
+    const prResp = {
+      ...resp([item("a", "failed")]),
+      usage: { tokens_consumed: 123, model_used: "m" },
+    };
+    const out = await applyVerifyPanelWithContext(
+      prResp,
+      { label: "PR changes", text: "diff --git a/x b/x", judgeRule: "supported=true ONLY if the PR clearly fails to implement the item." },
+      ENV,
+      { fetchImpl: stubFetch({ supported: false, note_ko: "diff에 구현이 보임" }) },
+    );
+    assert.equal(out.results[0].status, "inconclusive");
+    assert.equal(out.results[0].verification, "downgraded");
+    assert.match(out.results[0].reason, /diff에 구현이 보임/);
+    assert.deepEqual(out.usage, { tokens_consumed: 123, model_used: "m" });
+  });
+
   it("uses the CF AI Gateway URL when configured (Worker direct egress 403 trap)", async () => {
     const log = [];
     await applyVerifyPanel(
