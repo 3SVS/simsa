@@ -7,6 +7,7 @@
  */
 
 import { isExampleProject } from "./mock-data";
+import { readStoredLocale } from "@/i18n/dictionary.mjs";
 
 const CENTRAL_PLANE_URL =
   process.env.NEXT_PUBLIC_CENTRAL_PLANE_URL ??
@@ -149,6 +150,7 @@ export async function callCheckDraftApi(
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/check-draft`, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      // 서버 검수 프롬프트가 아직 KO-only — locale 전달은 G14-b(서버 EN화)와 함께.
       body: JSON.stringify({ ...input, locale: "ko" }),
       // council(협의체)은 다중 모델 2라운드라 기본 검수보다 오래 걸린다.
       signal: AbortSignal.timeout(input.reviewMode === "council" ? 90000 : 25000),
@@ -204,7 +206,8 @@ export async function callUnstickApi(input: {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/unstick`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, locale: "ko" }),
+      // G14: unstick은 서버 EN 지원 — UI 언어를 따른다.
+      body: JSON.stringify({ ...input, locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       signal: AbortSignal.timeout(30000),
     });
     if (resp.status === 429) {

@@ -11,6 +11,11 @@
 
 import type { IdeaToSpecDraftResponse } from "./workspace-types";
 import { getUserKey } from "./workflow-store";
+import { readStoredLocale } from "@/i18n/dictionary.mjs";
+
+/** G14: 서버가 EN을 지원하는 호출에 활성 UI 언어를 전달 (미설정=ko). */
+const activeLocale = () =>
+  readStoredLocale(typeof window !== "undefined" ? window.localStorage : null);
 import {
   generateUnderstanding,
   generateQuestions,
@@ -70,7 +75,8 @@ export async function callWorkspaceApi(
       body: JSON.stringify({
         idea: input.idea,
         answers: input.answers ?? [],
-        locale: "ko",
+        // G14: 생성 파이프라인은 서버 EN 지원 완비 — UI 언어를 따른다.
+        locale: activeLocale(),
         mode: "standard",
         // G7 계측: userKey 없이는 생성 이벤트가 전부 anonymous로 묶여 퍼널에서
         // 사라진다 (2026-07-19 첫 실측이 드러낸 구멍).
@@ -164,7 +170,8 @@ export async function recommendAnswer(
         targetUsers: input.targetUsers,
         projectId: input.projectId,
         userKey: input.userKey,
-        locale: "ko",
+        // G14: recommend는 서버 EN 지원(langLine) — UI 언어를 따른다.
+        locale: activeLocale(),
       }),
       signal: AbortSignal.timeout(30000),
     });
