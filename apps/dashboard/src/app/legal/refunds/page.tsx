@@ -22,10 +22,13 @@ export default function RefundsPage() {
       </ul>
 
       <h2>3. 환불 요청 방법</h2>
-      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
-        [게시 전 확인 필요] 결제 도입 시 환불 접수 창구(이메일/화면)와 처리 기한을 확정해 기재합니다.
-        문의: seunghunbae@3svs.com
-      </p>
+      <ul>
+        <li>접수: seunghunbae@3svs.com 으로 이메일 (결제 도입 시 화면 내 접수 창구를 추가 예정)</li>
+        <li>접수 후 영업일 기준 3일 이내에 회신합니다. 환불 처리 기한은 결제 수단별로 결제 도입 시 고지합니다.</li>
+      </ul>
+
+      <h2>4. 운영자</h2>
+      <p>오마이워크 (대표자: 배승훈) · 사업자등록번호 113-24-17841 · 통신판매업 신고 2020-경기부천-1455</p>
     </>
   );
 }
