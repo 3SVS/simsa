@@ -17,17 +17,26 @@
 import { Hono } from "hono";
 import type { Env } from "../env.js";
 import { createCheckoutSession } from "../lemonsqueezy.js";
+import { corsMiddleware } from "./cors.js";
 
-const KNOWN_PRODUCTS = ["first-pr-pass"] as const;
+// G6-1 (2026-07-19, Bae 확정 구조): Simsa 상품 3종 — 단건 협의체 $1/회(구 $3
+// 패스 대체), Solo $19/월, Pro $49/월. variant env가 비어 있는 동안은 각 상품이
+// 정직한 503으로 응답한다(결제 비활성 배선) — 활성화는 LS 상품 생성+env 설정만.
+const KNOWN_PRODUCTS = ["first-pr-pass", "council-single", "solo-monthly", "pro-monthly"] as const;
 type KnownProduct = (typeof KNOWN_PRODUCTS)[number];
 
 function variantIdFor(env: Env, product: KnownProduct): string | undefined {
   if (product === "first-pr-pass") return env.LEMONSQUEEZY_VARIANT_ID_FIRST_PR;
+  if (product === "council-single") return env.LEMONSQUEEZY_VARIANT_ID_COUNCIL_SINGLE;
+  if (product === "solo-monthly") return env.LEMONSQUEEZY_VARIANT_ID_SOLO;
+  if (product === "pro-monthly") return env.LEMONSQUEEZY_VARIANT_ID_PRO;
   return undefined;
 }
 
 export function createBillingRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
+  // G6-1: 대시보드(/pricing)가 브라우저에서 체크아웃을 호출한다 — 프리플라이트+CORS.
+  app.use("/billing/*", corsMiddleware);
 
   // GET /billing — minimal landing-on-Worker page. The landing
   // (apps/landing) also renders a richer billing page; this one is
@@ -61,7 +70,7 @@ export function createBillingRoutes(): Hono<{ Bindings: Env }> {
     const variantId = variantIdFor(c.env, product as KnownProduct);
     if (!variantId) {
       return c.json(
-        { error: "billing_not_configured", error_description: `LEMONSQUEEZY_VARIANT_ID_FIRST_PR not set.` },
+        { error: "billing_not_configured", error_description: `variant id for '${product}' not set.` },
         503,
       );
     }
