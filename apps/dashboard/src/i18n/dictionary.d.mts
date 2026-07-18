@@ -481,6 +481,9 @@ export type Dictionary = {
     verifiedCouncil: string;
     verifiedSplit: string;
     councilMeta: string;
+    compareRegressionTitle: string;
+    compareRegressionHint: string;
+    compareRecovered: string;
   };
   runStatus: { error: string; running: string; queued: string };
   stuckHelper: {

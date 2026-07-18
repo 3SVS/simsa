@@ -18,6 +18,7 @@ import {
   type CheckDraftResponse,
   type CheckResultItem,
 } from "@/lib/workspace-check-api";
+import { computeCheckComparison, type CheckComparison } from "@/lib/check-compare.mjs";
 import {
   getLatestPRReview,
   fetchLinkedPulls,
@@ -54,6 +55,8 @@ export default function ChecksPage() {
   const [reviewMode, setReviewMode] = useState<"panel" | "council">("panel");
   const [plan, setPlan] = useState<"free" | "paid">("free");
   const [planMsg, setPlanMsg] = useState<string | null>(null);
+  // G3: 직전 실행 대비 회귀/회복 — 재실행 직후에만 의미가 있는 휘발 상태.
+  const [comparison, setComparison] = useState<CheckComparison | null>(null);
   // Collapsible findings: actionable (non-passed) cards default open; passed
   // cards collapse so the report doesn't become a wall of green.
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
@@ -167,6 +170,10 @@ export default function ChecksPage() {
       return;
     }
     setPlanMsg(null);
+    // G3: 덮어쓰기 전에 직전 결과와 비교 — "지난번엔 통과였는데 이번에 깨짐"을
+    // 시스템이 말해준다. 직전 결과가 없으면(첫 실행) 비교 없음.
+    const prevResults = loadExtendedProjectData(id)?.checkResults?.results;
+    setComparison(prevResults && prevResults.length > 0 ? computeCheckComparison(prevResults, res.results) : null);
     setResults(res);
     setPhase("done");
     saveExtendedProjectData(id, { checkResults: res });
@@ -301,6 +308,27 @@ export default function ChecksPage() {
               .replace("{rounds}", String(results.council.rounds))
               .replace("{splits}", String(results.council.disagreements))}
           </p>
+        )}
+
+        {/* G3: 직전 실행 대비 — 회귀는 가장 아픈 신호라 판정 바로 아래 앰버로. */}
+        {comparison && comparison.regressions.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-5 py-4">
+            <p className="text-sm font-semibold text-amber-900 mb-2">{t.checks.compareRegressionTitle}</p>
+            <ul className="space-y-1.5">
+              {comparison.regressions.map((r) => (
+                <li key={r.itemId} className="flex items-center gap-2 text-sm text-amber-800">
+                  <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                  <StatusBadge status={r.to as ItemStatus} />
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-amber-700">{t.checks.compareRegressionHint}</p>
+          </div>
+        )}
+        {comparison && comparison.regressions.length === 0 && comparison.recovered.length > 0 && (
+          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            {t.checks.compareRecovered.replace("{n}", String(comparison.recovered.length))}
+          </div>
         )}
 
         {/* Next action — right under the verdict so "so what do I do" is
