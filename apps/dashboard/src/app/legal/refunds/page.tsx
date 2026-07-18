@@ -1,0 +1,31 @@
+/** G9 — 환불 정책 (KO 정본). 유료 도입 전 — 조건은 결제 라이브 시 확정 고지. */
+export const metadata = { title: "환불 정책 — Simsa" };
+
+export default function RefundsPage() {
+  return (
+    <>
+      <h1>Simsa 환불 정책</h1>
+      <p className="text-xs text-gray-400">시행일: 2026-07-19 (베타) · The Korean text is authoritative.</p>
+
+      <h2>1. 현재 상태 — 베타 무료</h2>
+      <p>
+        현재 서비스의 기본 기능은 무료로 제공되며, 결제가 발생하지 않으므로 환불 대상도 없습니다.
+      </p>
+
+      <h2>2. 유료 기능 도입 시 기준</h2>
+      <p>유료 기능(구독·크레딧)이 도입되면 다음 기준을 적용하며, 도입 시점에 구체 조건을 고지합니다.</p>
+      <ul>
+        <li><strong>사용하지 않은 결제</strong> — 결제 후 7일 이내이고 유료 기능(예: 협의체 검수)을 한 번도 사용하지 않았다면 전액 환불합니다.</li>
+        <li><strong>구독</strong> — 언제든 해지할 수 있으며, 해지 시 다음 결제부터 청구되지 않습니다. 이미 시작된 결제 주기의 일할 환불 여부는 도입 시 고지합니다.</li>
+        <li><strong>서비스 장애</strong> — 회사 측 장애로 유료 기능을 정상 이용하지 못한 경우, 해당 이용분을 환불하거나 보전합니다.</li>
+        <li><strong>디지털 서비스 특성</strong> — 이미 실행된 검수·생성 결과는 성격상 반환이 불가능하므로, 실행 완료된 이용분은 환불 대상에서 제외될 수 있습니다(전자상거래법 제17조 제2항의 범위 내).</li>
+      </ul>
+
+      <h2>3. 환불 요청 방법</h2>
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+        [게시 전 확인 필요] 결제 도입 시 환불 접수 창구(이메일/화면)와 처리 기한을 확정해 기재합니다.
+        문의: seunghunbae@3svs.com
+      </p>
+    </>
+  );
+}

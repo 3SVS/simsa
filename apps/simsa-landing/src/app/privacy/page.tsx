@@ -37,6 +37,9 @@ export default function Privacy() {
         <p className="status">
           Early access note. This page may be updated as Simsa evolves.
         </p>
+        <p className="status">
+          한국어 정본: <a href={`${APP_URL}/legal/privacy`}>개인정보처리방침</a>
+        </p>
 
         <h2>What you may share</h2>
         <ul>
