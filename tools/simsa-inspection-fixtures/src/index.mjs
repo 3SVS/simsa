@@ -116,6 +116,28 @@ const JS_CRASH = SHELL(
 // F5 — 200 OK, effectively empty body.
 const BLANK = `<!doctype html><html><head><meta charset="utf-8"><title></title></head><body></body></html>`;
 
+// F6 — OPTIMISTIC GHOST (G4-①, 2026-07-18): adds the item to the DOM on click
+// so everything LOOKS working (visible change, no network call, no console
+// error) — but stores nothing anywhere. Only the reload-persistence check can
+// tell this apart from F1. The classic "메모리에만 있는 앱".
+const OPTIMISTIC_GHOST = SHELL(
+  "오늘의 기록장 📔",
+  `<h1>📔 오늘의 기록장</h1>
+<p class="sub">오늘 있었던 일을 기록해보세요</p>
+<div class="row"><input id="m" placeholder="기록할 내용"><button id="add">추가</button></div>
+<ul id="list"><li>💬 (아직 기록이 없습니다)</li></ul>
+<script>
+  document.getElementById("add").addEventListener("click", () => {
+    const v = document.getElementById("m").value || "기록";
+    const li = document.createElement("li");
+    li.textContent = "📝 " + v;
+    document.getElementById("list").appendChild(li);
+    document.getElementById("m").value = "";
+    // 저장은 어디에도 하지 않는다 — 새로고침하면 전부 사라진다.
+  });
+</script>`,
+);
+
 const INDEX = SHELL(
   "Simsa inspection fixtures",
   `<h1>Simsa inspection fixtures</h1>
@@ -126,6 +148,7 @@ const INDEX = SHELL(
   <li><a href="/potemkin-crm">F3 /potemkin-crm — Potemkin</a></li>
   <li><a href="/js-crash">F4 /js-crash — JS 크래시</a></li>
   <li><a href="/blank">F5 /blank — 빈 페이지</a></li>
+  <li><a href="/optimistic-ghost">F6 /optimistic-ghost — 화면만 추가, 저장 없음</a></li>
 </ul>`,
 );
 
@@ -136,6 +159,7 @@ const ROUTES = {
   "/potemkin-crm": POTEMKIN_CRM,
   "/js-crash": JS_CRASH,
   "/blank": BLANK,
+  "/optimistic-ghost": OPTIMISTIC_GHOST,
 };
 
 export default {

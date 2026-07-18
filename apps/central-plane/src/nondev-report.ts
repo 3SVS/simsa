@@ -269,6 +269,10 @@ export interface DecisionEvidence {
   /** D9: console error count — NEVER a verdict driver alone (noise lesson);
    *  only its CONJUNCTION with a dead action is a crash signal. */
   consoleErrorCount?: number;
+  /** G4-① (2026-07-18): 입력으로 만든 내용이 새로고침 후에도 남았는가.
+   *  null/undefined = 측정 불가·비적용(판정 무영향). false = 낙관적 UI만 있고
+   *  저장이 없는 앱 — 측정된 false만 신호다. */
+  persistedAfterReload?: boolean | null;
 }
 
 /**
@@ -299,6 +303,11 @@ export function decideFromEvidence(
   // alone stays non-fatal (healthy sites are noisy — the vercel.com lesson), and
   // a no-change action alone stays "couldn't confirm" (subtle UIs exist).
   if (e.interacted && e.visibleChangeAfterAction === false && (e.consoleErrorCount ?? 0) > 0) return "Needs Fix";
+  // G4-① (2026-07-18): 화면은 바뀌었는데(항목이 추가된 것처럼 보였는데) 새로고침
+  // 후 입력한 내용이 사라졌다 — 낙관적 UI만 있고 저장이 없는 앱(Potemkin의 마지막
+  // 형태). 측정된 false만 신호: null/undefined(비적용·측정 실패)는 판정 무영향,
+  // localStorage 저장 앱은 새로고침을 살아남으므로 여기 걸리지 않는다.
+  if (e.interacted && e.visibleChangeAfterAction === true && e.persistedAfterReload === false) return "Needs Fix";
   if (steps.some((s) => !s.ok)) return e.interacted ? "User Acceptance Required" : "Needs Clarification";
   if (!e.primaryActionFound) return "Needs Clarification";
   if (e.interacted) return "User Acceptance Required";
