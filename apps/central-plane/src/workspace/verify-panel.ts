@@ -70,11 +70,23 @@ export type VerifyPanelOpts = {
 
 type SecondOpinion = { supported: boolean; noteKo: string };
 
-function opinionPrompt(spec: ProductSpecForCheck, item: CheckResultItem): string {
-  return `You are an INDEPENDENT second reviewer. A first reviewer marked a product-spec item as "failed" (conflicts with the spec's excluded scope or decided directions). Decide independently whether the evidence supports that verdict.
+/** G5: 컨텍스트 일반화 — 스펙 검수와 PR 리뷰가 같은 패널을 쓴다. */
+export type VerifyPanelContext = {
+  /** 프롬프트의 컨텍스트 블록 제목 (예: "Product spec", "PR changes"). */
+  label: string;
+  /** 판정 근거 텍스트 (스펙 JSON, diff 요약 등). 서버에서 길이 캡. */
+  text: string;
+  /** supported=true의 기준 문장 — 유해 판정을 확정할 조건을 명시. */
+  judgeRule: string;
+};
 
-[Product spec]
-${JSON.stringify(spec)}
+const CONTEXT_TEXT_CAP = 16_000;
+
+function opinionPrompt(ctx: VerifyPanelContext, item: CheckResultItem): string {
+  return `You are an INDEPENDENT second reviewer. A first reviewer marked an item as "failed". Decide independently whether the evidence supports that verdict.
+
+[${ctx.label}]
+${ctx.text.slice(0, CONTEXT_TEXT_CAP)}
 
 [Item]
 title: ${item.title}
@@ -82,10 +94,20 @@ first verdict: failed
 first reason: ${item.reason}
 first evidence: ${JSON.stringify(item.evidence)}
 
-Rule: supported=true ONLY if the item clearly conflicts with the spec's excluded scope or decided directions. If the conflict is unclear, arguable, or the evidence is weak, supported=false.
+Rule: ${ctx.judgeRule} If it is unclear, arguable, or the evidence is weak, supported=false.
 
 Answer with JSON only (no markdown):
 {"supported": true, "note_ko": "<판단 근거 한 문장, 한국어>"}`;
+}
+
+/** check-draft(스펙 검수)의 기존 컨텍스트 — 동작·문구 불변. */
+function specContext(spec: ProductSpecForCheck): VerifyPanelContext {
+  return {
+    label: "Product spec",
+    text: JSON.stringify(spec),
+    judgeRule:
+      "supported=true ONLY if the item clearly conflicts with the spec's excluded scope or decided directions.",
+  };
 }
 
 function parseOpinion(text: string): SecondOpinion | null {
@@ -195,6 +217,7 @@ async function secondOpinion(
 /**
  * failed 판정에 교차 확인을 적용하고 (필요시) 강등해 새 response를 만든다.
  * 어떤 실패에도 검수 자체를 깨지 않는다 (fail-open + 정직 표기).
+ * 스펙 검수용 래퍼 — 동작 불변. 컨텍스트 일반형은 아래 WithContext (G5).
  */
 export async function applyVerifyPanel(
   response: WorkspaceCheckDraftResponse,
@@ -202,6 +225,25 @@ export async function applyVerifyPanel(
   env: VerifyPanelEnv,
   opts: VerifyPanelOpts = {},
 ): Promise<WorkspaceCheckDraftResponse> {
+  return applyVerifyPanelWithContext(response, specContext(spec), env, opts);
+}
+
+/**
+ * G5 (2026-07-19): 컨텍스트 일반형 — PR 코드 리뷰 등 CheckResultItem 모양을
+ * 공유하는 모든 판정면에 같은 계약(동의=dual_confirmed·불일치=강등+양관점·
+ * 실패=single)을 적용한다.
+ */
+export async function applyVerifyPanelWithContext<
+  T extends {
+    results: CheckResultItem[];
+    summary: { passed: number; failed: number; inconclusive: number; needsDecision: number };
+  },
+>(
+  response: T,
+  ctx: VerifyPanelContext,
+  env: VerifyPanelEnv,
+  opts: VerifyPanelOpts = {},
+): Promise<T> {
   const maxChecks = opts.maxChecks ?? 5;
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const openaiModel = opts.openaiModel ?? "gpt-5.4";
@@ -221,7 +263,7 @@ export async function applyVerifyPanel(
       if (!item) return;
       const opinion = await secondOpinion(
         env,
-        opinionPrompt(spec, item),
+        opinionPrompt(ctx, item),
         { timeoutMs, openaiModel, anthropicModel },
         fetchImpl,
       );
