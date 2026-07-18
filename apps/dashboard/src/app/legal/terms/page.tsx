@@ -60,10 +60,13 @@ export default function TermsPage() {
       </ul>
 
       <h2>9. 운영자 정보</h2>
-      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
-        [게시 전 확인 필요] 상호·대표자·사업자등록번호·통신판매업 신고번호·주소는 운영사 확정 후
-        기재됩니다. 문의: seunghunbae@3svs.com
-      </p>
+      <ul>
+        <li>상호: 오마이워크 · 대표자: 배승훈</li>
+        <li>사업자등록번호: 113-24-17841</li>
+        <li>통신판매업 신고번호: 2020-경기부천-1455</li>
+        <li>주소: 경기도 부천시 부천로 365-1, 2층 일부</li>
+        <li>문의: seunghunbae@3svs.com</li>
+      </ul>
 
       <h2>10. 준거법</h2>
       <p>이 약관은 대한민국 법을 준거법으로 하며, 분쟁은 민사소송법상 관할 법원에 제기합니다.</p>

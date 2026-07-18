@@ -56,9 +56,10 @@ export default function PrivacyPage() {
       </ul>
 
       <h2>7. 개인정보 보호책임자</h2>
-      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
-        [게시 전 확인 필요] 보호책임자 성명·직책은 운영사 확정 후 기재됩니다. 문의: seunghunbae@3svs.com
-      </p>
+      <ul>
+        <li>개인정보 보호책임자: 배승훈 (대표이사, 오마이워크)</li>
+        <li>문의: seunghunbae@3svs.com</li>
+      </ul>
     </>
   );
 }
