@@ -1,0 +1,31 @@
+{
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "fixtures": "https://simsa-inspection-fixtures.seunghunbae.workers.dev",
+  "date": "2026-07-18",
+  "results": [
+    {
+      "id": "F1",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/working-todo",
+      "expected": "working",
+      "intent": "할 일을 입력하고 추가 버튼을 누르면 목록에 나타나야 한다",
+      "works": null,
+      "decision": "User Acceptance Required",
+      "verdict": "직접 눈으로 확인이 필요해요",
+      "oneLine": "아직 '작동한다'고 확정하기엔 확인이 더 필요해요.",
+      "runStatus": "done",
+      "score": "partial(null)"
+    },
+    {
+      "id": "F6",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/optimistic-ghost",
+      "expected": "broken",
+      "intent": "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다",
+      "works": false,
+      "decision": "Needs Fix",
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 흐름이 지금은 작동하지 않아요. '새로고침 후에도 입력한 내용이 남아 있는지 확인' 단계가 끝까지 되지 않았어요.",
+      "runStatus": "done",
+      "score": "correct"
+    }
+  ]
+}
