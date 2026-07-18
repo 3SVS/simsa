@@ -10,6 +10,7 @@
  */
 
 import type { IdeaToSpecDraftResponse } from "./workspace-types";
+import { getUserKey } from "./workflow-store";
 import {
   generateUnderstanding,
   generateQuestions,
@@ -71,6 +72,9 @@ export async function callWorkspaceApi(
         answers: input.answers ?? [],
         locale: "ko",
         mode: "standard",
+        // G7 계측: userKey 없이는 생성 이벤트가 전부 anonymous로 묶여 퍼널에서
+        // 사라진다 (2026-07-19 첫 실측이 드러낸 구멍).
+        userKey: getUserKey(),
         ...(input.context?.trim() ? { context: input.context.trim() } : {}),
         ...(input.rejectedQuestions?.length ? { rejectedQuestions: input.rejectedQuestions } : {}),
       }),
