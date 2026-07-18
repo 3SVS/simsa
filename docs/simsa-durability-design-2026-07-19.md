@@ -1,4 +1,4 @@
-# G8 데이터 내구성 설계 — localStorage 정본을 서버 정본으로 (승인 대기)
+# G8 데이터 내구성 설계 — localStorage 정본을 서버 정본으로 [LOCKED 2026-07-19]
 
 2026-07-19. 백로그 G8의 설계 잠금 문서. 프로덕션 데이터 이동이 걸려 있어 구현 전
 `design lock approved`를 받는다.
@@ -46,4 +46,5 @@
 ## 게이트 레지스트리
 | 일시 | 게이트 | 상태 |
 |---|---|---|
-| 2026-07-19 | 설계 작성 | 완료 — `design lock approved` 대기 |
+| 2026-07-19 | 설계 작성 | 완료 |
+| 2026-07-19 | 설계 잠금 | **Bae `design lock approved`** — DR-1·DR-2·DR-3·DR-5 LOCKED, DR-4 OPEN(결제 라이브 시 재검토). 구현 착수는 `train D-1 start approved` 별도 |
