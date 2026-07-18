@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/Toast";
 import { AppSidebar } from "@/components/AppSidebar";
 import { GlobalDropZone } from "@/components/GlobalDropZone";
 import { ImproveSimsaPrompt } from "@/components/ImproveSimsaPrompt";
+import { ClientErrorReporter } from "@/components/ClientErrorReporter";
 import { BackspaceNavGuard } from "@/components/BackspaceNavGuard";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { BRAND } from "@/lib/brand.mjs";
@@ -39,6 +40,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <GlobalDropZone />
             <BackspaceNavGuard />
             <ImproveSimsaPrompt />
+            {/* G12 — 전역 오류 수집 (fire-and-forget, 화면 영향 0) */}
+            <ClientErrorReporter />
             {/* App shell: slim left sidebar (like an AI-platform workspace) + spacious main */}
             <div className="flex min-h-screen">
               <AppSidebar />
