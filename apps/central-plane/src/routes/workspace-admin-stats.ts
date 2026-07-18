@@ -239,6 +239,84 @@ function computeDryRunBilling(
   };
 }
 
+// ─── G7 funnel (2026-07-19 backlog) ──────────────────────────────────────────
+
+/** 퍼널 단계 — 제품 루프 순서. key는 usage_events의 event_type. */
+const FUNNEL_STAGES = [
+  { key: "workspace_idea_to_spec_generated", label: "아이디어→설명서 생성" },
+  { key: "workspace_check_draft_run", label: "검수 실행" },
+  { key: "workspace_fix_suggestion_generated", label: "고쳐보기 생성" },
+  { key: "workspace_builder_pack_exported", label: "만들기 패키지 받음" },
+] as const;
+
+/**
+ * Pure: 단계별 distinct 유저 수 → 전환율(첫 단계 대비·직전 단계 대비).
+ * 퍼널은 "몇 %가 다음 단계에 도달했나"를 보는 도구 — 이벤트 총량이 아니라
+ * 유저 수 기준이고, 'anonymous' 집계 키는 한 명처럼 보여 왜곡하므로 호출측이
+ * 미리 제외한다.
+ */
+export function computeFunnelSummary(
+  stages: Array<{ key: string; label: string; users: number }>,
+  returnedUsers: number,
+): {
+  stages: Array<{ key: string; label: string; users: number; pctOfFirst: number | null; pctOfPrev: number | null }>;
+  returnedAfterPack: { users: number; pctOfPack: number | null };
+} {
+  const first = stages[0]?.users ?? 0;
+  const out = stages.map((s, i) => {
+    const prev = i === 0 ? null : stages[i - 1]!.users;
+    return {
+      ...s,
+      pctOfFirst: first > 0 ? Math.round((s.users / first) * 100) : null,
+      pctOfPrev: prev === null ? null : prev > 0 ? Math.round((s.users / prev) * 100) : null,
+    };
+  });
+  const pack = stages[stages.length - 1]?.users ?? 0;
+  return {
+    stages: out,
+    returnedAfterPack: {
+      users: returnedUsers,
+      pctOfPack: pack > 0 ? Math.round((returnedUsers / pack) * 100) : null,
+    },
+  };
+}
+
+async function funnelStageCounts(db: D1Database, cutoff: string): Promise<Array<{ key: string; label: string; users: number }>> {
+  const rows = await Promise.all(
+    FUNNEL_STAGES.map(async (s) => {
+      const r = await db
+        .prepare(
+          `SELECT COUNT(DISTINCT user_key) AS n FROM workspace_usage_events
+            WHERE event_type = ? AND created_at >= ? AND user_key != 'anonymous'`,
+        )
+        .bind(s.key, cutoff)
+        .first<{ n: number }>();
+      return { key: s.key, label: s.label, users: r?.n ?? 0 };
+    }),
+  );
+  return rows;
+}
+
+/** 팩 받은 뒤(그 export 이후) 다른 활동으로 돌아온 유저 수 — G1 복귀 루프의 핵심 지표. */
+async function returnedAfterPackCount(db: D1Database, cutoff: string): Promise<number> {
+  const r = await db
+    .prepare(
+      `SELECT COUNT(DISTINCT e.user_key) AS n
+         FROM workspace_usage_events e
+        WHERE e.event_type = 'workspace_builder_pack_exported'
+          AND e.created_at >= ? AND e.user_key != 'anonymous'
+          AND EXISTS (
+            SELECT 1 FROM workspace_usage_events l
+             WHERE l.user_key = e.user_key
+               AND l.event_type != 'workspace_builder_pack_exported'
+               AND l.created_at > e.created_at
+          )`,
+    )
+    .bind(cutoff)
+    .first<{ n: number }>();
+  return r?.n ?? 0;
+}
+
 // ─── Route factory ────────────────────────────────────────────────────────────
 
 export function createWorkspaceAdminStatsRoutes(): Hono<{ Bindings: Env }> {
@@ -313,6 +391,43 @@ export function createWorkspaceAdminStatsRoutes(): Hono<{ Bindings: Env }> {
       });
     } catch (err) {
       console.error("[admin/usage-stats] query failed:", err);
+      return c.json({ ok: false, error: "query_failed" }, 500);
+    }
+  });
+
+  /**
+   * GET /admin/funnel?range=24h|7d|30d — G7 (2026-07-19 backlog).
+   * 제품 루프 퍼널: 생성→검수→고쳐보기→팩→복귀. distinct 유저 기준
+   * (anonymous 집계 키 제외). 인증은 usage-stats와 동일(x-admin-key).
+   * 참고: 시각 검수 실행은 usage_events 밖(자체 테이블)이라 v1 미포함 —
+   * 수치가 '없다'가 아니라 '이 표에 안 잡힌다'는 뜻(정직 명시).
+   */
+  app.get("/admin/funnel", async (c) => {
+    if (!c.env.ADMIN_USAGE_STATS_KEY) {
+      return c.json({ ok: false, error: "disabled" }, 503);
+    }
+    if ((c.req.header("x-admin-key") ?? "") !== c.env.ADMIN_USAGE_STATS_KEY) {
+      return c.json({ ok: false, error: "unauthorized" }, 401);
+    }
+    const rawRange = c.req.query("range") ?? "7d";
+    const range: Range = (["24h", "7d", "30d"] as const).includes(rawRange as Range)
+      ? (rawRange as Range)
+      : "7d";
+    const cutoff = cutoffIso(range);
+    try {
+      const [stages, returned] = await Promise.all([
+        funnelStageCounts(c.env.DB, cutoff),
+        returnedAfterPackCount(c.env.DB, cutoff),
+      ]);
+      return c.json({
+        ok: true,
+        range,
+        cutoff,
+        ...computeFunnelSummary(stages, returned),
+        notes: ["distinct userKey 기준(anonymous 제외)", "시각 검수 실행은 v1 미포함(자체 테이블)"],
+      });
+    } catch (err) {
+      console.error("[admin/funnel] query failed:", err);
       return c.json({ ok: false, error: "query_failed" }, 500);
     }
   });
