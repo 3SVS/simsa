@@ -25,6 +25,7 @@ import {
 import { applyVerifyPanel } from "../workspace/verify-panel.js";
 import { runCouncilCheck } from "../workspace/council-review.js";
 import { resolvePlan } from "../plan.js";
+import { generateUnstickAdvice, type WorkspaceUnstickRequest } from "../workspace/unstick.js";
 import {
   generateFixSuggestion,
   type WorkspaceFixSuggestionRequest,
@@ -656,6 +657,68 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         ? String((body as Record<string, unknown>)["projectId"])
         : undefined,
       eventType: "workspace_recommend_answer_run",
+      metadata: { source: result.source },
+    });
+
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json", ...headers } });
+  });
+
+  // ── POST /workspace/unstick ──────────────────────────────────────────────────
+  // G2 막힘 도우미: 붙여넣은 에러/상황 → 쉬운 설명 + 다음 행동 1~3개.
+  // recommend-answer와 같은 계약: 게이트웨이 경유, 실패 시 정직한 503(날조 금지).
+  app.post("/workspace/unstick", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const headers = corsHeaders(origin);
+
+    const limitPerHour = parseInt(c.env.WORKSPACE_GENERATION_LIMIT_PER_HOUR ?? "", 10) || DEFAULT_LIMIT_PER_HOUR;
+    const rawIp = c.req.header("cf-connecting-ip") ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ?? "unknown";
+    const ipHash = await sha256Hex(`workspace-unstick::${rawIp}`);
+    const hourUtc = currentHourUtc();
+    const count = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
+    if (count >= limitPerHour) {
+      return new Response(JSON.stringify({ ok: false, error: "rate_limited", message: "잠시 후 다시 시도해주세요. 요청이 너무 많이 발생했어요.", retryAfterSeconds: secondsUntilNextHour() }), { status: 429, headers: { "content-type": "application/json", "retry-after": String(secondsUntilNextHour()), ...headers } });
+    }
+
+    let body: unknown;
+    try { body = await c.req.json(); } catch {
+      return new Response(JSON.stringify({ ok: false, error: "invalid_json" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+    const req = body as Partial<WorkspaceUnstickRequest>;
+    if (typeof req.problemText !== "string" || req.problemText.trim().length === 0) {
+      return new Response(JSON.stringify({ ok: false, error: "problemText_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    let result;
+    try {
+      result = await generateUnstickAdvice(
+        {
+          problemText: req.problemText,
+          productName: typeof req.productName === "string" ? req.productName : undefined,
+          buildTool: typeof req.buildTool === "string" ? req.buildTool.slice(0, 60) : undefined,
+          locale: req.locale ?? "ko",
+        },
+        c.env.ANTHROPIC_API_KEY,
+        c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+      );
+    } catch (err) {
+      console.error("[workspace/unstick] error:", err);
+      return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
+
+    if (result.ok === false) {
+      return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
+    }
+
+    await insertUsageEvent(c.env, {
+      userKey: typeof (body as Record<string, unknown>)["userKey"] === "string"
+        ? String((body as Record<string, unknown>)["userKey"])
+        : "anonymous",
+      projectId: typeof (body as Record<string, unknown>)["projectId"] === "string"
+        ? String((body as Record<string, unknown>)["projectId"])
+        : undefined,
+      eventType: "workspace_unstick_run",
       metadata: { source: result.source },
     });
 

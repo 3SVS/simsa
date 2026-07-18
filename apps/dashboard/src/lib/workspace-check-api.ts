@@ -182,6 +182,50 @@ export async function callCheckDraftApi(
   }
 }
 
+// ─── unstick (G2) ────────────────────────────────────────────────────────────
+
+export type UnstickResponse = {
+  ok: true;
+  source: "llm";
+  whatHappened: string;
+  nextSteps: string[];
+  askAgentMessage?: string;
+};
+
+/** G2 막힘 도우미 — 서버와 같은 정직 계약: 실패 시 날조 없이 오류로. */
+export async function callUnstickApi(input: {
+  problemText: string;
+  projectId?: string;
+  userKey?: string;
+  productName?: string;
+  buildTool?: string;
+}): Promise<UnstickResponse | ApiError> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/unstick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...input, locale: "ko" }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (resp.status === 429) {
+      let msg = "잠시 후 다시 시도해주세요. 요청이 많이 발생했어요.";
+      try {
+        const b = (await resp.json()) as { message?: string };
+        if (b.message) msg = b.message;
+      } catch { /* default */ }
+      return { ok: false, error: "rate_limited", message: msg };
+    }
+    if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
+    const data = (await resp.json()) as UnstickResponse;
+    if (!data.ok || typeof data.whatHappened !== "string" || !Array.isArray(data.nextSteps)) {
+      return { ok: false, error: "server", message: "bad_shape" };
+    }
+    return data;
+  } catch (err) {
+    return { ok: false, error: "network", message: String(err) };
+  }
+}
+
 // ─── plan (RC-4) ─────────────────────────────────────────────────────────────
 
 /** Resolve the user's plan for review-mode gating. Failure → "free" (UI keeps B locked). */

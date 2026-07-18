@@ -41,6 +41,7 @@ import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
+import { StuckHelper } from "@/components/StuckHelper";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
@@ -108,6 +109,15 @@ export default function ProjectOverviewPage() {
 
       {/* Stage 272 — inspection status at a glance + the single next action */}
       <VisualChecksOverviewCard projectId={id} t={t} locale={locale} />
+
+      {/* G2 — 막힘 도우미: 만들기 도중의 유일한 도움 입구 (복귀 이메일이 여기로 안내) */}
+      <div className="mb-8">
+        <StuckHelper
+          projectId={id}
+          productName={project.name}
+          buildTool={loadExtendedProjectData(id)?.builtWithTools?.[0]}
+        />
+      </div>
 
       <section className="mb-8">
         <div className="mb-2 flex items-center justify-between">
