@@ -483,6 +483,19 @@ export type Dictionary = {
     councilMeta: string;
   };
   runStatus: { error: string; running: string; queued: string };
+  stuckHelper: {
+    title: string;
+    desc: string;
+    placeholder: string;
+    submit: string;
+    loading: string;
+    failed: string;
+    whatHappened: string;
+    nextSteps: string;
+    askAgentTitle: string;
+    copy: string;
+    copied: string;
+  };
   credit: {
     disabledBeta: string;
     mayUse: string;
