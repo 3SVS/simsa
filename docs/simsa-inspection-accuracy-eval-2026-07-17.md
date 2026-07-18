@@ -136,3 +136,19 @@ simsa.dev로 리다이렉트되는 것 자체는 사이트 정리 대상(별건)
 콘솔 메시지는 low finding으로만 표기, verdict 비영향). 실제 앱 확장 최종: R1·R2·R3 전부
 false 아님.
 
+
+## E5 — G4-① 지속성 검사 (2026-07-18 추가)
+
+기존 신호(네트워크·콘솔·변화 관찰)가 전부 침묵하는 마지막 Potemkin 변종 —
+**낙관적 유령**(화면엔 추가되는데 아무 데도 저장 안 됨) — 을 잡기 위해 reload-지속성
+검사를 추가했다(#391). 전제 3중 접합(입력 텍스트가 화면에 노출 && 변화 관찰 &&
+라우트 유지)일 때만 새로고침 후 마커 잔존을 확인하고, 측정 안 된 null은 판정에
+절대 영향을 주지 않는다.
+
+| 타겟 | 정답 | 판정 | 채점 |
+|---|---|---|---|
+| F1 working-todo (localStorage 저장) | working | UAR·works=null | partial — **7/17 기준선과 동일(무회귀)** |
+| F6 optimistic-ghost (신규, 저장 없음) | broken | **Needs Fix·works=false** | correct — 사유에 "새로고침 후에도 … 확인" 단계 명시 |
+
+localStorage 앱은 새로고침을 살아남아 걸리지 않고(F1), 저장 없는 앱만 갈린다(F6).
+결과: `tools/simsa-inspection-fixtures/eval-results-2026-07-18-F1-F6.json`.

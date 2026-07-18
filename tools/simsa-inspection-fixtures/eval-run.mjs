@@ -31,6 +31,10 @@ const TARGETS = [
     intent: "원화 금액을 입력하고 계산하기를 누르면 달러 금액이 보여야 한다" },
   { id: "F5", url: `${FIXTURES}/blank`, expected: "broken",
     intent: "방문자가 이 서비스가 무엇인지 화면에서 알 수 있어야 한다" },
+  // G4-① (2026-07-18): 낙관적 유령 — 화면엔 추가되지만 아무 데도 저장 안 됨.
+  // 네트워크·콘솔 신호가 전부 침묵하는 변종; reload-지속성 검사만이 F1과 가른다.
+  { id: "F6", url: `${FIXTURES}/optimistic-ghost`, expected: "broken",
+    intent: "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
   { id: "R1", url: "https://app.trysimsa.com", expected: "working", nullOk: true,
     intent: "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다" },
   // 실제-타겟 확장 (2026-07-17, Bae "실유저 vibe 앱 재확인"): 빠르게 만들어
