@@ -37,6 +37,10 @@ export default function Terms() {
         <p className="status">
           Early access note. Simsa is evolving and these terms may be updated.
         </p>
+        <p className="status">
+          한국어 정본: <a href={`${APP_URL}/legal/terms`}>이용약관</a> ·{" "}
+          <a href={`${APP_URL}/legal/refunds`}>환불 정책</a>
+        </p>
 
         <h2>Use of Simsa</h2>
         <ul>

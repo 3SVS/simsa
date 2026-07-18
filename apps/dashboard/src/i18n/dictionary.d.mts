@@ -45,6 +45,9 @@ export type Dictionary = {
     groupDeliver: string;
     groupAdvanced: string;
     feedback: string;
+    legalTerms: string;
+    legalPrivacy: string;
+    legalRefunds: string;
     searchProjects: string;
     allProjects: string;
     noProjects: string;
