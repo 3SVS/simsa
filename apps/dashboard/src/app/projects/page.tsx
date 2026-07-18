@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { MOCK_PROJECTS, getProjectStats, type Project } from "@/lib/mock-data";
-import { loadLocalProjects, deleteProject, getUserKey } from "@/lib/workflow-store";
+import { loadLocalProjects, deleteProject, getUserKey, saveProject, saveExtendedProjectData } from "@/lib/workflow-store";
+import { buildSampleProject } from "@/lib/sample-project.mjs";
 import { deleteProjectFromDb } from "@/lib/workspace-check-api";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -14,7 +16,16 @@ import { StampMark } from "@/components/brand/StampMark";
 
 export default function ProjectsPage() {
   const { t } = useI18n();
+  const router = useRouter();
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
+
+  // G10: 입력·대기 없이 전체 루프가 채워진 예시를 로컬 생성 → 바로 개요로.
+  const startSample = () => {
+    const { project, ext } = buildSampleProject();
+    saveProject(project);
+    saveExtendedProjectData(project.id, ext);
+    router.push(`/projects/${project.id}`);
+  };
   // Guard the one-frame empty-state flash: localProjects starts [] and only
   // fills after this effect runs, so a returning user would briefly see the
   // "no projects yet" card before their projects hydrate in.
@@ -43,9 +54,15 @@ export default function ProjectsPage() {
           <StampMark size={40} className="mb-4 opacity-90" />
           <h2 className="text-base font-semibold text-gray-900">{t.projects.emptyTitle}</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">{t.projects.emptyBody}</p>
-          <Link href="/projects/new" className="btn btn-primary btn-md mt-5">
-            + {t.projects.newProject}
-          </Link>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/projects/new" className="btn btn-primary btn-md">
+              + {t.projects.newProject}
+            </Link>
+            <button type="button" onClick={startSample} className="btn btn-secondary btn-md">
+              {t.projects.trySample}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-gray-400">{t.projects.trySampleHint}</p>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -62,8 +79,16 @@ export default function ProjectsPage() {
 
       {MOCK_PROJECTS.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-sm font-semibold text-gray-700">{t.projects.examplesTitle}</h2>
-          <p className="mt-0.5 text-xs text-gray-500">{t.projects.examplesNote}</p>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700">{t.projects.examplesTitle}</h2>
+              <p className="mt-0.5 text-xs text-gray-500">{t.projects.examplesNote}</p>
+            </div>
+            {/* G10: 읽기전용 예시와 달리, 직접 만져볼 수 있는 내 복사본을 만든다 */}
+            <button type="button" onClick={startSample} className="btn btn-secondary btn-sm flex-shrink-0">
+              {t.projects.trySample}
+            </button>
+          </div>
           <div className="mt-3 grid gap-4">
             {MOCK_PROJECTS.map((project) => (
               <ProjectCard key={project.id} project={project} t={t} exampleBadge={t.projects.exampleBadge} />

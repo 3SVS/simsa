@@ -84,6 +84,16 @@ export default function ProjectOverviewPage() {
       <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{project.name}</h1>
       <p className="mb-6 mt-1 text-sm text-gray-500">{project.description}</p>
 
+      {/* G10: 체험용 예시 배너 — 자유롭게 만지게 하고, 출구(내 아이디어)를 명시 */}
+      {loadExtendedProjectData(id)?.isSample && (
+        <div className="callout mb-6 flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50 text-brand-800">
+          <span className="text-sm">{t.overview.sampleBanner}</span>
+          <Link href="/projects/new" className="btn btn-sm btn-primary flex-shrink-0">
+            {t.overview.sampleCta} →
+          </Link>
+        </div>
+      )}
+
       {/* STEP 4 — command center: ONE computed "지금 할 일" CTA that walks the
           user along the shortest path to the activation moment (first review
           result). The 3-step explainer folds inside it pre-activation, so the

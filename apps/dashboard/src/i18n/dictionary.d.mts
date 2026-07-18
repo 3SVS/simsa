@@ -154,6 +154,8 @@ export type Dictionary = {
     examplesTitle: string;
     examplesNote: string;
     exampleBadge: string;
+    trySample: string;
+    trySampleHint: string;
     deleteLabel: string;
     deleteAria: string;
     deleteModalTitle: string;
@@ -321,6 +323,8 @@ export type Dictionary = {
     gsIdeaStep1: string;
     gsIdeaStep2: string;
     gsIdeaStep3: string;
+    sampleBanner: string;
+    sampleCta: string;
     gsStep2: string;
     gsStep3: string;
   };
