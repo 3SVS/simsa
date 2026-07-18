@@ -417,8 +417,9 @@ export function AppSidebar() {
           </svg>
           {t.share.starGithub}
         </a>
-        {/* G9 — 법적 문서 링크 (약관·개인정보·환불) */}
+        {/* G9/G6 — 법적 문서 + 요금 링크 */}
         <div className="mb-1 flex flex-wrap gap-x-2 px-2.5 py-1 text-[11px] text-gray-400">
+          <Link href="/pricing" className="hover:text-gray-600 hover:underline">{t.pricing.seePricing}</Link>
           <Link href="/legal/terms" className="hover:text-gray-600 hover:underline">{t.nav.legalTerms}</Link>
           <Link href="/legal/privacy" className="hover:text-gray-600 hover:underline">{t.nav.legalPrivacy}</Link>
           <Link href="/legal/refunds" className="hover:text-gray-600 hover:underline">{t.nav.legalRefunds}</Link>

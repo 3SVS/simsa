@@ -260,6 +260,10 @@ export interface Env {
   LEMONSQUEEZY_WEBHOOK_SECRET?: string;
   LEMONSQUEEZY_STORE_ID?: string;
   LEMONSQUEEZY_VARIANT_ID_FIRST_PR?: string;
+  /** G6-1 (2026-07-19): Simsa 상품 variant — 비어 있으면 해당 상품은 정직한 503. */
+  LEMONSQUEEZY_VARIANT_ID_COUNCIL_SINGLE?: string;
+  LEMONSQUEEZY_VARIANT_ID_SOLO?: string;
+  LEMONSQUEEZY_VARIANT_ID_PRO?: string;
   /**
    * LS subscriptions — variant id → monthly workspace review credits.
    * JSON string like {"123456":30,"789012":100}. Parsed fail-safe by

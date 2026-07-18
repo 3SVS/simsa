@@ -313,7 +313,12 @@ export default function ChecksPage() {
             )}
           </button>
         </div>
-        {planMsg && <div className="callout mb-4 border-brand-200 bg-brand-50 text-brand-800">{planMsg}</div>}
+        {planMsg && (
+          <div className="callout mb-4 border-brand-200 bg-brand-50 text-brand-800">
+            {planMsg}{" "}
+            <Link href="/pricing" className="font-medium underline">{t.pricing.seePricing} →</Link>
+          </div>
+        )}
 
         {/* In-progress: Vercel deploy-dot pattern — a pulsing ● + a live counter,
             so system status is visible rather than a bare spinner (Nielsen H1). */}
