@@ -32,6 +32,7 @@ import { createBillingRoutes } from "./routes/billing.js";
 import { createLemonsqueezyWebhookRoutes } from "./routes/lemonsqueezy-webhook.js";
 import { createWorkspaceRoutes } from "./routes/workspace.js";
 import { createPlanRoutes } from "./plan.js";
+import { createClientErrorRoutes } from "./routes/client-errors.js";
 import { createWorkspaceGitHubRoutes } from "./routes/workspace-github.js";
 import { createWorkspaceNotificationRoutes } from "./routes/workspace-notifications.js";
 import { createWorkspaceTrainingConsentRoutes } from "./routes/workspace-training-consent.js";
@@ -149,6 +150,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceRoutes());
   // RC-4 — plan entitlement: GET /workspace/plan + admin plan-grants.
   app.route("/", createPlanRoutes());
+  // G12 — client error intake (dashboard 전역 핸들러의 fire-and-forget).
+  app.route("/", createClientErrorRoutes());
   // Stage 9 — Workspace GitHub OAuth + project-repo connections.
   app.route("/", createWorkspaceGitHubRoutes(fetchImpl));
   // Stage 17 — Telegram notification settings + history.
