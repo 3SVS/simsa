@@ -229,6 +229,57 @@ export async function callUnstickApi(input: {
   }
 }
 
+// ─── project ext sync (G8 D-1) ───────────────────────────────────────────────
+
+/**
+ * ExtendedProjectData 서버 정본 upsert — fire-and-forget용 (DR-2). 예시/체험
+ * 프로젝트는 미러 대상 아님(호출측 가드). 404 = 프로젝트가 아직 미러 전 —
+ * 실패가 아니라 "다음 저장에서 자연 재시도"이므로 ok:true로 삼키지 않고
+ * 구분해 돌려준다(호출측이 sync-failed 마킹을 건너뛰게).
+ */
+export async function saveExtToDb(
+  projectId: string,
+  userKey: string,
+  ext: unknown,
+): Promise<{ ok: true } | { ok: false; error: "not_mirrored" | "server" | "network" }> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/ext`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userKey, ext }),
+        signal: AbortSignal.timeout(10000),
+        keepalive: true,
+      },
+    );
+    if (resp.status === 404) return { ok: false, error: "not_mirrored" };
+    if (!resp.ok) return { ok: false, error: "server" };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+/** G8 D-2에서 복원 흐름이 사용 — 소유자만 조회. */
+export async function loadExtFromDb(
+  projectId: string,
+  userKey: string,
+): Promise<{ ok: true; ext: unknown; updatedAt: string } | { ok: false }> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/ext?userKey=${encodeURIComponent(userKey)}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
+    if (!resp.ok) return { ok: false };
+    const b = (await resp.json()) as { ok?: boolean; ext?: unknown; updatedAt?: string };
+    if (!b.ok || typeof b.ext !== "object" || b.ext === null) return { ok: false };
+    return { ok: true, ext: b.ext, updatedAt: b.updatedAt ?? "" };
+  } catch {
+    return { ok: false };
+  }
+}
+
 // ─── shares (G11) ────────────────────────────────────────────────────────────
 
 export type SharePayload = {

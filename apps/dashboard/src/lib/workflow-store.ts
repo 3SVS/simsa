@@ -275,6 +275,35 @@ export function saveExtendedProjectData(projectId: string, patch: Partial<Extend
   if (typeof window === "undefined") return;
   const existing = loadExtendedProjectData(projectId) ?? {};
   localStorage.setItem(EXT_KEY(projectId), JSON.stringify({ ...existing, ...patch }));
+  scheduleExtSync(projectId);
+}
+
+// ─── G8 D-1 (DR-2): 로컬 즉시 + 서버 best-effort 동기화 ─────────────────────
+// 저장은 위에서 이미 끝났다(로컬이 UI의 진실). 서버 upsert는 디바운스된
+// fire-and-forget — 404(아직 미러 전)는 다음 저장에서 자연 재시도, 그 외 실패만
+// sync-failed 마킹(기존 배너 재사용). 예시/체험 프로젝트는 서버 정본 대상 아님.
+const EXT_SYNC_DEBOUNCE_MS = 1500;
+const extSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleExtSync(projectId: string): void {
+  if (projectId.startsWith("sample_")) return;
+  const prev = extSyncTimers.get(projectId);
+  if (prev) clearTimeout(prev);
+  extSyncTimers.set(
+    projectId,
+    setTimeout(() => {
+      extSyncTimers.delete(projectId);
+      const ext = loadExtendedProjectData(projectId);
+      if (!ext) return;
+      // 동적 import — workflow-store(저장소)와 API 클라이언트의 정적 순환 방지.
+      void import("./workspace-check-api")
+        .then(({ saveExtToDb }) => saveExtToDb(projectId, getUserKey(), ext))
+        .then((res) => {
+          if (!res.ok && res.error !== "not_mirrored") markProjectSyncFailed(projectId);
+        })
+        .catch(() => markProjectSyncFailed(projectId));
+    }, EXT_SYNC_DEBOUNCE_MS),
+  );
 }
 
 export function loadExtendedProjectData(projectId: string): ExtendedProjectData | null {
