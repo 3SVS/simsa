@@ -226,6 +226,65 @@ export async function callUnstickApi(input: {
   }
 }
 
+// ─── shares (G11) ────────────────────────────────────────────────────────────
+
+export type SharePayload = {
+  title: string;
+  oneLine?: string;
+  problem?: string;
+  included?: string[];
+  excluded?: string[];
+  decisions?: string[];
+  openQuestions?: string[];
+  items?: Array<{ title: string; status: string; userLabel?: string; reason?: string; criteria?: string[] }>;
+  summary?: { passed: number; failed: number; inconclusive: number; needsDecision: number };
+  sharedAtLabel?: string;
+};
+
+/** G11: 공유 시점 스냅샷 생성 — 응답은 shareId(추측 불가). */
+export async function callCreateShareApi(input: {
+  userKey: string;
+  projectId?: string;
+  payload: SharePayload;
+}): Promise<{ ok: true; shareId: string } | ApiError> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/shares`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (resp.status === 429) {
+      let msg = "잠시 후 다시 시도해주세요.";
+      try { const b = (await resp.json()) as { message?: string }; if (b.message) msg = b.message; } catch { /* default */ }
+      return { ok: false, error: "rate_limited", message: msg };
+    }
+    if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
+    const b = (await resp.json()) as { ok?: boolean; shareId?: string };
+    if (!b.ok || typeof b.shareId !== "string") return { ok: false, error: "server", message: "bad_shape" };
+    return { ok: true, shareId: b.shareId };
+  } catch (err) {
+    return { ok: false, error: "network", message: String(err) };
+  }
+}
+
+/** G11: 공개 열람 — revoked/없음은 동일한 not_found. */
+export async function callGetShareApi(
+  shareId: string,
+): Promise<{ ok: true; payload: SharePayload; createdAt: string } | { ok: false }> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/shares/${encodeURIComponent(shareId)}`, {
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) return { ok: false };
+    const b = (await resp.json()) as { ok?: boolean; payload?: SharePayload; createdAt?: string };
+    if (!b.ok || !b.payload || typeof b.payload.title !== "string") return { ok: false };
+    return { ok: true, payload: b.payload, createdAt: b.createdAt ?? "" };
+  } catch {
+    return { ok: false };
+  }
+}
+
 // ─── plan (RC-4) ─────────────────────────────────────────────────────────────
 
 /** Resolve the user's plan for review-mode gating. Failure → "free" (UI keeps B locked). */

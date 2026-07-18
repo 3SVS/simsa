@@ -488,6 +488,23 @@ export type Dictionary = {
     compareRegressionTitle: string;
     compareRegressionHint: string;
     compareRecovered: string;
+    shareButton: string;
+    shareCreating: string;
+    shareCopied: string;
+    shareHint: string;
+  };
+  sharePage: {
+    eyebrow: string;
+    problem: string;
+    included: string;
+    excluded: string;
+    results: string;
+    summaryLine: string;
+    openQuestions: string;
+    snapshotNote: string;
+    missingTitle: string;
+    missingBody: string;
+    footer: string;
   };
   runStatus: { error: string; running: string; queued: string };
   stuckHelper: {

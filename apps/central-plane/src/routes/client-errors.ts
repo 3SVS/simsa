@@ -12,7 +12,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
-import { corsHeaders } from "./cors.js";
+import { corsHeaders, corsMiddleware } from "./cors.js";
 
 const LIMIT_PER_HOUR = 30;
 
@@ -41,6 +41,8 @@ export function sanitizeClientError(body: unknown): {
 
 export function createClientErrorRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
+  // 브라우저 신고는 JSON 프리플라이트를 동반 — 모듈 컨벤션대로 OPTIONS+CORS.
+  app.use("*", corsMiddleware);
 
   app.post("/workspace/client-errors", async (c) => {
     const headers = corsHeaders(c.req.header("origin") ?? null);

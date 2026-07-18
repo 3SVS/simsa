@@ -33,6 +33,7 @@ import { createLemonsqueezyWebhookRoutes } from "./routes/lemonsqueezy-webhook.j
 import { createWorkspaceRoutes } from "./routes/workspace.js";
 import { createPlanRoutes } from "./plan.js";
 import { createClientErrorRoutes } from "./routes/client-errors.js";
+import { createShareRoutes } from "./routes/shares.js";
 import { createWorkspaceGitHubRoutes } from "./routes/workspace-github.js";
 import { createWorkspaceNotificationRoutes } from "./routes/workspace-notifications.js";
 import { createWorkspaceTrainingConsentRoutes } from "./routes/workspace-training-consent.js";
@@ -152,6 +153,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createPlanRoutes());
   // G12 — client error intake (dashboard 전역 핸들러의 fire-and-forget).
   app.route("/", createClientErrorRoutes());
+  // G11 — read-only share links (스냅샷 모델, 추측 불가 id, 회수 가능).
+  app.route("/", createShareRoutes());
   // Stage 9 — Workspace GitHub OAuth + project-repo connections.
   app.route("/", createWorkspaceGitHubRoutes(fetchImpl));
   // Stage 17 — Telegram notification settings + history.

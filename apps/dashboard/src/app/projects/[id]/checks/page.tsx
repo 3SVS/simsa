@@ -19,6 +19,7 @@ import {
   type CheckResultItem,
 } from "@/lib/workspace-check-api";
 import { computeCheckComparison, type CheckComparison } from "@/lib/check-compare.mjs";
+import { callCreateShareApi } from "@/lib/workspace-check-api";
 import {
   getLatestPRReview,
   fetchLinkedPulls,
@@ -57,6 +58,49 @@ export default function ChecksPage() {
   const [planMsg, setPlanMsg] = useState<string | null>(null);
   // G3: 직전 실행 대비 회귀/회복 — 재실행 직후에만 의미가 있는 휘발 상태.
   const [comparison, setComparison] = useState<CheckComparison | null>(null);
+  // G11: 공유 링크 생성 상태.
+  const [sharePhase, setSharePhase] = useState<"idle" | "creating" | "copied" | "error">("idle");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  const createShareLink = useCallback(async () => {
+    if (!project || !results || sharePhase === "creating") return;
+    setSharePhase("creating");
+    const ext = loadExtendedProjectData(id);
+    const spec = ext?.productSpec;
+    const res = await callCreateShareApi({
+      userKey: getUserKey(),
+      projectId: id,
+      payload: {
+        title: spec?.productName || project.name,
+        oneLine: spec?.oneLine || project.description,
+        problem: spec?.problem,
+        included: spec?.included,
+        excluded: spec?.excluded,
+        openQuestions: spec?.openQuestions,
+        summary: results.summary,
+        items: results.results.map((r) => ({
+          title: r.title,
+          status: r.status,
+          userLabel: r.userLabel,
+          reason: r.reason,
+          criteria: ext?.itemCriteria?.[r.itemId] ?? [],
+        })),
+      },
+    });
+    if (!res.ok) {
+      setSharePhase("error");
+      setShareUrl(null);
+      return;
+    }
+    const url = `${window.location.origin}/s/${res.shareId}`;
+    setShareUrl(url);
+    try {
+      await navigator.clipboard.writeText(url);
+      setSharePhase("copied");
+    } catch {
+      setSharePhase("idle"); // 클립보드 불가 — URL 박스는 표시되므로 수동 복사 가능
+    }
+  }, [id, project, results, sharePhase]);
   // Collapsible findings: actionable (non-passed) cards default open; passed
   // cards collapse so the report doesn't become a wall of green.
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
@@ -221,11 +265,27 @@ export default function ChecksPage() {
             <p className="mt-0.5 text-xs text-gray-500">{t.checks.draftDesc}</p>
           </div>
           {phase === "done" && (
-            <button onClick={runCheck} className="btn btn-sm btn-secondary flex-shrink-0">
-              {t.checks.reRun}
-            </button>
+            <div className="flex flex-shrink-0 items-center gap-2">
+              {/* G11: 공유 시점 스냅샷 링크 — 받는 사람은 로그인 없이 읽기만 */}
+              {results && (
+                <button onClick={createShareLink} disabled={sharePhase === "creating"}
+                  className="btn btn-sm btn-secondary">
+                  {sharePhase === "creating" ? t.checks.shareCreating
+                    : sharePhase === "copied" ? t.checks.shareCopied
+                    : t.checks.shareButton}
+                </button>
+              )}
+              <button onClick={runCheck} className="btn btn-sm btn-secondary">
+                {t.checks.reRun}
+              </button>
+            </div>
           )}
         </div>
+        {shareUrl && (
+          <div className="mb-4 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-xs text-brand-800">
+            {t.checks.shareHint} <span className="select-all font-mono">{shareUrl}</span>
+          </div>
+        )}
 
         {/* RC-4: review-mode chooser — B(협의체) is visible to everyone but
             locked on free (existence drives upgrades; the server enforces). */}
