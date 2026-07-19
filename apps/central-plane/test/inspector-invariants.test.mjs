@@ -177,6 +177,15 @@ test("E-corpus-1 ec1-fix1: finally must never hold the report hostage", () => {
   );
 });
 
+test("E-corpus-2: runner grants deterministic geolocation so permission-gated apps show their real flow", () => {
+  // golf-now류: 권한 요청이 미해결이면 차단 화면에서 검수가 끝난다(C1 실측
+  // "무엇을 눌러 시작해야 할지 못 찾음"). 가짜 좌표 부여는 읽기전용 신호라
+  // 안전 레일과 무관 — 픽스처 F8(/geo-gated)이 판별쌍.
+  const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
+  assert.match(runMjs, /permissions:\s*\["geolocation"\]/, "context must grant geolocation");
+  assert.match(runMjs, /geolocation:\s*\{\s*latitude/, "context must set deterministic coords");
+});
+
 test("E-corpus-1 ec1-dbg2: phase trace travels IN-BAND on failure (tail can't see container stdout)", () => {
   // 2026-07-20 실측: `wrangler tail`은 Worker/DO 로그만 보여주고 컨테이너
   // stdout은 포함하지 않는다. 그래서 hang 진단은 in-band로 간다 — 러너가

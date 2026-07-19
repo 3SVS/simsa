@@ -183,6 +183,46 @@ const OPTIMISTIC_GHOST = SHELL(
 </script>`,
 );
 
+// F8 — GEO-GATED working app (E-corpus-2, 2026-07-20): the entire UI sits
+// behind a geolocation request, mimicking golf-now. Permission unresolved/
+// denied → full-screen blocker with NO usable CTA (the runner used to end at
+// "무엇을 눌러 시작해야 할지 못 찾음"). Permission granted (the runner now
+// injects deterministic Seoul coords) → a working localStorage flow appears.
+// Ground truth: working — the differentiator is whether the inspector gets
+// PAST the permission gate to the real flow.
+const GEO_GATED = SHELL(
+  "동네 산책 기록 🚶",
+  `<div id="blocker">
+  <h1>🚶 동네 산책 기록</h1>
+  <p class="sub">위치 권한을 허용해야 이용할 수 있어요. 브라우저의 위치 권한 요청을 확인해주세요.</p>
+</div>
+<div id="app" style="display:none">
+  <h1>🚶 동네 산책 기록</h1>
+  <p class="sub" id="here">현재 위치를 확인했어요</p>
+  <div class="row"><input id="w" placeholder="예: 한강공원 한 바퀴"><button id="add">추가</button></div>
+  <ul id="list"></ul>
+</div>
+<script>
+  const saved = JSON.parse(localStorage.getItem("walks") || "[]");
+  const list = document.getElementById("list");
+  const render = () => { list.innerHTML = saved.length ? saved.map(t => "<li>👟 " + t + "</li>").join("") : "<li>💬 (아직 기록이 없습니다)</li>"; };
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      document.getElementById("blocker").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      document.getElementById("here").textContent = "현재 위치 (" + pos.coords.latitude.toFixed(2) + ", " + pos.coords.longitude.toFixed(2) + ") 근처를 기록해요";
+      render();
+      document.getElementById("add").addEventListener("click", () => {
+        const v = document.getElementById("w").value.trim() || "산책";
+        saved.push(v); localStorage.setItem("walks", JSON.stringify(saved));
+        document.getElementById("w").value = ""; render();
+      });
+    },
+    () => { /* denied → blocker stays: no usable CTA anywhere */ },
+  );
+</script>`,
+);
+
 const INDEX = SHELL(
   "Simsa inspection fixtures",
   `<h1>Simsa inspection fixtures</h1>
@@ -195,6 +235,7 @@ const INDEX = SHELL(
   <li><a href="/blank">F5 /blank — 빈 페이지</a></li>
   <li><a href="/optimistic-ghost">F6 /optimistic-ghost — 화면만 추가, 저장 없음</a></li>
   <li><a href="/heavy-site">F7 /heavy-site — 무거운 랜딩(작동함, E-corpus-1)</a></li>
+  <li><a href="/geo-gated">F8 /geo-gated — 위치권한 게이트(작동함, E-corpus-2)</a></li>
 </ul>`,
 );
 
@@ -207,6 +248,7 @@ const ROUTES = {
   "/blank": BLANK,
   "/optimistic-ghost": OPTIMISTIC_GHOST,
   "/heavy-site": HEAVY_SITE,
+  "/geo-gated": GEO_GATED,
 };
 
 export default {
