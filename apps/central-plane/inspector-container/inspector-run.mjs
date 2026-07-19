@@ -168,9 +168,18 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   }
 
   try {
-    const resp = await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // E-corpus-1: goto도 남은 예산 안에서만 기다린다(무거운 사이트가 여기서
+    // 30s를 다 먹는 걸 막는다). 예산이 있으면 그 이하로 캡.
+    const gotoTimeout = deadline === Infinity ? 30000 : Math.max(8000, Math.min(30000, deadline - Date.now() - 5000));
+    const resp = await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: gotoTimeout });
     evidence.loadStatus = resp ? resp.status() : null;
     evidence.routeBeforeClick = page.url();
+    // E-corpus-1: 이후 모든 Playwright 작업(click/waitForLoadState/reload 등)이
+    // 남은 예산 안에서 timeout하도록 기본 타임아웃을 예산에 건다 — 개별 작업이
+    // hang해 hard 4분 레일(빈손 실패)까지 가는 걸 막는 핵심 안전장치.
+    if (deadline !== Infinity) {
+      page.setDefaultTimeout(Math.max(3000, Math.min(8000, deadline - Date.now())));
+    }
     await page.waitForTimeout(1800);
     await snap("step-00-initial.png");
 
@@ -186,6 +195,10 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       locale,
     });
     evidence.primaryActionFound = plan.some((s) => s.action === "click" || s.action === "type");
+
+    // E-corpus-1: goto+collect에서 이미 예산을 넘겼으면 구동 스텝을 아예 시작하지
+    // 않는다(첫 화면 관찰만으로 정직 판정 — 무거운 사이트는 여기서 끝난다).
+    if (overBudget()) evidence.timedOutPartial = true;
 
     // D7: success is measured as CHANGE from this baseline (body text or
     // route), never as an absolute page size — the old `bodyLen > 200` check
