@@ -151,7 +151,7 @@ async function runJob(payload) {
     // not exceed ~4 minutes. On timeout the run is reported failed; the
     // leaked browser (if any) dies with the container's sleepAfter.
     const result = await withTimeout(
-      runInspection({ targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS }),
+      runInspection({ targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId }),
       INSPECTION_TIMEOUT_MS,
       `inspection timed out after ${Math.round(INSPECTION_TIMEOUT_MS / 1000)}s`,
     );
