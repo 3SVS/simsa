@@ -26,6 +26,14 @@ import { planVisualFlow } from "./dist/visual-flow-plan.js";
 import { buildNonDevReport, buildAgentFixPrompt, isNoiseResource, decideFromEvidence } from "./dist/nondev-report.js";
 import { classifyActionSafety } from "./safety.mjs";
 
+/**
+ * E-corpus-1 live-debug rev marker. Bump on every runner change — the first
+ * log line of every run carries it, so a tail session can tell instantly
+ * whether the container rollout actually picked up the new image (the #412~
+ * #418 train could never rule out "old image still serving").
+ */
+export const RUNNER_REV = "ec1-dbg1";
+
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
   "payment", "pay", "checkout", "delete", "remove", "send", "invite",
@@ -98,8 +106,16 @@ const STEP_NOTES = {
  * sampleQuery has NO default here on purpose: planVisualFlow picks one from the
  * locale, and a default at this seam would silently win over it.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId }) {
   const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
+  // E-corpus-1 phase log: one line per runner phase, elapsed-stamped. The whole
+  // point is that in a `wrangler tail` session the LAST line printed before
+  // silence names the exact operation that hangs. PRIVACY: never log userKey/
+  // callbackToken (not even passed in here) — runId + target host + phase only.
+  const t0 = Date.now();
+  const tag = `[insp ${runId ?? "?"}]`;
+  const plog = (msg) => console.log(`${tag} +${((Date.now() - t0) / 1000).toFixed(1)}s ${msg}`);
+  plog(`runner-rev=${RUNNER_REV} budgetMs=${budgetMs ?? "none"} locale=${locale}`);
   // E-corpus-1 (2026-07-19): soft deadline. When we cross it we stop driving NEW
   // steps and fall through to observe + verdict with whatever evidence exists —
   // a partial-but-honest report beats an empty timeout on heavy sites.
@@ -110,6 +126,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   mkdirSync(shotsDir, { recursive: true });
   mkdirSync(videoDir, { recursive: true });
 
+  plog("launch:start");
   const browser = await chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
@@ -119,6 +136,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     recordVideo: { dir: videoDir, size: { width: 1280, height: 800 } },
   });
   const page = await context.newPage();
+  plog("launch:done");
 
   const consoleErrors = [];
   const networkFailures = []; // real: app domain + its backend (drives verdict)
@@ -165,11 +183,15 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   let killTimer = null;
   if (deadline !== Infinity) {
     killTimer = setTimeout(() => {
+      plog("killTimer:FIRED — browser.close() forcing");
       evidence.timedOutPartial = true;
       // context.close()는 graceful이라 무한 hang(무거운 사이트의 innerText/
       // $$eval 등)을 못 깬다 — browser.close()로 브라우저 프로세스를 강제
       // 종료해 진행 중 모든 작업을 즉시 터뜨린다(아래 catch로 빠짐).
-      browser.close().catch(() => {});
+      browser
+        .close()
+        .then(() => plog("killTimer:browser.close() resolved"))
+        .catch((err) => plog(`killTimer:browser.close() rejected: ${String(err?.message ?? err).slice(0, 120)}`));
     }, budgetMs);
   }
 
@@ -178,8 +200,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     try {
       await page.screenshot({ path: p, fullPage: false });
       evidenceFiles.push({ name: `screenshots/${name}`, path: p });
-    } catch {
-      /* ignore screenshot failures */
+    } catch (err) {
+      plog(`snap:${name} failed: ${String(err?.message ?? err).slice(0, 80)}`);
     }
   }
 
@@ -187,9 +209,11 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // E-corpus-1: goto도 남은 예산 안에서만 기다린다(무거운 사이트가 여기서
     // 30s를 다 먹는 걸 막는다). 예산이 있으면 그 이하로 캡.
     const gotoTimeout = deadline === Infinity ? 30000 : Math.max(8000, Math.min(30000, deadline - Date.now() - 5000));
+    plog(`goto:start timeout=${gotoTimeout}ms host=${safeLogHost(targetUrl)}`);
     const resp = await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: gotoTimeout });
     evidence.loadStatus = resp ? resp.status() : null;
     evidence.routeBeforeClick = page.url();
+    plog(`goto:done status=${evidence.loadStatus}`);
     // E-corpus-1: 이후 모든 Playwright 작업(click/waitForLoadState/reload 등)이
     // 남은 예산 안에서 timeout하도록 기본 타임아웃을 예산에 건다 — 개별 작업이
     // hang해 hard 4분 레일(빈손 실패)까지 가는 걸 막는 핵심 안전장치.
@@ -197,10 +221,15 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       page.setDefaultTimeout(Math.max(3000, Math.min(8000, deadline - Date.now())));
     }
     await page.waitForTimeout(1800);
+    plog("snap:initial start");
     await snap("step-00-initial.png");
 
+    plog("collect:ctas start");
     const ctas = await collectCtas(page);
+    plog(`collect:ctas done n=${ctas.length}`);
+    plog("collect:inputs start");
     const inputs = await collectInputs(page);
+    plog(`collect:inputs done n=${inputs.length}`);
 
     const plan = planVisualFlow({
       intentAnchor: intent,
@@ -214,13 +243,18 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
 
     // E-corpus-1: goto+collect에서 이미 예산을 넘겼으면 구동 스텝을 아예 시작하지
     // 않는다(첫 화면 관찰만으로 정직 판정 — 무거운 사이트는 여기서 끝난다).
-    if (overBudget()) evidence.timedOutPartial = true;
+    if (overBudget()) {
+      evidence.timedOutPartial = true;
+      plog("budget:exceeded before drive steps");
+    }
 
     // D7: success is measured as CHANGE from this baseline (body text or
     // route), never as an absolute page size — the old `bodyLen > 200` check
     // failed every small app card regardless of actual behavior.
     const bodyTextAt = async () => (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    plog(`plan:built steps=${plan.length} bodyBefore:start`);
     const bodyBefore = await bodyTextAt();
+    plog(`bodyBefore:done len=${bodyBefore.length}`);
     // D6: when the plan submits via a CLICK step, Enter after typing would
     // double-submit (or submit an incomplete form) — press Enter only when
     // typing is the plan's only driver.
@@ -237,6 +271,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       }
       stepIdx += 1;
       const shotName = `step-${String(stepIdx).padStart(2, "0")}.png`;
+      plog(`step:${stepIdx}/${plan.length} ${step.action} start`);
       try {
         if (step.action === "click") {
           const safety = classifyActionSafety(step.targetText);
@@ -266,7 +301,9 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
           await snap(shotName);
           // D7: judge by change, not size. An action that changed neither the
           // body text nor the route did nothing observable.
+          plog("observe:bodyNow start");
           const bodyNow = await bodyTextAt();
+          plog(`observe:bodyNow done len=${bodyNow.length}`);
           const visibleChange = bodyNow !== bodyBefore || evidence.routeChanged;
           if (evidence.interacted) evidence.visibleChangeAfterAction = visibleChange;
           const ok = networkFailures.length === 0 && (!evidence.interacted || visibleChange);
@@ -274,9 +311,11 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
           stepOutcomes.push({ label: step.label, ok, note });
         }
       } catch (err) {
+        plog(`step:${stepIdx} ${step.action} failed: ${String(err?.message ?? err).slice(0, 120)}`);
         await snap(shotName);
         stepOutcomes.push({ label: step.label, ok: false, note: N.actionFailed(String(err).slice(0, 100)) });
       }
+      plog(`step:${stepIdx}/${plan.length} ${step.action} done`);
     }
 
     // G4-① (2026-07-18): 지속성 확인 — 내용을 "추가"한 플로우(입력한 텍스트가
@@ -293,8 +332,10 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       !evidence.routeChanged
     ) {
       try {
+        plog("persist:check start");
         const bodyAfterAction = await bodyTextAt();
         if (bodyAfterAction.includes(typedStep.value)) {
+          plog("persist:reload start");
           await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 });
           await page.waitForTimeout(1800);
           await snap(`step-${String(stepIdx + 1).padStart(2, "0")}-reload.png`);
@@ -306,7 +347,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
             note: evidence.persistedAfterReload ? undefined : N.notPersisted,
           });
         }
-      } catch {
+      } catch (err) {
+        plog(`persist:check failed: ${String(err?.message ?? err).slice(0, 80)}`);
         /* best-effort — 측정 실패는 null 유지 */
       }
     }
@@ -320,6 +362,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     }
   } catch (err) {
     // #415: 여기서 절대 다시 던지지 않는다 — 지금까지의 evidence로 판정한다.
+    plog(`outer-catch: timedOutPartial=${evidence.timedOutPartial} err=${String(err?.message ?? err).slice(0, 120)}`);
     if (evidence.timedOutPartial) {
       // killTimer가 컨텍스트를 강제 종료한 경우 = 예산 초과 → 정직한 부분 리포트.
       if (!stepOutcomes.some((s) => s.label === N.partial)) {
@@ -332,24 +375,30 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     }
   } finally {
     if (killTimer) clearTimeout(killTimer);
+    plog("finally:context.close start");
     try { await context.close(); } catch { /* killTimer가 이미 닫았을 수 있음 */ }
+    plog("finally:browser.close start");
     try { await browser.close(); } catch { /* ignore */ }
+    plog("finally:closed");
   }
 
   // Save the recorded video next to the screenshots.
   try {
+    plog("video:path start");
     const vp = await page.video()?.path();
     if (vp && existsSync(vp)) {
       const dest = join(videoDir, "flow.webm");
       copyFileSync(vp, dest);
       evidenceFiles.push({ name: "video/flow.webm", path: dest });
     }
-  } catch {
-    /* video optional */
+    plog("video:done");
+  } catch (err) {
+    plog(`video:failed: ${String(err?.message ?? err).slice(0, 80)}`);
   }
 
   evidence.consoleErrorCount = consoleErrors.length;
   const decision = decideFromEvidence(evidence, stepOutcomes);
+  plog(`decision=${decision} timedOutPartial=${evidence.timedOutPartial}`);
   const reportInput = {
     targetUrl,
     intentAnchor: intent,
@@ -368,4 +417,13 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   const agentPrompt = buildAgentFixPrompt(reportInput, locale);
 
   return { report, agentPrompt, decision, works: report.works, evidenceFiles };
+}
+
+/** Host-only URL for log lines (never the full URL — query strings can carry tokens). */
+function safeLogHost(url) {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "invalid-url";
+  }
 }
