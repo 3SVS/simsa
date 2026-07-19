@@ -194,6 +194,15 @@ export async function markRepairJobDone(
     envCause?: boolean;
     mode?: RepairJobMode;
     changedFiles?: number;
+    /**
+     * auto_fix 정직성 (2026-07-20): WHY the container fell back to brief_only
+     * (e.g. "worker_returned_no_rewrites; oversize_skipped: index.html(389KB)").
+     * Stored in the existing `error` column on DONE rows — the dashboard only
+     * renders `error` on FAILED rows, so this is API-level diagnostics without
+     * a migration. Container stdout is unreachable (no tail), so this is the
+     * only place the fallback reason survives.
+     */
+    modeReason?: string;
   },
 ): Promise<void> {
   await env.DB.prepare(
@@ -205,6 +214,7 @@ export async function markRepairJobDone(
             env_cause = CASE WHEN ? = 1 THEN 1 ELSE env_cause END,
             mode = COALESCE(?, mode),
             changed_files = COALESCE(?, changed_files),
+            error = COALESCE(?, error),
             updated_at = ?
       WHERE id = ?`,
   )
@@ -217,6 +227,7 @@ export async function markRepairJobDone(
       typeof input.changedFiles === "number" && Number.isInteger(input.changedFiles) && input.changedFiles >= 0
         ? input.changedFiles
         : null,
+      typeof input.modeReason === "string" && input.modeReason ? input.modeReason.slice(0, 300) : null,
       new Date().toISOString(),
       id,
     )

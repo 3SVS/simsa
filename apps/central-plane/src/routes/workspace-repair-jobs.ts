@@ -410,6 +410,7 @@ export function createWorkspaceRepairJobRoutes(
           envCause?: boolean;
           mode?: string;
           changedFiles?: number;
+          modeReason?: string;
           error?: string;
         }
       | null;
@@ -439,6 +440,12 @@ export function createWorkspaceRepairJobRoutes(
       changedFiles:
         typeof body.changedFiles === "number" && Number.isInteger(body.changedFiles) && body.changedFiles >= 0
           ? body.changedFiles
+          : undefined,
+      // auto_fix 정직성 (2026-07-20): brief_only 폴백 사유(in-band 진단 —
+      // 컨테이너 stdout은 tail로 볼 수 없다). brief_only일 때만 저장.
+      modeReason:
+        body.mode === "brief_only" && typeof body.modeReason === "string" && body.modeReason
+          ? body.modeReason
           : undefined,
     });
     return c.json({ ok: true, status: "done" });

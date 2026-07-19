@@ -112,6 +112,34 @@ export function classifyCloneError(stderrText) {
 }
 
 /**
+ * auto_fix 정직성 (2026-07-20) — turn the attemptAutoFix diagnosis object into
+ * (a) `modeReason` for the repair-done callback (in-band observability: WHY
+ * did this fall back to brief_only — container stdout is unreachable) and
+ * (b) an optional honest note appended to the brief-only DRAFT PR body when
+ * code files were skipped for size (the single-big-index.html vibe-app class:
+ * apply-walmart 실측 — index.html 389KB > 200KB 상한 → 워커가 앱의 유일한
+ * 실코드를 본 적도 없는데 사용자에겐 그냥 "지시서 PR"로만 보였다).
+ *
+ * Pure. diag: { skippedOversize: [{path, bytes}], reason: string|null }.
+ */
+export function buildBriefOnlyDiagnosis(diag) {
+  const skipped = Array.isArray(diag?.skippedOversize) ? diag.skippedOversize : [];
+  const reason =
+    typeof diag?.reason === "string" && diag.reason ? diag.reason : "worker_no_applicable_fix";
+  const kb = (b) => `${Math.round(b / 1024)}KB`;
+  const list = skipped.map((s) => `${s.path}(${kb(s.bytes)})`).join(", ");
+  const modeReason = skipped.length ? `${reason}; oversize_skipped: ${list}` : reason;
+  const prNote = skipped.length
+    ? [
+        "> **자동수정을 시도하지 못한 파일이 있어요.**",
+        `> ${skipped.map((s) => `\`${s.path}\`(${kb(s.bytes)})`).join(", ")} — 자동수정 크기 한도(200KB)를 넘는 파일이라 워커가 열어보지 못했어요.`,
+        "> 이 지시서(`SIMSA-FIX-BRIEF.md`)를 쓰시는 코딩 에이전트에게 그대로 전달하면 고칠 수 있어요.",
+      ].join("\n")
+    : null;
+  return { modeReason, prNote };
+}
+
+/**
  * Stage 268 — strip a secret from a message before it travels anywhere
  * (callback body, logs). Pure; no-op when the secret is empty.
  */

@@ -26,6 +26,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
+  buildBriefOnlyDiagnosis,
   buildRepairPrContent,
   classifyCloneError,
   coerceResult,
@@ -485,9 +486,12 @@ async function runRepairJob(payload, anthropicApiKey) {
     // 3. Stage 270 — attempt the real fix. Any failure inside resets the
     //    tree and returns null → brief-only fallback below.
     let autoFix = null;
+    // auto_fix 정직성: attemptAutoFix가 왜 포기했는지의 out-param — brief_only
+    // 콜백의 modeReason과 draft PR 본문의 정직 노트가 여기서 나온다.
+    const diag = { skippedOversize: [], reason: null };
     if (anthropicApiKey) {
       try {
-        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey });
+        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, diag });
       } catch (err) {
         console.error(
           `[repair ${jobId}] auto-fix crashed (falling back to brief-only):`,
@@ -499,7 +503,19 @@ async function runRepairJob(payload, anthropicApiKey) {
     }
     const mode = autoFix ? "auto_fix" : "brief_only";
     const changedFiles = autoFix ? autoFix.changedFiles : [];
-    console.log(`[repair ${jobId}] mode=${mode} changedFiles=${changedFiles.length}`);
+    // brief_only 폴백의 사유 — 키 부재는 diag를 거치지 않으므로 직접 명명.
+    let modeReason = null;
+    let briefPrNote = null;
+    if (!autoFix) {
+      if (!anthropicApiKey) {
+        modeReason = "no_anthropic_key";
+      } else {
+        const d = buildBriefOnlyDiagnosis(diag);
+        modeReason = d.modeReason;
+        briefPrNote = d.prNote;
+      }
+    }
+    console.log(`[repair ${jobId}] mode=${mode} changedFiles=${changedFiles.length}${modeReason ? ` reason=${modeReason}` : ""}`);
 
     // 4. Commit. Both modes carry SIMSA-FIX-BRIEF.md (the repair's evidence
     //    + instructions); auto_fix additionally commits the worker's changes.
@@ -512,6 +528,10 @@ async function runRepairJob(payload, anthropicApiKey) {
       title = prContent.title;
       body = prContent.body;
       commitArgs = ["-m", prContent.commitMessage, "-m", prContent.commitBody];
+    } else if (briefPrNote) {
+      // 정직 노트: 크기 한도로 스킵된 핵심 파일이 있으면 draft PR 본문에 밝힌다
+      // (사용자는 왜 코드 수정이 아닌 지시서인지 알 권리가 있다).
+      body = `${body}\n\n${briefPrNote}`;
     }
     await fs.writeFile(path.join(workDir, briefContent.briefFileName), briefContent.briefContent, "utf8");
     await execFileP("git", ["-C", workDir, "config", "user.name", "simsa-repair[bot]"]);
@@ -549,6 +569,7 @@ async function runRepairJob(payload, anthropicApiKey) {
       envCause: envCause === true,
       mode,
       changedFiles: changedFiles.length,
+      ...(modeReason ? { modeReason } : {}),
       durationMs: Date.now() - start,
     });
   } catch (err) {
@@ -619,7 +640,7 @@ async function quickSyntaxCheck(workDir, changedFiles) {
  * worker produced nothing applicable — callers reset the tree + fall back
  * to brief-only. Never leaves a dirty tree on the null path.
  */
-async function attemptAutoFix({ workDir, payload, anthropicApiKey }) {
+async function attemptAutoFix({ workDir, payload, anthropicApiKey, diag = { skippedOversize: [], reason: null } }) {
   const jobId = payload.jobId;
   const deadline = Date.now() + AUTO_FIX_DEADLINE_MS;
 
@@ -633,6 +654,7 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey }) {
   });
   if (decision.mode !== "auto_fix") {
     console.log(`[repair ${jobId}] auto-fix skipped: ${decision.reason}`);
+    diag.reason = decision.reason;
     return null;
   }
 
@@ -645,6 +667,7 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey }) {
   const ranked = brief.rankSnapshotCandidates(parsed, repoFiles);
   if (ranked.length === 0) {
     console.log(`[repair ${jobId}] auto-fix skipped: no snapshot candidates in repo`);
+    diag.reason = "no_snapshot_candidates";
     return null;
   }
 
@@ -670,7 +693,14 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey }) {
     for (const rel of batch) {
       try {
         const stat = await fs.stat(path.join(workDir, rel));
-        if (stat.size > AUTO_FIX_MAX_SNAPSHOT_BYTES) continue;
+        if (stat.size > AUTO_FIX_MAX_SNAPSHOT_BYTES) {
+          // auto_fix 정직성: 크기 한도로 스킵된 파일을 기록한다 — 단일 대형
+          // index.html(vibe 툴 전형)에서 워커가 앱의 유일한 실코드를 본 적도
+          // 없이 brief_only가 되는 케이스(apply-walmart 389KB 실측)를 사용자와
+          // 운영자 모두에게 드러내기 위함.
+          diag.skippedOversize.push({ path: rel, bytes: stat.size });
+          continue;
+        }
         const contents = await fs.readFile(path.join(workDir, rel), "utf8");
         fileSnapshots.push({ path: rel, contents });
         originals[rel] = contents;
@@ -691,10 +721,12 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey }) {
       });
     } catch (err) {
       console.error(`[repair ${jobId}] worker call failed (iter ${iteration}):`, err?.message ?? err);
+      diag.reason = "worker_call_failed";
       continue;
     }
     if (!Array.isArray(outcome.rewrites) || outcome.rewrites.length === 0) {
       console.log(`[repair ${jobId}] worker returned no rewrites (iter ${iteration})`);
+      diag.reason = "worker_returned_no_rewrites";
       continue;
     }
 
@@ -705,7 +737,10 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey }) {
           rejected.map((r) => `${r.path}:${r.reason}`).join(", "),
       );
     }
-    if (accepted.length === 0) continue;
+    if (accepted.length === 0) {
+      diag.reason = "rewrites_rejected_by_sanitizer";
+      continue;
+    }
 
     for (const rw of accepted) {
       await fs.writeFile(path.join(workDir, rw.path), rw.content, "utf8");
@@ -719,12 +754,14 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey }) {
     const changedFiles = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
     if (changedFiles.length === 0) {
       console.log(`[repair ${jobId}] rewrites were no-ops (iter ${iteration})`);
+      diag.reason = "rewrites_were_noops";
       continue;
     }
 
     const verify = await quickSyntaxCheck(workDir, changedFiles);
     if (!verify.ok) {
       console.error(`[repair ${jobId}] syntax check failed on ${verify.file}: ${verify.detail}`);
+      diag.reason = "syntax_check_failed";
       await resetWorkTree(workDir);
       continue;
     }
