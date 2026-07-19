@@ -511,7 +511,9 @@ async function runRepairJob(payload, anthropicApiKey) {
         modeReason = "no_anthropic_key";
       } else {
         const d = buildBriefOnlyDiagnosis(diag);
-        modeReason = d.modeReason;
+        // diag.reason이 워커 에러 메시지를 담을 수 있다 — 콜백에 나가기 전
+        // 토큰을 반드시 걸러낸다(에러 문자열은 신뢰 경계 밖으로 취급).
+        modeReason = redactSecret(d.modeReason, githubToken);
         briefPrNote = d.prNote;
       }
     }
@@ -721,7 +723,10 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, diag = { skip
       });
     } catch (err) {
       console.error(`[repair ${jobId}] worker call failed (iter ${iteration}):`, err?.message ?? err);
-      diag.reason = "worker_call_failed";
+      // 실패 클래스만으론 진단이 안 된다(apply-walmart 실측 — 원인 불명의
+      // worker_call_failed). 메시지 앞부분을 싣는다; 토큰류는 runRepairJob이
+      // 콜백 직전에 redactSecret으로 걸러낸다.
+      diag.reason = `worker_call_failed: ${String(err?.message ?? err).slice(0, 100)}`;
       continue;
     }
     if (!Array.isArray(outcome.rewrites) || outcome.rewrites.length === 0) {
