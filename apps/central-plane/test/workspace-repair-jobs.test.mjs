@@ -70,8 +70,9 @@ function makeDb({ projects = new Map(), checks = [], repos = [], connections = [
               return { meta: { changes: row ? 1 : 0 } };
             }
             if (sql.includes("workspace_repair_jobs") && sql.includes("SET status = 'done'")) {
-              // Stage 270 — markRepairJobDone also binds mode + changed_files.
-              const [pr_url, pr_number, branch_name, env_flag, mode, changed_files, updated_at, id] = args;
+              // Stage 270 — markRepairJobDone binds mode + changed_files;
+              // 2026-07-20 — plus mode_reason (stored into error via COALESCE).
+              const [pr_url, pr_number, branch_name, env_flag, mode, changed_files, mode_reason, updated_at, id] = args;
               const row = jobs.find((r) => r.id === id);
               if (row) {
                 row.status = "done";
@@ -81,6 +82,7 @@ function makeDb({ projects = new Map(), checks = [], repos = [], connections = [
                 if (env_flag === 1) row.env_cause = 1;
                 row.mode = mode ?? row.mode ?? null;
                 row.changed_files = changed_files ?? row.changed_files ?? null;
+                row.error = mode_reason ?? row.error ?? null;
                 row.updated_at = updated_at;
               }
               return { meta: { changes: row ? 1 : 0 } };
@@ -755,6 +757,55 @@ test("Stage 270 repair-done: brief_only fallback persists mode with changedFiles
   assert.equal(r.status, 200);
   assert.equal(env.DB._jobs[0].mode, "brief_only");
   assert.equal(env.DB._jobs[0].changed_files, 0);
+});
+
+test("repair-done modeReason (2026-07-20): brief_only stores WHY in error; auto_fix drops it", async () => {
+  // in-band 진단: 컨테이너 stdout은 tail로 볼 수 없으므로 brief_only 폴백
+  // 사유가 살아남는 유일한 곳이 이 error 컬럼이다(done 행의 error는 대시보드
+  // 실패 카드에 렌더되지 않음 — API 전용 진단).
+  const env = makeEnv({ sandbox: makeSandbox({ names: [], calls: [] }) });
+  const created = await req(env, "POST", REPAIR_PATH, { userKey: USER });
+  const jobId = created.json.repair.id;
+
+  const reason = "worker_returned_no_rewrites; oversize_skipped: index.html(389KB)";
+  const r = await req(
+    env, "POST", "/internal/repair-done",
+    { jobId, ok: true, prUrl: "https://github.com/acme/golf-now/pull/41", prNumber: 41, mode: "brief_only", changedFiles: 0, modeReason: reason },
+    { authorization: `Bearer ${TOKEN}` },
+  );
+  assert.equal(r.status, 200);
+  assert.equal(env.DB._jobs[0].error, reason);
+
+  // auto_fix에서는 modeReason이 와도 버린다(성공엔 사유가 필요 없다).
+  const env2 = makeEnv({ sandbox: makeSandbox({ names: [], calls: [] }) });
+  const created2 = await req(env2, "POST", REPAIR_PATH, { userKey: USER });
+  const r2 = await req(
+    env2, "POST", "/internal/repair-done",
+    { jobId: created2.json.repair.id, ok: true, mode: "auto_fix", changedFiles: 1, modeReason: "should_be_dropped" },
+    { authorization: `Bearer ${TOKEN}` },
+  );
+  assert.equal(r2.status, 200);
+  assert.equal(env2.DB._jobs[0].error, null);
+});
+
+test("buildBriefOnlyDiagnosis (pure): oversize files surface in modeReason + honest PR note; plain reason passes through", async () => {
+  const { buildBriefOnlyDiagnosis } = await import("../container/coerce-result.mjs");
+  const withSkip = buildBriefOnlyDiagnosis({
+    skippedOversize: [{ path: "index.html", bytes: 398473 }],
+    reason: "worker_returned_no_rewrites",
+  });
+  assert.match(withSkip.modeReason, /^worker_returned_no_rewrites; oversize_skipped: index\.html\(389KB\)$/);
+  assert.match(withSkip.prNote, /자동수정을 시도하지 못한 파일/);
+  assert.match(withSkip.prNote, /index\.html/);
+  assert.match(withSkip.prNote, /SIMSA-FIX-BRIEF\.md/);
+
+  const plain = buildBriefOnlyDiagnosis({ skippedOversize: [], reason: "no_findings" });
+  assert.equal(plain.modeReason, "no_findings");
+  assert.equal(plain.prNote, null);
+
+  const empty = buildBriefOnlyDiagnosis({});
+  assert.equal(empty.modeReason, "worker_no_applicable_fix");
+  assert.equal(empty.prNote, null);
 });
 
 test("Stage 270 repair-done: invalid mode / negative or non-int changedFiles are dropped; legacy callback (no fields) stays null", async () => {
