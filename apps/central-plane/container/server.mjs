@@ -27,6 +27,7 @@ import path from "node:path";
 import os from "node:os";
 import {
   buildRepairPrContent,
+  classifyCloneError,
   coerceResult,
   extractHeaderEnv,
   redactSecret,
@@ -455,9 +456,22 @@ async function runRepairJob(payload, anthropicApiKey) {
 
   const workDir = await fs.mkdtemp(path.join(WORK_ROOT, `repair-${jobId}-`));
   try {
-    // 1. Shallow clone with the user's OAuth token.
+    // 1. Shallow clone with the resolved token (user OAuth, or the GitHub App
+    //    installation token the Worker minted for a private repo).
     const cloneUrl = `https://x-access-token:${githubToken}@github.com/${repo}.git`;
-    await execFileP("git", ["clone", "--depth", "1", cloneUrl, workDir], { timeout: 90_000 });
+    try {
+      await execFileP("git", ["clone", "--depth", "1", cloneUrl, workDir], { timeout: 90_000 });
+    } catch (cloneErr) {
+      const detail = String(cloneErr?.stderr ?? cloneErr?.message ?? cloneErr);
+      if (classifyCloneError(detail) === "access_denied") {
+        // Stable prefix — the dashboard renders the non-dev guidance card off
+        // this. Never echo git's stderr here (it embeds the clone URL + token).
+        throw new Error(
+          `repo_access_denied: ${repo} 저장소를 읽을 수 없어요 (비공개 저장소이거나 접근 권한이 없음)`,
+        );
+      }
+      throw cloneErr;
+    }
 
     // Base branch = whatever the clone checked out (the repo default).
     const baseBranch = (

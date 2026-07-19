@@ -48,6 +48,7 @@ import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import {
   canRepair,
   isRepairActive,
+  repairFailureKind,
   isEnvCause,
   repairErrorKey,
   REPAIR_POLL_INTERVAL_MS,
@@ -476,8 +477,21 @@ function RepairSection({
         </div>
       )}
 
+      {/* Failed: repo access denied — non-dev guidance (private repo / no
+          permission) with a path to the repo-connection screen instead of a
+          raw git error (auto_fix 성숙 2026-07-20). */}
+      {isFailed && repair && repairFailureKind(repair) === "repoAccessDenied" && (
+        <div className="callout callout-info mt-4">
+          <p className="text-sm font-medium">{s.failedRepoAccessTitle}</p>
+          <p className="mt-1 text-sm leading-relaxed">{s.failedRepoAccessBody}</p>
+          <Link href={`/projects/${projectId}/github`} className="btn btn-secondary btn-sm mt-2">
+            {s.goToRepo}
+          </Link>
+        </div>
+      )}
+
       {/* Failed — localized error card + collapsible developer details */}
-      {isFailed && repair && (
+      {isFailed && repair && repairFailureKind(repair) !== "repoAccessDenied" && (
         <div className="callout callout-error mt-4">
           <p className="text-sm font-medium">{s.failedTitle}</p>
           <p className="mt-1 text-sm leading-relaxed">{s.failedBody}</p>

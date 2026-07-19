@@ -26,3 +26,9 @@ export function isEnvCause(
 ): boolean;
 
 export function repairErrorKey(codeOrStatus: unknown): RepairErrorKey;
+
+export type RepairFailureKind = "repoAccessDenied" | "generic";
+
+export function repairFailureKind(
+  repair: { status?: unknown; error?: unknown } | null | undefined,
+): RepairFailureKind | null;

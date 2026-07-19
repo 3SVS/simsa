@@ -8,8 +8,39 @@ import {
   isEnvCause,
   nextRepairPollMs,
   repairErrorKey,
+  repairFailureKind,
 } from "../src/lib/repair-state.mjs";
 import { getDictionary } from "../src/i18n/dictionary.mjs";
+
+describe("repair-state: repairFailureKind (auto_fix 성숙 2026-07-20)", () => {
+  it("failed job with the container's repo_access_denied prefix → repoAccessDenied", () => {
+    assert.equal(
+      repairFailureKind({ status: "failed", error: "repo_access_denied: acme/x 저장소를 읽을 수 없어요 (비공개 저장소이거나 접근 권한이 없음)" }),
+      "repoAccessDenied",
+    );
+  });
+
+  it("failed job with any other error → generic; access text WITHOUT the prefix stays generic", () => {
+    assert.equal(repairFailureKind({ status: "failed", error: "callback returned 500" }), "generic");
+    assert.equal(repairFailureKind({ status: "failed", error: null }), "generic");
+    // 프리픽스 계약: 본문에 403이 있어도 프리픽스가 없으면 일반 실패 카드.
+    assert.equal(repairFailureKind({ status: "failed", error: "clone exited 403" }), "generic");
+  });
+
+  it("non-failed / absent jobs → null (card renders nothing)", () => {
+    assert.equal(repairFailureKind({ status: "done" }), null);
+    assert.equal(repairFailureKind({ status: "running", error: "repo_access_denied: x" }), null);
+    assert.equal(repairFailureKind(null), null);
+  });
+
+  it("dictionary carries the guidance copy in both locales", () => {
+    for (const locale of ["ko", "en"]) {
+      const d = getDictionary(locale).visualChecks.repair;
+      assert.equal(typeof d.failedRepoAccessTitle, "string");
+      assert.ok(d.failedRepoAccessBody.length > 20);
+    }
+  });
+});
 
 describe("repair-state: canRepair", () => {
   it("done + not working (false) and done + unverified (null) are repairable", () => {

@@ -162,6 +162,19 @@ test("buildRepairReview: ReviewResult-shaped input — verdict rework, one block
   assert.match(review.summary, /파일 경로가 없습니다/, "explains why blockers carry no file field");
 });
 
+test("buildRepairReview: diagnosis ladder for ambiguous UX findings (auto_fix 성숙 2026-07-20)", () => {
+  // 실측 격차(apply-walmart): '시작 버튼 못 찾음' 류 모호 판정에서 워커가 즉시
+  // 포기 → brief_only. 지시에 발견성/무변화 두 축의 코드-가설 사다리와
+  // '가설 확인 전 포기 금지 + 추측 수정 금지' 양쪽 레일이 모두 있어야 한다.
+  const parsed = parseRepairBrief(buildAgentFixPrompt(CHECK_INPUT));
+  const review = buildRepairReview(parsed, { repoFiles: ["src/app.js"] });
+  assert.match(review.summary, /진단 규칙/, "diagnosis rules present");
+  assert.match(review.summary, /못 찾음/, "discoverability branch present");
+  assert.match(review.summary, /변화 없음|저장 안 됨/, "no-change branch present");
+  assert.match(review.summary, /포기하지 마세요/, "no-early-give-up rail present");
+  assert.match(review.summary, /빈 rewrites 배열을 반환/, "no-guess rail preserved");
+});
+
 // ─── snapshot ranking + batching ──────────────────────────────────────────────
 
 test("rankSnapshotCandidates: evidence-token files rank first; vendor/lockfiles/secrets excluded", () => {

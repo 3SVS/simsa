@@ -38,9 +38,10 @@ import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { getProject } from "../workspace/db.js";
 import { getVisualCheckById, type DbVisualCheck } from "../workspace/visual-check-db.js";
-import { getProjectRepo, getGitHubConnectionByUserKey } from "../workspace/github-db.js";
+import { getProjectRepo } from "../workspace/github-db.js";
 import { listProjectSources } from "../workspace/project-sources-db.js";
-import { decryptToken } from "../crypto.js";
+import { resolveRepoAccessToken } from "../workspace/github-app-access.js";
+import type { FetchLike } from "../github.js";
 import {
   findActiveRepairJobForRun,
   getLatestRepairJobForRun,
@@ -192,7 +193,9 @@ export async function dispatchRepairJob(
   }
 }
 
-export function createWorkspaceRepairJobRoutes(): Hono<{ Bindings: Env }> {
+export function createWorkspaceRepairJobRoutes(
+  fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
+): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
   app.use("/workspace/*", corsMiddleware);
 
@@ -262,22 +265,30 @@ export function createWorkspaceRepairJobRoutes(): Hono<{ Bindings: Env }> {
       );
     }
 
-    // Resolve + decrypt the user's OAuth token (public_repo scope).
+    // Resolve the token that can actually SEE the repo. Public repos keep the
+    // exact pre-existing path (OAuth token, zero extra GitHub calls — the
+    // repoPrivate:false fast path). A private linked repo falls back to the
+    // GitHub App installation token when the App is installed there
+    // (github-app-access.ts) — before this, private repos always died in the
+    // container with a clone 403 (실측 2026-07-19, simsa-autofix-test).
     const tokenRequired = {
       ok: false,
       error: "github_token_required",
       message: "GitHub 계정 연결이 필요해요. 설정에서 GitHub을 다시 연결해 주세요.",
     };
-    const conn = await getGitHubConnectionByUserKey(c.env, userKey).catch(() => null);
-    if (!conn || !conn.accessTokenEnc || !c.env.CONCLAVE_TOKEN_KEK) {
+    const slash = repoFullName.indexOf("/");
+    const repoOwner = repoFullName.slice(0, slash);
+    const repoName = repoFullName.slice(slash + 1);
+    const access = await resolveRepoAccessToken(c.env, userKey, repoOwner, repoName, fetchImpl, {
+      // Only the linked-repo record knows privacy. A project_sources fallback
+      // repo keeps the exact pre-App behavior (OAuth direct, zero probes) —
+      // repoPrivate:false is the documented fast path for that.
+      repoPrivate: projectRepo ? projectRepo.private : false,
+    });
+    if (!access.ok) {
       return c.json(tokenRequired, 400);
     }
-    let githubToken: string;
-    try {
-      githubToken = await decryptToken(conn.accessTokenEnc, c.env.CONCLAVE_TOKEN_KEK);
-    } catch {
-      return c.json(tokenRequired, 400);
-    }
+    const githubToken = access.token;
 
     // One active repair per run.
     const active = await findActiveRepairJobForRun(c.env, runId);
