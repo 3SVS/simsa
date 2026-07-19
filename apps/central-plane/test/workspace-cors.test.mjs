@@ -85,3 +85,24 @@ test("Stage 91 CORS: admin route carries ACAO even on guard response when Origin
   const res = await req("/admin/credits", { origin: APP });
   assert.equal(res.headers.get("access-control-allow-origin"), APP);
 });
+
+// 2026-07-19 P0 regression: GitHub connect (oauth/start) returns
+// Response.redirect(), whose headers are IMMUTABLE. The global corsMiddleware
+// (now mounted on 15+ modules) tried to .set() CORS headers on it →
+// "Can't modify immutable headers" → the global onError turned it into a 500,
+// so every GitHub connection attempt died. The middleware must survive an
+// immutable response: preserve the redirect (302 + Location) AND add CORS.
+test("P0: oauth/start redirect through global CORS does not 500 (immutable headers)", async () => {
+  const env = makeEnv();
+  env.WORKSPACE_GH_CLIENT_ID = "Iv1.testclientid"; // non-REPLACE → passes the config gate
+  const res = await createApp().fetch(
+    new Request("http://x/workspace/github/oauth/start?userKey=uk_test&returnTo=https://app.trysimsa.com/", {
+      headers: { origin: APP },
+    }),
+    env,
+    CTX,
+  );
+  assert.notEqual(res.status, 500, "redirect must not 500 through the CORS middleware");
+  assert.equal(res.status, 302, "GitHub auth redirect preserved");
+  assert.ok(res.headers.get("location")?.includes("github.com"), "Location header survives the rebuild");
+});

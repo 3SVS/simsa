@@ -53,7 +53,18 @@ export const corsMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (c, ne
   }
   await next();
   const headers = corsHeaders(origin);
-  for (const [key, value] of Object.entries(headers)) {
-    c.res.headers.set(key, value);
+  try {
+    for (const [key, value] of Object.entries(headers)) {
+      c.res.headers.set(key, value);
+    }
+  } catch {
+    // `Response.redirect()` (OAuth start/callback/disconnect) returns a response
+    // whose headers are IMMUTABLE — set() throws "Can't modify immutable
+    // headers", which the global onError turned into a 500 for the whole
+    // GitHub-connect flow. Rebuild the response with a mutable Headers copy so
+    // the redirect (status + Location) survives and CORS still applies.
+    const merged = new Headers(c.res.headers);
+    for (const [key, value] of Object.entries(headers)) merged.set(key, value);
+    c.res = new Response(c.res.body, { status: c.res.status, statusText: c.res.statusText, headers: merged });
   }
 };
