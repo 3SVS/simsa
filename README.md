@@ -34,6 +34,20 @@ they meant — before real users see it.
 Simsa is in open beta. Star this repo to follow along, and try it at
 [simsa.dev](https://simsa.dev).
 
+## What actually runs the live product
+
+This monorepo contains two generations. **If you are evaluating the codebase,
+read this first** — line counts alone will mislead you.
+
+| | Path | Status |
+|---|---|---|
+| **Simsa (live product)** | `apps/central-plane` (Cloudflare Worker + D1 + R2 + inspector container), `apps/dashboard` (app.trysimsa.com), `apps/simsa-landing` (simsa.dev) | **Production.** Every user-facing flow runs here. |
+| Consensus review layer | `apps/central-plane/src/workspace/verify-panel.ts`, `council-review.ts` | **Production (2026-07).** Cross-vendor verification of harmful verdicts for everyone; a 3-vendor (Anthropic/OpenAI/Gemini) council as a paid option. Worker-native — written fresh, live-verified. |
+| Deterministic inspection | `apps/central-plane/inspector-container` + `src/nondev-report.ts`, `visual-flow-plan.ts` | **Production.** Evidence-based verdict ladder incl. reload-persistence ("Potemkin") checks. Accuracy is measured against fixtures with known ground truth (`docs/simsa-inspection-accuracy-eval-*.md`). |
+| **Conclave (origin, legacy)** | `packages/*` (council/Mastra graph, efficiency gate, self-evolve memory, federated sync), `packages/cli` | **EOL-declared legacy (2026-07-08 decision).** Does **not** power any Simsa user flow. Kept for reference; concepts were re-implemented Worker-native where they earned their way into the live product. |
+
+Rule of thumb: `apps/*` is the product, `packages/*` is history.
+
 ---
 
 **한국어** — Simsa(심사)는 **AI로 만든 소프트웨어를 검수하고 수락하는 레이어**입니다.
