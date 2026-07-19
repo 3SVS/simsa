@@ -166,7 +166,10 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   if (deadline !== Infinity) {
     killTimer = setTimeout(() => {
       evidence.timedOutPartial = true;
-      context.close().catch(() => {});
+      // context.close()는 graceful이라 무한 hang(무거운 사이트의 innerText/
+      // $$eval 등)을 못 깬다 — browser.close()로 브라우저 프로세스를 강제
+      // 종료해 진행 중 모든 작업을 즉시 터뜨린다(아래 catch로 빠짐).
+      browser.close().catch(() => {});
     }, budgetMs);
   }
 
