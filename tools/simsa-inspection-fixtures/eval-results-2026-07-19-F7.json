@@ -1,0 +1,20 @@
+{
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "fixtures": "https://simsa-inspection-fixtures.seunghunbae.workers.dev",
+  "date": "2026-07-19",
+  "results": [
+    {
+      "id": "F7",
+      "url": "https://simsa-inspection-fixtures.seunghunbae.workers.dev/heavy-site",
+      "expected": "working",
+      "nullOk": true,
+      "intent": "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다",
+      "works": null,
+      "decision": "Not Verified",
+      "verdict": null,
+      "oneLine": null,
+      "runStatus": "failed",
+      "score": "no-result"
+    }
+  ]
+}
