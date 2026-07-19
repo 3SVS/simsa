@@ -32,7 +32,7 @@ import { classifyActionSafety } from "./safety.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "ec1-dbg1";
+export const RUNNER_REV = "ec1-dbg2";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
@@ -106,15 +106,25 @@ const STEP_NOTES = {
  * sampleQuery has NO default here on purpose: planVisualFlow picks one from the
  * locale, and a default at this seam would silently win over it.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId, onPhase }) {
   const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
-  // E-corpus-1 phase log: one line per runner phase, elapsed-stamped. The whole
-  // point is that in a `wrangler tail` session the LAST line printed before
-  // silence names the exact operation that hangs. PRIVACY: never log userKey/
-  // callbackToken (not even passed in here) — runId + target host + phase only.
+  // E-corpus-1 phase log: one line per runner phase, elapsed-stamped, so the
+  // LAST entry before silence names the exact operation that hangs.
+  // ec1-dbg2: `wrangler tail`은 컨테이너 stdout을 포함하지 않는다(2026-07-20
+  // 실측) — 그래서 onPhase 콜백으로 위상을 server.mjs에 노출하고, server가
+  // hard-rail 실패 콜백의 error에 마지막 위상들을 실어 보낸다(in-band 진단).
+  // PRIVACY: never log userKey/callbackToken — runId + target host + phase only.
   const t0 = Date.now();
   const tag = `[insp ${runId ?? "?"}]`;
-  const plog = (msg) => console.log(`${tag} +${((Date.now() - t0) / 1000).toFixed(1)}s ${msg}`);
+  const plog = (msg) => {
+    const line = `+${((Date.now() - t0) / 1000).toFixed(1)}s ${msg}`;
+    console.log(`${tag} ${line}`);
+    try {
+      onPhase?.(line);
+    } catch {
+      /* diagnostics must never break the run */
+    }
+  };
   plog(`runner-rev=${RUNNER_REV} budgetMs=${budgetMs ?? "none"} locale=${locale}`);
   // E-corpus-1 (2026-07-19): soft deadline. When we cross it we stop driving NEW
   // steps and fall through to observe + verdict with whatever evidence exists —

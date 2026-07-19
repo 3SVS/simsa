@@ -150,11 +150,25 @@ async function runJob(payload) {
     // Wall-clock rail: Chromium hangs (infinite spinners, slow hosts) must
     // not exceed ~4 minutes. On timeout the run is reported failed; the
     // leaked browser (if any) dies with the container's sleepAfter.
+    //
+    // ec1-dbg2 in-band diagnostics: container stdout never reaches
+    // `wrangler tail` (measured 2026-07-20), so the runner's phase log is
+    // collected HERE and, when the run fails, shipped inside the error string
+    // → markVisualCheckFailed snapshots it into report_json → readable via
+    // the normal GET. The failed row itself now names the hang point.
+    const phases = [];
+    const onPhase = (line) => {
+      phases.push(line);
+      if (phases.length > 60) phases.splice(1, 1); // keep [0] = runner-rev marker
+    };
     const result = await withTimeout(
-      runInspection({ targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId }),
+      runInspection({ targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId, onPhase }),
       INSPECTION_TIMEOUT_MS,
       `inspection timed out after ${Math.round(INSPECTION_TIMEOUT_MS / 1000)}s`,
-    );
+    ).catch((err) => {
+      const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");
+      throw new Error(`${String(err?.message ?? err)} ||trace: ${trace}`.slice(0, 490));
+    });
 
     // 1) Upload evidence through the EXISTING Stage 261 endpoint (it
     //    validates names + sizes server-side). Failures are non-fatal —
