@@ -160,3 +160,16 @@ test("E-corpus-1: soft budget is passed to the runner and sits BELOW the hard ra
   assert.match(runMjs, /budgetMs/, "runner must accept budgetMs");
   assert.match(runMjs, /timedOutPartial/, "runner must mark partial runs");
 });
+
+test("E-corpus-1 ec1-dbg2: phase trace travels IN-BAND on failure (tail can't see container stdout)", () => {
+  // 2026-07-20 실측: `wrangler tail`은 Worker/DO 로그만 보여주고 컨테이너
+  // stdout은 포함하지 않는다. 그래서 hang 진단은 in-band로 간다 — 러너가
+  // onPhase로 위상을 노출하고, server.mjs가 hard-rail 실패의 error 문자열에
+  // `||trace:`로 마지막 위상들을 실어 보내면 markVisualCheckFailed가 그대로
+  // report_json에 스냅샷한다. 실패 행 자체가 hang 지점을 보고하는 계약.
+  const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
+  assert.match(runMjs, /onPhase/, "runner must expose the phase stream via onPhase");
+  assert.match(runMjs, /RUNNER_REV\s*=/, "runner must carry a rev marker (in-band rollout verification)");
+  assert.match(serverMjs, /onPhase/, "server must collect the runner's phase stream");
+  assert.match(serverMjs, /\|\|trace:/, "server must embed the phase trace in the failure error string");
+});
