@@ -134,6 +134,18 @@ test("inspector runner captures UNCAUGHT exceptions (pageerror), not just consol
   assert.match(runMjs, /page\.on\("pageerror"/, "runner must listen for pageerror");
 });
 
+test("E-corpus-1 #415: runner force-closes at budget and never re-throws (always partial report)", () => {
+  // 2026-07-19: gard-only 접근(#412/#414)이 무거운 사이트에서 실패 → 러너를
+  // "예산 도달 시 context 강제 종료 + catch에서 지금까지 evidence로 판정" 구조로
+  // 재작성. killTimer가 context.close()로 진행 중 작업을 터뜨리고, catch가 그
+  // throw를 삼켜 부분 리포트를 반환한다. 이 세 요소가 모두 있어야 빈손 타임아웃이
+  // 구조적으로 불가능해진다.
+  const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
+  assert.match(runMjs, /killTimer\s*=\s*setTimeout/, "runner must arm a budget kill-timer");
+  assert.match(runMjs, /context\.close\(\)\.catch/, "kill-timer must force-close the context");
+  assert.match(runMjs, /\}\s*catch\s*\(err\)\s*\{[\s\S]*timedOutPartial[\s\S]*\}\s*finally/, "the main try must catch (not re-throw) and finalize");
+});
+
 test("E-corpus-1: soft budget is passed to the runner and sits BELOW the hard rail", () => {
   // 2026-07-19 corpus eval: heavy marketing sites hit the 4-min rail and
   // returned an EMPTY timeout failure. The soft budget must be strictly less

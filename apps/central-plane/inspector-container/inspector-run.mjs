@@ -157,6 +157,19 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     timedOutPartial: false,
   };
 
+  // E-corpus-1 재작성 (2026-07-19, #415): 예산에 도달하면 컨텍스트를 강제 종료해
+  // 진행 중이던 Playwright 작업을 "Target closed"로 터뜨린다 → 아래 catch가 지금까지
+  // 모은 evidence로 무조건 판정을 만들어 반환한다. 개별 작업(innerText/$$eval/
+  // screenshot/waitForTimeout)이 예산 가드를 우회해도(무거운 사이트) server.mjs의
+  // hard 4분 레일에 닿기 전에 부분 리포트가 반드시 나온다 — 빈손 타임아웃 제거의 핵심.
+  let killTimer = null;
+  if (deadline !== Infinity) {
+    killTimer = setTimeout(() => {
+      evidence.timedOutPartial = true;
+      context.close().catch(() => {});
+    }, budgetMs);
+  }
+
   async function snap(name) {
     const p = join(shotsDir, name);
     try {
@@ -302,9 +315,22 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     if (evidence.timedOutPartial) {
       stepOutcomes.push({ label: N.partial, ok: false, note: N.partial });
     }
+  } catch (err) {
+    // #415: 여기서 절대 다시 던지지 않는다 — 지금까지의 evidence로 판정한다.
+    if (evidence.timedOutPartial) {
+      // killTimer가 컨텍스트를 강제 종료한 경우 = 예산 초과 → 정직한 부분 리포트.
+      if (!stepOutcomes.some((s) => s.label === N.partial)) {
+        stepOutcomes.push({ label: N.partial, ok: false, note: N.partial });
+      }
+    } else {
+      // 예산과 무관한 조기 실패(로드 자체 실패 등) — evidence(networkFailures/
+      // loadStatus)가 이미 사실을 담고 있으니 판정 사다리에 맡긴다.
+      stepOutcomes.push({ label: N.actionFailed(String(err?.message ?? err).slice(0, 100)), ok: false });
+    }
   } finally {
-    await context.close(); // finalizes the video
-    await browser.close();
+    if (killTimer) clearTimeout(killTimer);
+    try { await context.close(); } catch { /* killTimer가 이미 닫았을 수 있음 */ }
+    try { await browser.close(); } catch { /* ignore */ }
   }
 
   // Save the recorded video next to the screenshots.
