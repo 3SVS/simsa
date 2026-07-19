@@ -229,6 +229,43 @@ export async function callUnstickApi(input: {
   }
 }
 
+// ─── project list/detail (G8 D-2 restore) ────────────────────────────────────
+
+export type RemoteProjectSummary = { id: string; title: string; idea: string; createdAt: string; updatedAt: string };
+
+/** 소유 프로젝트 서버 목록 — 복원 차집합 계산용. 실패 시 빈 목록(복원 카드만 안 뜸). */
+export async function listProjectsFromDb(userKey: string): Promise<RemoteProjectSummary[]> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/projects?userKey=${encodeURIComponent(userKey)}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return [];
+    const b = (await resp.json()) as { ok?: boolean; projects?: RemoteProjectSummary[] };
+    return b.ok && Array.isArray(b.projects) ? b.projects : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 단건 전체 페이로드 — 복원 실행용 (owned 게이트). */
+export async function loadProjectFromDb(
+  id: string,
+  userKey: string,
+): Promise<{ ok: true; project: { id: string; title?: string; idea?: string; productSpec?: unknown; items?: unknown[]; createdAt?: string } } | { ok: false }> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(id)}?userKey=${encodeURIComponent(userKey)}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
+    if (!resp.ok) return { ok: false };
+    const b = (await resp.json()) as { ok?: boolean; project?: { id: string } };
+    if (!b.ok || !b.project || typeof b.project.id !== "string") return { ok: false };
+    return { ok: true, project: b.project };
+  } catch {
+    return { ok: false };
+  }
+}
+
 // ─── project ext sync (G8 D-1) ───────────────────────────────────────────────
 
 /**
