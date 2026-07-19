@@ -32,7 +32,7 @@ import { classifyActionSafety } from "./safety.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "ec1-fix1";
+export const RUNNER_REV = "ec2-fix1";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
@@ -144,6 +144,12 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     recordVideo: { dir: videoDir, size: { width: 1280, height: 800 } },
+    // E-corpus-2 (2026-07-20): 위치권한 게이트 앱(golf-now류)은 권한 요청이
+    // 미해결로 남으면 차단 화면에 갇혀 검수가 "무엇을 눌러야 할지 못 찾음"에서
+    // 끝난다. 결정론 가짜 좌표(서울시청)를 부여해 권한 뒤의 실제 플로우를
+    // 관찰한다. 위치는 읽기전용 신호 — forbidden-action 안전 레일과 무관.
+    permissions: ["geolocation"],
+    geolocation: { latitude: 37.5665, longitude: 126.978 },
   });
   const page = await context.newPage();
   plog("launch:done");

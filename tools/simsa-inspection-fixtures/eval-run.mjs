@@ -39,6 +39,11 @@ const TARGETS = [
   // 러너가 hard 레일에 걸려 빈손 실패하던 클래스. 부분 리포트로 not-false여야.
   { id: "F7", url: `${FIXTURES}/heavy-site`, expected: "working", nullOk: true,
     intent: "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
+  // E-corpus-2 (2026-07-20): 위치권한 게이트 뒤에 작동 앱 — 러너가 결정론
+  // 좌표로 게이트를 통과해 실플로우(UAR+interacted)에 도달해야 한다. 수정 전엔
+  // 차단 화면만 보고 "무엇을 눌러야 할지 못 찾음"(Needs Clarification)으로 끝남.
+  { id: "F8", url: `${FIXTURES}/geo-gated`, expected: "working", nullOk: true,
+    intent: "산책 기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
   { id: "R1", url: "https://app.trysimsa.com", expected: "working", nullOk: true,
     intent: "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다" },
   // 실제-타겟 확장 (2026-07-17, Bae "실유저 vibe 앱 재확인"): 빠르게 만들어
