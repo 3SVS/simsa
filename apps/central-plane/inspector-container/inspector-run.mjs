@@ -75,6 +75,7 @@ const STEP_NOTES = {
     noChange: "동작 후 화면에 아무 변화가 없음",
     reloadCheck: "새로고침 후에도 입력한 내용이 남아 있는지 확인",
     notPersisted: "새로고침하니 입력한 내용이 사라짐 — 화면만 바뀌고 실제 저장은 되지 않았을 가능성",
+    partial: "사이트가 무거워 시간 안에 다 확인하지 못했어요 — 여기까지 본 내용만 담았어요",
   },
   en: {
     unsafeSkipped: (cat) => `Skipped — not safe to run (${cat})`,
@@ -84,6 +85,7 @@ const STEP_NOTES = {
     noChange: "Nothing on the screen changed after the action",
     reloadCheck: "Check the entered content survives a page reload",
     notPersisted: "The entered content disappeared after a reload — the screen changed but nothing was actually saved",
+    partial: "The site was heavy and couldn't be fully checked in time — this covers only what was seen so far",
   },
 };
 
@@ -96,8 +98,13 @@ const STEP_NOTES = {
  * sampleQuery has NO default here on purpose: planVisualFlow picks one from the
  * locale, and a default at this seam would silently win over it.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko" }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs }) {
   const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
+  // E-corpus-1 (2026-07-19): soft deadline. When we cross it we stop driving NEW
+  // steps and fall through to observe + verdict with whatever evidence exists —
+  // a partial-but-honest report beats an empty timeout on heavy sites.
+  const deadline = budgetMs && budgetMs > 0 ? Date.now() + budgetMs : Infinity;
+  const overBudget = () => Date.now() > deadline;
   const shotsDir = join(outDir, "screenshots");
   const videoDir = join(outDir, "video");
   mkdirSync(shotsDir, { recursive: true });
@@ -146,6 +153,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     consoleErrorCount: 0,
     // G4-① (2026-07-18): 입력한 내용이 새로고침을 살아남는가. null = 비적용/미측정.
     persistedAfterReload: null,
+    // E-corpus-1 (2026-07-19): 시간 예산 초과로 일부 단계를 건너뛰었는가.
+    timedOutPartial: false,
   };
 
   async function snap(name) {
@@ -190,6 +199,13 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
 
     let stepIdx = 0;
     for (const step of plan) {
+      // E-corpus-1: 예산을 넘겼으면 남은 구동 스텝(click/type)은 건너뛰되
+      // observe 스텝은 판정에 필요하므로 계속 실행한다(break 아님 — 마지막
+      // 관찰까지 도달해 지금 화면 기준으로 정직하게 판정).
+      if (overBudget() && step.action !== "observe") {
+        evidence.timedOutPartial = true;
+        continue;
+      }
       stepIdx += 1;
       const shotName = `step-${String(stepIdx).padStart(2, "0")}.png`;
       try {
@@ -242,6 +258,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     const typedStep = plan.find((s) => s.action === "type");
     if (
       typedStep &&
+      !overBudget() && // E-corpus-1: 지속성 확인은 reload가 필요해 비싸다 — 예산 초과 시 생략(측정 null 유지).
       evidence.interacted &&
       evidence.visibleChangeAfterAction === true &&
       !evidence.routeChanged
@@ -263,6 +280,14 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       } catch {
         /* best-effort — 측정 실패는 null 유지 */
       }
+    }
+
+    // E-corpus-1: 예산 초과로 조기 종료했으면 정직하게 남긴다 — 이 스텝이
+    // classifyFindings의 stepFailed로 잡혀 리포트에 "다 못 봤다"가 드러나고,
+    // decideFromEvidence는 부분 증거 기준으로 (interacted면 UAR, 아니면 Needs
+    // Clarification) 판정한다. 빈손 실패가 아니다.
+    if (evidence.timedOutPartial) {
+      stepOutcomes.push({ label: N.partial, ok: false, note: N.partial });
     }
   } finally {
     await context.close(); // finalizes the video
