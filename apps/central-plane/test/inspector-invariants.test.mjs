@@ -142,7 +142,7 @@ test("E-corpus-1 #415: runner force-closes at budget and never re-throws (always
   // 구조적으로 불가능해진다.
   const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
   assert.match(runMjs, /killTimer\s*=\s*setTimeout/, "runner must arm a budget kill-timer");
-  assert.match(runMjs, /context\.close\(\)\.catch/, "kill-timer must force-close the context");
+  assert.match(runMjs, /browser\.close\(\)\.catch/, "kill-timer must force-close the BROWSER (graceful context.close can't break a hang)");
   assert.match(runMjs, /\}\s*catch\s*\(err\)\s*\{[\s\S]*timedOutPartial[\s\S]*\}\s*finally/, "the main try must catch (not re-throw) and finalize");
 });
 
