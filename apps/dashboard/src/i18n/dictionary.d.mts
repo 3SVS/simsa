@@ -159,6 +159,10 @@ export type Dictionary = {
     exampleBadge: string;
     trySample: string;
     trySampleHint: string;
+    restoreTitle: string;
+    restoreDesc: string;
+    restoreCta: string;
+    restoring: string;
     deleteLabel: string;
     deleteAria: string;
     deleteModalTitle: string;

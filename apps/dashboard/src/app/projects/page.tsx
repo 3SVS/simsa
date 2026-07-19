@@ -6,7 +6,14 @@ import { useEffect, useId, useState } from "react";
 import { MOCK_PROJECTS, getProjectStats, type Project } from "@/lib/mock-data";
 import { loadLocalProjects, deleteProject, getUserKey, saveProject, saveExtendedProjectData } from "@/lib/workflow-store";
 import { buildSampleProject } from "@/lib/sample-project.mjs";
-import { deleteProjectFromDb } from "@/lib/workspace-check-api";
+import { buildLocalProjectFromServer } from "@/lib/project-restore.mjs";
+import {
+  deleteProjectFromDb,
+  listProjectsFromDb,
+  loadProjectFromDb,
+  loadExtFromDb,
+  type RemoteProjectSummary,
+} from "@/lib/workspace-check-api";
 import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/components/Toast";
@@ -31,10 +38,43 @@ export default function ProjectsPage() {
   // "no projects yet" card before their projects hydrate in.
   const [hydrated, setHydrated] = useState(false);
 
+  // G8 D-2 (DR-3): 서버에는 있는데 이 기기에 없는 프로젝트 — 명시적 가져오기만.
+  const [restorable, setRestorable] = useState<RemoteProjectSummary[]>([]);
+  const [restoring, setRestoring] = useState<string | null>(null);
+
   useEffect(() => {
-    setLocalProjects(loadLocalProjects());
+    const locals = loadLocalProjects();
+    setLocalProjects(locals);
     setHydrated(true);
+    const localIds = new Set(locals.map((p) => p.id));
+    let cancelled = false;
+    listProjectsFromDb(getUserKey()).then((remote) => {
+      if (cancelled) return;
+      setRestorable(remote.filter((r) => !localIds.has(r.id) && !r.id.startsWith("sample_") && !r.id.startsWith("probe_")));
+    });
+    return () => { cancelled = true; };
   }, []);
+
+  const restoreOne = async (summary: RemoteProjectSummary) => {
+    if (restoring) return;
+    setRestoring(summary.id);
+    try {
+      const userKey = getUserKey();
+      const full = await loadProjectFromDb(summary.id, userKey);
+      if (!full.ok) return;
+      const extRes = await loadExtFromDb(summary.id, userKey);
+      const { project, ext } = buildLocalProjectFromServer(
+        full.project,
+        extRes.ok ? (extRes.ext as Parameters<typeof buildLocalProjectFromServer>[1]) : null,
+      );
+      saveProject(project);
+      saveExtendedProjectData(project.id, ext);
+      setLocalProjects((prev) => [project, ...prev.filter((p) => p.id !== project.id)]);
+      setRestorable((prev) => prev.filter((r) => r.id !== summary.id));
+    } finally {
+      setRestoring(null);
+    }
+  };
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
@@ -74,6 +114,32 @@ export default function ProjectsPage() {
               onDeleted={(id) => setLocalProjects((prev) => prev.filter((p) => p.id !== id))}
             />
           ))}
+        </div>
+      )}
+
+      {/* G8 D-2: 복원 카드 — 조용한 자동 병합 금지, 명시 클릭으로만 가져온다 */}
+      {restorable.length > 0 && (
+        <div className="mt-8 rounded-xl border border-brand-200 bg-brand-50 p-5">
+          <p className="text-sm font-semibold text-brand-900">{t.projects.restoreTitle.replace("{n}", String(restorable.length))}</p>
+          <p className="mt-0.5 text-xs text-brand-700">{t.projects.restoreDesc}</p>
+          <ul className="mt-3 space-y-2">
+            {restorable.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-800">{r.title || r.id}</p>
+                  <p className="truncate text-xs text-gray-400">{r.updatedAt?.slice(0, 10)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => restoreOne(r)}
+                  disabled={restoring !== null}
+                  className="btn btn-sm btn-primary flex-shrink-0 disabled:opacity-50"
+                >
+                  {restoring === r.id ? t.projects.restoring : t.projects.restoreCta}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
