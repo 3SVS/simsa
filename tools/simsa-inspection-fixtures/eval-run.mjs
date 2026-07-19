@@ -35,6 +35,10 @@ const TARGETS = [
   // 네트워크·콘솔 신호가 전부 침묵하는 변종; reload-지속성 검사만이 F1과 가른다.
   { id: "F6", url: `${FIXTURES}/optimistic-ghost`, expected: "broken",
     intent: "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
+  // E-corpus-1 (2026-07-19): 무거운 랜딩(큰 DOM+애니메이션) — 작동하는 앱인데
+  // 러너가 hard 레일에 걸려 빈손 실패하던 클래스. 부분 리포트로 not-false여야.
+  { id: "F7", url: `${FIXTURES}/heavy-site`, expected: "working", nullOk: true,
+    intent: "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
   { id: "R1", url: "https://app.trysimsa.com", expected: "working", nullOk: true,
     intent: "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다" },
   // 실제-타겟 확장 (2026-07-17, Bae "실유저 vibe 앱 재확인"): 빠르게 만들어
