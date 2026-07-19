@@ -51,6 +51,19 @@ export function isEnvCause(repair) {
 }
 
 /**
+ * auto_fix 성숙 (2026-07-20): classify a FAILED repair job by its stored error
+ * string. The container tags access-shaped clone failures with the stable
+ * `repo_access_denied:` prefix (container/coerce-result.mjs classifyCloneError)
+ * — those get the non-dev "저장소가 비공개예요" guidance card instead of the
+ * generic failure + raw details. Pure; unknown/absent errors → "generic".
+ */
+export function repairFailureKind(repair) {
+  if (!repair || typeof repair !== "object" || repair.status !== "failed") return null;
+  const err = typeof repair.error === "string" ? repair.error : "";
+  return /^repo_access_denied\b/.test(err.trim()) ? "repoAccessDenied" : "generic";
+}
+
+/**
  * Map a backend error code (string), an HTTP status (number), or the client
  * fallback string "HTTP <status>" to a t.visualChecks.repair.errors
  * dictionary key. Unknown inputs fall back to "generic" — the UI never

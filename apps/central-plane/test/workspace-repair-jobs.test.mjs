@@ -26,7 +26,7 @@ const { detectEnvCause, isRunRepairable, normalizeRepoReference } = await import
   "../dist/routes/workspace-repair-jobs.js"
 );
 const { encryptToken } = await import("../dist/crypto.js");
-const { validateRepairPayload, redactSecret, buildRepairPrContent } = await import(
+const { validateRepairPayload, redactSecret, buildRepairPrContent, classifyCloneError } = await import(
   "../container/coerce-result.mjs"
 );
 
@@ -325,6 +325,73 @@ test("repair: falls back to project_sources github_repo when no workspace repo l
   assert.equal(r.status, 202);
   assert.equal(r.json.repair.repoFullName, "acme/golf-now");
   assert.equal(recorder.calls[0].body.repo, "acme/golf-now");
+});
+
+// ─── private-repo token resolution (auto_fix 성숙 2026-07-20) ─────────────────
+
+test("repair: PUBLIC linked repo keeps the OAuth fast path — zero GitHub API calls", async () => {
+  const recorder = { names: [], calls: [] };
+  const env = makeEnv({ sandbox: makeSandbox(recorder) }); // makeRepoRow → private: 0
+  const fetchCalls = [];
+  const app = createApp({
+    fetch: async (url) => {
+      fetchCalls.push(String(url));
+      return new Response("{}", { status: 200 });
+    },
+  });
+  const res = await app.fetch(
+    new Request(`http://localhost${REPAIR_PATH}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userKey: USER }),
+    }),
+    env,
+  );
+  assert.equal(res.status, 202);
+  assert.equal(fetchCalls.filter((u) => u.includes("api.github.com")).length, 0, "public repo must not probe GitHub");
+  assert.equal(recorder.calls[0].body.githubToken, GH_TOKEN);
+});
+
+test("repair: PRIVATE linked repo probes via fetchImpl; App creds absent → OAuth fail-safe still dispatches", async () => {
+  const recorder = { names: [], calls: [] };
+  const env = makeEnv({ repos: [makeRepoRow({ private: 1 })], sandbox: makeSandbox(recorder) });
+  const fetchCalls = [];
+  const app = createApp({
+    fetch: async (url) => {
+      fetchCalls.push(String(url));
+      // OAuth probe: private repo under public_repo scope answers 404.
+      return new Response("{}", { status: 404 });
+    },
+  });
+  const res = await app.fetch(
+    new Request(`http://localhost${REPAIR_PATH}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userKey: USER }),
+    }),
+    env,
+  );
+  assert.equal(res.status, 202, "resolution failure modes must never block dispatch (fail-safe contract)");
+  assert.ok(
+    fetchCalls.some((u) => u.includes("/repos/acme/golf-now")),
+    "private repo must probe the GitHub API through the injected fetchImpl",
+  );
+  // No GH_APP_* creds in this env → resolveRepoAccessToken falls back to the
+  // OAuth token — the container then fails the clone and tags repo_access_denied.
+  assert.equal(recorder.calls[0].body.githubToken, GH_TOKEN);
+});
+
+test("classifyCloneError: access-shaped git failures → access_denied; everything else → other", () => {
+  assert.equal(
+    classifyCloneError("remote: Write access to repository not granted.\nfatal: unable to access 'https://github.com/a/b.git/': The requested URL returned error: 403"),
+    "access_denied",
+  );
+  assert.equal(classifyCloneError("fatal: repository 'https://github.com/a/b.git/' not found"), "access_denied");
+  assert.equal(classifyCloneError("fatal: Authentication failed for 'https://github.com/a/b.git/'"), "access_denied");
+  assert.equal(classifyCloneError("fatal: could not read Username for 'https://github.com': No such device"), "access_denied");
+  assert.equal(classifyCloneError("fatal: the remote end hung up unexpectedly"), "other");
+  assert.equal(classifyCloneError("error: RPC failed; curl 56 GnuTLS recv error"), "other");
+  assert.equal(classifyCloneError(""), "other");
 });
 
 test("repair: token missing (no connection / no KEK / bad ciphertext) → 400 github_token_required", async () => {

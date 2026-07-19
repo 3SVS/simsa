@@ -189,7 +189,7 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // simsa_repair job into the ConclaveSandbox container (repair branch + draft
   // PR from the run's agent_prompt); /internal/repair-{running,done} are the
   // container's callbacks (Bearer INTERNAL_CALLBACK_TOKEN).
-  app.route("/", createWorkspaceRepairJobRoutes());
+  app.route("/", createWorkspaceRepairJobRoutes(fetchImpl));
   // Stage 72 — Persisted Manual Multi-Agent Experiments.
   app.route("/", createWorkspaceExperimentRoutes());
   // Stage 112 — Persisted Agent Workflow Records (intake snapshot save/list/read).

@@ -2328,6 +2328,9 @@ const EN = {
       envCauseWarning: "The evidence points at an environment or configuration cause, so a code change alone may not fully resolve this.",
       failedTitle: "The repair could not be completed",
       failedBody: "Something went wrong while creating the repair PR. You can try again.",
+      failedRepoAccessTitle: "Simsa can't access this repository",
+      failedRepoAccessBody:
+        "The repository looks private, or the connected GitHub account doesn't have access. Make the repository public, or install the Simsa GitHub App on it from the repository connection screen, then try the repair again.",
       // Stage 272 — post-repair re-check: honest merge+deploy explainer + one click.
       recheckExplainer:
         "The fix currently lives only on the PR branch, so your live site has not changed yet. After you merge the repair PR and your platform finishes deploying, re-inspect and we will show the result compared with before.",
@@ -4786,6 +4789,9 @@ const KO = {
       envCauseWarning: "원인에 환경설정 문제가 포함돼 있어 코드 수정만으로 완전히 해결되지 않을 수 있어요",
       failedTitle: "고치기를 마치지 못했어요",
       failedBody: "수리 PR을 만드는 중에 문제가 생겼어요. 다시 시도할 수 있어요.",
+      failedRepoAccessTitle: "저장소에 접근할 수 없어서 고치기를 못 했어요",
+      failedRepoAccessBody:
+        "저장소가 비공개이거나, 연결된 GitHub 계정에 접근 권한이 없어요. 저장소를 공개로 바꾸거나, 저장소 연결 화면에서 Simsa GitHub 앱을 설치한 뒤 다시 시도해 주세요.",
       // Stage 272 — 수리 후 재검수: 머지+배포 전에는 라이브가 안 바뀐다는 정직한 안내 + 원클릭.
       recheckExplainer:
         "수리 내용은 아직 PR 브랜치에만 있어서 실제 사이트는 그대로예요. 수리 PR을 머지하고 배포가 끝난 뒤 다시 검수하면, 이전과 비교한 결과를 보여드려요.",

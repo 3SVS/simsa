@@ -95,6 +95,23 @@ export function validateRepairPayload(payload) {
 }
 
 /**
+ * auto_fix 성숙 (2026-07-20) — classify a `git clone` failure as an ACCESS
+ * problem (private repo the token can't see / token lacking write) vs any
+ * other failure. Access-shaped failures get the stable `repo_access_denied:`
+ * error prefix so the Worker stores it verbatim and the dashboard can render
+ * the non-dev guidance card ("저장소가 비공개예요") instead of a raw git dump.
+ *
+ * Pure string classification — git over https answers a private repo the
+ * token cannot see with 403/404-shaped auth errors, never a clean "private".
+ */
+const CLONE_ACCESS_PATTERN =
+  /(403|404 not found|access denied|write access to repository not granted|authentication failed|repository (?:'[^']*' )?not found|could not read username|permission denied)/i;
+
+export function classifyCloneError(stderrText) {
+  return CLONE_ACCESS_PATTERN.test(String(stderrText ?? "")) ? "access_denied" : "other";
+}
+
+/**
  * Stage 268 — strip a secret from a message before it travels anywhere
  * (callback body, logs). Pure; no-op when the secret is empty.
  */

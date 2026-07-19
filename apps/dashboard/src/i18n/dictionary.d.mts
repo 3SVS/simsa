@@ -2185,6 +2185,8 @@ export type Dictionary = {
       envCauseWarning: string;
       failedTitle: string;
       failedBody: string;
+      failedRepoAccessTitle: string;
+      failedRepoAccessBody: string;
       recheckExplainer: string;
       recheckButton: string;
       detailsLabel: string;
