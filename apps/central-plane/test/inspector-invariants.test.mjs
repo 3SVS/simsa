@@ -161,6 +161,22 @@ test("E-corpus-1: soft budget is passed to the runner and sits BELOW the hard ra
   assert.match(runMjs, /timedOutPartial/, "runner must mark partial runs");
 });
 
+test("E-corpus-1 ec1-fix1: finally must never hold the report hostage", () => {
+  // 2026-07-20 in-band 트레이스 확정: F7 hang의 실지점 = finally의
+  // context.close() (recordVideo 파이널라이즈, 0.25 vCPU). 게다가 이전 코드는
+  // close 전에 killTimer를 해제해 구조 수단까지 없앴다. 계약: ①close류는
+  // 타임아웃 레이스(raceOrNull)로 감싼다 ②killTimer 해제는 close 시도 뒤
+  // ③video path 대기도 레이스 — 리포트는 어떤 정리 작업의 볼모도 아니다.
+  const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
+  assert.match(runMjs, /raceOrNull\(context\.close\(\)/, "context.close must be timeout-raced");
+  assert.match(runMjs, /raceOrNull\(browser\.close\(\)/, "browser.close must be timeout-raced");
+  assert.match(runMjs, /raceOrNull\(\s*Promise\.resolve\(page\.video\(\)/, "video path wait must be timeout-raced");
+  assert.ok(
+    !/clearTimeout\(killTimer\)[\s\S]*plog\("finally:context\.close start"\)/.test(runMjs),
+    "killTimer must NOT be disarmed before the close attempts",
+  );
+});
+
 test("E-corpus-1 ec1-dbg2: phase trace travels IN-BAND on failure (tail can't see container stdout)", () => {
   // 2026-07-20 실측: `wrangler tail`은 Worker/DO 로그만 보여주고 컨테이너
   // stdout은 포함하지 않는다. 그래서 hang 진단은 in-band로 간다 — 러너가
