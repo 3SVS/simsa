@@ -70,3 +70,33 @@ evidence로 리포트를 만들게 하는 구조. 이는 컨테이너 라이브 
 정확성 회귀 없음(오판 0, works=null 유지) — 커버리지 한계일 뿐. 다음 스텝:
 ①wrangler tail로 F7 검수의 마지막 로그 라인 = hang 직전 작업 특정 ②롤아웃 반영
 여부부터 확인(내 강화 로그가 찍히는지).
+
+## 근본 원인 확정 — 5·6차 라이브 계측 (2026-07-20)
+
+관측 경로부터 실측으로 바로잡았다:
+
+1. **`wrangler tail`은 컨테이너 stdout을 포함하지 않는다** (Worker/DO 로그만).
+   "tail로 hang 지점 특정" 계획은 CF Containers에선 성립 불가 → 위상 로그를
+   실패 콜백 error에 실어 report_json으로 회수하는 **in-band 트레이스**(#423)로
+   전환. RUNNER_REV 마커가 롤아웃 반영도 in-band로 검증한다.
+2. 로컬 대조 실험(`heavy-hang-repro.mjs`): 로컬에선 동일 조건(heavy-site+
+   recordVideo+$$eval 부하)에서 browser.close()가 0.1s에 resolve — killTimer
+   설계 자체는 유효, hang은 컨테이너 환경 특이(0.25 vCPU).
+
+6차 실행의 트레이스 (`ec1-dbg2`):
+
+```
++0.0s runner-rev=ec1-dbg2 budgetMs=200000 | ... | +50.4s step:3/3 observe done
+| +50.4s finally:context.close start   ← 마지막 라인, 이후 190s 침묵 → 240s rail
+```
+
+**진범 = finally의 `context.close()`** — 검수 자체는 +50s에 정상 완료됐고,
+recordVideo 파이널라이즈가 0.25 vCPU + 무거운 애니메이션 페이지에서 영영 안
+풀린다. 결정적으로 이전 코드는 close 전에 `clearTimeout(killTimer)`를 먼저
+실행해 유일한 구조 수단까지 해제했다. #412~#418 4차 트레인이 전부 빗나간
+이유 = "검수 중 hang" 가정(실제는 "종료 중 hang").
+
+**수정(ec1-fix1)**: finally의 context.close/browser.close와 video path 대기를
+전부 타임아웃 레이스(`raceOrNull` 15s/10s/5s)로 감싸 리포트 반환을 어떤 정리
+작업의 볼모로도 잡지 않는다. killTimer 해제는 close 시도 이후로 이동. 못 죽인
+Chromium은 per-run 컨테이너 sleepAfter와 함께 죽는다(원래 계약).

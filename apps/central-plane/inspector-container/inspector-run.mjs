@@ -32,7 +32,7 @@ import { classifyActionSafety } from "./safety.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "ec1-dbg2";
+export const RUNNER_REV = "ec1-fix1";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
@@ -384,18 +384,35 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       stepOutcomes.push({ label: N.actionFailed(String(err?.message ?? err).slice(0, 100)), ok: false });
     }
   } finally {
-    if (killTimer) clearTimeout(killTimer);
+    // ec1-fix1 (2026-07-20, in-band 트레이스로 확정): F7 hang의 실제 지점은
+    // 검수 중이 아니라 여기 — context.close()가 recordVideo 파이널라이즈에서
+    // 영영 안 풀린다(0.25 vCPU + 무거운 애니메이션 페이지; 검수 자체는 +50s에
+    // 정상 완료, 트레이스 마지막 라인 "finally:context.close start" 후 190s
+    // 침묵 → hard rail). 이전 코드는 close 전에 killTimer부터 해제해 구조
+    // 수단까지 없앴다(#412~#418이 전부 빗나간 이유 — "검수 중 hang" 가정).
+    //
+    // 수정: close류는 전부 raceOrNull(타임아웃 레이스)로 감싸 리포트 반환을
+    // 절대 막지 않는다. 못 죽인 Chromium은 per-run 컨테이너의 sleepAfter와
+    // 함께 죽는다(원래 계약). killTimer는 close 시도가 끝난 뒤에 해제한다.
     plog("finally:context.close start");
-    try { await context.close(); } catch { /* killTimer가 이미 닫았을 수 있음 */ }
+    await raceOrNull(context.close().catch(() => {}), 15000, "finally:context.close", plog);
     plog("finally:browser.close start");
-    try { await browser.close(); } catch { /* ignore */ }
+    await raceOrNull(browser.close().catch(() => {}), 10000, "finally:browser.close", plog);
+    if (killTimer) clearTimeout(killTimer);
     plog("finally:closed");
   }
 
-  // Save the recorded video next to the screenshots.
+  // Save the recorded video next to the screenshots. context.close()가 위에서
+  // 타임아웃했다면 비디오는 파이널라이즈 안 됐을 수 있다 — path() 대기도
+  // 레이스로 캡(비디오는 선택 증거, 리포트를 볼모로 잡지 않는다).
   try {
     plog("video:path start");
-    const vp = await page.video()?.path();
+    const vp = await raceOrNull(
+      Promise.resolve(page.video()?.path()).catch(() => null),
+      5000,
+      "video:path",
+      plog,
+    );
     if (vp && existsSync(vp)) {
       const dest = join(videoDir, "flow.webm");
       copyFileSync(vp, dest);
@@ -427,6 +444,24 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   const agentPrompt = buildAgentFixPrompt(reportInput, locale);
 
   return { report, agentPrompt, decision, works: report.works, evidenceFiles };
+}
+
+/**
+ * ec1-fix1: resolve `promise` or fall through as null after `ms` — never
+ * throws, never blocks. Cleanup(close/video) 경로 전용: 리포트 반환이 어떤
+ * Playwright 정리 작업의 볼모도 되지 않게 하는 레이스.
+ */
+function raceOrNull(promise, ms, label, plog) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      timer = setTimeout(() => {
+        plog?.(`${label}:TIMEOUT after ${ms}ms — proceeding without it`);
+        resolve(null);
+      }, ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 /** Host-only URL for log lines (never the full URL — query strings can carry tokens). */
