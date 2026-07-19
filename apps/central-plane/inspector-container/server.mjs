@@ -22,8 +22,13 @@ import path from "node:path";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const WORK_ROOT = process.env.WORK_ROOT ?? "/var/lib/simsa";
-/** Total wall-clock budget for one inspection (browser phase). */
+/** Hard safety rail: kills a truly hung Chromium (last resort). */
 const INSPECTION_TIMEOUT_MS = 4 * 60 * 1000;
+/** E-corpus-1 (2026-07-19): soft budget handed to the runner so it stops
+ *  driving new steps ~40s before the hard rail and returns a PARTIAL report
+ *  from evidence gathered so far — a heavy marketing site should yield "couldn't
+ *  finish, here's what I saw", never an empty timeout failure. */
+const INSPECTION_SOFT_BUDGET_MS = INSPECTION_TIMEOUT_MS - 40_000;
 
 /** Required job payload fields (Worker's dispatchInspection contract). */
 const REQUIRED_FIELDS = ["runId", "projectId", "userKey", "targetUrl", "intent", "baseUrl", "callbackUrl", "callbackToken"];
@@ -146,7 +151,7 @@ async function runJob(payload) {
     // not exceed ~4 minutes. On timeout the run is reported failed; the
     // leaked browser (if any) dies with the container's sleepAfter.
     const result = await withTimeout(
-      runInspection({ targetUrl, intent, outDir, locale }),
+      runInspection({ targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS }),
       INSPECTION_TIMEOUT_MS,
       `inspection timed out after ${Math.round(INSPECTION_TIMEOUT_MS / 1000)}s`,
     );

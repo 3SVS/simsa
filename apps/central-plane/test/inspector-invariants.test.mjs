@@ -133,3 +133,15 @@ test("inspector runner captures UNCAUGHT exceptions (pageerror), not just consol
   const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
   assert.match(runMjs, /page\.on\("pageerror"/, "runner must listen for pageerror");
 });
+
+test("E-corpus-1: soft budget is passed to the runner and sits BELOW the hard rail", () => {
+  // 2026-07-19 corpus eval: heavy marketing sites hit the 4-min rail and
+  // returned an EMPTY timeout failure. The soft budget must be strictly less
+  // than the hard rail (so the runner self-terminates with a partial report
+  // before the reject), and the runner must consume it via `budgetMs`.
+  assert.match(serverMjs, /INSPECTION_SOFT_BUDGET_MS\s*=\s*INSPECTION_TIMEOUT_MS\s*-\s*\d/, "soft budget must be derived below the hard rail");
+  assert.match(serverMjs, /runInspection\(\{[^}]*budgetMs:\s*INSPECTION_SOFT_BUDGET_MS/s, "runInspection must receive the soft budget");
+  const runMjs = readFileSync(path.join(ROOT, "inspector-container/inspector-run.mjs"), "utf8");
+  assert.match(runMjs, /budgetMs/, "runner must accept budgetMs");
+  assert.match(runMjs, /timedOutPartial/, "runner must mark partial runs");
+});
