@@ -48,3 +48,5 @@
 |---|---|---|
 | 2026-07-19 | 설계 작성 | 완료 |
 | 2026-07-19 | 설계 잠금 | **Bae `design lock approved`** — DR-1·DR-2·DR-3·DR-5 LOCKED, DR-4 OPEN(결제 라이브 시 재검토). 구현 착수는 `train D-1 start approved` 별도 |
+| 2026-07-19 | Train D-1 | Bae `train D-1 start approved` → #406 머지·배포·**라이브 8/8** |
+| 2026-07-19 | Train D-2 | Bae "작업시작해" → #408 머지·배포·**새 기기 시뮬 라이브 8/8** — D-1/D-2 종료, 잔여는 D-3(DR-4와 함께) |
