@@ -28,6 +28,7 @@ import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 import { useToast } from "@/components/Toast";
 import { BranchGlyph } from "@/components/brand/BranchGlyph";
 import { buildStepper, rotatingWaitLine } from "@/lib/wizard-steps.mjs";
+import { composeCodeIntent } from "@/lib/code-intent.mjs";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -57,7 +58,7 @@ export default function NewProjectPage() {
 function NewProjectInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const toast = useToast();
   const [step, setStep] = useState<Step>(1);
   const [ideaText, setIdeaText] = useState("");
@@ -92,6 +93,8 @@ function NewProjectInner() {
   // Code branch: skip the idea step entirely (that's the branch's normal path).
   const [appName, setAppName] = useState("");
   const [codeDesc, setCodeDesc] = useState("");
+  // F-5 — the lightweight intent interview's one extra question (optional).
+  const [codeMustWork, setCodeMustWork] = useState("");
   const [isCreatingCode, setIsCreatingCode] = useState(false);
 
   function toggleBuiltWith(tool: string) {
@@ -323,9 +326,13 @@ function NewProjectInner() {
     setIsCreatingCode(true);
     setRateLimitMsg(null);
 
+    // F-5 — compose the one-liner + "꼭 작동해야 하는 것" into the generation
+    // input. Either field alone is enough; both empty → no LLM call, project
+    // starts without draft items (this branch's pre-F-5 normal path).
+    const intent = composeCodeIntent({ desc: codeDesc, mustWork: codeMustWork, locale });
     let generated: IdeaToSpecDraftResponse | null = null;
-    if (codeDesc.trim()) {
-      const res = await callWorkspaceApi({ idea: codeDesc.trim() });
+    if (intent) {
+      const res = await callWorkspaceApi({ idea: intent });
       // Honest failure: if generation fails the project is simply created
       // without draft items (normal for this branch) — never with mock items
       // silently saved as if they were real.
@@ -373,7 +380,7 @@ function NewProjectInner() {
       id,
       userKey: getUserKey(),
       title: name,
-      idea: codeDesc.trim(),
+      idea: intent,
       understood: generated?.understood ?? {},
       productSpec: generated?.productSpec ?? {},
       items: generated?.items ?? [],
@@ -563,6 +570,18 @@ function NewProjectInner() {
                 onChange={(e) => setCodeDesc(e.target.value)}
                 placeholder={t.branch.codeDescPlaceholder}
                 rows={2}
+                className="input mb-6 resize-none rounded-lg"
+              />
+
+              {/* F-5 — 경량 의도 인터뷰: 선택 질문 하나로 확인 항목이 "내 앱
+                  기준"이 되게 한다. 하드 게이트 없음 — 빈칸이어도 생성 진행. */}
+              <label className="mb-1 block text-xs font-semibold text-gray-600">{t.branch.codeMustWorkLabel}</label>
+              <p className="mb-2 text-xs text-gray-500">{t.branch.codeMustWorkHint}</p>
+              <textarea
+                value={codeMustWork}
+                onChange={(e) => setCodeMustWork(e.target.value)}
+                placeholder={t.branch.codeMustWorkPlaceholder}
+                rows={3}
                 className="input mb-8 resize-none rounded-lg"
               />
 

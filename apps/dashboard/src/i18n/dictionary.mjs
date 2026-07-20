@@ -380,6 +380,11 @@ const EN = {
     codeNamePlaceholder: "e.g. My first shop",
     codeDescLabel: "What does it do? (optional)",
     codeDescPlaceholder: "One line is enough — we'll draft a checklist from it. You can skip this.",
+    // F-5 (2026-07-20) — lightweight intent interview: one extra optional
+    // question so the review checks YOUR app, not a generic one.
+    codeMustWorkLabel: "What absolutely must work? (optional)",
+    codeMustWorkHint: "2–3 things. This turns the checklist into checks written for your app.",
+    codeMustWorkPlaceholder: "e.g. sign-in, create a booking, checkout — one per line or comma-separated",
     codeCreate: "Create project & connect code",
     codeCreating: "Creating…",
     specStepTitle: "Paste your plan",
@@ -2869,6 +2874,11 @@ const KO = {
     codeNamePlaceholder: "예: 나의 첫 쇼핑몰",
     codeDescLabel: "무엇을 하는 앱인가요? (선택)",
     codeDescPlaceholder: "한 줄이면 충분해요 — 이걸로 확인 항목 초안을 만들어 드려요. 건너뛰어도 돼요.",
+    // F-5 (2026-07-20) — 경량 의도 인터뷰: 선택 질문 하나로 검수가
+    // "내 앱 기준"이 되게 한다. 하드 게이트 없음, 빈칸 허용 유지.
+    codeMustWorkLabel: "꼭 작동해야 하는 건 뭔가요? (선택)",
+    codeMustWorkHint: "2~3개면 충분해요. 적어주시면 확인 항목이 내 앱에 맞게 만들어져요.",
+    codeMustWorkPlaceholder: "예: 로그인, 예약 만들기, 결제 — 줄바꿈이나 쉼표로 구분",
     codeCreate: "프로젝트 만들고 코드 연결하기",
     codeCreating: "만드는 중…",
     specStepTitle: "기획서를 붙여넣어 주세요",

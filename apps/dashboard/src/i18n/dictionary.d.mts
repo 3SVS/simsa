@@ -313,6 +313,9 @@ export type Dictionary = {
     codeNamePlaceholder: string;
     codeDescLabel: string;
     codeDescPlaceholder: string;
+    codeMustWorkLabel: string;
+    codeMustWorkHint: string;
+    codeMustWorkPlaceholder: string;
     codeCreate: string;
     codeCreating: string;
     specStepTitle: string;
