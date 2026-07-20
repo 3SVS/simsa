@@ -517,7 +517,7 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl) {
       if (!anthropicApiKey) {
         modeReason = "no_anthropic_key";
       } else {
-        const d = buildBriefOnlyDiagnosis(diag);
+        const d = buildBriefOnlyDiagnosis(diag, payload.locale);
         // diag.reason이 워커 에러 메시지를 담을 수 있다 — 콜백에 나가기 전
         // 토큰을 반드시 걸러낸다(에러 문자열은 신뢰 경계 밖으로 취급).
         modeReason = redactSecret(d.modeReason, githubToken);
@@ -793,6 +793,7 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
       targetUrl: payload.targetUrl,
       visualCheckId: payload.visualCheckId,
       envCause: payload.envCause === true,
+      locale: payload.locale,
       findings: parsed.findings,
       changedFiles,
       workerCommitMessage: outcome.message,
@@ -938,6 +939,7 @@ async function attemptOversizeEditFix({ workDir, payload, brief, parsed, review,
     targetUrl: payload.targetUrl,
     visualCheckId: payload.visualCheckId,
     envCause: payload.envCause === true,
+    locale: payload.locale,
     findings: parsed.findings,
     changedFiles,
     workerCommitMessage: outcome.message,

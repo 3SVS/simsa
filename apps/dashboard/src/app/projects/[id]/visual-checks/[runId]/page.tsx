@@ -345,7 +345,7 @@ function RepairSection({
     if (phase !== "ready") return;
     setPhase("submitting");
     setErrorKey(null);
-    const res = await requestRepair(projectId, runId, userKey);
+    const res = await requestRepair(projectId, runId, userKey, locale);
     if (res.ok) {
       // Undispatched jobs come back already failed (dispatched:false) with
       // the reason in `note` — surface it through the failed card.

@@ -670,12 +670,62 @@ export function applyExactEdits(
 
 // ─── Auto-fix PR content ──────────────────────────────────────────────────────
 
-const SEVERITY_KO_LABEL: Record<RepairSeverity, string> = {
-  blocker: "높음",
-  major: "중간",
-  minor: "낮음",
-  nit: "참고",
+const SEVERITY_LABEL: Record<"ko" | "en", Record<RepairSeverity, string>> = {
+  ko: { blocker: "높음", major: "중간", minor: "낮음", nit: "참고" },
+  en: { blocker: "high", major: "medium", minor: "low", nit: "note" },
 };
+
+/** Train E (2026-07-21) — repair PR 산문 로케일. 미지정 = ko(기존 동작). */
+export type RepairPrLocale = "ko" | "en";
+
+const PR_COPY = {
+  ko: {
+    titlePrefix: "Simsa 자동 수리: ",
+    defaultIntent: "핵심 기능 점검",
+    commitBody1: "Simsa 시각 검수에서 발견된 문제를 워커 에이전트가 자동 수정한 커밋입니다.",
+    commitBody2: "수리 근거: 같은 브랜치의 SIMSA-FIX-BRIEF.md 참고.",
+    workerSummaryPrefix: "워커 요약: ",
+    heading: "## Simsa 자동 수리 결과",
+    lead: "Simsa가 실제 브라우저로 앱을 검수해 발견한 문제를, 워커 에이전트가 이 브랜치의 코드에 직접 수정했습니다.",
+    target: "검수 대상",
+    verdict: "판정",
+    noRecord: "(기록 없음)",
+    runIdLabel: "검사 ID",
+    findingsHeading: "### 발견된 문제와 조치",
+    fixDirection: "수정 방향: ",
+    noFindings: "- (브리프에 개별 문제 항목이 없습니다)",
+    oversizeHeading: "### 큰 파일은 필요한 부분만 고쳤어요",
+    oversizeBody1: "위 파일은 한 번에 다시 쓰기엔 커서, 문제와 관련된 부분만 발췌해 정확히 일치하는 곳만 바꿨어요.",
+    oversizeBody2: "바꾼 곳 외의 내용은 그대로예요.",
+    cautionLine1: "> **주의: 자동 생성된 수정입니다.** 머지 전에 반드시 코드 리뷰와 실제 동작 확인을 해주세요.",
+    cautionLine2: "> 수리 근거(검수 증거 + 지시서)는 이 브랜치의 `SIMSA-FIX-BRIEF.md`에 있습니다.",
+    envCause1: "> **환경 원인 가능성:** 증거에 백엔드 주소가 응답하지 않는 패턴(DNS/연결 실패)이 포함되어 있습니다.",
+    envCause2: "> 코드 수정만으로 완전히 해결되지 않을 수 있어요 — 환경 변수(백엔드 주소 등) 설정도 함께 확인하세요.",
+  },
+  en: {
+    titlePrefix: "Simsa auto-repair: ",
+    defaultIntent: "core feature check",
+    commitBody1: "This commit was written by Simsa's worker agent to fix problems found by the visual inspection.",
+    commitBody2: "Rationale: see SIMSA-FIX-BRIEF.md on this branch.",
+    workerSummaryPrefix: "Worker summary: ",
+    heading: "## Simsa auto-repair result",
+    lead: "Simsa inspected your app in a real browser, and the worker agent fixed the problems it found directly on this branch.",
+    target: "Inspected",
+    verdict: "Verdict",
+    noRecord: "(not recorded)",
+    runIdLabel: "Check ID",
+    findingsHeading: "### Problems found & what was done",
+    fixDirection: "Fix direction: ",
+    noFindings: "- (the brief carried no individual findings)",
+    oversizeHeading: "### Large files were edited in place",
+    oversizeBody1: "The file(s) above are too large to rewrite wholesale, so only the excerpted regions relevant to the problems were changed — each edit applied only where it matched exactly.",
+    oversizeBody2: "Everything outside those spots is untouched.",
+    cautionLine1: "> **Caution: this is an auto-generated fix.** Review the code and verify the app actually works before merging.",
+    cautionLine2: "> The evidence and instructions live in `SIMSA-FIX-BRIEF.md` on this branch.",
+    envCause1: "> **Possible environment cause:** the evidence includes a backend address that never responded (DNS/connection failure).",
+    envCause2: "> A code fix alone may not fully resolve this — also check your environment variables (backend URL, etc.).",
+  },
+} as const;
 
 /**
  * Deterministic PR + commit content for the auto_fix path (no LLM output in
@@ -699,55 +749,63 @@ export function buildAutoFixPrContent(input: {
    * excerpts, not the whole file — honesty over silence.
    */
   editedOversizeFiles?: readonly string[];
+  /** Reader's locale for the PR prose (Train E). Omitted = ko (기존 동작). */
+  locale?: RepairPrLocale;
 }): { title: string; commitMessage: string; commitBody: string; body: string } {
-  const intent = (input.intent ?? "").trim() || "핵심 기능 점검";
+  const loc: RepairPrLocale = input.locale === "en" ? "en" : "ko";
+  const C = PR_COPY[loc];
+  const intent = (input.intent ?? "").trim() || C.defaultIntent;
   const shortIntent = intent.length > 60 ? `${intent.slice(0, 57)}...` : intent;
-  const title = `Simsa 자동 수리: ${shortIntent}`;
+  const title = `${C.titlePrefix}${shortIntent}`;
   const commitMessage = `fix(simsa): apply repair for ${input.runId}`;
   const commitBody = [
-    "Simsa 시각 검수에서 발견된 문제를 워커 에이전트가 자동 수정한 커밋입니다.",
-    "수리 근거: 같은 브랜치의 SIMSA-FIX-BRIEF.md 참고.",
-    ...(input.workerCommitMessage ? [`워커 요약: ${input.workerCommitMessage}`] : []),
+    C.commitBody1,
+    C.commitBody2,
+    ...(input.workerCommitMessage ? [`${C.workerSummaryPrefix}${input.workerCommitMessage}`] : []),
   ].join("\n");
 
+  const changedLabel =
+    loc === "en"
+      ? `- ${input.changedFiles.length} file(s) changed:`
+      : `- 변경 파일 ${input.changedFiles.length}개:`;
   const lines: string[] = [
-    "## Simsa 자동 수리 결과",
+    C.heading,
     "",
-    "Simsa가 실제 브라우저로 앱을 검수해 발견한 문제를, 워커 에이전트가 이 브랜치의 코드에 직접 수정했습니다.",
+    C.lead,
     "",
-    `- 검수 대상: ${input.targetUrl || "(기록 없음)"}`,
-    `- 판정: ${input.decision || "Not Judged"}`,
-    ...(input.visualCheckId ? [`- 검사 ID: \`${input.visualCheckId}\``] : []),
-    `- 변경 파일 ${input.changedFiles.length}개:`,
+    `- ${C.target}: ${input.targetUrl || C.noRecord}`,
+    `- ${C.verdict}: ${input.decision || "Not Judged"}`,
+    ...(input.visualCheckId ? [`- ${C.runIdLabel}: \`${input.visualCheckId}\``] : []),
+    changedLabel,
     ...input.changedFiles.map((f) => `  - \`${f}\``),
     "",
-    "### 발견된 문제와 조치",
+    C.findingsHeading,
   ];
   if (input.findings.length > 0) {
     input.findings.forEach((f, i) => {
-      lines.push(`${i + 1}. [${SEVERITY_KO_LABEL[f.severity]}] ${f.what}`);
-      if (f.how) lines.push(`   - 수정 방향: ${f.how}`);
+      lines.push(`${i + 1}. [${SEVERITY_LABEL[loc][f.severity]}] ${f.what}`);
+      if (f.how) lines.push(`   - ${C.fixDirection}${f.how}`);
     });
   } else {
-    lines.push("- (브리프에 개별 문제 항목이 없습니다)");
+    lines.push(C.noFindings);
   }
   if (input.workerCommitMessage) {
-    lines.push("", `워커 커밋 요약: ${input.workerCommitMessage}`);
+    lines.push("", `${C.workerSummaryPrefix}${input.workerCommitMessage}`);
   }
   if (input.editedOversizeFiles && input.editedOversizeFiles.length > 0) {
     lines.push(
       "",
-      "### 큰 파일은 필요한 부분만 고쳤어요",
+      C.oversizeHeading,
       ...input.editedOversizeFiles.map((f) => `- \`${f}\``),
       "",
-      "위 파일은 한 번에 다시 쓰기엔 커서, 문제와 관련된 부분만 발췌해 정확히 일치하는 곳만 바꿨어요.",
-      "바꾼 곳 외의 내용은 그대로예요.",
+      C.oversizeBody1,
+      C.oversizeBody2,
     );
   }
   lines.push(
     "",
-    "> **주의: 자동 생성된 수정입니다.** 머지 전에 반드시 코드 리뷰와 실제 동작 확인을 해주세요.",
-    "> 수리 근거(검수 증거 + 지시서)는 이 브랜치의 `SIMSA-FIX-BRIEF.md`에 있습니다.",
+    C.cautionLine1,
+    C.cautionLine2,
     "",
     // Simsa repair PRs must NOT be re-reviewed by the legacy Conclave council
     // App (double review + double credit burn on repos where users installed
@@ -757,11 +815,7 @@ export function buildAutoFixPrContent(input: {
     "",
   );
   if (input.envCause === true) {
-    lines.push(
-      "> **환경 원인 가능성:** 증거에 백엔드 주소가 응답하지 않는 패턴(DNS/연결 실패)이 포함되어 있습니다.",
-      "> 코드 수정만으로 완전히 해결되지 않을 수 있어요 — 환경 변수(백엔드 주소 등) 설정도 함께 확인하세요.",
-      "",
-    );
+    lines.push(C.envCause1, C.envCause2, "");
   }
 
   return { title, commitMessage, commitBody, body: lines.join("\n") };

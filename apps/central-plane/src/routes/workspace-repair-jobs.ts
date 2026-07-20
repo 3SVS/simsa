@@ -142,6 +142,9 @@ export async function dispatchRepairJob(
     targetUrl: string;
     decision: string;
     envCause: boolean;
+    /** Reader's locale — PR title/body prose is built in the container at job
+     *  time, so it must travel WITH the job (visual-check run과 동일 독트린). */
+    locale: "ko" | "en";
     publicBaseUrl: string;
   },
 ): Promise<{ dispatched: boolean; note?: string }> {
@@ -165,6 +168,7 @@ export async function dispatchRepairJob(
     targetUrl: args.targetUrl,
     decision: args.decision,
     envCause: args.envCause,
+    locale: args.locale,
     callbackUrl: `${base}/internal/repair-done`,
     runningUrl: `${base}/internal/repair-running`,
     callbackToken: env.INTERNAL_CALLBACK_TOKEN,
@@ -212,7 +216,7 @@ export function createWorkspaceRepairJobRoutes(
     const projectId = c.req.param("id");
     const runId = c.req.param("runId");
 
-    let body: { userKey?: unknown };
+    let body: { userKey?: unknown; locale?: unknown };
     try {
       body = await c.req.json();
     } catch {
@@ -220,6 +224,9 @@ export function createWorkspaceRepairJobRoutes(
     }
     const userKey = typeof body.userKey === "string" ? body.userKey : "";
     if (!userKey) return c.json({ ok: false, error: "userKey_required" }, 400);
+    // Train E (2026-07-21): repair PR 제목/본문도 리더의 언어로 — 런 생성과
+    // 같은 방식으로 대시보드가 UI locale을 싣는다. 미전송 = ko(기존 동작).
+    const locale: "ko" | "en" = body.locale === "en" ? "en" : "ko";
 
     // Ownership chain: project → userKey, run → project + userKey.
     const project = await getProject(c.env, projectId);
@@ -338,6 +345,7 @@ export function createWorkspaceRepairJobRoutes(
       targetUrl: run.targetUrl,
       decision: run.decision,
       envCause,
+      locale,
       publicBaseUrl,
     });
 

@@ -199,6 +199,9 @@ export async function requestRepair(
   projectId: string,
   runId: string,
   userKey: string,
+  // Train E (2026-07-21): repair PR 제목/본문은 컨테이너가 잡 시점에 짓는다 —
+  // 리더의 언어가 잡과 함께 이동해야 한다(런 생성과 동일 독트린). 미전송 = ko.
+  locale: "ko" | "en" = "ko",
 ): Promise<RepairRequestResponse> {
   try {
     const resp = await fetch(
@@ -206,7 +209,7 @@ export async function requestRepair(
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userKey }),
+        body: JSON.stringify({ userKey, locale }),
         signal: AbortSignal.timeout(30000),
       },
     );
