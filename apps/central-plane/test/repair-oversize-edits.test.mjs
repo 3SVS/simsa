@@ -159,6 +159,16 @@ test("applyExactEdits: partial application — good edit lands, bad edit reports
 
 // ─── PR honesty note ────────────────────────────────────────────────────────
 
+test("buildAutoFixPrContent: body carries [skip conclave] (legacy council must not double-review)", () => {
+  const { body } = buildAutoFixPrContent({
+    runId: "wvc_x",
+    findings: [],
+    changedFiles: ["a.js"],
+  });
+  assert.match(body, /\[skip conclave\]/i);
+  assert.ok(body.includes("<!-- [skip conclave] -->"), "marker stays invisible via HTML comment");
+});
+
 test("buildAutoFixPrContent: editedOversizeFiles adds the excerpt honesty note", () => {
   const { body } = buildAutoFixPrContent({
     runId: "wvc_x",

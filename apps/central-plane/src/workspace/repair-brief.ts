@@ -749,6 +749,12 @@ export function buildAutoFixPrContent(input: {
     "> **주의: 자동 생성된 수정입니다.** 머지 전에 반드시 코드 리뷰와 실제 동작 확인을 해주세요.",
     "> 수리 근거(검수 증거 + 지시서)는 이 브랜치의 `SIMSA-FIX-BRIEF.md`에 있습니다.",
     "",
+    // Simsa repair PRs must NOT be re-reviewed by the legacy Conclave council
+    // App (double review + double credit burn on repos where users installed
+    // it — 2026-07-21 실측: simsa-autofix-test PR#1). The pull_request webhook
+    // honors [skip conclave]; the HTML comment keeps it invisible in render.
+    "<!-- [skip conclave] -->",
+    "",
   );
   if (input.envCause === true) {
     lines.push(

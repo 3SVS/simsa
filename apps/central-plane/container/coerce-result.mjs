@@ -193,6 +193,12 @@ export function buildRepairPrContent(payload) {
     );
   }
   bodyLines.push("### 수리 지시서", "", "```", agentPrompt, "```", "");
+  // Simsa repair PRs must NOT be re-reviewed by the legacy Conclave council
+  // App (users who installed it get double reviews + double credit burn on
+  // every repair PR — 2026-07-21 실측: simsa-autofix-test PR#1). The webhook
+  // honors [skip conclave] in the body; an HTML comment keeps it invisible
+  // to the non-developer reading the PR.
+  bodyLines.push("<!-- [skip conclave] -->", "");
 
   const briefContent = [
     "# SIMSA-FIX-BRIEF",

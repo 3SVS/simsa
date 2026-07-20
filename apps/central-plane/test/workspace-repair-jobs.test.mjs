@@ -691,6 +691,18 @@ test("container helpers: buildRepairPrContent is honest (no auto-fix claim), car
   assert.ok(plain.title.length < 80);
 });
 
+test("repair PR bodies carry [skip conclave] so the legacy council App never double-reviews them", () => {
+  // Lock-step with the webhook's escape hatch: saas-auth.ts tests the PR
+  // title/body against /\[skip conclave\]/i. A Simsa repair PR re-reviewed
+  // by the legacy Conclave App is double review + double credit burn
+  // (2026-07-21 실측: simsa-autofix-test PR#1의 Conclave AI Council 체크런).
+  const webhookRegex = /\[skip conclave\]/i;
+  const brief = buildRepairPrContent({ intent: "테스트", agentPrompt: AGENT_PROMPT, envCause: false });
+  assert.match(brief.body, webhookRegex, "brief-only draft PR body must carry the marker");
+  // Invisible to the non-developer: wrapped in an HTML comment.
+  assert.ok(brief.body.includes("<!-- [skip conclave] -->"));
+});
+
 // ─── Stage 270: auto-repair execution (mode + changed_files + key forwarding) ─
 
 test("Stage 270 dispatch: ANTHROPIC_API_KEY forwarded via x-anthropic-key HEADER, never in the payload body", async () => {
