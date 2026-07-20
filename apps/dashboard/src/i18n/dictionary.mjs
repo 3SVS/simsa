@@ -1197,6 +1197,14 @@ const EN = {
     errorPrivate: "This looks like a private repository. Private repositories can be connected by installing our GitHub App on them. Alternatively, make the repository public: on GitHub, open the repository → Settings → General → Danger Zone → Change visibility → Public.",
     appInstallHint: "This private repository needs our GitHub App. Install it on the repository (or its organization), then try connecting again.",
     appInstallLink: "Install the GitHub App",
+    privateGuideTitle:
+      "Can't see the repository? If the name is right, it's probably private — private repositories work too, once our GitHub App is installed:",
+    privateGuideStep1:
+      "On the install screen, pick the account that OWNS the repository (your personal account vs. an organization — this is the step most people miss).",
+    privateGuideStep2:
+      "Under \"Repository access\", make sure this repository is selected (or choose \"All repositories\").",
+    privateGuideAlready:
+      "Already installed but still failing? The App is likely installed on a different account, or this repository isn't selected — check GitHub Settings → Installations, then try again here (no waiting needed).",
     errorNotConnected: "Connect your GitHub account first.",
     errorInvalidName: "Use the owner/repo format, e.g. 3SVS/My-first-product.",
     reposLoadError: "We could not load repositories. Reconnect GitHub or enter a repository manually.",
@@ -3672,6 +3680,14 @@ const KO = {
     errorPrivate: "비공개 저장소인 것 같아요. 비공개 저장소는 GitHub App을 설치하면 연결할 수 있어요. 또는 저장소를 공개로 바꾸세요: GitHub에서 저장소를 열고 Settings → General → Danger Zone → Change visibility → Public을 선택하세요.",
     appInstallHint: "이 비공개 저장소에는 GitHub App 설치가 필요해요. 저장소(또는 조직)에 App을 설치한 뒤 다시 연결해 보세요.",
     appInstallLink: "GitHub App 설치하기",
+    privateGuideTitle:
+      "저장소가 안 보이나요? 이름이 맞다면 비공개 저장소일 수 있어요 — 비공개 저장소도 GitHub App만 설치하면 연결됩니다:",
+    privateGuideStep1:
+      "설치 화면에서 저장소를 갖고 있는 계정(개인 계정 vs 조직)을 정확히 선택하세요 — 여기서 가장 많이 헷갈려요.",
+    privateGuideStep2:
+      "\"Repository access\"에서 이 저장소가 선택돼 있는지 확인하세요 (또는 \"All repositories\" 선택).",
+    privateGuideAlready:
+      "이미 설치했는데도 안 되나요? 다른 계정에 설치됐거나 저장소가 선택 안 됐을 가능성이 커요 — GitHub 설정 → Installations에서 확인한 뒤 여기서 바로 다시 시도하면 됩니다(기다릴 필요 없음).",
     errorNotConnected: "먼저 GitHub 계정을 연결하세요.",
     errorInvalidName: "owner/repo 형식으로 입력하세요. 예: 3SVS/My-first-product.",
     reposLoadError: "저장소를 불러오지 못했어요. GitHub를 다시 연결하거나 저장소를 직접 입력하세요.",

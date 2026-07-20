@@ -1097,6 +1097,10 @@ export type Dictionary = {
     errorPrivate: string;
     appInstallHint: string;
     appInstallLink: string;
+    privateGuideTitle: string;
+    privateGuideStep1: string;
+    privateGuideStep2: string;
+    privateGuideAlready: string;
     errorNotConnected: string;
     errorInvalidName: string;
     reposLoadError: string;
