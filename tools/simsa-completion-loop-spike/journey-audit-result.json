@@ -1,0 +1,1116 @@
+{
+  "startedAt": "2026-07-20T16:52:17.710Z",
+  "version": 2,
+  "journeys": [
+    {
+      "name": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "갈래 선택 화면",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new",
+          "h1": [
+            "무엇부터 시작할까요?"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "아이디어만 있어요 만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요.",
+            "이미 만든 앱이 있어요 코드를 연결하면 바로 검수해요.",
+            "기획서가 있어요 붙여넣으면 확인할 항목으로 바꿔드려요."
+          ],
+          "primaryCta": [],
+          "primaryCtaCount": 0,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 279,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 179,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO ← 전체 프로젝트 무엇부터 시작할까요? 지금 갖고 계신 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요. 아이디어만 있어요 만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요. 이미 만든 앱이 있어요 코드를 연결하면 바로 검수해요. 기획서가 있어요 붙여넣으면 확인할 항목으로 바꿔드려요."
+        },
+        {
+          "label": "idea 스텝1 — 무엇을 묻는가",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new?path=idea",
+          "h1": [
+            "어떤 제품을 만들고 싶으신가요?"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "← 처음 선택으로 돌아가기",
+            "회의 녹음을 요약해서 할 일을 Linear로 보내주는 앱",
+            "사진을 올리면 쇼핑몰 상품 설명을 자동으로 써주는 도구",
+            "고객 문의를 분석해서 FAQ를 자동으로 정리해주는 서비스",
+            "웹사이트·웹앱",
+            "휴대폰 앱",
+            "잘 모르겠어요",
+            "있고 익숙해요",
+            "들어봤지만 잘 몰라요",
+            "처음 들어요",
+            "네",
+            "조금",
+            "아뇨",
+            "제품 설명서 만들기 →"
+          ],
+          "primaryCta": [
+            "제품 설명서 만들기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "제품 설명서 만들기 →"
+          ],
+          "bodyLen": 500,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 307,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 1 아이디어 → 2 이해 → 3 질문 → 4 완성 ← 처음 선택으로 돌아가기 어떤 제품을 만들고 싶으신가요? 완성된 문장이 아니어도 괜찮습니다. 아이디어를 자유롭게 적어주세요. 예시로 시작하기 회의 녹음을 요약해서 할 일을 Linear로 보내주는 앱 사진을 올리면 쇼핑몰 상품 설명을 자동으로 써주는 도구 고객 문의를 분석해서 FAQ를 자동으로 정리해주는 서비스 심사에게 더 알려줄 내용이 있나요? (선택) 몇 가지만 알려주세요 (선택) — 안내를 맞춰 드려요 어디서 돌아가는 앱인가요? 웹사이트·웹앱 휴대폰 앱 잘"
+        },
+        {
+          "label": "인터뷰 첫 질문 화면",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new?path=idea",
+          "h1": [
+            "어떤 제품을 만들고 싶으신가요?"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "← 처음 선택으로 돌아가기",
+            "회의 녹음을 요약해서 할 일을 Linear로 보내주는 앱",
+            "사진을 올리면 쇼핑몰 상품 설명을 자동으로 써주는 도구",
+            "고객 문의를 분석해서 FAQ를 자동으로 정리해주는 서비스",
+            "웹사이트·웹앱",
+            "휴대폰 앱",
+            "잘 모르겠어요",
+            "있고 익숙해요",
+            "들어봤지만 잘 몰라요",
+            "처음 들어요",
+            "네",
+            "조금",
+            "아뇨",
+            "Simsa가 이해하는 중…"
+          ],
+          "primaryCta": [
+            "Simsa가 이해하는 중…"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Simsa가 이해하는 중…"
+          ],
+          "bodyLen": 518,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 316,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 1 아이디어 → 2 이해 → 3 질문 → 4 완성 ← 처음 선택으로 돌아가기 어떤 제품을 만들고 싶으신가요? 완성된 문장이 아니어도 괜찮습니다. 아이디어를 자유롭게 적어주세요. 예시로 시작하기 회의 녹음을 요약해서 할 일을 Linear로 보내주는 앱 사진을 올리면 쇼핑몰 상품 설명을 자동으로 써주는 도구 고객 문의를 분석해서 FAQ를 자동으로 정리해주는 서비스 심사에게 더 알려줄 내용이 있나요? (선택) 몇 가지만 알려주세요 (선택) — 안내를 맞춰 드려요 어디서 돌아가는 앱인가요? 웹사이트·웹앱 휴대폰 앱 잘"
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "code 갈래 스텝1 — 무엇을 묻는가",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new?path=code",
+          "h1": [
+            "앱에 대해 알려주세요"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "← 처음 선택으로 돌아가기",
+            "v0",
+            "Lovable",
+            "Bolt",
+            "Cursor",
+            "Claude Code",
+            "Replit",
+            "Windsurf",
+            "Codex",
+            "직접 코딩",
+            "프로젝트 만들고 코드 연결하기 →"
+          ],
+          "primaryCta": [
+            "프로젝트 만들고 코드 연결하기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "프로젝트 만들고 코드 연결하기 →"
+          ],
+          "bodyLen": 407,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 219,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO ← 처음 선택으로 돌아가기 앱에 대해 알려주세요 기본 정보만 적으면 — 바로 코드를 연결하고 검수할 수 있어요. 앱 이름 이 앱을 어떤 도구로 만들었나요? 해당하는 것 모두 골라주세요. 각 도구의 방식에 맞춰 확인 품질을 높이는 데 써요. v0 Lovable Bolt Cursor Claude Code Replit Windsurf Codex 직접 코딩 무엇을 하는 앱인가요? (선택) 꼭 작동해야 하는 건 뭔가요? (선택) 2~3개면 충분해요. 적어주시면 확인 항목이 내 앱에 맞게 만들어져요. 프로젝트 만들고 코드"
+        },
+        {
+          "label": "code 스텝1 입력 후",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new?path=code",
+          "h1": [
+            "앱에 대해 알려주세요"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "← 처음 선택으로 돌아가기",
+            "v0",
+            "Lovable",
+            "Bolt",
+            "Cursor",
+            "Claude Code",
+            "Replit",
+            "Windsurf",
+            "Codex",
+            "직접 코딩",
+            "프로젝트 만들고 코드 연결하기 →"
+          ],
+          "primaryCta": [
+            "프로젝트 만들고 코드 연결하기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 407,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 219,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO ← 처음 선택으로 돌아가기 앱에 대해 알려주세요 기본 정보만 적으면 — 바로 코드를 연결하고 검수할 수 있어요. 앱 이름 이 앱을 어떤 도구로 만들었나요? 해당하는 것 모두 골라주세요. 각 도구의 방식에 맞춰 확인 품질을 높이는 데 써요. v0 Lovable Bolt Cursor Claude Code Replit Windsurf Codex 직접 코딩 무엇을 하는 앱인가요? (선택) 꼭 작동해야 하는 건 뭔가요? (선택) 2~3개면 충분해요. 적어주시면 확인 항목이 내 앱에 맞게 만들어져요. 프로젝트 만들고 코드"
+        },
+        {
+          "label": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw/settings",
+          "h1": [
+            "준비와 연결"
+          ],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "GitHub 연결",
+            "키 찾는 방법",
+            "✕",
+            "키 찾는 방법",
+            "✕",
+            "+ Resend (이메일 보내기)",
+            "+ Sentry (오류 추적)",
+            "Claude Code",
+            "Codex",
+            "복사",
+            "복사",
+            "작성하고 저장하기",
+            "저장",
+            "저장",
+            "새로고침",
+            "다음: 코드 변경 →"
+          ],
+          "primaryCta": [
+            "GitHub 연결",
+            "작성하고 저장하기"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 2,
+          "disabledLabels": [
+            "저장",
+            "저장"
+          ],
+          "bodyLen": 3315,
+          "errorish": 0,
+          "guidanceish": 2,
+          "koLeakChars": 1745,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 준비와 연결 앱에 필요한 서비스와 키를 준비하고, 알림을 설정하고, 코드가 있는 곳을 연결하는 — 이 프로젝트를 위해 한 번 해두는 것들이에요. GitHub 연결 GitHub 계정을 연결하면 이 프로젝트에 쓸 저장소를 고를 수 있어요. GitHub 연결 현재 브라우저에 로그인된 GitHub 계정으로 연결됩니다. github.com에서 로그아웃 GitHu"
+        },
+        {
+          "label": "개요 — 지금 할 일이 이 갈래에 맞는가",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw",
+          "h1": [
+            "동네 빵집 예약 테스트앱"
+          ],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "첫 검수 실행하기",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "도움받기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 1004,
+          "errorish": 0,
+          "guidanceish": 1,
+          "koLeakChars": 601,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 동네 빵집 예약 테스트앱 고객이 원하는 시간에 빵을 예약하고 픽업하는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 코드 저장소 연결 — AI가 만든 코드가 있는 GitHub 저장소를 연결하세요. 3. 확인 실행 — 코드 변경을 골라 검수 항목 기준으"
+        },
+        {
+          "label": "checks 첫 화면 — 모드 선택/소스 없이 안내",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw/checks",
+          "h1": [
+            "확인 결과"
+          ],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함.",
+            "협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 토론해 합의한 뒤 판정해요 — 가장 깊은 검수, 유료 플랜 전용.",
+            "확인 실행",
+            "코드 변경(PR) 연결하고 확인하기 →"
+          ],
+          "primaryCta": [
+            "확인 실행",
+            "코드 변경(PR) 연결하고 확인하기 →"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 651,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 391,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 확인 결과 확인 항목을 기준으로 제품을 확인한 결과예요. 제품 설명서 기준 사전 확인 코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다. 어떻게 검수할까요? 기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함. 협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 토론"
+        },
+        {
+          "label": "소스 없이 검수 시도 — 막힘 안내",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw/checks",
+          "h1": [
+            "확인 결과"
+          ],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함.",
+            "협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 토론해 합의한 뒤 판정해요 — 가장 깊은 검수, 유료 플랜 전용.",
+            "확인 실행",
+            "코드 변경(PR) 연결하고 확인하기 →"
+          ],
+          "primaryCta": [
+            "확인 실행",
+            "코드 변경(PR) 연결하고 확인하기 →"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 653,
+          "errorish": 0,
+          "guidanceish": 2,
+          "koLeakChars": 393,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 코드를 먼저 연결하세요. 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 확인 결과 확인 항목을 기준으로 제품을 확인한 결과예요. 제품 설명서 기준 사전 확인 코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다. 어떻게 검수할까요? 기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함. 협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 "
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J2 기획서 갈래: 붙여넣기→변환→다음 행동",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "spec 갈래 스텝1",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new?path=spec",
+          "h1": [
+            "기획서를 붙여넣어 주세요"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "← 처음 선택으로 돌아가기",
+            "확인 항목으로 바꾸기 →"
+          ],
+          "primaryCta": [
+            "확인 항목으로 바꾸기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "확인 항목으로 바꾸기 →"
+          ],
+          "bodyLen": 276,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 149,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO ← 처음 선택으로 돌아가기 기획서를 붙여넣어 주세요 형식은 상관없어요 — 문서, 메모, 요구사항 무엇이든. 확인할 항목으로 바꿔드려요. 파일에서 불러오기 hwpx · PDF · Word · txt/md/json/csv — 화면 아무 데나 끌어다 놓아도 돼요. 확인 항목으로 바꾸기 → 무료 베타"
+        },
+        {
+          "label": "변환 중/직후",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new?path=spec",
+          "h1": [
+            "기획서를 붙여넣어 주세요"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "← 처음 선택으로 돌아가기",
+            "Simsa가 이해하는 중…"
+          ],
+          "primaryCta": [
+            "Simsa가 이해하는 중…"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Simsa가 이해하는 중…"
+          ],
+          "bodyLen": 291,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 156,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO ← 처음 선택으로 돌아가기 기획서를 붙여넣어 주세요 형식은 상관없어요 — 문서, 메모, 요구사항 무엇이든. 확인할 항목으로 바꿔드려요. 파일에서 불러오기 hwpx · PDF · Word · txt/md/json/csv — 화면 아무 데나 끌어다 놓아도 돼요. Simsa가 이해하는 중… 아이디어를 읽고 있어요… 무료 베타"
+        },
+        {
+          "label": "변환 결과 화면",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/new?path=spec",
+          "h1": [],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "v0",
+            "Lovable",
+            "Bolt",
+            "Cursor",
+            "Claude Code",
+            "Replit",
+            "Windsurf",
+            "Codex",
+            "직접 코딩",
+            "← 붙여넣기로 돌아가기",
+            "저장하고 프로젝트 시작하기 →"
+          ],
+          "primaryCta": [
+            "저장하고 프로젝트 시작하기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 2812,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 1816,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 이 앱을 어떤 도구로 만들었나요? 해당하는 것 모두 골라주세요. 각 도구의 방식에 맞춰 확인 품질을 높이는 데 써요. v0 Lovable Bolt Cursor Claude Code Replit Windsurf Codex 직접 코딩 ✓ 제품 설명서 초안이 완성됐습니다 저장하면 프로젝트 페이지에서 언제든 확인할 수 있습니다. 반려견 산책 기록 웹앱 반려견과의 산책을 GPS로 기록하고, 주간 통계를 보며, 기록을 공유하는 개인용 산책 다이어리입니다. 누가 쓰는 제품 반려견을 기르는 개인 보호자, 여러 반려견을 함께 "
+        },
+        {
+          "label": "저장 후 랜딩 — 다음 행동",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/proj_gseombua",
+          "h1": [
+            "반려견 산책 기록 웹앱"
+          ],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "첫 검수 실행하기",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "도움받기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 1011,
+          "errorish": 0,
+          "guidanceish": 1,
+          "koLeakChars": 638,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 반려견 산책 기록 웹앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 2 만들기·검수 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 반려견 산책 기록 웹앱 반려견과의 산책을 GPS로 기록하고, 주간 통계를 보며, 기록을 공유하는 개인용 산책 다이어리입니다. 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 코드 저장소 연결 — AI가 만든 코드가 있는 GitHub 저장소를 연결하세요. 3. 확인 실행 — 코"
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J3 repo 연결 여정: GitHub 미연결 신규 유저",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "settings/연결 화면 — 미연결 유저가 보는 것",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/proj_gshpwt63/settings",
+          "h1": [
+            "준비와 연결"
+          ],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "GitHub 연결",
+            "키 찾는 방법",
+            "✕",
+            "+ Supabase (데이터 저장·로그인)",
+            "+ Resend (이메일 보내기)",
+            "+ Sentry (오류 추적)",
+            "Claude Code",
+            "Codex",
+            "복사",
+            "복사",
+            "작성하고 저장하기",
+            "저장",
+            "저장",
+            "새로고침",
+            "다음: 코드 변경 →"
+          ],
+          "primaryCta": [
+            "GitHub 연결",
+            "작성하고 저장하기"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 2,
+          "disabledLabels": [
+            "저장",
+            "저장"
+          ],
+          "bodyLen": 2960,
+          "errorish": 0,
+          "guidanceish": 2,
+          "koLeakChars": 1605,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 연결 여정 테스트 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 준비와 연결 앱에 필요한 서비스와 키를 준비하고, 알림을 설정하고, 코드가 있는 곳을 연결하는 — 이 프로젝트를 위해 한 번 해두는 것들이에요. GitHub 연결 GitHub 계정을 연결하면 이 프로젝트에 쓸 저장소를 고를 수 있어요. GitHub 연결 현재 브라우저에 로그인된 GitHub 계정으로 연결됩니다. github.com에서 로그아웃 GitHub이 처"
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "en",
+      "steps": [
+        {
+          "label": "갈래 선택 화면",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/new",
+          "h1": [
+            "What do you have to start with?"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "I just have an idea Describe what you want to build. We'll turn it into things to check.",
+            "I already built an app Connect the code and review it right away.",
+            "I have a plan or spec Paste it in and we'll turn it into things to check."
+          ],
+          "primaryCta": [],
+          "primaryCtaCount": 0,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 498,
+          "errorish": 0,
+          "guidanceish": 1,
+          "koLeakChars": 8,
+          "bodyHead": "Simsa « ＋ New project ALL PROJECTS 회의록 자동 요약 앱Example Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO ← All projects What do you have to start with? Pick whatever fits — you'll end up in the same place: your app, reviewed. I just have an idea Describe what you want to build. We'll turn it into things to check. I already built an app Connect the code a"
+        },
+        {
+          "label": "idea 스텝1 — 무엇을 묻는가",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/new?path=idea",
+          "h1": [
+            "What do you want to build?"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "← Back to the three choices",
+            "An app that summarizes meeting recordings and sends the action items to Linear",
+            "A tool where uploading a photo auto-writes the e-commerce product description",
+            "A service that analyzes customer questions and organizes the FAQ automatically",
+            "Website / web app",
+            "Phone app",
+            "Not sure",
+            "Yes, comfortable",
+            "Heard of it",
+            "First time",
+            "Yes",
+            "A little",
+            "No",
+            "Create product brief →"
+          ],
+          "primaryCta": [
+            "Create product brief →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Create product brief →"
+          ],
+          "bodyLen": 873,
+          "errorish": 0,
+          "guidanceish": 1,
+          "koLeakChars": 8,
+          "bodyHead": "Simsa « ＋ New project ALL PROJECTS 회의록 자동 요약 앱Example Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO 1 Idea → 2 Understand → 3 Questions → 4 Done ← Back to the three choices What do you want to build? A rough sentence is fine — write your idea freely. Start from an example An app that summarizes meeting recordings and sends the action items to Linear"
+        },
+        {
+          "label": "인터뷰 첫 질문 화면",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/new?path=idea",
+          "h1": [
+            "What do you want to build?"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "← Back to the three choices",
+            "An app that summarizes meeting recordings and sends the action items to Linear",
+            "A tool where uploading a photo auto-writes the e-commerce product description",
+            "A service that analyzes customer questions and organizes the FAQ automatically",
+            "Website / web app",
+            "Phone app",
+            "Not sure",
+            "Yes, comfortable",
+            "Heard of it",
+            "First time",
+            "Yes",
+            "A little",
+            "No",
+            "Simsa is reading…"
+          ],
+          "primaryCta": [
+            "Simsa is reading…"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Simsa is reading…"
+          ],
+          "bodyLen": 895,
+          "errorish": 0,
+          "guidanceish": 1,
+          "koLeakChars": 8,
+          "bodyHead": "Simsa « ＋ New project ALL PROJECTS 회의록 자동 요약 앱Example Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO 1 Idea → 2 Understand → 3 Questions → 4 Done ← Back to the three choices What do you want to build? A rough sentence is fine — write your idea freely. Start from an example An app that summarizes meeting recordings and sends the action items to Linear"
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "en",
+      "steps": [
+        {
+          "label": "code 갈래 스텝1 — 무엇을 묻는가",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/new?path=code",
+          "h1": [
+            "Tell us about your app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "← Back to the three choices",
+            "v0",
+            "Lovable",
+            "Bolt",
+            "Cursor",
+            "Claude Code",
+            "Replit",
+            "Windsurf",
+            "Codex",
+            "Hand-coded",
+            "Create project & connect code →"
+          ],
+          "primaryCta": [
+            "Create project & connect code →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Create project & connect code →"
+          ],
+          "bodyLen": 618,
+          "errorish": 0,
+          "guidanceish": 2,
+          "koLeakChars": 8,
+          "bodyHead": "Simsa « ＋ New project ALL PROJECTS 회의록 자동 요약 앱Example Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO ← Back to the three choices Tell us about your app Just the basics — then connect the code and review right away. App name Which tool did you build this with? Pick any that apply. This helps us tailor reviews to how each tool works. v0 Lovable Bolt Cu"
+        },
+        {
+          "label": "code 스텝1 입력 후",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/new?path=code",
+          "h1": [
+            "Tell us about your app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "← Back to the three choices",
+            "v0",
+            "Lovable",
+            "Bolt",
+            "Cursor",
+            "Claude Code",
+            "Replit",
+            "Windsurf",
+            "Codex",
+            "Hand-coded",
+            "Create project & connect code →"
+          ],
+          "primaryCta": [
+            "Create project & connect code →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 618,
+          "errorish": 0,
+          "guidanceish": 2,
+          "koLeakChars": 8,
+          "bodyHead": "Simsa « ＋ New project ALL PROJECTS 회의록 자동 요약 앱Example Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO ← Back to the three choices Tell us about your app Just the basics — then connect the code and review right away. App name Which tool did you build this with? Pick any that apply. This helps us tailor reviews to how each tool works. v0 Lovable Bolt Cu"
+        },
+        {
+          "label": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/proj_gtek266g/settings",
+          "h1": [
+            "Prep & connections"
+          ],
+          "buttons": [
+            "«",
+            "ADVANCED +",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "Connect GitHub",
+            "How to get the keys",
+            "✕",
+            "How to get the keys",
+            "✕",
+            "How to get the keys",
+            "✕",
+            "+ Sentry (오류 추적)",
+            "Claude Code",
+            "Codex",
+            "Copy",
+            "Copy",
+            "Save setup",
+            "Save",
+            "Save",
+            "Refresh",
+            "Next: Code changes →"
+          ],
+          "primaryCta": [
+            "Connect GitHub",
+            "Save setup"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 2,
+          "disabledLabels": [
+            "Save",
+            "Save"
+          ],
+          "bodyLen": 5183,
+          "errorish": 0,
+          "guidanceish": 14,
+          "koLeakChars": 478,
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Prep & connections Get the app's service"
+        },
+        {
+          "label": "개요 — 지금 할 일이 이 갈래에 맞는가",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/proj_gtek266g",
+          "h1": [
+            "Bakery reservation test app"
+          ],
+          "buttons": [
+            "«",
+            "ADVANCED +",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "Run your first inspection",
+            "Get help"
+          ],
+          "primaryCta": [
+            "Get help"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Get help"
+          ],
+          "bodyLen": 1964,
+          "errorish": 0,
+          "guidanceish": 4,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Bakery reservation test app A simple onl"
+        },
+        {
+          "label": "checks 첫 화면 — 모드 선택/소스 없이 안내",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/proj_gtek266g/checks",
+          "h1": [
+            "Review results"
+          ],
+          "buttons": [
+            "«",
+            "ADVANCED +",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "Standard check Selected One AI checks, a second AI cross-verifies every problem call — included on every plan.",
+            "Council check Paid plan Three AIs review independently, debate disagreements, and agree before the verdict — the deepest check, on the paid plan.",
+            "Run check",
+            "Connect and review code changes →"
+          ],
+          "primaryCta": [
+            "Run check",
+            "Connect and review code changes →"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 1180,
+          "errorish": 0,
+          "guidanceish": 4,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Review results The results of checking y"
+        },
+        {
+          "label": "소스 없이 검수 시도 — 막힘 안내",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/proj_gtek266g/checks",
+          "h1": [
+            "Review results"
+          ],
+          "buttons": [
+            "«",
+            "ADVANCED +",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "Standard check Selected One AI checks, a second AI cross-verifies every problem call — included on every plan.",
+            "Council check Paid plan Three AIs review independently, debate disagreements, and agree before the verdict — the deepest check, on the paid plan.",
+            "Run check",
+            "Connect and review code changes →"
+          ],
+          "primaryCta": [
+            "Run check",
+            "Connect and review code changes →"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 1176,
+          "errorish": 0,
+          "guidanceish": 6,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Connect your code first. ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Review results The results of checking your "
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J2e 기획서 갈래 입구(EN)",
+      "locale": "en",
+      "steps": [
+        {
+          "label": "spec 갈래 스텝1 (EN)",
+          "note": "",
+          "locale": "en",
+          "url": "https://app.trysimsa.com/projects/new?path=spec",
+          "h1": [
+            "Paste your plan"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "M Workspace Sign in → ⌃",
+            "EN",
+            "KO",
+            "← Back to the three choices",
+            "Turn it into a checklist →"
+          ],
+          "primaryCta": [
+            "Turn it into a checklist →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Turn it into a checklist →"
+          ],
+          "bodyLen": 405,
+          "errorish": 0,
+          "guidanceish": 0,
+          "koLeakChars": 8,
+          "bodyHead": "Simsa « ＋ New project ALL PROJECTS 회의록 자동 요약 앱Example Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO ← Back to the three choices Paste your plan Any format works — a doc, bullet notes, a spec. We'll turn it into things to check. Load from file hwpx · PDF · Word · txt/md/json/csv — or drop a file anywhere on the screen. Turn it into a checklist → Free"
+        }
+      ],
+      "failure": null
+    }
+  ],
+  "findings": [
+    {
+      "sev": "P1",
+      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "ko",
+      "step": "갈래 선택 화면",
+      "what": "primary CTA 0 — 다음 행동이 버튼으로 안 보임"
+    },
+    {
+      "sev": "P2",
+      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "ko",
+      "step": "idea 스텝1 — 무엇을 묻는가",
+      "what": "비활성 버튼 1개(제품 설명서 만들기 →) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "ko",
+      "step": "인터뷰 첫 질문 화면",
+      "what": "비활성 버튼 1개(Simsa가 이해하는 중…) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "ko",
+      "step": "code 갈래 스텝1 — 무엇을 묻는가",
+      "what": "비활성 버튼 1개(프로젝트 만들고 코드 연결하기 →) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "ko",
+      "step": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
+      "what": "비활성 버튼 2개(저장/저장) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "ko",
+      "step": "개요 — 지금 할 일이 이 갈래에 맞는가",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J2 기획서 갈래: 붙여넣기→변환→다음 행동",
+      "locale": "ko",
+      "step": "spec 갈래 스텝1",
+      "what": "비활성 버튼 1개(확인 항목으로 바꾸기 →) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J2 기획서 갈래: 붙여넣기→변환→다음 행동",
+      "locale": "ko",
+      "step": "변환 중/직후",
+      "what": "비활성 버튼 1개(Simsa가 이해하는 중…) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J2 기획서 갈래: 붙여넣기→변환→다음 행동",
+      "locale": "ko",
+      "step": "저장 후 랜딩 — 다음 행동",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J3 repo 연결 여정: GitHub 미연결 신규 유저",
+      "locale": "ko",
+      "step": "settings/연결 화면 — 미연결 유저가 보는 것",
+      "what": "비활성 버튼 2개(저장/저장) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P1",
+      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "en",
+      "step": "갈래 선택 화면",
+      "what": "primary CTA 0 — 다음 행동이 버튼으로 안 보임"
+    },
+    {
+      "sev": "P2",
+      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "en",
+      "step": "idea 스텝1 — 무엇을 묻는가",
+      "what": "비활성 버튼 1개(Create product brief →) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
+      "locale": "en",
+      "step": "인터뷰 첫 질문 화면",
+      "what": "비활성 버튼 1개(Simsa is reading…) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "en",
+      "step": "code 갈래 스텝1 — 무엇을 묻는가",
+      "what": "비활성 버튼 1개(Create project & connect code →) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P1",
+      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "en",
+      "step": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
+      "what": "EN 주행 한글 누수 478자"
+    },
+    {
+      "sev": "P2",
+      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "en",
+      "step": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
+      "what": "비활성 버튼 2개(Save/Save) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
+      "locale": "en",
+      "step": "개요 — 지금 할 일이 이 갈래에 맞는가",
+      "what": "비활성 버튼 1개(Get help) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J2e 기획서 갈래 입구(EN)",
+      "locale": "en",
+      "step": "spec 갈래 스텝1 (EN)",
+      "what": "비활성 버튼 1개(Turn it into a checklist →) — 이유 표시 스크린샷 확인"
+    }
+  ]
+}
