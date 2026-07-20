@@ -92,6 +92,26 @@ export function overviewNextAction(checks) {
 }
 
 /**
+ * Journey-audit P2 (2026-07-20) — which door the overview inspection card's
+ * EMPTY state offers. On the CODE branch with the repo CONFIRMED absent and
+ * no deploy URL, "run your first inspection" points at the URL-based door the
+ * user can't use yet — walk them to connect first instead. Unknown facts
+ * (null — fetch pending/failed) keep the default door: fail-open, a wrong
+ * "connect" nudge on an already-connected project is worse than the generic
+ * lead (transient-null-hard-false).
+ *
+ * @param {{ entryPath?: "idea" | "code" | "spec" | null, hasRepo?: boolean | null, hasDeployUrl?: boolean | null }} facts
+ * @returns {"connect" | "run"}
+ */
+export function inspectionEmptyStateDoor(facts) {
+  const f = facts ?? {};
+  if (f.entryPath === "code" && f.hasRepo === false && f.hasDeployUrl !== true) {
+    return "connect";
+  }
+  return "run";
+}
+
+/**
  * Stage 272 — localized "3 minutes ago"-style label for the overview card.
  * `now` is injectable for deterministic tests. Unparseable dates return ""
  * (the card simply omits the timestamp).

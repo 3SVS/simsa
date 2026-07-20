@@ -2212,6 +2212,8 @@ export type Dictionary = {
     };
     overview: {
       emptyLead: string;
+      emptyLeadCodeNoSource: string;
+      connectFirst: string;
       runFirst: string;
       inProgress: string;
       viewReport: string;

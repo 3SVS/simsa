@@ -36,7 +36,7 @@ import {
   listVisualChecks,
   type VisualCheckListItem,
 } from "@/lib/workspace-visual-checks-api";
-import { overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
+import { inspectionEmptyStateDoor, overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
 import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
@@ -63,6 +63,29 @@ export default function ProjectOverviewPage() {
     if (consumeProjectSyncFailed(id)) setSyncFailed(true);
   }, [id]);
   const { t, locale } = useI18n();
+
+  // Confirmed project facts, fetched ONCE at the page level so the command
+  // center and the inspection card can never disagree about what's connected
+  // (journey-audit P2, 2026-07-20: the inspection card pushed a code-branch
+  // project toward URL inspection while nothing was connected yet).
+  const [hasRepo, setHasRepo] = useState<boolean | null>(null);
+  const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
+  const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const uk = getUserKey();
+    fetchProjectRepoSettled(fetchProjectRepo, id, uk)
+      .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
+      .catch(() => {});
+    listProjectReviewHistory(id, uk, { limit: 1 })
+      .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
+      .catch(() => {});
+    listProjectSources(id, uk)
+      .then((res) => { if (!cancelled) setHasDeployUrl(res.ok ? res.sources.some((s) => s.type === "website") : null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id]);
+  const entryPath = loadExtendedProjectData(id)?.entryPath ?? null;
   // Locally-created projects live in localStorage (client-only); mock demos are
   // bundled. Read on the client so real projects resolve.
   const project = getLocalProject(id) ?? getProject(id);
@@ -103,6 +126,10 @@ export default function ProjectOverviewPage() {
         t={t}
         hasItems={project.requirements.length > 0}
         showExplainer={!hasReviewActivity}
+        hasRepo={hasRepo}
+        hasReviewRun={hasReviewRun}
+        hasDeployUrl={hasDeployUrl}
+        entryPath={entryPath}
       />
 
       {/* Stage 183 — Plan Map ("Where are we?") read-only entry */}
@@ -118,7 +145,14 @@ export default function ProjectOverviewPage() {
       </Link>
 
       {/* Stage 272 — inspection status at a glance + the single next action */}
-      <VisualChecksOverviewCard projectId={id} t={t} locale={locale} />
+      <VisualChecksOverviewCard
+        projectId={id}
+        t={t}
+        locale={locale}
+        entryPath={entryPath}
+        hasRepo={hasRepo}
+        hasDeployUrl={hasDeployUrl}
+      />
 
       {/* G2 — 막힘 도우미: 만들기 도중의 유일한 도움 입구 (복귀 이메일이 여기로 안내) */}
       <div className="mb-8">
@@ -234,34 +268,22 @@ function CommandCenterCard({
   t,
   hasItems,
   showExplainer,
+  hasRepo,
+  hasReviewRun,
+  hasDeployUrl,
+  entryPath,
 }: {
   projectId: string;
   t: Dictionary;
   hasItems: boolean;
   showExplainer: boolean;
-}) {
-  const [hasRepo, setHasRepo] = useState<boolean | null>(null);
-  const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
+  hasRepo: boolean | null;
+  hasReviewRun: boolean | null;
   // A connected deploy/website URL — the builder path's alternative to a repo,
   // so an idea-only project reaches its results without connecting GitHub.
-  const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const uk = getUserKey();
-    fetchProjectRepoSettled(fetchProjectRepo, projectId, uk)
-      .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
-      .catch(() => {});
-    listProjectReviewHistory(projectId, uk, { limit: 1 })
-      .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
-      .catch(() => {});
-    listProjectSources(projectId, uk)
-      .then((res) => { if (!cancelled) setHasDeployUrl(res.ok ? res.sources.some((s) => s.type === "website") : null); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [projectId]);
-
-  const entryPath = loadExtendedProjectData(projectId)?.entryPath ?? null;
+  hasDeployUrl: boolean | null;
+  entryPath: "idea" | "code" | "spec" | null;
+}) {
   const next = nextProjectAction({ hasItems, hasRepo, hasReviewRun, hasDeployUrl, entryPath });
 
   const copy: Record<string, { label: string; desc: string }> = {
@@ -359,10 +381,16 @@ function VisualChecksOverviewCard({
   projectId,
   t,
   locale,
+  entryPath,
+  hasRepo,
+  hasDeployUrl,
 }: {
   projectId: string;
   t: Dictionary;
   locale: Locale;
+  entryPath: "idea" | "code" | "spec" | null;
+  hasRepo: boolean | null;
+  hasDeployUrl: boolean | null;
 }) {
   const [checks, setChecks] = useState<VisualCheckListItem[] | null>(null);
   const [userKey, setUserKey] = useState<string>("");
@@ -409,17 +437,36 @@ function VisualChecksOverviewCard({
       </div>
       <div className="card p-5">
         {run === null ? (
-          <>
-            <p className="text-sm leading-relaxed text-gray-600">
-              {t.visualChecks.overview.emptyLead}
-            </p>
-            <Link
-              href={`/projects/${projectId}/visual-checks`}
-              className="btn btn-secondary btn-sm mt-3"
-            >
-              {t.visualChecks.overview.runFirst}
-            </Link>
-          </>
+          // Journey-audit P2 (2026-07-20): on the CODE branch with nothing
+          // connected (repo confirmed absent, no deploy URL), "run your first
+          // inspection" pointed at the URL-based door the user can't use yet.
+          // Branch-fit: walk them to connect first. Unknown facts (null) keep
+          // the default door — fail-open, never a wrong lock.
+          inspectionEmptyStateDoor({ entryPath, hasRepo, hasDeployUrl }) === "connect" ? (
+            <>
+              <p className="text-sm leading-relaxed text-gray-600">
+                {t.visualChecks.overview.emptyLeadCodeNoSource}
+              </p>
+              <Link
+                href={`/projects/${projectId}/settings`}
+                className="btn btn-secondary btn-sm mt-3"
+              >
+                {t.visualChecks.overview.connectFirst}
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-sm leading-relaxed text-gray-600">
+                {t.visualChecks.overview.emptyLead}
+              </p>
+              <Link
+                href={`/projects/${projectId}/visual-checks`}
+                className="btn btn-secondary btn-sm mt-3"
+              >
+                {t.visualChecks.overview.runFirst}
+              </Link>
+            </>
+          )
         ) : (
           <>
             <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">

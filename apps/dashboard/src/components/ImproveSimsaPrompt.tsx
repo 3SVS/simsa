@@ -25,10 +25,12 @@ export function ImproveSimsaPrompt() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const pathname = usePathname();
-  // Flow-audit B-3 (2026-07-17): never show over the creation wizard — the
-  // popup physically covered the last question's options and the progress
-  // button. The invite waits until the user has a project.
-  const onWizard = pathname?.startsWith("/projects/new") ?? false;
+  // Flow-audit B-3 (2026-07-17) banned it from the creation wizard; the
+  // journey-audit P2 (2026-07-20) showed it still floated over the project
+  // overview and checks screens — exactly where a fresh user is orienting.
+  // The invite now shows ONLY on the project list (nothing critical to
+  // cover there); Settings keeps the permanent consent UI for everyone else.
+  const onProjectList = pathname === "/projects";
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +77,7 @@ export function ImproveSimsaPrompt() {
     }
   }
 
-  if (!open || onWizard) return null;
+  if (!open || !onProjectList) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 w-[calc(100%-2rem)] max-w-sm">
