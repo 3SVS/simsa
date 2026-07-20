@@ -13,6 +13,11 @@ database_id = "28be7ec4-9c46-4b78-8d07-11f344021dd0"
 
 [vars]
 ENVIRONMENT = "production"
+# 2026-07-21 (Bae 결정) — 레거시 Conclave 자동 리뷰 전면 정지(Simsa 집중 기간).
+# pull_request 웹훅 자동 협의체 리뷰 + 설치 웰컴 리뷰를 크레딧 소모 전에 스킵.
+# 설치 기록·파운더 알림·수동 /saas/review·Simsa repair는 영향 없음.
+# 재가동 = 이 줄을 지우고(또는 "on") deploy-central-plane 1회.
+LEGACY_AUTO_REVIEW = "off"
 # Stage 271 — public sign-up OPEN (Bae approved 2026-07-02: "env 변경도 저건 승인할게").
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.

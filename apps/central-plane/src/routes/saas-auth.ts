@@ -131,11 +131,17 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
           // Fire-and-forget: find the most recently updated open PR across
           // the newly accessible repos and kick off a welcome review so
           // the installer sees a result without having to open a new PR.
-          const webhookRepos = (p["repositories"] ?? []) as Array<{ id: number; full_name: string; updated_at?: string }>;
-          const publicBaseUrl = env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
-          autoReviewOnInstall(env, installationId, user.id, webhookRepos, publicBaseUrl).catch(
-            (err) => console.error(`[webhook] autoReviewOnInstall failed: ${(err as Error).message}`),
-          );
+          // 2026-07-21 (Bae): 킬스위치가 off면 웰컴 리뷰도 스킵 — 설치 기록·
+          // 유저 생성·파운더 알림은 위에서 이미 끝났고 그대로 유지된다.
+          if (env.LEGACY_AUTO_REVIEW === "off") {
+            console.log(`[webhook] install ${installationId}: welcome review skipped (legacy auto-review off)`);
+          } else {
+            const webhookRepos = (p["repositories"] ?? []) as Array<{ id: number; full_name: string; updated_at?: string }>;
+            const publicBaseUrl = env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
+            autoReviewOnInstall(env, installationId, user.id, webhookRepos, publicBaseUrl).catch(
+              (err) => console.error(`[webhook] autoReviewOnInstall failed: ${(err as Error).message}`),
+            );
+          }
         } else {
           console.log(`[webhook] install ${installationId} created (no account info)`);
         }
@@ -275,6 +281,12 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
     // review on opened/reopened/synchronize (the head SHA changed).
     // Other actions (closed/labeled/etc.) are acknowledged but skipped.
     if (event === "pull_request") {
+      // 2026-07-21 (Bae): 레거시 자동 리뷰 킬스위치 — Simsa 집중 기간 동안
+      // 전 repo에서 자동 협의체 리뷰 정지. 크레딧 소모/잡 생성/샌드박스
+      // 어느 것도 일어나기 전에 여기서 끊는다. 수동 /saas/review는 그대로.
+      if (env.LEGACY_AUTO_REVIEW === "off") {
+        return c.json({ ok: true, event, action, delivery, skipped: "legacy_auto_review_disabled" });
+      }
       const reviewable = action === "opened" || action === "reopened" || action === "synchronize";
       if (!reviewable) {
         return c.json({ ok: true, event, action, delivery, skipped: "non_reviewable_action" });
