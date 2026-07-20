@@ -242,11 +242,16 @@ export default function ChecksPage() {
 
   // Exactly ONE filled primary on the page (UIUX #5 / #2), state-driven — see
   // checksPrimaryCta. The real code review outranks the draft spec pre-check.
+  // Mirrors the section-render gate below (#328) — a hidden PR section's CTA
+  // must never be picked as the screen primary (journey-audit v2 기준선).
+  const prSectionVisible = entryPath !== "idea" || latestPrReview != null || linkedPulls.length > 0;
   const primaryCta = checksPrimaryCta({
+    prSectionVisible,
     prReviewLoaded: prLoadPhase === "done",
     hasPrReview: Boolean(latestPrReview),
     prNeedsAction,
     draftNeedsAction: needsAction,
+    draftHasResults: Boolean(results),
   });
   const btnClass = (isPrimary: boolean) => (isPrimary ? "btn btn-md btn-primary" : "btn btn-md btn-secondary");
 
@@ -445,7 +450,11 @@ export default function ChecksPage() {
           <div className="card p-8 text-center">
             <p className="mb-1 text-sm font-medium text-gray-700">{t.checks.emptyTitle}</p>
             <p className="mb-5 text-xs text-gray-500">{t.checks.emptyDesc}</p>
-            <button onClick={runCheck} className="btn btn-md btn-primary">{t.checks.runCheck}</button>
+            {/* journey-audit v2 기준선: 이 버튼이 btn-primary 하드코딩으로 상태
+                기계를 우회해 화면에 filled primary가 2개였다(실측 cta=2).
+                이제 run_precheck일 때만 primary — connect_pr이 주인공인 상태
+                (code 갈래·PR 미연결)에선 secondary로 물러난다. */}
+            <button onClick={runCheck} className={btnClass(primaryCta === "run_precheck")}>{t.checks.runCheck}</button>
           </div>
         )}
 

@@ -238,9 +238,23 @@ describe("inspectionEmptyStateDoor", () => {
     );
   });
 
-  it("unknown repo fact (null) stays fail-open → run", () => {
+  it("code branch + unknown repo fact (null) → wait (never a door that flips)", () => {
+    // v2 기준선 (2026-07-21 실측): rendering the default door while the repo
+    // fetch settles made the CTA flip "run"→"connect" ~2s after paint. On the
+    // code branch an undecidable door holds the card instead.
     assert.equal(
       inspectionEmptyStateDoor({ entryPath: "code", hasRepo: null, hasDeployUrl: null }),
+      "wait",
+    );
+    // A confirmed deploy URL decides the door regardless of the repo fact.
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: null, hasDeployUrl: true }),
+      "run",
+    );
+    // Non-code branches keep the default door on unknowns (their door never
+    // depends on the repo fact).
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "idea", hasRepo: null, hasDeployUrl: null }),
       "run",
     );
   });

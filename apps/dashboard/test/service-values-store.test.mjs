@@ -59,10 +59,33 @@ describe("service-values-store (browser-only, sessionStorage)", () => {
   });
 
   // A2b safety check 1: values entered in prep survive the move to export.
-  it("seedServiceSetup returns the STORED values when present (survives the move)", () => {
+  // v2 (2026-07-21 i18n): the stored blob decides WHICH services + their
+  // VALUES, but the copy is re-resolved from the catalog in the current
+  // locale — a KO-saved blob must not pin the labels after switching to EN.
+  it("seedServiceSetup keeps STORED values, re-resolves copy per locale", () => {
     const stored = [{ id: "supabase", envVars: [{ key: "SUPABASE_SERVICE_ROLE_KEY", value: "svc_real" }] }];
     saveServiceValues("proj_1", stored);
-    const seeded = seedServiceSetup("proj_1", { oneLine: "무엇이든" });
+
+    const seededKo = seedServiceSetup("proj_1", { oneLine: "무엇이든" });
+    assert.equal(seededKo.length, 1);
+    assert.equal(seededKo[0].id, "supabase");
+    const roleKo = seededKo[0].envVars.find((v) => v.key === "SUPABASE_SERVICE_ROLE_KEY");
+    assert.equal(roleKo.value, "svc_real", "entered value survives");
+    assert.ok(/데이터/.test(seededKo[0].label), "KO copy resolved");
+    // Catalog vars the stored blob didn't carry come back (full entry restored).
+    assert.ok(seededKo[0].envVars.some((v) => v.key === "NEXT_PUBLIC_SUPABASE_URL"));
+
+    const seededEn = seedServiceSetup("proj_1", { oneLine: "anything" }, "en");
+    const roleEn = seededEn[0].envVars.find((v) => v.key === "SUPABASE_SERVICE_ROLE_KEY");
+    assert.equal(roleEn.value, "svc_real", "value survives locale switch");
+    assert.ok(/data/.test(seededEn[0].label), "EN copy resolved");
+    assert.ok(!/[가-힣]/.test(seededEn[0].label), "no Hangul in EN label");
+  });
+
+  it("seedServiceSetup passes unknown/legacy service ids through untouched", () => {
+    const stored = [{ id: "custom-thing", label: "커스텀", envVars: [{ key: "X", value: "1" }] }];
+    saveServiceValues("proj_legacy", stored);
+    const seeded = seedServiceSetup("proj_legacy", null, "en");
     assert.deepEqual(seeded, stored);
   });
 

@@ -242,7 +242,10 @@ for (const j of audit.journeys) {
     if (s.errorish > 0 && !isBlockedStep) {
       audit.findings.push({ sev: "P0", journey: j.name, locale: s.locale, step: s.label, what: `happy path 오류 카피 ${s.errorish}건 노출` });
     }
-    if (s.primaryCtaCount === 0 && !/입력 후|변환 중/.test(s.label)) {
+    // 갈래 선택(chooser)은 3개의 동등한 문 설계라 primary-0이 정상 — 기준선
+    // 판독(2026-07-21)에서 거짓 양성으로 확정, 규칙 예외. (추천 배지는 D16이
+    // 별도로 담당한다.)
+    if (s.primaryCtaCount === 0 && !/입력 후|변환 중|갈래 선택/.test(s.label)) {
       audit.findings.push({ sev: "P1", journey: j.name, locale: s.locale, step: s.label, what: "primary CTA 0 — 다음 행동이 버튼으로 안 보임" });
     }
     if (s.primaryCtaCount >= 3) {

@@ -95,18 +95,24 @@ export function overviewNextAction(checks) {
  * Journey-audit P2 (2026-07-20) — which door the overview inspection card's
  * EMPTY state offers. On the CODE branch with the repo CONFIRMED absent and
  * no deploy URL, "run your first inspection" points at the URL-based door the
- * user can't use yet — walk them to connect first instead. Unknown facts
- * (null — fetch pending/failed) keep the default door: fail-open, a wrong
- * "connect" nudge on an already-connected project is worse than the generic
- * lead (transient-null-hard-false).
+ * user can't use yet — walk them to connect first instead.
+ *
+ * v2 기준선 (2026-07-21): on the code branch an UNKNOWN repo fact must not
+ * render the default door either — the baseline caught the card showing
+ * "run" for ~2s then flipping to "connect" once the repo fetch settled
+ * (실측 스크린샷). A CTA that flips is worse than a moment without one
+ * (same principle as nextProjectAction). So code + hasRepo null → "wait"
+ * (caller renders nothing until the fact settles). Non-code branches keep
+ * the default door on unknowns — their door never depends on the repo fact.
  *
  * @param {{ entryPath?: "idea" | "code" | "spec" | null, hasRepo?: boolean | null, hasDeployUrl?: boolean | null }} facts
- * @returns {"connect" | "run"}
+ * @returns {"connect" | "run" | "wait"}
  */
 export function inspectionEmptyStateDoor(facts) {
   const f = facts ?? {};
-  if (f.entryPath === "code" && f.hasRepo === false && f.hasDeployUrl !== true) {
-    return "connect";
+  if (f.entryPath === "code" && f.hasDeployUrl !== true) {
+    if (f.hasRepo === false) return "connect";
+    if (f.hasRepo == null) return "wait";
   }
   return "run";
 }

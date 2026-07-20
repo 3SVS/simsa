@@ -16,7 +16,7 @@ export function inspectionEmptyStateDoor(facts: {
   entryPath?: "idea" | "code" | "spec" | null;
   hasRepo?: boolean | null;
   hasDeployUrl?: boolean | null;
-}): "connect" | "run";
+}): "connect" | "run" | "wait";
 
 export function relativeTimeLabel(iso: string, locale: string, now?: number): string;
 

@@ -147,3 +147,46 @@ describe("service-catalog", () => {
     assert.notEqual(SERVICE_CATALOG[0].label, "mutated");
   });
 });
+
+// v2 (2026-07-21, journey-audit 기준선 P1): the catalog is bilingual — the EN
+// journey's prep card was the only Korean left on the screen (실측 478자).
+describe("service-catalog: locale resolution", () => {
+  it('locale "en" resolves every user-facing string without Hangul', () => {
+    for (const svc of allCatalogServices("en")) {
+      const texts = [
+        svc.label,
+        svc.why,
+        ...(svc.setupSteps ?? []),
+        ...svc.envVars.flatMap((v) => [v.description, v.example ?? ""]),
+      ];
+      for (const text of texts) {
+        assert.ok(!/[가-힣]/.test(text), `Hangul leaked in EN copy of ${svc.id}: ${text}`);
+      }
+    }
+  });
+
+  it("locale omitted defaults to KO (backward compat — 기존 호출자 무변경)", () => {
+    assert.equal(catalogServiceById("app-url").label, "앱 주소");
+    assert.equal(catalogServiceById("app-url", "en").label, "App URL");
+  });
+
+  it("EN/KO entries mirror structure: same ids, keys, secret flags, urls", () => {
+    const ko = allCatalogServices("ko");
+    const en = allCatalogServices("en");
+    assert.deepEqual(ko.map((s) => s.id), en.map((s) => s.id));
+    for (let i = 0; i < ko.length; i++) {
+      assert.equal(ko[i].setupUrl, en[i].setupUrl);
+      assert.deepEqual(
+        ko[i].envVars.map((v) => ({ key: v.key, secret: v.secret ?? false })),
+        en[i].envVars.map((v) => ({ key: v.key, secret: v.secret ?? false })),
+      );
+      assert.equal((ko[i].setupSteps ?? []).length, (en[i].setupSteps ?? []).length);
+    }
+  });
+
+  it("detectServices honors locale for the resolved copy", () => {
+    const en = detectServices({ oneLine: "an app that sends a verify email on sign up" }, "en");
+    const resend = en.find((s) => s.id === "resend");
+    assert.ok(resend && !/[가-힣]/.test(resend.label));
+  });
+});

@@ -12,7 +12,7 @@
  * never lingers on the device indefinitely. Keyed per project.
  */
 
-import { detectServices } from "./service-catalog.mjs";
+import { detectServices, catalogServiceById } from "./service-catalog.mjs";
 
 const KEY_PREFIX = "conclave:service-values:";
 
@@ -80,12 +80,33 @@ export function clearServiceValues(projectId) {
  *   2. spec detection (email→Resend, error→Sentry, …) still reaches the panel
  *      on its new screen (detection fallback).
  *
+ * i18n (2026-07-21): the stored blob wins on WHICH services + their values, but
+ * the copy (labels/steps/descriptions) is re-resolved from the catalog in the
+ * CURRENT locale — otherwise a user who saved under KO keeps seeing KO after
+ * switching to EN (journey-audit v2 P1의 같은 클래스).
+ *
  * @param {string} projectId
  * @param {Parameters<typeof detectServices>[0]} spec
+ * @param {"en"|"ko"} [locale]
  * @returns {unknown[]}
  */
-export function seedServiceSetup(projectId, spec) {
+export function seedServiceSetup(projectId, spec, locale) {
   const stored = loadServiceValues(projectId);
-  if (Array.isArray(stored) && stored.length > 0) return stored;
-  return detectServices(spec);
+  if (!Array.isArray(stored) || stored.length === 0) return detectServices(spec, locale);
+  return stored.map((s) => {
+    const fresh = catalogServiceById(s?.id, locale);
+    if (!fresh) return s; // unknown/legacy id — pass through untouched
+    const valueByKey = new Map(
+      (Array.isArray(s?.envVars) ? s.envVars : [])
+        .filter((v) => v && typeof v.key === "string")
+        .map((v) => [v.key, v.value]),
+    );
+    return {
+      ...fresh,
+      envVars: fresh.envVars.map((v) => {
+        const value = valueByKey.get(v.key);
+        return typeof value === "string" && value.length > 0 ? { ...v, value } : v;
+      }),
+    };
+  });
 }
