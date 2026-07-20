@@ -29,7 +29,15 @@ export interface ClaudeWorkerOptions {
   /** For tests or alternate providers — inject a Messages-compatible client. */
   client?: AnthropicLike;
   /** Factory used when `client` is not supplied. Defaults to lazy-loading @anthropic-ai/sdk. */
-  clientFactory?: (apiKey: string) => Promise<AnthropicLike>;
+  clientFactory?: (apiKey: string, baseURL?: string) => Promise<AnthropicLike>;
+  /**
+   * Optional Anthropic-compatible base URL (e.g. a CF AI Gateway provider
+   * endpoint). First-class here — NOT via a caller-side clientFactory —
+   * because @anthropic-ai/sdk must resolve from THIS package's context;
+   * a dynamic import from an app entrypoint fails module resolution
+   * (2026-07-21 실측: container server.mjs "Cannot find package").
+   */
+  baseURL?: string;
 }
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -40,12 +48,12 @@ const DEFAULT_MODEL = "claude-sonnet-4-6";
  */
 const DEFAULT_MAX_TOKENS = 16_384;
 
-async function defaultClientFactory(apiKey: string): Promise<AnthropicLike> {
+async function defaultClientFactory(apiKey: string, baseURL?: string): Promise<AnthropicLike> {
   const mod = (await import("@anthropic-ai/sdk")) as unknown as {
-    default: new (opts: { apiKey: string }) => AnthropicLike;
+    default: new (opts: { apiKey: string; baseURL?: string }) => AnthropicLike;
   };
   const Ctor = mod.default;
-  return new Ctor({ apiKey });
+  return new Ctor(baseURL ? { apiKey, baseURL } : { apiKey });
 }
 
 /**
@@ -70,7 +78,8 @@ export class ClaudeWorker {
   private readonly model: string;
   private readonly maxTokens: number;
   private readonly gate: EfficiencyGate;
-  private readonly clientFactory: (apiKey: string) => Promise<AnthropicLike>;
+  private readonly clientFactory: (apiKey: string, baseURL?: string) => Promise<AnthropicLike>;
+  private readonly baseURL: string | undefined;
   private clientPromise: Promise<AnthropicLike> | null;
 
   constructor(opts: ClaudeWorkerOptions = {}) {
@@ -85,12 +94,13 @@ export class ClaudeWorker {
     this.maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS;
     this.gate = opts.gate ?? new EfficiencyGate();
     this.clientFactory = opts.clientFactory ?? defaultClientFactory;
+    this.baseURL = opts.baseURL;
     this.clientPromise = opts.client ? Promise.resolve(opts.client) : null;
   }
 
   private async getClient(): Promise<AnthropicLike> {
     if (!this.clientPromise) {
-      this.clientPromise = this.clientFactory(this.apiKey);
+      this.clientPromise = this.clientFactory(this.apiKey, this.baseURL);
     }
     return this.clientPromise;
   }
