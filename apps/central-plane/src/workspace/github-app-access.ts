@@ -54,19 +54,41 @@ export async function getAppInstallationToken(
   repo: string,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
 ): Promise<AppInstallationAccess | null> {
-  if (!env.GH_APP_ID || !env.GH_APP_PRIVATE_KEY) return null;
+  // 2026-07-20 계측: 이 경로의 실패가 전부 조용한 null이라 "App 설치했는데
+  // 연결 실패"를 라이브에서 판별할 수 없었다(Bae 실측). 실패 지점·HTTP
+  // status·app id(공개 정보)를 로그로 남긴다 — Worker 로그는 tail로 보인다.
+  // fail-safe 계약(어떤 실패도 null, throw 금지)은 그대로.
+  if (!env.GH_APP_ID || !env.GH_APP_PRIVATE_KEY) {
+    console.log(`[gh-app-access] ${owner}/${repo}: skipped — GH_APP_ID/PRIVATE_KEY missing`);
+    return null;
+  }
   try {
     const jwt = await mintAppJwt(env);
     const r = await fetchImpl(
       `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`,
       { headers: ghHeaders(jwt) },
     );
-    if (!r.ok) return null; // 404 = App not installed on this repo
+    if (!r.ok) {
+      // 404 = App not installed on this repo (or installed under a different
+      // account/app id). app_id 로그가 "설치한 앱 ≠ 서버 자격의 앱" 불일치를
+      // 즉시 드러낸다.
+      const tail = await r.text().then((t) => t.slice(0, 120)).catch(() => "");
+      console.log(
+        `[gh-app-access] ${owner}/${repo}: installation lookup ${r.status} (app_id=${env.GH_APP_ID}) ${tail}`,
+      );
+      return null;
+    }
     const j = (await r.json()) as { id?: number };
-    if (typeof j.id !== "number") return null;
+    if (typeof j.id !== "number") {
+      console.log(`[gh-app-access] ${owner}/${repo}: installation response missing id`);
+      return null;
+    }
     const t = await getInstallationToken(env, j.id, fetchImpl);
     return { token: t.token, installationId: j.id };
-  } catch {
+  } catch (err) {
+    console.log(
+      `[gh-app-access] ${owner}/${repo}: failed — ${String((err as Error)?.message ?? err).slice(0, 200)}`,
+    );
     return null;
   }
 }
