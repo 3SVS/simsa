@@ -323,11 +323,17 @@ acceptance-graph Visual 노드, product-boundary. 코드: `nondev-report.ts`, `v
    빠지는 그 실패 모드. #296 머지로 이제 repo에 있다(§6.1).
    **남은 미결:** 그 문서(07-07~08)와 이 PRD(07-09) 중 어느 쪽이 P1의 단일 스펙인지 **Bae 확정
    필요**(T-DESIGN). 문서 존재 ≠ 스펙 확정.
+   > [해소 2026-07-21] Bae 확정("4,5 제외 다 진행"): **`onboarding-feasibility-layer.md`를
+   > THE P1 스펙으로 승격.** 구현은 이미 라이브(#296 Phase1~4, D17, #346). 미결 닫힘.
 2. **스테이지 번호 문서 간 불일치** — 258A/260A가 문서마다 다른 것을 지칭(operating §19의 258A=
    Artifact Alignment Gate vs loop 문서=External Spike). **"번호 아닌 계약"으로 참조**, 재조정은
    별도.
 3. **UIUX 순서의 "A2"·prep의 "D"** — 어느 문서에도 정의 없음. 착수 전 Bae 확인 필요.
+   > [해소 2026-07-21] **A2 = "Prep layer A2"** — 서비스/MCP 셋업 패널을 export 화면에서
+   > 준비·설정(settings) 화면으로 이동(§6.3 재배치의 일부). 코드 주석(`service-values-store.mjs`)
+   > 으로 정체 확인, **이미 완료·라이브**. "D"는 여전히 미상 — 결번 취급.
 4. **prep 계층 A 보안 방식** — "서버 무저장 + 브라우저 주입" **승인 대기**(design-prep-layer §7).
+   > [해소 2026-07-21] Bae 승인("4,5 제외 다 진행") — 방식 확정. 구현은 라이브 상태였음.
 5. **code-check 링크상태 유실 버그** — 코드변경 링크 후 "확인하기" 누르면 "2 코드변경"으로 되돌아가고
    링크 유실(design-prep-layer §9). 재현·원인규명·수정+회귀.
 6. **자체 해자 dormant** — Acceptance Graph/Evidence Pack이 라이브 라우트에 미연결(감사 §P4).
