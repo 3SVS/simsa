@@ -397,6 +397,62 @@ export async function upsertInstallation(
     .run();
 }
 
+/** Apply an `installation_repositories` webhook (repos added/removed on an
+ *  existing installation) to gh_app_installations. GitHub sends only the
+ *  delta plus the new repository_selection, so we merge with the stored
+ *  list. `repository_selection === "all"` normalizes the list to NULL
+ *  (= no filter). Returns false when the installation row is missing
+ *  (install webhook missed) so the caller can rebuild from the payload.
+ *
+ *  2026-07-20 실측: 이 이벤트를 무시해 selected_repo_ids가 설치 시점에
+ *  고정돼 있었다(추가된 repo가 D1에 안 보임). 게이팅에는 아직 안 쓰는
+ *  컬럼이지만, stale 데이터는 다음 소비자가 생기는 순간 버그가 된다. */
+export async function applyInstallationRepoChange(
+  env: Env,
+  input: {
+    installationId: number;
+    repoSelection: "all" | "selected";
+    addedRepoIds: number[];
+    removedRepoIds: number[];
+  },
+): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT selected_repo_ids FROM gh_app_installations
+      WHERE installation_id = ? AND removed_at IS NULL`,
+  )
+    .bind(input.installationId)
+    .first<{ selected_repo_ids: string | null }>();
+  if (!row) return false;
+
+  let selected: string | null;
+  if (input.repoSelection === "all") {
+    selected = null;
+  } else {
+    let current: number[] = [];
+    if (row.selected_repo_ids) {
+      try {
+        const parsed: unknown = JSON.parse(row.selected_repo_ids);
+        if (Array.isArray(parsed)) {
+          current = parsed.filter((n): n is number => typeof n === "number");
+        }
+      } catch {
+        // corrupt stored list → rebuild from this delta alone
+      }
+    }
+    const removed = new Set(input.removedRepoIds);
+    const merged = new Set(current.filter((id) => !removed.has(id)));
+    for (const id of input.addedRepoIds) merged.add(id);
+    selected = JSON.stringify([...merged]);
+  }
+
+  await env.DB.prepare(
+    `UPDATE gh_app_installations SET repo_selection = ?, selected_repo_ids = ? WHERE installation_id = ?`,
+  )
+    .bind(input.repoSelection, selected, input.installationId)
+    .run();
+  return true;
+}
+
 export async function suspendInstallation(env: Env, installationId: number): Promise<void> {
   const now = new Date().toISOString();
   await env.DB.prepare(`UPDATE gh_app_installations SET suspended_at = ? WHERE installation_id = ?`)
