@@ -68,7 +68,7 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
 
   // Which agent's MCP connect steps to show (settings has no target selector).
   const [agentId, setAgentId] = useState<string>("claude_code");
-  const deployTools: McpTool[] = detectMcpTools();
+  const deployTools: McpTool[] = detectMcpTools(locale);
 
   function setEnvValue(serviceId: string, key: string, value: string) {
     setServices((prev) =>

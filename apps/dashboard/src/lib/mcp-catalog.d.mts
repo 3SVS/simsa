@@ -3,8 +3,6 @@ export interface McpTool {
   label: string;
   /** why a non-dev needs this, one plain sentence */
   purpose: string;
-  /** how to connect it once, in their editor */
-  connectHint: string;
   /** the "we never see your token" reassurance */
   authNote: string;
   /** the MCP server name to register it under */
@@ -16,6 +14,6 @@ export interface McpTool {
 
 export declare const MCP_CATALOG: McpTool[];
 
-export declare function mcpToolById(id: string): McpTool | null;
+export declare function mcpToolById(id: string, locale?: "en" | "ko"): McpTool | null;
 
-export declare function detectMcpTools(): McpTool[];
+export declare function detectMcpTools(locale?: "en" | "ko"): McpTool[];

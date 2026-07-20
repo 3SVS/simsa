@@ -66,3 +66,22 @@ describe("mcp-catalog", () => {
     assert.equal(mcpToolById("nope"), null);
   });
 });
+
+// v2 (2026-07-21, journey-audit 재감사): EN 화면 잔여 한글 177자의 출처가 이
+// 카탈로그였다 — EN 해석은 무한글 전수, 기본값은 KO(기존 호출자 무변경).
+describe("mcp-catalog: locale resolution", () => {
+  it('locale "en" resolves every user-facing string without Hangul', () => {
+    for (const tool of detectMcpTools("en")) {
+      for (const text of [tool.label, tool.purpose, tool.authNote]) {
+        assert.ok(!/[가-힣]/.test(text), `Hangul leaked in EN copy of ${tool.id}: ${text}`);
+      }
+    }
+  });
+
+  it("locale omitted defaults to KO; ids/urls are locale-neutral", () => {
+    assert.ok(/코드 저장소/.test(mcpToolById("github").label));
+    assert.ok(/code storage/.test(mcpToolById("github", "en").label));
+    assert.equal(mcpToolById("vercel").serverUrl, mcpToolById("vercel", "en").serverUrl);
+    assert.deepEqual(detectMcpTools("ko").map((t) => t.id), detectMcpTools("en").map((t) => t.id));
+  });
+});
