@@ -207,19 +207,7 @@ export default function ProjectOverviewPage() {
             {t.common.viewAll} →
           </Link>
         </div>
-        <div className="card divide-y divide-gray-100">
-          {project.requirements.slice(0, 4).map((req) => (
-            <div key={req.id} className="flex items-center gap-3 px-5 py-3.5">
-              <StatusDot status={req.status} />
-              <span className="flex-1 text-sm text-gray-700">{req.title}</span>
-            </div>
-          ))}
-          {project.requirements.length > 4 && (
-            <div className="px-5 py-3 text-center font-mono text-xs text-gray-500">
-              + {project.requirements.length - 4} {t.common.more}
-            </div>
-          )}
-        </div>
+        <RequirementsInlineList requirements={project.requirements} t={t} />
       </section>
 
       {/* Stage 81/82: evolution analytics. These are power-user "engine" gauges
@@ -870,6 +858,46 @@ function badgeClassForEventType(type: string): string {
     default:
       return "border-gray-200 bg-white text-gray-500";
   }
+}
+
+/**
+ * UIUX 지시서 #3 (2026-07-21) — "+N개 더"를 별도 페이지가 아니라 그 자리
+ * 인라인 확장/접힘으로. 노출 기준은 개수가 아니라 중요도: 필수(must)는 전부
+ * 항상 노출, 부가(should/could)만 접힘. 전부 must면 전부 보인다(지시 그대로).
+ */
+function RequirementsInlineList({
+  requirements,
+  t,
+}: {
+  requirements: Array<{ id: string; title: string; status: string; priority: string }>;
+  t: Dictionary;
+}) {
+  const [showOptional, setShowOptional] = useState(false);
+  const mustItems = requirements.filter((r) => r.priority === "must");
+  const optionalItems = requirements.filter((r) => r.priority !== "must");
+
+  const row = (req: { id: string; title: string; status: string }) => (
+    <div key={req.id} className="flex items-center gap-3 px-5 py-3.5">
+      <StatusDot status={req.status} />
+      <span className="flex-1 text-sm text-gray-700">{req.title}</span>
+    </div>
+  );
+
+  return (
+    <div className="card divide-y divide-gray-100">
+      {mustItems.map(row)}
+      {showOptional && optionalItems.map(row)}
+      {optionalItems.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowOptional((v) => !v)}
+          className="w-full px-5 py-3 text-center font-mono text-xs text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-700"
+        >
+          {showOptional ? t.interaction.collapseAll : `+ ${optionalItems.length} ${t.common.more}`}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function StatusDot({ status }: { status: string }) {
