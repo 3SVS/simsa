@@ -118,6 +118,14 @@ export interface Env {
   OPENAI_API_KEY?: string;
   GEMINI_API_KEY?: string;
   /**
+   * 2026-07-21 (Bae 결정) — 레거시 Conclave 자동 리뷰 킬스위치. "off"면
+   * pull_request 웹훅의 자동 협의체 리뷰와 설치 시 웰컴 리뷰를 크레딧 소모
+   * 전에 스킵한다(설치 기록·파운더 알림·수동 /saas/review는 그대로).
+   * Simsa 집중 기간 동안 wrangler.toml [vars]로 "off" 고정 — 한 줄 되돌리면
+   * 재가동. 미설정/다른 값 = 기존 동작(enabled).
+   */
+  LEGACY_AUTO_REVIEW?: string;
+  /**
    * 2026-07-09 — Langfuse minimal wiring (Simsa flow observability).
    * All three must be set for traces to be sent; otherwise the workspace
    * routes silently skip Langfuse (fail-open — never blocks a user call).
