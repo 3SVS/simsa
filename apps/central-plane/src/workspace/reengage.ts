@@ -31,10 +31,15 @@ export interface ReengageRunSummary {
   send_failures: number;
 }
 
+/**
+ * Train E (2026-07-21): 크론 발신이라 리더 locale을 알 수 없다(서버 저장
+ * locale 없음 — 스키마 변경은 하드 게이트라 회피). 무저장 전략 = **이중언어
+ * 병기**: KO 본문 + 구분선 + EN 본문 한 통. 제목도 병기.
+ */
 function nudgeEmail(projectId: string, appBaseUrl: string): { subject: string; text: string } {
   const projectUrl = `${appBaseUrl.replace(/\/$/, "")}/projects/${projectId}`;
   return {
-    subject: "만들던 앱, 잘 되고 있나요? — Simsa",
+    subject: "만들던 앱, 잘 되고 있나요? — Simsa / How's the app coming along?",
     text: [
       "안녕하세요, Simsa예요.",
       "",
@@ -47,6 +52,21 @@ function nudgeEmail(projectId: string, appBaseUrl: string): { subject: string; t
       `내 프로젝트 열기: ${projectUrl}`,
       "",
       "이 메일은 이 프로젝트에 대해 딱 한 번만 보내드려요.",
+      "— Simsa",
+      "",
+      "----------------------------------------",
+      "",
+      "Hi, this is Simsa.",
+      "",
+      "You picked up a builder pack a few days ago and we haven't heard from you since — just checking in.",
+      "",
+      "- Stuck while building? Tell us what happened on your project screen and we'll explain the next step in plain language.",
+      "- Finished building? Connect your app's URL and we'll check that it actually works.",
+      "- Haven't started? Begin by pasting the brief from the pack into your dev AI's chat.",
+      "",
+      `Open my project: ${projectUrl}`,
+      "",
+      "We only send this email once per project.",
       "— Simsa",
     ].join("\n"),
   };

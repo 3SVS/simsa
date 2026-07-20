@@ -104,3 +104,39 @@ test("dispatchRepairJob: locale travels in the container payload", async () => {
   assert.equal(r.dispatched, true);
   assert.equal(calls[0].locale, "en");
 });
+
+// ── Train E-2: 알림 표면 (email/telegram/reengage) ─────────────────────────
+const { buildPrReviewTelegramMessage, truncateTelegramMessage } = await import(
+  "../dist/workspace/telegram-notify.js"
+);
+const { buildPrReviewEmailContent } = await import("../dist/workspace/email-notify.js");
+
+test("PR notify (telegram+email): en → no Hangul; ko default unchanged", () => {
+  const opts = {
+    repoFullName: "acme/site",
+    prNumber: 7,
+    summary: { passed: 3, failed: 1, inconclusive: 0, needsDecision: 1 },
+    problematicItems: [{ title: "Login works", status: "failed" }],
+    dashboardUrl: "https://app.trysimsa.com/projects/p/github",
+  };
+  const en = buildPrReviewTelegramMessage({ ...opts, locale: "en" });
+  assert.ok(noHangul(en), `Hangul leaked: ${en.slice(0, 120)}`);
+  assert.ok(en.includes("Simsa PR check complete"));
+  assert.ok(en.includes("Not matching"));
+
+  const ko = buildPrReviewTelegramMessage(opts);
+  assert.ok(ko.includes("Simsa PR 확인 완료"));
+  assert.ok(ko.includes("안 맞음"));
+
+  const mail = buildPrReviewEmailContent({ ...opts, locale: "en" });
+  assert.ok(noHangul(mail.subject) && noHangul(mail.text));
+  assert.match(mail.subject, /PR check complete/);
+  const mailKo = buildPrReviewEmailContent(opts);
+  assert.match(mailKo.subject, /PR 확인 완료/);
+});
+
+test("truncateTelegramMessage: locale-matched suffix", () => {
+  const long = "x".repeat(5000);
+  assert.ok(truncateTelegramMessage(long, 200, "en").endsWith("[Message truncated — it was too long.]"));
+  assert.ok(truncateTelegramMessage(long, 200).endsWith("[메시지가 너무 길어 일부가 생략됐습니다.]"));
+});
