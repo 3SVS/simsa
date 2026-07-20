@@ -153,6 +153,27 @@ test("parseEditToolUse: rejects malformed entries and missing tool block", () =>
   );
 });
 
+test("baseURL option flows into the client factory (CF AI Gateway routing)", async () => {
+  // 2026-07-21 — the SDK import must live in agent-worker's module context;
+  // callers pass baseURL as an option and every factory receives it as the
+  // second argument (the default factory forwards it to the Anthropic ctor).
+  const gate = new EfficiencyGate({ perPrUsd: 1 });
+  const seen = [];
+  const client = makeMockClient([editResponse()]);
+  const worker = new ClaudeWorker({
+    apiKey: "test-key",
+    gate,
+    baseURL: "https://gateway.ai.cloudflare.com/v1/acct/simsa/anthropic",
+    clientFactory: async (key, baseURL) => {
+      seen.push({ key, baseURL });
+      return client;
+    },
+  });
+  await worker.workEdits(editCtx);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].baseURL, "https://gateway.ai.cloudflare.com/v1/acct/simsa/anthropic");
+});
+
 test("buildEditWorkerPrompt: excerpts are verbatim inside fences, line labels outside", () => {
   const prompt = buildEditWorkerPrompt(editCtx);
   assert.ok(prompt.includes("### lines 800-820"));

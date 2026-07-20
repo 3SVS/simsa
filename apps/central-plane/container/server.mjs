@@ -687,19 +687,14 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
 
   // The worker agent — same dist layout the autofix path uses for cli.
   const { ClaudeWorker } = await import("file:///app/packages/agent-worker/dist/index.js");
-  // 2026-07-21 — when the Worker forwarded a CF AI Gateway base URL, build the
-  // Anthropic client against it (direct egress 403s intermittently). The
-  // factory mirrors agent-worker's default one, adding only baseURL.
+  // 2026-07-21 — when the Worker forwarded a CF AI Gateway base URL, aim the
+  // worker's Anthropic client at it (direct egress 403s intermittently).
+  // baseURL is a first-class ClaudeWorker option: the SDK import must happen
+  // inside agent-worker's own module context — a dynamic import from THIS
+  // file fails resolution ("Cannot find package '@anthropic-ai/sdk'", 실측).
   const worker = new ClaudeWorker({
     apiKey: anthropicApiKey,
-    ...(anthropicBaseUrl
-      ? {
-          clientFactory: async (key) => {
-            const mod = await import("@anthropic-ai/sdk");
-            return new mod.default({ apiKey: key, baseURL: anthropicBaseUrl });
-          },
-        }
-      : {}),
+    ...(anthropicBaseUrl ? { baseURL: anthropicBaseUrl } : {}),
   });
 
   for (let iteration = 0; iteration < AUTO_FIX_MAX_ITERATIONS; iteration++) {
