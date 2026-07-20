@@ -730,6 +730,25 @@ test("Stage 270 dispatch: no ANTHROPIC_API_KEY → no x-anthropic-key header (co
   assert.equal(recorder.calls[0].headers["x-anthropic-key"], undefined);
 });
 
+test("gateway dispatch: CF_AI_GATEWAY_ANTHROPIC_URL forwarded via x-anthropic-base-url header; absent → no header", async () => {
+  // 2026-07-21 — direct container→Anthropic egress 403s intermittently
+  // ("Request not allowed"); the worker-agent call must ride the gateway.
+  const recorder = { names: [], calls: [] };
+  const env = makeEnv({ sandbox: makeSandbox(recorder) });
+  env.ANTHROPIC_API_KEY = "sk-ant-testkey-abcdefghijklmnop";
+  env.CF_AI_GATEWAY_ANTHROPIC_URL = "https://gateway.ai.cloudflare.com/v1/acct/simsa/anthropic";
+  const r = await req(env, "POST", REPAIR_PATH, { userKey: USER });
+  assert.equal(r.status, 202);
+  assert.equal(recorder.calls[0].headers["x-anthropic-base-url"], env.CF_AI_GATEWAY_ANTHROPIC_URL);
+
+  const recorder2 = { names: [], calls: [] };
+  const env2 = makeEnv({ sandbox: makeSandbox(recorder2) });
+  env2.ANTHROPIC_API_KEY = "sk-ant-testkey-abcdefghijklmnop";
+  const r2 = await req(env2, "POST", REPAIR_PATH, { userKey: USER });
+  assert.equal(r2.status, 202);
+  assert.equal(recorder2.calls[0].headers["x-anthropic-base-url"], undefined);
+});
+
 test("Stage 270 repair-done: mode auto_fix + changedFiles persisted; GET view exposes both", async () => {
   const env = makeEnv({ sandbox: makeSandbox({ names: [], calls: [] }) });
   const created = await req(env, "POST", REPAIR_PATH, { userKey: USER });
