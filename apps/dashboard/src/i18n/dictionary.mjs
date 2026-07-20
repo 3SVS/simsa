@@ -2365,6 +2365,12 @@ const EN = {
     overview: {
       emptyLead:
         "No inspections have run yet. Simsa opens your live app in a real browser and reports what works in plain language.",
+      // Journey-audit P2 (2026-07-20): a code-branch project with nothing
+      // connected was told "run your first inspection" — a URL-based door it
+      // can't use yet. Branch-fit copy walks it to connect first.
+      emptyLeadCodeNoSource:
+        "Nothing is connected yet. Connect your GitHub repository to review code changes — or connect your app's URL for a live-screen inspection.",
+      connectFirst: "Connect your code",
       runFirst: "Run your first inspection",
       inProgress: "View the inspection in progress",
       viewReport: "View the report",
@@ -4837,6 +4843,11 @@ const KO = {
     overview: {
       emptyLead:
         "아직 실행된 검수가 없어요. Simsa가 라이브 앱을 실제 브라우저로 열어 무엇이 작동하는지 쉬운 말로 알려드려요.",
+      // Journey-audit P2 (2026-07-20): 코드 갈래인데 아무것도 연결 전이면
+      // "첫 검수 실행하기"(URL 검수 문)가 아니라 연결부터 안내한다.
+      emptyLeadCodeNoSource:
+        "아직 연결된 게 없어요. GitHub 저장소를 연결하면 코드 변경을 검수하고, 앱 주소(URL)를 연결하면 화면 검수도 할 수 있어요.",
+      connectFirst: "코드 연결하기",
       runFirst: "첫 검수 실행하기",
       inProgress: "진행 중인 검수 보기",
       viewReport: "리포트 보기",

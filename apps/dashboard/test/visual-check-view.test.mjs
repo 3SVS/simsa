@@ -8,6 +8,7 @@ import {
   splitEvidenceKeys,
   buildEvidenceUrl,
   overviewNextAction,
+  inspectionEmptyStateDoor,
   relativeTimeLabel,
 } from "../src/lib/visual-check-view.mjs";
 import { getDictionary } from "../src/i18n/dictionary.mjs";
@@ -208,5 +209,52 @@ describe("visual-check-view: buildEvidenceUrl", () => {
     const url = buildEvidenceUrl("https://api.example.com///", "p", "r", "screenshots/a.png", "u");
     assert.ok(url.startsWith("https://api.example.com/workspace/projects/p/"));
     assert.ok(!url.includes("com//workspace"));
+  });
+});
+
+// Journey-audit P2 (2026-07-20): the overview inspection card's empty state
+// must fit the branch — a code-entry project with nothing connected gets the
+// "connect" door, everything else (and every unknown) keeps the default.
+describe("inspectionEmptyStateDoor", () => {
+  it("code branch + repo confirmed absent + no deploy URL → connect", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: false, hasDeployUrl: false }),
+      "connect",
+    );
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: false, hasDeployUrl: null }),
+      "connect",
+    );
+  });
+
+  it("repo connected or deploy URL present → run (never a wrong connect nudge)", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: true, hasDeployUrl: false }),
+      "run",
+    );
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: false, hasDeployUrl: true }),
+      "run",
+    );
+  });
+
+  it("unknown repo fact (null) stays fail-open → run", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: null, hasDeployUrl: null }),
+      "run",
+    );
+  });
+
+  it("non-code branches always keep the default door", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "idea", hasRepo: false, hasDeployUrl: false }),
+      "run",
+    );
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "spec", hasRepo: false, hasDeployUrl: false }),
+      "run",
+    );
+    assert.equal(inspectionEmptyStateDoor({}), "run");
+    assert.equal(inspectionEmptyStateDoor(null), "run");
   });
 });
