@@ -607,20 +607,30 @@ export default function SettingsPage() {
                 {lookupPhase === "loading" ? t.github.finding : t.github.connect}
               </button>
             </div>
-            {lookupPhase === "error" && lookupError && (
+            {/* 2026-07-20 (Bae 실측): 비공개 repo의 not_found에서 "공개 저장소인지
+                확인" 빨간 한 줄은 public-강요로 읽혔고, App 설치의 두 함정(계정
+                선택·Repository access 선택)을 안내하지 않아 설치하고도 연결에
+                실패했다. installUrl이 있으면 빨간 에러 대신 구조화된 안내로. */}
+            {lookupPhase === "error" && lookupError && !lookupInstallUrl && (
               <p className="mt-2 text-xs text-red-500">{lookupError}</p>
             )}
             {lookupPhase === "error" && lookupInstallUrl && (
-              <p className="mt-1 text-xs">
+              <div className="callout callout-info mt-2 text-xs leading-relaxed">
+                <p className="font-medium">{t.github.privateGuideTitle}</p>
+                <ol className="mt-1.5 list-decimal space-y-1 pl-4">
+                  <li>{t.github.privateGuideStep1}</li>
+                  <li>{t.github.privateGuideStep2}</li>
+                </ol>
+                <p className="mt-1.5 text-gray-500">{t.github.privateGuideAlready}</p>
                 <a
                   href={lookupInstallUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-brand-700 underline hover:text-brand-800"
+                  className="btn btn-secondary btn-sm mt-2 inline-block"
                 >
                   {t.github.appInstallLink} →
                 </a>
-              </p>
+              </div>
             )}
           </div>
 
