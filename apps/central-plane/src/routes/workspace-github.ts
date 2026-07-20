@@ -21,7 +21,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
-import { ALLOWED_ORIGINS } from "./cors.js";
+import { ALLOWED_ORIGINS, CORS_ALLOW_METHODS } from "./cors.js";
 import { BRAND } from "../workspace/brand.js";
 import type { FetchLike } from "../github.js";
 import { encryptToken, decryptToken } from "../crypto.js";
@@ -97,7 +97,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
       : (ALLOWED_ORIGINS[0] as string);
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
+    "Access-Control-Allow-Methods": CORS_ALLOW_METHODS,
     "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key, X-Simsa-User-Key",
     "Access-Control-Max-Age": "86400",
   };

@@ -12,7 +12,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
-import { ALLOWED_ORIGINS } from "./cors.js";
+import { ALLOWED_ORIGINS, CORS_ALLOW_METHODS } from "./cors.js";
 import { sendWorkspaceTelegramMessage } from "../workspace/telegram-notify.js";
 import { sendWorkspaceEmail } from "../workspace/email-notify.js";
 import { wrapBrandedEmail } from "../workspace/email-brand.js";
@@ -27,7 +27,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
       : (ALLOWED_ORIGINS[0] as string);
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": CORS_ALLOW_METHODS,
     "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key, X-Simsa-User-Key",
     "Access-Control-Max-Age": "86400",
   };

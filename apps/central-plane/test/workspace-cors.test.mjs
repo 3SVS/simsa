@@ -106,3 +106,39 @@ test("P0: oauth/start redirect through global CORS does not 500 (immutable heade
   assert.equal(res.status, 302, "GitHub auth redirect preserved");
   assert.ok(res.headers.get("location")?.includes("github.com"), "Location header survives the rebuild");
 });
+
+// ─── 2026-07-20 P0: PUT이 어떤 Allow-Methods 선언에도 없어 브라우저에서만
+// G8 ext-sync PUT이 전멸("서버 저장에 실패했어요" 유령 배너). node/curl 프로브는
+// CORS를 안 타서 8/8 green이었다. 계약: Allow-Methods 문자열 리터럴은 cors.ts의
+// CORS_ALLOW_METHODS 단일 정본만 존재하고, 정본은 완전한 메서드 목록을 갖는다.
+test("P0: Allow-Methods single source of truth — complete list, no stray literals", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const routesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/routes");
+
+  const { CORS_ALLOW_METHODS } = await import("../dist/routes/cors.js");
+  for (const m of ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+    assert.ok(CORS_ALLOW_METHODS.includes(m), `canonical list must include ${m}`);
+  }
+
+  for (const file of readdirSync(routesDir)) {
+    if (!file.endsWith(".ts") || file === "cors.ts") continue;
+    const src = readFileSync(path.join(routesDir, file), "utf8");
+    const literal = /"Access-Control-Allow-Methods"\s*:\s*"/.exec(src);
+    assert.ok(!literal, `${file} declares a hardcoded Allow-Methods literal — use CORS_ALLOW_METHODS from cors.ts`);
+  }
+});
+
+test("P0: /workspace/projects/:id/ext preflight allows PUT (the G8 sync method)", async () => {
+  const res = await createApp().fetch(
+    new Request("http://x/workspace/projects/proj_x/ext", {
+      method: "OPTIONS",
+      headers: { origin: APP, "access-control-request-method": "PUT" },
+    }),
+    makeEnv(),
+    CTX,
+  );
+  assert.equal(res.status, 204);
+  assert.match(res.headers.get("access-control-allow-methods") ?? "", /PUT/);
+});

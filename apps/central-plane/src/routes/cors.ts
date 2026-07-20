@@ -25,6 +25,18 @@ export const ALLOWED_ORIGINS = [
   "https://trysimsa.com", // Stage 89/91: Simsa marketing domain (exact origin)
 ];
 
+/**
+ * Canonical browser-method allowlist — the SINGLE place Allow-Methods is
+ * declared. 2026-07-20 P0: PUT was missing from every declaration in the
+ * codebase, and workspace.ts's local "POST, OPTIONS" shadowed stricter routes'
+ * preflights — so the browser blocked the G8 ext-sync PUT for EVERY real
+ * user while node/curl probes (no CORS) stayed green, surfacing as a phantom
+ * "서버 저장에 실패했어요" banner. Allowing a method a route doesn't implement
+ * is harmless (404/405 + auth still apply); missing one silently kills the
+ * feature in browsers only. Keep this complete.
+ */
+export const CORS_ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
+
 /** Returns CORS headers for `origin`; disallowed origins fall back to the first
  * allowed origin (never echoed). */
 export function corsHeaders(origin: string | null): Record<string, string> {
@@ -34,7 +46,7 @@ export function corsHeaders(origin: string | null): Record<string, string> {
       : (ALLOWED_ORIGINS[0] as string);
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": CORS_ALLOW_METHODS,
     "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key, X-Simsa-User-Key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
