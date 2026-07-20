@@ -288,30 +288,56 @@ export default function ChecksPage() {
         )}
 
         {/* RC-4: review-mode chooser — B(협의체) is visible to everyone but
-            locked on free (existence drives upgrades; the server enforces). */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => { setReviewMode("panel"); setPlanMsg(null); }}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${reviewMode === "panel" ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-700 border-gray-200 hover:border-brand-300"}`}
-          >
-            {t.checks.modePanel}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (plan === "paid") { setReviewMode("council"); setPlanMsg(null); }
-              else { setPlanMsg(t.checks.councilLockedHint); }
-            }}
-            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${reviewMode === "council" ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-700 border-gray-200 hover:border-brand-300"}`}
-          >
-            {t.checks.modeCouncil}
-            {plan !== "paid" && (
-              <span className="ml-1.5 inline-block rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 align-middle">
-                {t.checks.modeCouncilLocked}
+            locked on free (existence drives upgrades; the server enforces).
+            2026-07-20 (Bae): 작은 텍스트 필 2개는 눈에 안 띄었다 → 라벨+설명이
+            있는 선택 카드로 승격. 동작·게이팅은 그대로. */}
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-semibold text-gray-600">{t.checks.modeLabel}</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => { setReviewMode("panel"); setPlanMsg(null); }}
+              aria-pressed={reviewMode === "panel"}
+              className={`rounded-xl border p-3.5 text-left transition-all ${reviewMode === "panel" ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-gray-200 bg-white hover:border-brand-300"}`}
+            >
+              <span className="flex items-center gap-2">
+                <span className={`text-sm font-semibold ${reviewMode === "panel" ? "text-brand-800" : "text-gray-800"}`}>
+                  {t.checks.modePanel}
+                </span>
+                {reviewMode === "panel" && (
+                  <span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {t.checks.modeSelected}
+                  </span>
+                )}
               </span>
-            )}
-          </button>
+              <span className="mt-1 block text-xs leading-relaxed text-gray-500">{t.checks.modePanelDesc}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (plan === "paid") { setReviewMode("council"); setPlanMsg(null); }
+                else { setPlanMsg(t.checks.councilLockedHint); }
+              }}
+              aria-pressed={reviewMode === "council"}
+              className={`rounded-xl border p-3.5 text-left transition-all ${reviewMode === "council" ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-gray-200 bg-white hover:border-brand-300"}`}
+            >
+              <span className="flex items-center gap-2">
+                <span className={`text-sm font-semibold ${reviewMode === "council" ? "text-brand-800" : "text-gray-800"}`}>
+                  {t.checks.modeCouncil}
+                </span>
+                {plan !== "paid" ? (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                    {t.checks.modeCouncilLocked}
+                  </span>
+                ) : reviewMode === "council" ? (
+                  <span className="rounded-full bg-brand-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {t.checks.modeSelected}
+                  </span>
+                ) : null}
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-gray-500">{t.checks.modeCouncilDesc}</span>
+            </button>
+          </div>
         </div>
         {planMsg && (
           <div className="callout mb-4 border-brand-200 bg-brand-50 text-brand-800">

@@ -485,8 +485,12 @@ export type Dictionary = {
     nextStep: string;
     verifiedDual: string;
     verifiedSingle: string;
+    modeLabel: string;
+    modeSelected: string;
     modePanel: string;
+    modePanelDesc: string;
     modeCouncil: string;
+    modeCouncilDesc: string;
     modeCouncilLocked: string;
     councilLockedHint: string;
     verifiedCouncil: string;
