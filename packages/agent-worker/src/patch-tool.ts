@@ -58,3 +58,61 @@ export const REWRITE_TOOL_INPUT_SCHEMA = {
 export const PATCH_TOOL_NAME = REWRITE_TOOL_NAME;
 export const PATCH_TOOL_DESCRIPTION = REWRITE_TOOL_DESCRIPTION;
 export const PATCH_TOOL_INPUT_SCHEMA = REWRITE_TOOL_INPUT_SCHEMA;
+
+/**
+ * Edit-mode tool (oversize files). Files above the snapshot byte cap cannot
+ * take the full-file rewrite contract — LLM output limits make wholesale
+ * reproduction truncation-prone (a truncated HTML commits silently; there is
+ * no syntax gate for it). Instead the model sees EXCERPTS and returns exact
+ * search/replace pairs; the caller verifies each `search` matches exactly
+ * once before touching the file, so a bad edit is rejected, never applied.
+ * (Unified diffs stay banned — v0.14 removed them for hallucinated hunk
+ * headers; exact-match replacement has no line arithmetic to get wrong.)
+ */
+export const EDIT_TOOL_NAME = "submit_edits";
+
+export const EDIT_TOOL_DESCRIPTION =
+  "Submit exact search/replace edits for the excerpted files. Call this exactly once at the end of your analysis.";
+
+export const EDIT_TOOL_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    edits: {
+      type: "array",
+      description:
+        "One entry per contiguous change. Each `search` string must be copied VERBATIM from an excerpt and must be unique within the whole file — include enough surrounding lines to make it unambiguous. The caller rejects any edit whose search text is missing or matches more than once.",
+      items: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description:
+              "Repo-relative file path, forward slashes. Must be one of the excerpted files.",
+          },
+          search: {
+            type: "string",
+            description:
+              "Exact text to find, copied verbatim from the excerpt (same whitespace, same indentation). Must occur exactly once in the file.",
+          },
+          replace: {
+            type: "string",
+            description:
+              "Replacement text. Keep the surrounding unchanged lines from `search` intact and edit only what the blocker requires.",
+          },
+        },
+        required: ["path", "search", "replace"],
+      },
+    },
+    commitMessage: {
+      type: "string",
+      description:
+        "Single-line commit subject (≤ 72 chars), conventional-commit style where it fits.",
+    },
+    summary: {
+      type: "string",
+      description:
+        "One-paragraph rationale: which blockers the edits address, which could not be addressed from the excerpts and why.",
+    },
+  },
+  required: ["edits", "commitMessage", "summary"],
+} as const;

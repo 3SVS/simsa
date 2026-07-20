@@ -787,7 +787,151 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, diag = { skip
     );
     return { changedFiles, prContent };
   }
+
+  // Oversize ladder rung: the full-file loop produced nothing AND at least
+  // one candidate was skipped for size (apply-walmart class — a single huge
+  // index.html holding the app's only real code). Try the excerpt+exact-edit
+  // path before giving up. Engages ONLY here, so every previously-green path
+  // is byte-identical to before this rung existed.
+  if (diag.skippedOversize.length > 0 && Date.now() < deadline) {
+    const editFix = await attemptOversizeEditFix({
+      workDir,
+      payload,
+      brief,
+      parsed,
+      review,
+      worker,
+      repoFiles,
+      headSha,
+      diag,
+    });
+    if (editFix) return editFix;
+  }
   return null;
+}
+
+/**
+ * Excerpt + exact-edit attempt for files above AUTO_FIX_MAX_SNAPSHOT_BYTES.
+ * One bounded worker call (no iteration loop): deterministic excerpts around
+ * the brief's evidence tokens go to ClaudeWorker.workEdits; returned
+ * search/replace edits are applied ONLY when each search matches exactly
+ * once (applyExactEdits) — a bad edit is rejected, never a corrupted file.
+ * Returns { changedFiles, prContent } or null (caller resets the tree).
+ */
+async function attemptOversizeEditFix({ workDir, payload, brief, parsed, review, worker, repoFiles, headSha, diag }) {
+  const jobId = payload.jobId;
+
+  // Rank order was preserved when skippedOversize was recorded; dedupe and
+  // keep the top 2 files (excerpt budget is per-call, not per-file).
+  const seen = new Set();
+  const targets = [];
+  for (const s of diag.skippedOversize) {
+    if (seen.has(s.path)) continue;
+    seen.add(s.path);
+    targets.push(s);
+    if (targets.length >= 2) break;
+  }
+
+  const tokens = brief.extractEvidenceTokens(parsed);
+  const fileExcerpts = [];
+  const originals = {};
+  for (const t of targets) {
+    try {
+      const content = await fs.readFile(path.join(workDir, t.path), "utf8");
+      const regions = brief.buildOversizeExcerpts(content, tokens);
+      if (regions.length === 0) continue;
+      originals[t.path] = content;
+      fileExcerpts.push({
+        path: t.path,
+        totalBytes: t.bytes,
+        totalLines: content.split("\n").length,
+        regions,
+      });
+    } catch {
+      // unreadable file — skip
+    }
+  }
+  if (fileExcerpts.length === 0) {
+    diag.reason = "oversize_excerpts_empty";
+    return null;
+  }
+
+  console.log(
+    `[repair ${jobId}] oversize edit attempt: ${fileExcerpts
+      .map((f) => `${f.path}(${f.regions.length} region(s))`)
+      .join(", ")}`,
+  );
+
+  let outcome;
+  try {
+    outcome = await worker.workEdits({
+      repo: payload.repo,
+      pullNumber: 0,
+      newSha: headSha,
+      reviews: [review],
+      fileExcerpts,
+    });
+  } catch (err) {
+    console.error(`[repair ${jobId}] edit worker call failed:`, err?.message ?? err);
+    diag.reason = `edit_worker_call_failed: ${String(err?.message ?? err).slice(0, 100)}`;
+    return null;
+  }
+  if (!Array.isArray(outcome.edits) || outcome.edits.length === 0) {
+    console.log(`[repair ${jobId}] edit worker returned no edits`);
+    diag.reason = "edit_worker_returned_no_edits";
+    return null;
+  }
+
+  const { contents, applied, rejected } = brief.applyExactEdits(originals, outcome.edits);
+  if (rejected.length > 0) {
+    console.log(
+      `[repair ${jobId}] edit(s) rejected: ` + rejected.map((r) => `${r.path}:${r.reason}`).join(", "),
+    );
+  }
+  if (applied.length === 0) {
+    diag.reason = `edits_rejected: ${rejected.map((r) => r.reason).join(",")}`.slice(0, 120);
+    return null;
+  }
+
+  const appliedPaths = [...new Set(applied.map((a) => a.path))];
+  for (const p of appliedPaths) {
+    await fs.writeFile(path.join(workDir, p), contents[p], "utf8");
+  }
+
+  // Same gates as the full-file path: real change + JS syntax check.
+  const diff = await execFileP("git", ["-C", workDir, "diff", "--name-only"], {
+    timeout: 30_000,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  const changedFiles = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+  if (changedFiles.length === 0) {
+    diag.reason = "edits_were_noops";
+    return null;
+  }
+  const verify = await quickSyntaxCheck(workDir, changedFiles);
+  if (!verify.ok) {
+    console.error(`[repair ${jobId}] edit syntax check failed on ${verify.file}: ${verify.detail}`);
+    diag.reason = "edit_syntax_check_failed";
+    await resetWorkTree(workDir);
+    return null;
+  }
+
+  const prContent = brief.buildAutoFixPrContent({
+    runId: payload.visualCheckId ?? jobId,
+    intent: payload.intent,
+    decision: payload.decision,
+    targetUrl: payload.targetUrl,
+    visualCheckId: payload.visualCheckId,
+    envCause: payload.envCause === true,
+    findings: parsed.findings,
+    changedFiles,
+    workerCommitMessage: outcome.message,
+    editedOversizeFiles: appliedPaths,
+  });
+  console.log(
+    `[repair ${jobId}] oversize edit applied: ${applied.length} edit(s) across ${appliedPaths.length} file(s)`,
+  );
+  return { changedFiles, prContent };
 }
 
 /**

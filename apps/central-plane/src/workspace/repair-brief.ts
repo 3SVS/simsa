@@ -478,6 +478,196 @@ export function sanitizeRewrites(
   return { accepted, rejected };
 }
 
+// ─── Oversize files: excerpt + exact-edit path ───────────────────────────────
+// Files above the snapshot byte cap can't take the full-file rewrite contract
+// (LLM output limits make wholesale reproduction truncation-prone, and HTML
+// has no syntax gate to catch a truncated commit). Instead: deterministic
+// EXCERPTS around the brief's evidence tokens go to the worker's edit mode,
+// which returns exact search/replace pairs; applyExactEdits enforces the
+// exactly-once match rule so a bad edit is rejected, never applied.
+// (apply-walmart 실측: 389KB 단일 index.html — vibe 툴 전형 — 이 유일한
+// 실코드가 스킵돼 auto_fix가 구조적으로 불가능한 클래스였다. 2026-07-20)
+
+export interface OversizeExcerptRegion {
+  startLine: number;
+  endLine: number;
+  text: string;
+}
+
+/** Tunables for buildOversizeExcerpts — exported for tests. */
+export const OVERSIZE_EXCERPT_WINDOW_LINES = 40;
+export const OVERSIZE_EXCERPT_MAX_REGIONS = 8;
+export const OVERSIZE_EXCERPT_BUDGET_BYTES = 48 * 1024;
+
+/**
+ * Deterministically select regions of an oversize file worth showing the
+ * edit-mode worker: a ±window around every line matching an evidence token,
+ * merged when overlapping, capped by region count and total byte budget.
+ * Regions keep the file's text VERBATIM (line numbers live in metadata only)
+ * so the worker can copy exact search strings from them.
+ *
+ * Zero token matches → first window of the file (head) as a last resort:
+ * single-file vibe apps concentrate wiring near the top, and an empty
+ * excerpt list would silently skip the file entirely.
+ */
+export function buildOversizeExcerpts(
+  content: string,
+  tokens: readonly string[],
+  opts: {
+    windowLines?: number;
+    maxRegions?: number;
+    budgetBytes?: number;
+  } = {},
+): OversizeExcerptRegion[] {
+  const windowLines = opts.windowLines ?? OVERSIZE_EXCERPT_WINDOW_LINES;
+  const maxRegions = opts.maxRegions ?? OVERSIZE_EXCERPT_MAX_REGIONS;
+  const budgetBytes = opts.budgetBytes ?? OVERSIZE_EXCERPT_BUDGET_BYTES;
+
+  const lines = content.split("\n");
+  const lowerTokens = tokens.map((t) => t.toLowerCase()).filter((t) => t.length >= 2);
+
+  // 1-based line hits, in file order.
+  const hitLines: number[] = [];
+  if (lowerTokens.length > 0) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line === undefined) continue;
+      const lower = line.toLowerCase();
+      if (lowerTokens.some((t) => lower.includes(t))) hitLines.push(i + 1);
+    }
+  }
+  if (hitLines.length === 0) hitLines.push(1); // head-of-file fallback
+
+  // Expand each hit to a window, then merge overlaps (file order preserved).
+  const windows: Array<{ start: number; end: number }> = [];
+  for (const hit of hitLines) {
+    const start = Math.max(1, hit - windowLines);
+    const end = Math.min(lines.length, hit + windowLines);
+    const last = windows[windows.length - 1];
+    if (last && start <= last.end + 1) {
+      last.end = Math.max(last.end, end);
+    } else {
+      windows.push({ start, end });
+    }
+  }
+
+  // Emit regions under the caps. (TextEncoder over Buffer — this module is
+  // consumed by the container today, but stays runtime-neutral by design.)
+  const utf8 = new TextEncoder();
+  const regions: OversizeExcerptRegion[] = [];
+  let spent = 0;
+  for (const w of windows) {
+    if (regions.length >= maxRegions) break;
+    const text = lines.slice(w.start - 1, w.end).join("\n");
+    const bytes = utf8.encode(text).length;
+    if (spent + bytes > budgetBytes) {
+      if (regions.length === 0) {
+        // Always emit at least one region — trim to budget on a line boundary.
+        const kept: string[] = [];
+        let acc = 0;
+        for (const line of lines.slice(w.start - 1, w.end)) {
+          const b = utf8.encode(line).length + 1;
+          if (acc + b > budgetBytes) break;
+          kept.push(line);
+          acc += b;
+        }
+        if (kept.length > 0) {
+          regions.push({ startLine: w.start, endLine: w.start + kept.length - 1, text: kept.join("\n") });
+        }
+      }
+      break;
+    }
+    regions.push({ startLine: w.start, endLine: w.end, text });
+    spent += bytes;
+  }
+  return regions;
+}
+
+export interface RejectedEdit {
+  path: string;
+  reason:
+    | "unsafe_path"
+    | "denied_file"
+    | "not_excerpted_file"
+    | "empty_search"
+    | "search_not_found"
+    | "search_ambiguous"
+    | "noop_edit"
+    | "introduces_secret";
+}
+
+/**
+ * Apply exact search/replace edits to in-memory file contents, enforcing the
+ * exactly-once rule per edit:
+ *   - search must occur EXACTLY ONCE in the file's CURRENT content (earlier
+ *     accepted edits included) — 0 hits rejects as search_not_found, 2+ as
+ *     search_ambiguous. No fuzzy matching, no line arithmetic.
+ *   - path must be one of the provided files (the excerpt set), pass the
+ *     deny-list, and contain no traversal.
+ *   - replace must not introduce credential-shaped strings the original
+ *     didn't already contain.
+ * Returns updated contents plus per-edit accept/reject records. Rejected
+ * edits never touch the content — partial application is intentional (apply
+ * what verifies, report the rest).
+ */
+export function applyExactEdits(
+  files: Readonly<Record<string, string>>,
+  edits: ReadonlyArray<{ path: string; search: string; replace: string }>,
+): {
+  contents: Record<string, string>;
+  applied: Array<{ path: string; search: string }>;
+  rejected: RejectedEdit[];
+} {
+  const contents: Record<string, string> = { ...files };
+  const applied: Array<{ path: string; search: string }> = [];
+  const rejected: RejectedEdit[] = [];
+
+  for (const edit of edits) {
+    let p = String(edit.path ?? "").trim().replace(/\\/g, "/");
+    while (p.startsWith("./")) p = p.slice(2);
+    if (p.length === 0 || p.startsWith("/") || /^[A-Za-z]:/.test(p) || p.split("/").includes("..")) {
+      rejected.push({ path: edit.path, reason: "unsafe_path" });
+      continue;
+    }
+    if (isRepairFileDenied(p)) {
+      rejected.push({ path: p, reason: "denied_file" });
+      continue;
+    }
+    if (!(p in contents)) {
+      rejected.push({ path: p, reason: "not_excerpted_file" });
+      continue;
+    }
+    const search = String(edit.search ?? "");
+    if (search.length === 0) {
+      rejected.push({ path: p, reason: "empty_search" });
+      continue;
+    }
+    const replace = String(edit.replace ?? "");
+    if (search === replace) {
+      rejected.push({ path: p, reason: "noop_edit" });
+      continue;
+    }
+    const current = contents[p] ?? "";
+    const first = current.indexOf(search);
+    if (first === -1) {
+      rejected.push({ path: p, reason: "search_not_found" });
+      continue;
+    }
+    if (current.indexOf(search, first + 1) !== -1) {
+      rejected.push({ path: p, reason: "search_ambiguous" });
+      continue;
+    }
+    if (SECRET_CONTENT_PATTERN.test(replace) && !SECRET_CONTENT_PATTERN.test(files[p] ?? "")) {
+      rejected.push({ path: p, reason: "introduces_secret" });
+      continue;
+    }
+    contents[p] = current.slice(0, first) + replace + current.slice(first + search.length);
+    applied.push({ path: p, search });
+  }
+
+  return { contents, applied, rejected };
+}
+
 // ─── Auto-fix PR content ──────────────────────────────────────────────────────
 
 const SEVERITY_KO_LABEL: Record<RepairSeverity, string> = {
@@ -503,6 +693,12 @@ export function buildAutoFixPrContent(input: {
   findings: readonly RepairFinding[];
   changedFiles: readonly string[];
   workerCommitMessage?: string;
+  /**
+   * Files fixed via the oversize excerpt+edit path (too big for full-file
+   * rewrites). Named in the PR body so a reviewer knows the worker saw
+   * excerpts, not the whole file — honesty over silence.
+   */
+  editedOversizeFiles?: readonly string[];
 }): { title: string; commitMessage: string; commitBody: string; body: string } {
   const intent = (input.intent ?? "").trim() || "핵심 기능 점검";
   const shortIntent = intent.length > 60 ? `${intent.slice(0, 57)}...` : intent;
@@ -537,6 +733,16 @@ export function buildAutoFixPrContent(input: {
   }
   if (input.workerCommitMessage) {
     lines.push("", `워커 커밋 요약: ${input.workerCommitMessage}`);
+  }
+  if (input.editedOversizeFiles && input.editedOversizeFiles.length > 0) {
+    lines.push(
+      "",
+      "### 큰 파일은 필요한 부분만 고쳤어요",
+      ...input.editedOversizeFiles.map((f) => `- \`${f}\``),
+      "",
+      "위 파일은 한 번에 다시 쓰기엔 커서, 문제와 관련된 부분만 발췌해 정확히 일치하는 곳만 바꿨어요.",
+      "바꾼 곳 외의 내용은 그대로예요.",
+    );
   }
   lines.push(
     "",

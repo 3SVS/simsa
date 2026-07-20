@@ -1,10 +1,23 @@
 import { EfficiencyGate, estimateTokens } from "@simsa/core";
 import type { AnthropicCreateParams, AnthropicLike, AnthropicResponse } from "./anthropic-types.js";
-import { REWRITE_TOOL_NAME, REWRITE_TOOL_DESCRIPTION, REWRITE_TOOL_INPUT_SCHEMA } from "./patch-tool.js";
-import { buildWorkerPrompt, buildCacheablePrefix, WORKER_SYSTEM_PROMPT } from "./prompts.js";
-import { parseRewriteToolUse } from "./patch-parser.js";
+import {
+  REWRITE_TOOL_NAME,
+  REWRITE_TOOL_DESCRIPTION,
+  REWRITE_TOOL_INPUT_SCHEMA,
+  EDIT_TOOL_NAME,
+  EDIT_TOOL_DESCRIPTION,
+  EDIT_TOOL_INPUT_SCHEMA,
+} from "./patch-tool.js";
+import {
+  buildWorkerPrompt,
+  buildCacheablePrefix,
+  buildEditWorkerPrompt,
+  buildEditCacheablePrefix,
+  WORKER_SYSTEM_PROMPT,
+} from "./prompts.js";
+import { parseRewriteToolUse, parseEditToolUse } from "./patch-parser.js";
 import { actualCost, estimateCallCost } from "./pricing.js";
-import type { WorkerContext, WorkerOutcome } from "./types.js";
+import type { WorkerContext, WorkerOutcome, EditWorkerContext, EditWorkerOutcome } from "./types.js";
 
 export interface ClaudeWorkerOptions {
   apiKey?: string;
@@ -117,6 +130,72 @@ export class ClaudeWorker {
         const latencyMs = Date.now() - started;
 
         const parsed = parseRewriteToolUse(response);
+        const cost = actualCost(model, {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+          cacheCreationTokens: response.usage.cache_creation_input_tokens,
+          cacheReadTokens: response.usage.cache_read_input_tokens,
+        });
+
+        return {
+          result: parsed,
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+          costUsd: cost,
+          latencyMs,
+        };
+      },
+    );
+
+    return {
+      ...outcome.result,
+      tokensUsed: outcome.metric.inputTokens + outcome.metric.outputTokens,
+      costUsd: outcome.metric.costUsd,
+    };
+  }
+
+  /**
+   * Edit-mode invocation for files above the snapshot byte cap: the model
+   * sees excerpts (EditWorkerContext.fileExcerpts) and returns exact
+   * search/replace edits instead of full-file rewrites. Same gate, pricing,
+   * and single-tool pattern as work(); only the tool contract differs.
+   * The caller is responsible for the exactly-once match check + apply.
+   */
+  async workEdits(ctx: EditWorkerContext): Promise<EditWorkerOutcome> {
+    const cacheablePrefix = buildEditCacheablePrefix(ctx);
+    const userPrompt = buildEditWorkerPrompt(ctx);
+    const inputTokenEstimate = estimateTokens(cacheablePrefix) + estimateTokens(userPrompt);
+    const estimatedCost = estimateCallCost(this.model, inputTokenEstimate, this.maxTokens);
+
+    const outcome = await this.gate.run<Omit<EditWorkerOutcome, "tokensUsed" | "costUsd">>(
+      {
+        agent: this.id,
+        cacheablePrefix,
+        prompt: cacheablePrefix + "\n" + userPrompt,
+        estimatedCostUsd: estimatedCost,
+        forceModel: this.model,
+      },
+      async ({ model }) => {
+        const started = Date.now();
+        const client = await this.getClient();
+        const params: AnthropicCreateParams = {
+          model,
+          max_tokens: this.maxTokens,
+          system: [{ type: "text", text: cacheablePrefix, cache_control: { type: "ephemeral" } }],
+          messages: [{ role: "user", content: userPrompt }],
+          tools: [
+            {
+              name: EDIT_TOOL_NAME,
+              description: EDIT_TOOL_DESCRIPTION,
+              input_schema: EDIT_TOOL_INPUT_SCHEMA,
+            },
+          ],
+          tool_choice: { type: "tool", name: EDIT_TOOL_NAME },
+        };
+        const response: AnthropicResponse = await client.messages.create(params);
+        const latencyMs = Date.now() - started;
+
+        const parsed = parseEditToolUse(response);
         const cost = actualCost(model, {
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
