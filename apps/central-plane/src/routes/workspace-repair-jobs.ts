@@ -175,6 +175,14 @@ export async function dispatchRepairJob(
   // container keeps the Stage 268 brief-only behavior (mode 'brief_only').
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (env.ANTHROPIC_API_KEY) headers["x-anthropic-key"] = env.ANTHROPIC_API_KEY;
+  // 2026-07-21 — route the container's worker-agent calls through the CF AI
+  // Gateway. Direct container→Anthropic egress 403s intermittently
+  // ("Request not allowed" — Worker-side direct egress measured ~90% 403 on
+  // 2026-07-05; repair hit the same class today). Base URL is not a secret
+  // (wrangler.toml [vars]); absent → container keeps the direct default.
+  if (env.CF_AI_GATEWAY_ANTHROPIC_URL) {
+    headers["x-anthropic-base-url"] = env.CF_AI_GATEWAY_ANTHROPIC_URL;
+  }
   try {
     const id = env.SANDBOX.idFromName(`repair-${args.jobId}`);
     const stub = env.SANDBOX.get(id);

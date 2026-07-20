@@ -92,11 +92,18 @@ const server = createServer(async (req, res) => {
       typeof req.headers["x-anthropic-key"] === "string" && req.headers["x-anthropic-key"].length > 0
         ? req.headers["x-anthropic-key"]
         : undefined;
+    // 2026-07-21 — optional CF AI Gateway base URL for the worker-agent
+    // calls. Direct container→Anthropic egress 403s intermittently
+    // ("Request not allowed"); the gateway path doesn't. Absent → SDK default.
+    const anthropicBaseUrl =
+      typeof req.headers["x-anthropic-base-url"] === "string" && req.headers["x-anthropic-base-url"].length > 0
+        ? req.headers["x-anthropic-base-url"]
+        : undefined;
     res.writeHead(202, { "content-type": "application/json" });
     res.end(JSON.stringify({ jobId: payload.jobId, status: "accepted" }));
 
     inFlightJobs.set(payload.jobId, payload);
-    runRepairJob(payload, anthropicApiKey)
+    runRepairJob(payload, anthropicApiKey, anthropicBaseUrl)
       .catch(async (err) => {
         console.error(`[repair ${payload.jobId}] crashed:`, redactSecret(err?.message ?? String(err), payload.githubToken));
         await postCallback(payload.callbackUrl, payload.callbackToken, {
@@ -432,7 +439,7 @@ async function runJob(payload) {
  * before it leaves this process, and the Anthropic key never reaches the
  * repo, the PR, or the callback.
  */
-async function runRepairJob(payload, anthropicApiKey) {
+async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl) {
   const {
     jobId,
     repo, // "owner/name"
@@ -491,7 +498,7 @@ async function runRepairJob(payload, anthropicApiKey) {
     const diag = { skippedOversize: [], reason: null };
     if (anthropicApiKey) {
       try {
-        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, diag });
+        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag });
       } catch (err) {
         console.error(
           `[repair ${jobId}] auto-fix crashed (falling back to brief-only):`,
@@ -642,7 +649,7 @@ async function quickSyntaxCheck(workDir, changedFiles) {
  * worker produced nothing applicable — callers reset the tree + fall back
  * to brief-only. Never leaves a dirty tree on the null path.
  */
-async function attemptAutoFix({ workDir, payload, anthropicApiKey, diag = { skippedOversize: [], reason: null } }) {
+async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null } }) {
   const jobId = payload.jobId;
   const deadline = Date.now() + AUTO_FIX_DEADLINE_MS;
 
@@ -680,7 +687,20 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, diag = { skip
 
   // The worker agent — same dist layout the autofix path uses for cli.
   const { ClaudeWorker } = await import("file:///app/packages/agent-worker/dist/index.js");
-  const worker = new ClaudeWorker({ apiKey: anthropicApiKey });
+  // 2026-07-21 — when the Worker forwarded a CF AI Gateway base URL, build the
+  // Anthropic client against it (direct egress 403s intermittently). The
+  // factory mirrors agent-worker's default one, adding only baseURL.
+  const worker = new ClaudeWorker({
+    apiKey: anthropicApiKey,
+    ...(anthropicBaseUrl
+      ? {
+          clientFactory: async (key) => {
+            const mod = await import("@anthropic-ai/sdk");
+            return new mod.default({ apiKey: key, baseURL: anthropicBaseUrl });
+          },
+        }
+      : {}),
+  });
 
   for (let iteration = 0; iteration < AUTO_FIX_MAX_ITERATIONS; iteration++) {
     if (Date.now() >= deadline) {
