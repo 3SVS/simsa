@@ -65,6 +65,66 @@ export interface WorkerContext {
   prd?: string;
 }
 
+// ─── Edit mode (oversize files) ────────────────────────────────────────────
+// Files too large for the full-file rewrite contract (LLM output limits make
+// wholesale reproduction truncation-prone) are served as EXCERPTS and fixed
+// via exact search/replace edits instead. The caller enforces that each
+// `search` matches exactly once before applying — a failed match rejects the
+// edit rather than corrupting the file.
+
+/** One verbatim region of an oversize file, selected around evidence tokens. */
+export interface ExcerptRegion {
+  /** 1-based first line of the region in the real file. */
+  startLine: number;
+  /** 1-based last line (inclusive). */
+  endLine: number;
+  /** The region's text EXACTLY as it appears on disk — no line numbers mixed in. */
+  text: string;
+}
+
+/** Excerpted view of a file that exceeded the snapshot byte cap. */
+export interface FileExcerpt {
+  path: string;
+  /** Size of the full file on disk, for the model's context. */
+  totalBytes: number;
+  /** Total line count of the full file. */
+  totalLines: number;
+  regions: ExcerptRegion[];
+}
+
+/** One exact-match edit. `search` must occur EXACTLY ONCE in the target file. */
+export interface FileEdit {
+  path: string;
+  /** Verbatim text to find (unique in the file). Copied exactly from an excerpt. */
+  search: string;
+  /** Replacement text. May be multi-line; empty string deletes the matched text. */
+  replace: string;
+}
+
+/** Context for an edit-mode invocation (oversize files only). */
+export interface EditWorkerContext {
+  repo: string;
+  pullNumber: number;
+  newSha: string;
+  reviews: ReviewResult[];
+  /** Excerpted views of the oversize files the blockers point at. */
+  fileExcerpts: FileExcerpt[];
+  answerKeys?: readonly string[];
+  failureCatalog?: readonly string[];
+  priorBailHints?: readonly string[];
+  prd?: string;
+}
+
+/** Result of an edit-mode invocation. Empty `edits` means the worker gave up. */
+export interface EditWorkerOutcome {
+  edits: FileEdit[];
+  message: string;
+  /** Convenience: unique paths touched by the edits. */
+  appliedFiles: string[];
+  tokensUsed?: number;
+  costUsd?: number;
+}
+
 /** Result of a worker invocation — ready to write to disk + commit. */
 export interface WorkerOutcome {
   /**

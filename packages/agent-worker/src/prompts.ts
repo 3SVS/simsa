@@ -1,5 +1,5 @@
 import type { Blocker } from "@simsa/core";
-import type { WorkerContext } from "./types.js";
+import type { WorkerContext, EditWorkerContext } from "./types.js";
 
 export const WORKER_SYSTEM_PROMPT = `You are the Worker agent on Conclave AI. Your job is to turn council blockers into complete file rewrites that resolve those blockers.
 
@@ -123,6 +123,97 @@ export function buildWorkerPrompt(ctx: WorkerContext): string {
     `Call submit_rewrite exactly once with the complete new contents of every file that needs changing, a commit message, and a one-paragraph summary.`,
   );
   return sections.join("\n");
+}
+
+// ─── Edit mode (oversize files) ────────────────────────────────────────────
+
+export const EDIT_WORKER_SYSTEM_PROMPT = `You are the Worker agent on Conclave AI, operating in EDIT MODE. The files you must fix are too large to reproduce wholesale, so you see EXCERPTS and respond with exact search/replace edits.
+
+Hard rules:
+- You MUST respond by calling the submit_edits tool exactly once. Do not emit free-form text.
+- Each edit's \`search\` string must be copied VERBATIM from an excerpt — identical whitespace, indentation, and line breaks. The caller verifies it occurs EXACTLY ONCE in the full file; if it is missing or matches more than once, the edit is rejected. Include enough surrounding lines (3+ context lines) to make the match unique.
+- \`replace\` must keep the unchanged context lines from \`search\` intact and alter only what the blocker requires.
+- Fix ONLY the blockers raised. No refactoring, renaming, reformatting, or feature work.
+- Edit ONLY the excerpted files. Never invent content for regions you have not been shown — if a fix requires unseen code, skip it and say so in \`summary\`.
+- If NO blocker is fixable from the excerpts, return an empty \`edits\` array and explain in \`summary\` what region or file the caller should excerpt next.
+- \`commitMessage\` should be a single line (≤ 72 chars), conventional-commit style where it fits. No trailing period.`;
+
+/**
+ * Build the edit-mode user prompt: blockers + excerpted regions with their
+ * real line ranges (line numbers live in the HEADERS only — the region text
+ * stays verbatim so the model can copy it into \`search\` exactly).
+ */
+export function buildEditWorkerPrompt(ctx: EditWorkerContext): string {
+  const sections: string[] = [];
+  sections.push(`# Rework target (edit mode)`);
+  sections.push(`repo: ${ctx.repo}`);
+  sections.push(`pull: #${ctx.pullNumber}`);
+  sections.push(`head sha: ${ctx.newSha}`);
+  sections.push("");
+
+  const blockerSection = renderBlockers(ctx.reviews);
+  sections.push(`# Blockers to fix`);
+  sections.push(
+    blockerSection ||
+      `(None of the council verdicts carry blockers. Return an empty edits array and note this in summary.)`,
+  );
+  sections.push("");
+
+  if (ctx.fileExcerpts.length > 0) {
+    sections.push(`# File excerpts`);
+    sections.push(
+      `These files are too large to show in full. Each region below is VERBATIM from disk at sha ${ctx.newSha} — copy search text from these regions exactly. Regions are labeled with their real line ranges for orientation; the labels are NOT part of the file.`,
+    );
+    sections.push("");
+    for (const ex of ctx.fileExcerpts) {
+      sections.push(
+        `## ${ex.path} (${ex.totalBytes} bytes, ${ex.totalLines} lines total — showing ${ex.regions.length} region(s))`,
+      );
+      for (const region of ex.regions) {
+        sections.push(`### lines ${region.startLine}-${region.endLine}`);
+        sections.push("```");
+        sections.push(region.text);
+        sections.push("```");
+      }
+      sections.push("");
+    }
+  } else {
+    sections.push(
+      `# File excerpts\n(no excerpts provided — return an empty edits array and list what you need in summary)`,
+    );
+    sections.push("");
+  }
+
+  sections.push(
+    `Call submit_edits exactly once with your exact search/replace edits, a commit message, and a one-paragraph summary.`,
+  );
+  return sections.join("\n");
+}
+
+/** Stable cacheable prefix for edit-mode calls (mirrors buildCacheablePrefix). */
+export function buildEditCacheablePrefix(ctx: EditWorkerContext): string {
+  const parts: string[] = [EDIT_WORKER_SYSTEM_PROMPT];
+  if (ctx.answerKeys && ctx.answerKeys.length > 0) {
+    parts.push("answer-keys:\n" + ctx.answerKeys.slice(0, 8).join("\n"));
+  }
+  if (ctx.failureCatalog && ctx.failureCatalog.length > 0) {
+    parts.push("failure-catalog:\n" + ctx.failureCatalog.slice(0, 8).join("\n"));
+  }
+  if (ctx.priorBailHints && ctx.priorBailHints.length > 0) {
+    const lines = ctx.priorBailHints.slice(0, 5).map((h, i) => `${i + 1}. ${h}`);
+    parts.push(
+      [
+        "## Past worker bails — avoid these failure modes",
+        "Previous autofix runs on similar shapes hit these terminal states.",
+        "",
+        ...lines,
+      ].join("\n"),
+    );
+  }
+  if (ctx.prd) {
+    parts.push("prd:\n" + ctx.prd);
+  }
+  return parts.join("\n---\n");
 }
 
 /**

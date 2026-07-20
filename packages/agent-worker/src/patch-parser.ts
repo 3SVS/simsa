@@ -1,6 +1,6 @@
 import type { AnthropicResponse } from "./anthropic-types.js";
-import { REWRITE_TOOL_NAME } from "./patch-tool.js";
-import type { WorkerOutcome } from "./types.js";
+import { REWRITE_TOOL_NAME, EDIT_TOOL_NAME } from "./patch-tool.js";
+import type { WorkerOutcome, EditWorkerOutcome } from "./types.js";
 
 export class WorkerParseError extends Error {
   constructor(message: string) {
@@ -65,6 +65,63 @@ export function parseRewriteToolUse(response: AnthropicResponse): Omit<WorkerOut
     rewrites,
     message: (input.commitMessage as string).trim(),
     appliedFiles: rewrites.map((r) => r.path),
+  };
+}
+
+/**
+ * Parse the edit-mode tool_use response into an EditWorkerOutcome.
+ * Same shape rules as parseRewriteToolUse; `edits` may be empty (the
+ * worker gave up — preserved as a signal). Entries with an empty path
+ * or empty search are dropped here; uniqueness-in-file is the caller's
+ * job (it has the file, we don't).
+ */
+export function parseEditToolUse(
+  response: AnthropicResponse,
+): Omit<EditWorkerOutcome, "tokensUsed" | "costUsd"> {
+  const toolUse = response.content.find(
+    (block): block is Extract<(typeof response.content)[number], { type: "tool_use" }> =>
+      block.type === "tool_use" && block.name === EDIT_TOOL_NAME,
+  );
+  if (!toolUse) {
+    throw new WorkerParseError(
+      `Worker: response did not include a ${EDIT_TOOL_NAME} tool_use block (stop_reason=${response.stop_reason ?? "?"})`,
+    );
+  }
+
+  const input = toolUse.input as {
+    edits?: unknown;
+    commitMessage?: unknown;
+    summary?: unknown;
+  };
+
+  if (typeof input.commitMessage !== "string" || input.commitMessage.trim().length === 0) {
+    throw new WorkerParseError(`Worker: submit_edits.commitMessage must be a non-empty string`);
+  }
+  if (!Array.isArray(input.edits)) {
+    throw new WorkerParseError(`Worker: submit_edits.edits must be an array`);
+  }
+  for (const entry of input.edits) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      typeof (entry as Record<string, unknown>).path !== "string" ||
+      typeof (entry as Record<string, unknown>).search !== "string" ||
+      typeof (entry as Record<string, unknown>).replace !== "string"
+    ) {
+      throw new WorkerParseError(
+        `Worker: submit_edits.edits entries must be objects with string path, search, replace fields`,
+      );
+    }
+  }
+
+  const edits = (input.edits as Array<{ path: string; search: string; replace: string }>)
+    .map((e) => ({ path: e.path.trim(), search: e.search, replace: e.replace }))
+    .filter((e) => e.path.length > 0 && e.search.length > 0);
+
+  return {
+    edits,
+    message: (input.commitMessage as string).trim(),
+    appliedFiles: [...new Set(edits.map((e) => e.path))],
   };
 }
 
