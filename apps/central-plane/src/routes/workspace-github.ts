@@ -1118,6 +1118,7 @@ export function createWorkspaceGitHubRoutes(
           summary: reviewResult.summary,
           problematicItems,
           dashboardUrl: `${dashboardBase}/projects/${projectId}/github`,
+          locale: reviewLocale,
         });
 
         const sendResult = await sendWorkspaceTelegramMessage(c.env, settings.chatId, message, fetchImpl);
@@ -1159,6 +1160,7 @@ export function createWorkspaceGitHubRoutes(
       prNumber,
       summary: reviewResult.summary,
       results: reviewResult.results.map((r) => ({ title: r.title, status: r.status })),
+      locale: reviewLocale,
     }, fetchImpl);
 
     // 11. Build rerun metadata + comparison if applicable

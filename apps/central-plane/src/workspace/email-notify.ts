@@ -93,8 +93,12 @@ export async function sendWorkspaceEmail(
 export function buildPrReviewEmailContent(
   opts: PrReviewTelegramMessageOptions,
 ): { subject: string; text: string } {
+  const subject =
+    opts.locale === "en"
+      ? `[${BRAND.productName}] PR check complete — ${opts.repoFullName} #${opts.prNumber}`
+      : `[${BRAND.productName}] PR 확인 완료 — ${opts.repoFullName} #${opts.prNumber}`;
   return {
-    subject: `[${BRAND.productName}] PR 확인 완료 — ${opts.repoFullName} #${opts.prNumber}`,
+    subject,
     text: buildPrReviewTelegramMessage(opts),
   };
 }
@@ -108,6 +112,8 @@ export type PrReviewEmailNotifyInput = {
   summary: { passed: number; failed: number; inconclusive: number; needsDecision: number };
   /** Full per-item results; non-passed items are listed in the email. */
   results: Array<{ title: string; status: string }>;
+  /** Train E (2026-07-21): 리뷰 요청의 locale. 미지정 = ko. */
+  locale?: "ko" | "en";
 };
 
 /**
@@ -156,6 +162,7 @@ export async function notifyPrReviewCompleteByEmail(
       summary: input.summary,
       problematicItems,
       dashboardUrl: `${dashboardBase}/projects/${input.projectId}/github`,
+      locale: input.locale,
     });
 
     const sendResult = await sendWorkspaceEmail(env, { to: address, subject, text }, fetchImpl);
