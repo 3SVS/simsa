@@ -21,7 +21,9 @@ export interface CatalogService {
 
 export declare const SERVICE_CATALOG: CatalogService[];
 
-export declare function catalogServiceById(id: string): CatalogService | null;
+export type CatalogLocale = "en" | "ko";
+
+export declare function catalogServiceById(id: string, locale?: CatalogLocale): CatalogService | null;
 
 export declare function detectServices(
   spec:
@@ -34,8 +36,9 @@ export declare function detectServices(
       }
     | null
     | undefined,
+  locale?: CatalogLocale,
 ): CatalogService[];
 
 export declare function hasAnyValue(services: CatalogService[]): boolean;
 
-export declare function allCatalogServices(): CatalogService[];
+export declare function allCatalogServices(locale?: CatalogLocale): CatalogService[];

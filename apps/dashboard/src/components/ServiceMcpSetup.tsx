@@ -41,13 +41,20 @@ type SpecLike = {
 };
 
 export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: SpecLike }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const toast = useToast();
   // Seed from the store (values entered earlier) or fresh detection from the
-  // spec — the single shared seed both this panel and export use.
+  // spec — the single shared seed both this panel and export use. Copy is
+  // resolved in the CURRENT locale (journey-audit v2 P1: EN 화면에 이 카드만
+  // 한국어로 남던 누수); stored VALUES survive locale switches.
   const [services, setServices] = useState<CatalogService[]>(
-    () => seedServiceSetup(projectId, spec) as CatalogService[],
+    () => seedServiceSetup(projectId, spec, locale) as CatalogService[],
   );
+  // Locale switch re-resolves the copy without losing entered values.
+  useEffect(() => {
+    setServices(seedServiceSetup(projectId, spec, locale) as CatalogService[]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
   // Persist every change (browser-only) so the values reach the builder pack.
   useEffect(() => { saveServiceValues(projectId, services); }, [projectId, services]);
 
@@ -75,14 +82,14 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
   function addService(serviceId: string) {
     setServices((prev) => {
       if (prev.some((s) => s.id === serviceId)) return prev;
-      const svc = catalogServiceById(serviceId);
+      const svc = catalogServiceById(serviceId, locale);
       return svc ? [...prev, svc] : prev;
     });
   }
   function removeService(serviceId: string) {
     setServices((prev) => prev.filter((s) => s.id !== serviceId));
   }
-  const addableServices = allCatalogServices().filter(
+  const addableServices = allCatalogServices(locale).filter(
     (c) => !services.some((s) => s.id === c.id),
   );
 

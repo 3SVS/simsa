@@ -424,6 +424,14 @@ function VisualChecksOverviewCard({
   const run =
     action.kind === "runFirst" ? null : (checks.find((c) => c.id === action.runId) ?? null);
 
+  // Journey-audit v2 기준선 (2026-07-21): on the code branch the empty-state
+  // door depends on the repo fact — rendering the default door while it's
+  // unknown made the CTA flip "run"→"connect" ~2s after paint (실측). Hold the
+  // whole card until the door is decidable; a moment without the card beats a
+  // CTA that changes under the user's cursor.
+  const door = run === null ? inspectionEmptyStateDoor({ entryPath, hasRepo, hasDeployUrl }) : null;
+  if (door === "wait") return null;
+
   return (
     <section className="mb-8">
       <div className="mb-2 flex items-center justify-between">
@@ -440,9 +448,9 @@ function VisualChecksOverviewCard({
           // Journey-audit P2 (2026-07-20): on the CODE branch with nothing
           // connected (repo confirmed absent, no deploy URL), "run your first
           // inspection" pointed at the URL-based door the user can't use yet.
-          // Branch-fit: walk them to connect first. Unknown facts (null) keep
-          // the default door — fail-open, never a wrong lock.
-          inspectionEmptyStateDoor({ entryPath, hasRepo, hasDeployUrl }) === "connect" ? (
+          // Branch-fit: walk them to connect first. ("wait" is handled above —
+          // the card holds until the door is decidable, never flips.)
+          door === "connect" ? (
             <>
               <p className="text-sm leading-relaxed text-gray-600">
                 {t.visualChecks.overview.emptyLeadCodeNoSource}

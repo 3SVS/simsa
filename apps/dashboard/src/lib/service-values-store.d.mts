@@ -7,4 +7,5 @@ export declare function seedServiceSetup(
     | { oneLine?: string; problem?: string; included?: string[]; userFlow?: string[]; productName?: string }
     | null
     | undefined,
+  locale?: "en" | "ko",
 ): unknown[];
