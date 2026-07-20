@@ -29,6 +29,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       typeof navigator !== "undefined" ? navigator.language : null
     );
     if (initial !== locale) setLocaleState(initial);
+    // 2026-07-20 P1: 감지된 locale을 즉시 저장한다. 저장하지 않으면 UI는
+    // ko(감지)인데 API 호출부(readStoredLocale — 저장값 없음 → 기본 en)는
+    // en을 보내서, 토글을 안 건드린 한국 첫 방문 유저의 제품 설명서가
+    // 영어로 생성됐다(journey-audit 실측). UI 언어와 API 언어의 단일화.
+    writeStoredLocale(typeof window !== "undefined" ? window.localStorage : null, initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

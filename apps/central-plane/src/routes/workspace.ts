@@ -12,7 +12,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
-import { ALLOWED_ORIGINS } from "./cors.js";
+import { ALLOWED_ORIGINS, CORS_ALLOW_METHODS } from "./cors.js";
 import { generateIdeaToSpecDraft, toClientDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
@@ -78,7 +78,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
       : (ALLOWED_ORIGINS[0] as string);
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": CORS_ALLOW_METHODS,
     "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key, X-Simsa-User-Key",
     "Access-Control-Max-Age": "86400",
   };
@@ -457,7 +457,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
   // deleteProject() in workspace/db.ts.
   app.delete("/workspace/projects/:id", async (c) => {
     const origin = c.req.header("origin") ?? null;
-    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "GET, DELETE, OPTIONS" };
+    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": CORS_ALLOW_METHODS };
     const id = c.req.param("id");
     const userKey = c.req.query("userKey") ?? "";
     if (!userKey) {
@@ -796,7 +796,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
   // Deterministic — no LLM, no rate limit. Assembles markdown files from project data.
   app.post("/workspace/export-builder-pack", async (c) => {
     const origin = c.req.header("origin") ?? null;
-    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "POST, OPTIONS" };
+    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": CORS_ALLOW_METHODS };
 
     let body: unknown;
     try { body = await c.req.json(); } catch {
@@ -887,7 +887,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
   // Save the result of sending a builder pack to Claude Code / Codex.
   app.post("/workspace/builder-pack-outcomes", async (c) => {
     const origin = c.req.header("origin") ?? null;
-    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
+    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": CORS_ALLOW_METHODS };
 
     let body: unknown;
     try { body = await c.req.json(); } catch {
@@ -939,7 +939,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
   // Ownership-enforced: 404 not_found for missing OR not-owned project.
   app.get("/workspace/projects/:id/builder-pack-outcomes", async (c) => {
     const origin = c.req.header("origin") ?? null;
-    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": "POST, GET, OPTIONS" };
+    const headers = { ...corsHeaders(origin), "Access-Control-Allow-Methods": CORS_ALLOW_METHODS };
     const projectId = c.req.param("id");
     const userKey = c.req.query("userKey") ?? "";
     if (!userKey) {
