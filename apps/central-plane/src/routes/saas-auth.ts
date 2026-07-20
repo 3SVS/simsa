@@ -24,6 +24,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env.js";
 import {
+  applyInstallationRepoChange,
   approveDeviceCode,
   cancelMarketplaceSubscription,
   clearPendingMarketplaceChange,
@@ -146,6 +147,46 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
       } else if (action === "unsuspend") {
         await unsuspendInstallation(env, installationId);
       }
+      return c.json({ ok: true, event, action, delivery });
+    }
+
+    // Repo-access edits on an existing installation ("Only select
+    // repositories" add/remove, or flipping to "All repositories").
+    // Ignoring this left selected_repo_ids frozen at install time
+    // (2026-07-20 실측: Bae's row still showed the single repo picked
+    // back in May). The column isn't consumed by gating yet, but stale
+    // data becomes a bug the moment a consumer appears.
+    if (event === "installation_repositories") {
+      const inst = (p["installation"] ?? {}) as Record<string, unknown>;
+      const installationId = Number(inst["id"]);
+      const repoSelection = String(inst["repository_selection"] ?? "selected") === "all" ? "all" as const : "selected" as const;
+      const addedRaw = (p["repositories_added"] ?? []) as Array<{ id: number }>;
+      const removedRaw = (p["repositories_removed"] ?? []) as Array<{ id: number }>;
+      const addedRepoIds = Array.isArray(addedRaw) ? addedRaw.map((r) => Number(r.id)).filter(Number.isFinite) : [];
+      const removedRepoIds = Array.isArray(removedRaw) ? removedRaw.map((r) => Number(r.id)).filter(Number.isFinite) : [];
+
+      const applied = await applyInstallationRepoChange(env, {
+        installationId,
+        repoSelection,
+        addedRepoIds,
+        removedRepoIds,
+      });
+      if (!applied) {
+        // Row missing — the install webhook was missed or the row was
+        // marked removed. Rebuild from this payload's installation object.
+        const account = (inst["account"] ?? {}) as Record<string, unknown>;
+        await upsertInstallation(env, {
+          installationId,
+          accountLogin: String(account["login"] ?? ""),
+          accountId: Number(account["id"] ?? 0),
+          targetType: String(inst["target_type"] ?? "User") === "Organization" ? "Organization" : "User",
+          repoSelection,
+          selectedRepoIds: repoSelection === "selected" && addedRepoIds.length > 0 ? addedRepoIds : null,
+        });
+      }
+      console.log(
+        `[webhook] installation_repositories ${action} inst=${installationId} +${addedRepoIds.length} -${removedRepoIds.length} sel=${repoSelection}${applied ? "" : " (row rebuilt)"}`,
+      );
       return c.json({ ok: true, event, action, delivery });
     }
 
