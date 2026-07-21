@@ -20,6 +20,7 @@ import type { Env } from "../env.js";
 import { getProject } from "../workspace/db.js";
 import { listProjectReviewRuns } from "../workspace/pr-review-db.js";
 import { assembleLiveEvidence } from "../workspace/evidence-live.js";
+import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import {
   insertVisualCheck,
   listVisualChecks,
@@ -255,6 +256,18 @@ export function createWorkspaceVisualChecksRoutes(): Hono<{ Bindings: Env }> {
       report = JSON.parse(owned.run.reportJson);
     } catch {
       report = null;
+    }
+
+    // 기준평가 8a (2026-07-21): 퍼널 마지막 칸(결과 열람) 계측 공백을 닫는다.
+    // done 런의 상세 조회 = 리포트 열람. 비치명·GET당 1기록(뷰 카운트 성격 —
+    // 재방문 포함이 의도). active 폴링은 status가 done이 아니라 안 잡힌다.
+    if (owned.run.status === "done") {
+      await insertUsageEvent(c.env, {
+        userKey,
+        projectId,
+        eventType: "workspace_report_viewed",
+        metadata: { runId },
+      }).catch(() => undefined);
     }
 
     return c.json({
