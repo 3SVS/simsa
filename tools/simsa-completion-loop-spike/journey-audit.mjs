@@ -205,12 +205,66 @@ async function runConnectJourney(locale) {
   }
 }
 
+// ── J5: 시드 세션 축 — 로그인-후/결과 표면 (기준평가 6, 2026-07-21) ──────────
+// 익명 감사의 구조적 사각(런 상세·결과 루프)을 userKey+프로젝트 스텁 주입으로
+// 뚫는다(m1b 실증 기법의 제도화). 시드는 QA 픽스처 트리플이 기본 — 환경변수로
+// 교체 가능. 채점: "왜 이 판정" 발견성 + evidence 로드 + 점수 누수.
+const SEED = {
+  userKey: process.env.SIMSA_SEED_USERKEY ?? "uk_mqru04hf3qv61",
+  projectId: process.env.SIMSA_SEED_PROJECT ?? "wsp_rwwupkcox7",
+  runId: process.env.SIMSA_SEED_RUN ?? "wvc_rwwvk5fhdw",
+};
+
+async function runSeededResultJourney(locale) {
+  try {
+    journey("J5 시드 세션: 런 상세 → 왜 이 판정 → 증거 로드", locale);
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 1200 } });
+    await ctx.addInitScript((seed) => {
+      try {
+        localStorage.setItem("conclave_user_key", seed.userKey);
+        localStorage.setItem("conclave:locale", seed.locale);
+        localStorage.setItem("conclave_wf_projects:anon", JSON.stringify([{
+          id: seed.projectId, name: "QA seed", description: "seed",
+          createdAt: "2026-07-19",
+          spec: { completeness: 0, goal: "", included: [], excluded: [], openDecisions: [] },
+          requirements: [],
+        }]));
+      } catch {}
+    }, { ...SEED, locale });
+    const page = await ctx.newPage();
+    page._simsaLocale = locale;
+    await page.goto(`${BASE}/projects/${SEED.projectId}/visual-checks/${SEED.runId}`, { waitUntil: "networkidle", timeout: 45000 });
+    await page.waitForTimeout(1500);
+    await facts(page, "런 상세 — 리포트 렌더");
+    const evSummary = page.locator("summary", { hasText: locale === "en" ? "Why this verdict" : "왜 이 판정" }).first();
+    if (await evSummary.count()) {
+      await evSummary.scrollIntoViewIfNeeded();
+      await evSummary.click();
+      await page.waitForTimeout(4000);
+      const row = await facts(page, "왜 이 판정 — 펼침 후 증거 로드");
+      const body = await page.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
+      if (/\d{1,3}\s*\/\s*100/.test(body)) {
+        audit.findings.push({ sev: "P0", journey: "J5", locale, step: row.label, what: "증거 체인에 숫자 점수 누수" });
+      }
+      if (!/(확인 항목 ↔ 관찰|Acceptance items)/.test(body)) {
+        audit.findings.push({ sev: "P1", journey: "J5", locale, step: row.label, what: "펼침 후 증거 체인 미로드" });
+      }
+    } else {
+      audit.findings.push({ sev: "P1", journey: "J5", locale, step: "런 상세", what: '"왜 이 판정" 섹션 미발견 (발견성/배포 회귀)' });
+    }
+    await page.context().close();
+  } catch (err) {
+    audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
+  }
+}
+
 // ── 실행: KO 전체 + (기본) EN 축 ──────────────────────────────────────────────
 
 await runIdeaEntry("ko");
 await runCodeJourney("ko");
 await runSpecJourney("ko");
 await runConnectJourney("ko");
+await runSeededResultJourney("ko");
 
 if (!KO_ONLY) {
   await runIdeaEntry("en");
