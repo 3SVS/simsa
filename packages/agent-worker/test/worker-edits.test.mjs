@@ -183,3 +183,9 @@ test("buildEditWorkerPrompt: excerpts are verbatim inside fences, line labels ou
   assert.ok(prompt.includes("398336 bytes"));
   assert.ok(prompt.includes("API base must not be localhost"));
 });
+
+test("edit-mode system prompt carries the anti-shotgun rail (기준평가 5b)", async () => {
+  const { EDIT_WORKER_SYSTEM_PROMPT } = await import("../dist/index.js");
+  assert.ok(EDIT_WORKER_SYSTEM_PROMPT.includes("NO speculative shotgun fixes"));
+  assert.ok(EDIT_WORKER_SYSTEM_PROMPT.includes("empty \`edits\` array with an honest \`summary\` IS the correct outcome"));
+});

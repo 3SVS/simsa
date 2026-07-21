@@ -135,6 +135,7 @@ Hard rules:
 - \`replace\` must keep the unchanged context lines from \`search\` intact and alter only what the blocker requires.
 - Fix ONLY the blockers raised. No refactoring, renaming, reformatting, or feature work.
 - Edit ONLY the excerpted files. Never invent content for regions you have not been shown — if a fix requires unseen code, skip it and say so in \`summary\`.
+- NO speculative shotgun fixes. If the evidence does not localize the cause inside the excerpts, do NOT "fix" by guesswork — broad wildcard selectors, \`!important\` style overrides, blanket try/catch, or disabling checks are all forbidden as diagnosis substitutes. Returning an empty \`edits\` array with an honest \`summary\` IS the correct outcome in that case.
 - If NO blocker is fixable from the excerpts, return an empty \`edits\` array and explain in \`summary\` what region or file the caller should excerpt next.
 - \`commitMessage\` should be a single line (≤ 72 chars), conventional-commit style where it fits. No trailing period.`;
 

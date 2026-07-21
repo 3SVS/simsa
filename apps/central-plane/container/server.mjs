@@ -997,6 +997,24 @@ async function createOrReuseRepairPr({ repo, token, head, base, title, body, dra
           headers: apiHeaders,
           body: JSON.stringify({ title, body }),
         }).catch(() => {});
+        // 기준평가 V4 (2026-07-21): auto_fix가 brief-only 시절의 draft PR을
+        // 재사용하면 실코드가 실렸는데 "초안"으로 남아 오도한다. REST는
+        // un-draft 불가, GraphQL은 가능 — best effort.
+        if (draft === false && existing.draft === true && existing.node_id) {
+          await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+              "user-agent": "simsa-repair",
+            },
+            body: JSON.stringify({
+              query:
+                "mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){pullRequest{isDraft}}}",
+              variables: { id: existing.node_id },
+            }),
+          }).catch(() => {});
+        }
         return existing;
       }
     }
