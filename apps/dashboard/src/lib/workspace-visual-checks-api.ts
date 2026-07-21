@@ -260,3 +260,55 @@ export async function getVisualCheck(
     return { ok: false, error: String(err) };
   }
 }
+
+// ── Train M-1b (2026-07-21, design locked) — "왜 이 판정인가" 증거 체인 ──────
+
+export type EvidenceCriterion = {
+  id: string;
+  text: string;
+  status: "verified" | "broken" | "not_verified";
+  observedBy: string[];
+};
+
+export type RunEvidence = {
+  pack: {
+    riskFlags: Record<string, boolean>;
+    notVerified: string[];
+    verified: string[];
+    broken: string[];
+    humanGateRequired: boolean;
+  };
+  gate: { decision: string; reasons: string[]; nextSafestAction: string };
+  criteria: EvidenceCriterion[];
+  browserFacts: {
+    works: boolean | null;
+    decision: string;
+    consoleErrors: string[];
+    failedInteractions: string[];
+    screenshotCount: number;
+  };
+  interpretations: string[];
+};
+
+export type RunEvidenceResponse =
+  | { ok: true; evidence: RunEvidence }
+  | { ok: false; error: string };
+
+export async function fetchRunEvidence(
+  projectId: string,
+  runId: string,
+  userKey: string,
+): Promise<RunEvidenceResponse> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/evidence/${encodeURIComponent(runId)}?userKey=${encodeURIComponent(userKey)}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    const data = (await resp
+      .json()
+      .catch(() => ({ ok: false, error: `HTTP ${resp.status}` }))) as RunEvidenceResponse;
+    return data;
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}

@@ -2222,6 +2222,34 @@ export type Dictionary = {
       viewReport: string;
       latestLabel: string;
     };
+    evidence: {
+      title: string;
+      subtitle: string;
+      loading: string;
+      loadError: string;
+      chainTitle: string;
+      colCriterion: string;
+      colObserved: string;
+      colStatus: string;
+      statusVerified: string;
+      statusBroken: string;
+      statusNotVerified: string;
+      noObservation: string;
+      noCriteria: string;
+      factsTitle: string;
+      factsWorks: string;
+      factsConsoleErrors: string;
+      factsFailedInteractions: string;
+      factsScreenshots: string;
+      factsNone: string;
+      interpretationsTitle: string;
+      interpretationsNote: string;
+      riskTitle: string;
+      humanGate: string;
+      devDetails: string;
+      decisionLabel: string;
+      states: Record<string, string>;
+    };
   };
   connectReentry: {
     title: string;
