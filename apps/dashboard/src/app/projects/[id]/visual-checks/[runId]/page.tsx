@@ -55,6 +55,7 @@ import {
 } from "@/lib/repair-state.mjs";
 import type { RepairErrorKey } from "@/lib/repair-state.mjs";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
+import { EvidenceChainSection } from "@/components/EvidenceChainSection";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -740,6 +741,9 @@ export default function VisualCheckDetailPage() {
               findings.map((f, i) => <FindingCard key={i} finding={f} t={t} />)
             )}
           </section>
+
+          {/* Train M-1b — "왜 이 판정인가요?" 증거 체인 (펼침 시 lazy 로드) */}
+          <EvidenceChainSection projectId={id} runId={runId} userKey={userKey} t={t} />
 
           {/* Screenshots */}
           {evidence.screenshots.length > 0 && (
