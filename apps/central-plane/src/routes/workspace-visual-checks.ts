@@ -18,6 +18,8 @@ import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { getProject } from "../workspace/db.js";
+import { listProjectReviewRuns } from "../workspace/pr-review-db.js";
+import { assembleLiveEvidence } from "../workspace/evidence-live.js";
 import {
   insertVisualCheck,
   listVisualChecks,
@@ -272,6 +274,66 @@ export function createWorkspaceVisualChecksRoutes(): Hono<{ Bindings: Env }> {
         createdAt: owned.run.createdAt,
       },
     });
+  });
+
+  // ── GET /workspace/projects/:id/evidence/:runId ────────────────────────────
+  // Train M-1a (2026-07-21, design locked): "왜 이 판정인가" 증거 체인.
+  // 저장된 사실(스펙/items · 시각 런 · 최신 PR 리뷰 결과)을 GET 시점에
+  // acceptance-graph로 재도출(on-demand — 저장 없음·네트워크 없음·결정론).
+  // 새 판정을 만들지 않는다: 이미 내려진 판정에 근거를 붙일 뿐이다.
+  app.get("/workspace/projects/:id/evidence/:runId", async (c) => {
+    const projectId = c.req.param("id");
+    const runId = c.req.param("runId");
+    const userKey = c.req.query("userKey") ?? "";
+    if (!userKey) return c.json({ ok: false, error: "userKey_required" }, 400);
+
+    const owned = await requireOwnedRun(c.env, projectId, runId, userKey);
+    if (!owned.ok) return c.json({ ok: false, error: owned.error }, owned.status);
+
+    try {
+      const project = await getProject(c.env, projectId);
+      const parse = (v: unknown): unknown => {
+        if (typeof v !== "string") return v ?? null;
+        try {
+          return JSON.parse(v);
+        } catch {
+          return null;
+        }
+      };
+      // A finished review = terminal verdict status with a stored result.
+      const latest = (await listProjectReviewRuns(c.env, projectId, { limit: 5 })).find(
+        (r) => (r.status === "passed" || r.status === "failed" || r.status === "inconclusive") && r.resultJson,
+      );
+      let latestReview: { repoFullName?: string; prNumber?: number; results?: Array<{ itemId?: string; title?: string; status?: string }> } | null = null;
+      if (latest) {
+        const parsed = parse(latest.resultJson) as { results?: Array<{ itemId?: string; title?: string; status?: string }> } | null;
+        latestReview = {
+          repoFullName: latest.repoFullName,
+          prNumber: latest.prNumber,
+          results: parsed?.results ?? [],
+        };
+      }
+
+      const evidence = assembleLiveEvidence({
+        projectId,
+        entryPath: project?.entryPath ?? null,
+        productSpec: (project ? parse(project.productSpec) : null) as never,
+        items: (project ? parse(project.items) : null) as never,
+        run: {
+          id: owned.run.id,
+          intent: owned.run.intent,
+          decision: owned.run.decision,
+          works: owned.run.works,
+          reportJson: owned.run.reportJson,
+        },
+        latestReview,
+      });
+
+      return c.json({ ok: true, evidence });
+    } catch (err) {
+      console.error("[workspace/evidence GET] failed:", err);
+      return c.json({ ok: false, error: "query_failed" }, 500);
+    }
   });
 
   return app;
