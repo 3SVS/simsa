@@ -15,6 +15,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
+import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { corsHeaders, corsMiddleware } from "./cors.js";
 
 const MAX_PAYLOAD_BYTES = 60_000;
@@ -85,6 +86,15 @@ export function createShareRoutes(): Hono<{ Bindings: Env }> {
     )
       .bind(id, share.userKey, share.projectId, share.payloadJson, new Date().toISOString())
       .run();
+
+    // Train M-2 (2026-07-21, design locked): PRD §9.4가 예약해 둔 result_shared
+    // 이벤트 슬롯을 실제로 채운다 — 공유가 성장 신호의 1차 지표. 비치명(non-fatal).
+    await insertUsageEvent(c.env, {
+      userKey: share.userKey,
+      ...(share.projectId ? { projectId: share.projectId } : {}),
+      eventType: "workspace_result_shared",
+      metadata: { shareId: id },
+    }).catch(() => undefined);
 
     return new Response(JSON.stringify({ ok: true, shareId: id }), { status: 200, headers: { "content-type": "application/json", ...headers } });
   });
