@@ -56,6 +56,9 @@ import {
   verifyWebhookSignature,
 } from "../gh-app.js";
 import { notifyFounderOnNewInstall } from "../notify-founder.js";
+import { getVisualCheckById } from "../workspace/visual-check-db.js";
+import { insertUsageEvent } from "../workspace/usage-events-db.js";
+import { REPAIR_MERGED_EVENT } from "../workspace/verify-sweep.js";
 import { spawnSandbox } from "./saas.js";
 
 export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
@@ -281,6 +284,29 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
     // review on opened/reopened/synchronize (the head SHA changed).
     // Other actions (closed/labeled/etc.) are acknowledged but skipped.
     if (event === "pull_request") {
+      // 기준평가 1 (2026-07-22): find→fix→verify 원 닫기의 신호 수집.
+      // Simsa 수리 PR(head=fix/simsa-{runId})이 머지되면 이벤트만 기록 —
+      // 10분 크론(verify-sweep)이 배포 그레이스 후 재검수를 디스패치한다.
+      // 협의체 스폰이 아니므로 킬스위치보다 먼저, 기록 후 자체 ack.
+      {
+        const pr0 = (p["pull_request"] ?? {}) as Record<string, unknown>;
+        const head0 = (pr0["head"] ?? {}) as Record<string, unknown>;
+        const headRef = String(head0["ref"] ?? "");
+        if (action === "closed" && pr0["merged"] === true && headRef.startsWith("fix/simsa-")) {
+          const runId = headRef.slice("fix/simsa-".length);
+          const run = runId ? await getVisualCheckById(env, runId).catch(() => null) : null;
+          if (run) {
+            await insertUsageEvent(env, {
+              userKey: run.userKey,
+              projectId: run.projectId,
+              eventType: REPAIR_MERGED_EVENT,
+              metadata: { runId, prNumber: Number(pr0["number"]) || null },
+            }).catch(() => undefined);
+            console.log(`[webhook] repair PR merged → verify signal recorded (run=${runId})`);
+          }
+          return c.json({ ok: true, event, action, delivery, noted: "repair_merged" });
+        }
+      }
       // 2026-07-21 (Bae): 레거시 자동 리뷰 킬스위치 — Simsa 집중 기간 동안
       // 전 repo에서 자동 협의체 리뷰 정지. 크레딧 소모/잡 생성/샌드박스
       // 어느 것도 일어나기 전에 여기서 끊는다. 수동 /saas/review는 그대로.

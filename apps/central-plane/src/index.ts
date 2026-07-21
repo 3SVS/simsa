@@ -11,6 +11,7 @@ import { runSourceDiscovery } from "./source-discovery.js";
 import { runOssPrMiner } from "./oss-pr-miner.js";
 import { runChangelogMonitor } from "./changelog-monitor.js";
 import { runDeployTrendWatcher } from "./deploy-trend-watcher.js";
+import { runVerifySweep } from "./workspace/verify-sweep.js";
 import { runAgentSpawner, runAutoGraduation } from "./agent-spawner.js";
 import { runCveAdvisoryMiner } from "./cve-advisory-miner.js";
 import { runReengageNudges } from "./workspace/reengage.js";
@@ -274,6 +275,15 @@ export default {
       cronExpression: event.cron,
       ...result,
     }));
+    // 기준평가 1 (2026-07-22) — find→fix→verify 원 닫기: 머지된 수리 PR
+    // 신호(workspace_repair_merged)를 소비해 재검수를 자동 디스패치한다.
+    // 5분 배포 그레이스는 스윕 내부에서 처리. 실패는 스윕을 죽이지 않는다.
+    try {
+      const verify = await runVerifySweep(env);
+      console.log(JSON.stringify({ cron: "verify-sweep", cronExpression: event.cron, ...verify }));
+    } catch (err) {
+      console.error("[verify-sweep] crashed:", err);
+    }
   },
 };
 
