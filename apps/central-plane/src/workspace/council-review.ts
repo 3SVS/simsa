@@ -53,6 +53,13 @@ const USER_LABEL: Record<CheckItemStatus, CheckResultItem["userLabel"]> = {
   needs_decision: "결정 필요",
 };
 
+/** G14-b: split-요약 등 사용자 노출 프로즈에 쓰는 언어별 status 표현.
+ *  (wire의 userLabel 자체는 KO 리터럴 유지 — 표시는 dashboard statusLabel이 담당) */
+const STATUS_WORD: Record<"ko" | "en", Record<CheckItemStatus, string>> = {
+  ko: { passed: "통과", failed: "안 맞음", inconclusive: "확인 부족", needs_decision: "결정 필요" },
+  en: { passed: "passed", failed: "doesn't match", inconclusive: "needs checking", needs_decision: "needs a decision" },
+};
+
 const VALID_STATUS = new Set<string>(["passed", "failed", "inconclusive", "needs_decision"]);
 
 function parseVerdicts(text: string): VendorVerdicts | null {
@@ -161,6 +168,29 @@ function rebuttalPrompt(
   opinions: Map<VendorId, VendorVerdicts>,
 ): string {
   const items = req.items.filter((i) => itemIds.includes(i.id));
+  // G14-b: 라운드2 프롬프트도 사용자 언어를 따른다 (라운드1은 buildCheckPrompt가 담당).
+  if (req.locale === "en") {
+    const lines: string[] = [
+      "The reviewers' first-round verdicts disagree on the items below. Read each reviewer's judgment and re-decide your final verdict yourself. If you agree, adopt that verdict; if you still see it differently, keep yours with your reasoning.",
+      "",
+      `[Product spec]`,
+      JSON.stringify(req.productSpec),
+      "",
+    ];
+    for (const item of items) {
+      lines.push(`[Item ${item.id}] ${item.title} (done-criteria: ${item.criteria.join(", ") || "none"})`);
+      for (const [vendor, verdicts] of opinions) {
+        const v = verdicts.get(item.id);
+        if (v) lines.push(`- reviewer ${vendor}: ${v.status} — ${v.reason}`);
+      }
+      lines.push("");
+    }
+    lines.push(
+      `For these items only, respond ONLY with JSON in this shape (no markdown, no prose):`,
+      `{"results":[{"itemId":"...","status":"passed|failed|inconclusive|needs_decision","reason":"1–2 sentences in English","evidence":[],"nextAction":"one line"}]}`,
+    );
+    return lines.join("\n");
+  }
   const lines: string[] = [
     "다음 항목들에 대해 검토자들의 1차 판정이 갈렸습니다. 각 검토자의 판단을 읽고, 스스로 최종 판정을 다시 내려주세요. 동의하면 그 판정으로, 여전히 다르게 보면 근거와 함께 자신의 판정을 유지하세요.",
     "",
@@ -207,11 +237,11 @@ function majorityFor(
 }
 
 /** split 항목의 각 관점을 쉬운 말 한 줄로. */
-function splitSummary(itemId: string, opinions: Map<VendorId, VendorVerdicts>): string {
+function splitSummary(itemId: string, opinions: Map<VendorId, VendorVerdicts>, locale: "ko" | "en"): string {
   const parts: string[] = [];
   for (const [vendor, verdicts] of opinions) {
     const v = verdicts.get(itemId);
-    if (v) parts.push(`${USER_LABEL[v.status]}(${vendor}: ${v.reason.slice(0, 80)})`);
+    if (v) parts.push(`${STATUS_WORD[locale][v.status]}(${vendor}: ${v.reason.slice(0, 80)})`);
   }
   return parts.join(" / ");
 }
@@ -277,11 +307,12 @@ export async function runCouncilCheck(
   }
 
   // ── Final merge ────────────────────────────────────────────────────────────
+  const locale: "ko" | "en" = req.locale === "en" ? "en" : "ko";
   let stillSplit = 0;
   const results: CheckResultItem[] = req.items.map((item) => {
     const maj = majorityFor(item.id, opinions);
     if (maj) {
-      // 다수 판정 벤더 중 anthropic 우선(한국어 사유 품질), 없으면 합의 벤더 아무나.
+      // 다수 판정 벤더 중 anthropic 우선(사유 프로즈 품질), 없으면 합의 벤더 아무나.
       const src =
         (opinions.get("anthropic")?.get(item.id)?.status === maj.status
           ? opinions.get("anthropic")?.get(item.id)
@@ -291,7 +322,8 @@ export async function runCouncilCheck(
         title: item.title,
         status: maj.status,
         userLabel: USER_LABEL[maj.status],
-        reason: src?.reason ?? "협의체가 합의한 판정입니다.",
+        reason:
+          src?.reason ?? (locale === "en" ? "The council agreed on this verdict." : "협의체가 합의한 판정입니다."),
         evidence: src?.evidence ?? [],
         nextAction: src?.nextAction ?? "",
         verification: "council_agreed",
@@ -303,9 +335,15 @@ export async function runCouncilCheck(
       title: item.title,
       status: "inconclusive",
       userLabel: "확인 부족",
-      reason: `협의체 의견이 끝까지 갈렸습니다 — ${splitSummary(item.id, opinions)}. 이런 항목은 직접 확인해보는 것이 가장 정확합니다.`,
+      reason:
+        locale === "en"
+          ? `The council stayed split on this one — ${splitSummary(item.id, opinions, locale)}. For items like this, checking it yourself is the most reliable.`
+          : `협의체 의견이 끝까지 갈렸습니다 — ${splitSummary(item.id, opinions, locale)}. 이런 항목은 직접 확인해보는 것이 가장 정확합니다.`,
       evidence: [],
-      nextAction: "항목 기준을 더 구체적으로 적거나, 실제 화면에서 직접 확인해보세요.",
+      nextAction:
+        locale === "en"
+          ? "Make the item's criteria more specific, or check it directly on the real screen."
+          : "항목 기준을 더 구체적으로 적거나, 실제 화면에서 직접 확인해보세요.",
       verification: "council_split",
     };
   });

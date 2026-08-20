@@ -119,12 +119,51 @@ const USER_LABEL: Record<CheckItemStatus, CheckResultItem["userLabel"]> = {
 
 export function buildCheckPrompt(req: WorkspaceCheckDraftRequest): string {
   const specText = JSON.stringify(req.productSpec, null, 2);
+  const none = req.locale === "en" ? "(none)" : "(없음)";
   const itemsText = req.items
     .map(
       (item) =>
-        `- id: ${item.id}\n  title: ${item.title}\n  criteria: ${item.criteria.join(", ") || "(없음)"}`,
+        `- id: ${item.id}\n  title: ${item.title}\n  criteria: ${item.criteria.join(", ") || none}`,
     )
     .join("\n");
+
+  // G14-b: the prompt follows the user's UI language — an EN user must never
+  // receive Korean verdict prose. locale is absent on legacy callers → ko.
+  if (req.locale === "en") {
+    return `Review the product spec and the must-have items below, and judge each item's status.
+
+[Product spec]
+${specText}
+
+[Items]
+${itemsText}
+
+Judgment criteria:
+- passed: the item is specific, has 2 or more done-criteria, and matches the spec's included scope
+- failed: the item falls in the spec's excluded scope, or conflicts with a decided direction
+- inconclusive: the item looks important but its done-criteria are missing or vague (also when "permissions", "data", or "failure handling" is not covered)
+- needs_decision: the item is directly tied to one of the spec's undecided questions (openQuestions)
+
+Rules:
+- Write ALL user-facing text in English
+- reason: 1–2 sentences, specific
+- evidence: sentences quoted from the product spec (empty array if none)
+- nextAction: one line the user can act on
+
+Respond ONLY with JSON in this shape (no markdown, no prose):
+{
+  "results": [
+    {
+      "itemId": "req_001",
+      "status": "passed",
+      "userLabel": "통과",
+      "reason": "...",
+      "evidence": ["..."],
+      "nextAction": "..."
+    }
+  ]
+}`;
+  }
 
   return `제품 설명서와 꼭 들어가야 할 항목들을 검토해서 각 항목의 상태를 판단해주세요.
 
@@ -177,10 +216,48 @@ async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | u
 
 // ─── Mock fallback heuristics ─────────────────────────────────────────────────
 
+/** G14-b: heuristic fallback prose per locale — the fallback path must match the
+ *  user's language just like the LLM path (userLabel stays the KO wire literal;
+ *  the dashboard localizes its display via statusLabel). */
+const HEURISTIC_COPY = {
+  ko: {
+    excludedReason: "이 항목은 이번 버전의 제외 범위에 있는 기능과 관련됩니다.",
+    excludedNext: "제품 설명서의 포함/제외 범위를 다시 확인하거나, 이번 버전에서 제외하세요.",
+    openQReason: "이 항목은 아직 결정되지 않은 제품 방향과 연결됩니다.",
+    openQNext: "제품 설명서의 결정 필요 항목을 먼저 확정하고 다시 확인하세요.",
+    noCriteriaReason: "완성 기준이 없어서 실제로 구현이 됐는지 확인하기 어렵습니다.",
+    noCriteriaNext: "완성 기준을 2개 이상 구체적으로 추가하세요.",
+    oneCriterionReason: "완성 기준이 1개뿐입니다. 확인 가능한 기준이 더 필요합니다.",
+    oneCriterionNext: "완성 기준을 최소 2개로 늘리고, 권한·데이터·실패 상황도 포함해 주세요.",
+    securityReason: "권한이나 데이터 보안과 관련된 항목인데 완성 기준이 부족합니다.",
+    securityNext: "접근 제어 조건과 비정상 접근 시 동작을 완성 기준에 추가하세요.",
+    passedReason: "항목이 구체적이고 완성 기준이 충분합니다.",
+    passedNext: "다음 단계에서 실제 구현 후 검증하세요.",
+    noItemsWarning: "확인할 항목이 없습니다.",
+  },
+  en: {
+    excludedReason: "This item relates to a feature that is in this version's excluded scope.",
+    excludedNext: "Re-check the spec's included/excluded scope, or drop this item from this version.",
+    openQReason: "This item is tied to a product direction that has not been decided yet.",
+    openQNext: "Settle the spec's open decisions first, then run the check again.",
+    noCriteriaReason: "There are no done-criteria, so it is hard to confirm this was actually built.",
+    noCriteriaNext: "Add at least 2 specific done-criteria.",
+    oneCriterionReason: "There is only one done-criterion. More checkable criteria are needed.",
+    oneCriterionNext: "Grow the done-criteria to at least 2, covering permissions, data, and failure cases.",
+    securityReason: "This item involves permissions or data safety, but its done-criteria are too thin.",
+    securityNext: "Add access-control conditions and what happens on unauthorized access to the criteria.",
+    passedReason: "The item is specific and its done-criteria are sufficient.",
+    passedNext: "Verify it against the real build in the next step.",
+    noItemsWarning: "There are no items to check.",
+  },
+} as const;
+
 function checkItemHeuristic(
   item: CheckableItem,
   spec: ProductSpecForCheck,
+  locale: "ko" | "en",
 ): Omit<CheckResultItem, "title"> {
+  const copy = HEURISTIC_COPY[locale];
   const titleLower = item.title.toLowerCase();
 
   // Check excluded features — require full phrase OR ≥2 content words to match
@@ -202,11 +279,11 @@ function checkItemHeuristic(
       itemId: item.id,
       status: "failed",
       userLabel: "안 맞음",
-      reason: "이 항목은 이번 버전의 제외 범위에 있는 기능과 관련됩니다.",
+      reason: copy.excludedReason,
       evidence: spec.excluded.filter((ex) =>
         ex.split(/[\s,·]+/).some((w) => w.length > 1 && titleLower.includes(w.toLowerCase())),
       ),
-      nextAction: "제품 설명서의 포함/제외 범위를 다시 확인하거나, 이번 버전에서 제외하세요.",
+      nextAction: copy.excludedNext,
     };
   }
 
@@ -224,11 +301,11 @@ function checkItemHeuristic(
       itemId: item.id,
       status: "needs_decision",
       userLabel: "결정 필요",
-      reason: "이 항목은 아직 결정되지 않은 제품 방향과 연결됩니다.",
+      reason: copy.openQReason,
       evidence: spec.openQuestions.filter((q) =>
         q.split(/[\s,·]+/).some((w) => w.length > 1 && titleLower.includes(w.toLowerCase())),
       ),
-      nextAction: "제품 설명서의 결정 필요 항목을 먼저 확정하고 다시 확인하세요.",
+      nextAction: copy.openQNext,
     };
   }
 
@@ -238,9 +315,9 @@ function checkItemHeuristic(
       itemId: item.id,
       status: "inconclusive",
       userLabel: "확인 부족",
-      reason: "완성 기준이 없어서 실제로 구현이 됐는지 확인하기 어렵습니다.",
+      reason: copy.noCriteriaReason,
       evidence: [],
-      nextAction: "완성 기준을 2개 이상 구체적으로 추가하세요.",
+      nextAction: copy.noCriteriaNext,
     };
   }
   if (item.criteria.length === 1) {
@@ -248,23 +325,26 @@ function checkItemHeuristic(
       itemId: item.id,
       status: "inconclusive",
       userLabel: "확인 부족",
-      reason: "완성 기준이 1개뿐입니다. 확인 가능한 기준이 더 필요합니다.",
+      reason: copy.oneCriterionReason,
       evidence: [],
-      nextAction: "완성 기준을 최소 2개로 늘리고, 권한·데이터·실패 상황도 포함해 주세요.",
+      nextAction: copy.oneCriterionNext,
     };
   }
 
   // Check if permissions/data/failure are covered for critical items
+  // (EN titles need EN keywords — the KO-only regex silently skipped this rule
+  //  for English items.)
   const needsSecurityCheck =
-    /사용자|권한|접근|개인|로그인/.test(titleLower) && item.criteria.length < 3;
+    /사용자|권한|접근|개인|로그인|user|permission|access|login|account|privacy|private/.test(titleLower) &&
+    item.criteria.length < 3;
   if (needsSecurityCheck) {
     return {
       itemId: item.id,
       status: "inconclusive",
       userLabel: "확인 부족",
-      reason: "권한이나 데이터 보안과 관련된 항목인데 완성 기준이 부족합니다.",
+      reason: copy.securityReason,
       evidence: [],
-      nextAction: "접근 제어 조건과 비정상 접근 시 동작을 완성 기준에 추가하세요.",
+      nextAction: copy.securityNext,
     };
   }
 
@@ -277,15 +357,15 @@ function checkItemHeuristic(
     itemId: item.id,
     status: "passed",
     userLabel: "통과",
-    reason: "항목이 구체적이고 완성 기준이 충분합니다.",
+    reason: copy.passedReason,
     evidence: relatedDecision ? [relatedDecision] : [],
-    nextAction: "다음 단계에서 실제 구현 후 검증하세요.",
+    nextAction: copy.passedNext,
   };
 }
 
 function buildMockCheckFallback(req: WorkspaceCheckDraftRequest): WorkspaceCheckDraftResponse {
   const results: CheckResultItem[] = req.items.map((item) => ({
-    ...checkItemHeuristic(item, req.productSpec),
+    ...checkItemHeuristic(item, req.productSpec, req.locale === "en" ? "en" : "ko"),
     title: item.title,
   }));
 
@@ -329,7 +409,7 @@ export async function generateCheckDraft(
       source: "mock-fallback",
       summary: { passed: 0, failed: 0, inconclusive: 0, needsDecision: 0 },
       results: [],
-      warnings: ["확인할 항목이 없습니다."],
+      warnings: [HEURISTIC_COPY[req.locale === "en" ? "en" : "ko"].noItemsWarning],
     };
   }
 

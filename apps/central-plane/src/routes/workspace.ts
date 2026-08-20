@@ -523,7 +523,9 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         return new Response(JSON.stringify({
           ok: false,
           error: "plan_required",
-          message: "협의체 검수는 유료 플랜 기능이에요. 지금 플랜에서는 기본 검수(AI 2중 확인)를 사용할 수 있습니다.",
+          message: req.locale === "en"
+            ? "Council review is a paid-plan feature. On your current plan you can use the standard check (AI double-check)."
+            : "협의체 검수는 유료 플랜 기능이에요. 지금 플랜에서는 기본 검수(AI 2중 확인)를 사용할 수 있습니다.",
         }), { status: 402, headers: { "content-type": "application/json", ...headers } });
       }
       // RC-3 협의체 엔진 — 벤더 2개 미만이면 조용한 대체 대신 정직한 안내.
@@ -538,7 +540,9 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         return new Response(JSON.stringify({
           ok: false,
           error: "council_not_ready",
-          message: "협의체 검수를 지금 진행할 수 없어요(참여 AI 부족). 기본 검수를 사용해주세요.",
+          message: req.locale === "en"
+            ? "Council review is not available right now (not enough participating AIs). Please use the standard check."
+            : "협의체 검수를 지금 진행할 수 없어요(참여 AI 부족). 기본 검수를 사용해주세요.",
         }), { status: 503, headers: { "content-type": "application/json", ...headers } });
       }
       await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
@@ -575,7 +579,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     // RC-2 검증 패널 (A, 전원): failed 판정만 교차-벤더 2차 확인. 어떤 실패에도
     // 검수 자체를 깨지 않는다 — 패널 오류 시 원판정+single 표기로 진행.
     try {
-      result = await applyVerifyPanel(result, normalizeProductSpec(req.productSpec), c.env);
+      result = await applyVerifyPanel(result, normalizeProductSpec(req.productSpec), c.env, { locale: req.locale === "en" ? "en" : "ko" });
     } catch (err) {
       console.error("[workspace/check-draft] verify-panel error (kept single):", err);
     }

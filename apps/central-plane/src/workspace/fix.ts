@@ -55,6 +55,52 @@ export type WorkspaceFixSuggestionResponse = {
 // ─── Prompt ───────────────────────────────────────────────────────────────────
 
 function buildFixPrompt(req: WorkspaceFixSuggestionRequest): string {
+  // G14-b: prompt follows the user's UI language (legacy callers without locale → ko).
+  if (req.locale === "en") {
+    return `A problem was found in the item below. Write a fix suggestion and a brief to hand to a coding AI.
+
+[Problem item]
+Title: ${req.item.title}
+Status: ${req.item.status}
+Current done-criteria: ${req.item.criteria.join(", ") || "(none)"}
+
+[Check result]
+Reason: ${req.checkResult.reason}
+Evidence: ${req.checkResult.evidence.join(", ") || "(none)"}
+Next action: ${req.checkResult.nextAction}
+
+[Product spec (summary)]
+${JSON.stringify(req.productSpec, null, 2).slice(0, 800)}
+
+Writing rules:
+- Write ALL text in English
+- No developer jargon like PRD, Requirement, or Acceptance Criteria
+- tasks start with a concrete action verb (e.g. "Add", "Change", "Remove")
+- doneWhen are checkable behavior criteria (e.g. "clicking the button does ~")
+- doNotDo lists what is out of scope for this fix
+- verifyBy lists how to confirm the feature is done
+
+Respond ONLY with JSON in this shape:
+{
+  "plainSummary": "1–2 line summary in English",
+  "productSpecPatch": {
+    "addDecisions": ["decisions to add to the product spec"],
+    "addCriteria": ["done-criteria to add"],
+    "addOpenQuestions": ["things still to decide (if any)"],
+    "removeOrClarify": ["existing content to change or remove (if any)"]
+  },
+  "builderBrief": {
+    "title": "brief title",
+    "goal": "goal in 1–2 sentences",
+    "context": ["background notes"],
+    "tasks": ["task 1", "task 2", "..."],
+    "doneWhen": ["done criterion 1", "done criterion 2"],
+    "doNotDo": ["do not 1", "do not 2"],
+    "verifyBy": ["how to verify 1", "how to verify 2"]
+  }
+}`;
+  }
+
   return `다음 항목에서 문제가 발견됐습니다. 수정 제안과 개발 AI에게 줄 지시서를 만들어주세요.
 
 [문제 항목]
@@ -115,7 +161,98 @@ async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | u
 
 // ─── Mock fallback ────────────────────────────────────────────────────────────
 
+/** G14-b: EN mirror of the deterministic fallback — same branch logic, English prose. */
+function buildMockFixFallbackEn(req: WorkspaceFixSuggestionRequest): WorkspaceFixSuggestionResponse {
+  const { item, checkResult } = req;
+  const isFailedScope = item.status === "failed";
+  const isVague = item.status === "inconclusive";
+
+  let plainSummary: string;
+  let addDecisions: string[];
+  let addCriteria: string[];
+  let addOpenQuestions: string[];
+  let tasks: string[];
+  let doneWhen: string[];
+  let doNotDo: string[];
+
+  if (isFailedScope) {
+    plainSummary = `This item (${item.title}) does not match the product spec's current scope. Either update the spec or drop the item from this version.`;
+    addDecisions = [`${item.title} — decide whether it ships in this version`];
+    addCriteria = [];
+    addOpenQuestions = [`Decide whether ${item.title} ships in this version or moves to the next one`];
+    tasks = [
+      "Re-check the product spec's included/excluded scope.",
+      "If you decide to include this item, add it to the spec's included scope.",
+      "If you decide to exclude it, delete the item or move it to the next-version list.",
+    ];
+    doneWhen = ["The product spec and this item agree.", "The include/exclude decision is recorded."];
+    doNotDo = ["Do not build the feature right away.", "Do not write code before the scope decision is made."];
+  } else if (isVague) {
+    plainSummary = `This item (${item.title}) lacks done-criteria, so it is hard to confirm it was actually built. Add specific criteria.`;
+    addDecisions = [];
+    addCriteria = [
+      `${item.title} — normal behavior criterion (e.g. a given input produces a given result)`,
+      `${item.title} — failure behavior criterion (e.g. an error shows a helpful message)`,
+      `${item.title} — permission/access criterion (if applicable)`,
+    ];
+    addOpenQuestions = [];
+    tasks = [
+      "Write at least 2 specific done-criteria for this item.",
+      "Cover normal behavior, failure behavior, and permission conditions where they apply.",
+      "Update the criteria, then run the check again.",
+    ];
+    doneWhen = [
+      `${item.title} has 2 or more done-criteria.`,
+      'Each criterion is checkable, phrased as "~ should happen".',
+    ];
+    doNotDo = ['Do not write criteria as vague impressions ("works fine", "looks good").'];
+  } else {
+    // needs_decision
+    plainSummary = `This item (${item.title}) is tied to something not decided yet. Settle the direction first, then pick the implementation.`;
+    addDecisions = [`Decision related to ${item.title}`];
+    addCriteria = [];
+    addOpenQuestions = [checkResult.nextAction || `${item.title} — the concrete direction still needs a decision`];
+    tasks = [
+      `Settle the related decision first: ${checkResult.reason}`,
+      "Record the decision in the product spec's decisions.",
+      "After deciding, update this item's done-criteria.",
+    ];
+    doneWhen = ["The related decision is recorded in the product spec.", "This item's done-criteria reflect the decision."];
+    doNotDo = ["Do not implement arbitrarily without the decision.", "Do not build multiple options at once."];
+  }
+
+  return {
+    ok: true,
+    source: "mock-fallback",
+    itemId: item.id,
+    suggestion: {
+      plainSummary,
+      productSpecPatch: {
+        addDecisions,
+        addCriteria,
+        addOpenQuestions,
+      },
+      builderBrief: {
+        title: item.title,
+        goal: plainSummary,
+        context: [
+          `Current state: ${checkResult.reason}`,
+          ...(checkResult.evidence.length > 0 ? [`Evidence: ${checkResult.evidence.join(", ")}`] : []),
+        ],
+        tasks,
+        doneWhen,
+        doNotDo,
+        verifyBy: [
+          "Re-read the product spec and confirm it agrees with this item.",
+          "Test each done-criterion directly, one by one.",
+        ],
+      },
+    },
+  };
+}
+
 function buildMockFixFallback(req: WorkspaceFixSuggestionRequest): WorkspaceFixSuggestionResponse {
+  if (req.locale === "en") return buildMockFixFallbackEn(req);
   const { item, checkResult } = req;
   const isFailedScope = item.status === "failed";
   const isVague = item.status === "inconclusive";
