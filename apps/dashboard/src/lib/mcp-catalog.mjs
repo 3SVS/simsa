@@ -101,17 +101,25 @@ export function mcpToolById(id, locale) {
 }
 
 /**
- * The deploy tools a "build it and put it live" project needs. Any web app the
- * user wants online needs a code repo (GitHub) and a host (Vercel), so this is
- * deterministic and spec-independent for now — returned in connect order
- * (repo first, then deploy). The `spec` parameter is accepted for future
- * refinement (e.g. skipping the repo tool for a throwaway prototype) but is not
- * used today.
+ * The deploy tools a "build it and put it live" project needs, in connect order
+ * (repo first, then deploy).
+ *
+ * 스택 불가지 P3 (§3-3, D-2): 종전엔 스펙·조합 무관하게 GitHub+Vercel을 항상
+ * 반환했다 — Netlify·타 호스팅·빌더 내장 배포 유저에게 틀린 도구를 권하는
+ * 위반(B4). 이제 stackProfile.hosting을 소비한다:
+ *   - vercel / 미응답 / unknown / none_yet → 종전 그대로 (GitHub + Vercel)
+ *   - netlify / other / builder_hosted    → Vercel MCP를 빼고 GitHub만.
+ *     (타 호스팅의 원격 MCP URL은 검증 전이라 지어내지 않는다 — 이 모듈의
+ *      "확인된 사실만" 원칙. 검증되면 해당 엔트리를 추가한다.)
  *
  * @param {"en"|"ko"} [locale]
+ * @param {import("./service-catalog.mjs").StackProfileLike | null} [stackProfile]
  * @returns {McpTool[]}
  */
-export function detectMcpTools(locale) {
+export function detectMcpTools(locale, stackProfile) {
   const loc = norm(locale);
-  return MCP_SOURCE.map((t) => resolve(t, loc));
+  const hosting = stackProfile?.hosting?.id;
+  const vercelFits =
+    hosting === undefined || hosting === null || hosting === "vercel" || hosting === "unknown" || hosting === "none_yet";
+  return MCP_SOURCE.filter((t) => (t.id === "vercel" ? vercelFits : true)).map((t) => resolve(t, loc));
 }

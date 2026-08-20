@@ -27,7 +27,16 @@
 export const DEV_AGENTS = [
   { id: "claude_code", label: "Claude Code", mcpStyle: "command" },
   { id: "codex", label: "Codex", mcpStyle: "settings" },
+  // 스택 불가지 P3 (§3-4, D-4): 두 종으로 닫혀 있던 목록 확장. 정확한 CLI
+  // 명령이 검증되지 않은 에이전트는 settings 스타일(안전 강등 — 서버 URL을
+  // 그 에이전트의 MCP 설정에 추가)로만 안내한다.
+  { id: "cursor", label: "Cursor", mcpStyle: "settings" },
+  { id: "windsurf", label: "Windsurf", mcpStyle: "settings" },
+  { id: "gemini_cli", label: "Gemini CLI", mcpStyle: "settings" },
 ];
+// 목록 밖 도구도 배제하지 않는다(D-3/D-4): resolveMcpConnect는 미지 id에
+// settings 스타일(서버 URL을 그 도구의 MCP 설정에 추가)로 안전 강등한다.
+// "기타" 칩 UI는 MCP 패널 개편(§3-3)과 함께 붙인다.
 
 /**
  * @param {string} id
@@ -66,6 +75,23 @@ export function primaryAgentForTarget(target) {
  */
 export function buildClaudeMcpAddCommand(mcpName, serverUrl) {
   return `claude mcp add --transport http ${mcpName} ${serverUrl}`;
+}
+
+/**
+ * 스택 불가지 P3 (§3-5): builtWith 답 → 수리팩(fix pack) 타깃. 웹 빌더 도구면
+ * web_builder(채팅 프롬프트 1장), codex면 codex, 검증된 CLI 계열이면
+ * claude_code. 미지/미응답이면 undefined — 서버 기본(both, CLI 양쪽 파일)을
+ * 유지해 종전 동작 무회귀.
+ * @param {string[] | undefined} builtWithTools
+ * @returns {"web_builder" | "codex" | "claude_code" | undefined}
+ */
+export function fixBriefTargetForBuiltWith(builtWithTools) {
+  for (const tool of builtWithTools ?? []) {
+    if (tool === "lovable" || tool === "replit" || tool === "v0" || tool === "bolt") return "web_builder";
+    if (tool === "codex") return "codex";
+    if (tool === "claude-code" || tool === "cursor" || tool === "windsurf") return "claude_code";
+  }
+  return undefined;
 }
 
 /**

@@ -748,7 +748,8 @@ export type FixBriefResponse =
   | FixBriefResult
   | { ok: false; error: string };
 
-export type FixBriefTarget = "claude_code" | "codex" | "both";
+// 스택 불가지 P3 (§3-5): web_builder — 채팅형 빌더 대화창용 단일 수리 프롬프트.
+export type FixBriefTarget = "claude_code" | "codex" | "both" | "web_builder";
 
 export async function generatePRFixBrief(
   projectId: string,

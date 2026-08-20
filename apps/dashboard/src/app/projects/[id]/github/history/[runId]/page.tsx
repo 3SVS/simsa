@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject, loadExtendedProjectData, getUserKey, applyReviewResultsToLocalProject } from "@/lib/workflow-store";
+import { fixBriefTargetForBuiltWith } from "@/lib/agent-registry.mjs";
 import {
   getReviewRunDetail,
   generatePRFixBrief,
@@ -187,6 +188,9 @@ function FixPackPanel({
       selectedItemIds,
       productSpec: ext?.productSpec,
       items: undefined,
+      // 스택 불가지 P3 (§3-5): builtWith 답을 따라 수리팩 타깃을 고른다 —
+      // 웹 빌더 유저는 채팅 프롬프트 1장, 미응답은 종전 기본(both) 유지.
+      target: fixBriefTargetForBuiltWith(ext?.builtWithTools),
     });
     if (!res.ok) { setPhase("error"); return; }
     setResult(res);

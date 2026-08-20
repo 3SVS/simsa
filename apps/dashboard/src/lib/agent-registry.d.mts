@@ -16,6 +16,10 @@ export declare function primaryAgentForTarget(target: string): string;
 
 export declare function buildClaudeMcpAddCommand(mcpName: string, serverUrl: string): string;
 
+export declare function fixBriefTargetForBuiltWith(
+  builtWithTools: string[] | undefined,
+): "web_builder" | "codex" | "claude_code" | undefined;
+
 export interface McpConnectResolution {
   style: McpSetupStyle;
   agentLabel: string;

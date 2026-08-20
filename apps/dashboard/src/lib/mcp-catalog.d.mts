@@ -16,4 +16,9 @@ export declare const MCP_CATALOG: McpTool[];
 
 export declare function mcpToolById(id: string, locale?: "en" | "ko"): McpTool | null;
 
-export declare function detectMcpTools(locale?: "en" | "ko"): McpTool[];
+import type { StackProfileLike } from "./service-catalog.mjs";
+
+export declare function detectMcpTools(
+  locale?: "en" | "ko",
+  stackProfile?: StackProfileLike | null,
+): McpTool[];
