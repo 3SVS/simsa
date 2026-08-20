@@ -907,7 +907,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       return new Response(JSON.stringify({ ok: false, error: "userKey_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
     if (!isValidTarget(b["target"])) {
-      return new Response(JSON.stringify({ ok: false, error: "target_invalid: claude_code | codex | both" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
+      return new Response(JSON.stringify({ ok: false, error: "target_invalid: claude_code | codex | both | web_builder | handoff" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
     if (!isValidOutcome(b["outcome"])) {
       return new Response(JSON.stringify({ ok: false, error: "outcome_invalid: worked | partial | failed | not_checked" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
