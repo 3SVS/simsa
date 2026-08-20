@@ -150,17 +150,22 @@ export async function callCheckDraftApi(
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/check-draft`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      // 서버 검수 프롬프트가 아직 KO-only — locale 전달은 G14-b(서버 EN화)와 함께.
-      body: JSON.stringify({ ...input, locale: "ko" }),
+      // G14-b: 서버 검수(check/council/panel)가 EN을 지원한다 — UI 언어를 따른다.
+      body: JSON.stringify({ ...input, locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       // council(협의체)은 다중 모델 2라운드라 기본 검수보다 오래 걸린다.
       signal: AbortSignal.timeout(input.reviewMode === "council" ? 90000 : 25000),
     });
     if (resp.status === 429) {
-      let msg = "잠시 후 다시 시도해주세요. 확인 요청이 너무 많이 발생했어요.";
+      // 서버 429는 body 파싱 전에 나가 locale을 모른다(KO 고정) — EN UI에서는
+      // 서버 문구 대신 클라이언트 EN 문구를 쓴다.
+      const en = readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) === "en";
+      let msg = en
+        ? "Please try again in a moment — too many check requests right now."
+        : "잠시 후 다시 시도해주세요. 확인 요청이 너무 많이 발생했어요.";
       let retryAfterSeconds: number | undefined;
       try {
         const b = (await resp.json()) as { message?: string; retryAfterSeconds?: number };
-        if (b.message) msg = b.message;
+        if (b.message && !en) msg = b.message;
         if (b.retryAfterSeconds) retryAfterSeconds = b.retryAfterSeconds;
       } catch { /* ignore */ }
       return { ok: false, error: "rate_limited", message: msg, retryAfterSeconds };
@@ -171,7 +176,14 @@ export async function callCheckDraftApi(
       try {
         const b = (await resp.json()) as { error?: string; message?: string };
         if (b.error === "plan_required" || b.error === "council_not_ready") {
-          return { ok: false, error: "plan", message: b.message ?? "이 검수 방식은 지금 플랜에서 사용할 수 없어요." };
+          const en = readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) === "en";
+          return {
+            ok: false,
+            error: "plan",
+            message: b.message ?? (en
+              ? "This review mode isn't available on your current plan."
+              : "이 검수 방식은 지금 플랜에서 사용할 수 없어요."),
+          };
         }
       } catch { /* fall through */ }
       return { ok: false, error: "server", message: `HTTP ${resp.status}` };
@@ -411,14 +423,17 @@ export async function callFixSuggestionApi(
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/fix-suggestion`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, locale: "ko" }),
+      // G14-b: 서버 수정 제안이 EN을 지원한다 — UI 언어를 따른다.
+      body: JSON.stringify({ ...input, locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       signal: AbortSignal.timeout(25000),
     });
     if (resp.status === 429) {
-      let msg = "잠시 후 다시 시도해주세요.";
+      // 서버 429는 locale을 모른다(파싱 전) — EN UI는 클라이언트 EN 문구.
+      const en = readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) === "en";
+      let msg = en ? "Please try again in a moment." : "잠시 후 다시 시도해주세요.";
       try {
         const b = (await resp.json()) as { message?: string };
-        if (b.message) msg = b.message;
+        if (b.message && !en) msg = b.message;
       } catch { /* ignore */ }
       return { ok: false, error: "rate_limited", message: msg };
     }

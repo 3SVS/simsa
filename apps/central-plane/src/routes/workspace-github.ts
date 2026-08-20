@@ -989,6 +989,7 @@ export function createWorkspaceGitHubRoutes(
             "supported=true ONLY if the PR changes clearly fail to implement the item or clearly contradict it.",
         },
         c.env,
+        { locale: reviewLocale === "en" ? "en" : "ko" },
       );
     } catch (err) {
       console.error("[workspace/pr-review] verify-panel error (kept single):", err);

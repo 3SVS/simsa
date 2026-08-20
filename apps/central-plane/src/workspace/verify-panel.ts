@@ -66,9 +66,11 @@ export type VerifyPanelOpts = {
   openaiModel?: string;
   anthropicModel?: string;
   fetchImpl?: typeof fetch;
+  /** G14-b: 2차 소견·강등 사유가 따르는 사용자 언어 (기본 ko). */
+  locale?: "ko" | "en";
 };
 
-type SecondOpinion = { supported: boolean; noteKo: string };
+type SecondOpinion = { supported: boolean; note: string };
 
 /** G5: 컨텍스트 일반화 — 스펙 검수와 PR 리뷰가 같은 패널을 쓴다. */
 export type VerifyPanelContext = {
@@ -82,7 +84,13 @@ export type VerifyPanelContext = {
 
 const CONTEXT_TEXT_CAP = 16_000;
 
-function opinionPrompt(ctx: VerifyPanelContext, item: CheckResultItem): string {
+function opinionPrompt(ctx: VerifyPanelContext, item: CheckResultItem, locale: "ko" | "en"): string {
+  // The wire key stays `note_ko` for compatibility; only the requested language
+  // of the note changes (G14-b — the note is shown to the user on downgrade).
+  const noteInstruction =
+    locale === "en"
+      ? '{"supported": true, "note_ko": "<one sentence of reasoning, in English>"}'
+      : '{"supported": true, "note_ko": "<판단 근거 한 문장, 한국어>"}';
   return `You are an INDEPENDENT second reviewer. A first reviewer marked an item as "failed". Decide independently whether the evidence supports that verdict.
 
 [${ctx.label}]
@@ -97,7 +105,7 @@ first evidence: ${JSON.stringify(item.evidence)}
 Rule: ${ctx.judgeRule} If it is unclear, arguable, or the evidence is weak, supported=false.
 
 Answer with JSON only (no markdown):
-{"supported": true, "note_ko": "<판단 근거 한 문장, 한국어>"}`;
+${noteInstruction}`;
 }
 
 /** check-draft(스펙 검수)의 기존 컨텍스트 — 동작·문구 불변. */
@@ -116,9 +124,10 @@ function parseOpinion(text: string): SecondOpinion | null {
   try {
     const o = JSON.parse(m[0]) as Record<string, unknown>;
     if (typeof o["supported"] !== "boolean") return null;
+    const rawNote = typeof o["note_ko"] === "string" ? o["note_ko"] : typeof o["note"] === "string" ? o["note"] : "";
     return {
       supported: o["supported"],
-      noteKo: typeof o["note_ko"] === "string" ? o["note_ko"].slice(0, 300) : "",
+      note: rawNote.slice(0, 300),
     };
   } catch {
     return null;
@@ -249,6 +258,7 @@ export async function applyVerifyPanelWithContext<
   const openaiModel = opts.openaiModel ?? "gpt-5.4";
   const anthropicModel = opts.anthropicModel ?? "claude-sonnet-5";
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const locale: "ko" | "en" = opts.locale === "en" ? "en" : "ko";
 
   const failedIdx = response.results
     .map((r, i) => (r.status === "failed" ? i : -1))
@@ -263,7 +273,7 @@ export async function applyVerifyPanelWithContext<
       if (!item) return;
       const opinion = await secondOpinion(
         env,
-        opinionPrompt(ctx, item),
+        opinionPrompt(ctx, item, locale),
         { timeoutMs, openaiModel, anthropicModel },
         fetchImpl,
       );
@@ -281,7 +291,10 @@ export async function applyVerifyPanelWithContext<
         status: "inconclusive",
         userLabel: "확인 부족",
         verification: "downgraded",
-        reason: `두 AI의 판단이 갈렸습니다. 1차 판단: ${item.reason} / 2차 판단: ${opinion.noteKo || "충돌 근거가 분명하지 않습니다."} 직접 한 번 확인해보세요.`,
+        reason:
+          locale === "en"
+            ? `The two AIs disagreed. First opinion: ${item.reason} / Second opinion: ${opinion.note || "the conflicting evidence is unclear."} Please check this one yourself.`
+            : `두 AI의 판단이 갈렸습니다. 1차 판단: ${item.reason} / 2차 판단: ${opinion.note || "충돌 근거가 분명하지 않습니다."} 직접 한 번 확인해보세요.`,
       };
     }),
   );
