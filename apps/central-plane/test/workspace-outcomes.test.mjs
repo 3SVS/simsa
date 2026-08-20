@@ -69,6 +69,15 @@ describe("outcome validation helpers", () => {
     }
   });
 
+  // 스택 불가지 §0-B8 (2026-08-20): export.ts는 5-타깃인데 outcome이 3-타깃만
+  // 받아 web_builder/handoff 유저의 성과 기록이 400으로 소실됐다. export.ts의
+  // ExportTarget 전체와 항상 일치해야 한다 — 이 테스트는 구 코드에서 실패한다.
+  it("isValidTarget accepts every export.ts target (web_builder/handoff outcome loss fix)", () => {
+    for (const t of ["web_builder", "handoff"]) {
+      assert.ok(isValidTarget(t), `${t} should be valid — outcome for non-CLI users must not be dropped`);
+    }
+  });
+
   it("isValidTarget rejects unknown strings", () => {
     assert.ok(!isValidTarget("gpt"), "gpt should be invalid");
     assert.ok(!isValidTarget(undefined), "undefined should be invalid");

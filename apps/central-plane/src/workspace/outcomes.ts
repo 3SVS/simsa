@@ -2,9 +2,10 @@
  * workspace/outcomes.ts
  *
  * D1 helpers for builder_pack_outcomes — recording the result of sending
- * a builder pack to Claude Code or Codex.
+ * a builder pack to the user's coding agent / web builder / human handoff.
  */
 import type { Env } from "../env.js";
+import type { ExportTarget } from "./export.js";
 
 function randId(): string {
   const ts = Date.now().toString(36).slice(-6);
@@ -13,10 +14,12 @@ function randId(): string {
 }
 
 export type OutcomeStatus = "worked" | "partial" | "failed" | "not_checked";
-export type ExportTarget = "claude_code" | "codex" | "both";
+export type { ExportTarget };
 
 const VALID_OUTCOMES: OutcomeStatus[] = ["worked", "partial", "failed", "not_checked"];
-const VALID_TARGETS: ExportTarget[] = ["claude_code", "codex", "both"];
+// export.ts의 ExportTarget과 단일 소스 — 여기가 뒤처지면 web_builder/handoff
+// 유저의 outcome이 400으로 소실된다 (스택 불가지 설계 §0-B8, 2026-08-20 실사고).
+const VALID_TARGETS: ExportTarget[] = ["claude_code", "codex", "both", "web_builder", "handoff"];
 
 export function isValidOutcome(v: unknown): v is OutcomeStatus {
   return typeof v === "string" && (VALID_OUTCOMES as string[]).includes(v);
