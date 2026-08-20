@@ -8,4 +8,5 @@ export declare function seedServiceSetup(
     | null
     | undefined,
   locale?: "en" | "ko",
+  stackProfile?: { hosting?: { id?: string; other?: string }; data?: { id?: string; other?: string } } | null,
 ): unknown[];

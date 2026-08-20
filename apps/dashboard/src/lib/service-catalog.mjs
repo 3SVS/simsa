@@ -55,12 +55,12 @@ const CATALOG_SOURCE = [
       ko: [
         "가입이 필요 없는 항목입니다.",
         "만드는 동안에는 http://localhost:3000 을 그대로 두세요.",
-        "배포한 뒤에는 실제 도메인(예: https://내앱.vercel.app)으로 바꾸면 됩니다.",
+        "배포한 뒤에는 실제 도메인(예: https://내앱.example.com)으로 바꾸면 됩니다.",
       ],
       en: [
         "No sign-up needed for this one.",
         "While building, leave it as http://localhost:3000.",
-        "After deploying, change it to your real domain (e.g. https://myapp.vercel.app).",
+        "After deploying, change it to your real domain (e.g. https://myapp.example.com).",
       ],
     },
     envVars: [
@@ -125,6 +125,59 @@ const CATALOG_SOURCE = [
         },
         secret: true,
         example: { ko: "eyJhbGciOiJI...(service_role · 서버 전용)", en: "eyJhbGciOiJI...(service_role · server only)" },
+      },
+    ],
+  },
+  {
+    // 스택 불가지 §3-2 (design lock 2026-08-20): 데이터 축의 두 번째 1급 항목.
+    // detectServices가 stackProfile.data를 보고 supabase 대신 이 항목을 제안한다.
+    id: "firebase",
+    label: { ko: "Firebase (데이터 저장·로그인)", en: "Firebase (data & sign-in)" },
+    why: {
+      ko: "회원가입·로그인이나 데이터를 저장하는 앱이 Firebase 위에 만들어졌다면 이 키들이 필요합니다. 무료로 시작할 수 있습니다.",
+      en: "If your app was built on Firebase for sign-ins and saved data, it needs these keys. Free tier available.",
+    },
+    setupUrl: "https://console.firebase.google.com",
+    setupSteps: {
+      ko: [
+        "https://console.firebase.google.com 에 구글 계정으로 로그인합니다.",
+        "프로젝트를 만들거나(Add project) 이미 있는 프로젝트를 엽니다.",
+        "프로젝트 설정(톱니바퀴) → 일반(General) 탭 → 아래 '내 앱'에서 웹 앱(</>)을 선택하거나 새로 등록합니다.",
+        "SDK 설정의 firebaseConfig 에서 apiKey 를 복사해 NEXT_PUBLIC_FIREBASE_API_KEY 에 넣습니다.",
+        "같은 화면의 authDomain 을 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN 에, projectId 를 NEXT_PUBLIC_FIREBASE_PROJECT_ID 에 넣습니다.",
+      ],
+      en: [
+        "Log in at https://console.firebase.google.com with your Google account.",
+        "Create a project (Add project) or open an existing one.",
+        "Project settings (gear) → General tab → under 'Your apps' pick the web app (</>) or register a new one.",
+        "From the SDK setup's firebaseConfig, copy apiKey into NEXT_PUBLIC_FIREBASE_API_KEY.",
+        "On the same screen, put authDomain into NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN and projectId into NEXT_PUBLIC_FIREBASE_PROJECT_ID.",
+      ],
+    },
+    envVars: [
+      {
+        key: "NEXT_PUBLIC_FIREBASE_API_KEY",
+        description: {
+          ko: "Firebase 웹 앱의 apiKey 입니다. 공개돼도 되는 식별자라 프론트에 넣어도 됩니다(권한은 보안 규칙이 결정).",
+          en: "Your Firebase web app's apiKey. It's a public identifier, safe in the frontend (security rules decide access).",
+        },
+        example: { ko: "AIza...(firebaseConfig의 apiKey)", en: "AIza...(apiKey from firebaseConfig)" },
+      },
+      {
+        key: "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+        description: {
+          ko: "firebaseConfig 의 authDomain 값입니다.",
+          en: "The authDomain value from firebaseConfig.",
+        },
+        example: { ko: "내프로젝트.firebaseapp.com", en: "my-project.firebaseapp.com" },
+      },
+      {
+        key: "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+        description: {
+          ko: "firebaseConfig 의 projectId 값입니다.",
+          en: "The projectId value from firebaseConfig.",
+        },
+        example: { ko: "my-project-id", en: "my-project-id" },
       },
     ],
   },
@@ -285,20 +338,33 @@ const EMAIL_KEYWORDS = ["이메일", "메일", "알림 메일", "발송", "비�
 const ERROR_KEYWORDS = ["오류", "에러", "버그", "모니터링", "예외", "error", "bug", "monitoring", "crash", "exception"];
 
 /**
+ * 스택 불가지 §3-2 (D-1~D-3, design lock 2026-08-20): 유저가 답한 조합.
+ * StackProfile의 data 축만 여기서 소비한다 (hosting 축은 배포 안내 쪽 소관).
+ * @typedef {Object} StackProfileLike
+ * @property {{ id?: string, other?: string }} [hosting]
+ * @property {{ id?: string, other?: string }} [data]
+ */
+
+/**
  * Read the product spec and return the services this project probably needs.
  * Deterministic: same spec → same result, no LLM, no network.
  *
  * - `app-url` is always suggested (every deployed app benefits from a
  *   deploy-aware self URL; also fixes the localhost-hardcoding pitfall).
- * - `supabase` is suggested when the spec mentions data/account keywords.
+ * - Data keywords suggest the DATA AXIS, not a fixed vendor (스택 불가지 §3-2):
+ *   the user's stackProfile decides which entry — firebase → firebase,
+ *   other+이름 → customServiceEntry(그 이름), builder_managed/none → 제안 없음.
+ *   프로파일이 없거나 unknown이면 기존 동작(supabase 제안)을 유지한다 — 제안은
+ *   지우기 쉬운 카드일 뿐 강요가 아니고, "when available"이 어댑트 조건이다.
  *
  * Never invents keys or values — only picks catalog entries.
  *
  * @param {{ oneLine?: string, problem?: string, included?: string[], userFlow?: string[], productName?: string } | null | undefined} spec
  * @param {"en"|"ko"} [locale]
+ * @param {StackProfileLike | null | undefined} [stackProfile]
  * @returns {CatalogService[]}
  */
-export function detectServices(spec, locale) {
+export function detectServices(spec, locale, stackProfile) {
   const loc = norm(locale);
   /** @type {CatalogService[]} */
   const out = [];
@@ -315,8 +381,8 @@ export function detectServices(spec, locale) {
   const text = parts.join(" ").toLowerCase();
 
   if (DATA_KEYWORDS.some((k) => text.includes(k.toLowerCase()))) {
-    const supabase = catalogServiceById("supabase", loc);
-    if (supabase) out.push(supabase);
+    const dataService = dataServiceForProfile(stackProfile, loc);
+    if (dataService) out.push(dataService);
   }
   if (EMAIL_KEYWORDS.some((k) => text.includes(k.toLowerCase()))) {
     const resend = catalogServiceById("resend", loc);
@@ -328,6 +394,84 @@ export function detectServices(spec, locale) {
   }
 
   return out;
+}
+
+/**
+ * 데이터 키워드가 감지됐을 때 어떤 항목을 제안할지 — 프로파일의 data 축이 결정.
+ * @param {StackProfileLike | null | undefined} stackProfile
+ * @param {CatalogLocale} loc
+ * @returns {CatalogService | null}
+ */
+function dataServiceForProfile(stackProfile, loc) {
+  const data = stackProfile?.data;
+  const id = typeof data?.id === "string" ? data.id : undefined;
+  if (id === "firebase") return catalogServiceById("firebase", loc);
+  if (id === "none" || id === "builder_managed") return null; // 저장 안 함 / 빌더 내장 — 별도 키 불필요
+  if (id === "other" && typeof data?.other === "string" && data.other.trim()) {
+    return customServiceEntry(data.other, loc);
+  }
+  // supabase 명시 또는 미응답/unknown → 기존 제안 유지 (지우기 쉬운 카드).
+  return catalogServiceById("supabase", loc);
+}
+
+/** Existing env keys — a derived custom key must never collide with these. */
+const KNOWN_ENV_KEYS = new Set(
+  CATALOG_SOURCE.flatMap((s) => s.envVars.map((v) => v.key)),
+);
+
+/**
+ * 스택 불가지 §3-2 (D-3, built-with `other` 패턴): 카탈로그에 없는 서비스를
+ * 자유텍스트 이름으로 추가한다 — 모르는 벤더를 버리지 않고 잘 갖춰진 항목으로
+ * 흡수. env 키는 이름의 ASCII 영숫자에서 결정론으로 유도하고(비ASCII 이름은
+ * CUSTOM_SERVICE 폴백), 기존 카탈로그 키와 충돌하면 CUSTOM_ 접두사를 붙인다.
+ * 키 값 용도를 모르는 채 프론트에 노출하면 위험하므로 secret(서버 전용) 기본.
+ *
+ * @param {string} name  사용자가 입력한 서비스 이름 (한국어 포함 아무 문자열)
+ * @param {"en"|"ko"} [locale]
+ * @returns {CatalogService | null}  이름이 비면 null
+ */
+export function customServiceEntry(name, locale) {
+  const loc = norm(locale);
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed) return null;
+  const ascii = trimmed
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_{2,}/g, "_");
+  let key = `${ascii || "CUSTOM_SERVICE"}_API_KEY`;
+  if (KNOWN_ENV_KEYS.has(key)) key = `CUSTOM_${key}`;
+  const id = `custom:${trimmed.toLowerCase()}`;
+  return {
+    id,
+    label: trimmed,
+    why:
+      loc === "en"
+        ? `Keys for ${trimmed} — a service you told us you use. Same order as always: signup page → find the key → paste it here.`
+        : `직접 알려주신 서비스(${trimmed})의 키입니다. 순서는 늘 같아요: 가입 페이지 → 키 찾기 → 여기에 붙여넣기.`,
+    setupSteps:
+      loc === "en"
+        ? [
+            `Log in to ${trimmed}'s dashboard (the site where you manage it).`,
+            "Find the API key / access key menu — usually under Settings, API, or Developers.",
+            "Copy the key and paste it below. If there are several keys, the secret/server one goes here.",
+          ]
+        : [
+            `${trimmed} 관리 화면(그 서비스를 관리하는 사이트)에 로그인합니다.`,
+            "API 키 / 액세스 키 메뉴를 찾습니다 — 보통 설정(Settings), API, Developers 아래에 있어요.",
+            "키를 복사해 아래에 붙여넣습니다. 키가 여러 개라면 시크릿/서버용 키를 여기에 넣으세요.",
+          ],
+    envVars: [
+      {
+        key,
+        description:
+          loc === "en"
+            ? `${trimmed} API key. Treated as server-only to be safe — the pack will keep it out of frontend code.`
+            : `${trimmed} 의 API 키입니다. 안전하게 서버 전용으로 다룹니다 — 팩이 프론트엔드 코드에는 넣지 않아요.`,
+        secret: true,
+      },
+    ],
+  };
 }
 
 /**
