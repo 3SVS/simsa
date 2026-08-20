@@ -16,7 +16,10 @@ import type { PullRequestMeta } from "./github-pr.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type FixBriefTarget = "claude_code" | "codex" | "both";
+/** 스택 불가지 P3 (§3-5, 2026-08-20): web_builder — 채팅형 웹 빌더(Lovable,
+ *  v0, Bolt 등)의 대화창에 붙여넣는 단일 프롬프트. 브랜치·터미널·PR 조작
+ *  지시가 없다. 종전 CLI 2종만 있던 수리팩의 비-CLI 유저 공백을 닫는다. */
+export type FixBriefTarget = "claude_code" | "codex" | "both" | "web_builder";
 
 export type FixBriefItem = CheckableItem & {
   criteria?: string[];
@@ -59,6 +62,7 @@ export type FixBriefResponse = {
     plainSummary: string;
     claudeCodePrompt?: string;
     codexPrompt?: string;
+    webBuilderPrompt?: string;
     files: FixBriefFile[];
   };
   warnings?: string[];
@@ -111,14 +115,21 @@ function genReadme(
     "",
   ];
 
-  if (target !== "codex") {
+  if (target === "web_builder") {
+    lines.push(
+      "### 웹 빌더(예: Lovable, v0, Bolt 등) 사용 시",
+      "`WEB_BUILDER_FIX_PROMPT.md` 파일 내용을 쓰시는 빌더의 대화창에 붙여넣으세요.",
+      "",
+    );
+  }
+  if (target !== "codex" && target !== "web_builder") {
     lines.push(
       "### Claude Code 사용 시",
       "`CLAUDE_CODE_FIX_PROMPT.md` 파일 내용을 Claude Code 대화창에 붙여넣으세요.",
       "",
     );
   }
-  if (target !== "claude_code") {
+  if (target !== "claude_code" && target !== "web_builder") {
     lines.push(
       "### Codex 사용 시",
       "`CODEX_FIX_PROMPT.md` 파일 내용을 Codex 대화창에 붙여넣으세요.",
@@ -455,6 +466,78 @@ function genCodexPrompt(
   return lines.join("\n").trimEnd();
 }
 
+/**
+ * 스택 불가지 P3 (§3-5): 채팅형 웹 빌더용 수리 프롬프트 — 대화창에 그대로
+ * 붙여넣는 한 덩어리. export.ts의 web_builder 팩과 같은 규약: 파일 트리·
+ * 터미널·git·브랜치·PR 조작 지시 금지, 완료 확인은 화면 동작 기준.
+ */
+function genWebBuilderFixPrompt(
+  projectName: string,
+  prMeta: PullRequestMeta,
+  items: FixBriefItem[],
+  results: CheckResultItem[],
+): string {
+  const resultMap = new Map(results.map((r) => [r.itemId, r]));
+  const failed = items.filter((i) => resultMap.get(i.id)?.status === "failed");
+  const inconclusive = items.filter((i) => resultMap.get(i.id)?.status === "inconclusive");
+  const needsDecision = items.filter((i) => resultMap.get(i.id)?.status === "needs_decision");
+
+  const lines = [
+    `# 수정 요청 — ${projectName}`,
+    "",
+    "아래는 이 앱을 검수한 결과에서 나온, 이번에 고쳐야 할 항목들입니다. 이 대화의 앱 프로젝트 안에서 해당 부분만 수정해주세요.",
+    "",
+    "## 지켜야 할 것",
+    "",
+    "- **아래 항목만** 수정한다 — 다른 화면·기능은 그대로 둔다.",
+    "- 앱 전체를 새로 만들지 않는다.",
+    "- 애매하면 만들기 전에 나에게 질문한다.",
+    "- 다 고치면 각 항목이 화면에서 실제로 어떻게 동작하는지 확인 방법을 알려준다.",
+    "",
+  ];
+
+  if (failed.length > 0) {
+    lines.push("## 안 맞음 — 반드시 수정", "");
+    for (const item of failed) {
+      const r = resultMap.get(item.id);
+      lines.push(`**${item.title}**`);
+      if (r) lines.push(`- 문제: ${r.reason}`);
+      if (r?.nextAction) lines.push(`- 수정 방향: ${r.nextAction}`);
+      if (item.criteria?.length) lines.push(`- 완료 기준: ${item.criteria.join(" / ")}`);
+      lines.push("");
+    }
+  }
+  if (inconclusive.length > 0) {
+    lines.push("## 확인 부족 — 확인하고 필요하면 보완", "");
+    for (const item of inconclusive) {
+      const r = resultMap.get(item.id);
+      lines.push(`**${item.title}**`);
+      if (r) lines.push(`- 상황: ${r.reason}`);
+      if (r?.nextAction) lines.push(`- 방향: ${r.nextAction}`);
+      lines.push("");
+    }
+  }
+  if (needsDecision.length > 0) {
+    lines.push("## 결정 필요 — 만들기 전에 나에게 질문", "");
+    for (const item of needsDecision) {
+      const r = resultMap.get(item.id);
+      lines.push(`**${item.title}**`);
+      if (r) lines.push(`- ${r.reason}`);
+      lines.push("");
+    }
+  }
+
+  lines.push(
+    "## 끝나면",
+    "",
+    "1. 무엇을 어떻게 바꿨는지 쉬운 말로 알려주세요.",
+    "2. 바뀐 화면을 실제로 열어 확인할 수 있게 해주세요.",
+    `3. (참고) 이 수정 목록은 코드 확인 #${prMeta.number} 결과에서 나왔습니다.`,
+  );
+
+  return lines.join("\n").trimEnd();
+}
+
 function buildPlainSummary(
   items: FixBriefItem[],
   results: CheckResultItem[],
@@ -505,12 +588,17 @@ export function generatePRFixBrief(req: FixBriefRequest): FixBriefResponse {
 
   let claudeCodePrompt: string | undefined;
   let codexPrompt: string | undefined;
+  let webBuilderPrompt: string | undefined;
 
-  if (req.target !== "codex") {
+  if (req.target === "web_builder") {
+    webBuilderPrompt = genWebBuilderFixPrompt(req.productSpec.productName, req.prMeta, selectedItems, fixableResults);
+    files.push({ path: `${root}/WEB_BUILDER_FIX_PROMPT.md`, content: webBuilderPrompt });
+  }
+  if (req.target !== "codex" && req.target !== "web_builder") {
     claudeCodePrompt = genClaudeCodePrompt(req.productSpec.productName, req.prMeta, req.repoFullName, selectedItems, fixableResults);
     files.push({ path: `${root}/CLAUDE_CODE_FIX_PROMPT.md`, content: claudeCodePrompt });
   }
-  if (req.target !== "claude_code") {
+  if (req.target !== "claude_code" && req.target !== "web_builder") {
     codexPrompt = genCodexPrompt(req.productSpec.productName, req.prMeta, req.repoFullName, selectedItems, fixableResults);
     files.push({ path: `${root}/CODEX_FIX_PROMPT.md`, content: codexPrompt });
   }
@@ -529,6 +617,7 @@ export function generatePRFixBrief(req: FixBriefRequest): FixBriefResponse {
       plainSummary,
       claudeCodePrompt,
       codexPrompt,
+      webBuilderPrompt,
       files,
     },
     warnings: warnings.length ? warnings : undefined,

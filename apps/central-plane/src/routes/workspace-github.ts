@@ -1298,7 +1298,9 @@ export function createWorkspaceGitHubRoutes(
       ? (b["selectedItemIds"] as unknown[]).filter((x): x is string => typeof x === "string")
       : undefined;
     const target: FixBriefTarget =
-      b["target"] === "claude_code" || b["target"] === "codex" ? b["target"] : "both";
+      b["target"] === "claude_code" || b["target"] === "codex" || b["target"] === "web_builder"
+        ? b["target"]
+        : "both";
     const reviewRunId = typeof b["reviewRunId"] === "string" ? b["reviewRunId"] : undefined;
 
     // 1. Get linked repo

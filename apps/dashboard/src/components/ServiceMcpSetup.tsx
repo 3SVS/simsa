@@ -77,7 +77,9 @@ export function ServiceMcpSetup({
 
   // Which agent's MCP connect steps to show (settings has no target selector).
   const [agentId, setAgentId] = useState<string>("claude_code");
-  const deployTools: McpTool[] = detectMcpTools(locale);
+  // 스택 불가지 P3 (§3-3): 호스팅 답변을 따른다 — Netlify/기타/빌더 내장 유저에게
+  // Vercel MCP를 권하지 않는다.
+  const deployTools: McpTool[] = detectMcpTools(locale, stackProfile);
 
   function setEnvValue(serviceId: string, key: string, value: string) {
     setServices((prev) =>
