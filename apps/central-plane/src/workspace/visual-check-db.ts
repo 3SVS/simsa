@@ -26,6 +26,8 @@ export type DbVisualCheck = {
   reportJson: string;
   agentPrompt?: string;
   evidenceKeys: string[];
+  /** 0065: 런을 만든 사용자의 언어. null = 레거시 행(ko 취급). */
+  locale: "ko" | "en" | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -54,6 +56,7 @@ type RawRow = {
   report_json: string;
   agent_prompt: string | null;
   evidence_keys_json: string;
+  locale: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -92,6 +95,7 @@ function fromRow(row: RawRow): DbVisualCheck {
     reportJson: row.report_json,
     agentPrompt: row.agent_prompt ?? undefined,
     evidenceKeys: parseKeys(row.evidence_keys_json),
+    locale: row.locale === "en" ? "en" : row.locale === "ko" ? "ko" : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -109,6 +113,7 @@ export async function insertVisualCheck(
     executor: VisualCheckExecutor;
     reportJson: string;
     agentPrompt?: string;
+    locale?: "ko" | "en";
     now?: string;
   },
 ): Promise<DbVisualCheck> {
@@ -117,8 +122,8 @@ export async function insertVisualCheck(
   await env.DB.prepare(
     `INSERT INTO workspace_visual_checks
        (id, project_id, user_key, target_url, intent, decision, works,
-        status, executor, report_json, agent_prompt, evidence_keys_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'uploaded', ?, ?, ?, '[]', ?, ?)`,
+        status, executor, report_json, agent_prompt, evidence_keys_json, locale, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'uploaded', ?, ?, ?, '[]', ?, ?, ?)`,
   )
     .bind(
       id,
@@ -131,6 +136,7 @@ export async function insertVisualCheck(
       input.executor,
       input.reportJson,
       input.agentPrompt ?? null,
+      input.locale ?? null,
       now,
       now,
     )
@@ -148,6 +154,7 @@ export async function insertVisualCheck(
     reportJson: input.reportJson,
     agentPrompt: input.agentPrompt,
     evidenceKeys: [],
+    locale: input.locale ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -156,7 +163,7 @@ export async function insertVisualCheck(
 export async function listVisualChecks(env: Env, projectId: string): Promise<VisualCheckListItem[]> {
   const res = await env.DB.prepare(
     `SELECT id, project_id, user_key, target_url, intent, decision, works,
-            status, executor, report_json, agent_prompt, evidence_keys_json, created_at, updated_at
+            status, executor, report_json, agent_prompt, evidence_keys_json, locale, created_at, updated_at
        FROM workspace_visual_checks
       WHERE project_id = ?
       ORDER BY created_at DESC
@@ -179,7 +186,7 @@ export async function listVisualChecks(env: Env, projectId: string): Promise<Vis
 export async function getVisualCheckById(env: Env, id: string): Promise<DbVisualCheck | null> {
   const row = (await env.DB.prepare(
     `SELECT id, project_id, user_key, target_url, intent, decision, works,
-            status, executor, report_json, agent_prompt, evidence_keys_json, created_at, updated_at
+            status, executor, report_json, agent_prompt, evidence_keys_json, locale, created_at, updated_at
        FROM workspace_visual_checks
       WHERE id = ?`,
   )
@@ -201,6 +208,7 @@ export async function insertQueuedVisualCheck(
     userKey: string;
     targetUrl: string;
     intent: string;
+    locale?: "ko" | "en";
     now?: string;
   },
 ): Promise<DbVisualCheck> {
@@ -209,10 +217,10 @@ export async function insertQueuedVisualCheck(
   await env.DB.prepare(
     `INSERT INTO workspace_visual_checks
        (id, project_id, user_key, target_url, intent, decision, works,
-        status, executor, report_json, agent_prompt, evidence_keys_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'Not Judged', NULL, 'queued', 'container', '{}', NULL, '[]', ?, ?)`,
+        status, executor, report_json, agent_prompt, evidence_keys_json, locale, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'Not Judged', NULL, 'queued', 'container', '{}', NULL, '[]', ?, ?, ?)`,
   )
-    .bind(id, input.projectId, input.userKey, input.targetUrl, input.intent, now, now)
+    .bind(id, input.projectId, input.userKey, input.targetUrl, input.intent, input.locale ?? null, now, now)
     .run();
   return {
     id,
@@ -226,6 +234,7 @@ export async function insertQueuedVisualCheck(
     executor: "container",
     reportJson: "{}",
     evidenceKeys: [],
+    locale: input.locale ?? null,
     createdAt: now,
     updatedAt: now,
   };

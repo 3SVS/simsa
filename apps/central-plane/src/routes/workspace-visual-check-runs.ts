@@ -225,7 +225,8 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
 
     let run;
     try {
-      run = await insertQueuedVisualCheck(c.env, { projectId, userKey, targetUrl, intent });
+      // 0065: 런 행에 locale 저장 — verify-sweep 자동 재검수가 원 런의 언어를 따른다.
+      run = await insertQueuedVisualCheck(c.env, { projectId, userKey, targetUrl, intent, locale });
     } catch (err) {
       console.error("[visual-check-runs POST run] insert failed:", err);
       return c.json({ ok: false, error: "save_failed" }, 500);
