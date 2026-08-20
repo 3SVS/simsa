@@ -3,6 +3,11 @@
   "framework": "nextjs",
   "redirects": [
     {
+      "source": "/",
+      "destination": "https://simsa.dev/",
+      "permanent": true
+    },
+    {
       "source": "/privacy",
       "destination": "https://simsa.dev/privacy",
       "permanent": true
