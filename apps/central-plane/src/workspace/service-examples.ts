@@ -17,6 +17,19 @@
 /** G14-b: guidance language. KO output is byte-identical to pre-locale code. */
 export type GuideLocale = "ko" | "en";
 
+/**
+ * 스택 불가지 Phase 2 (D-1~D-4 LOCKED 2026-08-20): 유저가 답한 조합 축.
+ * export.ts의 ExportUserProfile에서 온다. id 미지정/"unknown" = 중립 산출물
+ * (특정 벤더를 조용히 가정하지 않는다 — D-2), "other"는 자유텍스트 이름을
+ * 그대로 안내에 쓴다(D-3).
+ */
+export type StackAxes = {
+  hosting?: string;
+  hostingOther?: string;
+  data?: string;
+  dataOther?: string;
+};
+
 export type ServiceExampleNeed = {
   key: string;
   /** Deterministic matcher over the spec text (included/items/idea). */
@@ -37,6 +50,50 @@ export const BASE_SERVICE_EXAMPLE_BLOCKS: string[] = [
 export const BASE_SERVICE_EXAMPLE_BLOCKS_EN: string[] = [
   "- **Supabase (database)**: sign up at https://supabase.com → create a `New project` → bottom-left `Project Settings` (gear) → `API` → copy the `Project URL` and the `anon public` key. If an admin key is needed: `API Keys` tab → `service_role` → click `Reveal` → copy. **Warn the user that the `service_role` key is admin-only and must NEVER go into frontend/browser code** — server-side environment variables only.",
 ];
+
+// ─── 스택 불가지 Phase 2: 데이터 축 어댑터 ──────────────────────────────────
+// data 축이 답해진 조합에는 그 서비스의 워크스루를, 미응답에는 벤더를 가정하지
+// 않는 물음-먼저 안내를 넣는다(D-2). 종전의 "무조건 Supabase" 기본 블록은
+// data="supabase"일 때만 나간다.
+
+const FIREBASE_DATA_BLOCK =
+  "- **Firebase (데이터베이스)**: https://console.firebase.google.com 에서 프로젝트 만들기 → `프로젝트 설정`(톱니바퀴) → `일반` 탭 아래 `내 앱`에서 웹 앱 등록 → 나오는 `firebaseConfig`의 `apiKey`·`projectId` 등을 복사. Firestore를 쓰면 `빌드 → Firestore Database → 데이터베이스 만들기`(테스트 모드로 시작 가능, 규칙은 나중에 잠그도록 안내). **Admin SDK 키(서비스 계정 JSON)는 서버 전용 — 절대 프론트엔드에 넣지 말라고 경고**한다.";
+const FIREBASE_DATA_BLOCK_EN =
+  "- **Firebase (database)**: create a project at https://console.firebase.google.com → `Project settings` (gear) → `General` tab, register a web app under `Your apps` → copy `apiKey`, `projectId`, etc. from the shown `firebaseConfig`. For Firestore: `Build → Firestore Database → Create database` (test mode is fine to start; remind them to lock down rules later). **Warn that the Admin SDK key (service-account JSON) is server-only — never in frontend code.**";
+
+const BUILDER_MANAGED_DATA_BLOCK =
+  "- **데이터 (빌더 내장)**: 이 사용자의 데이터는 만들던 도구 안에서 관리된다 — 별도 가입이나 키 발급이 필요 없다. 데이터 구조를 바꿀 일이 있으면 그 빌더의 데이터/DB 패널에서 하도록 안내하고, 외부 DB로 옮기자는 제안을 먼저 하지 마라.";
+const BUILDER_MANAGED_DATA_BLOCK_EN =
+  "- **Data (managed by the builder)**: this user's data lives inside their building tool — no separate signup or keys needed. For schema changes, point them to that builder's data/DB panel, and do not proactively suggest migrating to an external database.";
+
+const NEUTRAL_DATA_CHOOSER_BLOCK =
+  "- **데이터 저장(필요해지면)**: 어떤 서비스를 쓸지 정해져 있지 않다 — **먼저 사용자에게 이미 쓰는 데이터 서비스가 있는지 물어라.** 있다면 그 서비스 기준으로(가입 URL → 키 위치 → 붙여넣을 곳 순), 없다면 예: Supabase, Firebase 등에서 하나를 고르게 하고 고른 것을 같은 순서로 안내한다. 특정 서비스를 기본값처럼 단정하지 마라.";
+const NEUTRAL_DATA_CHOOSER_BLOCK_EN =
+  "- **Data storage (when needed)**: no service has been chosen — **first ask the user whether they already use one.** If yes, guide for that service (signup URL → exactly where the key is → where to paste it); if not, have them pick one (e.g. Supabase, Firebase, or another they prefer) and walk through it in the same order. Never present one vendor as the assumed default.";
+
+function otherDataBlock(name: string, locale: GuideLocale): string {
+  return locale === "en"
+    ? `- **${name} (the user's data service)**: guide against THIS service — do not swap it for another. Order: its dashboard/console → where the API key or connection string lives → which environment variable to paste it into (admin/secret keys are server-only). If unsure of the exact menu, say so honestly and find it together with the user.`
+    : `- **${name} (사용자의 데이터 서비스)**: 다른 서비스로 바꾸지 말고 **이 서비스 기준으로** 안내하라. 순서: 해당 서비스 대시보드/콘솔 → API 키 또는 연결 문자열 위치 → 어떤 환경변수에 붙여넣을지(관리자·시크릿 키는 서버 전용). 정확한 메뉴 위치가 확실치 않으면 솔직히 말하고 사용자와 함께 찾아라.`;
+}
+
+/** data 축 → 데이터 워크스루 블록들. 미응답/unknown = 중립(물음-먼저). */
+export function dataServiceBlocks(stack: StackAxes | undefined, locale: GuideLocale): string[] {
+  const en = locale === "en";
+  const id = stack?.data;
+  if (id === "supabase") return [...(en ? BASE_SERVICE_EXAMPLE_BLOCKS_EN : BASE_SERVICE_EXAMPLE_BLOCKS)];
+  if (id === "firebase") return [en ? FIREBASE_DATA_BLOCK_EN : FIREBASE_DATA_BLOCK];
+  if (id === "builder_managed") return [en ? BUILDER_MANAGED_DATA_BLOCK_EN : BUILDER_MANAGED_DATA_BLOCK];
+  if (id === "none") return [];
+  if (id === "other") {
+    const name = stack?.dataOther?.trim();
+    return name
+      ? [otherDataBlock(name, locale)]
+      : [en ? NEUTRAL_DATA_CHOOSER_BLOCK_EN : NEUTRAL_DATA_CHOOSER_BLOCK];
+  }
+  // 미응답·unknown·미지 id — 벤더를 가정하지 않는다 (D-2).
+  return [en ? NEUTRAL_DATA_CHOOSER_BLOCK_EN : NEUTRAL_DATA_CHOOSER_BLOCK];
+}
 
 /**
  * D11: the deploy guidance is a PATH CHOICE, not a GitHub mandate. A user who
@@ -63,12 +120,68 @@ export const DEPLOY_PATH_GUIDANCE_EN: string = [
   "  3. An app with **server features** (login, database writes) cannot use (a) — recommend (b) or the builder's built-in deploy.",
 ].join("\n");
 
+// ─── 스택 불가지 Phase 2: 호스팅 축 어댑터 ──────────────────────────────────
+
+const NETLIFY_DEPLOY_GUIDANCE = [
+  "- **배포 — 이 사용자는 Netlify를 쓴다 (답변으로 확인됨). Netlify 기준으로 안내하라:**",
+  "  1. https://app.netlify.com 로그인 → `Add new site`. GitHub 저장소가 있으면 `Import an existing project`로 연결, 없으면 빌드 결과 폴더를 **Netlify Drop**(https://app.netlify.com/drop)에 드래그.",
+  "  2. 환경변수는 `Site configuration → Environment variables`에 키 이름 그대로 추가 → 재배포. 끝나면 나오는 URL을 사용자에게 알려준다.",
+  "  3. 다른 호스팅으로 갈아타자는 제안을 먼저 하지 마라.",
+].join("\n");
+const NETLIFY_DEPLOY_GUIDANCE_EN = [
+  "- **Deploy — this user is on Netlify (confirmed by their answer). Guide for Netlify:**",
+  "  1. Log in at https://app.netlify.com → `Add new site`. With a GitHub repo, use `Import an existing project`; without one, drag the build output folder onto **Netlify Drop** (https://app.netlify.com/drop).",
+  "  2. Add keys (exact names) under `Site configuration → Environment variables` → redeploy. Give the user the resulting URL.",
+  "  3. Do not proactively suggest switching hosts.",
+].join("\n");
+
+const BUILDER_HOSTED_DEPLOY_GUIDANCE = [
+  "- **배포 — 이 사용자의 앱은 만들던 도구가 직접 호스팅한다 (답변으로 확인됨):**",
+  "  1. 배포는 그 빌더의 **Publish/Deploy 버튼**으로 끝난다 — 별도의 호스팅 가입·터미널·git이 필요 없다.",
+  "  2. 환경변수·키는 빌더의 설정(Settings/Secrets) 화면에 넣도록 안내한다.",
+  "  3. 외부 호스팅으로 옮기자는 제안을 먼저 하지 마라 — 사용자가 원할 때만.",
+].join("\n");
+const BUILDER_HOSTED_DEPLOY_GUIDANCE_EN = [
+  "- **Deploy — this user's app is hosted by their building tool (confirmed by their answer):**",
+  "  1. Deploying is that builder's **Publish/Deploy button** — no separate hosting signup, terminal, or git.",
+  "  2. Environment variables/keys go in the builder's Settings/Secrets screen.",
+  "  3. Do not proactively suggest moving to external hosting — only if the user asks.",
+].join("\n");
+
+function otherHostGuidance(name: string, locale: GuideLocale): string {
+  return locale === "en"
+    ? [
+        `- **Deploy — this user hosts on ${name} (their answer). Guide against THAT host, do not swap it:**`,
+        `  1. In ${name}'s dashboard: connect/select the project → add the environment variables (exact key names) in its settings → trigger a deploy → give the user the resulting URL.`,
+        "  2. If you are unsure of the exact menus, say so honestly and find them together — never fall back to a different host's instructions.",
+      ].join("\n")
+    : [
+        `- **배포 — 이 사용자는 ${name} 에 올린다 (답변으로 확인됨). 그 호스팅 기준으로 안내하고 바꾸자고 하지 마라:**`,
+        `  1. ${name} 대시보드에서: 프로젝트 연결/선택 → 설정에서 환경변수(키 이름 그대로) 추가 → 배포 실행 → 나온 URL을 사용자에게 알려준다.`,
+        "  2. 정확한 메뉴가 확실치 않으면 솔직히 말하고 함께 찾아라 — 다른 호스팅 안내로 대체하지 마라.",
+      ].join("\n");
+}
+
 /**
  * #296 Phase 3: when the onboarding interview captured the user's GitHub level,
  * the deploy guidance stops asking and leads with the right path. No answer →
  * the neutral D11 chooser above (unchanged behavior).
+ *
+ * 스택 불가지 Phase 2: hosting 축이 답해졌으면 그 호스팅 기준 안내가 우선한다
+ * (netlify/builder_hosted/other). vercel·미응답·unknown·none_yet은 기존 로직
+ * (vercel은 종전 기본 경로가 이미 Vercel 기준).
  */
-export function deployPathGuidanceFor(githubLevel?: "fluent" | "heard" | "new", locale: GuideLocale = "ko"): string {
+export function deployPathGuidanceFor(
+  githubLevel?: "fluent" | "heard" | "new",
+  locale: GuideLocale = "ko",
+  stack?: StackAxes,
+): string {
+  const en = locale === "en";
+  if (stack?.hosting === "netlify") return en ? NETLIFY_DEPLOY_GUIDANCE_EN : NETLIFY_DEPLOY_GUIDANCE;
+  if (stack?.hosting === "builder_hosted") return en ? BUILDER_HOSTED_DEPLOY_GUIDANCE_EN : BUILDER_HOSTED_DEPLOY_GUIDANCE;
+  if (stack?.hosting === "other" && stack.hostingOther?.trim()) {
+    return otherHostGuidance(stack.hostingOther.trim(), locale);
+  }
   if (locale === "en") {
     if (githubLevel === "fluent") {
       return [
@@ -149,21 +262,55 @@ export const NEED_SERVICE_EXAMPLES: ServiceExampleNeed[] = [
   },
 ];
 
+/** uploads 워크스루는 data 축에 붙는다 — Supabase 고정이던 것을 조합별로. */
+function uploadsBlockFor(stack: StackAxes | undefined, locale: GuideLocale): string {
+  const en = locale === "en";
+  const id = stack?.data;
+  if (id === "firebase") {
+    return en
+      ? "- **File/photo uploads (Firebase Storage)**: handled inside the Firebase project above — `Build → Storage → Get started`, then upload from code with the same `firebaseConfig`. Start by telling the user no extra signup is needed."
+      : "- **파일·사진 업로드 (Firebase Storage)**: 위 Firebase 프로젝트 안에서 해결된다 — `빌드 → Storage → 시작하기`, 코드에선 같은 `firebaseConfig` 사용. 별도 가입이 필요 없다는 것부터 알려준다.";
+  }
+  if (id === "builder_managed") {
+    return en
+      ? "- **File/photo uploads**: use the builder's built-in upload/asset feature — no external storage signup. Only if the builder has none, ask the user before introducing an external service."
+      : "- **파일·사진 업로드**: 빌더의 내장 업로드/자산 기능을 쓴다 — 외부 스토리지 가입이 필요 없다. 빌더에 그 기능이 없을 때만, 외부 서비스 도입 전에 사용자에게 먼저 묻는다.";
+  }
+  if (id === "supabase") {
+    const supa = NEED_SERVICE_EXAMPLES.find((n) => n.key === "uploads")!;
+    return en ? supa.blockEn : supa.block;
+  }
+  // other/none/미응답 — 데이터 축과 같은 물음-먼저 원칙.
+  return en
+    ? "- **File/photo uploads**: use the storage feature of whatever data service the user chose (ask first if none is chosen yet — e.g. Supabase Storage, Firebase Storage, or another they prefer), then guide signup URL → key location → where to paste."
+    : "- **파일·사진 업로드**: 사용자가 고른 데이터 서비스의 스토리지 기능을 쓴다(아직 없으면 먼저 물어라 — 예: Supabase Storage, Firebase Storage 등). 이후 가입 URL → 키 위치 → 붙여넣을 곳 순으로 안내한다.";
+}
+
 /**
- * Pick the walkthrough blocks for THIS product: base + whatever the spec text
- * actually needs. Deterministic, order-stable, no LLM.
+ * Pick the walkthrough blocks for THIS product: data-axis walkthrough + whatever
+ * the spec text actually needs + the hosting-axis deploy path. Deterministic,
+ * order-stable, no LLM.
+ *
+ * 스택 불가지 Phase 2: stack 미전달·미응답 = 중립(물음-먼저) — 종전의 무조건
+ * Supabase 기본은 data="supabase"일 때만 나간다 (D-2).
  */
 export function pickServiceExampleBlocks(
   specText: string,
   githubLevel?: "fluent" | "heard" | "new",
   locale: GuideLocale = "ko",
+  stack?: StackAxes,
 ): string[] {
   const en = locale === "en";
-  const blocks = [...(en ? BASE_SERVICE_EXAMPLE_BLOCKS_EN : BASE_SERVICE_EXAMPLE_BLOCKS)];
+  const blocks = dataServiceBlocks(stack, locale);
   for (const need of NEED_SERVICE_EXAMPLES) {
-    if (need.re.test(specText)) blocks.push(en ? need.blockEn : need.block);
+    if (!need.re.test(specText)) continue;
+    if (need.key === "uploads") {
+      blocks.push(uploadsBlockFor(stack, locale));
+      continue;
+    }
+    blocks.push(en ? need.blockEn : need.block);
   }
-  blocks.push(deployPathGuidanceFor(githubLevel, locale));
+  blocks.push(deployPathGuidanceFor(githubLevel, locale, stack));
   blocks.push(
     en
       ? "- For any other service, guide in the same order: **signup URL → exactly where to find the key → where to paste it**, in full detail."

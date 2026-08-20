@@ -87,7 +87,9 @@ describe("workspace export-builder-pack", () => {
   });
 
   it("both prompts hand-hold a beginner through external-service setup + return-to-Simsa", () => {
-    const res = generateBuilderPack(makeReq("both"));
+    // 스택 불가지 P2: Supabase 워크스루는 data 축이 supabase일 때만 나간다 —
+    // 이 테스트는 그 조합의 대표 케이스로 명시한다 (미응답=중립은 stack 테스트).
+    const res = generateBuilderPack({ ...makeReq("both"), userProfile: { data: "supabase" } });
     const prompts = res.bundle.files
       .filter((f) => f.path.endsWith("CLAUDE_CODE_PROMPT.md") || f.path.endsWith("CODEX_PROMPT.md"))
       .map((f) => f.content);

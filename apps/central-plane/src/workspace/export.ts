@@ -8,7 +8,7 @@
  * Stage 7: supports selectedItemIds filtering + stronger task-focus prompts.
  */
 
-import { pickServiceExampleBlocks } from "./service-examples.js";
+import { pickServiceExampleBlocks, type StackAxes } from "./service-examples.js";
 import { detectNonWebBuildable } from "./generate.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ function genReadme(
         ? "This pack is the product spec and build brief exported from Simsa. Paste the brief into a web builder's chat (Lovable, Replit, v0, Bolt, …) and it carries the work from implementation to Publish inside the builder — no installs, no terminal."
         : target === "handoff"
           ? "This pack was exported from Simsa **to hand to a developer or a specialist team**. Send `HANDOFF_BRIEF.md` as-is — it contains what to build, what's decided, and the acceptance criteria."
-          : "This pack is the product spec and build brief exported from Simsa. Hand the prompt to a coding AI and it is instructed to carry the work through implementation and a run check. **For deployment to finish automatically, the coding AI needs a deploy tool connected (e.g. Vercel/GitHub MCP or CLI)**; if none is connected, it falls back to walking the user through a deploy path that fits their situation (with or without GitHub), step by step.",
+          : "This pack is the product spec and build brief exported from Simsa. Hand the prompt to a coding AI and it is instructed to carry the work through implementation and a run check. **For deployment to finish automatically, the coding AI needs a deploy tool connected (the MCP or CLI of whichever hosting you use — e.g. Vercel, Netlify — or GitHub)**; if none is connected, it falls back to walking the user through a deploy path that fits their situation (with or without GitHub), step by step.",
       "",
     ];
 
@@ -291,7 +291,7 @@ function genReadme(
       ? "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 웹 빌더(Lovable·Replit·v0·Bolt 등)의 채팅창에 지시서를 붙여넣으면 구현부터 게시(Publish)까지 빌더 안에서 진행됩니다 — 별도 설치나 터미널이 필요 없습니다."
       : target === "handoff"
         ? "이 패키지는 Simsa에서 내보낸, **개발자·전문팀에게 전달하기 위한** 자료입니다. 무엇을 만들지·결정된 것·완성 기준이 담긴 `HANDOFF_BRIEF.md`를 그대로 보내면 됩니다."
-        : "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트를 넘기면 구현과 실행 확인까지 진행하도록 지시합니다. **인터넷 배포까지 자동으로 이어지려면 개발 AI에 배포 도구(예: Vercel·GitHub의 MCP 또는 CLI)가 연결돼 있어야 하고**, 연결돼 있지 않으면 개발 AI가 사용자 상황에 맞는 배포 길(GitHub 유무에 따라)을 단계별로 안내하는 방식으로 대신합니다.",
+        : "이 패키지는 Simsa에서 내보낸 제품 설명서와 개발 지시서입니다. 개발 AI에게 프롬프트를 넘기면 구현과 실행 확인까지 진행하도록 지시합니다. **인터넷 배포까지 자동으로 이어지려면 개발 AI에 배포 도구(쓰시는 호스팅 — 예: Vercel, Netlify 등 — 의 MCP나 CLI, 또는 GitHub)가 연결돼 있어야 하고**, 연결돼 있지 않으면 개발 AI가 사용자 상황에 맞는 배포 길(GitHub 유무에 따라)을 단계별로 안내하는 방식으로 대신합니다.",
     "",
   ];
 
@@ -704,7 +704,7 @@ function beginnerSetupGuidance(specText: string, profile?: ExportUserProfile, lo
       "",
       "Common service walkthroughs — matched to what this product needs (if a UI changed, adapt to the current screens, but keep this level of detail):",
       "",
-      ...pickServiceExampleBlocks(specText, profile?.githubLevel, "en"),
+      ...pickServiceExampleBlocks(specText, profile?.githubLevel, "en", stackOf(profile)),
       "",
       "**Deploy-readiness (important):** never hardcode any address the app uses to point at itself — the prefix of a short link, a share URL, a redirect target, an API base — to a development address like `http://localhost:3000`. Read it from the runtime origin (`window.location.origin` in the browser; the request host or an env var like `NEXT_PUBLIC_APP_URL` on the server). That way the address is right both locally and after deploy; skipping this ships user-visible links broken as `localhost`.",
     ].join("\n");
@@ -736,7 +736,7 @@ function beginnerSetupGuidance(specText: string, profile?: ExportUserProfile, lo
     "",
     // D12: base + need-matched walkthroughs + the D11 deploy-path chooser
     // (#296 Phase 3: profile-aware — a known githubLevel skips the asking).
-    ...pickServiceExampleBlocks(specText, profile?.githubLevel),
+    ...pickServiceExampleBlocks(specText, profile?.githubLevel, "ko", stackOf(profile)),
     "",
     "**배포 대응(중요):** 앱이 스스로를 가리키는 주소 — 짧은 링크의 앞부분, 공유 URL, 리다이렉트 대상, API 주소 등 — 를 절대 `http://localhost:3000` 같은 개발용 주소로 하드코딩하지 마라. 런타임 origin에서 가져와라(브라우저는 `window.location.origin`, 서버는 요청 host 또는 `NEXT_PUBLIC_APP_URL` 같은 환경변수). 그래야 로컬에서도, 배포 후에도 주소가 자동으로 맞는다. 이걸 안 하면 배포했을 때 사용자에게 보이는 링크가 `localhost`로 깨진다.",
   ].join("\n");
@@ -761,7 +761,7 @@ const NONDEV_WORKFLOW_GUIDANCE: string = [
   "",
   "다 만들었으면 절대 '어떻게 마무리할까요(병합/PR/브랜치/폐기)?'처럼 개발 절차를 나열해 묻지 마라. 대신 이렇게 끝맺어라:",
   "1. 앱을 실제로 **실행해서 동작하는 모습을 보여준다** (예: 개발 서버를 켠 뒤 접속할 로컬 주소를 알려준다).",
-  "2. 실제로 쓰려면 어떻게 **배포**하는지 위 '초보자 안내' 방식으로 단계별 안내한다(Vercel 등).",
+  "2. 실제로 쓰려면 어떻게 **배포**하는지 위 '초보자 안내'의 배포 안내(사용자가 답한 호스팅 기준)를 따라 단계별 안내한다.",
   "3. 배포된 URL(또는 프로젝트 파일)을 **Simsa에 다시 넣어 확인받게** 안내한다(아래 참고).",
   "끝은 언제나 '완성된 결과물 + 다음에 할 한 가지 행동'이어야 한다. 개발 절차 선택 메뉴로 끝내지 마라.",
 ].join("\n");
@@ -778,7 +778,7 @@ const NONDEV_WORKFLOW_GUIDANCE_EN: string = [
   "",
   "When it's built, never end with a process menu like \"how shall we wrap up (merge/PR/branch/discard)?\". End like this instead:",
   "1. Actually **run the app and show it working** (e.g. start the dev server and give the local address to open).",
-  "2. Walk them through how to **deploy** for real use, step by step per the beginner guidance above (Vercel etc.).",
+  "2. Walk them through how to **deploy** for real use, step by step per the deploy guidance above (which follows the user's own hosting).",
   "3. Guide them to **put the deployed URL (or the project files) back into Simsa** for review (see below).",
   "The ending is always \"a finished result + the one next action\" — never a menu of development choices.",
 ].join("\n");
@@ -791,37 +791,74 @@ const NONDEV_WORKFLOW_GUIDANCE_EN: string = [
  * only thing collected in Simsa is guidance, so the prompt reinforces the
  * token-safety invariant on the agent side too.
  */
-const DEPLOY_VIA_MCP_GUIDANCE: string = [
-  "## 한 번에 배포 — 네게 연결된 도구로 네가 직접",
-  "",
-  "이 사용자는 배포를 직접 손으로 하기 어렵다. 가능하면 **네게 연결된 배포·저장소 도구(예: Vercel·GitHub의 MCP 또는 CLI)를 사용해 네가 직접 배포와 저장소 푸시를 끝내라.** 사용자를 여러 화면으로 왕복시키지 말고, 한 번에 실제 배포 URL이 나오게 하라.",
-  "",
-  "**토큰·비밀 취급 (반드시 지킬 것):**",
-  "- 배포·저장소 토큰이나 비밀 키를 코드·커밋·파일·이 지시서 어디에도 하드코딩하거나 기록하지 마라.",
-  "- 사용자에게 배포 토큰이나 개인 액세스 토큰(PAT) 같은 raw 비밀을 붙여넣으라고 요구하지 마라. 그 인증은 사용자 에디터에 연결된 도구가 이미 갖고 있다고 가정한다.",
-  "- 도구가 아직 연결돼 있지 않으면, 토큰을 물어보지 말고 **\"에디터에서 Vercel(또는 GitHub) 연결을 한 번 해주세요\"**라고 그 도구를 연결(로그인)하는 방법만 한 단계 안내한 뒤, 연결되면 네가 배포를 이어간다.",
-  "- 사용자에게 **GitHub 계정 자체가 없다면 연결을 강요하지 마라** — 위 '초보자 안내'의 '배포 — 사용자 상황에 맞는 길'을 따라, GitHub 없이 되는 길(드래그앤드롭 배포)과 GitHub부터 만드는 길(계정 생성 → 저장소 생성 → 연결)을 쉽게 설명하고 사용자가 고르게 하라.",
-  "",
-  "**저장소:** 코드를 GitHub에 올릴 때도 같은 방식 — 연결된 GitHub 도구로 네가 푸시하고, 사용자에게 토큰을 묻지 마라.",
-  "",
-  "**배포 후:** 실제 배포된 URL을 사용자에게 그대로 알려주고, 그 URL을 Simsa에 다시 넣어 확인받게 안내한다(아래 참고). 연결된 도구가 전혀 없어 자동 배포가 정말 불가능한 경우에만, 위 '초보자 안내' 방식의 수동 배포로 대체한다.",
-].join("\n");
+/** 스택 불가지 Phase 2: 유저 프로파일의 hosting/data 축을 서비스 예시·배포
+ *  안내가 소비할 모양으로. 두 축 다 비어 있으면 undefined(중립 산출물). */
+function stackOf(profile?: ExportUserProfile): StackAxes | undefined {
+  if (!profile) return undefined;
+  const { hosting, hostingOther, data, dataOther } = profile;
+  if (!hosting && !data) return undefined;
+  return { hosting, hostingOther, data, dataOther };
+}
 
-const DEPLOY_VIA_MCP_GUIDANCE_EN: string = [
-  "## Deploy in one shot — with YOUR connected tools, yourself",
-  "",
-  "This user can't easily deploy by hand. Whenever possible, **use the deploy/repository tools connected to you (e.g. Vercel/GitHub MCP or CLI) and finish the deploy and repo push yourself.** Don't bounce the user between screens — end with a real deployed URL in one shot.",
-  "",
-  "**Token & secret handling (non-negotiable):**",
-  "- Never hardcode or record deploy/repository tokens or secret keys in code, commits, files, or anywhere in this brief.",
-  "- Never ask the user to paste raw secrets like deploy tokens or personal access tokens (PATs). Assume the tool connected to their editor already holds that auth.",
-  "- If a tool isn't connected yet, don't ask for a token — guide exactly one step: **\"please connect Vercel (or GitHub) in your editor once\"**, then continue the deploy yourself once it's connected.",
-  "- If the user **has no GitHub account at all, don't force one** — follow the beginner guidance's \"deploy paths that fit the user\": explain the no-GitHub path (drag-and-drop deploy) and the GitHub-first path (create account → create repo → connect) simply, and let them choose.",
-  "",
-  "**Repository:** same rule for pushing code to GitHub — push it yourself via the connected GitHub tool; never ask the user for a token.",
-  "",
-  "**After deploying:** give the user the actual deployed URL as-is, and guide them to put that URL back into Simsa for review (see below). Only when no tool is connected at all and automatic deploy is truly impossible, fall back to the beginner-guided manual deploy.",
-].join("\n");
+/** MCP 배포 지시에 넣을 호스팅 표기. 미응답 = 열린 목록 (D-2·D-4). */
+function hostLabelOf(profile: ExportUserProfile | undefined, locale: "ko" | "en"): string {
+  const h = profile?.hosting;
+  if (h === "vercel") return "Vercel";
+  if (h === "netlify") return "Netlify";
+  if (h === "other" && profile?.hostingOther?.trim()) return profile.hostingOther.trim();
+  return locale === "en" ? "the user's hosting (e.g. Vercel, Netlify, or whichever they use)" : "사용자의 호스팅(예: Vercel, Netlify 등 쓰는 것)";
+}
+
+function deployViaMcpGuidance(profile: ExportUserProfile | undefined, locale: "ko" | "en"): string {
+  // 빌더가 직접 호스팅하는 조합엔 MCP/CLI 배포 지시 자체가 어긋난다 —
+  // Publish 버튼 안내로 대체한다.
+  if (profile?.hosting === "builder_hosted") {
+    return locale === "en"
+      ? [
+          "## Deploying — this user's app is hosted by their building tool",
+          "",
+          "Do NOT set up external hosting, MCP deploy tools, or tokens. Deploying is the builder's **Publish/Deploy button**; keys go in the builder's Settings/Secrets screen. After publishing, give the user the URL and guide them to put it back into Simsa for review (see below).",
+        ].join("\n")
+      : [
+          "## 배포 — 이 사용자의 앱은 만들던 도구가 직접 호스팅한다",
+          "",
+          "외부 호스팅 가입·MCP 배포 도구·토큰 설정을 하지 마라. 배포는 그 빌더의 **Publish/Deploy 버튼**이고, 키는 빌더의 설정(Settings/Secrets) 화면에 넣는다. 발행이 끝나면 URL을 사용자에게 알려주고 Simsa에 다시 넣어 확인받게 안내한다(아래 참고).",
+        ].join("\n");
+  }
+  const host = hostLabelOf(profile, locale);
+  if (locale === "en") {
+    return [
+      "## Deploy in one shot — with YOUR connected tools, yourself",
+      "",
+      `This user can't easily deploy by hand. Whenever possible, **use the deploy/repository tools connected to you (e.g. ${host} / GitHub MCP or CLI) and finish the deploy and repo push yourself.** Don't bounce the user between screens — end with a real deployed URL in one shot.`,
+      "",
+      "**Token & secret handling (non-negotiable):**",
+      "- Never hardcode or record deploy/repository tokens or secret keys in code, commits, files, or anywhere in this brief.",
+      "- Never ask the user to paste raw secrets like deploy tokens or personal access tokens (PATs). Assume the tool connected to their editor already holds that auth.",
+      `- If a tool isn't connected yet, don't ask for a token — guide exactly one step: **"please connect ${host} (or GitHub) in your editor once"**, then continue the deploy yourself once it's connected.`,
+      "- If the user **has no GitHub account at all, don't force one** — follow the beginner guidance's \"deploy paths that fit the user\": explain the no-GitHub path (drag-and-drop deploy) and the GitHub-first path (create account → create repo → connect) simply, and let them choose.",
+      "",
+      "**Repository:** same rule for pushing code to GitHub — push it yourself via the connected GitHub tool; never ask the user for a token.",
+      "",
+      "**After deploying:** give the user the actual deployed URL as-is, and guide them to put that URL back into Simsa for review (see below). Only when no tool is connected at all and automatic deploy is truly impossible, fall back to the beginner-guided manual deploy.",
+    ].join("\n");
+  }
+  return [
+    "## 한 번에 배포 — 네게 연결된 도구로 네가 직접",
+    "",
+    `이 사용자는 배포를 직접 손으로 하기 어렵다. 가능하면 **네게 연결된 배포·저장소 도구(예: ${host}·GitHub의 MCP 또는 CLI)를 사용해 네가 직접 배포와 저장소 푸시를 끝내라.** 사용자를 여러 화면으로 왕복시키지 말고, 한 번에 실제 배포 URL이 나오게 하라.`,
+    "",
+    "**토큰·비밀 취급 (반드시 지킬 것):**",
+    "- 배포·저장소 토큰이나 비밀 키를 코드·커밋·파일·이 지시서 어디에도 하드코딩하거나 기록하지 마라.",
+    "- 사용자에게 배포 토큰이나 개인 액세스 토큰(PAT) 같은 raw 비밀을 붙여넣으라고 요구하지 마라. 그 인증은 사용자 에디터에 연결된 도구가 이미 갖고 있다고 가정한다.",
+    `- 도구가 아직 연결돼 있지 않으면, 토큰을 물어보지 말고 **"에디터에서 ${host}(또는 GitHub) 연결을 한 번 해주세요"**라고 그 도구를 연결(로그인)하는 방법만 한 단계 안내한 뒤, 연결되면 네가 배포를 이어간다.`,
+    "- 사용자에게 **GitHub 계정 자체가 없다면 연결을 강요하지 마라** — 위 '초보자 안내'의 '배포 — 사용자 상황에 맞는 길'을 따라, GitHub 없이 되는 길(드래그앤드롭 배포)과 GitHub부터 만드는 길(계정 생성 → 저장소 생성 → 연결)을 쉽게 설명하고 사용자가 고르게 하라.",
+    "",
+    "**저장소:** 코드를 GitHub에 올릴 때도 같은 방식 — 연결된 GitHub 도구로 네가 푸시하고, 사용자에게 토큰을 묻지 마라.",
+    "",
+    "**배포 후:** 실제 배포된 URL을 사용자에게 그대로 알려주고, 그 URL을 Simsa에 다시 넣어 확인받게 안내한다(아래 참고). 연결된 도구가 전혀 없어 자동 배포가 정말 불가능한 경우에만, 위 '초보자 안내' 방식의 수동 배포로 대체한다.",
+  ].join("\n");
+}
 
 /**
  * Closing "bring it back to Simsa" guidance, appended after the beginner setup
@@ -1012,7 +1049,7 @@ function genClaudeCodePrompt(
       "",
       NONDEV_WORKFLOW_GUIDANCE_EN,
       "",
-      DEPLOY_VIA_MCP_GUIDANCE_EN,
+      deployViaMcpGuidance(profile, "en"),
       "",
       RETURN_TO_SIMSA_GUIDANCE_EN,
       "",
@@ -1062,7 +1099,7 @@ function genClaudeCodePrompt(
     "",
     NONDEV_WORKFLOW_GUIDANCE,
     "",
-    DEPLOY_VIA_MCP_GUIDANCE,
+    deployViaMcpGuidance(profile, "ko"),
     "",
     RETURN_TO_SIMSA_GUIDANCE,
     "",
@@ -1182,7 +1219,7 @@ function genCodexPrompt(
       "",
       NONDEV_WORKFLOW_GUIDANCE_EN,
       "",
-      DEPLOY_VIA_MCP_GUIDANCE_EN,
+      deployViaMcpGuidance(profile, "en"),
       "",
       RETURN_TO_SIMSA_GUIDANCE_EN,
       "",
@@ -1278,7 +1315,7 @@ function genCodexPrompt(
     "",
     NONDEV_WORKFLOW_GUIDANCE,
     "",
-    DEPLOY_VIA_MCP_GUIDANCE,
+    deployViaMcpGuidance(profile, "ko"),
     "",
     RETURN_TO_SIMSA_GUIDANCE,
     "",
