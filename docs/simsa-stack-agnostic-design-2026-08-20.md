@@ -105,9 +105,30 @@ stackProfile: {
 |---|---|---|
 | 설계 잠금 | `design lock approved` | ✅ 발효 2026-08-20 (Bae) |
 | Phase 1 착수 | `train stack-p1 start approved` | ✅ 발효 2026-08-20 — 별도 문구 없이, "design lock approved 주시면 Phase 1(질문+저장) 착수하겠습니다"라는 제안에 대한 승인 문맥으로 P1에 한해 착수 포함 해석 (기록: 이 행) |
-| Phase 2 착수 | `train stack-p2 start approved` | ⏳ 대기 |
-| Phase 3 착수 | `train stack-p3 start approved` | ⏳ 대기 |
+| Phase 2 착수 | `train stack-p2 start approved` | ✅ 발효 2026-08-20 (Bae) — 집행: #477(서버 어댑터) + #478(카탈로그·카피 레일) 머지 |
+| Phase 3 착수 | `train stack-p3 start approved` | ✅ 발효 2026-08-20 (Bae) — 집행: #479(web_builder 수리팩·에이전트 3종·MCP 호스팅 소비) 머지 |
 | migration 0065 적용 | `migration 0065 apply approved.` | ✅ 발효·집행 2026-08-20 (0065 remote 적용 → central-plane 배포) |
+
+## 6. 집행 결과 (2026-08-20, 트레인 종결)
+
+| Phase | PR | 요지 |
+|---|---|---|
+| 0 | #474 | web_builder/handoff outcome 400 소실 수정 (B8) |
+| 1 | #475 | 호스팅/데이터 2문항(idea·code)·ext 저장·ExportUserProfile 운반 |
+| 2 서버 | #477 | 빌더팩이 조합 소비 — **미응답=중립(물음-먼저)**, Firebase/기타(치환 금지)/빌더 내장/none, 호스팅별 배포 안내, DEPLOY_VIA_MCP 함수화 (B2·B5·B9 상당) |
+| 2 대시 | #478 | 서비스 카탈로그 확장(Firebase·customServiceEntry 기타 흡수·프로파일 소비)·카피 레일 EN/KO 11쌍 개방 (B3·B6·B10) |
+| 3 | #479 | 수리팩 web_builder 타깃(B7)·에이전트 Cursor/Windsurf/Gemini CLI(§3-4)·MCP 패널 호스팅 소비(B4) |
+
+**정정:** §3-6(silent claude_code 기본)은 실측 결과 비실재 — export 스텝0 선택기가
+명시적 클릭을 강제한다. 인벤토리 항목 정정으로 종결(코드 무변경).
+
+**잔여 백로그 (트레인 밖, 우선순위 낮음):**
+- 타 호스팅(Netlify 등) 원격 MCP 서버 URL 검증 후 mcp-catalog 엔트리 추가
+  (현재는 틀린 Vercel 안내 제거까지만 — "확인된 사실만" 원칙).
+- prep 서비스 제안의 미응답 기본이 아직 Supabase(#478의 무회귀 선택) —
+  D-2 순화(축 선택 카드화)는 실유저 other 수집 분포를 보고 결정.
+- 에이전트 "기타" 칩 UI(레지스트리는 미지 id 안전 강등 이미 지원).
+- dictionary 죽은 fixBrief 블록 정리(참조 0 — 무해).
 
 ## 부록 A — B6 카피 위치 (dictionary.mjs EN/KO 줄)
 
