@@ -4,8 +4,8 @@
 > 같다. 어떤 조합을 사용해도 우리가 **물어보고**, 그에 맞춰 제공할 수 있어야 한다.
 > 그런 하드코딩이 없어야 한다."
 >
-> 상태: **제안 (design lock 대기)** — 아래 D-번호는 `design lock approved` 발효 전까지
-> 전부 [OPEN]. Phase 0만 버그 수정으로 선행(기존 결정의 결함이지 재론 아님).
+> 상태: **잠금 발효 — `design lock approved` (Bae, 2026-08-20).** D-1~D-4 [LOCKED].
+> 재론은 결정 번호 인용으로만. Phase 0은 버그 수정으로 선행 집행됨(#474).
 
 ## 0. 전수 인벤토리 요약 (2026-08-20 실측)
 
@@ -33,17 +33,17 @@
 
 ## 1. 원칙 (제안)
 
-- **D-1 [OPEN → LOCK 요청] 물음-프로파일-소비 원칙.** 조합(빌더·호스팅·데이터·부가
+- **D-1 [LOCKED 2026-08-20] 물음-프로파일-소비 원칙.** 조합(빌더·호스팅·데이터·부가
   서비스)은 항상 유저에게 **묻고**, 답을 **StackProfile**로 저장하며, 모든 산출물
   (빌더팩·서비스 안내·수리팩·MCP 연결·UI 카피)은 프로파일을 **소비해서** 렌더링한다.
   하드코딩된 벤더 전제 금지.
-- **D-2 [OPEN] 중립 기본값.** 미응답/모름("모르겠어요" 항상 허용)일 때 특정 벤더를
+- **D-2 [LOCKED 2026-08-20] 중립 기본값.** 미응답/모름("모르겠어요" 항상 허용)일 때 특정 벤더를
   조용히 가정하지 않는다 — 중립 산출물(예: "지금 쓰는 호스팅의 환경변수 화면에
   넣으세요") 또는 명시적 질문으로 되돌린다. 현행 "unknown → 조용히 Claude Code 팩"
   같은 silent default 금지.
-- **D-3 [OPEN] other는 버리지 않는다.** 모든 축에 자유텍스트 "기타"를 두고 수집한다
+- **D-3 [LOCKED 2026-08-20] other는 버리지 않는다.** 모든 축에 자유텍스트 "기타"를 두고 수집한다
   (built-with 패턴). 수집된 other 빈도가 다음 카탈로그 확장의 우선순위 근거다.
-- **D-4 [OPEN] 닫힌 목록 카피 금지.** UI 카피의 도구 나열은 항상 "예: A, B 등 쓰시는
+- **D-4 [LOCKED 2026-08-20] 닫힌 목록 카피 금지.** UI 카피의 도구 나열은 항상 "예: A, B 등 쓰시는
   도구"의 열린 형태. (K-축: 비개발자 언어 규칙과 동일한 성격의 카피 레일.)
 
 ## 2. 데이터 모델 (제안)
@@ -103,10 +103,11 @@ stackProfile: {
 
 | 게이트 | 문구 | 상태 |
 |---|---|---|
-| 설계 잠금 | `design lock approved` | ⏳ 대기 |
-| Phase 1 착수 | `train stack-p1 start approved` | — |
-| Phase 2 착수 | `train stack-p2 start approved` | — |
-| Phase 3 착수 | `train stack-p3 start approved` | — |
+| 설계 잠금 | `design lock approved` | ✅ 발효 2026-08-20 (Bae) |
+| Phase 1 착수 | `train stack-p1 start approved` | ✅ 발효 2026-08-20 — 별도 문구 없이, "design lock approved 주시면 Phase 1(질문+저장) 착수하겠습니다"라는 제안에 대한 승인 문맥으로 P1에 한해 착수 포함 해석 (기록: 이 행) |
+| Phase 2 착수 | `train stack-p2 start approved` | ⏳ 대기 |
+| Phase 3 착수 | `train stack-p3 start approved` | ⏳ 대기 |
+| migration 0065 적용 | `migration 0065 apply approved.` | ✅ 발효·집행 2026-08-20 (0065 remote 적용 → central-plane 배포) |
 
 ## 부록 A — B6 카피 위치 (dictionary.mjs EN/KO 줄)
 

@@ -12,6 +12,7 @@ import {
   getUserKey,
   markProjectSyncFailed,
 } from "@/lib/workflow-store";
+import { stackProfilePatch } from "@/lib/stack-profile.mjs";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import type {
   IdeaToSpecDraftResponse,
@@ -68,6 +69,12 @@ function NewProjectInner() {
   const [platform, setPlatform] = useState<"web" | "mobile" | "unknown" | null>(null);
   const [githubLevel, setGithubLevel] = useState<"fluent" | "heard" | "new" | null>(null);
   const [aiToolLevel, setAiToolLevel] = useState<"yes" | "some" | "no" | null>(null);
+  // 스택 불가지 Phase 1 (D-1) — 호스팅/데이터 축. 전부 선택 사항, "모르겠어요"
+  // 허용, "other"는 자유텍스트로 수집(D-3: 모르는 벤더도 시장 레이더).
+  const [hostingId, setHostingId] = useState<string | null>(null);
+  const [hostingOther, setHostingOther] = useState("");
+  const [dataId, setDataId] = useState<string | null>(null);
+  const [dataOther, setDataOther] = useState("");
   // D3: questions the user marked "not right for my case" (question + reason),
   // fed back into the next generation so it steers away instead of re-asking.
   const [rejectedQuestions, setRejectedQuestions] = useState<Array<{ question: string; reason: string }>>([]);
@@ -369,6 +376,7 @@ function NewProjectInner() {
         : {}),
       entryPath: "code",
       ...(builtWithTools.length ? { builtWithTools } : {}),
+      ...stackProfilePatch(hostingId, hostingOther, dataId, dataOther),
     });
     // Persist the project server-side BEFORE navigating to connect a repo.
     // This was fire-and-forget + an immediate router.push, so the project row
@@ -436,6 +444,7 @@ function NewProjectInner() {
             },
           }
         : {}),
+      ...stackProfilePatch(hostingId, hostingOther, dataId, dataOther),
     });
     // Await the D1 persist BEFORE navigating (was fire-and-forget). Same race
     // #258 fixed on the code branch: navigating first leaves the project row
@@ -563,6 +572,23 @@ function NewProjectInner() {
                 placeholder={t.builtWith.otherPlaceholder}
                 className="input mb-6 text-sm"
               />
+
+              {/* 스택 불가지 Phase 1 (D-1) — 이미 만든 앱이므로 호스팅/데이터가
+                  실재한다. 선택 사항, 답하면 안내·팩·연결 패널이 이 조합을 따른다. */}
+              <div className="mb-6 rounded-lg border border-gray-100 bg-gray-50/60 p-4">
+                <p className="mb-3 text-xs font-medium text-gray-600">{t.np.interviewTitle}</p>
+                <StackProfileRows
+                  t={t}
+                  hostingId={hostingId}
+                  setHostingId={setHostingId}
+                  hostingOther={hostingOther}
+                  setHostingOther={setHostingOther}
+                  dataId={dataId}
+                  setDataId={setDataId}
+                  dataOther={dataOther}
+                  setDataOther={setDataOther}
+                />
+              </div>
 
               <label className="mb-1 block text-xs font-semibold text-gray-600">{t.branch.codeDescLabel}</label>
               <textarea
@@ -735,6 +761,17 @@ function NewProjectInner() {
                   ]}
                   value={aiToolLevel}
                   onChange={(v) => setAiToolLevel(v as "yes" | "some" | "no")}
+                />
+                <StackProfileRows
+                  t={t}
+                  hostingId={hostingId}
+                  setHostingId={setHostingId}
+                  hostingOther={hostingOther}
+                  setHostingOther={setHostingOther}
+                  dataId={dataId}
+                  setDataId={setDataId}
+                  dataOther={dataOther}
+                  setDataOther={setDataOther}
                 />
               </div>
               <button
@@ -961,6 +998,81 @@ function WizardStepper({ t, step }: { t: Dictionary; step: number }) {
         ))}
       </ol>
     </div>
+  );
+}
+
+/** 스택 불가지 Phase 1 (D-1, design lock 2026-08-20): 호스팅/데이터 2축 질문.
+ *  idea·code 두 갈래가 공용으로 쓴다. 칩 목록은 예시이지 강요가 아니며(D-4),
+ *  "other" 선택 시 자유텍스트를 열어 모르는 벤더도 수집한다(D-3). 미응답이면
+ *  아무것도 저장하지 않는다 — 소비자 쪽 중립 기본값(D-2)의 전제. */
+function StackProfileRows({
+  t,
+  hostingId,
+  setHostingId,
+  hostingOther,
+  setHostingOther,
+  dataId,
+  setDataId,
+  dataOther,
+  setDataOther,
+}: {
+  t: ReturnType<typeof useI18n>["t"];
+  hostingId: string | null;
+  setHostingId: (v: string | null) => void;
+  hostingOther: string;
+  setHostingOther: (v: string) => void;
+  dataId: string | null;
+  setDataId: (v: string | null) => void;
+  dataOther: string;
+  setDataOther: (v: string) => void;
+}) {
+  return (
+    <>
+      <InterviewChipRow
+        label={t.np.stackHostingQ}
+        options={[
+          ["vercel", t.np.stackHostingVercel],
+          ["netlify", t.np.stackHostingNetlify],
+          ["builder_hosted", t.np.stackHostingBuilder],
+          ["none_yet", t.np.stackHostingNone],
+          ["unknown", t.np.stackHostingUnknown],
+          ["other", t.np.stackHostingOther],
+        ]}
+        value={hostingId}
+        onChange={setHostingId}
+      />
+      {hostingId === "other" && (
+        <input
+          type="text"
+          value={hostingOther}
+          onChange={(e) => setHostingOther(e.target.value)}
+          placeholder={t.np.stackHostingOtherPlaceholder}
+          className="input mb-2.5 text-sm"
+        />
+      )}
+      <InterviewChipRow
+        label={t.np.stackDataQ}
+        options={[
+          ["supabase", t.np.stackDataSupabase],
+          ["firebase", t.np.stackDataFirebase],
+          ["builder_managed", t.np.stackDataBuilder],
+          ["none", t.np.stackDataNone],
+          ["unknown", t.np.stackDataUnknown],
+          ["other", t.np.stackDataOther],
+        ]}
+        value={dataId}
+        onChange={setDataId}
+      />
+      {dataId === "other" && (
+        <input
+          type="text"
+          value={dataOther}
+          onChange={(e) => setDataOther(e.target.value)}
+          placeholder={t.np.stackDataOtherPlaceholder}
+          className="input mb-2.5 text-sm"
+        />
+      )}
+    </>
   );
 }
 

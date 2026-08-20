@@ -263,6 +263,14 @@ export type ExtendedProjectData = {
     githubLevel?: "fluent" | "heard" | "new";
     aiToolLevel?: "yes" | "some" | "no";
   };
+  /** 스택 불가지 Phase 1 (D-1, design lock 2026-08-20) — 유저가 답한 조합.
+   *  id는 칩의 canonical 값, "other"일 때만 자유텍스트 other가 따른다(D-3:
+   *  모르는 벤더도 버리지 않고 수집). 미응답 축은 키 자체가 없다 — 소비자는
+   *  특정 벤더를 조용히 가정하지 말 것(D-2 중립 기본값). */
+  stackProfile?: {
+    hosting?: { id: string; other?: string };
+    data?: { id: string; other?: string };
+  };
   /** C2 (openQuestions 질문화): answers the user settled for spec.openDecisions,
    *  keyed by the decision text. Kept out of the core spec so example projects
    *  aren't mutated — the spec page reads this to mark a decision "resolved". */
