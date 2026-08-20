@@ -135,8 +135,9 @@ describe("D11 — deploy path is a choice, never a GitHub mandate", () => {
 });
 
 describe("D12 — need-based service examples", () => {
-  it("an email-sending spec gets the Resend walkthrough; uploads get Supabase Storage", () => {
-    const p = fileOf(pack("claude_code"), "CLAUDE_CODE_PROMPT.md").content;
+  it("an email-sending spec gets the Resend walkthrough; uploads get Supabase Storage (data=supabase)", () => {
+    // 스택 불가지 P2: uploads 워크스루는 data 축을 따른다 — supabase 명시 케이스.
+    const p = fileOf(pack("claude_code", { userProfile: { data: "supabase" } }), "CLAUDE_CODE_PROMPT.md").content;
     assert.match(p, /Resend/);          // "월별 리포트 이메일 발송"
     assert.match(p, /Supabase Storage/); // "영수증 사진 업로드"
   });
@@ -159,7 +160,10 @@ describe("D12 — need-based service examples", () => {
     });
     const p = fileOf(res, "CLAUDE_CODE_PROMPT.md").content;
     assert.doesNotMatch(p, /Resend|카카오맵|토스페이먼츠/);
-    assert.match(p, /Supabase \(데이터베이스\)/);
+    // 스택 불가지 P2 (D-2): 미응답 조합에 Supabase를 기본값처럼 단정하지 않는다
+    // — 물음-먼저 중립 안내가 나간다.
+    assert.doesNotMatch(p, /Supabase \(데이터베이스\)/);
+    assert.match(p, /먼저 사용자에게 이미 쓰는 데이터 서비스가 있는지 물어라/);
     assert.match(p, /Netlify Drop/);
   });
 
