@@ -47,6 +47,7 @@ import {
 import {
   generateBuilderPack,
   type WorkspaceExportBuilderPackRequest,
+  type ExportUserProfile,
 } from "../workspace/export.js";
 import { BRAND } from "../workspace/brand.js";
 import {
@@ -852,13 +853,28 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     const appBaseUrl = c.env.DASHBOARD_BASE_URL ?? BRAND.appUrl;
     // #296 Phase 3: interview profile — enum-whitelisted, anything else dropped.
     const rawProfile = (body as Record<string, unknown>)["userProfile"];
-    const userProfile = (() => {
+    const userProfile = ((): ExportUserProfile | undefined => {
       if (typeof rawProfile !== "object" || rawProfile === null) return undefined;
       const p = rawProfile as Record<string, unknown>;
-      const out: { platform?: "web" | "mobile" | "unknown"; githubLevel?: "fluent" | "heard" | "new"; aiToolLevel?: "yes" | "some" | "no" } = {};
+      const out: ExportUserProfile = {};
       if (p.platform === "web" || p.platform === "mobile" || p.platform === "unknown") out.platform = p.platform;
       if (p.githubLevel === "fluent" || p.githubLevel === "heard" || p.githubLevel === "new") out.githubLevel = p.githubLevel;
       if (p.aiToolLevel === "yes" || p.aiToolLevel === "some" || p.aiToolLevel === "no") out.aiToolLevel = p.aiToolLevel;
+      // 스택 불가지 P2 (D-1): hosting/data 축. 위 3개와 달리 **닫힌 enum이 아니다** —
+      // 카탈로그 확장과 "기타" 자유입력을 서버가 막지 않아야 하므로(D-3) 문자열
+      // 길이만 캡하고 값은 그대로 통과시킨다. 미지 id는 소비자에서 중립 처리(D-2).
+      // (2026-08-21 라이브 QA: 이 화이트리스트가 두 축을 조용히 버려서 유저가
+      //  답한 조합이 팩에 전혀 반영되지 않았다 — 라우트 경유 회귀 가드 필수.)
+      const str = (v: unknown, cap: number): string | undefined =>
+        typeof v === "string" && v.trim() ? v.trim().slice(0, cap) : undefined;
+      const hosting = str(p.hosting, 40);
+      const hostingOther = str(p.hostingOther, 80);
+      const data = str(p.data, 40);
+      const dataOther = str(p.dataOther, 80);
+      if (hosting) out.hosting = hosting;
+      if (hostingOther) out.hostingOther = hostingOther;
+      if (data) out.data = data;
+      if (dataOther) out.dataOther = dataOther;
       return Object.keys(out).length > 0 ? out : undefined;
     })();
     const result = generateBuilderPack({
