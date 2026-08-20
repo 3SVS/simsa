@@ -53,6 +53,7 @@ import { reviewPRAgainstItems, deriveRunStatus } from "../workspace/pr-review.js
 import { applyVerifyPanelWithContext } from "../workspace/verify-panel.js";
 import { buildDiffSummary } from "../workspace/github-pr.js";
 import { captureTrainingRecord, computeRecheckOutcome, updateTrainingRecordOutcome } from "../workspace/training-store.js";
+import { captureJourneyEvent } from "../workspace/journey-store.js";
 import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { detectContentLang } from "../workspace/topic-tags.js";
@@ -1085,6 +1086,26 @@ export function createWorkspaceGitHubRoutes(
       }
     }
 
+    // 9e. Journey event (e1f9f9f 복원, 2026-08-20): pr_reviewed(첫 리뷰) vs
+    // pr_rechecked(재실행). rerunOfReviewRunId가 둘을 구분한다 — recheck은
+    // fix_brief → next-PR 라운드트립의 후반부(per-agent 크라운 주얼).
+    // 코드 기반 이벤트라 전체 payload 캡처(시크릿 스크럽), 동의 게이트 동일.
+    await captureJourneyEvent(c.env, {
+      userKey,
+      projectId,
+      eventType: rerunOfReviewRunId ? "pr_rechecked" : "pr_reviewed",
+      builtWith: normalizeBuiltWith(projForTag?.builtWith),
+      eventId: run.id,
+      payload: {
+        reviewRunId: run.id,
+        rerunOfReviewRunId: rerunOfReviewRunId ?? null,
+        prNumber,
+        finalStatus,
+        summary: reviewResult.summary,
+        source: reviewResult.source,
+      },
+    }).catch(() => {});
+
     // 10. Telegram notification (non-blocking: failure must not fail the review response)
     await (async () => {
       try {
@@ -1399,6 +1420,22 @@ export function createWorkspaceGitHubRoutes(
       runId: runId,
       target,
     });
+
+    // Journey event (e1f9f9f 복원): fix_brief_generated — 라운드트립의 전반부
+    // (이 지시서 → 유저의 다음 PR → pr_rechecked, per agent). dbProj 재사용.
+    await captureJourneyEvent(c.env, {
+      userKey,
+      projectId,
+      eventType: "fix_brief_generated",
+      builtWith: normalizeBuiltWith(dbProj?.builtWith),
+      eventId: `${runId}_fixbrief`,
+      payload: {
+        sourceReviewRunId: runId,
+        prNumber,
+        target,
+        itemCount: selectedItemIds.length,
+      },
+    }).catch(() => {});
 
     return json({
       ...result,
