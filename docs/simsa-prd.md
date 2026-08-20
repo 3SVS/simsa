@@ -300,6 +300,11 @@ acceptance-graph Visual 노드, product-boundary. 코드: `nondev-report.ts`, `v
   `.conclaverc.json`, cosmiconfig key `conclave`. dashboard `app.trysimsa.com`.
 - **빌링(§7):** BYO=**영구 무료**. 유료=**GitHub Marketplace만**(first-pr +5 $3, Solo +30 $19,
   Pro +100 $49, 일회성 없음). Lemon Squeezy dormant. **크레딧 차감 프로덕션 OFF**.
+  - **[결정 2026-08-20, Bae] 당분간 전면 무료 유지.** 과금 도입(크레딧 차감 ON·토스 연동 포함)은
+    보류 — 실유저 코퍼스/정확도 실측이 우선. 기존 GHM 유료 SKU·admin plan-grants(협의체 검수
+    티어 게이팅)는 코드/문서상 유지하되 신규 판매 활동 없음. 랜딩도 Simsa 단일로 통일
+    (conclave-ai.dev → simsa.dev 리다이렉트, #470). 백로그의 "G6-2 토스 연동"은 이 결정으로
+    보류 상태가 정본이다.
 - **auth(§8):** Better Auth(D1) 라이브, identity=`userKey`, 소유권 per-userKey, claim flow, 가입 개방,
   private repo=GitHub App.
 
