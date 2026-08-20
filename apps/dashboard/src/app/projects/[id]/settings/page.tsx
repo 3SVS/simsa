@@ -669,7 +669,9 @@ export default function SettingsPage() {
             included: ext?.productSpec?.included ?? proj?.spec?.included,
             userFlow: ext?.productSpec?.userFlow,
           };
-          return <ServiceMcpSetup projectId={id} spec={spec} />;
+          // 스택 불가지 §3-2: P1에서 답한 조합(stackProfile)의 data 축이
+          // 서비스 제안을 결정한다 (예: Firebase 유저에게 Supabase 안내 금지).
+          return <ServiceMcpSetup projectId={id} spec={spec} stackProfile={ext?.stackProfile} />;
         })()}
       </div>
 

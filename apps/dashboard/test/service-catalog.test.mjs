@@ -4,6 +4,7 @@ import { allCatalogServices } from "../src/lib/service-catalog.mjs";
 import {
   SERVICE_CATALOG,
   catalogServiceById,
+  customServiceEntry,
   detectServices,
   hasAnyValue,
 } from "../src/lib/service-catalog.mjs";
@@ -142,9 +143,91 @@ describe("service-catalog", () => {
 
   it("allCatalogServices returns every service as a fresh clone", () => {
     const all = allCatalogServices();
-    assert.deepEqual(all.map((s) => s.id).sort(), ["app-url", "resend", "sentry", "supabase"]);
+    assert.deepEqual(all.map((s) => s.id).sort(), ["app-url", "firebase", "resend", "sentry", "supabase"]);
     all[0].label = "mutated";
     assert.notEqual(SERVICE_CATALOG[0].label, "mutated");
+  });
+});
+
+// 스택 불가지 §3-2 (design lock 2026-08-20, D-1~D-3): 데이터 키워드는 축을
+// 감지하고, 어떤 벤더를 제안할지는 유저가 답한 stackProfile이 결정한다.
+// 이 블록은 프로파일 인지 이전 코드(무조건 Supabase)에서 실패한다.
+describe("service-catalog: stack-profile aware detection (§3-2)", () => {
+  const DATA_SPEC = { oneLine: "회원가입하고 글을 저장하는 앱", included: ["로그인"] };
+
+  it("firebase entry exists with public web-config env keys", () => {
+    const fb = catalogServiceById("firebase");
+    assert.ok(fb, "firebase catalog entry missing");
+    const keys = fb.envVars.map((v) => v.key);
+    assert.ok(keys.includes("NEXT_PUBLIC_FIREBASE_API_KEY"));
+    assert.ok(keys.includes("NEXT_PUBLIC_FIREBASE_PROJECT_ID"));
+    for (const v of fb.envVars) assert.notEqual(v.secret, true, `${v.key}: web config keys are public`);
+  });
+
+  it("data=firebase → firebase suggested, NOT supabase", () => {
+    const out = detectServices(DATA_SPEC, "ko", { data: { id: "firebase" } });
+    assert.ok(out.some((s) => s.id === "firebase"));
+    assert.ok(!out.some((s) => s.id === "supabase"), "Firebase 유저에게 Supabase를 제안하면 안 된다");
+  });
+
+  it("data=none / builder_managed → no data service suggested", () => {
+    for (const id of ["none", "builder_managed"]) {
+      const out = detectServices(DATA_SPEC, "ko", { data: { id } });
+      assert.ok(!out.some((s) => s.id === "supabase" || s.id === "firebase"), `data=${id} must not suggest a DB`);
+    }
+  });
+
+  it('data=other+"PocketBase" → custom entry with that name suggested', () => {
+    const out = detectServices(DATA_SPEC, "ko", { data: { id: "other", other: "PocketBase" } });
+    const custom = out.find((s) => s.id === "custom:pocketbase");
+    assert.ok(custom, "custom entry for the named service");
+    assert.equal(custom.label, "PocketBase");
+    assert.equal(custom.envVars[0].key, "POCKETBASE_API_KEY");
+  });
+
+  it("no profile / unknown → existing supabase suggestion preserved (removable card)", () => {
+    assert.ok(detectServices(DATA_SPEC, "ko").some((s) => s.id === "supabase"));
+    assert.ok(detectServices(DATA_SPEC, "ko", { data: { id: "unknown" } }).some((s) => s.id === "supabase"));
+  });
+});
+
+describe("service-catalog: customServiceEntry (D-3 — other는 버리지 않는다)", () => {
+  it("derives a deterministic ASCII env key from the name", () => {
+    assert.equal(customServiceEntry("PocketBase").envVars[0].key, "POCKETBASE_API_KEY");
+    assert.equal(customServiceEntry("Planet Scale!").envVars[0].key, "PLANET_SCALE_API_KEY");
+  });
+
+  it("한글 이름(Rule 6)도 안전한 ASCII 키로 폴백한다", () => {
+    const e = customServiceEntry("우리회사포스");
+    assert.ok(e);
+    assert.equal(e.envVars[0].key, "CUSTOM_SERVICE_API_KEY");
+    assert.equal(e.label, "우리회사포스", "표시용 원본명은 보존");
+  });
+
+  it("collision with an existing catalog key gets the CUSTOM_ prefix", () => {
+    assert.equal(customServiceEntry("Resend").envVars[0].key, "CUSTOM_RESEND_API_KEY");
+  });
+
+  it("secret by default (unknown key purpose → server-only), empty name → null", () => {
+    assert.equal(customServiceEntry("PocketBase").envVars[0].secret, true);
+    assert.equal(customServiceEntry("   "), null);
+    assert.equal(customServiceEntry(""), null);
+  });
+
+  it("EN locale copy carries no Hangul", () => {
+    const e = customServiceEntry("PocketBase", "en");
+    const texts = [e.label, e.why, ...(e.setupSteps ?? []), e.envVars[0].description];
+    for (const text of texts) assert.ok(!/[가-힣]/.test(text), `Hangul leaked: ${text}`);
+  });
+});
+
+describe("service-catalog: neutral placeholders (§3-7)", () => {
+  it("app-url examples no longer hardcode vercel.app", () => {
+    for (const loc of ["ko", "en"]) {
+      const appUrl = catalogServiceById("app-url", loc);
+      const joined = [...(appUrl.setupSteps ?? [])].join(" ");
+      assert.ok(!/vercel\.app/.test(joined), `vercel.app leaked in ${loc} app-url steps`);
+    }
   });
 });
 

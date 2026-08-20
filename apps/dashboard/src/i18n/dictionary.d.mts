@@ -711,6 +711,8 @@ export type Dictionary = {
       valuePlaceholder: string;
       note: string;
       addMore: string;
+      addCustomPlaceholder: string;
+      addCustomButton: string;
       remove: string;
       save: string;
       saved: string;

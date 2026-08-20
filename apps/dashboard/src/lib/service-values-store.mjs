@@ -88,11 +88,12 @@ export function clearServiceValues(projectId) {
  * @param {string} projectId
  * @param {Parameters<typeof detectServices>[0]} spec
  * @param {"en"|"ko"} [locale]
+ * @param {Parameters<typeof detectServices>[2]} [stackProfile]  스택 불가지 §3-2 — data 축이 제안 벤더를 결정
  * @returns {unknown[]}
  */
-export function seedServiceSetup(projectId, spec, locale) {
+export function seedServiceSetup(projectId, spec, locale, stackProfile) {
   const stored = loadServiceValues(projectId);
-  if (!Array.isArray(stored) || stored.length === 0) return detectServices(spec, locale);
+  if (!Array.isArray(stored) || stored.length === 0) return detectServices(spec, locale, stackProfile);
   return stored.map((s) => {
     const fresh = catalogServiceById(s?.id, locale);
     if (!fresh) return s; // unknown/legacy id — pass through untouched

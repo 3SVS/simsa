@@ -9,8 +9,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { hasAnyValue, allCatalogServices, catalogServiceById } from "@/lib/service-catalog.mjs";
-import type { CatalogService } from "@/lib/service-catalog.mjs";
+import { hasAnyValue, allCatalogServices, catalogServiceById, customServiceEntry } from "@/lib/service-catalog.mjs";
+import type { CatalogService, StackProfileLike } from "@/lib/service-catalog.mjs";
 import { detectMcpTools } from "@/lib/mcp-catalog.mjs";
 import type { McpTool } from "@/lib/mcp-catalog.mjs";
 import { agentLabel, resolveMcpConnect, DEV_AGENTS } from "@/lib/agent-registry.mjs";
@@ -40,7 +40,16 @@ type SpecLike = {
   productName?: string;
 };
 
-export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: SpecLike }) {
+export function ServiceMcpSetup({
+  projectId,
+  spec,
+  stackProfile,
+}: {
+  projectId: string;
+  spec: SpecLike;
+  /** 스택 불가지 §3-2 (P1 답변): data 축이 제안 벤더를 결정한다. */
+  stackProfile?: StackProfileLike | null;
+}) {
   const { t, locale } = useI18n();
   const toast = useToast();
   // Seed from the store (values entered earlier) or fresh detection from the
@@ -48,11 +57,11 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
   // resolved in the CURRENT locale (journey-audit v2 P1: EN 화면에 이 카드만
   // 한국어로 남던 누수); stored VALUES survive locale switches.
   const [services, setServices] = useState<CatalogService[]>(
-    () => seedServiceSetup(projectId, spec, locale) as CatalogService[],
+    () => seedServiceSetup(projectId, spec, locale, stackProfile) as CatalogService[],
   );
   // Locale switch re-resolves the copy without losing entered values.
   useEffect(() => {
-    setServices(seedServiceSetup(projectId, spec, locale) as CatalogService[]);
+    setServices(seedServiceSetup(projectId, spec, locale, stackProfile) as CatalogService[]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locale]);
   // Persist every change (browser-only) so the values reach the builder pack.
@@ -89,6 +98,13 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
   function removeService(serviceId: string) {
     setServices((prev) => prev.filter((s) => s.id !== serviceId));
   }
+  // 스택 불가지 §3-2 (D-3): 카탈로그에 없는 서비스도 이름으로 추가 — 모르는
+  // 벤더를 버리지 않는다 (built-with `other` 패턴).
+  function addCustomService(name: string) {
+    const entry = customServiceEntry(name, locale);
+    if (!entry) return;
+    setServices((prev) => (prev.some((s) => s.id === entry.id) ? prev : [...prev, entry]));
+  }
   const addableServices = allCatalogServices(locale).filter(
     (c) => !services.some((s) => s.id === c.id),
   );
@@ -100,6 +116,7 @@ export function ServiceMcpSetup({ projectId, spec }: { projectId: string; spec: 
         addable={addableServices}
         onEnvChange={setEnvValue}
         onAdd={addService}
+        onAddCustom={addCustomService}
         onRemove={removeService}
       />
       <McpSetupPanel tools={deployTools} agentId={agentId} onAgentChange={setAgentId} />
@@ -128,17 +145,20 @@ function ServiceSetupPanel({
   addable,
   onEnvChange,
   onAdd,
+  onAddCustom,
   onRemove,
 }: {
   services: CatalogService[];
   addable: CatalogService[];
   onEnvChange: (serviceId: string, key: string, value: string) => void;
   onAdd: (serviceId: string) => void;
+  onAddCustom: (name: string) => void;
   onRemove: (serviceId: string) => void;
 }) {
   const { t } = useI18n();
   const p = t.exportPage.prep;
   const [openSteps, setOpenSteps] = useState<Set<string>>(new Set());
+  const [customName, setCustomName] = useState("");
 
   if (services.length === 0 && addable.length === 0) return null;
 
@@ -231,6 +251,35 @@ function ServiceSetupPanel({
           ))}
         </div>
       )}
+
+      {/* 스택 불가지 §3-2 (D-3): 목록에 없는 서비스도 이름으로 추가 — 조합을
+          카탈로그 4종에 가두지 않는다. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={customName}
+          onChange={(e) => setCustomName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && customName.trim()) {
+              onAddCustom(customName);
+              setCustomName("");
+            }
+          }}
+          placeholder={p.addCustomPlaceholder}
+          className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-300 min-w-[220px]"
+        />
+        <button
+          onClick={() => {
+            if (!customName.trim()) return;
+            onAddCustom(customName);
+            setCustomName("");
+          }}
+          disabled={!customName.trim()}
+          className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 transition-colors disabled:opacity-40"
+        >
+          + {p.addCustomButton}
+        </button>
+      </div>
 
       <p className="text-xs text-gray-500 mt-4">{p.note}</p>
     </div>
