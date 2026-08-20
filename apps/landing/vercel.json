@@ -1,4 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "redirects": [
+    {
+      "source": "/privacy",
+      "destination": "https://simsa.dev/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/terms",
+      "destination": "https://simsa.dev/terms",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "destination": "https://simsa.dev/",
+      "permanent": true
+    }
+  ]
 }
