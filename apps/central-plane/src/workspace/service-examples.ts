@@ -14,17 +14,28 @@
  * 가입 URL → 키를 찾는 정확한 위치 → 붙여넣을 곳.
  */
 
+/** G14-b: guidance language. KO output is byte-identical to pre-locale code. */
+export type GuideLocale = "ko" | "en";
+
 export type ServiceExampleNeed = {
   key: string;
   /** Deterministic matcher over the spec text (included/items/idea). */
   re: RegExp;
   /** One walkthrough bullet, beginner hand-holding style. */
   block: string;
+  /** EN twin of `block`. Korea-only services swap to the international
+   *  equivalent (Toss→Stripe, KakaoMap→Google Maps) — a faithful translation
+   *  would send an EN user to a KR-gated signup. */
+  blockEn: string;
 };
 
 /** Always-included walkthroughs: data (Supabase) + the deploy-path chooser. */
 export const BASE_SERVICE_EXAMPLE_BLOCKS: string[] = [
   "- **Supabase (데이터베이스)**: https://supabase.com 가입 → `New project` 생성 → 왼쪽 하단 `Project Settings`(톱니바퀴) → `API` → `Project URL`과 `anon public` 키를 복사. 관리자 키가 필요하면 `API Keys` 탭 → `service_role` → `Reveal` 클릭 → 복사. **`service_role` 키는 관리자용이라 절대 프론트엔드/브라우저에 넣지 말라고 사용자에게 경고**하고, 서버 환경변수로만 쓰게 한다.",
+];
+
+export const BASE_SERVICE_EXAMPLE_BLOCKS_EN: string[] = [
+  "- **Supabase (database)**: sign up at https://supabase.com → create a `New project` → bottom-left `Project Settings` (gear) → `API` → copy the `Project URL` and the `anon public` key. If an admin key is needed: `API Keys` tab → `service_role` → click `Reveal` → copy. **Warn the user that the `service_role` key is admin-only and must NEVER go into frontend/browser code** — server-side environment variables only.",
 ];
 
 /**
@@ -43,12 +54,39 @@ export const DEPLOY_PATH_GUIDANCE: string = [
   "  3. 로그인·DB 쓰기 같은 **서버 기능이 있는 앱**은 (a)로는 안 된다 — (b) 또는 사용 중인 빌더의 내장 배포를 권하라.",
 ].join("\n");
 
+export const DEPLOY_PATH_GUIDANCE_EN: string = [
+  "- **Deploy — first ask which path fits this user (do NOT force GitHub):**",
+  "  1. **User already has a GitHub account/repo**: log in to https://vercel.com with GitHub → `Add New → Project` → pick the repo → add the keys under `Environment Variables` (exact names) → `Deploy`. Give the user the URL that comes out.",
+  "  2. **User is new to GitHub**: explain two simple paths and let them choose —",
+  "     - **(a) Easiest right now (no GitHub)**: for a static app with no login/data writes, drag the build output folder onto **Netlify Drop** (https://app.netlify.com/drop) and a live URL appears. **Cloudflare Pages direct upload** (dash.cloudflare.com → Workers & Pages → Create → Pages → Upload assets) works the same way.",
+  "     - **(b) The long-term path (GitHub first)**: ① sign up at https://github.com ② top-right `+` → `New repository` ③ push the code (if you have a GitHub tool connected, push it yourself) ④ connect the repo via path 1 (Vercel). One step at a time, waiting for the user's \"done\" before the next.",
+  "  3. An app with **server features** (login, database writes) cannot use (a) — recommend (b) or the builder's built-in deploy.",
+].join("\n");
+
 /**
  * #296 Phase 3: when the onboarding interview captured the user's GitHub level,
  * the deploy guidance stops asking and leads with the right path. No answer →
  * the neutral D11 chooser above (unchanged behavior).
  */
-export function deployPathGuidanceFor(githubLevel?: "fluent" | "heard" | "new"): string {
+export function deployPathGuidanceFor(githubLevel?: "fluent" | "heard" | "new", locale: GuideLocale = "ko"): string {
+  if (locale === "en") {
+    if (githubLevel === "fluent") {
+      return [
+        "- **Deploy — this user is comfortable with GitHub (confirmed in onboarding). Lead with the GitHub path:**",
+        "  1. **Default path**: log in to https://vercel.com with GitHub → `Add New → Project` → pick the repo → add the keys under `Environment Variables` (exact names) → `Deploy`. Give the user the resulting URL. (If you have GitHub/Vercel tools connected, push and deploy yourself.)",
+        "  2. If they just want a static app (no login/data writes) up fast, mention the shortcut: drag the build folder onto **Netlify Drop** (https://app.netlify.com/drop).",
+      ].join("\n");
+    }
+    if (githubLevel === "new") {
+      return [
+        "- **Deploy — this user is new to GitHub or has no account (confirmed in onboarding). Don't ask again; start with the no-GitHub path:**",
+        "  1. **Easiest right now (no GitHub)**: for a static app with no login/data writes, drag the build output folder onto **Netlify Drop** (https://app.netlify.com/drop) for an instant live URL. **Cloudflare Pages direct upload** (dash.cloudflare.com → Workers & Pages → Create → Pages → Upload assets) works the same way.",
+        "  2. **The long-term path (GitHub first, only if they want it)**: ① sign up at https://github.com ② top-right `+` → `New repository` ③ push the code (if you have a GitHub tool connected, push it yourself) ④ log in to https://vercel.com with GitHub, connect the repo, `Deploy`. One step at a time, waiting for \"done\" before the next.",
+        "  3. An app with **server features** (login, database writes) cannot use path 1 (drag-and-drop) — recommend path 2 or the builder's built-in deploy. Keep the tone \"we'll do it one step at a time\", never \"this is hard\".",
+      ].join("\n");
+    }
+    return DEPLOY_PATH_GUIDANCE_EN;
+  }
   if (githubLevel === "fluent") {
     return [
       "- **배포 — 이 사용자는 GitHub에 익숙하다 (온보딩에서 확인됨). GitHub 경로를 기본으로 진행하라:**",
@@ -74,30 +112,40 @@ export const NEED_SERVICE_EXAMPLES: ServiceExampleNeed[] = [
     re: /이메일|메일\s*(?:발송|전송|알림)|뉴스레터|email|newsletter/i,
     block:
       "- **Resend (이메일 발송)**: https://resend.com 가입 → `API Keys` → `Create API Key` → 복사해 서버 환경변수(`RESEND_API_KEY`)로. 도메인 인증 전에는 `onboarding@resend.dev` 발신으로 테스트할 수 있다고 안내한다.",
+    blockEn:
+      "- **Resend (sending email)**: sign up at https://resend.com → `API Keys` → `Create API Key` → copy it into a server-side environment variable (`RESEND_API_KEY`). Mention that before domain verification they can test with the `onboarding@resend.dev` sender.",
   },
   {
     key: "payment",
     re: /결제|구매|판매|구독료|유료|checkout|payment|subscription/i,
     block:
       "- **결제 (토스페이먼츠·Stripe)**: 실제 돈이 오가는 기능이므로 **테스트 키로만 구현**하고, 실 결제 전환은 사용자가 사업자 정보 등록을 마친 뒤 별도로 진행하게 안내한다. 토스페이먼츠: https://developers.tosspayments.com 가입 → 테스트 클라이언트/시크릿 키 복사. 시크릿 키는 서버 전용.",
+    blockEn:
+      "- **Payments (Stripe)**: real money is involved, so **build with test keys only** and tell the user that switching payments live is a separate step after their business details are registered. Stripe: sign up at https://stripe.com → `Developers` → `API keys` → copy the test publishable/secret keys. The secret key is server-only.",
   },
   {
     key: "maps",
     re: /지도|위치\s*(?:표시|기반)|길\s*찾기|근처|\bmaps?\b|location/i,
     block:
       "- **지도 (카카오맵)**: https://developers.kakao.com 가입 → `내 애플리케이션` → 앱 만들기 → `앱 키`에서 JavaScript 키 복사 → 플랫폼에 배포 도메인 등록(등록 안 하면 지도가 안 뜬다는 것까지 안내).",
+    blockEn:
+      "- **Maps (Google Maps Platform)**: sign in at https://console.cloud.google.com → create a project → `APIs & Services` → enable `Maps JavaScript API` → `Credentials` → `Create credentials → API key` → copy it. Also restrict the key to the deployed domain (and warn that the map won't load on unlisted domains).",
   },
   {
     key: "sms",
     re: /문자|SMS|알림톡|카카오\s*알림|휴대폰\s*알림/i,
     block:
       "- **문자·알림톡 (솔라피 등)**: 발신번호 등록 심사가 필요해 즉시는 안 된다 — 우선 이메일이나 화면 내 알림으로 대체 구현하고, 문자 발송은 발신번호 등록 후 붙이도록 순서를 안내한다.",
+    blockEn:
+      "- **SMS/text notifications (Twilio etc.)**: sender-number registration and review means this cannot go live instantly — implement email or in-app notifications first, and guide the user to attach SMS after their sender number is approved.",
   },
   {
     key: "uploads",
     re: /사진|이미지\s*(?:업로드|첨부|올리)|파일\s*(?:업로드|첨부)|영수증|photo|upload|attachment/i,
     block:
       "- **파일·사진 업로드 (Supabase Storage)**: 위 Supabase 프로젝트 안에서 해결된다 — `Storage` → `New bucket`(공개 여부 선택) → 코드에선 같은 `Project URL`/`anon` 키 사용. 별도 가입이 필요 없다는 것부터 알려준다.",
+    blockEn:
+      "- **File/photo uploads (Supabase Storage)**: handled inside the Supabase project above — `Storage` → `New bucket` (choose public or not) → the code uses the same `Project URL`/`anon` key. Start by telling the user no extra signup is needed.",
   },
 ];
 
@@ -108,14 +156,18 @@ export const NEED_SERVICE_EXAMPLES: ServiceExampleNeed[] = [
 export function pickServiceExampleBlocks(
   specText: string,
   githubLevel?: "fluent" | "heard" | "new",
+  locale: GuideLocale = "ko",
 ): string[] {
-  const blocks = [...BASE_SERVICE_EXAMPLE_BLOCKS];
+  const en = locale === "en";
+  const blocks = [...(en ? BASE_SERVICE_EXAMPLE_BLOCKS_EN : BASE_SERVICE_EXAMPLE_BLOCKS)];
   for (const need of NEED_SERVICE_EXAMPLES) {
-    if (need.re.test(specText)) blocks.push(need.block);
+    if (need.re.test(specText)) blocks.push(en ? need.blockEn : need.block);
   }
-  blocks.push(deployPathGuidanceFor(githubLevel));
+  blocks.push(deployPathGuidanceFor(githubLevel, locale));
   blocks.push(
-    "- 그 외 서비스도 같은 순서로: **가입 URL → 키를 찾는 정확한 위치 → 붙여넣을 곳** 순으로 상세히 안내한다.",
+    en
+      ? "- For any other service, guide in the same order: **signup URL → exactly where to find the key → where to paste it**, in full detail."
+      : "- 그 외 서비스도 같은 순서로: **가입 URL → 키를 찾는 정확한 위치 → 붙여넣을 곳** 순으로 상세히 안내한다.",
   );
   return blocks;
 }

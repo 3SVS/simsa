@@ -164,14 +164,28 @@ export type WorkspaceExportBuilderPackResponse = {
 
 // ─── Status label mapping ─────────────────────────────────────────────────────
 
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    passed: "통과",
-    failed: "안 맞음",
-    inconclusive: "확인 부족",
-    needs_decision: "결정 필요",
-    not_started: "시작 전",
-  };
+/** G14-b: pack language. KO output stays byte-identical to pre-locale code —
+ *  every gen* function branches EN at the top and leaves the KO body untouched.
+ *  Keep the two branches structurally in sync when editing either. */
+type PackLocale = "ko" | "en";
+
+function statusLabel(status: string, locale: PackLocale = "ko"): string {
+  const map: Record<string, string> =
+    locale === "en"
+      ? {
+          passed: "passed",
+          failed: "doesn't match",
+          inconclusive: "needs checking",
+          needs_decision: "decision needed",
+          not_started: "not started",
+        }
+      : {
+          passed: "통과",
+          failed: "안 맞음",
+          inconclusive: "확인 부족",
+          needs_decision: "결정 필요",
+          not_started: "시작 전",
+        };
   return map[status] ?? status;
 }
 
@@ -182,8 +196,84 @@ function genReadme(
   target: ExportTarget,
   totalItems: number,
   selectedItems: number,
+  locale: PackLocale = "ko",
 ): string {
   const isFiltered = selectedItems < totalItems;
+  if (locale === "en") {
+    const lines = [
+      `# Build pack — ${title}`,
+      "",
+      target === "web_builder"
+        ? "This pack is the product spec and build brief exported from Simsa. Paste the brief into a web builder's chat (Lovable, Replit, v0, Bolt, …) and it carries the work from implementation to Publish inside the builder — no installs, no terminal."
+        : target === "handoff"
+          ? "This pack was exported from Simsa **to hand to a developer or a specialist team**. Send `HANDOFF_BRIEF.md` as-is — it contains what to build, what's decided, and the acceptance criteria."
+          : "This pack is the product spec and build brief exported from Simsa. Hand the prompt to a coding AI and it is instructed to carry the work through implementation and a run check. **For deployment to finish automatically, the coding AI needs a deploy tool connected (e.g. Vercel/GitHub MCP or CLI)**; if none is connected, it falls back to walking the user through a deploy path that fits their situation (with or without GitHub), step by step.",
+      "",
+    ];
+
+    if (isFiltered) {
+      lines.push(
+        `> **Items included in this pack: ${selectedItems}** (of ${totalItems} total)`,
+        "> Do not touch items that are not included.",
+        "",
+      );
+    } else {
+      lines.push(`> Items included in this pack: ${selectedItems} (all)`, "");
+    }
+
+    lines.push("## How to hand this to a coding AI", "");
+
+    if (target === "claude_code" || target === "both") {
+      lines.push(
+        "### Using Claude Code",
+        "Copy the contents of `CLAUDE_CODE_PROMPT.md` and paste them into the Claude Code chat.",
+        "",
+      );
+    }
+    if (target === "codex" || target === "both") {
+      lines.push(
+        "### Using Codex",
+        "Copy the contents of `CODEX_PROMPT.md` and paste them into the Codex chat.",
+        "",
+      );
+    }
+    if (target === "web_builder") {
+      lines.push(
+        "### Using a web builder like Lovable / Replit / v0 / Bolt",
+        "Copy the contents of `WEB_BUILDER_PROMPT.md` and paste them into the builder's chat. That one brief contains everything needed (the builder cannot read the other files in this folder).",
+        "",
+      );
+    }
+    if (target === "handoff") {
+      lines.push(
+        "### Handing off to a developer or team",
+        "Send `HANDOFF_BRIEF.md` as-is — it contains what to build, what is decided vs. still open, and the acceptance criteria.",
+        "",
+      );
+    }
+
+    lines.push(
+      "## Read the files in this order",
+      "",
+      "1. `product.md` — the product spec (what is being built)",
+      "2. `items.md` — the must-have items (what to implement)",
+      "3. `checks.md` — check results (which items have problems)",
+      "4. `fixes.md` — items to fix (how to fix them)",
+      "",
+      "## Cautions",
+      "",
+      "- Do not implement features outside the scope.",
+      "- The check results are a pre-check against the product spec — not a review of real code or a GitHub PR.",
+      "- If anything is ambiguous, ask before implementing.",
+      "",
+      "## What this pack does NOT guarantee",
+      "",
+      "- **Automatic deployment**: if the coding AI has no deploy tool connected, deployment proceeds as guided manual steps. Follow the AI's guidance to finish.",
+      "- **Result verification**: Simsa does not directly verify what the coding AI actually built. When it's done, put the deployed URL (or the project files) back into Simsa for review.",
+    );
+
+    return lines.join("\n");
+  }
   const lines = [
     `# 만들기 패키지 — ${title}`,
     "",
@@ -262,7 +352,30 @@ function genReadme(
   return lines.join("\n");
 }
 
-function genProductMd(spec: ExportProductSpec): string {
+function genProductMd(spec: ExportProductSpec, locale: PackLocale = "ko"): string {
+  if (locale === "en") {
+    const sections: string[] = [`# Product spec — ${spec.productName}`, "", spec.oneLine];
+    if (spec.targetUsers.length > 0) {
+      sections.push("", "## Who this is for", "", ...spec.targetUsers.map((u) => `- ${u}`));
+    }
+    sections.push("", "## Problem being solved", "", spec.problem);
+    if (spec.included.length > 0) {
+      sections.push("", "## Included in this version", "", ...spec.included.map((i) => `- ${i}`));
+    }
+    if (spec.excluded.length > 0) {
+      sections.push("", "## Excluded from this version", "", ...spec.excluded.map((e) => `- ~~${e}~~`));
+    }
+    if (spec.userFlow.length > 0) {
+      sections.push("", "## User flow", "", ...spec.userFlow.map((f, i) => `${i + 1}. ${f}`));
+    }
+    if (spec.decisions.length > 0) {
+      sections.push("", "## Decided", "", ...spec.decisions.map((d) => `- ${d}`));
+    }
+    if (spec.openQuestions.length > 0) {
+      sections.push("", "## Still to decide", "", ...spec.openQuestions.map((q) => `- [ ] ${q}`));
+    }
+    return sections.join("\n");
+  }
   const sections: string[] = [
     `# 제품 설명서 — ${spec.productName}`,
     "",
@@ -298,7 +411,30 @@ function genProductMd(spec: ExportProductSpec): string {
   return sections.join("\n");
 }
 
-function genItemsMd(items: ExportItem[], totalItems: number): string {
+function genItemsMd(items: ExportItem[], totalItems: number, locale: PackLocale = "ko"): string {
+  if (locale === "en") {
+    if (items.length === 0) {
+      return "# Must-have items\n\nThere are no items.";
+    }
+    const header =
+      items.length < totalItems
+        ? `# Must-have items (this pack: ${items.length} of ${totalItems})\n`
+        : `# Must-have items (${items.length})\n`;
+    const lines = [header];
+    if (items.length < totalItems) {
+      lines.push("> Do not touch items that are not included in this pack.\n");
+    }
+    for (const item of items) {
+      lines.push(`## ${item.title}`);
+      lines.push(`**Status:** ${statusLabel(item.status, "en")}`);
+      if (item.criteria.length > 0) {
+        lines.push("", "**Done when:**", "");
+        for (const c of item.criteria) lines.push(`- [ ] ${c}`);
+      }
+      lines.push("");
+    }
+    return lines.join("\n");
+  }
   if (items.length === 0) {
     return "# 꼭 들어가야 할 항목\n\n항목이 없습니다.";
   }
@@ -326,7 +462,56 @@ function genItemsMd(items: ExportItem[], totalItems: number): string {
   return lines.join("\n");
 }
 
-function genChecksMd(checkResults?: ExportCheckResults, totalItems?: number): string {
+function genChecksMd(checkResults?: ExportCheckResults, totalItems?: number, locale: PackLocale = "ko"): string {
+  if (locale === "en") {
+    const disclaimer =
+      "> **Note:** these check results are a pre-check against the product spec — not a review of real code or a GitHub PR.";
+    if (!checkResults || checkResults.results.length === 0) {
+      return [
+        "# Check results",
+        "",
+        disclaimer,
+        "",
+        "There are no check results yet. Run a check in the Simsa workspace.",
+      ].join("\n");
+    }
+    const { summary, results } = checkResults;
+    const isFiltered = totalItems !== undefined && results.length < totalItems;
+    const title = isFiltered ? `# Check results (this pack: ${results.length} items)` : "# Check results";
+    const lines = [title, "", disclaimer, ""];
+    lines.push(
+      "## Summary",
+      "",
+      "| Passed | Doesn't match | Needs checking | Decision needed |",
+      "|--------|---------------|----------------|-----------------|",
+      `| ${summary.passed} | ${summary.failed} | ${summary.inconclusive} | ${summary.needsDecision} |`,
+      "",
+    );
+    const order = ["passed", "failed", "inconclusive", "needs_decision"];
+    const grouped = new Map<string, ExportCheckResult[]>();
+    for (const r of results) {
+      if (!grouped.has(r.status)) grouped.set(r.status, []);
+      grouped.get(r.status)!.push(r);
+    }
+    for (const status of order) {
+      const group = grouped.get(status);
+      if (!group || group.length === 0) continue;
+      lines.push(`## ${statusLabel(status, "en")} (${group.length})`, "");
+      for (const r of group) {
+        lines.push(`### ${r.title}`, "");
+        lines.push(`**Reason:** ${r.reason}`, "");
+        if (r.evidence.length > 0) {
+          lines.push("**Evidence:**", "");
+          for (const e of r.evidence) lines.push(`- ${e}`);
+          lines.push("");
+        }
+        if (r.status !== "passed" && r.nextAction) {
+          lines.push(`**Next action:** ${r.nextAction}`, "");
+        }
+      }
+    }
+    return lines.join("\n");
+  }
   const disclaimer =
     "> **안내:** 이 확인 결과는 제품 설명서 기준의 사전 점검입니다. 아직 실제 코드나 GitHub PR을 확인한 결과가 아닙니다.";
 
@@ -388,7 +573,47 @@ function genChecksMd(checkResults?: ExportCheckResults, totalItems?: number): st
 function genFixesMd(
   items: ExportItem[],
   fixSuggestions?: Record<string, ExportFixSuggestion>,
+  locale: PackLocale = "ko",
 ): string {
+  if (locale === "en") {
+    const needsFix = items.filter(
+      (i) => i.status === "failed" || i.status === "inconclusive" || i.status === "needs_decision",
+    );
+    if (needsFix.length === 0) {
+      return "# Items to fix\n\nAll items passed.";
+    }
+    const lines = ["# Items to fix", ""];
+    for (const item of needsFix) {
+      const fix = fixSuggestions?.[item.id];
+      lines.push(`## ${item.title}`);
+      lines.push(`**Status:** ${statusLabel(item.status, "en")}`, "");
+      if (fix) {
+        const { plainSummary, builderBrief } = fix.suggestion;
+        lines.push("### Fix suggestion", "", plainSummary, "");
+        lines.push("### Brief for the coding AI", "");
+        lines.push(`**${builderBrief.title}**`, "");
+        lines.push(`**Goal:** ${builderBrief.goal}`, "");
+        if (builderBrief.tasks.length > 0) {
+          lines.push("**Tasks:**", "");
+          for (const t of builderBrief.tasks) lines.push(`- ${t}`);
+          lines.push("");
+        }
+        if (builderBrief.doneWhen.length > 0) {
+          lines.push("**Done when:**", "");
+          for (const d of builderBrief.doneWhen) lines.push(`- [ ] ${d}`);
+          lines.push("");
+        }
+        if (builderBrief.doNotDo.length > 0) {
+          lines.push("**Do not do:**", "");
+          for (const d of builderBrief.doNotDo) lines.push(`- ${d}`);
+          lines.push("");
+        }
+      } else {
+        lines.push("> No fix suggestion yet. Run \"Fix it\" in the Simsa workspace.", "");
+      }
+    }
+    return lines.join("\n");
+  }
   const needsFix = items.filter(
     (i) => i.status === "failed" || i.status === "inconclusive" || i.status === "needs_decision",
   );
@@ -444,7 +669,36 @@ function genFixesMd(
  * signup URLs and exact click-paths, one step at a time. Korean, matching the
  * surrounding prompt and the KO-first audience.
  */
-function beginnerSetupGuidance(specText: string, profile?: ExportUserProfile): string {
+function beginnerSetupGuidance(specText: string, profile?: ExportUserProfile, locale: PackLocale = "ko"): string {
+  if (locale === "en") {
+    return [
+      "## User guidance principle — assume a complete beginner",
+      "",
+      "This project's user may be a non-developer with zero coding experience. Whenever an external service (database, hosting, auth, payments, …), an API key, an environment variable, or a terminal command comes up, NEVER wave it off with \"set that up yourself\" — hold their hand like this:",
+      "",
+      ...(profile?.aiToolLevel === "no"
+        ? [
+            "**This user has never built anything with an AI tool before (confirmed in onboarding):**",
+            "- In your first response, lay out the plan in 3 lines or fewer before starting. (e.g. \"① I'll build the app → ② run it and show you → ③ help you put it on the internet.\")",
+            "- Ask for one thing at a time, and never move to the next step without the user's \"done\".",
+            "- If the user answers oddly or stalls, don't push — ask what they currently see on screen and re-sync.",
+            "",
+          ]
+        : []),
+      "- Explain in one plain sentence why it's needed. (e.g. \"To save data we need a free database.\")",
+      "- Give the full signup/setup URL as-is.",
+      "- Walk them through **exactly where to click, one step at a time**. Unpack jargon (API key, environment variable, .env, …) in one line as it comes up.",
+      "- Tell them **exactly where the copied value goes (e.g. which line of the `.env` file)**, and only move on after they confirm \"done\".",
+      "- Never hardcode keys/passwords in code or logs — environment variables only.",
+      "- If the user gets stuck, ask \"what do you see on your screen right now?\" or request a screenshot, then adjust the next step.",
+      "",
+      "Common service walkthroughs — matched to what this product needs (if a UI changed, adapt to the current screens, but keep this level of detail):",
+      "",
+      ...pickServiceExampleBlocks(specText, profile?.githubLevel, "en"),
+      "",
+      "**Deploy-readiness (important):** never hardcode any address the app uses to point at itself — the prefix of a short link, a share URL, a redirect target, an API base — to a development address like `http://localhost:3000`. Read it from the runtime origin (`window.location.origin` in the browser; the request host or an env var like `NEXT_PUBLIC_APP_URL` on the server). That way the address is right both locally and after deploy; skipping this ships user-visible links broken as `localhost`.",
+    ].join("\n");
+  }
   return [
     "## 사용자 안내 원칙 — 완전 초보자 가정",
     "",
@@ -502,6 +756,23 @@ const NONDEV_WORKFLOW_GUIDANCE: string = [
   "끝은 언제나 '완성된 결과물 + 다음에 할 한 가지 행동'이어야 한다. 개발 절차 선택 메뉴로 끝내지 마라.",
 ].join("\n");
 
+const NONDEV_WORKFLOW_GUIDANCE_EN: string = [
+  "## Working style — non-developer first",
+  "",
+  "This user is not a developer. Never make them decide development process:",
+  "- **Do not ask**: whether to branch, how to split commits, whether to merge to main/master, whether to open a PR. Handle or skip these yourself — a menu of such choices stalls the user.",
+  "- **Hand-hold exactly one kind of thing**: work only the user can do (service signups, key issuance) — step by step, per the beginner guidance above.",
+  "- Report progress without dev jargon: only \"what I'm building now, and what's needed next\".",
+  "",
+  "## Finishing — a result, not a question",
+  "",
+  "When it's built, never end with a process menu like \"how shall we wrap up (merge/PR/branch/discard)?\". End like this instead:",
+  "1. Actually **run the app and show it working** (e.g. start the dev server and give the local address to open).",
+  "2. Walk them through how to **deploy** for real use, step by step per the beginner guidance above (Vercel etc.).",
+  "3. Guide them to **put the deployed URL (or the project files) back into Simsa** for review (see below).",
+  "The ending is always \"a finished result + the one next action\" — never a menu of development choices.",
+].join("\n");
+
 /**
  * "Deploy in one shot with YOUR OWN connected tools" directive (prep-layer
  * option A). The user builds with an agent that has its own Vercel/GitHub MCP or
@@ -526,6 +797,22 @@ const DEPLOY_VIA_MCP_GUIDANCE: string = [
   "**배포 후:** 실제 배포된 URL을 사용자에게 그대로 알려주고, 그 URL을 Simsa에 다시 넣어 확인받게 안내한다(아래 참고). 연결된 도구가 전혀 없어 자동 배포가 정말 불가능한 경우에만, 위 '초보자 안내' 방식의 수동 배포로 대체한다.",
 ].join("\n");
 
+const DEPLOY_VIA_MCP_GUIDANCE_EN: string = [
+  "## Deploy in one shot — with YOUR connected tools, yourself",
+  "",
+  "This user can't easily deploy by hand. Whenever possible, **use the deploy/repository tools connected to you (e.g. Vercel/GitHub MCP or CLI) and finish the deploy and repo push yourself.** Don't bounce the user between screens — end with a real deployed URL in one shot.",
+  "",
+  "**Token & secret handling (non-negotiable):**",
+  "- Never hardcode or record deploy/repository tokens or secret keys in code, commits, files, or anywhere in this brief.",
+  "- Never ask the user to paste raw secrets like deploy tokens or personal access tokens (PATs). Assume the tool connected to their editor already holds that auth.",
+  "- If a tool isn't connected yet, don't ask for a token — guide exactly one step: **\"please connect Vercel (or GitHub) in your editor once\"**, then continue the deploy yourself once it's connected.",
+  "- If the user **has no GitHub account at all, don't force one** — follow the beginner guidance's \"deploy paths that fit the user\": explain the no-GitHub path (drag-and-drop deploy) and the GitHub-first path (create account → create repo → connect) simply, and let them choose.",
+  "",
+  "**Repository:** same rule for pushing code to GitHub — push it yourself via the connected GitHub tool; never ask the user for a token.",
+  "",
+  "**After deploying:** give the user the actual deployed URL as-is, and guide them to put that URL back into Simsa for review (see below). Only when no tool is connected at all and automatic deploy is truly impossible, fall back to the beginner-guided manual deploy.",
+].join("\n");
+
 /**
  * Closing "bring it back to Simsa" guidance, appended after the beginner setup
  * block. Broader than the deep-link hook: reminds the agent that the user can
@@ -538,6 +825,15 @@ const RETURN_TO_SIMSA_GUIDANCE: string = [
   "- **배포까지 했다면**: 배포된 앱 URL을 Simsa에 다시 넣어 라이브 화면을 검수받게 한다.",
   "- **아직 배포 전이라면**: 프로젝트 파일(또는 기획서)을 Simsa에 다시 넣어 이번 결과를 재확인받게 한다.",
   "이렇게 하면 남은 문제를 Simsa가 다시 잡아주고, 다음 패키지로 이어갈 수 있다.",
+].join("\n");
+
+const RETURN_TO_SIMSA_GUIDANCE_EN: string = [
+  "## When it's done — get it reviewed in Simsa again",
+  "",
+  "After implementation and self-checks, guide the user like this:",
+  "- **If it's deployed**: put the deployed app URL back into Simsa so the live screens get inspected.",
+  "- **If not deployed yet**: put the project files (or the spec) back into Simsa to re-check this round's result.",
+  "That way Simsa catches what's left and the next pack picks up from there.",
 ].join("\n");
 
 /**
@@ -564,6 +860,21 @@ const ONE_SHOT_RUNBOOK: string = [
   "**멈추지 않기:** 각 단계에서 막히면 스스로 해결을 시도하라. 정말 사용자만 할 수 있는 것(가입·키 입력, 도구 최초 연결)만 콕 집어 부탁하고 곧바로 이어간다. '어떻게 마무리할까요(병합/PR/브랜치)?' 같은 선택지로 끝내지 마라 — 끝은 언제나 '배포된 URL + 다음 한 가지 행동'이다.",
 ].join("\n");
 
+const ONE_SHOT_RUNBOOK_EN: string = [
+  "## This one brief, all the way — the user is not a developer",
+  "",
+  "You carry this through **start to finish in one go** on the user's behalf. The goal is not \"implement the items\" — it is **putting a genuinely working, internet-deployed app and its URL in the user's hands**. Walk the steps below to the end yourself. Don't quiz the user on development process along the way, and don't stop until a deployed result exists. However, **if no deploy/repository tool is connected to you and automatic deploy is impossible**, say so honestly and switch to the manual fallback in \"Deploy in one shot\" below — never pretend.",
+  "",
+  "1. **Understand** — read every file in this folder (`product.md`, `items.md`, `checks.md`, `fixes.md`, plus `SETUP.md`/`.env.example` if present).",
+  "2. **Implement** — make a short plan, then build only the items included in this pack.",
+  "3. **Service setup** — if external services are needed, follow `SETUP.md`. Ask the user only for what only they can do (signups, key issuance) — one hand-held step at a time per the beginner guidance — and put received values in `.env.local` (never hardcoded). Handle everything else yourself.",
+  "4. **Run check** — actually run the app, check every item's done-criteria yourself, and fix what fails until it works.",
+  "5. **Deploy + repository** — per \"Deploy in one shot\" below, deploy **yourself** with your connected tools and push the code to GitHub (zero token handling).",
+  "6. **Deliver** — give the user the real deployed URL and guide them to put it back into Simsa for review.",
+  "",
+  "**Don't stall:** if a step blocks, try to solve it yourself first. Ask only for the things truly only the user can do (signup/key entry, first-time tool connection), then continue immediately. Never end with \"how shall we wrap up (merge/PR/branch)?\" — the ending is always \"a deployed URL + one next action\".",
+].join("\n");
+
 /**
  * "이미 준비된 서비스" — a prompt-facing REFERENCE block for the services the
  * user set up in Simsa. Lists service names + env var KEYS + where the value
@@ -575,8 +886,33 @@ const ONE_SHOT_RUNBOOK: string = [
  * surface; values live only in the gitignored `.env.local`. Enforced by
  * builder-pack-prompt-no-secret.test.mjs (the prompt version of the #271 guard).
  */
-function genServicesContext(services: BuilderPackService[]): string {
+function genServicesContext(services: BuilderPackService[], locale: PackLocale = "ko"): string {
   if (services.length === 0) return "";
+  if (locale === "en") {
+    const lines: string[] = [
+      "## Services already prepared (no key values in this brief)",
+      "",
+      "The user pre-configured the services below in Simsa. **The actual key values are NOT in this brief** — they're already filled into the pack's `.env.local` file (gitignored) and never pasted into this chat.",
+      "- In code, never hardcode values — read them via `process.env.<KEY>` (or the framework's convention).",
+      "- Never expose actual key values in this chat, code, commits, or logs.",
+      "",
+    ];
+    for (const svc of services) {
+      lines.push(`### ${svc.label}`);
+      if (svc.setupUrl) lines.push(`- Service: ${svc.setupUrl}`);
+      lines.push("- Environment variables to use (values read from `.env.local`):");
+      for (const v of svc.envVars) {
+        const secret = v.secret ? " · server-only (never frontend/browser)" : "";
+        lines.push(`  - \`${v.key}\` — ${v.description}${secret}`);
+      }
+      lines.push("");
+    }
+    lines.push(
+      "- See `SETUP.md` for detailed setup and how to fill any still-empty values.",
+      "- If a key has no value yet, ask the user to issue it per `SETUP.md`/`.env.example` and continue right away.",
+    );
+    return lines.join("\n");
+  }
   const lines: string[] = [
     "## 이미 준비된 서비스 (키 값은 지시서에 없음)",
     "",
@@ -620,9 +956,61 @@ function genClaudeCodePrompt(
   totalItems: number,
   services: BuilderPackService[] = [],
   profile?: ExportUserProfile,
+  locale: PackLocale = "ko",
 ): string {
   const isFiltered = effectiveItems.length < totalItems;
   const itemList = effectiveItems.map((i) => `- [ ] ${i.title}`).join("\n");
+
+  if (locale === "en") {
+    return [
+      `# Brief for Claude Code — ${title}`,
+      "",
+      "Paste the contents of this file into the Claude Code chat as-is.",
+      "",
+      isFiltered
+        ? `> **Items included in this pack: ${effectiveItems.length}** (of ${totalItems} total)`
+        : `> Items included in this pack: ${effectiveItems.length} (all)`,
+      ">",
+      "> Do not touch items that are not included.",
+      "",
+      "---",
+      "",
+      ONE_SHOT_RUNBOOK_EN,
+      "",
+      "---",
+      "",
+      "## Detailed instructions",
+      "",
+      "1. Read `product.md` first for full context.",
+      `2. In \`items.md\`, confirm only the items included this time. (${effectiveItems.length} total)`,
+      "3. In `checks.md`, see why each item was flagged.",
+      "4. Follow the fix instructions in `fixes.md`.",
+      "5. Before coding, explore the relevant files and write a short implementation plan.",
+      "6. After implementing, self-check each item against its done-criteria.",
+      "7. Report changed files, completed items, tests run, and remaining risks.",
+      "",
+      "## Hard constraints",
+      "",
+      "- **Implement or modify only the items included in this pack.**",
+      "- Do not touch items that are not included.",
+      "- Never implement anything in `product.md`'s \"Excluded from this version\".",
+      "- Do not build the whole product at once — this pack's scope only.",
+      "- If anything is ambiguous, ask before writing code.",
+      ...(services.length > 0 ? ["", genServicesContext(services, "en")] : []),
+      "",
+      beginnerSetupGuidance(specTextOf(spec, effectiveItems), profile, "en"),
+      "",
+      NONDEV_WORKFLOW_GUIDANCE_EN,
+      "",
+      DEPLOY_VIA_MCP_GUIDANCE_EN,
+      "",
+      RETURN_TO_SIMSA_GUIDANCE_EN,
+      "",
+      "## Included items",
+      "",
+      itemList,
+    ].join("\n");
+  }
 
   return [
     `# Claude Code용 지시서 — ${title}`,
@@ -682,6 +1070,7 @@ function genCodexPrompt(
   fixSuggestions?: Record<string, ExportFixSuggestion>,
   services: BuilderPackService[] = [],
   profile?: ExportUserProfile,
+  locale: PackLocale = "ko",
 ): string {
   const isFiltered = effectiveItems.length < totalItems;
 
@@ -705,7 +1094,104 @@ function genCodexPrompt(
     for (const d of criteria) doneWhenLines.push(`- [ ] ${d}`);
   }
   if (doneWhenLines.length === 0) {
-    doneWhenLines.push("- (완성 기준을 items.md에서 확인하세요)");
+    doneWhenLines.push(locale === "en" ? "- (see items.md for the done-criteria)" : "- (완성 기준을 items.md에서 확인하세요)");
+  }
+
+  if (locale === "en") {
+    const doNotDoLines: string[] = [
+      isFiltered
+        ? `- Do not touch items not included in this pack (only ${effectiveItems.length} of ${totalItems} are included).`
+        : "- Do not implement features outside this version's scope.",
+      ...spec.excluded.map((e) => `- Do not implement ${e}`),
+      ...Object.values(fixSuggestions ?? {}).flatMap(
+        (f) => f.suggestion.builderBrief.doNotDo.map((d) => `- ${d}`)
+      ),
+    ];
+
+    return [
+      `# Brief for Codex — ${title}`,
+      "",
+      "Paste the contents of this file into the Codex chat as-is.",
+      "",
+      "---",
+      "",
+      ONE_SHOT_RUNBOOK_EN,
+      "",
+      "---",
+      "",
+      "## Goal",
+      "",
+      spec.oneLine,
+      "",
+      "## Context",
+      "",
+      `Product: ${spec.productName}`,
+      `Target users: ${spec.targetUsers.join(", ") || "TBD"}`,
+      `Core problem: ${spec.problem}`,
+      "",
+      "Features included in this version:",
+      ...spec.included.map((i) => `- ${i}`),
+      ...(services.length > 0 ? ["", genServicesContext(services, "en")] : []),
+      "",
+      "## Selected tasks",
+      "",
+      isFiltered
+        ? `**Items to implement this time (${effectiveItems.length} of ${totalItems}):**`
+        : `**Items to implement this time (${effectiveItems.length}):**`,
+      "",
+      ...(tasksLines.length > 0 ? tasksLines : ["- (see items.md)"]),
+      "",
+      "> Do not touch items that are not included.",
+      "",
+      "## Constraints",
+      "",
+      "- Implement only the items in the 'Selected tasks' list above.",
+      "- Do not build the whole product at once.",
+      "- Never implement anything under 'Do not do' below.",
+      "- Before coding, explore the relevant files and write a short implementation plan.",
+      "- If there is an existing codebase, follow its patterns.",
+      "",
+      "## Done when",
+      "",
+      ...doneWhenLines,
+      "",
+      "## Do not do",
+      "",
+      ...doNotDoLines,
+      "",
+      "## Verify by",
+      "",
+      "- Check directly against each item's done-criteria (items.md).",
+      "- Confirm items not included were left unchanged.",
+      "- Confirm no out-of-scope features were added.",
+      "- Confirm the still-open decisions (product.md) did not leak into the implementation.",
+      "",
+      "## Final response format",
+      "",
+      beginnerSetupGuidance(specTextOf(spec, effectiveItems), profile, "en"),
+      "",
+      NONDEV_WORKFLOW_GUIDANCE_EN,
+      "",
+      DEPLOY_VIA_MCP_GUIDANCE_EN,
+      "",
+      RETURN_TO_SIMSA_GUIDANCE_EN,
+      "",
+      "When done, report in this format:",
+      "",
+      "```",
+      "Completed items:",
+      "- [item]",
+      "",
+      "Changed files:",
+      "- [file]",
+      "",
+      "Tests run:",
+      "- [test]",
+      "",
+      "Remaining risks:",
+      "- [risk, or none]",
+      "```",
+    ].join("\n");
   }
 
   const doNotDoLines: string[] = [
@@ -819,8 +1305,91 @@ function genWebBuilderPrompt(
   effectiveItems: ExportItem[],
   totalItems: number,
   services: BuilderPackService[] = [],
+  locale: PackLocale = "ko",
 ): string {
   const isFiltered = effectiveItems.length < totalItems;
+
+  if (locale === "en") {
+    const itemBlocks: string[] = [];
+    for (const item of effectiveItems) {
+      itemBlocks.push(`### ${item.title}`);
+      if (item.criteria.length > 0) {
+        itemBlocks.push("Done when:", ...item.criteria.map((c) => `- [ ] ${c}`));
+      }
+      itemBlocks.push("");
+    }
+
+    const serviceLines: string[] = [];
+    if (services.length > 0) {
+      serviceLines.push(
+        "",
+        "## External services and keys needed",
+        "",
+        "The keys below are needed. **Never paste the actual key values into this chat** — have the user put them into this builder's environment-variable/Secrets settings screen (e.g. Replit `Secrets`, Lovable project settings) and read them from environment variables in code. Guide key issuance one step at a time: signup URL → where the key is → where to paste it.",
+        "",
+      );
+      for (const svc of services) {
+        serviceLines.push(`### ${svc.label}`);
+        if (svc.setupUrl) serviceLines.push(`- Signup/setup: ${svc.setupUrl}`);
+        for (const v of svc.envVars) {
+          const secret = v.secret ? " · **server-only — never in frontend code**" : "";
+          serviceLines.push(`- \`${v.key}\` — ${v.description}${secret}`);
+        }
+        serviceLines.push("");
+      }
+    }
+
+    return [
+      `# Brief for a web builder — ${title}`,
+      "",
+      "Paste the contents of this file into the chat of a web builder like Lovable, Replit, v0, or Bolt.",
+      "",
+      isFiltered
+        ? `> **Items to build this time: ${effectiveItems.length}** (of ${totalItems} total) — do not build items that are not included.`
+        : `> Items to build this time: ${effectiveItems.length} (all)`,
+      "",
+      "---",
+      "",
+      "## Mission — this one brief, all the way",
+      "",
+      "The user is not a developer. From this brief alone, deliver **an app that genuinely works and is published on the internet, URL included**. Don't quiz the user on development choices (file structure, tech picks) — decide yourself. Ask the user for exactly two things: issuing external service keys (step by step, per the guidance below) and pressing this builder's **Publish/Deploy button**.",
+      "",
+      "1. Read the product description and items below and make a short plan.",
+      "2. Build only the items included this time — never build the 'excluded' list.",
+      "3. If external services are needed, guide key issuance one step at a time and have the values go into this builder's **environment-variable/Secrets settings** (never exposed in chat or code).",
+      "4. Self-check each item's done-criteria in the preview, and fix what fails until it works.",
+      "5. Guide the user to publish with this builder's **Publish/Deploy feature**, and confirm the resulting URL.",
+      "6. Guide them to put that URL back into Simsa for review.",
+      "",
+      "## Product description",
+      "",
+      `**${spec.productName}** — ${spec.oneLine}`,
+      "",
+      `Problem being solved: ${spec.problem}`,
+      `Target users: ${spec.targetUsers.join(", ") || "general users"}`,
+      "",
+      "Included in this version:",
+      ...spec.included.map((i) => `- ${i}`),
+      "",
+      "Excluded from this version (never build these):",
+      ...(spec.excluded.length > 0 ? spec.excluded.map((e) => `- ${e}`) : ["- (none)"]),
+      "",
+      "User flow:",
+      ...spec.userFlow.map((f, i) => `${i + 1}. ${f}`),
+      "",
+      "## Items to build and their done-criteria",
+      "",
+      ...itemBlocks,
+      ...serviceLines,
+      "## How to proceed — non-developer first",
+      "",
+      "- Report progress without dev jargon: only \"what I'm building now, and what's needed next\".",
+      "- If the user gets stuck, ask \"what do you see on your screen right now?\" and adjust the next step.",
+      "- The ending is always \"a published URL + one next action\" — never a menu of tech choices.",
+      "",
+      RETURN_TO_SIMSA_GUIDANCE_EN,
+    ].join("\n");
+  }
 
   const itemBlocks: string[] = [];
   for (const item of effectiveItems) {
@@ -919,6 +1488,14 @@ const HANDOFF_KIND_LABEL: Record<string, string> = {
   extension: "브라우저 확장 프로그램",
 };
 
+const HANDOFF_KIND_LABEL_EN: Record<string, string> = {
+  mobile: "a native mobile app (iOS/Android)",
+  desktop: "an installable desktop program",
+  game: "a 3D/game-engine game",
+  hardware: "hardware/device integration",
+  extension: "a browser extension",
+};
+
 function genHandoffBrief(
   title: string,
   idea: string,
@@ -926,6 +1503,7 @@ function genHandoffBrief(
   items: ExportItem[],
   checkResults?: ExportCheckResults,
   profile?: ExportUserProfile,
+  locale: PackLocale = "ko",
 ): string {
   // #296 Phase 4: the interview's platform answer seeds the verdict here too —
   // the brief must not contradict what generation already told the user (P2).
@@ -933,6 +1511,90 @@ function genHandoffBrief(
     idea: `${idea} ${spec.oneLine} ${spec.included.join(" ")}`,
     ...(profile?.platform ? { platform: profile.platform } : {}),
   });
+  if (locale === "en") {
+    const lines: string[] = [
+      `# Handoff brief — ${title}`,
+      "",
+      "This document exists to **hand this product to a developer or a specialist team**. Send or print it as-is. If the recipient uses an AI coding tool, this whole document can be pasted in.",
+      "",
+      "## What to build",
+      "",
+      `**${spec.productName}** — ${spec.oneLine}`,
+      "",
+      `Problem being solved: ${spec.problem}`,
+      `Target users: ${spec.targetUsers.join(", ") || "general users"}`,
+    ];
+
+    if (feas.hit) {
+      const label = HANDOFF_KIND_LABEL_EN[feas.kind] ?? feas.kind;
+      lines.push(
+        "",
+        "## Target platform (important — an honest verdict)",
+        "",
+        `This product requires building **${label}**. It cannot be fully implemented as a web app alone.`,
+        `- The web-feasible parts (admin screens, landing, prototype) can proceed right away from the material Simsa produced.`,
+        `- Building **${label}** itself (native build, store release, …) **belongs to the professional team receiving this document**, and is outside Simsa's web-review scope.`,
+      );
+    } else {
+      lines.push(
+        "",
+        "## Target platform",
+        "",
+        "This product can be built as a **web app**. No specific stack is imposed — as long as the requirements below are met, the recipient chooses the stack.",
+      );
+    }
+
+    lines.push("", "## Decided", "");
+    const decided = [...spec.decisions, ...spec.included.map((i) => `Included: ${i}`)];
+    lines.push(...(decided.length ? decided.map((d) => `- ${d}`) : ["- (none yet)"]));
+
+    lines.push("", "## Excluded from this version (do not build)", "");
+    lines.push(...(spec.excluded.length ? spec.excluded.map((e) => `- ${e}`) : ["- (none)"]));
+
+    lines.push("", "## Still to decide (confirm with the owner before starting)", "");
+    lines.push(...(spec.openQuestions.length ? spec.openQuestions.map((q) => `- [ ] ${q}`) : ["- (none)"]));
+
+    if (checkResults && checkResults.results.length > 0) {
+      const s = checkResults.summary;
+      lines.push(
+        "",
+        "## Latest check results (Simsa review)",
+        "",
+        `Passed ${s.passed} · Doesn't match ${s.failed} · Needs checking ${s.inconclusive} · Decision needed ${s.needsDecision}`,
+        "",
+      );
+      const notPassed = checkResults.results.filter((r) => r.status !== "passed");
+      if (notPassed.length > 0) {
+        lines.push("Problems still open at handoff time:", "");
+        for (const r of notPassed) {
+          const next = r.nextAction ? ` (next action: ${r.nextAction})` : "";
+          lines.push(`- **${r.title}** — ${statusLabel(r.status, "en")}: ${r.reason}${next}`);
+        }
+      } else {
+        lines.push("All checked items passed as of handoff time.");
+      }
+      lines.push("", "These results are a snapshot at handoff time. The recipient should do the final check against the acceptance checklist below.");
+    }
+
+    lines.push("", "## Acceptance checklist (done when all of this holds)", "");
+    for (const item of items) {
+      lines.push(`### ${item.title}`);
+      for (const c of item.criteria) lines.push(`- [ ] ${c}`);
+      if (item.criteria.length === 0) lines.push("- [ ] (criteria not written — define with the owner)");
+      lines.push("");
+    }
+
+    lines.push(
+      "## User flow",
+      "",
+      ...spec.userFlow.map((f, i) => `${i + 1}. ${f.replace(/^\s*\d+[.)]\s*/, "")}`),
+      "",
+      "---",
+      "",
+      "This brief was produced by Simsa from the user's idea. Once built, the web-accessible parts can be reviewed by putting the URL into Simsa.",
+    );
+    return lines.join("\n");
+  }
   const lines: string[] = [
     `# 전달용 브리프 — ${title}`,
     "",
@@ -1049,15 +1711,25 @@ export function regressionHookBlock(projectId?: string, appBaseUrl?: string): st
 
 /** `.env.example` — every key with a PLACEHOLDER only. Never a real value, even
  *  when the setup UI supplied one. Safe to commit. */
-function genEnvExample(services: BuilderPackService[]): string {
-  const lines: string[] = [
-    "# 환경변수 예시 — 이 파일은 커밋해도 안전합니다(실제 값 없음).",
-    "# 실제 값은 .env.local 에 넣으세요(커밋 금지).",
-  ];
+function genEnvExample(services: BuilderPackService[], locale: PackLocale = "ko"): string {
+  const lines: string[] =
+    locale === "en"
+      ? [
+          "# Environment variable examples — safe to commit (no real values).",
+          "# Put real values in .env.local (never commit that).",
+        ]
+      : [
+          "# 환경변수 예시 — 이 파일은 커밋해도 안전합니다(실제 값 없음).",
+          "# 실제 값은 .env.local 에 넣으세요(커밋 금지).",
+        ];
   for (const svc of services) {
     lines.push("", `# ${svc.label}`);
     for (const v of svc.envVars) {
-      const note = v.secret ? ` (서버 전용 · 절대 프론트엔드/브라우저에 넣지 마세요)` : "";
+      const note = v.secret
+        ? locale === "en"
+          ? ` (server-only · never put this in frontend/browser code)`
+          : ` (서버 전용 · 절대 프론트엔드/브라우저에 넣지 마세요)`
+        : "";
       lines.push(`# ${v.description}${note}`);
       lines.push(`${v.key}=${v.example ?? ""}`);
     }
@@ -1068,13 +1740,19 @@ function genEnvExample(services: BuilderPackService[]): string {
 /** `.env.local` — real values the setup UI collected. Returns null when NO value
  *  was supplied (so an empty secret file is never emitted). Gitignored; loud
  *  never-commit/never-share warning at the top. */
-function genEnvLocal(services: BuilderPackService[]): string | null {
+function genEnvLocal(services: BuilderPackService[], locale: PackLocale = "ko"): string | null {
   const withValue = services.flatMap((s) => s.envVars.filter((v) => typeof v.value === "string" && v.value.length > 0));
   if (withValue.length === 0) return null;
-  const lines: string[] = [
-    "# 주의: 실제 비밀 값입니다. 절대 커밋하거나 공유하지 마세요.",
-    "# 이 파일은 .gitignore 에 포함되어야 하며, service_role 같은 관리자 키는 서버에서만 사용하세요.",
-  ];
+  const lines: string[] =
+    locale === "en"
+      ? [
+          "# WARNING: real secret values. Never commit or share this file.",
+          "# It must be in .gitignore; admin keys like service_role are server-only.",
+        ]
+      : [
+          "# 주의: 실제 비밀 값입니다. 절대 커밋하거나 공유하지 마세요.",
+          "# 이 파일은 .gitignore 에 포함되어야 하며, service_role 같은 관리자 키는 서버에서만 사용하세요.",
+        ];
   for (const svc of services) {
     const vals = svc.envVars.filter((v) => typeof v.value === "string" && v.value.length > 0);
     if (vals.length === 0) continue;
@@ -1087,7 +1765,30 @@ function genEnvLocal(services: BuilderPackService[]): string | null {
 /** `SETUP.md` — human guide: what each service is, exactly where to get each key,
  *  where the value goes, with security warnings. Reuses the beginner hand-holding
  *  style so the agent/user can finish anything the UI didn't pre-fill. */
-function genSetupMd(services: BuilderPackService[], hasValues: boolean): string {
+function genSetupMd(services: BuilderPackService[], hasValues: boolean, locale: PackLocale = "ko"): string {
+  if (locale === "en") {
+    const lines: string[] = [
+      "# Service & environment variable setup",
+      "",
+      hasValues
+        ? "The values you entered in Simsa are already filled into `.env.local`. Below is what each value is, where it came from, and how to fill in anything still missing."
+        : "This app needs the services below. Follow each section's guidance to sign up, issue keys, and put them in `.env.local`.",
+      "",
+      "> **Security:** never commit or share `.env.local` (keep it in .gitignore). Admin keys like `service_role` are **server-only** — never in frontend/browser code.",
+    ];
+    for (const svc of services) {
+      lines.push("", `## ${svc.label}`);
+      if (svc.setupUrl) lines.push("", `- Signup/setup: ${svc.setupUrl}`);
+      for (const step of svc.setupSteps ?? []) lines.push(`- ${step}`);
+      lines.push("", "Values needed:");
+      for (const v of svc.envVars) {
+        const filled = typeof v.value === "string" && v.value.length > 0 ? " — [filled · .env.local]" : "";
+        const secret = v.secret ? " · **server-only, never frontend**" : "";
+        lines.push(`- \`${v.key}\` — ${v.description}${secret}${filled}`);
+      }
+    }
+    return lines.join("\n");
+  }
   const lines: string[] = [
     "# 서비스·환경변수 설정",
     "",
@@ -1117,6 +1818,8 @@ export function generateBuilderPack(
   req: WorkspaceExportBuilderPackRequest,
 ): WorkspaceExportBuilderPackResponse {
   const project = req.project;
+  // G14-b: the pack follows the user's UI language (absent → ko, unchanged).
+  const locale: PackLocale = req.locale === "en" ? "en" : "ko";
   if (!project) {
     return {
       ok: true,
@@ -1126,7 +1829,8 @@ export function generateBuilderPack(
         fileCount: 0,
         totalItems: 0,
         selectedItems: 0,
-        recommendedNextStep: "project 데이터를 포함해서 다시 요청해주세요.",
+        recommendedNextStep:
+          locale === "en" ? "Please retry with the project data included." : "project 데이터를 포함해서 다시 요청해주세요.",
       },
     };
   }
@@ -1173,23 +1877,23 @@ export function generateBuilderPack(
   const baseFiles: ExportFile[] = [
     {
       path: "simsa-build-pack/README.md",
-      content: genReadme(title, target, allItems.length, effectiveItems.length) + hookSuffix,
+      content: genReadme(title, target, allItems.length, effectiveItems.length, locale) + hookSuffix,
     },
     {
       path: "simsa-build-pack/product.md",
-      content: genProductMd(productSpec), // always full context
+      content: genProductMd(productSpec, locale), // always full context
     },
     {
       path: "simsa-build-pack/items.md",
-      content: genItemsMd(effectiveItems, allItems.length),
+      content: genItemsMd(effectiveItems, allItems.length, locale),
     },
     {
       path: "simsa-build-pack/checks.md",
-      content: genChecksMd(effectiveCheckResults, allItems.length),
+      content: genChecksMd(effectiveCheckResults, allItems.length, locale),
     },
     {
       path: "simsa-build-pack/fixes.md",
-      content: genFixesMd(effectiveItems, effectiveFixSuggestions),
+      content: genFixesMd(effectiveItems, effectiveFixSuggestions, locale),
     },
   ];
 
@@ -1198,29 +1902,29 @@ export function generateBuilderPack(
   if (services.length > 0) {
     baseFiles.push({
       path: "simsa-build-pack/.env.example",
-      content: genEnvExample(services),
+      content: genEnvExample(services, locale),
     });
-    const envLocal = genEnvLocal(services);
+    const envLocal = genEnvLocal(services, locale);
     if (envLocal) {
       baseFiles.push({ path: "simsa-build-pack/.env.local", content: envLocal });
     }
     baseFiles.push({
       path: "simsa-build-pack/SETUP.md",
-      content: genSetupMd(services, envLocal !== null),
+      content: genSetupMd(services, envLocal !== null, locale),
     });
   }
 
   if (target === "claude_code" || target === "both") {
     baseFiles.push({
       path: "simsa-build-pack/CLAUDE_CODE_PROMPT.md",
-      content: genClaudeCodePrompt(title, productSpec, effectiveItems, allItems.length, services, req.userProfile) + hookSuffix,
+      content: genClaudeCodePrompt(title, productSpec, effectiveItems, allItems.length, services, req.userProfile, locale) + hookSuffix,
     });
   }
   if (target === "codex" || target === "both") {
     baseFiles.push({
       path: "simsa-build-pack/CODEX_PROMPT.md",
       content:
-        genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions, services, req.userProfile) +
+        genCodexPrompt(title, productSpec, effectiveItems, allItems.length, effectiveFixSuggestions, services, req.userProfile, locale) +
         hookSuffix,
     });
   }
@@ -1228,13 +1932,13 @@ export function generateBuilderPack(
     baseFiles.push({
       path: "simsa-build-pack/WEB_BUILDER_PROMPT.md",
       content:
-        genWebBuilderPrompt(title, productSpec, effectiveItems, allItems.length, services) + hookSuffix,
+        genWebBuilderPrompt(title, productSpec, effectiveItems, allItems.length, services, locale) + hookSuffix,
     });
   }
   if (target === "handoff") {
     baseFiles.push({
       path: "simsa-build-pack/HANDOFF_BRIEF.md",
-      content: genHandoffBrief(title, project.idea ?? "", productSpec, effectiveItems, effectiveCheckResults, req.userProfile),
+      content: genHandoffBrief(title, project.idea ?? "", productSpec, effectiveItems, effectiveCheckResults, req.userProfile, locale),
     });
   }
 
@@ -1244,13 +1948,22 @@ export function generateBuilderPack(
       effectiveCheckResults.summary.inconclusive > 0 ||
       effectiveCheckResults.summary.needsDecision > 0);
 
-  const recommendedNextStep = hasIssues
-    ? "fixes.md에서 고쳐야 할 항목을 확인하고, 해당 지시서를 개발 AI에 넘기세요."
-    : target === "web_builder"
-      ? "WEB_BUILDER_PROMPT.md를 복사해서 사용 중인 웹 빌더(Lovable·Replit·v0·Bolt 등)의 채팅창에 붙여넣으세요."
-      : target === "handoff"
-        ? "HANDOFF_BRIEF.md를 개발자·전문팀에게 그대로 전달하세요."
-        : "CLAUDE_CODE_PROMPT.md 또는 CODEX_PROMPT.md를 복사해서 개발 AI에 붙여넣으세요.";
+  const recommendedNextStep =
+    locale === "en"
+      ? hasIssues
+        ? "Check the items to fix in fixes.md, then hand the matching brief to your coding AI."
+        : target === "web_builder"
+          ? "Copy WEB_BUILDER_PROMPT.md and paste it into your web builder's chat (Lovable, Replit, v0, Bolt, …)."
+          : target === "handoff"
+            ? "Send HANDOFF_BRIEF.md to your developer or team as-is."
+            : "Copy CLAUDE_CODE_PROMPT.md or CODEX_PROMPT.md and paste it into your coding AI."
+      : hasIssues
+        ? "fixes.md에서 고쳐야 할 항목을 확인하고, 해당 지시서를 개발 AI에 넘기세요."
+        : target === "web_builder"
+          ? "WEB_BUILDER_PROMPT.md를 복사해서 사용 중인 웹 빌더(Lovable·Replit·v0·Bolt 등)의 채팅창에 붙여넣으세요."
+          : target === "handoff"
+            ? "HANDOFF_BRIEF.md를 개발자·전문팀에게 그대로 전달하세요."
+            : "CLAUDE_CODE_PROMPT.md 또는 CODEX_PROMPT.md를 복사해서 개발 AI에 붙여넣으세요.";
 
   return {
     ok: true,

@@ -5,6 +5,8 @@
  * Deterministic on the server side — no rate limits.
  */
 
+import { readStoredLocale } from "@/i18n/dictionary.mjs";
+
 const CENTRAL_PLANE_URL =
   process.env.NEXT_PUBLIC_CENTRAL_PLANE_URL ??
   "https://conclave-ai.seunghunbae.workers.dev";
@@ -75,7 +77,8 @@ export async function callExportBuilderPackApi(
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/export-builder-pack`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, format: "json", locale: "ko" }),
+      // G14-b: 서버 빌더팩이 EN을 지원한다 — UI 언어를 따른다.
+      body: JSON.stringify({ ...input, format: "json", locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       signal: AbortSignal.timeout(15000),
     });
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
