@@ -141,6 +141,16 @@ export type ExportUserProfile = {
   platform?: "web" | "mobile" | "unknown";
   githubLevel?: "fluent" | "heard" | "new";
   aiToolLevel?: "yes" | "some" | "no";
+  /** 스택 불가지 Phase 1 (D-1, design lock 2026-08-20): 유저가 답한 호스팅/
+   *  데이터 축. canonical id("vercel"|"netlify"|"builder_hosted"|"none_yet"|
+   *  "unknown"|"other" / "supabase"|"firebase"|"builder_managed"|"none"|
+   *  "unknown"|"other") + other 자유텍스트. Phase 2에서 서비스 예시·배포
+   *  안내·env 템플릿이 소비한다 — 그 전까지는 운반만. 미지 id는 버리지 않고
+   *  그대로 통과시킨다(D-3). */
+  hosting?: string;
+  hostingOther?: string;
+  data?: string;
+  dataOther?: string;
 };
 
 export type ExportFile = {

@@ -61,11 +61,18 @@ export type ExportBuilderPackInput = {
     }>;
   }>;
   /** #296 Phase 3: onboarding interview profile — the server branches deploy
-   *  guidance (githubLevel) and pacing (aiToolLevel) in the pack prompts. */
+   *  guidance (githubLevel) and pacing (aiToolLevel) in the pack prompts.
+   *  스택 불가지 Phase 1 (D-1): hosting/data 축 추가 — Phase 2에서 서비스
+   *  예시·배포 안내·env 템플릿이 이 값을 소비한다. id는 칩 canonical 값,
+   *  "other"일 때만 *Other 자유텍스트가 따른다. */
   userProfile?: {
     platform?: "web" | "mobile" | "unknown";
     githubLevel?: "fluent" | "heard" | "new";
     aiToolLevel?: "yes" | "some" | "no";
+    hosting?: string;
+    hostingOther?: string;
+    data?: string;
+    dataOther?: string;
   };
   target: ExportTarget;
 };

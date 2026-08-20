@@ -295,7 +295,16 @@ export default function ExportPage() {
             : undefined;
         })(),
         // #296 Phase 3: interview profile → server branches deploy path + pacing.
-        userProfile: ext?.userProfile ?? undefined,
+        // 스택 불가지 Phase 1: hosting/data 축을 함께 전달 (Phase 2가 소비).
+        userProfile: (() => {
+          const sp = ext?.stackProfile;
+          if (!ext?.userProfile && !sp) return undefined;
+          return {
+            ...(ext?.userProfile ?? {}),
+            ...(sp?.hosting ? { hosting: sp.hosting.id, ...(sp.hosting.other ? { hostingOther: sp.hosting.other } : {}) } : {}),
+            ...(sp?.data ? { data: sp.data.id, ...(sp.data.other ? { dataOther: sp.data.other } : {}) } : {}),
+          };
+        })(),
         target: t,
       });
 
