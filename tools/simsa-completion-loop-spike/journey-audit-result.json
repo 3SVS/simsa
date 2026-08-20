@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-07-20T16:52:17.710Z",
+  "startedAt": "2026-08-20T01:41:31.516Z",
   "version": 2,
   "journeys": [
     {
@@ -219,7 +219,7 @@
           "label": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw/settings",
+          "url": "https://app.trysimsa.com/projects/proj_uuk5e3iq/settings",
           "h1": [
             "준비와 연결"
           ],
@@ -263,13 +263,13 @@
           "errorish": 0,
           "guidanceish": 2,
           "koLeakChars": 1745,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 준비와 연결 앱에 필요한 서비스와 키를 준비하고, 알림을 설정하고, 코드가 있는 곳을 연결하는 — 이 프로젝트를 위해 한 번 해두는 것들이에요. GitHub 연결 GitHub 계정을 연결하면 이 프로젝트에 쓸 저장소를 고를 수 있어요. GitHub 연결 현재 브라우저에 로그인된 GitHub 계정으로 연결됩니다. github.com에서 로그아웃 GitHu"
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 준비와 연결 앱에 필요한 서비스와 키를 준비하고, 알림을 설정하고, 코드가 있는 곳을 연결하는 — 이 프로젝트를 위해 한 번 해두는 것들이에요. GitHub 연결 GitHub 계정을 연결하면 이 프로젝트에 쓸 저장소를 고를 수 있어요. GitHub 연결 현재 브라우저에 로그인된 GitHub 계정으로 연결됩니다. github.com에서 로그아웃 GitHu"
         },
         {
           "label": "개요 — 지금 할 일이 이 갈래에 맞는가",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw",
+          "url": "https://app.trysimsa.com/projects/proj_uuk5e3iq",
           "h1": [
             "동네 빵집 예약 테스트앱"
           ],
@@ -280,7 +280,6 @@
             "M 워크스페이스 로그인 → ⌃",
             "EN",
             "KO",
-            "첫 검수 실행하기",
             "도움받기"
           ],
           "primaryCta": [
@@ -293,17 +292,17 @@
           "disabledLabels": [
             "도움받기"
           ],
-          "bodyLen": 1004,
+          "bodyLen": 588,
           "errorish": 0,
           "guidanceish": 1,
-          "koLeakChars": 601,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 동네 빵집 예약 테스트앱 고객이 원하는 시간에 빵을 예약하고 픽업하는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 코드 저장소 연결 — AI가 만든 코드가 있는 GitHub 저장소를 연결하세요. 3. 확인 실행 — 코드 변경을 골라 검수 항목 기준으"
+          "koLeakChars": 349,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 동네 빵집 예약 테스트앱 빵을 예약하고 픽업 시간을 고르는 앱 지금 할 일 1 준비 2 만들기·검수 3 결과·수정 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 코드 저장소 연결 — AI가 만든 코드가 있는 GitHub 저장소를 연결하세요. 3. 확인 실행 — 코드 변경을 골라 검수 항목 기준으로 확인하세요"
         },
         {
           "label": "checks 첫 화면 — 모드 선택/소스 없이 안내",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw/checks",
+          "url": "https://app.trysimsa.com/projects/proj_uuk5e3iq/checks",
           "h1": [
             "확인 결과"
           ],
@@ -320,10 +319,9 @@
             "코드 변경(PR) 연결하고 확인하기 →"
           ],
           "primaryCta": [
-            "확인 실행",
             "코드 변경(PR) 연결하고 확인하기 →"
           ],
-          "primaryCtaCount": 2,
+          "primaryCtaCount": 1,
           "hasExit": true,
           "deadEnd": false,
           "disabledCount": 0,
@@ -332,13 +330,13 @@
           "errorish": 0,
           "guidanceish": 0,
           "koLeakChars": 391,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 확인 결과 확인 항목을 기준으로 제품을 확인한 결과예요. 제품 설명서 기준 사전 확인 코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다. 어떻게 검수할까요? 기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함. 협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 토론"
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 확인 결과 확인 항목을 기준으로 제품을 확인한 결과예요. 제품 설명서 기준 사전 확인 코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다. 어떻게 검수할까요? 기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함. 협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 토론"
         },
         {
           "label": "소스 없이 검수 시도 — 막힘 안내",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_gr55qrvw/checks",
+          "url": "https://app.trysimsa.com/projects/proj_uuk5e3iq/checks",
           "h1": [
             "확인 결과"
           ],
@@ -355,10 +353,9 @@
             "코드 변경(PR) 연결하고 확인하기 →"
           ],
           "primaryCta": [
-            "확인 실행",
             "코드 변경(PR) 연결하고 확인하기 →"
           ],
-          "primaryCtaCount": 2,
+          "primaryCtaCount": 1,
           "hasExit": true,
           "deadEnd": false,
           "disabledCount": 0,
@@ -367,7 +364,7 @@
           "errorish": 0,
           "guidanceish": 2,
           "koLeakChars": 393,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 ✓ 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 코드를 먼저 연결하세요. 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 확인 결과 확인 항목을 기준으로 제품을 확인한 결과예요. 제품 설명서 기준 사전 확인 코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다. 어떻게 검수할까요? 기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함. 협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 "
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 동네 빵집 예약 테스트앱 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 코드를 먼저 연결하세요. 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 확인 결과 확인 항목을 기준으로 제품을 확인한 결과예요. 제품 설명서 기준 사전 확인 코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다. 어떻게 검수할까요? 기본 검수 선택됨 AI가 검수하고, 문제로 판정된 항목은 다른 AI가 한 번 더 교차 확인해요 — 모든 플랜에 포함. 협의체 검수 유료 플랜 AI 3개가 각자 검토하고, 의견이 갈리면 "
         }
       ],
       "failure": null
@@ -474,19 +471,19 @@
           "deadEnd": false,
           "disabledCount": 0,
           "disabledLabels": [],
-          "bodyLen": 2812,
+          "bodyLen": 2854,
           "errorish": 0,
           "guidanceish": 0,
-          "koLeakChars": 1816,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 이 앱을 어떤 도구로 만들었나요? 해당하는 것 모두 골라주세요. 각 도구의 방식에 맞춰 확인 품질을 높이는 데 써요. v0 Lovable Bolt Cursor Claude Code Replit Windsurf Codex 직접 코딩 ✓ 제품 설명서 초안이 완성됐습니다 저장하면 프로젝트 페이지에서 언제든 확인할 수 있습니다. 반려견 산책 기록 웹앱 반려견과의 산책을 GPS로 기록하고, 주간 통계를 보며, 기록을 공유하는 개인용 산책 다이어리입니다. 누가 쓰는 제품 반려견을 기르는 개인 보호자, 여러 반려견을 함께 "
+          "koLeakChars": 1815,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 이 앱을 어떤 도구로 만들었나요? 해당하는 것 모두 골라주세요. 각 도구의 방식에 맞춰 확인 품질을 높이는 데 써요. v0 Lovable Bolt Cursor Claude Code Replit Windsurf Codex 직접 코딩 ✓ 제품 설명서 초안이 완성됐습니다 저장하면 프로젝트 페이지에서 언제든 확인할 수 있습니다. 반려견 산책 기록 앱 반려견의 산책 거리와 시간을 자동으로 기록하고 주간 통계로 보며 다른 보호자와 공유하는 웹앱 누가 쓰는 제품 20~50대 반려견 보호자, 반려견의 일일 운동량 관리에 관심"
         },
         {
           "label": "저장 후 랜딩 — 다음 행동",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_gseombua",
+          "url": "https://app.trysimsa.com/projects/proj_uvxcw1dt",
           "h1": [
-            "반려견 산책 기록 웹앱"
+            "반려견 산책 기록 앱"
           ],
           "buttons": [
             "«",
@@ -508,11 +505,11 @@
           "disabledLabels": [
             "도움받기"
           ],
-          "bodyLen": 1011,
+          "bodyLen": 1323,
           "errorish": 0,
           "guidanceish": 1,
-          "koLeakChars": 638,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 반려견 산책 기록 웹앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 2 만들기·검수 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 반려견 산책 기록 웹앱 반려견과의 산책을 GPS로 기록하고, 주간 통계를 보며, 기록을 공유하는 개인용 산책 다이어리입니다. 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 코드 저장소 연결 — AI가 만든 코드가 있는 GitHub 저장소를 연결하세요. 3. 확인 실행 — 코"
+          "koLeakChars": 857,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 반려견 산책 기록 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 2 만들기·검수 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 반려견 산책 기록 앱 반려견의 산책 거리와 시간을 자동으로 기록하고 주간 통계로 보며 다른 보호자와 공유하는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 코드 저장소 연결 — AI가 만든 코드가 있는 GitHub 저장소를 연결하세요. 3. 확인 실행 — 코드 변경을 골"
         }
       ],
       "failure": null
@@ -525,7 +522,7 @@
           "label": "settings/연결 화면 — 미연결 유저가 보는 것",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_gshpwt63/settings",
+          "url": "https://app.trysimsa.com/projects/proj_uw0sz1e9/settings",
           "h1": [
             "준비와 연결"
           ],
@@ -569,6 +566,77 @@
           "guidanceish": 2,
           "koLeakChars": 1605,
           "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 연결 여정 테스트 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 2 만들기·검수 코드 변경 빌더 팩 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO 준비와 연결 앱에 필요한 서비스와 키를 준비하고, 알림을 설정하고, 코드가 있는 곳을 연결하는 — 이 프로젝트를 위해 한 번 해두는 것들이에요. GitHub 연결 GitHub 계정을 연결하면 이 프로젝트에 쓸 저장소를 고를 수 있어요. GitHub 연결 현재 브라우저에 로그인된 GitHub 계정으로 연결됩니다. github.com에서 로그아웃 GitHub이 처"
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J5 시드 세션: 런 상세 → 왜 이 판정 → 증거 로드",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "런 상세 — 리포트 렌더",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/wsp_rwwupkcox7/visual-checks/wvc_rwwvk5fhdw",
+          "h1": [],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "GitHub에서 수리 PR 열기",
+            "수리 확인 재검수",
+            "고침 지시 복사"
+          ],
+          "primaryCta": [
+            "GitHub에서 수리 PR 열기",
+            "고침 지시 복사"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 1519,
+          "errorish": 0,
+          "guidanceish": 3,
+          "koLeakChars": 868,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 QA seed 개요 1 준비 아이디어 제품 설명서 확인 항목 2 만들기·검수 확인 항목을 먼저 만드세요. 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO ← 시각 검수 전체 직접 눈으로 확인이 필요해요 확인 필요 아직 '작동한다'고 확정하기엔 확인이 더 필요해요. '버튼을 누른 뒤 화면 확인' 단계가 끝까지 되지 않았어요. 대상 https://simsa-autofix-test.vercel.app/ 확인하려던 것 메모를 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다 클라우드 실행 2026년 7월 19일 오"
+        },
+        {
+          "label": "왜 이 판정 — 펼침 후 증거 로드",
+          "note": "",
+          "locale": "ko",
+          "url": "https://app.trysimsa.com/projects/wsp_rwwupkcox7/visual-checks/wvc_rwwvk5fhdw",
+          "h1": [],
+          "buttons": [
+            "«",
+            "고급 +",
+            "도움말 · 피드백",
+            "M 워크스페이스 로그인 → ⌃",
+            "EN",
+            "KO",
+            "GitHub에서 수리 PR 열기",
+            "수리 확인 재검수",
+            "고침 지시 복사"
+          ],
+          "primaryCta": [
+            "GitHub에서 수리 PR 열기",
+            "고침 지시 복사"
+          ],
+          "primaryCtaCount": 2,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 1717,
+          "errorish": 0,
+          "guidanceish": 4,
+          "koLeakChars": 997,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 QA seed 개요 1 준비 아이디어 제품 설명서 확인 항목 2 만들기·검수 확인 항목을 먼저 만드세요. 3 결과·수정 확인 결과 시각 검수 고급 + 언제든지 준비·설정 연결 도움말 · 피드백 GitHub에서 별 주기 요금 안내 이용약관 개인정보처리방침 환불 정책 M 워크스페이스 로그인 → ⌃ EN KO ← 시각 검수 전체 직접 눈으로 확인이 필요해요 확인 필요 아직 '작동한다'고 확정하기엔 확인이 더 필요해요. '버튼을 누른 뒤 화면 확인' 단계가 끝까지 되지 않았어요. 대상 https://simsa-autofix-test.vercel.app/ 확인하려던 것 메모를 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다 클라우드 실행 2026년 7월 19일 오"
         }
       ],
       "failure": null
@@ -790,7 +858,7 @@
           "label": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
           "note": "",
           "locale": "en",
-          "url": "https://app.trysimsa.com/projects/proj_gtek266g/settings",
+          "url": "https://app.trysimsa.com/projects/proj_uwxezfev/settings",
           "h1": [
             "Prep & connections"
           ],
@@ -804,11 +872,9 @@
             "Connect GitHub",
             "How to get the keys",
             "✕",
-            "How to get the keys",
-            "✕",
-            "How to get the keys",
-            "✕",
-            "+ Sentry (오류 추적)",
+            "+ Supabase (data & sign-in)",
+            "+ Resend (sending email)",
+            "+ Sentry (error tracking)",
             "Claude Code",
             "Codex",
             "Copy",
@@ -831,17 +897,17 @@
             "Save",
             "Save"
           ],
-          "bodyLen": 5183,
+          "bodyLen": 4951,
           "errorish": 0,
-          "guidanceish": 14,
-          "koLeakChars": 478,
-          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Prep & connections Get the app's service"
+          "guidanceish": 15,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview 1 Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Prep & connections Get the app's service"
         },
         {
           "label": "개요 — 지금 할 일이 이 갈래에 맞는가",
           "note": "",
           "locale": "en",
-          "url": "https://app.trysimsa.com/projects/proj_gtek266g",
+          "url": "https://app.trysimsa.com/projects/proj_uwxezfev",
           "h1": [
             "Bakery reservation test app"
           ],
@@ -852,7 +918,6 @@
             "M Workspace Sign in → ⌃",
             "EN",
             "KO",
-            "Run your first inspection",
             "Get help"
           ],
           "primaryCta": [
@@ -865,17 +930,17 @@
           "disabledLabels": [
             "Get help"
           ],
-          "bodyLen": 1964,
+          "bodyLen": 1092,
           "errorish": 0,
-          "guidanceish": 4,
+          "guidanceish": 2,
           "koLeakChars": 0,
-          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Bakery reservation test app A simple onl"
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview 1 Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Bakery reservation test app Reserve brea"
         },
         {
           "label": "checks 첫 화면 — 모드 선택/소스 없이 안내",
           "note": "",
           "locale": "en",
-          "url": "https://app.trysimsa.com/projects/proj_gtek266g/checks",
+          "url": "https://app.trysimsa.com/projects/proj_uwxezfev/checks",
           "h1": [
             "Review results"
           ],
@@ -892,10 +957,9 @@
             "Connect and review code changes →"
           ],
           "primaryCta": [
-            "Run check",
             "Connect and review code changes →"
           ],
-          "primaryCtaCount": 2,
+          "primaryCtaCount": 1,
           "hasExit": true,
           "deadEnd": false,
           "disabledCount": 0,
@@ -904,13 +968,13 @@
           "errorish": 0,
           "guidanceish": 4,
           "koLeakChars": 0,
-          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Review results The results of checking y"
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview 1 Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Review results Visual checks ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Review results The results of checking y"
         },
         {
           "label": "소스 없이 검수 시도 — 막힘 안내",
           "note": "",
           "locale": "en",
-          "url": "https://app.trysimsa.com/projects/proj_gtek266g/checks",
+          "url": "https://app.trysimsa.com/projects/proj_uwxezfev/checks",
           "h1": [
             "Review results"
           ],
@@ -927,10 +991,9 @@
             "Connect and review code changes →"
           ],
           "primaryCta": [
-            "Run check",
             "Connect and review code changes →"
           ],
-          "primaryCtaCount": 2,
+          "primaryCtaCount": 1,
           "hasExit": true,
           "deadEnd": false,
           "disabledCount": 0,
@@ -939,7 +1002,7 @@
           "errorish": 0,
           "guidanceish": 6,
           "koLeakChars": 0,
-          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview ✓ Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Connect your code first. ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Review results The results of checking your "
+          "bodyHead": "Simsa « ＋ New project ← All projects Bakery reservation test app Overview 1 Prepare optional Idea Product brief Acceptance items 2 Build & review Code changes Builder pack 3 Results & fixes Connect your code first. ADVANCED + ANYTIME Prep & connections Sources Help & feedback Star on GitHub See pricing Terms Privacy Refunds M Workspace Sign in → ⌃ EN KO Review results The results of checking your "
         }
       ],
       "failure": null
@@ -986,13 +1049,6 @@
     }
   ],
   "findings": [
-    {
-      "sev": "P1",
-      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
-      "locale": "ko",
-      "step": "갈래 선택 화면",
-      "what": "primary CTA 0 — 다음 행동이 버튼으로 안 보임"
-    },
     {
       "sev": "P2",
       "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
@@ -1057,13 +1113,6 @@
       "what": "비활성 버튼 2개(저장/저장) — 이유 표시 스크린샷 확인"
     },
     {
-      "sev": "P1",
-      "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
-      "locale": "en",
-      "step": "갈래 선택 화면",
-      "what": "primary CTA 0 — 다음 행동이 버튼으로 안 보임"
-    },
-    {
       "sev": "P2",
       "journey": "J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입",
       "locale": "en",
@@ -1083,13 +1132,6 @@
       "locale": "en",
       "step": "code 갈래 스텝1 — 무엇을 묻는가",
       "what": "비활성 버튼 1개(Create project & connect code →) — 이유 표시 스크린샷 확인"
-    },
-    {
-      "sev": "P1",
-      "journey": "J1 기존-앱 갈래: 만든 앱 검수받기 완주",
-      "locale": "en",
-      "step": "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가",
-      "what": "EN 주행 한글 누수 478자"
     },
     {
       "sev": "P2",
