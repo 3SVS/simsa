@@ -85,6 +85,7 @@ export function createWorkspaceVisualChecksRoutes(): Hono<{ Bindings: Env }> {
       executor?: unknown;
       report?: unknown;
       agentPrompt?: unknown;
+      locale?: unknown;
     };
     try {
       body = await c.req.json();
@@ -119,6 +120,10 @@ export function createWorkspaceVisualChecksRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: false, error: "agent_prompt_too_large" }, 400);
     }
 
+    // 0065: 업로드 런에도 locale 기록 (미지정 = 레거시 ko 취급).
+    const locale: "ko" | "en" | undefined =
+      body.locale === "en" ? "en" : body.locale === "ko" ? "ko" : undefined;
+
     const owned = await requireOwnedProject(c.env, projectId, userKey);
     if (!owned.ok) return c.json({ ok: false, error: owned.error }, owned.status);
 
@@ -133,6 +138,7 @@ export function createWorkspaceVisualChecksRoutes(): Hono<{ Bindings: Env }> {
         executor,
         reportJson,
         agentPrompt,
+        locale,
       });
       return c.json(
         {

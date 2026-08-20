@@ -16,8 +16,8 @@
  *
  * 정직 한계(v1, 기록):
  *   - App 미설치 repo는 머지 신호가 없다 → 기존 수동 "수리 확인 재검수" CTA 유지.
- *   - 재검수 locale은 ko 고정(런 행에 locale 미저장 — 컬럼 추가는 마이그레이션
- *     배치로 이월). EN 유저 재검수 리포트가 ko로 나올 수 있음.
+ *   - [해소 0065] 재검수 locale: 런 행에 locale이 저장되어 원 런의 언어를
+ *     따른다. locale 미기록 레거시 행만 ko로 폴백.
  */
 import type { Env } from "../env.js";
 import { listRecentUsageEventsByType } from "./usage-events-db.js";
@@ -99,6 +99,7 @@ export async function runVerifySweep(
         userKey: origin.userKey,
         targetUrl: origin.targetUrl,
         intent: origin.intent,
+        locale: origin.locale ?? "ko",
       });
     } catch (err) {
       console.error("[verify-sweep] insert failed:", err);
@@ -111,7 +112,7 @@ export async function runVerifySweep(
       userKey: origin.userKey,
       targetUrl: origin.targetUrl,
       intent: origin.intent,
-      locale: "ko", // v1 한계 — 헤더 주석 참조
+      locale: origin.locale ?? "ko", // 0065: 원 런의 언어 — 레거시 행만 ko 폴백
       publicBaseUrl: opts.publicBaseUrl ?? env.PUBLIC_BASE_URL ?? "https://conclave-ai.seunghunbae.workers.dev",
     });
     if (dispatch.dispatched) {
