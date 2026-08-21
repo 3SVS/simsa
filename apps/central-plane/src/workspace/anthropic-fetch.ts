@@ -33,6 +33,31 @@ const MAX_ATTEMPTS = 6; // 403 "Request not allowed" hits ~60% of CF egress
  */
 const DEFAULT_MAX_TOTAL_MS = 12_000;
 
+/**
+ * A′-1 (2026-08-21 실측): 재시도할 때 **경로를 번갈아 쓴다**.
+ *
+ * A-2 계측이 밝힌 진범은 용량이 아니라 **403 egress**였다 — Anthropic이 Cloudflare
+ * egress IP에 "Request not allowed"를 준다. 종전엔 6회 재시도가 **모두 같은 경로**로
+ * 나갔고, 그 경로가 막히면 6회가 통째로 막혔다(라이브: 동시 4건 중 2~4건 실패,
+ * 로그상 attempt 1~6 전부 403).
+ *
+ * 게이트웨이와 직행은 서로 다른 출구다. 둘이 완전히 상관되지 않는 한 번갈아 쓰는
+ * 편이 한 경로로 6번 두드리는 것보다 낫다. 어느 쪽이 실제로 잘 되는지는 추측하지
+ * 않고 **로그로 집계**한다(성공·실패 양쪽에 endpoint_kind를 남긴다).
+ */
+export const DIRECT_ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
+export type EndpointKind = "gateway" | "direct";
+
+export function endpointRotation(primary: string): Array<{ url: string; kind: EndpointKind }> {
+  if (!primary || primary === DIRECT_ANTHROPIC_ENDPOINT) {
+    return [{ url: DIRECT_ANTHROPIC_ENDPOINT, kind: "direct" }];
+  }
+  return [
+    { url: primary, kind: "gateway" },
+    { url: DIRECT_ANTHROPIC_ENDPOINT, kind: "direct" },
+  ];
+}
+
 /** `retry-after`(초 또는 HTTP date) → ms. 파싱 불가/과대값은 무시한다. */
 export function parseRetryAfterMs(header: string | null, nowMs: number): number | null {
   if (!header) return null;
@@ -67,7 +92,15 @@ export function retryDelayMs(status: number | null, attempt: number, retryAfterM
 export function logAnthropicFailure(
   callSite: string,
   model: string,
-  info: { finalStatus: number | null; attempts: number; latencyMs: number; reason: string },
+  info: {
+    finalStatus: number | null;
+    attempts: number;
+    latencyMs: number;
+    reason: string;
+    /** A′-1: 마지막으로 시도한 경로와 경로별 시도 횟수 — 어느 출구가 막히는지 집계용. */
+    endpointKind?: EndpointKind;
+    triedByEndpoint?: Record<string, number>;
+  },
 ): void {
   try {
     console.log(
@@ -88,6 +121,8 @@ export function logAnthropicFailure(
         attempts: info.attempts,
         latency_ms: info.latencyMs,
         reason: info.reason,
+        ...(info.endpointKind ? { endpoint_kind: info.endpointKind } : {}),
+        ...(info.triedByEndpoint ? { tried_by_endpoint: info.triedByEndpoint } : {}),
       }),
     );
   } catch {
@@ -124,6 +159,8 @@ export function logAnthropicUsage(
   model: string,
   usage: AnthropicMessagesData["usage"],
   latencyMs: number,
+  /** A′-1: 성공한 경로와 몇 번째 시도였는지 — 경로별 성공률 집계의 반쪽. */
+  meta?: { endpointKind?: EndpointKind; attempt?: number },
 ): void {
   try {
     console.log(
@@ -136,6 +173,8 @@ export function logAnthropicUsage(
         cache_creation_input_tokens: usage?.cache_creation_input_tokens ?? 0,
         cache_read_input_tokens: usage?.cache_read_input_tokens ?? 0,
         latency_ms: latencyMs,
+        ...(meta?.endpointKind ? { endpoint_kind: meta.endpointKind } : {}),
+        ...(meta?.attempt ? { attempt: meta.attempt } : {}),
       }),
     );
   } catch {
@@ -180,16 +219,22 @@ export async function anthropicMessages(
   let sleptTotalMs = 0;
   const maxTotalMs = opts.maxTotalMs ?? DEFAULT_MAX_TOTAL_MS;
   const sleep = opts.sleepImpl ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  // 예산은 **사용자가 기다린 실제 시간** 기준 — 대기뿐 아니라 요청 지연도 포함한다.
   const now = opts.nowImpl ?? (() => Date.now());
   const startedAt = now();
+  // A′-1: 시도마다 경로를 번갈아 쓴다(게이트웨이 → 직행 → 게이트웨이 …).
+  const rotation = endpointRotation(endpoint);
+  const triedByEndpoint: Record<string, number> = {};
+  let lastKind: EndpointKind = rotation[0]!.kind;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     attemptsMade = attempt;
+    const target = rotation[(attempt - 1) % rotation.length]!;
+    lastKind = target.kind;
+    triedByEndpoint[target.kind] = (triedByEndpoint[target.kind] ?? 0) + 1;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let resp: Response | null = null;
     try {
-      resp = await fetchImpl(endpoint, {
+      resp = await fetchImpl(target.url, {
         method: "POST",
         signal: ctrl.signal,
         headers: {
@@ -212,7 +257,10 @@ export async function anthropicMessages(
       if (resp.ok) {
         const data = (await resp.json()) as AnthropicMessagesData;
         // latency_ms is wall time including retries — what the user waited.
-        logAnthropicUsage(callSite, body.model, data.usage, now() - startedAt);
+        logAnthropicUsage(callSite, body.model, data.usage, now() - startedAt, {
+          endpointKind: target.kind,
+          attempt,
+        });
         return data;
       }
       const tail = await resp.text().catch(() => "");
@@ -224,11 +272,13 @@ export async function anthropicMessages(
           attempts: attempt,
           latencyMs: now() - startedAt,
           reason: "non_retryable",
+          endpointKind: target.kind,
+          triedByEndpoint,
         });
         throw lastErr;
       }
       retryAfterMs = parseRetryAfterMs(resp.headers.get("retry-after"), now());
-      console.warn(`[anthropic-fetch] attempt ${attempt} got ${resp.status} — retrying`);
+      console.warn(`[anthropic-fetch] attempt ${attempt} via ${target.kind} got ${resp.status} — retrying`);
     }
     if (attempt >= MAX_ATTEMPTS) break;
     // A-1: 오류 종류별 대기. 남은 예산을 넘길 대기라면 더 시도하지 않고
@@ -240,6 +290,8 @@ export async function anthropicMessages(
         attempts: attempt,
         latencyMs: now() - startedAt,
         reason: "budget_exhausted",
+        endpointKind: lastKind,
+        triedByEndpoint,
       });
       throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
     }
@@ -251,6 +303,8 @@ export async function anthropicMessages(
     attempts: attemptsMade,
     latencyMs: now() - startedAt,
     reason: "attempts_exhausted",
+    endpointKind: lastKind,
+    triedByEndpoint,
   });
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
