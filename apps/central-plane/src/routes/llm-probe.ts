@@ -20,7 +20,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
-import { anthropicEndpoint } from "../workspace/anthropic-fetch.js";
+import { anthropicEndpoint, OPENAI_FALLBACK_MODEL } from "../workspace/anthropic-fetch.js";
 
 type ProbeResult = {
   vendor: "anthropic" | "openai" | "gemini";
@@ -29,11 +29,26 @@ type ProbeResult = {
   ms: number;
   /** 실패 본문의 앞부분 — 원인 분류에 필요한 최소치만. */
   detail?: string;
+  /**
+   * ★200이 곧 "쓸 만하다"가 아니다 (2026-08-22 교훈).
+   *
+   * 종전 프로브는 **HTTP 상태만** 봤다. 그 결과 "openai 4/4 200"을 근거로 폴백을
+   * 그 모델에 걸었는데, 그건 **도달 가능**의 증거일 뿐 **텍스트를 돌려준다**는
+   * 증거가 아니었다. 추론형 모델은 토큰 예산을 추론에 다 쓰고 본문을 비워 보내도
+   * 200이다. 폴백이 이 모델에 의존하므로, 프로브가 그 질문에 직접 답해야 한다.
+   */
+  usable?: boolean;
+  /** 실제로 받은 텍스트 길이 — usable의 근거를 숫자로 남긴다. */
+  textChars?: number;
 };
 
 const PROMPT = "Reply with the single word: ok";
+/** 추론형 모델이 예산을 추론에 다 써서 본문을 비우지 않도록 넉넉히. 그래도 응답은 한 단어다. */
+const MAX_OUT = 512;
 
-async function timed(fn: () => Promise<{ status: number | "network_error"; detail?: string }>): Promise<{ status: number | "network_error"; detail?: string; ms: number }> {
+type Probed = { status: number | "network_error"; detail?: string; usable?: boolean; textChars?: number };
+
+async function timed(fn: () => Promise<Probed>): Promise<Probed & { ms: number }> {
   const t = Date.now();
   try {
     const r = await fn();
@@ -52,9 +67,12 @@ async function probeAnthropic(env: Env, useGateway: boolean): Promise<ProbeResul
     const r = await fetch(url, {
       method: "POST",
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json", "user-agent": "simsa-central-plane/1.0" },
-      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 5, messages: [{ role: "user", content: PROMPT }] }),
+      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: MAX_OUT, messages: [{ role: "user", content: PROMPT }] }),
     });
-    return { status: r.status, detail: r.ok ? undefined : (await r.text().catch(() => "")).slice(0, 120) };
+    if (!r.ok) return { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 120) };
+    const j = (await r.json().catch(() => null)) as { content?: Array<{ type: string; text?: string }> } | null;
+    const text = (j?.content ?? []).find((b) => b.type === "text")?.text ?? "";
+    return { status: r.status, usable: text.trim().length > 0, textChars: text.length };
   });
   return { vendor: "anthropic", path, ...out };
 }
@@ -69,9 +87,12 @@ async function probeOpenAi(env: Env): Promise<ProbeResult> {
     const r = await fetch(url, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-5.4", max_completion_tokens: 5, messages: [{ role: "user", content: PROMPT }] }),
+      body: JSON.stringify({ model: OPENAI_FALLBACK_MODEL, max_completion_tokens: MAX_OUT, messages: [{ role: "user", content: PROMPT }] }),
     });
-    return { status: r.status, detail: r.ok ? undefined : (await r.text().catch(() => "")).slice(0, 120) };
+    if (!r.ok) return { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 120) };
+    const j = (await r.json().catch(() => null)) as { choices?: Array<{ message?: { content?: string } }> } | null;
+    const text = j?.choices?.[0]?.message?.content ?? "";
+    return { status: r.status, usable: text.trim().length > 0, textChars: text.length };
   });
   return { vendor: "openai", path, ...out };
 }
@@ -91,7 +112,10 @@ async function probeGemini(env: Env): Promise<ProbeResult> {
       headers: { "x-goog-api-key": key, "content-type": "application/json" },
       body: JSON.stringify({ contents: [{ parts: [{ text: PROMPT }] }] }),
     });
-    return { status: r.status, detail: r.ok ? undefined : (await r.text().catch(() => "")).slice(0, 120) };
+    if (!r.ok) return { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 120) };
+    const j = (await r.json().catch(() => null)) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> } | null;
+    const text = (j?.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+    return { status: r.status, usable: text.trim().length > 0, textChars: text.length };
   });
   return { vendor: "gemini", path, ...out };
 }
@@ -119,12 +143,15 @@ export function createLlmProbeRoutes(): Hono<{ Bindings: Env }> {
     const results = await Promise.all(rounds);
 
     // 벤더·경로별 요약 — 사람이 한눈에 보고 판단하기 위한 집계.
-    const summary: Record<string, { ok: number; total: number; statuses: Record<string, number>; avgMs: number }> = {};
+    // ok(=200 도달)와 usable(=실제 텍스트를 받음)을 **따로** 센다. 둘이 갈리는
+    // 경우가 정확히 폴백이 조용히 망가지는 지점이다.
+    const summary: Record<string, { ok: number; usable: number; total: number; statuses: Record<string, number>; avgMs: number }> = {};
     for (const r of results) {
       const k = `${r.vendor}:${r.path}`;
-      const s = (summary[k] ??= { ok: 0, total: 0, statuses: {}, avgMs: 0 });
+      const s = (summary[k] ??= { ok: 0, usable: 0, total: 0, statuses: {}, avgMs: 0 });
       s.total += 1;
       if (r.status === 200) s.ok += 1;
+      if (r.usable) s.usable += 1;
       const key = String(r.status);
       s.statuses[key] = (s.statuses[key] ?? 0) + 1;
       s.avgMs += r.ms;
