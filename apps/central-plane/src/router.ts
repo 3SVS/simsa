@@ -46,6 +46,7 @@ import { createWorkspaceSourcesRoutes } from "./routes/workspace-sources.js";
 import { createWorkspaceDocumentIntakeRoutes } from "./routes/workspace-document-intake.js";
 import { createWorkspaceVisualChecksRoutes } from "./routes/workspace-visual-checks.js";
 import { createWorkspaceVisualCheckRunRoutes } from "./routes/workspace-visual-check-runs.js";
+import { createLlmProbeRoutes } from "./routes/llm-probe.js";
 import { createWorkspaceRepairJobRoutes } from "./routes/workspace-repair-jobs.js";
 import { createWorkspaceExperimentRoutes } from "./routes/workspace-experiment.js";
 import { createWorkspaceAgentWorkflowRoutes } from "./routes/workspace-agent-workflow.js";
@@ -79,6 +80,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   const app = new Hono<{ Bindings: Env }>();
   const fetchImpl: FetchLike = opts.fetch ?? (fetch.bind(globalThis) as FetchLike);
   app.route("/", healthRoutes);
+  // 관측 도구: 벤더별 LLM 도달성(내부 토큰 필요) — 2026-08-22 403 진단에서 신설.
+  app.route("/", createLlmProbeRoutes());
   app.route("/", registerRoutes);
   app.route("/", episodicRoutes);
   app.route("/", federatedBaselinesRoutes);
