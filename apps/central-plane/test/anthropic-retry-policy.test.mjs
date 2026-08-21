@@ -43,26 +43,28 @@ describe("retryDelayMs — 오류 종류별 대기 (A-1)", () => {
       const d1 = retryDelayMs(status, 1, null);
       const d2 = retryDelayMs(status, 2, null);
       const d3 = retryDelayMs(status, 3, null);
-      assert.ok(d1 >= 1000 && d1 < 1500, `${status} attempt1=${d1}`);
-      assert.ok(d2 >= 2000 && d2 < 2500, `${status} attempt2=${d2}`);
-      assert.ok(d3 >= 4000 && d3 < 4500, `${status} attempt3=${d3}`);
-      assert.ok(retryDelayMs(status, 6, null) <= 6400, "상한 6s + 지터");
-      assert.ok(d2 > d1 && d3 > d2, "단조 증가");
+      // A′-4 equal jitter: [base/2, base*1.5]. rand를 고정해 결정론 검증.
+      const mid = (a, n) => retryDelayMs(status, a, null, () => 0.5);
+      assert.equal(mid(1), 1000, `${status} attempt1 중앙값`);
+      assert.equal(mid(2), 2000, `${status} attempt2 중앙값`);
+      assert.equal(mid(3), 4000, `${status} attempt3 중앙값`);
+      assert.equal(retryDelayMs(status, 6, null, () => 1), 9000, "상한 6s의 최대 지터");
+      assert.ok(retryDelayMs(status, 1, null, () => 0) === 500, "최소는 base/2");
     }
   });
 
   it("egress성 오류(403)와 네트워크 예외(null)는 종전 공식 유지 — 무회귀", () => {
     // 종전: 500 * attempt + 지터. 용량 오류보다 촘촘해야 한다.
     for (const status of [403, null]) {
-      assert.ok(retryDelayMs(status, 1, null) < 1000, `${status} attempt1`);
-      assert.ok(retryDelayMs(status, 3, null) < 2000, `${status} attempt3`);
+      assert.ok(retryDelayMs(status, 1, null, () => 0.5) <= 500, `${status} attempt1`);
+      assert.ok(retryDelayMs(status, 3, null, () => 0.5) <= 1500, `${status} attempt3`);
     }
-    assert.ok(retryDelayMs(403, 2, null) < retryDelayMs(429, 2, null), "403이 429보다 짧다");
+    assert.ok(retryDelayMs(403, 2, null, () => 0.5) < retryDelayMs(429, 2, null, () => 0.5), "403이 429보다 짧다");
   });
 
   it("retry-after가 있으면 용량 백오프보다 우선한다", () => {
-    assert.ok(retryDelayMs(429, 3, 800) < 1300, "서버가 0.8s라면 4s를 기다리지 않는다");
-    assert.ok(retryDelayMs(429, 1, 5000) >= 5000, "서버가 5s라면 그만큼 기다린다");
+    assert.ok(retryDelayMs(429, 3, 800, () => 0.5) < 1300, "서버가 0.8s라면 4s를 기다리지 않는다");
+    assert.ok(retryDelayMs(429, 1, 5000, () => 0) >= 5000, "서버가 5s라면 그만큼 기다린다(하한 준수)");
   });
 });
 
@@ -174,5 +176,34 @@ describe("anthropicMessages — 예산과 실패 로그 (A-1·A-2)", () => {
       .find((j) => j && j.event === "llm_failure");
     assert.ok(line);
     assert.equal(line.failure_class, "egress");
+  });
+});
+
+describe("A′-4 — 지터가 동시 요청의 재시도를 흩는다", () => {
+  it("★같은 순간 실패한 요청들의 재시도 시각이 서로 달라진다 (종전엔 완전 동기화)", () => {
+    // 동시에 실패한 8건이 각자 다른 난수를 받으면 재시도 시각이 흩어져야 한다.
+    // 종전 결정론 지터에서는 8건 모두 같은 값이 나와 재시도가 뭉쳐 다녔다.
+    const delays = Array.from({ length: 8 }, (_, i) => retryDelayMs(403, 1, null, () => i / 8));
+    const unique = new Set(delays);
+    assert.ok(unique.size >= 6, `재시도 시각이 흩어져야 한다 — 서로 다른 값 ${unique.size}/8`);
+    const spread = Math.max(...delays) - Math.min(...delays);
+    assert.ok(spread >= 300, `분산이 충분해야 한다 — 폭 ${spread}ms`);
+  });
+
+  it("흩뿌려도 하한이 있어 폭주하지 않는다 (base/2 이상, base*1.5 이하)", () => {
+    for (const attempt of [1, 2, 3]) {
+      const lo = retryDelayMs(403, attempt, null, () => 0);
+      const hi = retryDelayMs(403, attempt, null, () => 1);
+      const base = 500 * attempt;
+      assert.equal(lo, base / 2);
+      assert.equal(hi, Math.round(base * 1.5));
+    }
+  });
+
+  it("retry-after는 하한으로 존중하고 그 위에만 흩뿌린다", () => {
+    const lo = retryDelayMs(429, 2, 2000, () => 0);
+    const hi = retryDelayMs(429, 2, 2000, () => 1);
+    assert.equal(lo, 2000, "서버 지시보다 일찍 가지 않는다");
+    assert.ok(hi > 2000 && hi <= 2500, "그 위에서만 흩어진다");
   });
 });
