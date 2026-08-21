@@ -81,6 +81,23 @@ describe("/internal/llm-probe — 결과 형태와 무누출", () => {
   });
 });
 
+describe("/internal/llm-probe — usable (200 ≠ 쓸 만하다)", () => {
+  it("★요약이 ok와 usable을 따로 센다", async () => {
+    const env = envWith({ ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    const body = await (await post(env)).json();
+    for (const [key, s] of Object.entries(body.summary)) {
+      assert.equal(typeof s.usable, "number", `${key}에 usable 집계가 있어야 한다`);
+      assert.equal(typeof s.ok, "number");
+    }
+  });
+
+  it("키가 없으면 usable은 0이다 — 호출하지 않았으니 쓸 만함도 증명 못 한다", async () => {
+    const env = envWith({ ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    const body = await (await post(env)).json();
+    assert.ok(Object.values(body.summary).every((s) => s.usable === 0));
+  });
+});
+
 describe("/internal/llm-probe — 전용 토큰 (관측/콜백 분리)", () => {
   it("LLM_PROBE_TOKEN이 있으면 그것으로 연다", async () => {
     const env = envWith({ LLM_PROBE_TOKEN: "probe_only", ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });
