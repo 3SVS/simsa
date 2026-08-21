@@ -110,6 +110,12 @@ export interface Env {
    */
   INTERNAL_CALLBACK_TOKEN?: string;
   /**
+   * 운영 관측 전용 토큰(/internal/llm-probe). INTERNAL_CALLBACK_TOKEN과 분리한
+   * 이유: 그 토큰은 컨테이너 콜백이 쓰는 값이라, 진단하려고 회전시키면 진행 중인
+   * 잡의 콜백이 깨진다. 관측은 별도 열쇠로 연다. 미설정이면 프로브는 503.
+   */
+  LLM_PROBE_TOKEN?: string;
+  /**
    * v0.16.2 — LLM keys forwarded into the container as env vars on
    * spawn. The container needs them to call the council agents +
    * worker model. Set via `wrangler secret put`.
