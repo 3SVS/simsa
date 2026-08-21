@@ -6,7 +6,7 @@
  * LLM failure → heuristic fallback (diff-aware: matching filenames lean toward "통과").
  */
 import type { CheckableItem, ProductSpecForCheck, CheckResultItem } from "./check.js";
-import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
 import type { PullRequestMeta, PullRequestFile } from "./github-pr.js";
 import { buildDiffSummary } from "./github-pr.js";
 import type { FetchLike } from "../github.js";
@@ -106,6 +106,7 @@ async function callAnthropic(
   timeoutMs = 25000,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
   baseUrl?: string,
+  fallback?: VendorFallback,
 ): Promise<{ text: string; tokens: number | null }> {
   const data = (await anthropicMessages(
     apiKey,
@@ -114,6 +115,7 @@ async function callAnthropic(
     fetchImpl,
     anthropicEndpoint(baseUrl),
     "pr-review",
+    { fallback },
   )) as {
     content?: Array<{ type: string; text?: string }>;
     usage?: { input_tokens?: number; output_tokens?: number };
@@ -294,6 +296,8 @@ export async function reviewPRAgainstItems(
   anthropicApiKey: string | undefined,
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
   anthropicBaseUrl?: string,
+  /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
+  fallback?: VendorFallback,
 ): Promise<PRReviewResponse> {
   if (!req.items?.length) {
     return {
@@ -314,7 +318,7 @@ export async function reviewPRAgainstItems(
   let rawText = "";
   let tokensConsumed: number | null = null;
   try {
-    const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl, anthropicBaseUrl);
+    const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl, anthropicBaseUrl, fallback);
     rawText = out.text;
     tokensConsumed = out.tokens;
   } catch (err) {

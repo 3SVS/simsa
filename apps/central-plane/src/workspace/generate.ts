@@ -3,7 +3,7 @@
  * idea-to-spec draft. Falls back to inline mock data on any failure
  * so the user-facing flow never breaks.
  */
-import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
 import { verifySpecAgainstUserWords, type SpecVerification } from "./verify-spec.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -548,6 +548,7 @@ async function callAnthropic(
   prompt: string,
   baseUrl: string | undefined,
   timeoutMs = 120000, // document-scale prompts (up to 80k chars) need generous time
+  fallback?: VendorFallback,
 ): Promise<{ text: string; usage: LlmCallUsage }> {
   const startedAt = Date.now();
   const data = (await anthropicMessages(
@@ -572,6 +573,7 @@ async function callAnthropic(
     undefined,
     anthropicEndpoint(baseUrl),
     "generate",
+    { fallback },
   )) as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
@@ -992,6 +994,8 @@ export async function generateIdeaToSpecDraft(
   req: IdeaToSpecDraftRequest,
   anthropicApiKey: string | undefined,
   anthropicBaseUrl?: string,
+  /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
+  fallback?: VendorFallback,
 ): Promise<IdeaToSpecDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.idea?.trim()) {
     return { ...buildMockFallback(req), warnings: ["아이디어를 입력해주세요."] };
@@ -1005,7 +1009,7 @@ export async function generateIdeaToSpecDraft(
   let rawText = "";
   let llmUsage: LlmCallUsage | undefined;
   try {
-    const call = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
+    const call = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback);
     rawText = call.text;
     llmUsage = call.usage;
   } catch (err) {

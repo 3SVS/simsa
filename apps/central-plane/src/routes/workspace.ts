@@ -63,6 +63,16 @@ import {
   BETA_PROJECT_CREATE_DAILY_BUCKET,
 } from "../workspace/beta-limits.js";
 
+/**
+ * 벤더 폴백 설정 — Anthropic이 Worker egress에서 차단될 때(실측 403 100%)
+ * 같은 프롬프트를 OpenAI로 넘긴다. 키가 없으면 undefined라 종전과 동일하게 동작.
+ * `/internal/llm-probe` 실측: anthropic 0/4 · **openai 4/4**(2.9초) · gemini 지역 제한.
+ */
+function vendorFallback(env: Env): { openaiApiKey?: string; openaiBaseUrl?: string } | undefined {
+  if (!env.OPENAI_API_KEY) return undefined;
+  return { openaiApiKey: env.OPENAI_API_KEY, openaiBaseUrl: env.CF_AI_GATEWAY_OPENAI_URL };
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_LIMIT_PER_HOUR = 20;
@@ -259,7 +269,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     let result;
     try {
-      result = await generateIdeaToSpecDraft(input, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL);
+      result = await generateIdeaToSpecDraft(input, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
     } catch (err) {
       console.error("[workspace] unexpected generate error:", err);
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), {
@@ -565,7 +575,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       // direct Worker→Anthropic egress ~90% 403s, which surfaced as the
       // recurring "확인 중 오류가 발생했습니다". This was the ONE LLM route that
       // omitted the gateway URL.
-      result = await generateCheckDraft({ productSpec: req.productSpec, items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL);
+      result = await generateCheckDraft({ productSpec: req.productSpec, items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
     } catch (err) {
       console.error("[workspace/check-draft] error:", err);
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
@@ -642,6 +652,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         },
         c.env.ANTHROPIC_API_KEY,
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+        vendorFallback(c.env),
       );
     } catch (err) {
       console.error("[workspace/recommend-answer] error:", err);
@@ -704,6 +715,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         },
         c.env.ANTHROPIC_API_KEY,
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+        vendorFallback(c.env),
       );
     } catch (err) {
       console.error("[workspace/unstick] error:", err);
@@ -769,7 +781,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     let result;
     try {
-      result = await generateFixSuggestion(req as WorkspaceFixSuggestionRequest, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL);
+      result = await generateFixSuggestion(req as WorkspaceFixSuggestionRequest, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
     } catch (err) {
       console.error("[workspace/fix-suggestion] error:", err);
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
