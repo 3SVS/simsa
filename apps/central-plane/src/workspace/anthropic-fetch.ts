@@ -172,8 +172,9 @@ export function logAnthropicUsage(
   model: string,
   usage: AnthropicMessagesData["usage"],
   latencyMs: number,
-  /** A′-1: 성공한 경로와 몇 번째 시도였는지 — 경로별 성공률 집계의 반쪽. */
-  meta?: { endpointKind?: EndpointKind; attempt?: number },
+  /** A′-1: 성공한 경로와 몇 번째 시도였는지 — 경로별 성공률 집계의 반쪽.
+   *  vendor: 실제로 응답한 벤더(폴백 시 openai). 정직성상 반드시 남긴다. */
+  meta?: { endpointKind?: EndpointKind; attempt?: number; vendor?: string },
 ): void {
   try {
     console.log(
@@ -186,6 +187,7 @@ export function logAnthropicUsage(
         cache_creation_input_tokens: usage?.cache_creation_input_tokens ?? 0,
         cache_read_input_tokens: usage?.cache_read_input_tokens ?? 0,
         latency_ms: latencyMs,
+        vendor: meta?.vendor ?? "anthropic",
         ...(meta?.endpointKind ? { endpoint_kind: meta.endpointKind } : {}),
         ...(meta?.attempt ? { attempt: meta.attempt } : {}),
       }),
@@ -199,6 +201,74 @@ export function logAnthropicUsage(
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 /**
+ * ★벤더 폴백 (2026-08-22) — 이 파일의 가장 중요한 장치.
+ *
+ * `/internal/llm-probe` 실측(동시성 1·4 각각):
+ *   anthropic:gateway 0/1·0/4 (403 forbidden)   anthropic:direct 0/1·0/4 (403)
+ *   **openai:gateway 1/1·4/4 (200, 평균 2.9초)**  gemini:gateway 0/1·0/4
+ *     (400 "User location is not supported" — 지역 제한)
+ *
+ * 즉 Worker egress에서 **Anthropic은 완전 차단**이고 **OpenAI만 열려 있다**.
+ * 재시도·백오프·경로 교대·지터로는 절대 못 넘는다(네 번 시도해 네 번 실패했다).
+ * 그래서 마지막 수단으로 **다른 벤더로 같은 프롬프트를 던진다**.
+ *
+ * 정직성: 조용한 품질 저하가 아니다 — 같은 프롬프트·같은 출력 계약이고,
+ * **어느 벤더가 응답했는지 로그에 남긴다**(anthropic_usage.vendor / llm_fallback).
+ * 폴백이 없으면(키 없음·폴백도 실패) 종전처럼 정직하게 실패한다.
+ */
+export const OPENAI_FALLBACK_MODEL = "gpt-5.4";
+
+export type VendorFallback = {
+  openaiApiKey?: string;
+  /** CF AI Gateway의 OpenAI 베이스(없으면 직행). */
+  openaiBaseUrl?: string;
+  model?: string;
+};
+
+function openAiUrl(baseUrl?: string): string {
+  const base = (baseUrl ?? "").trim().replace(/\/$/, "");
+  return base ? `${base}/chat/completions` : "https://api.openai.com/v1/chat/completions";
+}
+
+/** OpenAI 응답을 Anthropic 응답 형태로 옮긴다 — 호출부는 폴백을 몰라도 된다. */
+async function callOpenAiAsAnthropic(
+  fb: VendorFallback,
+  body: AnthropicMessagesBody,
+  timeoutMs: number,
+  fetchImpl: FetchLike,
+): Promise<AnthropicMessagesData> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetchImpl(openAiUrl(fb.openaiBaseUrl), {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { authorization: `Bearer ${fb.openaiApiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: fb.model ?? OPENAI_FALLBACK_MODEL,
+        max_completion_tokens: body.max_tokens,
+        messages: body.messages,
+      }),
+    });
+    if (!r.ok) {
+      const tail = await r.text().catch(() => "");
+      throw new Error(`OpenAI ${r.status}: ${tail.slice(0, 200)}`);
+    }
+    const j = (await r.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    const text = j.choices?.[0]?.message?.content ?? "";
+    return {
+      content: [{ type: "text", text }],
+      usage: { input_tokens: j.usage?.prompt_tokens ?? 0, output_tokens: j.usage?.completion_tokens ?? 0 },
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Base URL for the Anthropic Messages API. When CF_AI_GATEWAY_ANTHROPIC_URL is
  * set (e.g. https://gateway.ai.cloudflare.com/v1/{acct}/{gw}/anthropic) the
  * call routes through Cloudflare AI Gateway, which sidesteps the direct
@@ -207,6 +277,91 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export function anthropicEndpoint(baseUrl?: string): string {
   const base = (baseUrl ?? "").trim().replace(/\/$/, "");
   return base ? `${base}/v1/messages` : "https://api.anthropic.com/v1/messages";
+}
+
+/**
+ * Anthropic이 끝내 실패했을 때의 마지막 수단. 폴백이 없거나 그마저 실패하면
+ * **원래 에러를 그대로 던진다** — 조용히 성공한 척하지 않는다.
+ */
+async function fallbackOrThrow(
+  fb: VendorFallback | undefined,
+  body: AnthropicMessagesBody,
+  timeoutMs: number,
+  fetchImpl: FetchLike,
+  callSite: string,
+  now: () => number,
+  startedAt: number,
+  lastStatus: number | null,
+  lastErr: unknown,
+): Promise<AnthropicMessagesData> {
+  const primaryErr = lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+  if (!fb?.openaiApiKey) throw primaryErr;
+  try {
+    const data = await callOpenAiAsAnthropic(fb, body, timeoutMs, fetchImpl);
+    logAnthropicUsage(callSite, fb.model ?? OPENAI_FALLBACK_MODEL, data.usage, now() - startedAt, {
+      vendor: "openai",
+    });
+    try {
+      console.log(
+        JSON.stringify({
+          event: "llm_fallback",
+          call_site: callSite,
+          from: "anthropic",
+          to: "openai",
+          primary_status: lastStatus,
+          latency_ms: now() - startedAt,
+        }),
+      );
+    } catch { /* logging must not break the call */ }
+    return data;
+  } catch (fbErr) {
+    try {
+      console.log(
+        JSON.stringify({
+          event: "llm_fallback_failed",
+          call_site: callSite,
+          primary_status: lastStatus,
+          fallback_error: String(fbErr).slice(0, 200),
+        }),
+      );
+    } catch { /* ignore */ }
+    // 폴백도 실패 — 사용자에겐 원래 원인이 더 유용하다.
+    throw primaryErr;
+  }
+}
+
+/**
+ * ★회로 차단기 (2026-08-22) — 폴백의 짝.
+ *
+ * Anthropic이 100% 403인 지금, 호출마다 6회 재시도로 ~12초를 태우고 나서야
+ * 폴백에 들어간다. 그 12초는 실측상 **순손실**이다(네 번 시도해 네 번 실패한
+ * 경로를 다시 여섯 번 두드리는 것). 그래서 연속 실패가 임계에 닿으면 이후
+ * 호출은 Anthropic을 건너뛰고 바로 폴백으로 간다.
+ *
+ * 영구적으로 포기하진 않는다 — 쿨다운이 지나면 딱 한 번 다시 통과시켜
+ * (half-open) 살아났는지 실측한다. 살아나면 즉시 원복, 또 죽으면 재차단.
+ * 상태는 isolate 단위 메모리이므로 정확한 전역 합의가 아니라 **최적화**다.
+ * 폴백이 없으면 차단하지 않는다 — 유일한 경로를 스스로 끊으면 안 된다.
+ */
+const BREAKER_THRESHOLD = 2;
+const BREAKER_COOLDOWN_MS = 60_000;
+let breakerFailures = 0;
+let breakerOpenedAt = 0;
+
+function breakerIsOpen(t: number): boolean {
+  return breakerFailures >= BREAKER_THRESHOLD && t - breakerOpenedAt < BREAKER_COOLDOWN_MS;
+}
+function breakerRecordFailure(t: number): void {
+  breakerFailures += 1;
+  breakerOpenedAt = t;
+}
+function breakerRecordSuccess(): void {
+  breakerFailures = 0;
+  breakerOpenedAt = 0;
+}
+/** 테스트 전용 — isolate 전역 상태가 테스트 간에 새지 않도록. */
+export function __resetAnthropicBreaker(): void {
+  breakerRecordSuccess();
 }
 
 export async function anthropicMessages(
@@ -224,6 +379,8 @@ export async function anthropicMessages(
     nowImpl?: () => number;
     /** A′-4: 지터 난수 주입(테스트 결정론화). */
     randomImpl?: () => number;
+    /** ★벤더 폴백: Anthropic이 끝내 실패하면 여기로 같은 프롬프트를 던진다. */
+    fallback?: VendorFallback;
   } = {},
 ): Promise<AnthropicMessagesData> {
   let lastErr: unknown = null;
@@ -239,6 +396,18 @@ export async function anthropicMessages(
   // A′-1: 시도마다 경로를 번갈아 쓴다(게이트웨이 → 직행 → 게이트웨이 …).
   const rotation = endpointRotation(endpoint);
   const triedByEndpoint: Record<string, number> = {};
+  // 차단기가 열려 있고 갈 곳이 있으면 12초를 태우지 않고 곧장 폴백으로.
+  if (opts.fallback?.openaiApiKey && breakerIsOpen(startedAt)) {
+    try {
+      console.log(
+        JSON.stringify({ event: "llm_breaker_open", call_site: callSite, skipped: "anthropic", failures: breakerFailures }),
+      );
+    } catch { /* logging must not break the call */ }
+    return fallbackOrThrow(
+      opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt,
+      null, new Error("Anthropic skipped: circuit breaker open"),
+    );
+  }
   let lastKind: EndpointKind = rotation[0]!.kind;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     attemptsMade = attempt;
@@ -271,10 +440,12 @@ export async function anthropicMessages(
     if (resp) {
       if (resp.ok) {
         const data = (await resp.json()) as AnthropicMessagesData;
+        breakerRecordSuccess(); // Anthropic이 살아 있다 — 차단 해제.
         // latency_ms is wall time including retries — what the user waited.
         logAnthropicUsage(callSite, body.model, data.usage, now() - startedAt, {
           endpointKind: target.kind,
           attempt,
+          vendor: "anthropic",
         });
         return data;
       }
@@ -308,7 +479,8 @@ export async function anthropicMessages(
         endpointKind: lastKind,
         triedByEndpoint,
       });
-      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+      breakerRecordFailure(now());
+      return fallbackOrThrow(opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt, lastStatus, lastErr);
     }
     sleptTotalMs += delay;
     await sleep(delay);
@@ -321,5 +493,6 @@ export async function anthropicMessages(
     endpointKind: lastKind,
     triedByEndpoint,
   });
-  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+  breakerRecordFailure(now());
+  return fallbackOrThrow(opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt, lastStatus, lastErr);
 }

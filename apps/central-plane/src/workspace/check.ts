@@ -5,7 +5,7 @@
  * This is NOT a code review — it checks the spec document only.
  * LLM failure → deterministic mock fallback via heuristics.
  */
-import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
 
 export type CheckableItem = {
   id: string;
@@ -202,7 +202,7 @@ ${itemsText}
 
 // ─── Anthropic call ───────────────────────────────────────────────────────────
 
-async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | undefined, timeoutMs = 20000): Promise<string> {
+async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | undefined, timeoutMs = 20000, fallback?: VendorFallback): Promise<string> {
   const data = (await anthropicMessages(
     apiKey,
     { model: "claude-haiku-4-5-20251001", max_tokens: 4000, messages: [{ role: "user", content: prompt }] },
@@ -210,6 +210,7 @@ async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | u
     undefined,
     anthropicEndpoint(baseUrl),
     "check",
+    { fallback },
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
@@ -402,6 +403,8 @@ export async function generateCheckDraft(
   req: WorkspaceCheckDraftRequest,
   anthropicApiKey: string | undefined,
   anthropicBaseUrl?: string,
+  /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
+  fallback?: VendorFallback,
 ): Promise<WorkspaceCheckDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.items?.length) {
     return {
@@ -421,7 +424,7 @@ export async function generateCheckDraft(
   const prompt = buildCheckPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
+    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback);
   } catch (err) {
     console.error("[workspace/check] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };

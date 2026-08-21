@@ -13,7 +13,7 @@
  *      product decision would be worse than saying "추천을 못 가져왔어요".
  */
 
-import { anthropicMessages, anthropicEndpoint } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
 
 export type WorkspaceRecommendAnswerRequest = {
   /** The open decision to resolve, verbatim from productSpec.openQuestions. */
@@ -92,6 +92,7 @@ async function callAnthropic(
   prompt: string,
   baseUrl: string | undefined,
   timeoutMs = 15000,
+  fallback?: VendorFallback,
 ): Promise<string> {
   const data = (await anthropicMessages(
     apiKey,
@@ -100,6 +101,7 @@ async function callAnthropic(
     undefined,
     anthropicEndpoint(baseUrl),
     "recommend",
+    { fallback },
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
@@ -125,6 +127,8 @@ export async function generateRecommendedAnswer(
   req: WorkspaceRecommendAnswerRequest,
   anthropicApiKey: string | undefined,
   anthropicBaseUrl?: string,
+  /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
+  fallback?: VendorFallback,
 ): Promise<WorkspaceRecommendAnswerResponse> {
   if (!anthropicApiKey) {
     console.warn("[workspace/recommend] no API key — honest failure (no silent default)");
@@ -134,7 +138,7 @@ export async function generateRecommendedAnswer(
   const prompt = buildRecommendPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl);
+    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback);
   } catch (err) {
     console.error("[workspace/recommend] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };

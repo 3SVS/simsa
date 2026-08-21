@@ -969,6 +969,10 @@ export function createWorkspaceGitHubRoutes(
         c.env.ANTHROPIC_API_KEY,
         fetchImpl,
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+        // 벤더 폴백: Anthropic이 Worker egress에서 차단될 때 OpenAI로.
+        c.env.OPENAI_API_KEY
+          ? { openaiApiKey: c.env.OPENAI_API_KEY, openaiBaseUrl: c.env.CF_AI_GATEWAY_OPENAI_URL }
+          : undefined,
       );
       if (reviewResult.warnings?.length) warnings.push(...reviewResult.warnings);
     } catch (err) {
