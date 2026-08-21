@@ -73,14 +73,27 @@ export function parseRetryAfterMs(header: string | null, nowMs: number): number 
  * 다음 시도까지의 대기. FAST는 종전 공식 유지(회귀 없음), CAPACITY는 지수
  * 백오프(1s·2s·4s…, 상한 6s)에 `retry-after`가 있으면 그것을 우선한다.
  */
-export function retryDelayMs(status: number | null, attempt: number, retryAfterMs: number | null): number {
-  const jitter = (attempt * 137) % 400;
-  if (status !== null && CAPACITY_RETRY.has(status)) {
-    if (retryAfterMs !== null) return retryAfterMs + jitter;
-    return Math.min(1000 * 2 ** (attempt - 1), 6000) + jitter;
+export function retryDelayMs(
+  status: number | null,
+  attempt: number,
+  retryAfterMs: number | null,
+  /** A′-4: 지터 난수(테스트 주입). */
+  rand: () => number = Math.random,
+): number {
+  // A′-4 (2026-08-21 라이브 로그): 종전 지터는 `(attempt*137)%400` — **결정론적**이라
+  // 같은 순간 실패한 요청들이 **정확히 같은 시각에 함께 재시도**했다. 그래서 동시
+  // 4건이 6회 내내 뭉쳐 다니며 매번 같이 거절당했다(성공한 건은 전부 attempt 1에서
+  // 성공, 첫 시도에 실패한 건은 6회 전부 실패 — 재시도가 무력했던 정확한 이유).
+  // equal jitter(base/2 + rand*base)로 재시도 시각을 흩어 동시성을 스스로 낮춘다.
+  if (status !== null && CAPACITY_RETRY.has(status) && retryAfterMs !== null) {
+    // 서버가 명시한 대기는 **하한**으로 존중하고, 그 위에만 흩뿌린다.
+    return retryAfterMs + Math.round(rand() * 500);
   }
-  // 403 등 egress성 오류 + 네트워크 예외: 종전 그대로 촘촘하게.
-  return 500 * attempt + jitter;
+  const base =
+    status !== null && CAPACITY_RETRY.has(status)
+      ? Math.min(1000 * 2 ** (attempt - 1), 6000)
+      : 500 * attempt; // 403 등 egress성 오류 + 네트워크 예외
+  return Math.round(base / 2 + rand() * base);
 }
 
 /**
@@ -209,6 +222,8 @@ export async function anthropicMessages(
     maxTotalMs?: number;
     sleepImpl?: (ms: number) => Promise<void>;
     nowImpl?: () => number;
+    /** A′-4: 지터 난수 주입(테스트 결정론화). */
+    randomImpl?: () => number;
   } = {},
 ): Promise<AnthropicMessagesData> {
   let lastErr: unknown = null;
@@ -283,7 +298,7 @@ export async function anthropicMessages(
     if (attempt >= MAX_ATTEMPTS) break;
     // A-1: 오류 종류별 대기. 남은 예산을 넘길 대기라면 더 시도하지 않고
     // 정직하게 실패한다 — 클라이언트 타임아웃까지 붙들고 있는 것이 더 나쁘다.
-    const delay = retryDelayMs(lastStatus, attempt, retryAfterMs);
+    const delay = retryDelayMs(lastStatus, attempt, retryAfterMs, opts.randomImpl);
     if (sleptTotalMs + delay > maxTotalMs) {
       logAnthropicFailure(callSite, body.model, {
         finalStatus: lastStatus,
