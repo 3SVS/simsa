@@ -100,7 +100,9 @@ export function createLlmProbeRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
 
   app.post("/internal/llm-probe", async (c) => {
-    const expected = c.env.INTERNAL_CALLBACK_TOKEN;
+    // 관측 전용 토큰이 있으면 그것을, 없으면 기존 내부 토큰을 받는다.
+    // (전용 토큰을 따로 두는 이유는 env.ts LLM_PROBE_TOKEN 주석 참조.)
+    const expected = c.env.LLM_PROBE_TOKEN ?? c.env.INTERNAL_CALLBACK_TOKEN;
     if (!expected) return c.json({ ok: false, error: "probe_disabled" }, 503);
     const auth = c.req.header("authorization") ?? "";
     const m = /^Bearer\s+(.+)$/i.exec(auth);

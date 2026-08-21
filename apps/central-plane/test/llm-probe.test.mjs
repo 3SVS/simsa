@@ -80,3 +80,20 @@ describe("/internal/llm-probe — 결과 형태와 무누출", () => {
     assert.ok(body.summary["gemini:direct"] || body.summary["gemini:gateway"]);
   });
 });
+
+describe("/internal/llm-probe — 전용 토큰 (관측/콜백 분리)", () => {
+  it("LLM_PROBE_TOKEN이 있으면 그것으로 연다", async () => {
+    const env = envWith({ LLM_PROBE_TOKEN: "probe_only", ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    assert.equal((await post(env, { token: "probe_only" })).status, 200);
+  });
+
+  it("전용 토큰이 설정되면 내부 콜백 토큰으로는 열리지 않는다 (권한 분리)", async () => {
+    const env = envWith({ LLM_PROBE_TOKEN: "probe_only", ANTHROPIC_API_KEY: undefined });
+    assert.equal((await post(env, { token: TOKEN })).status, 401);
+  });
+
+  it("전용 토큰이 없으면 기존 내부 토큰으로 연다 (하위호환)", async () => {
+    const env = envWith({ ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    assert.equal((await post(env, { token: TOKEN })).status, 200);
+  });
+});
