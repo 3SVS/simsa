@@ -152,6 +152,35 @@ test("POST website: invalid URL rejected; github_repo: bad format rejected", asy
   assert.equal(goodRepo.status, 201);
 });
 
+test("★github_repo: 브라우저에서 복사한 주소를 그대로 붙여넣어도 받는다 (Bae 2026-08-23)", async () => {
+  // 종전엔 bare "owner/repo"만 받아 아래 형태들이 전부 invalid_repo로 거절됐다.
+  // 사용자는 주소창에서 복사해 오지, owner/repo를 손으로 치지 않는다.
+  const pasted = [
+    "https://github.com/seunghunbae-3svs/golf-now",
+    "https://github.com/seunghunbae-3svs/golf-now.git",
+    "https://github.com/seunghunbae-3svs/golf-now/tree/main/src",
+    "git@github.com:seunghunbae-3svs/golf-now.git",
+  ];
+  for (const reference of pasted) {
+    const env = makeEnv();
+    const res = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+      userKey: USER, type: "github_repo", reference,
+    });
+    assert.equal(res.status, 201, `거절되면 안 된다: ${reference}`);
+    // 저장은 정규화된 하나의 형태로 — 같은 저장소가 형태만 달라 중복 행이 되지 않도록.
+    assert.equal(res.json.source.reference, "seunghunbae-3svs/golf-now", reference);
+  }
+});
+
+test("github_repo: GitHub가 아닌 호스트는 조용히 통과시키지 않는다", async () => {
+  const env = makeEnv();
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+    userKey: USER, type: "github_repo", reference: "https://gitlab.com/seunghunbae-3svs/golf-now",
+  });
+  assert.equal(res.status, 400);
+  assert.equal(res.json.error, "invalid_repo");
+});
+
 test("ownership: other user forbidden (403), unknown project 404", async () => {
   const env = makeEnv();
   const forbidden = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
