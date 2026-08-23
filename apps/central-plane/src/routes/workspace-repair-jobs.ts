@@ -36,6 +36,7 @@
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
+import { normalizeGithubRepoRef } from "../workspace/github-repo-ref.js";
 import { getProject } from "../workspace/db.js";
 import { getVisualCheckById, type DbVisualCheck } from "../workspace/visual-check-db.js";
 import { getProjectRepo } from "../workspace/github-db.js";
@@ -77,15 +78,10 @@ export function isRunRepairable(run: Pick<DbVisualCheck, "status" | "works" | "a
 }
 
 /**
- * Normalize a project_sources github_repo reference into "owner/repo".
- * Accepts bare "owner/repo" and https://github.com/owner/repo(.git) URLs.
+ * 하위호환 별칭 — 정규화 로직은 workspace/github-repo-ref.ts 단일 출처.
+ * (이 함수를 부르는 기존 호출부·테스트를 그대로 두기 위한 재수출.)
  */
-export function normalizeRepoReference(reference: string): string | null {
-  let ref = (reference ?? "").trim();
-  ref = ref.replace(/^https?:\/\/(www\.)?github\.com\//i, "");
-  ref = ref.replace(/\.git$/i, "").replace(/\/+$/, "");
-  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(ref) ? ref : null;
-}
+export const normalizeRepoReference = normalizeGithubRepoRef;
 
 function requireInternalToken(c: {
   env: Env;

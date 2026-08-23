@@ -17,6 +17,7 @@ import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { getProject } from "../workspace/db.js";
+import { normalizeGithubRepoRef } from "../workspace/github-repo-ref.js";
 import {
   insertProjectSource,
   listProjectSources,
@@ -36,7 +37,10 @@ const DOCUMENT_EXTENSIONS: Record<string, string> = {
 };
 
 /** owner/repo — same shape GitHub accepts. */
-const GITHUB_REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+// 저장소 참조 정규화는 github-repo-ref.ts 단일 출처를 쓴다. 종전엔 이 파일이
+// bare "owner/repo"만 받는 정규식을 따로 갖고 있어, 사용자가 브라우저에서 복사한
+// GitHub **주소를 붙여넣으면 invalid_repo로 거절**했다 — 정작 그 값을 소비하는
+// 수리 작업은 이미 주소를 정규화하고 있었는데도. (Bae 2026-08-23 실사용 지적)
 
 function isValidHttpUrl(s: string): boolean {
   try {
@@ -95,8 +99,13 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
     if (type === "website" && !isValidHttpUrl(reference)) {
       return c.json({ ok: false, error: "invalid_url" }, 400);
     }
-    if (type === "github_repo" && !GITHUB_REPO_RE.test(reference)) {
-      return c.json({ ok: false, error: "invalid_repo" }, 400);
+    // 관대하게 받되 저장은 정규화된 owner/repo 하나로 — 같은 저장소가 형태만
+    // 달라 중복 행이 되지 않도록.
+    let storedReference = reference;
+    if (type === "github_repo") {
+      const normalized = normalizeGithubRepoRef(reference);
+      if (!normalized) return c.json({ ok: false, error: "invalid_repo" }, 400);
+      storedReference = normalized;
     }
 
     const label = typeof body.label === "string" ? body.label.trim().slice(0, MAX_LABEL_LEN) : undefined;
@@ -109,7 +118,7 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       if (existing.length >= MAX_SOURCES_PER_PROJECT) {
         return c.json({ ok: false, error: "source_limit_reached" }, 400);
       }
-      const source = await insertProjectSource(c.env, { projectId, userKey, type, reference, label });
+      const source = await insertProjectSource(c.env, { projectId, userKey, type, reference: storedReference, label });
       return c.json({ ok: true, source }, 201);
     } catch (err) {
       console.error("[workspace/sources POST] failed:", err);
