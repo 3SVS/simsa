@@ -59,18 +59,56 @@ describe("안 보이는 저장소 (②)", () => {
   });
 });
 
-describe("★모름과 못 읽음을 구분한다 (③)", () => {
-  it("429 → unknown/rate_limited (needs_access가 아니다)", async () => {
-    const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", async () => json({}, 429));
+describe("★레이트리밋이면 웹 페이지로 폴백한다 (2026-08-24 라이브 실측)", () => {
+  // 배포 직후 익명 4건 중 2건이 rate_limited였다. unknown 분류는 옳았지만
+  // 실사용에서 절반이 "모르겠어요"면 계측이 값을 못 낸다.
+  // github.com HEAD는 API 레이트리밋과 별개다(연속 20회 200 실측).
+  const rateLimitedApi = (webStatus) => async (url, init) => {
+    if (url.startsWith("https://api.github.com")) return json({}, 429);
+    assert.equal(init?.method, "HEAD", "웹 폴백은 본문을 받지 않는다");
+    assert.equal(url, "https://github.com/3SVS/simsa");
+    return new Response("", { status: webStatus });
+  };
+
+  it("API 429 → 웹 200이면 readable/public — 공개 저장소를 되살린다", async () => {
+    const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", rateLimitedApi(200));
+    assert.deepEqual(r, { state: "readable", visibility: "public", via: "anonymous" });
+  });
+
+  it("API 429 → 웹 404면 needs_access — 익명에겐 비공개도 404다", async () => {
+    const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", rateLimitedApi(404));
+    assert.equal(r.state, "needs_access");
+  });
+
+  it("403 + remaining:0도 같은 폴백을 탄다", async () => {
+    const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", async (url) =>
+      url.startsWith("https://api.github.com")
+        ? json({}, 403, { "x-ratelimit-remaining": "0" })
+        : new Response("", { status: 200 }),
+    );
+    assert.equal(r.state, "readable");
+  });
+
+  it("★웹까지 실패하면 종전대로 unknown — 폴백이 회귀를 만들지 않는다", async () => {
+    const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", async (url) => {
+      if (url.startsWith("https://api.github.com")) return json({}, 429);
+      throw new Error("web down");
+    });
     assert.deepEqual(r, { state: "unknown", reason: "rate_limited" });
   });
 
-  it("403 + x-ratelimit-remaining:0 → unknown — 공개 저장소 오진 방지", async () => {
-    const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", async () =>
-      json({}, 403, { "x-ratelimit-remaining": "0" }),
-    );
-    assert.deepEqual(r, { state: "unknown", reason: "rate_limited" });
+  it("★성공한 API 답은 폴백이 건드리지 않는다", async () => {
+    let webCalled = false;
+    const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", async (url) => {
+      if (!url.startsWith("https://api.github.com")) { webCalled = true; }
+      return json({ private: true });
+    });
+    assert.equal(r.visibility, "private");
+    assert.equal(webCalled, false, "API가 답했으면 웹은 부르지 않는다");
   });
+});
+
+describe("★모름과 못 읽음을 구분한다 (③)", () => {
 
   it("네트워크 예외 → unknown (던지지 않는다, ④)", async () => {
     const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", async () => {
