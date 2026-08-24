@@ -990,6 +990,35 @@ function withVerification(
   };
 }
 
+/**
+ * ★모델 출력이 우리가 기대한 모양이 아닐 때, **한 줄 구조화 로그**로 남긴다.
+ *
+ * 종전엔 `console.warn("... head:", text.slice(0,200))`처럼 **두 인자**로 찍었는데,
+ * wrangler tail의 pretty 출력에서 두 번째 인자가 잘려 `head: {{` 두 글자만 보였다.
+ * 진단이 있는데 읽을 수 없었던 것 — 계측이 없는 것과 같다(2026-08-24 실측).
+ *
+ * 한 줄 JSON이면 tail에서 온전히 보이고 집계도 된다. 벤더 폴백 이후 특히 중요하다:
+ * 같은 프롬프트라도 벤더마다 출력 습관이 달라, **어느 벤더의 어떤 모양**이 깨지는지
+ * 알아야 프롬프트를 고칠지 파서를 고칠지 판단할 수 있다.
+ */
+function logShapeFailure(kind: "non_json" | "parse_failed", text: string, err?: unknown): void {
+  try {
+    console.log(
+      JSON.stringify({
+        event: "llm_shape_failure",
+        call_site: "generate",
+        kind,
+        text_chars: text.length,
+        head: text.slice(0, 300),
+        tail: text.length > 300 ? text.slice(-150) : "",
+        ...(err ? { parse_error: String(err).slice(0, 160) } : {}),
+      }),
+    );
+  } catch {
+    // 진단이 호출을 깨뜨리면 안 된다
+  }
+}
+
 export async function generateIdeaToSpecDraft(
   req: IdeaToSpecDraftRequest,
   anthropicApiKey: string | undefined,
@@ -1021,16 +1050,15 @@ export async function generateIdeaToSpecDraft(
   const cleaned = rawText.replace(/```(?:json)?/g, "").trim();
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    // Head of the model text (ops diagnostic — this only fires on failure).
-    console.warn("[workspace/generate] LLM returned non-JSON. head:", cleaned.slice(0, 200));
+    logShapeFailure("non_json", cleaned);
     return { ok: false as const, error: "llm_unavailable" as const };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    console.warn("[workspace/generate] JSON parse failed. head:", cleaned.slice(0, 200));
+  } catch (parseErr) {
+    logShapeFailure("parse_failed", cleaned, parseErr);
     return { ok: false as const, error: "llm_unavailable" as const };
   }
 
