@@ -113,6 +113,14 @@ export function inspectionEmptyStateDoor(facts) {
   if (f.entryPath === "code" && f.hasDeployUrl !== true) {
     if (f.hasRepo === false) return "connect";
     if (f.hasRepo == null) return "wait";
+    // AF-1 (2026-08-23): 저장소만 연결된 상태. 종전엔 여기서 "run"을 줬는데,
+    // 화면 검수는 **앱 주소가 있어야** 돌아간다 — 그래서 사용자는 "첫 검수
+    // 돌려보기"를 눌러 갔다가 **비활성 버튼**을 만났다(막다른 골목).
+    //
+    // 제출물-우선 진입으로 "저장소만 넣기"가 흔한 시작점이 되면서 이 경로가
+    // 정문이 됐으므로, 문을 따로 판다: 코드는 연결됐고 화면 검수를 하려면
+    // 주소가 더 필요하다고 **정확히** 말한다.
+    return "need_url";
   }
   return "run";
 }

@@ -308,6 +308,17 @@ export type Dictionary = {
     specTitle: string;
     specDesc: string;
     codeStepTitle: string;
+    submitLabel: string;
+    submitPlaceholder: string;
+    submitHint: string;
+    submitCta: string;
+    submitWorking: string;
+    submitErrEmpty: string;
+    submitErrTooLong: string;
+    submitErrUnrecognized: string;
+    submitDetectedSite: string;
+    submitDetectedRepo: string;
+    submitLater: string;
     codeStepSub: string;
     codeName: string;
     codeNamePlaceholder: string;
@@ -2233,6 +2244,8 @@ export type Dictionary = {
     };
     overview: {
       emptyLead: string;
+      emptyLeadCodeNeedUrl: string;
+      needUrlCta: string;
       emptyLeadCodeNoSource: string;
       connectFirst: string;
       runFirst: string;
@@ -2289,6 +2302,7 @@ export type Dictionary = {
     repoBody: string;
     repoLink: string;
   };
+  stackCard: { title: string; desc: string; saved: string };
   sources: {
     title: string;
     subtitle: string;

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getUserKey, loadExtendedProjectData, getLocalProject } from "@/lib/workflow-store";
+import { StackProfileCard } from "@/components/StackProfileCard";
 import { isExampleProject } from "@/lib/mock-data";
 import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { ServiceMcpSetup } from "@/components/ServiceMcpSetup";
@@ -47,6 +48,8 @@ export default function SettingsPage() {
   const isExample = isExampleProject(id);
 
   const [phase, setPhase] = useState<"loading" | "disconnected" | "status_error" | "connected" | "selecting">("loading");
+  // 스택 답이 바뀌면 아래 서비스·배포 안내를 새 값으로 다시 그린다.
+  const [stackRev, setStackRev] = useState(0);
   const [ghUser, setGhUser] = useState<GitHubUser | null>(null);
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [reposPhase, setReposPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -658,7 +661,7 @@ export default function SettingsPage() {
       )}
 
       {/* ─── Services + deploy tools (prep layer A2) ──────────────────────── */}
-      <div className="mt-10">
+      <div className="mt-10" key={`stack-${stackRev}`}>
         {(() => {
           const ext = loadExtendedProjectData(id);
           const proj = getLocalProject(id);
@@ -669,9 +672,20 @@ export default function SettingsPage() {
             included: ext?.productSpec?.included ?? proj?.spec?.included,
             userFlow: ext?.productSpec?.userFlow,
           };
-          // 스택 불가지 §3-2: P1에서 답한 조합(stackProfile)의 data 축이
-          // 서비스 제안을 결정한다 (예: Firebase 유저에게 Supabase 안내 금지).
-          return <ServiceMcpSetup projectId={id} spec={spec} stackProfile={ext?.stackProfile} />;
+          // 스택 불가지 §3-2: 답한 조합(stackProfile)의 data 축이 서비스 제안을
+          // 결정한다 (예: Firebase 유저에게 Supabase 안내 금지).
+          //
+          // AF-1(설계 D-7): 이 질문은 종전에 **새 프로젝트 첫 화면에만** 있었고
+          // 한 번 답하면 고칠 방법이 없었다. 제출물-우선 진입으로 첫 화면에서 빠지면서
+          // 여기가 거처가 됐다 — 고치는 자리와 효과가 보이는 자리를 붙여 둔다.
+          return (
+            <>
+              <div className="mb-6">
+                <StackProfileCard projectId={id} initial={ext?.stackProfile} onChange={() => setStackRev((n) => n + 1)} />
+              </div>
+              <ServiceMcpSetup projectId={id} spec={spec} stackProfile={ext?.stackProfile} />
+            </>
+          );
         })()}
       </div>
 

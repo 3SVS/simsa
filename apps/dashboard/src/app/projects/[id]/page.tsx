@@ -450,6 +450,21 @@ function VisualChecksOverviewCard({
                 {t.visualChecks.overview.connectFirst}
               </Link>
             </>
+          ) : door === "need_url" ? (
+            // AF-1: 저장소만 연결된 상태. 종전엔 "첫 검수 돌려보기"로 보냈다가
+            // **비활성 버튼**을 만나게 했다(화면 검수는 앱 주소가 있어야 한다).
+            // 무엇이 더 필요한지 정확히 말하고 그곳으로 보낸다.
+            <>
+              <p className="text-sm leading-relaxed text-gray-600">
+                {t.visualChecks.overview.emptyLeadCodeNeedUrl}
+              </p>
+              <Link
+                href={`/projects/${projectId}/sources`}
+                className="btn btn-secondary btn-sm mt-3"
+              >
+                {t.visualChecks.overview.needUrlCta}
+              </Link>
+            </>
           ) : (
             <>
               <p className="text-sm leading-relaxed text-gray-600">

@@ -374,8 +374,19 @@ const EN = {
     codeDesc: "Connect the code and review it right away.",
     specTitle: "I have a plan or spec",
     specDesc: "Paste it in and we'll turn it into things to check.",
-    codeStepTitle: "Tell us about your app",
-    codeStepSub: "Just the basics — then connect the code and review right away.",
+    codeStepTitle: "Show us your app",
+    codeStepSub: "Paste its address or GitHub repository. That is all we need to start.",
+    submitLabel: "App address or GitHub repository",
+    submitPlaceholder: "my-app.vercel.app  ·  https://github.com/owner/repo",
+    submitHint: "Either one works. A public repository needs no GitHub sign-in.",
+    submitCta: "Start the review",
+    submitWorking: "Setting up…",
+    submitErrEmpty: "Paste your app's address or GitHub repository.",
+    submitErrTooLong: "That is too long to be an address.",
+    submitErrUnrecognized: "That does not look like a web address or a GitHub repository. Try something like my-app.vercel.app or owner/repo.",
+    submitDetectedSite: "Read as an app address",
+    submitDetectedRepo: "Read as a GitHub repository",
+    submitLater: "Name, stack and details come later — you can change everything.",
     codeName: "App name",
     codeNamePlaceholder: "e.g. My first shop",
     codeDescLabel: "What does it do? (optional)",
@@ -2391,6 +2402,9 @@ const EN = {
       // Journey-audit P2 (2026-07-20): a code-branch project with nothing
       // connected was told "run your first inspection" — a URL-based door it
       // can't use yet. Branch-fit copy walks it to connect first.
+      emptyLeadCodeNeedUrl:
+        "The code is connected. To check what people actually see, add the app's address too.",
+      needUrlCta: "Add the app address",
       emptyLeadCodeNoSource:
         "Nothing is connected yet. Connect your GitHub repository to review code changes — or connect your app's URL for a live-screen inspection.",
       connectFirst: "Connect your code",
@@ -2466,6 +2480,11 @@ const EN = {
     repoLink: "Go to Code changes",
   },
   // Stage 262 — project sources (연결): website, GitHub repo, uploaded documents.
+  stackCard: {
+    title: "Where this app runs",
+    desc: "Optional. If you answer, the setup guide and the builder pack follow your combination. Leave it blank and they stay neutral.",
+    saved: "Saved.",
+  },
   sources: {
     title: "Sources",
     subtitle: "Connect what Simsa should look at: your live site, your repository, and your product documents.",
@@ -2937,8 +2956,19 @@ const KO = {
     codeDesc: "코드를 연결하면 바로 검수해요.",
     specTitle: "기획서가 있어요",
     specDesc: "붙여넣으면 확인할 항목으로 바꿔드려요.",
-    codeStepTitle: "앱에 대해 알려주세요",
-    codeStepSub: "기본 정보만 적으면 — 바로 코드를 연결하고 검수할 수 있어요.",
+    codeStepTitle: "만드신 앱을 보여주세요",
+    codeStepSub: "앱 주소나 GitHub 저장소를 붙여넣기만 하면 됩니다.",
+    submitLabel: "앱 주소 또는 GitHub 저장소",
+    submitPlaceholder: "my-app.vercel.app  ·  https://github.com/owner/repo",
+    submitHint: "둘 중 아무거나 괜찮아요. 공개 저장소는 GitHub 로그인이 필요 없습니다.",
+    submitCta: "검수 시작하기",
+    submitWorking: "준비하는 중…",
+    submitErrEmpty: "앱 주소나 GitHub 저장소를 붙여넣어 주세요.",
+    submitErrTooLong: "주소로 보기엔 너무 길어요.",
+    submitErrUnrecognized: "웹 주소나 GitHub 저장소로 보이지 않아요. my-app.vercel.app 이나 owner/repo 형태로 넣어 주세요.",
+    submitDetectedSite: "앱 주소로 읽었어요",
+    submitDetectedRepo: "GitHub 저장소로 읽었어요",
+    submitLater: "이름·스택·자세한 내용은 나중에 정해요. 전부 바꿀 수 있습니다.",
     codeName: "앱 이름",
     codeNamePlaceholder: "예: 나의 첫 쇼핑몰",
     codeDescLabel: "무엇을 하는 앱인가요? (선택)",
@@ -4942,6 +4972,9 @@ const KO = {
         "아직 실행된 검수가 없어요. Simsa가 라이브 앱을 실제 브라우저로 열어 무엇이 작동하는지 쉬운 말로 알려드려요.",
       // Journey-audit P2 (2026-07-20): 코드 갈래인데 아무것도 연결 전이면
       // "첫 검수 실행하기"(URL 검수 문)가 아니라 연결부터 안내한다.
+      emptyLeadCodeNeedUrl:
+        "코드는 연결됐어요. 사람들이 실제로 보는 화면을 확인하려면 앱 주소도 알려주세요.",
+      needUrlCta: "앱 주소 추가하기",
       emptyLeadCodeNoSource:
         "아직 연결된 게 없어요. GitHub 저장소를 연결하면 코드 변경을 검수하고, 앱 주소(URL)를 연결하면 화면 검수도 할 수 있어요.",
       connectFirst: "코드 연결하기",
@@ -5017,6 +5050,11 @@ const KO = {
     repoLink: "코드 변경으로 가기",
   },
   // Stage 262 — 연결(프로젝트 소스): 웹사이트 · GitHub 저장소 · 문서 업로드.
+  stackCard: {
+    title: "이 앱이 돌아가는 곳",
+    desc: "선택 사항이에요. 답하시면 준비 안내와 빌더팩이 그 조합을 따라갑니다. 비워 두시면 중립을 유지해요.",
+    saved: "저장했어요.",
+  },
   sources: {
     title: "연결",
     subtitle: "Simsa가 봐야 할 것을 연결하세요: 라이브 사이트, 저장소, 제품 문서.",

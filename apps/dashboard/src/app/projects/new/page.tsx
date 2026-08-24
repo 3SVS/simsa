@@ -23,6 +23,9 @@ import { UnderstoodCard, SpecDraftBody } from "@/components/SpecDraftView";
 import { DROPPED_DOC_KEY, DROPPED_DOC_NAME_KEY, DROPPED_DOC_SKIPPED_KEY } from "@/components/GlobalDropZone";
 import { extractDocumentsText, SUPPORTED_ACCEPT } from "@/lib/document-extract";
 import { useI18n } from "@/i18n/I18nProvider";
+import { InterviewChipRow, StackProfileRows } from "@/components/StackProfileRows";
+import { parseSubmission } from "@/lib/submission.mjs";
+import { connectProjectSource } from "@/lib/workspace-sources-api";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import { Spinner } from "@/components/Spinner";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
@@ -62,6 +65,9 @@ function NewProjectInner() {
   const { t, locale } = useI18n();
   const toast = useToast();
   const [step, setStep] = useState<Step>(1);
+  // AF-1 — 코드 갈래의 유일한 입력.
+  const [submission, setSubmission] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [ideaText, setIdeaText] = useState("");
   // D2 (2026-07-16): free-text "anything else Simsa should know" beside the idea.
   const [extraContext, setExtraContext] = useState("");
@@ -322,88 +328,69 @@ function NewProjectInner() {
     setIsLoading(false);
   }
 
-  // Code branch: name + builtWith (+ optional one-liner) → create the project
-  // and go STRAIGHT to code connect (settings). Skipping the idea step is this
-  // branch's normal path — with a one-liner we still draft checklist items in
-  // the same call, without one the project starts empty (items are optional
-  // here; the progress map treats prepare as optional for code entry).
-  async function handleCreateCodeProject() {
-    const name = appName.trim();
-    if (!name || isCreatingCode) return;
+  /** 입력을 즉시 해석해 무엇으로 읽었는지 보여준다(조용한 오분류 방지). */
+  const parsedSubmission = submission.trim() ? parseSubmission(submission) : null;
+
+  function submissionErrorText(error: string): string {
+    if (error === "empty") return t.branch.submitErrEmpty;
+    if (error === "too_long") return t.branch.submitErrTooLong;
+    return t.branch.submitErrUnrecognized;
+  }
+
+  /**
+   * ★AF-1 (설계 D-1·D-2) — 제출물 하나로 프로젝트를 만들고 곧장 연결한다.
+   *
+   * 아무것도 더 묻지 않는다. 이름은 제출물에서 가져오고(임시), 스택·의도는 나중에
+   * 추론하거나(D-3) 설정에서 고친다(D-7). 여기서 LLM을 부르지 않으므로 실패할
+   * 여지도, 기다릴 이유도 없다.
+   */
+  async function handleSubmitArtifact() {
+    if (isCreatingCode) return;
+    const parsed = parseSubmission(submission);
+    if (!parsed.ok) {
+      setSubmitError(submissionErrorText(parsed.error));
+      return;
+    }
     setIsCreatingCode(true);
+    setSubmitError(null);
     setRateLimitMsg(null);
 
-    // F-5 — compose the one-liner + "꼭 작동해야 하는 것" into the generation
-    // input. Either field alone is enough; both empty → no LLM call, project
-    // starts without draft items (this branch's pre-F-5 normal path).
-    const intent = composeCodeIntent({ desc: codeDesc, mustWork: codeMustWork, locale });
-    let generated: IdeaToSpecDraftResponse | null = null;
-    if (intent) {
-      const res = await callWorkspaceApi({ idea: intent });
-      // Honest failure: if generation fails the project is simply created
-      // without draft items (normal for this branch) — never with mock items
-      // silently saved as if they were real.
-      if (res.ok) generated = res.data;
-    }
-
     const id = generateProjectId();
+    const userKey = getUserKey();
     saveProject({
       id,
-      name,
-      description: generated?.productSpec.oneLine ?? codeDesc.trim(),
+      name: parsed.name,
+      description: "",
       createdAt: new Date().toISOString().slice(0, 10),
-      spec: {
-        completeness: generated ? 60 : 0,
-        goal: generated?.productSpec.problem ?? "",
-        included: generated?.productSpec.included ?? [],
-        excluded: generated?.productSpec.excluded ?? [],
-        openDecisions: generated?.productSpec.openQuestions ?? [],
-      },
-      requirements: (generated?.items ?? []).map((item) => ({
-        id: item.id,
-        title: item.title,
-        status: "not_started" as const,
-        category: "feature",
-        priority: "must" as const,
-      })),
+      spec: { completeness: 0, goal: "", included: [], excluded: [], openDecisions: [] },
+      requirements: [],
     });
-    saveExtendedProjectData(id, {
-      ...(generated
-        ? {
-            productSpec: generated.productSpec,
-            itemCriteria: Object.fromEntries(generated.items.map((i) => [i.id, i.criteria ?? []])),
-          }
-        : {}),
-      entryPath: "code",
-      ...(builtWithTools.length ? { builtWithTools } : {}),
-      ...stackProfilePatch(hostingId, hostingOther, dataId, dataOther),
-    });
-    // Persist the project server-side BEFORE navigating to connect a repo.
-    // This was fire-and-forget + an immediate router.push, so the project row
-    // could still be uncommitted when the user linked a repo on the next screen
-    // — orphaning the link and later showing the "connect a repo again" card
-    // (the reported bug). Await it; on failure still navigate (local-first) and
-    // mark the sync so settings can surface it.
+    saveExtendedProjectData(id, { entryPath: "code" });
+
+    // 프로젝트 행이 커밋되기 전에 소스를 붙이면 소유권 검사에서 404가 나고
+    // 링크가 유실된다(과거 "저장소를 다시 연결해 주세요" 도돌이표의 원인).
     const saveRes = await saveProjectToDb({
       id,
-      userKey: getUserKey(),
-      title: name,
-      idea: intent,
-      understood: generated?.understood ?? {},
-      productSpec: generated?.productSpec ?? {},
-      items: generated?.items ?? [],
-      builtWith:
-        builtWithTools.length || builtWithOther.trim()
-          ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
-          : undefined,
+      userKey,
+      title: parsed.name,
+      // 코드 갈래엔 아직 아이디어 문장이 없다. 지어내지 않고 비운다 — 의도는
+      // 제출물에서 추론해 사용자 확인을 받는다(D-3, AF-3/AF-4).
+      idea: "",
+      understood: {},
+      productSpec: {},
+      items: [],
       entryPath: "code",
     }).catch(() => null);
     if (!saveRes || saveRes.ok !== true) {
       markProjectSyncFailed(id);
       toast.error(t.interaction.syncFailedSaved);
     }
-    // Straight to code connect — that IS this branch's step 1.
-    router.push(`/projects/${id}/settings`);
+
+    // 제출물을 소스로 붙인다. 실패해도 프로젝트는 이미 있으므로 연결 화면에서
+    // 다시 시도할 수 있다 — 사용자를 처음으로 되돌리지 않는다.
+    await connectProjectSource(id, { userKey, type: parsed.type, reference: parsed.reference }).catch(() => null);
+
+    router.push(`/projects/${id}`);
   }
 
   async function handleSave() {
@@ -532,100 +519,71 @@ function NewProjectInner() {
           {/* CODE branch step 1 — name + builtWith (+ optional one-liner) →
               straight to code connect. No idea step: that's this branch's
               normal path, not a deficit. */}
+          {/* ★AF-1 (설계 D-1) — 코드 갈래 첫 화면은 **제출물 한 칸**이다.
+              종전엔 이름(필수)+빌더칩+호스팅+데이터+설명+필수동작 여섯 칸이었고,
+              정작 사용자가 손에 들고 온 앱 주소·저장소는 **두 화면 뒤**에 있었다.
+              필수가 아니어도 보이는 순서가 요구로 읽힌다.
+              이름·스택은 이제 제출물에서 알아내거나(D-3) 나중에 고친다(D-7). */}
           {entryPath === "code" && step === 1 && (
-            <div>
+            <div className="mx-auto max-w-[34rem]">
               <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.codeStepTitle}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.codeStepSub}</p>
 
-              <label className="mb-1 block text-xs font-semibold text-gray-600">{t.branch.codeName}</label>
+              <label htmlFor="submission" className="mb-1 block text-xs font-semibold text-gray-600">
+                {t.branch.submitLabel}
+              </label>
               <input
+                id="submission"
                 type="text"
-                value={appName}
-                onChange={(e) => setAppName(e.target.value)}
-                placeholder={t.branch.codeNamePlaceholder}
-                className="input mb-6"
+                value={submission}
+                autoFocus
+                onChange={(e) => {
+                  setSubmission(e.target.value);
+                  setSubmitError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && submission.trim() && !isCreatingCode) void handleSubmitArtifact();
+                }}
+                placeholder={t.branch.submitPlaceholder}
+                className="input"
               />
+              <p className="mt-1.5 text-xs text-gray-500">{t.branch.submitHint}</p>
 
-              <p className="mb-1 text-xs font-semibold text-gray-600">{t.builtWith.question}</p>
-              <p className="mb-3 text-xs text-gray-500">{t.builtWith.hint}</p>
-              <div className="mb-6 flex flex-wrap gap-2">
-                {BUILT_WITH_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => toggleBuiltWith(opt.id)}
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                      builtWithTools.includes(opt.id)
-                        ? "border-brand-300 bg-brand-50 text-brand-700"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
-                    }`}
-                  >
-                    {t.builtWith.tools[opt.labelKey]}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="text"
-                value={builtWithOther}
-                onChange={(e) => setBuiltWithOther(e.target.value)}
-                placeholder={t.builtWith.otherPlaceholder}
-                className="input mb-6 text-sm"
-              />
-
-              {/* 스택 불가지 Phase 1 (D-1) — 이미 만든 앱이므로 호스팅/데이터가
-                  실재한다. 선택 사항, 답하면 안내·팩·연결 패널이 이 조합을 따른다. */}
-              <div className="mb-6 rounded-lg border border-gray-100 bg-gray-50/60 p-4">
-                <p className="mb-3 text-xs font-medium text-gray-600">{t.np.interviewTitle}</p>
-                <StackProfileRows
-                  t={t}
-                  hostingId={hostingId}
-                  setHostingId={setHostingId}
-                  hostingOther={hostingOther}
-                  setHostingOther={setHostingOther}
-                  dataId={dataId}
-                  setDataId={setDataId}
-                  dataOther={dataOther}
-                  setDataOther={setDataOther}
-                />
-              </div>
-
-              <label className="mb-1 block text-xs font-semibold text-gray-600">{t.branch.codeDescLabel}</label>
-              <textarea
-                value={codeDesc}
-                onChange={(e) => setCodeDesc(e.target.value)}
-                placeholder={t.branch.codeDescPlaceholder}
-                rows={2}
-                className="input mb-6 resize-none rounded-lg"
-              />
-
-              {/* F-5 — 경량 의도 인터뷰: 선택 질문 하나로 확인 항목이 "내 앱
-                  기준"이 되게 한다. 하드 게이트 없음 — 빈칸이어도 생성 진행. */}
-              <label className="mb-1 block text-xs font-semibold text-gray-600">{t.branch.codeMustWorkLabel}</label>
-              <p className="mb-2 text-xs text-gray-500">{t.branch.codeMustWorkHint}</p>
-              <textarea
-                value={codeMustWork}
-                onChange={(e) => setCodeMustWork(e.target.value)}
-                placeholder={t.branch.codeMustWorkPlaceholder}
-                rows={3}
-                className="input mb-8 resize-none rounded-lg"
-              />
+              {/* 무엇으로 읽었는지 즉시 보여준다 — 저장소를 넣었는데 '앱 주소'로
+                  읽혔다면 사용자가 바로 안다(조용한 오분류 방지). */}
+              {parsedSubmission?.ok && (
+                <p className="mt-2 text-xs text-gray-400">
+                  {parsedSubmission.type === "github_repo"
+                    ? t.branch.submitDetectedRepo
+                    : t.branch.submitDetectedSite}
+                  <span className="ml-1 font-mono text-gray-500">{parsedSubmission.reference}</span>
+                </p>
+              )}
 
               <button
-                onClick={handleCreateCodeProject}
-                disabled={!appName.trim() || isCreatingCode}
+                onClick={() => void handleSubmitArtifact()}
+                disabled={!submission.trim() || isCreatingCode}
                 data-loading={isCreatingCode}
-                className="btn btn-primary w-full py-3"
+                className="btn btn-primary mt-6 w-full py-3"
               >
                 {isCreatingCode ? (
                   <>
-                    <Spinner /> {t.branch.codeCreating}
+                    <Spinner /> {t.branch.submitWorking}
                   </>
                 ) : (
-                  `${t.branch.codeCreate} →`
+                  `${t.branch.submitCta} →`
                 )}
               </button>
-              {rateLimitMsg && <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>}
+
+              {submitError && (
+                <div className="callout callout-error mt-4 text-sm">{submitError}</div>
+              )}
+              {rateLimitMsg && (
+                <div className="callout mt-4 border-amber-200 bg-amber-50 text-amber-800">{rateLimitMsg}</div>
+              )}
+
+              <p className="mt-6 text-center text-xs text-gray-400">{t.branch.submitLater}</p>
             </div>
           )}
 
@@ -1005,113 +963,6 @@ function WizardStepper({ t, step }: { t: Dictionary; step: number }) {
  *  idea·code 두 갈래가 공용으로 쓴다. 칩 목록은 예시이지 강요가 아니며(D-4),
  *  "other" 선택 시 자유텍스트를 열어 모르는 벤더도 수집한다(D-3). 미응답이면
  *  아무것도 저장하지 않는다 — 소비자 쪽 중립 기본값(D-2)의 전제. */
-function StackProfileRows({
-  t,
-  hostingId,
-  setHostingId,
-  hostingOther,
-  setHostingOther,
-  dataId,
-  setDataId,
-  dataOther,
-  setDataOther,
-}: {
-  t: ReturnType<typeof useI18n>["t"];
-  hostingId: string | null;
-  setHostingId: (v: string | null) => void;
-  hostingOther: string;
-  setHostingOther: (v: string) => void;
-  dataId: string | null;
-  setDataId: (v: string | null) => void;
-  dataOther: string;
-  setDataOther: (v: string) => void;
-}) {
-  return (
-    <>
-      <InterviewChipRow
-        label={t.np.stackHostingQ}
-        options={[
-          ["vercel", t.np.stackHostingVercel],
-          ["netlify", t.np.stackHostingNetlify],
-          ["builder_hosted", t.np.stackHostingBuilder],
-          ["none_yet", t.np.stackHostingNone],
-          ["unknown", t.np.stackHostingUnknown],
-          ["other", t.np.stackHostingOther],
-        ]}
-        value={hostingId}
-        onChange={setHostingId}
-      />
-      {hostingId === "other" && (
-        <input
-          type="text"
-          value={hostingOther}
-          onChange={(e) => setHostingOther(e.target.value)}
-          placeholder={t.np.stackHostingOtherPlaceholder}
-          className="input mb-2.5 text-sm"
-        />
-      )}
-      <InterviewChipRow
-        label={t.np.stackDataQ}
-        options={[
-          ["supabase", t.np.stackDataSupabase],
-          ["firebase", t.np.stackDataFirebase],
-          ["builder_managed", t.np.stackDataBuilder],
-          ["none", t.np.stackDataNone],
-          ["unknown", t.np.stackDataUnknown],
-          ["other", t.np.stackDataOther],
-        ]}
-        value={dataId}
-        onChange={setDataId}
-      />
-      {dataId === "other" && (
-        <input
-          type="text"
-          value={dataOther}
-          onChange={(e) => setDataOther(e.target.value)}
-          placeholder={t.np.stackDataOtherPlaceholder}
-          className="input mb-2.5 text-sm"
-        />
-      )}
-    </>
-  );
-}
-
-/** Pulsing-dot + rotating status line for a long LLM wait (H1 system status). */
-/** #296 Phase 1 — one optional interview question as a chip row. Clicking the
- *  selected chip again clears it (truly optional; no forced answer). */
-function InterviewChipRow({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: Array<[string, string]>;
-  value: string | null;
-  onChange: (v: string | null) => void;
-}) {
-  return (
-    <div className="mb-2.5 last:mb-0">
-      <p className="mb-1 text-xs text-gray-500">{label}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map(([key, text]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onChange(value === key ? null : key)}
-            className={`rounded-full border px-3 py-1 text-xs transition-all ${
-              value === key
-                ? "border-brand-600 bg-brand-600 text-white"
-                : "border-gray-200 bg-white text-gray-600 hover:border-brand-300"
-            }`}
-          >
-            {text}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function WaitLine({ text }: { text: string }) {
   return (

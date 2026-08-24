@@ -227,9 +227,23 @@ describe("inspectionEmptyStateDoor", () => {
     );
   });
 
-  it("repo connected or deploy URL present → run (never a wrong connect nudge)", () => {
+  // AF-1 (2026-08-23) 동작 변경: 저장소만 연결된 상태는 "run"이 아니라 "need_url"이다.
+  // 화면 검수는 앱 주소가 있어야 돌아가므로, 종전 "run"은 사용자를 **비활성 버튼**으로
+  // 보냈다(막다른 골목). 제출물-우선 진입으로 "저장소만 넣기"가 흔해지면서 정문이 됐다.
+  it("★repo만 연결 + 배포 URL 없음 → need_url (비활성 버튼으로 보내지 않는다)", () => {
     assert.equal(
       inspectionEmptyStateDoor({ entryPath: "code", hasRepo: true, hasDeployUrl: false }),
+      "need_url",
+    );
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: true, hasDeployUrl: null }),
+      "need_url",
+    );
+  });
+
+  it("deploy URL이 있으면 repo 유무와 무관하게 run", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: true, hasDeployUrl: true }),
       "run",
     );
     assert.equal(
