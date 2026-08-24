@@ -1,6 +1,7 @@
 "use client";
 
 import { ProjectNotFound } from "@/components/ProjectNotFound";
+import { IntentConfirmCard } from "@/components/IntentConfirmCard";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -131,6 +132,13 @@ export default function ProjectOverviewPage() {
         hasDeployUrl={hasDeployUrl}
         entryPath={entryPath}
       />
+
+      {/* ★AF-4 (설계 D-3) — "이 앱은 ~로 보입니다. 맞나요?"
+          제출 직후 검수가 도는 동안 **그 자리에서** 확인받는다. 별도 화면으로
+          보내면 확인 절차가 검수를 가로막는데, 이 설계의 핵심은 가치를 먼저
+          보여주고 그 다음에 묻는 순서다. 이미 확정된 프로젝트에는 나타나지 않는다.
+          지도(Plan Map) 위에 둔다 — 기준이 정해져야 지도가 의미를 갖는다. */}
+      {entryPath === "code" && <IntentConfirmCard projectId={id} />}
 
       {/* Stage 183 — Plan Map ("Where are we?") read-only entry */}
       <Link

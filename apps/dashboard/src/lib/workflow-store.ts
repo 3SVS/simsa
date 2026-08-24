@@ -267,6 +267,9 @@ export type ExtendedProjectData = {
    *  id는 칩의 canonical 값, "other"일 때만 자유텍스트 other가 따른다(D-3:
    *  모르는 벤더도 버리지 않고 수집). 미응답 축은 키 자체가 없다 — 소비자는
    *  특정 벤더를 조용히 가정하지 말 것(D-2 중립 기본값). */
+  /** AF-4: 사용자가 추론된 의도를 확인한 시각. 카드가 다시 뜨지 않게 하고,
+   *  "누가 이 기준을 정했나"의 답이 된다. */
+  intentConfirmedAt?: string;
   stackProfile?: {
     hosting?: { id: string; other?: string };
     data?: { id: string; other?: string };

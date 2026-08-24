@@ -2310,6 +2310,13 @@ export type Dictionary = {
     repoBody: string;
     repoLink: string;
   };
+  intentConfirm: {
+    loading: string; title: string; subtitle: string; nameLabel: string; oneLineLabel: string;
+    oneLinePlaceholder: string; itemsLabel: string; itemsHint: string; readFrom: string;
+    confirm: string; later: string; errorLead: string; retry: string; emptyTitle: string;
+    emptyNoSource: string; emptyUnreadable: string; emptyNoEvidence: string; emptyLlm: string;
+    saveMine: string;
+  };
   stackCard: { title: string; desc: string; saved: string };
   sources: {
     title: string;
