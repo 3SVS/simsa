@@ -308,6 +308,17 @@ export type Dictionary = {
     specTitle: string;
     specDesc: string;
     codeStepTitle: string;
+    submitLabel: string;
+    submitPlaceholder: string;
+    submitHint: string;
+    submitCta: string;
+    submitWorking: string;
+    submitErrEmpty: string;
+    submitErrTooLong: string;
+    submitErrUnrecognized: string;
+    submitDetectedSite: string;
+    submitDetectedRepo: string;
+    submitLater: string;
     codeStepSub: string;
     codeName: string;
     codeNamePlaceholder: string;
@@ -1118,6 +1129,10 @@ export type Dictionary = {
     errorPrivate: string;
     appInstallHint: string;
     appInstallLink: string;
+    connectChoiceTitle: string;
+    connectOauthWhy: string;
+    connectAppWhy: string;
+    connectAppCta: string;
     privateGuideTitle: string;
     privateGuideStep1: string;
     privateGuideStep2: string;
@@ -2233,6 +2248,16 @@ export type Dictionary = {
     };
     overview: {
       emptyLead: string;
+      depth: {
+        label1: string;
+        label2: string;
+        note1: string;
+        note2: string;
+        addUrl: string;
+        addRepo: string;
+      };
+      emptyLeadCodeNeedUrl: string;
+      needUrlCta: string;
       emptyLeadCodeNoSource: string;
       connectFirst: string;
       runFirst: string;
@@ -2289,6 +2314,14 @@ export type Dictionary = {
     repoBody: string;
     repoLink: string;
   };
+  intentConfirm: {
+    loading: string; title: string; subtitle: string; nameLabel: string; oneLineLabel: string;
+    oneLinePlaceholder: string; itemsLabel: string; itemsHint: string; readFrom: string;
+    confirm: string; later: string; errorLead: string; retry: string; emptyTitle: string;
+    emptyNoSource: string; emptyUnreadable: string; emptyNoEvidence: string; emptyLlm: string;
+    saveMine: string;
+  };
+  stackCard: { title: string; desc: string; saved: string };
   sources: {
     title: string;
     subtitle: string;

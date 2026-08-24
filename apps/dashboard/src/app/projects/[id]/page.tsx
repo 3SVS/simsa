@@ -1,6 +1,7 @@
 "use client";
 
 import { ProjectNotFound } from "@/components/ProjectNotFound";
+import { IntentConfirmCard } from "@/components/IntentConfirmCard";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -36,7 +37,7 @@ import {
   listVisualChecks,
   type VisualCheckListItem,
 } from "@/lib/workspace-visual-checks-api";
-import { inspectionEmptyStateDoor, overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
+import { inspectionDepth, inspectionEmptyStateDoor, overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
 import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
@@ -131,6 +132,13 @@ export default function ProjectOverviewPage() {
         hasDeployUrl={hasDeployUrl}
         entryPath={entryPath}
       />
+
+      {/* ★AF-4 (설계 D-3) — "이 앱은 ~로 보입니다. 맞나요?"
+          제출 직후 검수가 도는 동안 **그 자리에서** 확인받는다. 별도 화면으로
+          보내면 확인 절차가 검수를 가로막는데, 이 설계의 핵심은 가치를 먼저
+          보여주고 그 다음에 묻는 순서다. 이미 확정된 프로젝트에는 나타나지 않는다.
+          지도(Plan Map) 위에 둔다 — 기준이 정해져야 지도가 의미를 갖는다. */}
+      {entryPath === "code" && <IntentConfirmCard projectId={id} />}
 
       {/* Stage 183 — Plan Map ("Where are we?") read-only entry */}
       <Link
@@ -450,6 +458,21 @@ function VisualChecksOverviewCard({
                 {t.visualChecks.overview.connectFirst}
               </Link>
             </>
+          ) : door === "need_url" ? (
+            // AF-1: 저장소만 연결된 상태. 종전엔 "첫 검수 돌려보기"로 보냈다가
+            // **비활성 버튼**을 만나게 했다(화면 검수는 앱 주소가 있어야 한다).
+            // 무엇이 더 필요한지 정확히 말하고 그곳으로 보낸다.
+            <>
+              <p className="text-sm leading-relaxed text-gray-600">
+                {t.visualChecks.overview.emptyLeadCodeNeedUrl}
+              </p>
+              <Link
+                href={`/projects/${projectId}/sources`}
+                className="btn btn-secondary btn-sm mt-3"
+              >
+                {t.visualChecks.overview.needUrlCta}
+              </Link>
+            </>
           ) : (
             <>
               <p className="text-sm leading-relaxed text-gray-600">
@@ -465,6 +488,32 @@ function VisualChecksOverviewCard({
           )
         ) : (
           <>
+            {/* ★AF-5 (설계 D-4) — 이 결과가 **어느 깊이**이고 **무엇을 못 봤는지**.
+                장식이 아니라 정직성 요건이다: 검수 러너에는 로그인 기능이 없어
+                로그인 뒤 화면은 보지 못한다. 표기가 없으면 사용자는 이 결과를
+                전체 검수로 오해한다. */}
+            {(() => {
+              const d = inspectionDepth({ hasRepo, hasDeployUrl });
+              const dc = t.visualChecks.overview.depth;
+              return (
+                <div className="mb-3 rounded-md border border-gray-100 bg-gray-50/70 px-3 py-2">
+                  <p className="text-[11px] font-medium text-gray-600">
+                    {d.level === 2 ? dc.label2 : dc.label1}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                    {d.level === 2 ? dc.note2 : dc.note1}
+                  </p>
+                  {d.nextStep && (
+                    <Link
+                      href={`/projects/${projectId}/sources`}
+                      className="mt-1 inline-block text-xs text-brand-700 hover:underline"
+                    >
+                      {d.nextStep === "add_url" ? dc.addUrl : dc.addRepo} →
+                    </Link>
+                  )}
+                </div>
+              );
+            })()}
             <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
               {t.visualChecks.overview.latestLabel}
             </p>

@@ -8,6 +8,7 @@ import {
   splitEvidenceKeys,
   buildEvidenceUrl,
   overviewNextAction,
+  inspectionDepth,
   inspectionEmptyStateDoor,
   relativeTimeLabel,
 } from "../src/lib/visual-check-view.mjs";
@@ -227,9 +228,23 @@ describe("inspectionEmptyStateDoor", () => {
     );
   });
 
-  it("repo connected or deploy URL present → run (never a wrong connect nudge)", () => {
+  // AF-1 (2026-08-23) 동작 변경: 저장소만 연결된 상태는 "run"이 아니라 "need_url"이다.
+  // 화면 검수는 앱 주소가 있어야 돌아가므로, 종전 "run"은 사용자를 **비활성 버튼**으로
+  // 보냈다(막다른 골목). 제출물-우선 진입으로 "저장소만 넣기"가 흔해지면서 정문이 됐다.
+  it("★repo만 연결 + 배포 URL 없음 → need_url (비활성 버튼으로 보내지 않는다)", () => {
     assert.equal(
       inspectionEmptyStateDoor({ entryPath: "code", hasRepo: true, hasDeployUrl: false }),
+      "need_url",
+    );
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: true, hasDeployUrl: null }),
+      "need_url",
+    );
+  });
+
+  it("deploy URL이 있으면 repo 유무와 무관하게 run", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: true, hasDeployUrl: true }),
       "run",
     );
     assert.equal(
@@ -270,5 +285,41 @@ describe("inspectionEmptyStateDoor", () => {
     );
     assert.equal(inspectionEmptyStateDoor({}), "run");
     assert.equal(inspectionEmptyStateDoor(null), "run");
+  });
+});
+
+describe("★inspectionDepth — 못 본 것을 말하기 위한 판정 (AF-5, 설계 D-4)", () => {
+  it("앱 주소만 있으면 L1(공개 화면)", () => {
+    const d = inspectionDepth({ hasDeployUrl: true, hasRepo: false });
+    assert.equal(d.level, 1);
+    assert.equal(d.nextStep, "add_repo", "다음 한 걸음은 코드 열람");
+  });
+
+  it("저장소까지 있으면 L2(공개 화면 + 코드)", () => {
+    const d = inspectionDepth({ hasDeployUrl: true, hasRepo: true });
+    assert.equal(d.level, 2);
+    assert.equal(d.nextStep, null, "제안할 다음 걸음이 없다 — L3는 미구현(D-5)");
+  });
+
+  it("★주소가 없으면 주소부터 — 볼 화면이 생겨야 검수가 된다", () => {
+    assert.equal(inspectionDepth({ hasDeployUrl: false, hasRepo: true }).nextStep, "add_url");
+    assert.equal(inspectionDepth({}).nextStep, "add_url");
+  });
+
+  it("null/undefined에도 던지지 않는다", () => {
+    assert.equal(inspectionDepth(null).level, 1);
+    assert.equal(inspectionDepth(undefined).level, 1);
+  });
+
+  it("★두 깊이 모두 '로그인 뒤는 못 봤다'를 KO/EN 양쪽에서 말한다", () => {
+    for (const dict of [ko, en]) {
+      const d = dict.visualChecks.overview.depth;
+      for (const note of [d.note1, d.note2]) {
+        assert.ok(note.trim().length > 0);
+      }
+      // 한계를 없애는 척하지 않는다 — 두 문구 다 로그인을 언급해야 한다.
+      assert.match(d.note1, /로그인|login|sign/i);
+      assert.match(d.note2, /로그인|login|sign/i);
+    }
   });
 });

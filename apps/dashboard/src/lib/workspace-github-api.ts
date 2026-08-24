@@ -19,8 +19,10 @@ const DASHBOARD_URL =
 export type GitHubUser = { login: string; name?: string; avatarUrl?: string };
 
 export type GitHubStatusResponse =
-  | { ok: true; connected: false }
-  | { ok: true; connected: true; user: GitHubUser }
+  /** AF-7: installUrl은 연결 여부와 무관하게 온다 — App 설치를 OAuth와 **동등한
+   *  선택지**로 처음부터 보여주기 위해서다(다계정 사용자에겐 이쪽이 정답). */
+  | { ok: true; connected: false; installUrl?: string }
+  | { ok: true; connected: true; user: GitHubUser; installUrl?: string }
   | { ok: false; error: string };
 
 export type GitHubRepo = {

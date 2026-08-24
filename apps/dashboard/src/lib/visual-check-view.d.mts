@@ -16,7 +16,7 @@ export function inspectionEmptyStateDoor(facts: {
   entryPath?: "idea" | "code" | "spec" | null;
   hasRepo?: boolean | null;
   hasDeployUrl?: boolean | null;
-}): "connect" | "run" | "wait";
+}): "connect" | "run" | "wait" | "need_url";
 
 export function relativeTimeLabel(iso: string, locale: string, now?: number): string;
 
@@ -42,3 +42,9 @@ export function buildEvidenceUrl(
   name: string,
   userKey: string,
 ): string;
+
+/** AF-5 — 검수 깊이와 다음 한 걸음 (설계 D-4). */
+export function inspectionDepth(facts: {
+  hasRepo?: boolean | null;
+  hasDeployUrl?: boolean | null;
+}): { level: 1 | 2; hasUrl: boolean; hasRepo: boolean; nextStep: "add_url" | "add_repo" | null };

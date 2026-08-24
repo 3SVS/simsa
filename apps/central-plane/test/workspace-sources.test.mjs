@@ -222,6 +222,39 @@ test("★계측이 실패해도 연결은 성공한다 — 부가 정보가 기�
   assert.equal(res.json.installUrl, undefined, "모르는 상태에서 설치를 권하지 않는다");
 });
 
+// ── AF-3 infer-intent (설계 D-3) ─────────────────────────────────────────────
+test("연결된 소스가 없으면 no_source — 지어내지 않는다", async () => {
+  const env = makeEnv();
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/infer-intent`, { userKey: USER });
+  assert.equal(res.status, 200);
+  assert.equal(res.json.inferred, null);
+  assert.equal(res.json.reason, "no_source");
+});
+
+test("★읽을 설명이 없으면 no_evidence — 빈 증거로 LLM을 부르지 않는다", async () => {
+  const env = makeEnv();
+  globalThis.fetch = async () => new Response("{}", { status: 200 });
+  await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+    userKey: USER, type: "github_repo", reference: "3SVS/empty-repo",
+  });
+  // README도 package.json도 내용이 없다.
+  let llmCalled = false;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("anthropic") || String(url).includes("openai")) llmCalled = true;
+    return new Response("", { status: 404 });
+  };
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/infer-intent`, { userKey: USER });
+  assert.equal(res.json.inferred, null);
+  assert.equal(res.json.reason, "no_evidence");
+  assert.equal(llmCalled, false, "★근거 없이 의도를 생성하러 가면 안 된다");
+});
+
+test("infer-intent도 소유권을 검사한다", async () => {
+  const env = makeEnv();
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/infer-intent`, { userKey: OTHER });
+  assert.equal(res.status, 403);
+});
+
 test("ownership: other user forbidden (403), unknown project 404", async () => {
   const env = makeEnv();
   const forbidden = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
