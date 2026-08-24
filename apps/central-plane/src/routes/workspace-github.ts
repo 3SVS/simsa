@@ -21,6 +21,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
+import { vendorFallback } from "../workspace/vendor-routing.js";
 import { ALLOWED_ORIGINS, CORS_ALLOW_METHODS } from "./cors.js";
 import { BRAND } from "../workspace/brand.js";
 import type { FetchLike } from "../github.js";
@@ -977,9 +978,7 @@ export function createWorkspaceGitHubRoutes(
         fetchImpl,
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
         // 벤더 폴백: Anthropic이 Worker egress에서 차단될 때 OpenAI로.
-        c.env.OPENAI_API_KEY
-          ? { openaiApiKey: c.env.OPENAI_API_KEY, openaiBaseUrl: c.env.CF_AI_GATEWAY_OPENAI_URL }
-          : undefined,
+        vendorFallback(c.env),
       );
       if (reviewResult.warnings?.length) warnings.push(...reviewResult.warnings);
     } catch (err) {
