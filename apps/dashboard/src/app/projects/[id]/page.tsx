@@ -72,6 +72,9 @@ export default function ProjectOverviewPage() {
   const [hasRepo, setHasRepo] = useState<boolean | null>(null);
   const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
   const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
+  // AF-1: 제출한 저장소는 project_sources에 저장된다. hasRepo(=GitHub 링크)와는
+  // 다른 사실이라 따로 센다 — 안 그러면 방금 준 저장소를 못 본 척하게 된다.
+  const [hasRepoSource, setHasRepoSource] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
     const uk = getUserKey();
@@ -82,7 +85,11 @@ export default function ProjectOverviewPage() {
       .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
       .catch(() => {});
     listProjectSources(id, uk)
-      .then((res) => { if (!cancelled) setHasDeployUrl(res.ok ? res.sources.some((s) => s.type === "website") : null); })
+      .then((res) => {
+        if (cancelled) return;
+        setHasDeployUrl(res.ok ? res.sources.some((s) => s.type === "website") : null);
+        setHasRepoSource(res.ok ? res.sources.some((s) => s.type === "github_repo") : null);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [id]);
@@ -128,6 +135,7 @@ export default function ProjectOverviewPage() {
         hasItems={project.requirements.length > 0}
         showExplainer={!hasReviewActivity}
         hasRepo={hasRepo}
+        hasRepoSource={hasRepoSource}
         hasReviewRun={hasReviewRun}
         hasDeployUrl={hasDeployUrl}
         entryPath={entryPath}
@@ -159,6 +167,7 @@ export default function ProjectOverviewPage() {
         locale={locale}
         entryPath={entryPath}
         hasRepo={hasRepo}
+        hasRepoSource={hasRepoSource}
         hasDeployUrl={hasDeployUrl}
       />
 
@@ -265,6 +274,7 @@ function CommandCenterCard({
   hasItems,
   showExplainer,
   hasRepo,
+  hasRepoSource,
   hasReviewRun,
   hasDeployUrl,
   entryPath,
@@ -274,17 +284,19 @@ function CommandCenterCard({
   hasItems: boolean;
   showExplainer: boolean;
   hasRepo: boolean | null;
+  hasRepoSource: boolean | null;
   hasReviewRun: boolean | null;
   // A connected deploy/website URL — the builder path's alternative to a repo,
   // so an idea-only project reaches its results without connecting GitHub.
   hasDeployUrl: boolean | null;
   entryPath: "idea" | "code" | "spec" | null;
 }) {
-  const next = nextProjectAction({ hasItems, hasRepo, hasReviewRun, hasDeployUrl, entryPath });
+  const next = nextProjectAction({ hasItems, hasRepo, hasRepoSource, hasReviewRun, hasDeployUrl, entryPath });
 
   const copy: Record<string, { label: string; desc: string }> = {
     create_items: { label: t.commandCenter.createItems, desc: t.commandCenter.createItemsDesc },
     connect_code: { label: t.commandCenter.connectCode, desc: t.commandCenter.connectCodeDesc },
+    add_url: { label: t.commandCenter.addUrl, desc: t.commandCenter.addUrlDesc },
     get_pack: { label: t.commandCenter.getPack, desc: t.commandCenter.getPackDesc },
     run_review: { label: t.commandCenter.runReview, desc: t.commandCenter.runReviewDesc },
     view_results: { label: t.commandCenter.viewResults, desc: t.commandCenter.viewResultsDesc },
@@ -379,6 +391,7 @@ function VisualChecksOverviewCard({
   locale,
   entryPath,
   hasRepo,
+  hasRepoSource,
   hasDeployUrl,
 }: {
   projectId: string;
@@ -386,6 +399,7 @@ function VisualChecksOverviewCard({
   locale: Locale;
   entryPath: "idea" | "code" | "spec" | null;
   hasRepo: boolean | null;
+  hasRepoSource: boolean | null;
   hasDeployUrl: boolean | null;
 }) {
   const [checks, setChecks] = useState<VisualCheckListItem[] | null>(null);
@@ -425,7 +439,7 @@ function VisualChecksOverviewCard({
   // unknown made the CTA flip "run"→"connect" ~2s after paint (실측). Hold the
   // whole card until the door is decidable; a moment without the card beats a
   // CTA that changes under the user's cursor.
-  const door = run === null ? inspectionEmptyStateDoor({ entryPath, hasRepo, hasDeployUrl }) : null;
+  const door = run === null ? inspectionEmptyStateDoor({ entryPath, hasRepo, hasRepoSource, hasDeployUrl }) : null;
   if (door === "wait") return null;
 
   return (
@@ -493,7 +507,7 @@ function VisualChecksOverviewCard({
                 로그인 뒤 화면은 보지 못한다. 표기가 없으면 사용자는 이 결과를
                 전체 검수로 오해한다. */}
             {(() => {
-              const d = inspectionDepth({ hasRepo, hasDeployUrl });
+              const d = inspectionDepth({ hasRepo, hasRepoSource, hasDeployUrl });
               const dc = t.visualChecks.overview.depth;
               return (
                 <div className="mb-3 rounded-md border border-gray-100 bg-gray-50/70 px-3 py-2">

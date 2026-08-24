@@ -111,6 +111,8 @@ export function overviewNextAction(checks) {
 export function inspectionEmptyStateDoor(facts) {
   const f = facts ?? {};
   if (f.entryPath === "code" && f.hasDeployUrl !== true) {
+    // 소스로 붙인 저장소도 "알고 있다"에 포함한다 — AF-1이 저장하는 형태다.
+    if (f.hasRepoSource === true) return "need_url";
     if (f.hasRepo === false) return "connect";
     if (f.hasRepo == null) return "wait";
     // AF-1 (2026-08-23): 저장소만 연결된 상태. 종전엔 여기서 "run"을 줬는데,
@@ -175,7 +177,8 @@ export function buildEvidenceUrl(base, projectId, runId, name, userKey) {
 export function inspectionDepth(facts) {
   const f = facts ?? {};
   const hasUrl = f.hasDeployUrl === true;
-  const hasRepo = f.hasRepo === true;
+  // 코드를 **읽는 데**는 링크가 필요 없다(공개 저장소는 토큰 없이 읽힌다).
+  const hasRepo = f.hasRepo === true || f.hasRepoSource === true;
   // 코드까지 읽을 수 있으면 L2. 주소만 있으면 L1.
   const level = hasRepo ? 2 : 1;
   // 다음 한 걸음만 제안한다 — 둘 다 없으면 화면 검수가 먼저다(볼 것이 생긴다).

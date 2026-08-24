@@ -323,3 +323,25 @@ describe("★inspectionDepth — 못 본 것을 말하기 위한 판정 (AF-5, �
     }
   });
 });
+
+describe("★소스로 붙인 저장소도 사실로 센다 (AF-1)", () => {
+  it("저장소 소스만 있으면 need_url — 막다른 골목 대신 무엇이 더 필요한지", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: false, hasRepoSource: true, hasDeployUrl: false }),
+      "need_url",
+    );
+  });
+
+  it("코드를 읽는 데는 링크가 필요 없다 — 소스만으로 L2", () => {
+    const d = inspectionDepth({ hasRepo: false, hasRepoSource: true, hasDeployUrl: true });
+    assert.equal(d.level, 2);
+    assert.equal(d.nextStep, null);
+  });
+
+  it("정말 아무것도 없으면 종전대로 connect (무회귀)", () => {
+    assert.equal(
+      inspectionEmptyStateDoor({ entryPath: "code", hasRepo: false, hasRepoSource: false, hasDeployUrl: false }),
+      "connect",
+    );
+  });
+});

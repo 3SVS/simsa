@@ -18,7 +18,7 @@
 /** @typedef {"done" | "current" | "todo" | "locked"} StepStatus */
 
 /**
- * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasReviewRun: boolean | null, hasDeployUrl?: boolean | null, entryPath?: "idea" | "code" | "spec" | null }} facts
+ * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasRepoSource?: boolean | null, hasReviewRun: boolean | null, hasDeployUrl?: boolean | null, entryPath?: "idea" | "code" | "spec" | null }} facts
  *   null = unknown (loading or fetch failed) — treated as "not confirmed", never locks.
  *   entryPath: the branch this project entered through. For the CODE branch the
  *   prepare step is OPTIONAL by design (the user skipped the idea step — that is
@@ -112,8 +112,8 @@ export function computeProjectSteps(facts) {
  * first review result: on the code branch missing items never interpose —
  * connect code → run review is the whole activation path.
  *
- * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasReviewRun: boolean | null, hasDeployUrl?: boolean | null, entryPath?: "idea" | "code" | "spec" | null }} facts
- * @returns {{ action: "create_items" | "connect_code" | "get_pack" | "run_review" | "view_results", slug: string } | null}
+ * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasRepoSource?: boolean | null, hasReviewRun: boolean | null, hasDeployUrl?: boolean | null, entryPath?: "idea" | "code" | "spec" | null }} facts
+ * @returns {{ action: "create_items" | "connect_code" | "add_url" | "get_pack" | "run_review" | "view_results", slug: string } | null}
  */
 export function nextProjectAction(facts) {
   const f = facts ?? {};
@@ -143,8 +143,23 @@ export function nextProjectAction(facts) {
   // 안내는 제품이 자기 상태를 모른다는 뜻이다.
   //
   // 저장소가 있으면 코드 리뷰를, 주소만 있으면 화면 검수를 가리킨다.
-  const codeConnected = f.hasRepo === true || f.hasDeployUrl === true;
-  if (f.hasRepo === false && f.hasDeployUrl === false) return { action: "connect_code", slug: "settings" };
+  // ★저장소가 **알려진 것**과 **연결된 것**은 다른 사실이다 (2026-08-24 실측).
+  //
+  // AF-1은 제출한 저장소를 `project_sources`에 저장한다. 그런데 `hasRepo`는
+  // GitHub 링크(토큰 보유)만 보므로, 저장소를 넣은 사용자가 시스템에는
+  // "아무것도 연결 안 함"으로 보였다 — 방금 준 것을 못 본 척하는 상태.
+  //
+  // 둘을 나눠 쓴다: 코드 **리뷰**는 링크가 있어야 하고(토큰 필요), 코드를
+  // **읽는 것**과 "무엇이 더 필요한가" 판단은 알려진 것만으로 충분하다.
+  const repoKnown = f.hasRepo === true || f.hasRepoSource === true;
+  const nothingKnown = f.hasRepo === false && f.hasRepoSource !== true && f.hasDeployUrl === false;
+  if (nothingKnown) return { action: "connect_code", slug: "settings" };
+  const codeConnected = repoKnown || f.hasDeployUrl === true;
+  // 저장소만 알고 화면 주소가 없으면 **첫 결과까지 가장 짧은 길은 주소 추가**다.
+  // (코드 리뷰는 GitHub 링크가 따로 필요하므로 더 먼 길이다.)
+  if (repoKnown && f.hasDeployUrl === false && f.hasRepo !== true) {
+    return { action: "add_url", slug: "sources" };
+  }
   const codeReviewSlug = f.hasRepo === true ? "github" : "visual-checks";
   if (codeConnected && f.hasReviewRun === false) return { action: "run_review", slug: codeReviewSlug };
   if (codeConnected && f.hasReviewRun === true) return { action: "view_results", slug: "checks" };

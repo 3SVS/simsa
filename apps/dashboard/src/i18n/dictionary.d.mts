@@ -274,6 +274,8 @@ export type Dictionary = {
     createItems: string;
     createItemsDesc: string;
     connectCode: string;
+    addUrl: string;
+    addUrlDesc: string;
     connectCodeDesc: string;
     getPack: string;
     getPackDesc: string;
