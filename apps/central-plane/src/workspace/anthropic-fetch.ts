@@ -220,6 +220,12 @@ export const OPENAI_FALLBACK_MODEL = "gpt-5.4";
 
 export type VendorFallback = {
   openaiApiKey?: string;
+  /**
+   * 킬스위치(ANTHROPIC_ENABLED="off"). 참이면 Anthropic을 **아예 시도하지 않고**
+   * 곧장 이 폴백으로 간다. 실측으로 egress가 막힌 것이 확정됐을 때, 요청마다
+   * 6회 재시도로 태우는 ~7초를 없앤다. 설정은 workspace/vendor-routing.ts 단일 출처.
+   */
+  preferFallback?: boolean;
   /** CF AI Gateway의 OpenAI 베이스(없으면 직행). */
   openaiBaseUrl?: string;
   model?: string;
@@ -468,6 +474,18 @@ export async function anthropicMessages(
   // A′-1: 시도마다 경로를 번갈아 쓴다(게이트웨이 → 직행 → 게이트웨이 …).
   const rotation = endpointRotation(endpoint);
   const triedByEndpoint: Record<string, number> = {};
+  // ★킬스위치: 사람이 실측으로 "Anthropic은 지금 막혔다"를 확정하고 끈 상태.
+  //  차단기(자동·isolate 단위)와 달리 이건 **전역·명시적**이라 첫 요청부터 적용된다.
+  if (opts.fallback?.openaiApiKey && opts.fallback.preferFallback) {
+    try {
+      console.log(JSON.stringify({ event: "llm_primary_skipped", call_site: callSite, reason: "anthropic_disabled" }));
+    } catch { /* logging must not break the call */ }
+    return fallbackOrThrow(
+      opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt,
+      null, new Error("Anthropic skipped: disabled by configuration"),
+    );
+  }
+
   // 차단기가 열려 있고 갈 곳이 있으면 12초를 태우지 않고 곧장 폴백으로.
   if (opts.fallback?.openaiApiKey && breakerIsOpen(startedAt)) {
     try {

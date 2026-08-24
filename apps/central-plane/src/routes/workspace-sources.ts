@@ -16,6 +16,7 @@
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
+import { vendorFallback } from "../workspace/vendor-routing.js";
 import { getProject } from "../workspace/db.js";
 import { normalizeGithubRepoRef } from "../workspace/github-repo-ref.js";
 import { probeGithubRepo, probeWebsite, type Reachability } from "../workspace/source-reachability.js";
@@ -223,9 +224,7 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       { idea, locale },
       c.env.ANTHROPIC_API_KEY,
       c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
-      c.env.OPENAI_API_KEY
-        ? { openaiApiKey: c.env.OPENAI_API_KEY, openaiBaseUrl: c.env.CF_AI_GATEWAY_OPENAI_URL }
-        : undefined,
+      vendorFallback(c.env),
     );
     if ("ok" in draft && draft.ok === false) {
       return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack });

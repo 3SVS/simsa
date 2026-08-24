@@ -12,6 +12,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
+import { vendorFallback } from "../workspace/vendor-routing.js";
 import { ALLOWED_ORIGINS, CORS_ALLOW_METHODS } from "./cors.js";
 import { generateIdeaToSpecDraft, toClientDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
@@ -62,16 +63,6 @@ import {
   betaProjectCreateDailyLimit,
   BETA_PROJECT_CREATE_DAILY_BUCKET,
 } from "../workspace/beta-limits.js";
-
-/**
- * 벤더 폴백 설정 — Anthropic이 Worker egress에서 차단될 때(실측 403 100%)
- * 같은 프롬프트를 OpenAI로 넘긴다. 키가 없으면 undefined라 종전과 동일하게 동작.
- * `/internal/llm-probe` 실측: anthropic 0/4 · **openai 4/4**(2.9초) · gemini 지역 제한.
- */
-function vendorFallback(env: Env): { openaiApiKey?: string; openaiBaseUrl?: string } | undefined {
-  if (!env.OPENAI_API_KEY) return undefined;
-  return { openaiApiKey: env.OPENAI_API_KEY, openaiBaseUrl: env.CF_AI_GATEWAY_OPENAI_URL };
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

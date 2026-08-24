@@ -180,6 +180,13 @@ export interface Env {
    */
   GH_APP_INSTALL_URL?: string;
   /**
+   * 킬스위치 — "off"면 Anthropic을 건너뛰고 곧장 OpenAI 폴백으로 간다.
+   * 2026-08-25 실측: 같은 키가 노트북에서 200, Worker에서 403 → egress 차단 확정.
+   * 복구 확인은 `/internal/llm-probe`, 되돌리기는 wrangler.toml에서 "on" + 배포.
+   * 설정 해석은 workspace/vendor-routing.ts 단일 출처.
+   */
+  ANTHROPIC_ENABLED?: string;
+  /**
    * Stage 17 — base URL of the dashboard. Used when building Telegram notification
    * message links. Defaults to https://app.trysimsa.com when unset (Stage 92).
    * Set via wrangler.toml [vars] or `wrangler secret put DASHBOARD_BASE_URL`.
