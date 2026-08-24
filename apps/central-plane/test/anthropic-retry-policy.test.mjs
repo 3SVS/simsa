@@ -123,12 +123,35 @@ describe("anthropicMessages — 예산과 실패 로그 (A-1·A-2)", () => {
   });
 
   it("403은 종전처럼 촘촘히 재시도해 회복한다 (무회귀)", async () => {
+    // ★2026-08-24: 이 테스트는 **플레이키였다.** randomImpl을 주입하지 않아
+    // Math.random()을 탔는데, 403 지터는 `base/2 + rand*base`(base=500*attempt)라
+    // 3번째 시도에서 최대 2250ms가 나온다 — `< 2000` 단언이 확률적으로 깨졌다.
+    // (CI Node 20에서 실제로 깨졌고, 그전 로컬 1회 실패도 이것이었다.)
+    //
+    // 난수를 **최악값으로 고정**해 결정론화하고, 상한은 실제 계약에 맞춘다.
     const { slept, sleepImpl, nowImpl } = recorder();
     let n = 0;
     const fetchImpl = async () => (++n < 4 ? errResponse(403) : okResponse());
-    const data = await anthropicMessages("k", BODY, 1000, fetchImpl, "https://x/v1/messages", "generate", { sleepImpl, nowImpl });
+    const data = await anthropicMessages("k", BODY, 1000, fetchImpl, "https://x/v1/messages", "generate", {
+      sleepImpl,
+      nowImpl,
+      randomImpl: () => 1, // 최악의 지터
+    });
     assert.equal(data.content[0].text, "ok");
-    assert.ok(slept.every((ms) => ms < 2000), "403 재시도는 촘촘하다");
+    assert.equal(slept.length, 3);
+    assert.ok(slept.every((ms) => ms <= 2250), `403 재시도 상한: ${slept}`);
+  });
+
+  it("★'촘촘하다'의 진짜 계약 — 같은 시도에서 403이 429보다 항상 빠르다", () => {
+    // 절대 밀리초 상한은 지터 공식이 바뀌면 의미를 잃는다. 실제로 지키려는 것은
+    // **egress성 오류(403)를 용량 오류(429)보다 촘촘히 재시도한다**는 관계다.
+    for (const attempt of [1, 2, 3, 4, 5]) {
+      for (const rand of [0, 0.5, 1]) {
+        const fast = retryDelayMs(403, attempt, null, () => rand);
+        const capacity = retryDelayMs(429, attempt, null, () => rand);
+        assert.ok(fast < capacity, `attempt ${attempt} rand ${rand}: 403 ${fast} < 429 ${capacity}`);
+      }
+    }
   });
 
   it("재시도 불가 오류(400)는 즉시 던진다", async () => {
