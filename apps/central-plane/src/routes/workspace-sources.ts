@@ -20,6 +20,13 @@ import { getProject } from "../workspace/db.js";
 import { normalizeGithubRepoRef } from "../workspace/github-repo-ref.js";
 import { probeGithubRepo, probeWebsite, type Reachability } from "../workspace/source-reachability.js";
 import {
+  composeIdeaFromEvidence,
+  evidenceFromRepo,
+  evidenceFromWebsite,
+  type SourceEvidence,
+} from "../workspace/source-evidence.js";
+import { generateIdeaToSpecDraft } from "../workspace/generate.js";
+import {
   insertProjectSource,
   listProjectSources,
   getProjectSourceById,
@@ -155,6 +162,82 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       console.error("[workspace/sources POST] failed:", err);
       return c.json({ ok: false, error: "save_failed" }, 500);
     }
+  });
+
+  // ── POST /workspace/projects/:id/infer-intent ─────────────────────────────
+  //
+  // ★AF-3 (설계 D-3): 제출물에서 **의도와 스택을 추론**한다 — 묻지 않고.
+  //
+  // Bae 지적 *"제작 의도도 모르고"* 에 대한 답이다. "모른다"가 "물어봐야 한다"는
+  // 아니다: 비개발자에게 빈칸을 내미는 것보다 **초안을 주고 고치게 하는 편이 쉽다.**
+  //
+  // 정직성(D-3): 증거가 없으면 **지어내지 않고 비운다.** 빈 증거로 LLM을 부르면
+  // 그럴듯한 의도를 만들어내는데, 잘못된 의도는 잘못된 기준을 만들고 잘못된 기준은
+  // 잘못된 검수 결과를 만든다 — 이 제품에서 가장 비싼 실패다.
+  //
+  // 스택은 LLM에게 묻지 않는다. 의존성 이름과 응답 헤더로 **결정론적으로** 읽는다.
+  app.post("/workspace/projects/:id/infer-intent", async (c) => {
+    const projectId = c.req.param("id");
+    let body: { userKey?: unknown; locale?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: "invalid_json" }, 400);
+    }
+    const userKey = typeof body.userKey === "string" ? body.userKey : "";
+    if (!userKey) return c.json({ ok: false, error: "userKey_required" }, 400);
+    const locale: "ko" | "en" = body.locale === "en" ? "en" : "ko";
+
+    const owned = await requireOwnedProject(c.env, projectId, userKey);
+    if (!owned.ok) return c.json({ ok: false, error: owned.error }, owned.status);
+
+    const sources = await listProjectSources(c.env, projectId).catch(() => []);
+    // 저장소를 먼저 본다 — README·package.json이 랜딩 문구보다 의도에 가깝다.
+    const repo = sources.find((s) => s.type === "github_repo");
+    const site = sources.find((s) => s.type === "website");
+    if (!repo && !site) return c.json({ ok: true, inferred: null, reason: "no_source", readSources: [] });
+
+    let evidence: SourceEvidence;
+    try {
+      evidence = repo
+        ? await evidenceFromRepo(repo.reference, fetch.bind(globalThis) as typeof fetch)
+        : await evidenceFromWebsite(site!.reference, fetch.bind(globalThis) as typeof fetch);
+    } catch (err) {
+      console.warn("[workspace/infer-intent] evidence gathering failed:", err);
+      return c.json({ ok: true, inferred: null, reason: "unreadable", readSources: [] });
+    }
+
+    const idea = composeIdeaFromEvidence(evidence, locale);
+    if (!idea) {
+      // 읽을 수 있는 설명이 없었다. 그대로 말한다 — 사용자가 직접 적으면 된다.
+      return c.json({
+        ok: true,
+        inferred: null,
+        reason: "no_evidence",
+        readSources: evidence.readSources,
+        stack: evidence.stack,
+      });
+    }
+
+    const draft = await generateIdeaToSpecDraft(
+      { idea, locale },
+      c.env.ANTHROPIC_API_KEY,
+      c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+      c.env.OPENAI_API_KEY
+        ? { openaiApiKey: c.env.OPENAI_API_KEY, openaiBaseUrl: c.env.CF_AI_GATEWAY_OPENAI_URL }
+        : undefined,
+    );
+    if ("ok" in draft && draft.ok === false) {
+      return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack });
+    }
+
+    return c.json({
+      ok: true,
+      inferred: draft,
+      readSources: evidence.readSources,
+      stack: evidence.stack,
+      ...(evidence.title ? { detectedName: evidence.title } : {}),
+    });
   });
 
   // ── POST /workspace/projects/:id/sources/document (multipart upload → R2) ──
