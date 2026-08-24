@@ -241,6 +241,32 @@ const FALLBACK_BUDGET_MULTIPLIER = 3;
 const FALLBACK_BUDGET_MIN = 8000;
 const FALLBACK_BUDGET_MAX = 32000;
 
+/**
+ * ★assistant prefill을 벤더 간에 번역한다 (2026-08-24, 라이브 실측으로 잡힘).
+ *
+ * Anthropic은 마지막 메시지가 assistant면 **그 뒤를 이어서** 쓴다. 그래서
+ * `generate.ts`는 `{ role:"assistant", content:"{" }`를 붙여 "반드시 JSON으로
+ * 시작"을 강제하고, 응답 앞에 `"{"`를 **되붙인다**.
+ *
+ * OpenAI는 이어쓰기를 하지 않는다 — **완전한 JSON**을 돌려준다. 그래서 되붙이면
+ * `{{...}`가 되어 파싱이 깨졌다. 실제 로그가 정확히 `head: {{` 였다.
+ *
+ * 즉 **폴백은 prefill을 쓰는 모든 호출부에서 조용히 망가져 있었다.** prefill을
+ * 안 쓰는 검수(check)는 멀쩡했기에 더 늦게 드러났다.
+ *
+ * 폴백의 계약은 "호출부는 폴백을 모른다"이므로, 여기서 **Anthropic의 이어쓰기
+ * 모양으로 맞춰서** 돌려준다: 응답이 prefill로 시작하면 그만큼 떼어낸다.
+ * 떼어낼 것이 없으면 그대로 둔다(이미 이어쓰기 모양).
+ */
+export function stripAssistantPrefill(text: string, messages: AnthropicMessagesBody["messages"]): string {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "assistant") return text;
+  const prefill = (last.content ?? "").trim();
+  if (!prefill) return text;
+  const lead = text.replace(/^\s+/, "");
+  return lead.startsWith(prefill) ? lead.slice(prefill.length) : text;
+}
+
 export function fallbackOutputBudget(anthropicMaxTokens: number): number {
   const wanted = Math.max(anthropicMaxTokens * FALLBACK_BUDGET_MULTIPLIER, FALLBACK_BUDGET_MIN);
   return Math.min(wanted, FALLBACK_BUDGET_MAX);
@@ -284,7 +310,8 @@ async function callOpenAiAsAnthropic(
       };
     };
     const choice = j.choices?.[0];
-    const text = choice?.message?.content ?? "";
+    // prefill을 쓴 호출부는 응답 앞에 그 조각을 되붙인다 — 벤더 차이를 여기서 흡수한다.
+    const text = stripAssistantPrefill(choice?.message?.content ?? "", body.messages);
     const reasoning = j.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
     // ★잘림을 호출부에 보이게 한다. 종전엔 stop_reason을 안 넘겨서 잘린 JSON이
     //  그냥 "파싱 실패"로만 보였다 — 원인을 알 수 없는 실패였다(2026-08-24 실측).
