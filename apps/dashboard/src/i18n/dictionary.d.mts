@@ -2299,6 +2299,15 @@ export type Dictionary = {
     githubTitle: string;
     githubHint: string;
     githubPlaceholder: string;
+    reach: {
+      siteReadable: string;
+      repoReadablePublic: string;
+      repoReadablePrivate: string;
+      repoNeedsAccess: string;
+      repoUnknown: string;
+      siteUnknown: string;
+      loginWallNote: string;
+    };
     documentTitle: string;
     documentHint: string;
     labelLabel: string;

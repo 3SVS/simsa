@@ -28,8 +28,18 @@ export type SourcesListResponse =
   | { ok: true; sources: ProjectSource[] }
   | { ok: false; error: string };
 
+/**
+ * 연결 시점 도달성 (central-plane workspace/source-reachability.ts와 동형).
+ * "못 읽음(needs_access)"과 "모름(unknown)"은 반드시 구분한다 — 레이트리밋을
+ * "비공개인가 봐요"로 말하면 멀쩡한 공개 저장소를 오진하게 된다.
+ */
+export type Reachability =
+  | { state: "readable"; visibility: "public" | "private"; via: "anonymous" | "user_token" }
+  | { state: "needs_access"; via: "anonymous" | "user_token" }
+  | { state: "unknown"; reason: "rate_limited" | "network" | "timeout" };
+
 export type SourceMutationResponse =
-  | { ok: true; source: ProjectSource }
+  | { ok: true; source: ProjectSource; reachability?: Reachability; installUrl?: string }
   | { ok: false; error: string };
 
 export type SourceDeleteResponse = { ok: true } | { ok: false; error: string };

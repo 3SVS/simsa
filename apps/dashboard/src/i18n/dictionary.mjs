@@ -2476,6 +2476,16 @@ const EN = {
     githubTitle: "GitHub repository",
     githubHint: "Paste the repository's address, or type it as owner/repo. No GitHub sign-in needed for a public repository.",
     githubPlaceholder: "https://github.com/owner/repo",
+    reach: {
+      siteReadable: "The address responded. Simsa can inspect what is visible without signing in.",
+      repoReadablePublic: "The repository is readable. No GitHub sign-in needed.",
+      repoReadablePrivate: "The repository is private and your GitHub account can read it.",
+      repoNeedsAccess:
+        "Saved, but Simsa cannot read it yet. If it is private, give Simsa access below. If it is public, check the address for a typo.",
+      repoUnknown: "Saved. Simsa could not check readability just now and will try again when it runs.",
+      siteUnknown: "Saved. Simsa could not reach the address just now and will try again when it runs.",
+      loginWallNote: "Anything behind a login is not inspected yet.",
+    },
     documentTitle: "Document",
     documentHint: "A PRD or reference document (.md, .txt, .pdf — up to 10MB).",
     labelLabel: "Label (optional)",
@@ -5017,6 +5027,16 @@ const KO = {
     githubTitle: "GitHub 저장소",
     githubHint: "저장소 주소를 그대로 붙여넣거나 owner/repo 형식으로 입력하세요. 공개 저장소는 GitHub 로그인 없이 됩니다.",
     githubPlaceholder: "https://github.com/owner/repo",
+    reach: {
+      siteReadable: "주소가 응답했어요. 로그인 없이 보이는 화면을 검수할 수 있습니다.",
+      repoReadablePublic: "저장소를 읽을 수 있어요. GitHub 로그인이 필요 없습니다.",
+      repoReadablePrivate: "비공개 저장소이고, 연결된 GitHub 계정으로 읽을 수 있어요.",
+      repoNeedsAccess:
+        "저장은 됐지만 아직 읽지 못해요. 비공개 저장소라면 아래에서 접근 권한을 주시고, 공개 저장소라면 주소에 오타가 없는지 확인해 주세요.",
+      repoUnknown: "저장했어요. 지금은 읽을 수 있는지 확인하지 못했고, 검수할 때 다시 시도합니다.",
+      siteUnknown: "저장했어요. 지금은 주소에 닿지 못했고, 검수할 때 다시 시도합니다.",
+      loginWallNote: "로그인 뒤 화면은 아직 검수하지 않습니다.",
+    },
     documentTitle: "문서",
     documentHint: "PRD나 참고 문서예요 (.md, .txt, .pdf — 최대 10MB).",
     labelLabel: "라벨 (선택)",

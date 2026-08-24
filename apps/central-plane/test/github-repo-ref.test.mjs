@@ -36,6 +36,12 @@ describe("붙여넣는 형태 — 브라우저에서 복사해 온 것들", () =
   }
 });
 
+describe("주소에서 온 경로만 자른다 — 손으로 친 오타는 거절", () => {
+  it("★손으로 친 a/b/c는 오타로 보고 거절한다 — 조용히 a/b로 고쳐 받지 않는다", () => {
+    assert.equal(normalizeGithubRepoRef("3SVS/simsa/extra"), null);
+  });
+});
+
 describe("소유자·저장소 이름의 실제 문자들", () => {
   it("점·밑줄·하이픈이 든 저장소 이름", () => {
     assert.equal(normalizeGithubRepoRef("https://github.com/some-org/my_app.v2"), "some-org/my_app.v2");

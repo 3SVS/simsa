@@ -31,8 +31,24 @@ describe("project-sources: validateSourceInput", () => {
     assert.deepEqual(validateSourceInput("github_repo", "seunghunbae-3svs/conclave.ai_v2"), { ok: true });
   });
 
+  // 2026-08-23 동작 변경 (Bae 지시): GitHub **주소를 그대로 붙여넣는 것**이 실제
+  // 사용 패턴이므로 이제 받는다. 종전엔 "https://github.com/o/r"가 거절 목록에
+  // 있었는데, 그게 바로 사용자를 막던 규칙이었다 — 아래 별도 테스트로 이동.
+  it("accepts a pasted GitHub address (2026-08-23)", () => {
+    for (const pasted of [
+      "https://github.com/o/r",
+      "https://github.com/o/r.git",
+      "https://github.com/o/r/tree/main/src",
+      "git@github.com:o/r.git",
+    ]) {
+      assert.deepEqual(validateSourceInput("github_repo", pasted), { ok: true }, pasted);
+    }
+  });
+
   it("rejects malformed GitHub references with invalid_repo", () => {
-    for (const bad of ["", "owner", "owner/", "/repo", "-owner/repo", "owner/repo/extra", "https://github.com/o/r"]) {
+    // "owner/repo/extra"는 여전히 거절한다 — 주소가 아니라 손으로 친 세 조각이면
+    // 오타이고, 조용히 owner/repo로 고쳐 받으면 의도하지 않은 저장소에 연결된다.
+    for (const bad of ["", "owner", "owner/", "/repo", "-owner/repo", "owner/repo/extra", "https://gitlab.com/o/r"]) {
       assert.deepEqual(validateSourceInput("github_repo", bad), { ok: false, error: "invalid_repo" }, bad);
     }
     // owner longer than 39 chars is rejected

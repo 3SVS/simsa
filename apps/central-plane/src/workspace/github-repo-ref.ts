@@ -31,17 +31,25 @@ export function normalizeGithubRepoRef(input: string): string | null {
   if (!ref) return null;
 
   // SSH 형태(git@github.com:owner/repo)
+  const beforeHost = ref;
   ref = ref.replace(/^git@github\.com:/i, "");
   // HTTP(S) + 선택적 www
   ref = ref.replace(/^https?:\/\/(www\.)?github\.com\//i, "");
+  /** 호스트를 떼어냈다 = 사용자가 **주소를 붙여넣었다**는 뜻. */
+  const fromUrl = ref !== beforeHost;
   // 흔한 꼬리: .git · 트레일링 슬래시 · 쿼리/프래그먼트
   ref = ref.replace(/[?#].*$/, "");
   ref = ref.replace(/\.git$/i, "");
   ref = ref.replace(/\/+$/, "");
 
   // 저장소 안쪽 경로를 복사해 온 경우(/tree/main/src, /blob/…, /pull/12) 앞 두 조각만.
-  const parts = ref.split("/").filter(Boolean);
-  if (parts.length > 2) ref = `${parts[0]}/${parts[1]}`;
+  //
+  // **주소에서 온 경우에만** 자른다. 손으로 친 `a/b/c`는 붙여넣기가 아니라 오타이고,
+  // 그걸 조용히 `a/b`로 고쳐 받으면 사용자가 의도하지 않은 저장소에 연결된다.
+  if (fromUrl) {
+    const parts = ref.split("/").filter(Boolean);
+    if (parts.length > 2) ref = `${parts[0]}/${parts[1]}`;
+  }
 
   return REPO_FULL_NAME_RE.test(ref) ? ref : null;
 }
