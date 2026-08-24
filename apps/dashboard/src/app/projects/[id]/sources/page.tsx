@@ -18,8 +18,10 @@ import {
   deleteProjectSource,
   buildSourceFileUrl,
   type ProjectSource,
+  type Reachability,
 } from "@/lib/workspace-sources-api";
 import {
+  reachabilityNotice,
   validateSourceInput,
   validateDocumentFile,
   sourceTypeLabel,
@@ -65,6 +67,8 @@ export default function SourcesPage() {
   const [repoFullName, setRepoFullName] = useState("");
   const [repoBusy, setRepoBusy] = useState(false);
   const [repoError, setRepoError] = useState<string | null>(null);
+  // 연결 직후 "지금 어디까지 보이는지" — 막는 배지가 아니라 알려주는 배지.
+  const [reach, setReach] = useState<{ type: "website" | "github_repo"; r: Reachability; installUrl?: string } | null>(null);
 
   const [docLabel, setDocLabel] = useState("");
   const [docBusy, setDocBusy] = useState(false);
@@ -104,11 +108,14 @@ export default function SourcesPage() {
       return;
     }
     setBusy(true);
+    setReach(null);
     const res = await connectProjectSource(id, { userKey, type, reference });
     setBusy(false);
     if (res.ok) {
       if (type === "website") setWebsiteUrl("");
       else setRepoFullName("");
+      // 연결은 이미 성공했다. 도달성은 **부가 정보**이므로 없으면 조용히 넘어간다.
+      if (res.reachability) setReach({ type, r: res.reachability, installUrl: res.installUrl });
       await load();
     } else {
       setError(errorMessage(t, res.error));
@@ -152,6 +159,37 @@ export default function SourcesPage() {
         <h2 className="page-title">{t.sources.title}</h2>
         <p className="page-subtitle">{t.sources.subtitle}</p>
       </div>
+
+      {/* ★연결 시점 도달성 안내 (2026-08-23) — 막지 않고 알려준다.
+          종전엔 조용히 저장하고 자동수리 단계에 가서야 "GitHub 계정 연결이
+          필요해요"로 막혔다. 이 카드는 그 말을 **연결하는 그 자리에서** 한다.
+          연결 자체는 이미 성공했으므로 어떤 상태든 되돌리지 않는다. */}
+      {reach && (() => {
+        const notice = reachabilityNotice(reach.type, reach.r);
+        if (!notice) return null;
+        const tone =
+          notice.tone === "ok" ? "callout-success" : notice.tone === "warn" ? "callout-warning" : "callout-info";
+        return (
+          <div className={`callout ${tone} text-sm leading-relaxed`} role="status">
+            <p>{t.sources.reach[notice.key]}</p>
+            {/* 로그인 벽은 지금 구조의 실제 한계다 — 결과를 전체 검수로 오해하지
+                않도록 주소를 연결한 자리에서 미리 말한다(설계서 D-4). */}
+            {reach.type === "website" && reach.r.state === "readable" && (
+              <p className="mt-1 text-xs text-gray-500">{t.sources.reach.loginWallNote}</p>
+            )}
+            {notice.showInstall && reach.installUrl && (
+              <a
+                href={reach.installUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-sm mt-2 inline-block"
+              >
+                {t.github.appInstallLink} →
+              </a>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Connect: website */}
       <section className="card p-5">

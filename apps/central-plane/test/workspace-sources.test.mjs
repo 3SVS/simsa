@@ -181,6 +181,47 @@ test("github_repo: GitHub가 아닌 호스트는 조용히 통과시키지 않�
   assert.equal(res.json.error, "invalid_repo");
 });
 
+test("★연결 응답에 도달성이 함께 온다 — 나중에 막지 말고 지금 말한다", async () => {
+  const env = makeEnv();
+  env.GH_APP_INSTALL_URL = "https://github.com/apps/x/installations/new";
+  // 공개 저장소: 그대로 되고, 설치 링크는 주지 않는다(되는 사람에게 노이즈).
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ private: false }), { status: 200, headers: { "content-type": "application/json" } });
+  const pub = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+    userKey: USER, type: "github_repo", reference: "https://github.com/3SVS/simsa",
+  });
+  assert.equal(pub.status, 201);
+  assert.equal(pub.json.reachability.state, "readable");
+  assert.equal(pub.json.reachability.visibility, "public");
+  assert.equal(pub.json.installUrl, undefined, "되는 저장소엔 설치 링크를 주지 않는다");
+});
+
+test("★안 보이는 저장소여도 저장은 되고, 그 자리에서 설치 경로를 준다", async () => {
+  const env = makeEnv();
+  env.GH_APP_INSTALL_URL = "https://github.com/apps/x/installations/new";
+  globalThis.fetch = async () => new Response("{}", { status: 404 });
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+    userKey: USER, type: "github_repo", reference: "https://github.com/3SVS/private-one",
+  });
+  assert.equal(res.status, 201, "★막지 않는다 — 연결은 성공이다");
+  assert.equal(res.json.reachability.state, "needs_access");
+  assert.equal(res.json.installUrl, "https://github.com/apps/x/installations/new");
+  // 그리고 실제로 저장돼 있어야 한다.
+  const list = await req(env, "GET", `/workspace/projects/${PROJECT}/sources?userKey=${USER}`);
+  assert.equal(list.json.sources.some((s) => s.reference === "3SVS/private-one"), true);
+});
+
+test("★계측이 실패해도 연결은 성공한다 — 부가 정보가 기능을 깨지 않는다", async () => {
+  const env = makeEnv();
+  globalThis.fetch = async () => { throw new Error("network down"); };
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+    userKey: USER, type: "github_repo", reference: "3SVS/simsa",
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.json.reachability.state, "unknown", "모른다고 말하지, 안 된다고 말하지 않는다");
+  assert.equal(res.json.installUrl, undefined, "모르는 상태에서 설치를 권하지 않는다");
+});
+
 test("ownership: other user forbidden (403), unknown project 404", async () => {
   const env = makeEnv();
   const forbidden = await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {

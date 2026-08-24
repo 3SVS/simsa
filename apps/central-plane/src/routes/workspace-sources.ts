@@ -18,6 +18,7 @@ import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { getProject } from "../workspace/db.js";
 import { normalizeGithubRepoRef } from "../workspace/github-repo-ref.js";
+import { probeGithubRepo, probeWebsite, type Reachability } from "../workspace/source-reachability.js";
 import {
   insertProjectSource,
   listProjectSources,
@@ -119,7 +120,37 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
         return c.json({ ok: false, error: "source_limit_reached" }, 400);
       }
       const source = await insertProjectSource(c.env, { projectId, userKey, type, reference: storedReference, label });
-      return c.json({ ok: true, source }, 201);
+
+      // ★연결 시점 도달성 계측 (2026-08-23, Bae 지시).
+      //
+      // 종전엔 조용히 저장하고 **한참 뒤 자동수리 단계에서** "GitHub 계정 연결이
+      // 필요해요"로 막혔다. 받을 때 아무 말 없다가 나중에 거절하는 것이 진짜 결함이었다.
+      //
+      // **게이트가 아니다** — 어떤 결과든 소스는 이미 저장됐고(위 줄), 계측은 응답에
+      // 얹히기만 한다. 계측이 실패해도 연결은 성공이다. 사용자를 자기 저장소로부터
+      // 막지 않는다. 우리가 하는 일은 "지금 어디까지 보이는지"와 "더 깊이 가는 법"을
+      // 그 자리에서 말해주는 것뿐이다.
+      let reachability: Reachability | null = null;
+      try {
+        reachability =
+          type === "github_repo"
+            ? await probeGithubRepo(c.env, userKey, storedReference)
+            : await probeWebsite(storedReference);
+      } catch (err) {
+        // 계측 실패가 연결을 깨뜨리면 안 된다 — 부가 정보일 뿐이다.
+        console.warn("[workspace/sources POST] reachability probe failed:", err);
+      }
+
+      // 접근 권한이 더 필요할 때만 설치 경로를 함께 준다 — 되는 사람에겐 노이즈다.
+      const installUrl =
+        type === "github_repo" && reachability?.state === "needs_access" && c.env.GH_APP_INSTALL_URL
+          ? c.env.GH_APP_INSTALL_URL
+          : undefined;
+
+      return c.json(
+        { ok: true, source, ...(reachability ? { reachability } : {}), ...(installUrl ? { installUrl } : {}) },
+        201,
+      );
     } catch (err) {
       console.error("[workspace/sources POST] failed:", err);
       return c.json({ ok: false, error: "save_failed" }, 500);
