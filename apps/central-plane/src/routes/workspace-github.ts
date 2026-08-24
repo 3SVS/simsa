@@ -331,18 +331,25 @@ export function createWorkspaceGitHubRoutes(
     const origin = c.req.header("origin") ?? null;
     const userKey = c.req.query("userKey") ?? "";
 
+    // AF-7 (설계 D-9): App 설치 경로를 **연결 화면에서 처음부터** 보여주기 위해
+    // 항상 함께 내려준다. 종전엔 비공개 저장소 조회가 실패한 뒤에야 나타났는데,
+    // 계정이 여러 개인 사용자에게는 OAuth가 아니라 **App 설치가 정답**이다
+    // (OAuth는 기존 승인을 조용히 재사용해 계정 전환이 3단계 절차가 된다).
+    const installUrl = c.env.GH_APP_INSTALL_URL || undefined;
+
     if (!userKey) {
-      return json({ ok: true, connected: false }, 200, origin);
+      return json({ ok: true, connected: false, ...(installUrl ? { installUrl } : {}) }, 200, origin);
     }
 
     try {
       const conn = await getGitHubConnectionByUserKey(c.env, userKey);
-      if (!conn) return json({ ok: true, connected: false }, 200, origin);
+      if (!conn) return json({ ok: true, connected: false, ...(installUrl ? { installUrl } : {}) }, 200, origin);
 
       return json({
         ok: true,
         connected: true,
         user: { login: conn.githubLogin, name: conn.githubName, avatarUrl: conn.avatarUrl },
+        ...(installUrl ? { installUrl } : {}),
       }, 200, origin);
     } catch (err) {
       console.error("[workspace/github/status] error:", err);

@@ -1129,6 +1129,10 @@ export type Dictionary = {
     errorPrivate: string;
     appInstallHint: string;
     appInstallLink: string;
+    connectChoiceTitle: string;
+    connectOauthWhy: string;
+    connectAppWhy: string;
+    connectAppCta: string;
     privateGuideTitle: string;
     privateGuideStep1: string;
     privateGuideStep2: string;

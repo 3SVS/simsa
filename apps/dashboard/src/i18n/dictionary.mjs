@@ -1231,6 +1231,10 @@ const EN = {
     errorPrivate: "This looks like a private repository. Private repositories can be connected by installing our GitHub App on them. Alternatively, make the repository public: on GitHub, open the repository → Settings → General → Danger Zone → Change visibility → Public.",
     appInstallHint: "This private repository needs our GitHub App. Install it on the repository (or its organization), then try connecting again.",
     appInstallLink: "Install the GitHub App",
+    connectChoiceTitle: "Two ways to connect",
+    connectOauthWhy: "Fastest. Shows a list of your repositories to pick from.",
+    connectAppWhy: "Pick exactly which account or organisation, and which repositories. Best if you have more than one GitHub account, and the only way to reach private repositories.",
+    connectAppCta: "Choose an account and install",
     privateGuideTitle:
       "Can't see the repository? If the name is right, it's probably private — private repositories work too, once our GitHub App is installed:",
     privateGuideStep1:
@@ -3842,6 +3846,10 @@ const KO = {
     errorPrivate: "비공개 저장소인 것 같아요. 비공개 저장소는 GitHub App을 설치하면 연결할 수 있어요. 또는 저장소를 공개로 바꾸세요: GitHub에서 저장소를 열고 Settings → General → Danger Zone → Change visibility → Public을 선택하세요.",
     appInstallHint: "이 비공개 저장소에는 GitHub App 설치가 필요해요. 저장소(또는 조직)에 App을 설치한 뒤 다시 연결해 보세요.",
     appInstallLink: "GitHub App 설치하기",
+    connectChoiceTitle: "연결하는 두 가지 방법",
+    connectOauthWhy: "가장 빠릅니다. 내 저장소 목록에서 고를 수 있어요.",
+    connectAppWhy: "어느 계정·조직에, 어떤 저장소까지 연결할지 직접 고릅니다. GitHub 계정이 여러 개면 이쪽이 확실하고, 비공개 저장소는 이 방법으로만 연결됩니다.",
+    connectAppCta: "계정 고르고 설치하기",
     privateGuideTitle:
       "저장소가 안 보이나요? 이름이 맞다면 비공개 저장소일 수 있어요 — 비공개 저장소도 GitHub App만 설치하면 연결됩니다:",
     privateGuideStep1:

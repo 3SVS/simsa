@@ -51,6 +51,8 @@ export default function SettingsPage() {
   // 스택 답이 바뀌면 아래 서비스·배포 안내를 새 값으로 다시 그린다.
   const [stackRev, setStackRev] = useState(0);
   const [ghUser, setGhUser] = useState<GitHubUser | null>(null);
+  // AF-7: App 설치 경로. 서버가 GH_APP_INSTALL_URL을 내려준다(미설정이면 undefined).
+  const [installUrl, setInstallUrl] = useState<string | undefined>(undefined);
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [reposPhase, setReposPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(null);
@@ -243,8 +245,10 @@ export default function SettingsPage() {
       setPhase("status_error");
     } else if (statusRes.connected) {
       setGhUser(statusRes.user);
+      setInstallUrl(statusRes.installUrl);
       setPhase("connected");
     } else {
+      setInstallUrl(statusRes.installUrl);
       setPhase("disconnected");
     }
 
@@ -425,11 +429,40 @@ export default function SettingsPage() {
           {disconnectPhase === "done" && (
             <p className="mx-auto mb-3 max-w-sm text-xs text-green-600">{t.github.disconnectDone}</p>
           )}
-          <p className="mb-1 text-sm font-medium text-gray-800">{t.github.connectGithub}</p>
+          <p className="mb-1 text-sm font-medium text-gray-800">{t.github.connectChoiceTitle}</p>
           <p className="mx-auto mb-5 max-w-sm text-xs text-gray-500">{t.github.connectHint}</p>
-          <button onClick={handleConnectGitHub} className="btn btn-md btn-primary">
-            {t.github.connectGithub}
-          </button>
+
+          {/* ★AF-7 (설계 D-9) — App 설치를 OAuth와 **동등한 선택지**로 올린다.
+              종전엔 비공개 저장소 조회가 실패한 뒤에야 나타나는 구제책이었다.
+              그런데 계정이 여러 개인 사용자에게는 OAuth가 오히려 함정이다:
+              기존 승인을 조용히 재사용하므로 계정을 바꾸려면 연결 해제 →
+              github.com 로그아웃 → 재연결의 3단계를 매번 밟아야 한다.
+              App 설치는 설치 화면에서 계정·조직·저장소를 직접 고르게 해준다. */}
+          <div className="mx-auto grid max-w-lg gap-3 text-left sm:grid-cols-2">
+            <div className="rounded-lg border border-gray-200 p-4">
+              <button onClick={handleConnectGitHub} className="btn btn-md btn-primary w-full">
+                {t.github.connectGithub}
+              </button>
+              <p className="mt-2 text-xs leading-relaxed text-gray-500">{t.github.connectOauthWhy}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 p-4">
+              {installUrl ? (
+                <a
+                  href={installUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-md btn-secondary w-full"
+                >
+                  {t.github.connectAppCta}
+                </a>
+              ) : (
+                <button disabled className="btn btn-md btn-secondary w-full opacity-50">
+                  {t.github.connectAppCta}
+                </button>
+              )}
+              <p className="mt-2 text-xs leading-relaxed text-gray-500">{t.github.connectAppWhy}</p>
+            </div>
+          </div>
           {/* Stage 273: GitHub binds the browser's current session instantly — say so upfront. */}
           <p className="mx-auto mt-3 max-w-sm text-xs text-gray-500">
             {t.github.instantBindCaption}{" "}
