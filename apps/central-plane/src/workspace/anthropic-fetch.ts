@@ -225,6 +225,27 @@ export type VendorFallback = {
   model?: string;
 };
 
+/**
+ * ★추론 모델은 **같은 예산에서 추론 토큰을 먼저 쓴다** (2026-08-24 실측).
+ *
+ * Anthropic의 `max_tokens`를 그대로 `max_completion_tokens`로 넘겼더니, gpt-5.4가
+ * 그 예산을 추론에 나눠 쓰고 **본문이 중간에서 끊겼다**: 스펙 생성에서 정상
+ * Anthropic 응답이 12,449자인데 폴백은 6,179자에서 잘려 `JSON parse failed`.
+ * 폴백이 "성공"으로 보이는데 결과는 못 쓰는 상태 — 가장 나쁜 실패 모양이다.
+ *
+ * 그래서 폴백에는 **여유 예산**을 준다. 배수는 실측 전까지의 잠정값이고,
+ * `llm_fallback_truncated` 로그의 reasoning_tokens로 조정한다(추측 대신 계측).
+ * OpenAI는 실제로 쓴 만큼만 과금하므로 상한을 넉넉히 잡는 비용은 낮다.
+ */
+const FALLBACK_BUDGET_MULTIPLIER = 3;
+const FALLBACK_BUDGET_MIN = 8000;
+const FALLBACK_BUDGET_MAX = 32000;
+
+export function fallbackOutputBudget(anthropicMaxTokens: number): number {
+  const wanted = Math.max(anthropicMaxTokens * FALLBACK_BUDGET_MULTIPLIER, FALLBACK_BUDGET_MIN);
+  return Math.min(wanted, FALLBACK_BUDGET_MAX);
+}
+
 function openAiUrl(baseUrl?: string): string {
   const base = (baseUrl ?? "").trim().replace(/\/$/, "");
   return base ? `${base}/chat/completions` : "https://api.openai.com/v1/chat/completions";
@@ -246,7 +267,7 @@ async function callOpenAiAsAnthropic(
       headers: { authorization: `Bearer ${fb.openaiApiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: fb.model ?? OPENAI_FALLBACK_MODEL,
-        max_completion_tokens: body.max_tokens,
+        max_completion_tokens: fallbackOutputBudget(body.max_tokens),
         messages: body.messages,
       }),
     });
@@ -255,12 +276,36 @@ async function callOpenAiAsAnthropic(
       throw new Error(`OpenAI ${r.status}: ${tail.slice(0, 200)}`);
     }
     const j = (await r.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        completion_tokens_details?: { reasoning_tokens?: number };
+      };
     };
-    const text = j.choices?.[0]?.message?.content ?? "";
+    const choice = j.choices?.[0];
+    const text = choice?.message?.content ?? "";
+    const reasoning = j.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+    // ★잘림을 호출부에 보이게 한다. 종전엔 stop_reason을 안 넘겨서 잘린 JSON이
+    //  그냥 "파싱 실패"로만 보였다 — 원인을 알 수 없는 실패였다(2026-08-24 실측).
+    const stop = choice?.finish_reason === "length" ? "max_tokens" : (choice?.finish_reason ?? undefined);
+    if (choice?.finish_reason === "length") {
+      try {
+        console.log(
+          JSON.stringify({
+            event: "llm_fallback_truncated",
+            model: fb.model ?? OPENAI_FALLBACK_MODEL,
+            requested_max: fallbackOutputBudget(body.max_tokens),
+            completion_tokens: j.usage?.completion_tokens ?? 0,
+            reasoning_tokens: reasoning,
+            text_chars: text.length,
+          }),
+        );
+      } catch { /* logging must not break the call */ }
+    }
     return {
       content: [{ type: "text", text }],
+      ...(stop ? { stop_reason: stop } : {}),
       usage: { input_tokens: j.usage?.prompt_tokens ?? 0, output_tokens: j.usage?.completion_tokens ?? 0 },
     };
   } finally {

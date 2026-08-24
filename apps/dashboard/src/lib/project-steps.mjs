@@ -134,10 +134,20 @@ export function nextProjectAction(facts) {
     return null;
   }
 
-  // Code (developer) path — connect the repo, then run review.
-  if (f.hasRepo === false) return { action: "connect_code", slug: "settings" };
-  if (f.hasRepo === true && f.hasReviewRun === false) return { action: "run_review", slug: "github" };
-  if (f.hasRepo === true && f.hasReviewRun === true) return { action: "view_results", slug: "checks" };
+  // Code path — 무언가 연결돼 있으면 검수로, 아니면 연결로.
+  //
+  // ★AF-1 이후 이 갈래는 **앱 주소로도 시작한다**(종전엔 항상 저장소였다).
+  // 그때까지 이 분기는 `hasDeployUrl`을 아예 보지 않았고, 그래서 주소를 넣어
+  // **검수까지 이미 끝난 프로젝트에도 "GitHub 저장소를 연결하세요"** 를 계속
+  // 내밀었다(2026-08-24 journey-audit 실측). 사용자가 방금 한 일을 못 본 척하는
+  // 안내는 제품이 자기 상태를 모른다는 뜻이다.
+  //
+  // 저장소가 있으면 코드 리뷰를, 주소만 있으면 화면 검수를 가리킨다.
+  const codeConnected = f.hasRepo === true || f.hasDeployUrl === true;
+  if (f.hasRepo === false && f.hasDeployUrl === false) return { action: "connect_code", slug: "settings" };
+  const codeReviewSlug = f.hasRepo === true ? "github" : "visual-checks";
+  if (codeConnected && f.hasReviewRun === false) return { action: "run_review", slug: codeReviewSlug };
+  if (codeConnected && f.hasReviewRun === true) return { action: "view_results", slug: "checks" };
   return null; // facts still unknown — show nothing rather than mislead
 }
 

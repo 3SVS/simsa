@@ -126,7 +126,9 @@ test("activation path (builder): deploy URL connected, no run → run_review via
 test("activation path (code branch): items ready + no repo → connect_code (GitHub stays for devs)", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
   assert.deepEqual(
-    nextProjectAction({ hasItems: true, hasRepo: false, hasReviewRun: false, entryPath: "code" }),
+    // AF-1 이후 코드 갈래는 앱 주소로도 시작하므로, "연결된 것이 없다"는
+    // 저장소와 주소 **둘 다 없음**이 확인돼야 성립한다.
+    nextProjectAction({ hasItems: true, hasRepo: false, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
     { action: "connect_code", slug: "settings" },
   );
 });
@@ -135,7 +137,7 @@ test("activation path: CODE branch with no items skips create_items entirely", a
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
   // Missing items must NOT interpose on the code branch — connect → run is the whole path.
   assert.deepEqual(
-    nextProjectAction({ hasItems: false, hasRepo: false, hasReviewRun: false, entryPath: "code" }),
+    nextProjectAction({ hasItems: false, hasRepo: false, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
     { action: "connect_code", slug: "settings" },
   );
 });
@@ -242,4 +244,37 @@ test("packReadiness: every failed item has a fix plan → fixes_ready", async ()
   assert.equal(r.state, "fixes_ready");
   assert.equal(r.failedCount, 1);
   assert.equal(r.missingCount, 0);
+});
+
+test("★AF-1: 코드 갈래에 앱 주소만 있어도 연결된 것으로 본다", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  // 2026-08-24 journey-audit 실측: 주소를 넣어 **검수까지 끝난 프로젝트**에도
+  // "GitHub 저장소를 연결하세요"가 계속 떴다. 제품이 자기 상태를 모르는 안내다.
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: false, hasDeployUrl: true, hasReviewRun: false, entryPath: "code" }),
+    { action: "run_review", slug: "visual-checks" },
+    "주소만 있으면 화면 검수를 가리킨다",
+  );
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: false, hasDeployUrl: true, hasReviewRun: true, entryPath: "code" }),
+    { action: "view_results", slug: "checks" },
+    "검수가 끝났으면 결과로 보낸다 — 연결을 다시 요구하지 않는다",
+  );
+});
+
+test("저장소가 있으면 코드 갈래는 여전히 코드 리뷰를 가리킨다 (무회귀)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: true, hasDeployUrl: true, hasReviewRun: false, entryPath: "code" }),
+    { action: "run_review", slug: "github" },
+  );
+});
+
+test("사실을 모르면 CTA를 내지 않는다 (기존 원칙)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.equal(
+    nextProjectAction({ hasItems: true, hasRepo: false, hasDeployUrl: null, hasReviewRun: false, entryPath: "code" }),
+    null,
+    "주소 여부가 미확인이면 잘못된 안내보다 침묵이 낫다",
+  );
 });
