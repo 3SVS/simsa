@@ -16,7 +16,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-const { anthropicMessages, OPENAI_FALLBACK_MODEL, __resetAnthropicBreaker, fallbackOutputBudget } = await import("../dist/workspace/anthropic-fetch.js");
+const { anthropicMessages, OPENAI_FALLBACK_MODEL, __resetAnthropicBreaker, fallbackOutputBudget, stripAssistantPrefill } = await import("../dist/workspace/anthropic-fetch.js");
 
 // 차단기는 isolate 전역이다 — 테스트 간에 상태가 새면 서로를 오염시킨다.
 beforeEach(() => __resetAnthropicBreaker());
@@ -265,5 +265,56 @@ describe("★추론 모델의 잘림 (2026-08-24 라이브 실측으로 잡힘)"
         : forbidden();
     const data = await anthropicMessages("k", BODY, 1000, fetchImpl, GATEWAY, "generate", { ...recorder(), fallback: FB });
     assert.notEqual(data.stop_reason, "max_tokens");
+  });
+});
+
+describe("★assistant prefill의 벤더 간 번역 (2026-08-24 실측)", () => {
+  // Anthropic은 마지막 assistant 메시지 **뒤를 이어서** 쓴다. generate.ts는 그걸
+  // 이용해 `{`를 prefill로 주고 응답 앞에 `{`를 되붙인다. OpenAI는 이어쓰기를
+  // 하지 않고 완전한 JSON을 준다 — 되붙이면 `{{...}`가 되어 파싱이 깨졌다.
+  // 실제 라이브 로그가 정확히 `head: {{` 였고, **폴백은 prefill을 쓰는 모든
+  // 호출부에서 조용히 망가져 있었다.**
+  const PREFILLED = [
+    { role: "user", content: "make json" },
+    { role: "assistant", content: "{" },
+  ];
+
+  it("완전한 JSON이 오면 prefill 조각을 떼어낸다 — 호출부가 되붙여도 정상", () => {
+    const out = stripAssistantPrefill('{"a":1}', PREFILLED);
+    assert.equal(out, '"a":1}');
+    assert.equal("{" + out, '{"a":1}', "호출부의 되붙이기와 합쳐 유효한 JSON");
+  });
+
+  it("앞 공백이 있어도 떼어낸다", () => {
+    const leading = String.fromCharCode(10) + '  {"a":1}';
+    assert.equal("{" + stripAssistantPrefill(leading, PREFILLED), '{"a":1}');
+  });
+
+  it("이미 이어쓰기 모양이면 손대지 않는다", () => {
+    assert.equal(stripAssistantPrefill('"a":1}', PREFILLED), '"a":1}');
+  });
+
+  it("prefill이 없는 호출부는 영향받지 않는다 (검수·수정 등 — 이들은 멀쩡했다)", () => {
+    const plain = [{ role: "user", content: "hi" }];
+    assert.equal(stripAssistantPrefill('{"a":1}', plain), '{"a":1}');
+  });
+
+  it("빈 prefill·빈 메시지에도 던지지 않는다", () => {
+    assert.equal(stripAssistantPrefill("x", [{ role: "assistant", content: "" }]), "x");
+    assert.equal(stripAssistantPrefill("x", []), "x");
+  });
+
+  it("★폴백 전체 경로에서 실증 — prefill 호출부가 유효한 JSON을 얻는다", async () => {
+    const body = { model: "m", max_tokens: 500, messages: PREFILLED };
+    const fetchImpl = async (url) =>
+      isOpenAi(url)
+        ? new Response(
+            JSON.stringify({ choices: [{ message: { content: '{"productName":"내 앱"}' }, finish_reason: "stop" }], usage: {} }),
+            { status: 200 },
+          )
+        : forbidden();
+    const data = await anthropicMessages("k", body, 1000, fetchImpl, GATEWAY, "generate", { ...recorder(), fallback: FB });
+    const reassembled = "{" + data.content[0].text;
+    assert.deepEqual(JSON.parse(reassembled), { productName: "내 앱" }, "한글 값도 온전하다 (Rule 6)");
   });
 });
