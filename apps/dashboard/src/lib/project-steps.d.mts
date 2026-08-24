@@ -5,6 +5,7 @@ export type StepLockReason = "need_items" | "need_code" | "need_build" | null;
 export type ProjectStepFacts = {
   hasItems: boolean | null;
   hasRepo: boolean | null;
+  hasRepoSource?: boolean | null;
   hasReviewRun: boolean | null;
   hasDeployUrl?: boolean | null;
   entryPath?: "idea" | "code" | "spec" | null;
@@ -22,6 +23,7 @@ export function nextScreenSlug(
 export type NextProjectAction =
   | "create_items"
   | "connect_code"
+  | "add_url"
   | "get_pack"
   | "run_review"
   | "view_results";

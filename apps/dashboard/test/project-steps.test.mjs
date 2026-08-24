@@ -278,3 +278,38 @@ test("사실을 모르면 CTA를 내지 않는다 (기존 원칙)", async () => 
     "주소 여부가 미확인이면 잘못된 안내보다 침묵이 낫다",
   );
 });
+
+test("★AF-1: 소스로 붙인 저장소도 '연결됨'으로 센다 (링크와는 다른 사실)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  // 2026-08-24 실측: AF-1은 제출한 저장소를 project_sources에 저장하는데 hasRepo는
+  // GitHub 링크만 봐서, 저장소를 넣은 사용자가 "아무것도 연결 안 함"으로 보였다.
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: false, hasRepoSource: true, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
+    { action: "add_url", slug: "sources" },
+    "첫 결과까지 가장 짧은 길은 주소 추가다 — 코드 리뷰는 GitHub 링크가 더 필요해 더 먼 길",
+  );
+});
+
+test("소스 저장소 + 주소가 둘 다 있으면 화면 검수로", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: false, hasRepoSource: true, hasDeployUrl: true, hasReviewRun: false, entryPath: "code" }),
+    { action: "run_review", slug: "visual-checks" },
+  );
+});
+
+test("GitHub 링크가 있으면 코드 리뷰를 가리킨다 (소스보다 우선)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: true, hasRepoSource: true, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
+    { action: "run_review", slug: "github" },
+  );
+});
+
+test("아무것도 없으면 종전대로 연결을 요구한다 (무회귀)", async () => {
+  const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  assert.deepEqual(
+    nextProjectAction({ hasItems: false, hasRepo: false, hasRepoSource: false, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
+    { action: "connect_code", slug: "settings" },
+  );
+});
