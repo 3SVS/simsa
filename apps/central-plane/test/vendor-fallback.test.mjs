@@ -16,7 +16,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-const { anthropicMessages, OPENAI_FALLBACK_MODEL, __resetAnthropicBreaker } = await import("../dist/workspace/anthropic-fetch.js");
+const { anthropicMessages, OPENAI_FALLBACK_MODEL, __resetAnthropicBreaker, fallbackOutputBudget } = await import("../dist/workspace/anthropic-fetch.js");
 
 // 차단기는 isolate 전역이다 — 테스트 간에 상태가 새면 서로를 오염시킨다.
 beforeEach(() => __resetAnthropicBreaker());
@@ -197,5 +197,73 @@ describe("회로 차단기 — 죽은 벤더를 반복해 두드리지 않는다
     await anthropicMessages("k", BODY, 1000, fetchFail, GATEWAY, "check", { ...recorder(), fallback: FB });
     await anthropicMessages("k", BODY, 1000, async (url) => { urls.push(url); return isOpenAi(url) ? openAiOk() : forbidden(); }, GATEWAY, "check", { ...recorder(), fallback: FB });
     assert.ok(urls.some((u) => !isOpenAi(u)), "리셋 후엔 다시 Anthropic부터 시도한다");
+  });
+});
+
+describe("★추론 모델의 잘림 (2026-08-24 라이브 실측으로 잡힘)", () => {
+  // 실측: Anthropic max_tokens를 그대로 넘겼더니 gpt-5.4가 예산을 추론에 나눠 쓰고
+  // 본문이 6,179자에서 끊겨 JSON 파싱이 실패했다(정상 Anthropic 응답은 12,449자).
+  // 폴백이 "성공"으로 보이는데 결과는 못 쓰는, 가장 나쁜 실패 모양이었다.
+
+  it("폴백 예산은 원래 예산보다 넉넉하다 — 추론 토큰이 같은 주머니에서 나간다", () => {
+    assert.ok(fallbackOutputBudget(4000) > 4000);
+    assert.ok(fallbackOutputBudget(500) >= 8000, "작은 요청도 최소 여유는 준다");
+  });
+
+  it("상한이 있다 — 무한정 키우지 않는다", () => {
+    assert.ok(fallbackOutputBudget(1_000_000) <= 32000);
+  });
+
+  it("실제 요청에 늘어난 예산이 실린다", async () => {
+    let sent = null;
+    const fetchImpl = async (url, init) => {
+      if (isOpenAi(url)) { sent = JSON.parse(init.body); return openAiOk(); }
+      return forbidden();
+    };
+    await anthropicMessages("k", BODY, 1000, fetchImpl, GATEWAY, "generate", { ...recorder(), fallback: FB });
+    assert.equal(sent.max_completion_tokens, fallbackOutputBudget(BODY.max_tokens));
+    assert.ok(sent.max_completion_tokens > BODY.max_tokens);
+  });
+
+  it("★잘리면 stop_reason으로 호출부에 보인다 — 종전엔 원인 모를 파싱 실패였다", async () => {
+    const truncated = () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '{"partial":' }, finish_reason: "length" }],
+          usage: { prompt_tokens: 10, completion_tokens: 4000, completion_tokens_details: { reasoning_tokens: 3800 } },
+        }),
+        { status: 200 },
+      );
+    const fetchImpl = async (url) => (isOpenAi(url) ? truncated() : forbidden());
+    const data = await anthropicMessages("k", BODY, 1000, fetchImpl, GATEWAY, "generate", { ...recorder(), fallback: FB });
+    assert.equal(data.stop_reason, "max_tokens", "Anthropic 어휘로 옮겨 호출부가 알아본다");
+  });
+
+  it("잘림이 추론 토큰과 함께 로그에 남는다 — 예산을 계측으로 조정하려고", async () => {
+    const fetchImpl = async (url) =>
+      isOpenAi(url)
+        ? new Response(
+            JSON.stringify({
+              choices: [{ message: { content: "x" }, finish_reason: "length" }],
+              usage: { completion_tokens: 4000, completion_tokens_details: { reasoning_tokens: 3800 } },
+            }),
+            { status: 200 },
+          )
+        : forbidden();
+    const { lines } = await captureLogs(() =>
+      anthropicMessages("k", BODY, 1000, fetchImpl, GATEWAY, "generate", { ...recorder(), fallback: FB }),
+    );
+    const ev = parsed(lines).find((j) => j.event === "llm_fallback_truncated");
+    assert.ok(ev, "잘림 이벤트가 있어야 한다");
+    assert.equal(ev.reasoning_tokens, 3800);
+  });
+
+  it("정상 종료면 stop_reason을 지어내지 않는다", async () => {
+    const fetchImpl = async (url) =>
+      isOpenAi(url)
+        ? new Response(JSON.stringify({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }] }), { status: 200 })
+        : forbidden();
+    const data = await anthropicMessages("k", BODY, 1000, fetchImpl, GATEWAY, "generate", { ...recorder(), fallback: FB });
+    assert.notEqual(data.stop_reason, "max_tokens");
   });
 });

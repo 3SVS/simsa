@@ -25,6 +25,15 @@ import { mkdirSync, writeFileSync } from "node:fs";
 
 const BASE = "https://app.trysimsa.com";
 const KO_ONLY = process.argv.includes("--ko-only");
+
+/**
+ * AF 트레인 이후 코드 갈래가 받는 것은 **주소 또는 저장소** 하나다.
+ * 리얼 데이터로 잰다(Rule 6): 실제로 살아 있는 주소와 실제 공개 저장소.
+ */
+const CODE_SUBMISSION = {
+  website: "https://app.trysimsa.com/",
+  repo: "https://github.com/3SVS/simsa",
+};
 const SHOTS = new URL("./journey-audit-shots", import.meta.url).pathname.replace(/^\/(\w):/, "$1:");
 mkdirSync(SHOTS, { recursive: true });
 
@@ -122,35 +131,59 @@ async function runIdeaEntry(locale) {
 
 async function runCodeJourney(locale) {
   try {
-    journey("J1 기존-앱 갈래: 만든 앱 검수받기 완주", locale);
+    journey("J1 기존-앱 갈래: 주소 하나로 검수까지 완주 (AF 트레인)", locale);
     const page = await newUserPage(locale);
     await page.goto(`${BASE}/projects/new?path=code`, { waitUntil: "networkidle", timeout: 45000 });
     await facts(page, "code 갈래 스텝1 — 무엇을 묻는가");
-    // ★사이드바 검색 input이 first("input")에 걸린다 — 본문 필드는 placeholder로.
-    const nameInput = page.locator("main input[type='text']").first();
-    await nameInput.fill(locale === "en" ? "Bakery reservation test app" : "동네 빵집 예약 테스트앱");
-    const descBox = page.locator("main textarea").first();
-    if (await descBox.count()) await descBox.fill(locale === "en" ? "Reserve bread and pick a pickup time" : "빵을 예약하고 픽업 시간을 고르는 앱");
-    await facts(page, "code 스텝1 입력 후");
+
+    // ★AF-1 이후 이 화면은 **칸 하나**다(종전: 이름+빌더칩+호스팅+데이터+설명+필수동작).
+    // 옛 스크립트는 이름 칸에 "동네 빵집 예약 테스트앱"을 넣었는데, 그건 주소가
+    // 아니므로 이제 거절된다 — 측정 장비부터 새 여정에 맞춰야 한다.
+    const submitField = page.locator("main input[type='text']").first();
+    await submitField.fill(CODE_SUBMISSION.website);
+    await page.waitForTimeout(400);
+    await facts(page, "주소 입력 후 — 무엇으로 읽었는지 보이는가");
+
     await page.locator("main .btn-primary, main button[class*='primary']").last().click();
-    await page.waitForURL(/projects\/(?!new)/, { timeout: 90000 }).catch(() => {});
-    await page.waitForTimeout(2500);
-    await facts(page, "생성 직후 랜딩 — 여기가 어디고 다음 행동이 보이는가");
+    // AF-2: 제출 즉시 1차 검수가 걸리므로 생성이 종전보다 오래 걸릴 수 있다.
+    await page.waitForURL(/projects\/(?!new)/, { timeout: 120000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+    await facts(page, "생성 직후 랜딩 — 검수가 돌고 확인 카드가 보이는가");
+
     const pid = (page.url().match(/projects\/([^/?#]+)/) ?? [])[1];
     if (pid) {
+      // AF-3/AF-4: 의도 추론은 LLM을 타므로 시간이 걸린다. 카드가 자리를 잡을 때까지.
+      await page.waitForTimeout(20000);
+      await facts(page, "AF-4 의도 확인 카드 — 초안이 왔는가 / 정직하게 비었는가");
       await page.goto(`${BASE}/projects/${pid}`, { waitUntil: "networkidle", timeout: 45000 });
       await facts(page, "개요 — 지금 할 일이 이 갈래에 맞는가");
-      await page.goto(`${BASE}/projects/${pid}/checks`, { waitUntil: "networkidle", timeout: 45000 });
-      await facts(page, "checks 첫 화면 — 모드 선택/소스 없이 안내");
-      const runBtn = page.getByRole("button", { name: /검수|확인|run|check/i }).first();
-      if (await runBtn.count()) {
-        await runBtn.click().catch(() => {});
-        await page.waitForTimeout(2500);
-        await facts(page, "소스 없이 검수 시도 — 막힘 안내");
-      }
+      await page.goto(`${BASE}/projects/${pid}/visual-checks`, { waitUntil: "networkidle", timeout: 45000 });
+      await facts(page, "AF-5 검수 화면 — 깊이와 '못 본 것'이 표기되는가");
     } else {
       audit.journeys.at(-1).failure = "프로젝트 생성 후 URL에서 id를 못 얻음";
     }
+    await page.context().close();
+  } catch (err) {
+    audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
+  }
+}
+
+/**
+ * J1b — 저장소만 넣은 경우. AF-1에서 새로 판 `need_url` 문이 실제로 뜨는지 본다.
+ * 종전엔 이 상태에서 "첫 검수 돌려보기"로 보냈다가 **비활성 버튼**을 만나게 했다.
+ */
+async function runRepoOnlyJourney(locale) {
+  try {
+    journey("J1b 저장소만 연결: 막다른 골목이 없는가 (need_url)", locale);
+    const page = await newUserPage(locale);
+    await page.goto(`${BASE}/projects/new?path=code`, { waitUntil: "networkidle", timeout: 45000 });
+    await page.locator("main input[type='text']").first().fill(CODE_SUBMISSION.repo);
+    await page.waitForTimeout(400);
+    await facts(page, "저장소 주소 입력 후 — 저장소로 읽었는가");
+    await page.locator("main .btn-primary, main button[class*='primary']").last().click();
+    await page.waitForURL(/projects\/(?!new)/, { timeout: 120000 }).catch(() => {});
+    await page.waitForTimeout(4000);
+    await facts(page, "★저장소만 있을 때 개요 — 비활성 버튼으로 보내지 않는가");
     await page.context().close();
   } catch (err) {
     audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
@@ -262,6 +295,7 @@ async function runSeededResultJourney(locale) {
 
 await runIdeaEntry("ko");
 await runCodeJourney("ko");
+await runRepoOnlyJourney("ko");
 await runSpecJourney("ko");
 await runConnectJourney("ko");
 await runSeededResultJourney("ko");
@@ -269,6 +303,7 @@ await runSeededResultJourney("ko");
 if (!KO_ONLY) {
   await runIdeaEntry("en");
   await runCodeJourney("en");
+  await runRepoOnlyJourney("en");
   // spec/connect의 EN은 code 여정이 셸·생성·랜딩을 이미 커버 — 입구만 본다.
   try {
     journey("J2e 기획서 갈래 입구(EN)", "en");
