@@ -163,11 +163,21 @@ new_sqlite_classes = ["ConclaveSandbox"]
 # instance_type "basic" (1 GiB memory / 4 GB disk): headless Chromium OOMs on
 # the default "dev" (256 MiB) instance. Image is built in CI by
 # deploy-central-plane.yml — first deploy after this lands builds + pushes it.
+#
+# ★max_instances 5 → 20 (2026-08-25). 정확도 평가를 **순차로** 돌렸는데도 11개 중
+# 6개가 `Maximum number of running container instances exceeded`로 실패했다.
+# 하나씩 돌려도 상한에 닿는다는 것은, 끝난 인스턴스가 곧바로 반환되지 않는다는 뜻이다.
+#
+# 제품 관점의 함의가 더 크다: **여러 사용자가 동시에 검수를 누르면 검수가 아예
+# 시작되지 않는다.** 오픈 전에 반드시 올려야 하는 값이었다.
+#
+# 상한을 올리는 것 자체는 과금되지 않는다(실제로 도는 인스턴스에만 과금).
+# 20은 잠정값 — 동시 검수 실측으로 조정한다.
 [[containers]]
 class_name = "SimsaInspector"
 image = "./inspector-container/Dockerfile"
 image_build_context = "../.."
-max_instances = 5
+max_instances = 20
 instance_type = "basic"
 
 [[durable_objects.bindings]]
