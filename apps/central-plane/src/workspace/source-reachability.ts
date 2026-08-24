@@ -32,6 +32,7 @@ import { getGitHubConnectionByUserKey } from "./github-db.js";
 import { decryptToken } from "../crypto.js";
 
 const GITHUB_API = "https://api.github.com";
+const GITHUB_WEB = "https://github.com";
 const PROBE_TIMEOUT_MS = 6000;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -104,14 +105,42 @@ export async function probeGithubRepo(
   }
   // 레이트리밋을 "안 보임"으로 셈하면 멀쩡한 공개 저장소를 비공개로 오진한다.
   // 비인증 GitHub API는 IP당 60회/시간이고 Worker는 egress IP를 공유한다.
-  if (resp.status === 429) return { state: "unknown", reason: "rate_limited" };
-  if (resp.status === 403) {
-    const remaining = resp.headers.get("x-ratelimit-remaining");
-    if (remaining === "0") return { state: "unknown", reason: "rate_limited" };
-    return { state: "needs_access", via };
-  }
-  if (resp.status === 404) return { state: "needs_access", via };
+  const rateLimited =
+    resp.status === 429 ||
+    (resp.status === 403 && resp.headers.get("x-ratelimit-remaining") === "0");
+  if (rateLimited) return webFallback(repoFullName, fetchImpl);
+  if (resp.status === 403 || resp.status === 404) return { state: "needs_access", via };
   return { state: "unknown", reason: "network" };
+}
+
+/**
+ * API가 레이트리밋에 걸렸을 때의 폴백 — **github.com 웹 페이지**를 찍는다.
+ *
+ * 왜 필요한가(2026-08-24 라이브 실측): 배포 직후 익명으로 4건을 연결해 봤더니
+ * **2건이 rate_limited**로 나왔다. `unknown`으로 분류한 것 자체는 옳았지만(오진을
+ * 막았다), 실사용에서 절반이 "모르겠어요"면 계측이 값을 못 낸다.
+ *
+ * 실측으로 확인한 대안: `github.com/owner/repo`에 HEAD를 던지면 **API 레이트리밋과
+ * 별개**로 동작하고(연속 20회 전부 200), 존재·공개 여부가 200/404로 갈린다.
+ *
+ * **성공한 API 답을 대체하지 않는다** — 오직 API가 막혔을 때만 부른다. 그래서 이
+ * 폴백이 실패해도 결과는 종전과 같은 `unknown`이고, 회귀가 없다.
+ * 비공개 저장소도 익명에겐 404이므로 `needs_access`가 맞다(우리 눈엔 안 보인다).
+ */
+async function webFallback(repoFullName: string, fetchImpl: FetchLike): Promise<Reachability> {
+  const resp = await withTimeout((signal) =>
+    fetchImpl(`${GITHUB_WEB}/${repoFullName}`, {
+      method: "HEAD",
+      redirect: "follow",
+      headers: { "user-agent": "simsa-central-plane/1.0" },
+      signal,
+    }),
+  );
+  if (!resp) return { state: "unknown", reason: "rate_limited" };
+  if (resp.ok) return { state: "readable", visibility: "public", via: "anonymous" };
+  if (resp.status === 404) return { state: "needs_access", via: "anonymous" };
+  // 웹까지 이상하면 종전대로 정직하게 "모름".
+  return { state: "unknown", reason: "rate_limited" };
 }
 
 /**
