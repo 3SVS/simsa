@@ -156,3 +156,29 @@ export function buildEvidenceUrl(base, projectId, runId, name, userKey) {
     `?userKey=${encodeURIComponent(userKey)}`
   );
 }
+
+/**
+ * ★AF-5 (설계 D-4) — 지금 검수가 **어느 깊이**인지, 그래서 **무엇을 못 봤는지**.
+ *
+ * 이 표기는 장식이 아니라 **정직성 요건**이다. 검수 러너에는 로그인 기능이 아예
+ * 없다(랜딩에서 안전한 CTA를 골라 눌러보는 결정론적 플로우). 즉 **로그인 뒤 화면은
+ * 보지 못한다** — 이건 제출물-우선 진입이 만든 한계가 아니라 원래 있던 한계이고,
+ * 앱 주소가 정문이 되면서 정면에 드러날 뿐이다.
+ *
+ * 한계를 없애는 척하지 않고, 몇 단인지와 다음 단으로 가는 법을 말한다:
+ *   L1 공개 표면  앱 주소 하나        페이지 로드·에러·공개 화면의 동작
+ *   L2 코드 열람  + GitHub 저장소     로그인 뒤 로직·설정·의존성(정적 판독)
+ *   L3 로그인 통과 + 테스트 계정       — **아직 구현하지 않았다**(D-5 미결)
+ *
+ * @returns {{level: 1|2, hasUrl: boolean, hasRepo: boolean, nextStep: "add_url"|"add_repo"|null}}
+ */
+export function inspectionDepth(facts) {
+  const f = facts ?? {};
+  const hasUrl = f.hasDeployUrl === true;
+  const hasRepo = f.hasRepo === true;
+  // 코드까지 읽을 수 있으면 L2. 주소만 있으면 L1.
+  const level = hasRepo ? 2 : 1;
+  // 다음 한 걸음만 제안한다 — 둘 다 없으면 화면 검수가 먼저다(볼 것이 생긴다).
+  const nextStep = !hasUrl ? "add_url" : !hasRepo ? "add_repo" : null;
+  return { level, hasUrl, hasRepo, nextStep };
+}

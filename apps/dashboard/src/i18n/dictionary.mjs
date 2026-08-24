@@ -2402,6 +2402,14 @@ const EN = {
       // Journey-audit P2 (2026-07-20): a code-branch project with nothing
       // connected was told "run your first inspection" — a URL-based door it
       // can't use yet. Branch-fit copy walks it to connect first.
+      depth: {
+        label1: "Public surface",
+        label2: "Public surface + code",
+        note1: "Checked what anyone can see without signing in. Anything behind a login was not checked.",
+        note2: "Checked the public screens, and read the code for what sits behind the login. The logged-in screens themselves were not opened.",
+        addUrl: "Add the app address to check the live screens",
+        addRepo: "Add the GitHub repository to also read the code",
+      },
       emptyLeadCodeNeedUrl:
         "The code is connected. To check what people actually see, add the app's address too.",
       needUrlCta: "Add the app address",
@@ -4972,6 +4980,14 @@ const KO = {
         "아직 실행된 검수가 없어요. Simsa가 라이브 앱을 실제 브라우저로 열어 무엇이 작동하는지 쉬운 말로 알려드려요.",
       // Journey-audit P2 (2026-07-20): 코드 갈래인데 아무것도 연결 전이면
       // "첫 검수 실행하기"(URL 검수 문)가 아니라 연결부터 안내한다.
+      depth: {
+        label1: "공개 화면",
+        label2: "공개 화면 + 코드",
+        note1: "로그인 없이 누구나 볼 수 있는 부분을 확인했어요. 로그인 뒤 화면은 확인하지 않았습니다.",
+        note2: "공개 화면을 확인하고, 로그인 뒤에 있는 부분은 코드로 읽었어요. 로그인한 화면 자체를 열어보지는 않았습니다.",
+        addUrl: "앱 주소를 알려주시면 실제 화면을 확인해요",
+        addRepo: "GitHub 저장소를 알려주시면 코드도 함께 읽어요",
+      },
       emptyLeadCodeNeedUrl:
         "코드는 연결됐어요. 사람들이 실제로 보는 화면을 확인하려면 앱 주소도 알려주세요.",
       needUrlCta: "앱 주소 추가하기",

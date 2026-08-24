@@ -2244,6 +2244,14 @@ export type Dictionary = {
     };
     overview: {
       emptyLead: string;
+      depth: {
+        label1: string;
+        label2: string;
+        note1: string;
+        note2: string;
+        addUrl: string;
+        addRepo: string;
+      };
       emptyLeadCodeNeedUrl: string;
       needUrlCta: string;
       emptyLeadCodeNoSource: string;

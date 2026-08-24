@@ -26,6 +26,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { InterviewChipRow, StackProfileRows } from "@/components/StackProfileRows";
 import { parseSubmission } from "@/lib/submission.mjs";
 import { connectProjectSource } from "@/lib/workspace-sources-api";
+import { runVisualCheck } from "@/lib/workspace-visual-checks-api";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import { Spinner } from "@/components/Spinner";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
@@ -388,7 +389,23 @@ function NewProjectInner() {
 
     // 제출물을 소스로 붙인다. 실패해도 프로젝트는 이미 있으므로 연결 화면에서
     // 다시 시도할 수 있다 — 사용자를 처음으로 되돌리지 않는다.
-    await connectProjectSource(id, { userKey, type: parsed.type, reference: parsed.reference }).catch(() => null);
+    const connected = await connectProjectSource(id, {
+      userKey,
+      type: parsed.type,
+      reference: parsed.reference,
+    }).catch(() => null);
+
+    // ★AF-2 (설계 D-2) — **아무것도 더 묻지 않고** 곧장 1차 검수를 건다.
+    //
+    // 가치를 먼저 보여주고 그 다음에 묻는 순서다. 앱 주소가 있을 때만 가능하다
+    // (화면 검수는 볼 화면이 있어야 한다). 저장소만 넣은 경우엔 프로젝트 화면의
+    // need_url 문이 무엇이 더 필요한지 말해 준다(AF-1).
+    //
+    // 실패는 삼킨다 — 검수는 프로젝트 화면에서 언제든 다시 걸 수 있고, 여기서
+    // 막으면 사용자가 아무 데도 못 간다.
+    if (parsed.type === "website" && connected?.ok) {
+      await runVisualCheck(id, { userKey, locale }).catch(() => null);
+    }
 
     router.push(`/projects/${id}`);
   }

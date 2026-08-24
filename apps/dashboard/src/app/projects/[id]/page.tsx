@@ -36,7 +36,7 @@ import {
   listVisualChecks,
   type VisualCheckListItem,
 } from "@/lib/workspace-visual-checks-api";
-import { inspectionEmptyStateDoor, overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
+import { inspectionDepth, inspectionEmptyStateDoor, overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
 import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
@@ -480,6 +480,32 @@ function VisualChecksOverviewCard({
           )
         ) : (
           <>
+            {/* ★AF-5 (설계 D-4) — 이 결과가 **어느 깊이**이고 **무엇을 못 봤는지**.
+                장식이 아니라 정직성 요건이다: 검수 러너에는 로그인 기능이 없어
+                로그인 뒤 화면은 보지 못한다. 표기가 없으면 사용자는 이 결과를
+                전체 검수로 오해한다. */}
+            {(() => {
+              const d = inspectionDepth({ hasRepo, hasDeployUrl });
+              const dc = t.visualChecks.overview.depth;
+              return (
+                <div className="mb-3 rounded-md border border-gray-100 bg-gray-50/70 px-3 py-2">
+                  <p className="text-[11px] font-medium text-gray-600">
+                    {d.level === 2 ? dc.label2 : dc.label1}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                    {d.level === 2 ? dc.note2 : dc.note1}
+                  </p>
+                  {d.nextStep && (
+                    <Link
+                      href={`/projects/${projectId}/sources`}
+                      className="mt-1 inline-block text-xs text-brand-700 hover:underline"
+                    >
+                      {d.nextStep === "add_url" ? dc.addUrl : dc.addRepo} →
+                    </Link>
+                  )}
+                </div>
+              );
+            })()}
             <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
               {t.visualChecks.overview.latestLabel}
             </p>
