@@ -1,6 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+// ★2026-08-26 판정 ② (Bae 결정): 깨끗하게 완주한 검수의 판정이
+// "User Acceptance Required"(직접 눈으로 확인이 필요해요) → **"Conditionally Ready"
+// (문제를 찾지 못했어요)** 로 바뀌었다.
+//
+// 왜: 종전엔 `decideFromEvidence`의 **어떤 분기도 긍정 판정을 내지 못했다**
+// (`"Ready"` 반환이 최초 버전부터 코드에 없었고 works=true의 유일한 조건이 그것).
+// 근거를 다 모아놓고 아무 말도 안 하는 것은 정직이 아니라 회피에 가깝다.
+// `works`는 여전히 null이다 — 확인한 범위를 넘어서는 주장은 하지 않는다.
+// UAR은 **부분 완주**(스텝 일부 실패 + 상호작용함) 자리로 남는다.
+
 // P0-B inspection accuracy (2026-07-16). Live: vercel.com (a working site) was
 // called "작동 안 해요 — 고쳐야 해요" because a third-party analytics 403 + console
 // noise + a CTA click timeout were all counted as defects. The fix: the verdict
@@ -68,8 +78,8 @@ describe("decideFromEvidence — the vercel.com false-negative is fixed", () => 
     assert.equal(d, "Needs Clarification"); // couldn't drive it → ask, don't fail
   });
 
-  it("a clean interactive journey is User Acceptance Required, not a fail", () => {
-    assert.equal(decideFromEvidence({ ...base, interacted: true }, [{ ok: true }]), "User Acceptance Required");
+  it("★깨끗한 완주는 문제를 찾지 못했어요 판정이다 (2026-08-26 ②)", () => {
+    assert.equal(decideFromEvidence({ ...base, interacted: true }, [{ ok: true }]), "Conditionally Ready");
   });
 });
 
@@ -104,12 +114,12 @@ describe("decideFromEvidence — D9: dead-button crash is the CONJUNCTION, never
     );
     assert.equal(d, "Needs Fix");
   });
-  it("console error alone (screen DID change) stays a clean acceptance ask", () => {
+  it("console error alone (screen DID change) stays a clean pass", () => {
     const d = decideFromEvidence(
       { ...base, interacted: true, visibleChangeAfterAction: true, consoleErrorCount: 3 },
       [{ ok: true }],
     );
-    assert.equal(d, "User Acceptance Required");
+    assert.equal(d, "Conditionally Ready");
   });
   it("no visible change alone (no console error) is 'couldn't confirm', not broken", () => {
     const d = decideFromEvidence(
@@ -119,7 +129,7 @@ describe("decideFromEvidence — D9: dead-button crash is the CONJUNCTION, never
     assert.notEqual(d, "Needs Fix");
   });
   it("older callers without the D9 fields keep their existing verdicts (fields optional)", () => {
-    assert.equal(decideFromEvidence({ ...base, interacted: true }, [{ ok: true }]), "User Acceptance Required");
+    assert.equal(decideFromEvidence({ ...base, interacted: true }, [{ ok: true }]), "Conditionally Ready");
   });
 });
 
@@ -133,19 +143,19 @@ describe("decideFromEvidence — G4-①: persistence is the FINAL Potemkin test"
     );
     assert.equal(d, "Needs Fix");
   });
-  it("persisted (localStorage app survives reload) → clean acceptance ask", () => {
+  it("persisted (localStorage app survives reload) → clean pass", () => {
     const d = decideFromEvidence(
       { ...base, interacted: true, visibleChangeAfterAction: true, persistedAfterReload: true },
       [{ ok: true }],
     );
-    assert.equal(d, "User Acceptance Required");
+    assert.equal(d, "Conditionally Ready");
   });
   it("not measured (null — search flow / route change / no marker) never drives the verdict", () => {
     const d = decideFromEvidence(
       { ...base, interacted: true, visibleChangeAfterAction: true, persistedAfterReload: null },
       [{ ok: true }],
     );
-    assert.equal(d, "User Acceptance Required");
+    assert.equal(d, "Conditionally Ready");
   });
   it("persisted=false WITHOUT a visible change is not this rung (nothing was 'added')", () => {
     const d = decideFromEvidence(
@@ -160,7 +170,7 @@ describe("classifyFindings — noise is info, real failures are high, console is
   const input = (over) => ({
     targetUrl: "https://myapp.vercel.app/", intentAnchor: "x", loadStatus: 200,
     primaryActionFound: true, interacted: true, routeAfterClick: null, routeChanged: false,
-    consoleErrors: [], networkFailures: [], noiseFailures: [], decision: "User Acceptance Required", steps: [],
+    consoleErrors: [], networkFailures: [], noiseFailures: [], decision: "Conditionally Ready", steps: [],
     ...over,
   });
 
@@ -182,5 +192,54 @@ describe("classifyFindings — noise is info, real failures are high, console is
     const con = f.find((x) => /코드 오류/.test(x.what));
     assert.ok(con, "console finding still listed");
     assert.equal(con.severity, "low", "console errors must be low, not medium");
+  });
+});
+
+describe("★긍정 판정이 실제로 존재한다 (2026-08-26 ②)", () => {
+  it("깨끗한 완주는 '문제를 찾지 못했어요'로 읽힌다 — 실패처럼 읽히면 안 된다", async () => {
+    const { buildNonDevReport } = await import("../dist/nondev-report.js");
+    const r = buildNonDevReport(
+      {
+        targetUrl: "https://x.dev",
+        intentAnchor: "버튼을 누르면 목록에 나타난다",
+        decision: "Conditionally Ready",
+        consoleErrors: [],
+        networkFailures: [],
+        primaryActionFound: true,
+        interacted: true,
+      },
+      "ko",
+    );
+    assert.equal(r.verdict, "문제를 찾지 못했어요");
+    assert.match(r.oneLine, /문제를 찾지 못했어요/);
+    assert.doesNotMatch(r.oneLine, /확정하기엔 확인이 더 필요/, "성공 경로가 실패 문구를 쓰면 안 된다");
+  });
+
+  it("★그래도 works는 null이다 — 확인한 범위를 넘어서는 주장을 하지 않는다", async () => {
+    const { decisionToWorks } = await import("../dist/nondev-report.js");
+    assert.equal(decisionToWorks("Conditionally Ready"), null);
+  });
+
+  it("로그인 뒤를 못 봤다는 한계를 문구가 계속 말한다", async () => {
+    const { buildNonDevReport } = await import("../dist/nondev-report.js");
+    for (const [locale, re] of [["ko", /로그인 뒤/], ["en", /behind a login/i]]) {
+      const r = buildNonDevReport(
+        { targetUrl: "https://x.dev", intentAnchor: "x", decision: "Conditionally Ready",
+          consoleErrors: [], networkFailures: [], primaryActionFound: true, interacted: true },
+        locale,
+      );
+      assert.match(r.oneLine, re, locale);
+    }
+  });
+
+  it("부분 완주는 여전히 '직접 확인'이다 — 두 자리를 뭉뜽그리지 않는다", async () => {
+    const { decideFromEvidence } = await import("../dist/nondev-report.js");
+    assert.equal(
+      decideFromEvidence(
+        { consoleErrors: [], networkFailures: [], primaryActionFound: true, interacted: true },
+        [{ ok: true }, { ok: false }],
+      ),
+      "User Acceptance Required",
+    );
   });
 });
