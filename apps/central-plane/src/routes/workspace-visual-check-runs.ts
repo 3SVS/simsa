@@ -98,6 +98,8 @@ export async function dispatchInspection(
     intent: string;
     locale: "ko" | "en";
     publicBaseUrl: string;
+    /** 로그인 뒤 검수 동의(기본 false). 남의 앱에 계정을 만드는 일이라 자동으로 켜지지 않는다. */
+    withSignup?: boolean;
   },
 ): Promise<{ dispatched: boolean; note?: string }> {
   if (!env.INSPECTOR) {
@@ -121,6 +123,21 @@ export async function dispatchInspection(
     callbackUrl: `${base}/internal/visual-check-done`,
     runningUrl: `${base}/internal/visual-check-running`,
     callbackToken: env.INTERNAL_CALLBACK_TOKEN,
+    // ★로그인 뒤 검수 (2026-08-26) — **동의가 있고 메일 수신이 준비됐을 때만.**
+    //
+    //  남의 앱에 일회용 계정을 만드는 일이라 자동으로 켜지지 않는다. 그리고 메일
+    //  받을 곳이 없으면 아예 보내지 않는다 — 확인 메일을 못 받으면 가입이 중간에서
+    //  멈춰 **그 앱에 쓸모없는 계정만 남기** 때문이다.
+    ...(args.withSignup && env.PROBE_MAIL_DOMAIN
+      ? {
+          signup: {
+            enabled: true,
+            mailDomain: env.PROBE_MAIL_DOMAIN,
+            callbackBaseUrl: base,
+            internalToken: env.INTERNAL_CALLBACK_TOKEN,
+          },
+        }
+      : {}),
   };
   try {
     const id = env.INSPECTOR.idFromName(`vc-${args.runId}`);
@@ -233,6 +250,10 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     }
 
     const publicBaseUrl = c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
+    // 로그인 뒤 검수는 **요청에 명시된 경우에만.** 남의 앱에 일회용 계정을 만드는
+    // 일이므로 기본값이 켜짐이 되어서는 안 된다(서버가 기본을 강제한다 — UI가
+    // 체크박스를 빠뜨려도 켜지지 않는다).
+    const withSignup = (body as Record<string, unknown>)["withSignup"] === true;
     const dispatch = await dispatchInspection(c.env, {
       runId: run.id,
       projectId,
@@ -241,6 +262,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       intent,
       locale,
       publicBaseUrl,
+      ...(withSignup ? { withSignup: true } : {}),
     });
 
     // Fail fast when the dispatch didn't take: nothing ever picks a queued row

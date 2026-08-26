@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { planVisualFlow } from "./dist/visual-flow-plan.js";
 import { buildNonDevReport, buildAgentFixPrompt, isNoiseResource, decideFromEvidence } from "./dist/nondev-report.js";
 import { classifyActionSafety } from "./safety.mjs";
+import { attemptSignup } from "./signup-run.mjs";
 
 /**
  * E-corpus-1 live-debug rev marker. Bump on every runner change — the first
@@ -106,7 +107,7 @@ const STEP_NOTES = {
  * sampleQuery has NO default here on purpose: planVisualFlow picks one from the
  * locale, and a default at this seam would silently win over it.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId, onPhase }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId, onPhase, signup }) {
   const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
   // E-corpus-1 phase log: one line per runner phase, elapsed-stamped, so the
   // LAST entry before silence names the exact operation that hangs.
@@ -189,6 +190,10 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     persistedAfterReload: null,
     // E-corpus-1 (2026-07-19): 시간 예산 초과로 일부 단계를 건너뛰었는가.
     timedOutPartial: false,
+    // 2026-08-26: 어느 깊이까지 봤는가. "L1"=공개 화면만, "L3"=로그인 뒤까지.
+    loginDepth: "L1",
+    signupBlocker: null,
+    signupBlockerMessage: null,
   };
 
   // E-corpus-1 재작성 (2026-07-19, #415): 예산에 도달하면 컨텍스트를 강제 종료해
@@ -239,6 +244,35 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     await page.waitForTimeout(1800);
     plog("snap:initial start");
     await snap("step-00-initial.png");
+
+    // ★로그인 뒤까지 들어가기 (2026-08-26) — **명시적 동의가 있을 때만.**
+    //
+    //  남의 앱에 계정을 만드는 일이라 기본은 꺼짐이다. 실패해도 던지지 않는다:
+    //  캡차·결제·메일 미도착에서 멈추면 "로그인 뒤는 못 봤습니다"로 돌아갈 뿐이고,
+    //  그건 지금도 하는 말이라 나빠지지 않는다. 있던 기능을 잃는 것이 더 나쁘다.
+    if (signup?.enabled) {
+      plog("signup:start");
+      const r = await attemptSignup({
+        page,
+        runId: signup.runId,
+        mailDomain: signup.mailDomain,
+        callbackBaseUrl: signup.callbackBaseUrl,
+        internalToken: signup.internalToken,
+        locale,
+        plog,
+      });
+      evidence.loginDepth = r.ok ? "L3" : "L1";
+      if (r.ok) {
+        plog(`signup:ok as ${r.email}`);
+      } else {
+        evidence.signupBlocker = r.blocker;
+        evidence.signupBlockerMessage = r.message;
+        plog(`signup:blocked ${r.blocker}`);
+      }
+      // 가입 여정 뒤에는 화면이 달라져 있다 — 검수 대상 주소로 되돌아가 시작한다.
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+    }
 
     plog("collect:ctas start");
     const ctas = await collectCtas(page);
