@@ -268,8 +268,23 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // route), never as an absolute page size — the old `bodyLen > 200` check
     // failed every small app card regardless of actual behavior.
     const bodyTextAt = async () => (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    /**
+     * ★"추가형 흐름"을 가르는 측정 (2026-08-26).
+     *
+     * 지속성 검사의 원래 의도는 **"추가한 것이 남아 있는가"** 인데, 종전 관문은
+     * "본문에 입력값이 들어 있는가"였다. 그건 너무 약하다 — 단위 변환기에 `5`를
+     * 넣으면 결과가 "5 km = 3.11 miles"라 관문을 통과하고, 새로고침하면 당연히
+     * 사라지므로 **작동하는 앱이 "낙관적 유령"으로 오판**됐다(F2 실측).
+     *
+     * 진짜 구분점은 **모음이 자랐는가**다: 기록장은 목록에 항목이 **추가**되고,
+     * 변환기는 결과 한 칸이 **교체**된다. 저장할 것이 없는 앱에 저장을 요구하지 않는다.
+     */
+    const countCollectionItems = async () =>
+      page.evaluate(() => document.querySelectorAll("li, tbody tr, [role='listitem']").length).catch(() => 0);
     plog(`plan:built steps=${plan.length} bodyBefore:start`);
     const bodyBefore = await bodyTextAt();
+    const itemsBefore = await countCollectionItems();
+    plog(`baseline:items=${itemsBefore}`);
     plog(`bodyBefore:done len=${bodyBefore.length}`);
     // D6: when the plan submits via a CLICK step, Enter after typing would
     // double-submit (or submit an incomplete form) — press Enter only when
@@ -349,14 +364,23 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     ) {
       try {
         plog("persist:check start");
-        const bodyAfterAction = await bodyTextAt();
-        if (bodyAfterAction.includes(typedStep.value)) {
+        const itemsAfter = await countCollectionItems();
+        const collectionGrew = itemsAfter > itemsBefore;
+        plog(`persist:gate itemsBefore=${itemsBefore} itemsAfter=${itemsAfter} grew=${collectionGrew}`);
+        // ★관문: **모음이 자란 흐름에서만** 지속성을 묻는다. 자라지 않았다면 이 앱은
+        //  애초에 "추가"를 하는 앱이 아니므로(계산기·변환기·조회 화면) 저장을
+        //  요구하는 것 자체가 틀렸다 — null 유지로 판정에 영향을 주지 않는다.
+        if (collectionGrew) {
           plog("persist:reload start");
           await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 });
           await page.waitForTimeout(1800);
           await snap(`step-${String(stepIdx + 1).padStart(2, "0")}-reload.png`);
           const bodyReload = await bodyTextAt();
-          evidence.persistedAfterReload = bodyReload.includes(typedStep.value);
+          const itemsReload = await countCollectionItems();
+          // 추가된 항목이 살아남았는가. 개수가 먼저이고(정렬·페이지네이션에 강함),
+          // 텍스트 잔존은 보조 신호다.
+          evidence.persistedAfterReload = itemsReload > itemsBefore || bodyReload.includes(typedStep.value);
+          plog(`persist:result itemsReload=${itemsReload} persisted=${evidence.persistedAfterReload}`);
           stepOutcomes.push({
             label: N.reloadCheck,
             ok: evidence.persistedAfterReload,
