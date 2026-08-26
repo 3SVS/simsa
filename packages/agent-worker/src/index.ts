@@ -27,6 +27,13 @@ export {
   WorkerParseError,
 } from "./patch-parser.js";
 export { actualCost, estimateCallCost, PRICING } from "./pricing.js";
+export {
+  withOpenAiFallback,
+  callOpenAiAsAnthropic,
+  fallbackOutputBudget,
+  OPENAI_FALLBACK_MODEL,
+} from "./openai-fallback.js";
+export type { FallbackOptions } from "./openai-fallback.js";
 export type { ModelPricing, UsageBreakdown } from "./pricing.js";
 export type { AnthropicLike, AnthropicCreateParams, AnthropicResponse } from "./anthropic-types.js";
 export type {

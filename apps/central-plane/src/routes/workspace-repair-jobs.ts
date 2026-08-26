@@ -180,6 +180,12 @@ export async function dispatchRepairJob(
   // ("Request not allowed" — Worker-side direct egress measured ~90% 403 on
   // 2026-07-05; repair hit the same class today). Base URL is not a secret
   // (wrangler.toml [vars]); absent → container keeps the direct default.
+  // ★벤더 폴백 (2026-08-26) — Anthropic이 egress에서 막힌 뒤 이 경로만 폴백이
+  //  없어서 "고쳐줘"가 통째로 멈춰 있었을 가능성이 높다. 키가 없으면 안 실린다.
+  if (env.OPENAI_API_KEY) headers["x-openai-key"] = env.OPENAI_API_KEY;
+  if (env.CF_AI_GATEWAY_OPENAI_URL) headers["x-openai-base-url"] = env.CF_AI_GATEWAY_OPENAI_URL;
+  // 킬스위치를 컨테이너에도 전달 — 막힌 문을 컨테이너가 다시 두드릴 이유가 없다.
+  if (env.ANTHROPIC_ENABLED === "off") headers["x-anthropic-disabled"] = "1";
   if (env.CF_AI_GATEWAY_ANTHROPIC_URL) {
     headers["x-anthropic-base-url"] = env.CF_AI_GATEWAY_ANTHROPIC_URL;
   }

@@ -103,7 +103,13 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({ jobId: payload.jobId, status: "accepted" }));
 
     inFlightJobs.set(payload.jobId, payload);
-    runRepairJob(payload, anthropicApiKey, anthropicBaseUrl)
+    // ★벤더 폴백용 키 — Worker가 함께 실어 보낸다. 없으면 종전 동작.
+    const hdr = (n) => (typeof req.headers[n] === "string" && req.headers[n].length > 0 ? req.headers[n] : undefined);
+    const openaiApiKey = hdr("x-openai-key");
+    const openaiBaseUrl = hdr("x-openai-base-url");
+    const preferFallback = hdr("x-anthropic-disabled") === "1";
+
+    runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, { openaiApiKey, openaiBaseUrl, preferFallback })
       .catch(async (err) => {
         console.error(`[repair ${payload.jobId}] crashed:`, redactSecret(err?.message ?? String(err), payload.githubToken));
         await postCallback(payload.callbackUrl, payload.callbackToken, {
@@ -439,7 +445,7 @@ async function runJob(payload) {
  * before it leaves this process, and the Anthropic key never reaches the
  * repo, the PR, or the callback.
  */
-async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl) {
+async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor = {}) {
   const {
     jobId,
     repo, // "owner/name"
@@ -498,7 +504,7 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl) {
     const diag = { skippedOversize: [], reason: null };
     if (anthropicApiKey) {
       try {
-        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag });
+        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag, vendor });
       } catch (err) {
         console.error(
           `[repair ${jobId}] auto-fix crashed (falling back to brief-only):`,
@@ -649,7 +655,8 @@ async function quickSyntaxCheck(workDir, changedFiles) {
  * worker produced nothing applicable — callers reset the tree + fall back
  * to brief-only. Never leaves a dirty tree on the null path.
  */
-async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null } }) {
+async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null }, vendor = {} }) {
+  const { openaiApiKey, openaiBaseUrl, preferFallback } = vendor;
   const jobId = payload.jobId;
   const deadline = Date.now() + AUTO_FIX_DEADLINE_MS;
 
@@ -692,9 +699,15 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
   // baseURL is a first-class ClaudeWorker option: the SDK import must happen
   // inside agent-worker's own module context — a dynamic import from THIS
   // file fails resolution ("Cannot find package '@anthropic-ai/sdk'", 실측).
+  // ★벤더 폴백 (2026-08-26). Anthropic이 Cloudflare egress에서 완전 차단된 뒤에도
+  //  이 경로에는 폴백이 없어서, 검수는 문제를 짚어주는데 **"고쳐줘"는 아무 일도
+  //  못 하는** 상태였다. 키가 없으면 undefined라 종전과 동일하게 동작한다.
   const worker = new ClaudeWorker({
     apiKey: anthropicApiKey,
     ...(anthropicBaseUrl ? { baseURL: anthropicBaseUrl } : {}),
+    ...(openaiApiKey ? { openaiApiKey } : {}),
+    ...(openaiBaseUrl ? { openaiBaseUrl } : {}),
+    ...(preferFallback ? { preferFallback: true } : {}),
   });
 
   for (let iteration = 0; iteration < AUTO_FIX_MAX_ITERATIONS; iteration++) {
