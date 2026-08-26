@@ -128,6 +128,8 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
 
 async function runJob(payload) {
   const { runId, projectId, userKey, targetUrl, intent, baseUrl, callbackUrl, callbackToken, runningUrl } = payload;
+  // 로그인 뒤 검수 설정. Worker가 동의를 확인한 뒤에만 실어 보낸다(기본 부재).
+  const signup = payload.signup;
   // Report language, dispatched with the job. Older Workers won't send it —
   // fall back to "ko" rather than trusting an arbitrary value off the wire.
   const locale = payload.locale === "en" ? "en" : "ko";
@@ -162,7 +164,20 @@ async function runJob(payload) {
       if (phases.length > 60) phases.splice(1, 1); // keep [0] = runner-rev marker
     };
     const result = await withTimeout(
-      runInspection({ targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId, onPhase }),
+      runInspection({
+        targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId, onPhase,
+        // ★로그인 뒤 검수 — Worker가 **명시적 동의가 있을 때만** 실어 보낸다.
+        //  기본은 꺼짐이다. 남의 앱에 계정을 만드는 일이므로 자동으로 켜지지 않는다.
+        signup: signup?.enabled
+          ? {
+              enabled: true,
+              runId,
+              mailDomain: signup.mailDomain,
+              callbackBaseUrl: signup.callbackBaseUrl,
+              internalToken: signup.internalToken,
+            }
+          : undefined,
+      }),
       INSPECTION_TIMEOUT_MS,
       `inspection timed out after ${Math.round(INSPECTION_TIMEOUT_MS / 1000)}s`,
     ).catch((err) => {
