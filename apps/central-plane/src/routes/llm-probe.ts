@@ -40,13 +40,26 @@ type ProbeResult = {
   usable?: boolean;
   /** 실제로 받은 텍스트 길이 — usable의 근거를 숫자로 남긴다. */
   textChars?: number;
+  /**
+   * ★벤더가 응답에 붙인 요청 식별자 (2026-08-29).
+   * Anthropic 지원팀이 자기네 로그에서 우리 요청을 찾으려면 **이것이 있어야 한다** —
+   * 상태 코드와 시각만으로는 조회가 안 된다. 403 원인 조사를 넘기려고 잡는다.
+   * 비밀이 아니다(키가 아니라 요청 번호).
+   */
+  requestId?: string | null;
 };
 
 const PROMPT = "Reply with the single word: ok";
 /** 추론형 모델이 예산을 추론에 다 써서 본문을 비우지 않도록 넉넉히. 그래도 응답은 한 단어다. */
 const MAX_OUT = 512;
 
-type Probed = { status: number | "network_error"; detail?: string; usable?: boolean; textChars?: number };
+type Probed = {
+  status: number | "network_error";
+  detail?: string;
+  usable?: boolean;
+  textChars?: number;
+  requestId?: string | null;
+};
 
 async function timed(fn: () => Promise<Probed>): Promise<Probed & { ms: number }> {
   const t = Date.now();
@@ -69,7 +82,13 @@ async function probeAnthropic(env: Env, useGateway: boolean): Promise<ProbeResul
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json", "user-agent": "simsa-central-plane/1.0" },
       body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: MAX_OUT, messages: [{ role: "user", content: PROMPT }] }),
     });
-    if (!r.ok) return { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 120) };
+    if (!r.ok) {
+      return {
+        status: r.status,
+        detail: (await r.text().catch(() => "")).slice(0, 120),
+        requestId: r.headers.get("request-id") ?? r.headers.get("x-request-id"),
+      };
+    }
     const j = (await r.json().catch(() => null)) as { content?: Array<{ type: string; text?: string }> } | null;
     const text = (j?.content ?? []).find((b) => b.type === "text")?.text ?? "";
     return { status: r.status, usable: text.trim().length > 0, textChars: text.length };
