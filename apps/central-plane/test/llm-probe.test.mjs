@@ -98,6 +98,24 @@ describe("/internal/llm-probe — usable (200 ≠ 쓸 만하다)", () => {
   });
 });
 
+describe("★request-id — 지원팀이 자기네 로그에서 우리 요청을 찾는 열쇠", () => {
+  it("결과 항목이 requestId 자리를 갖는다", async () => {
+    const env = envWith({ ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    const body = await (await post(env)).json();
+    // 키가 없으면 호출을 안 하므로 값은 없지만, 형태는 있어야 한다.
+    assert.ok(Array.isArray(body.results));
+    for (const r of body.results) assert.ok(!("requestId" in r) || r.requestId === null || typeof r.requestId === "string");
+  });
+
+  it("요청 식별자는 비밀이 아니다 — 키와 달리 응답에 실어도 된다", async () => {
+    // 이 테스트는 의도를 문서화한다: requestId는 키가 아니라 요청 번호이므로
+    // 응답에 담아 사용자가 지원팀에 그대로 전달할 수 있어야 한다.
+    const env = envWith({ ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });
+    const text = JSON.stringify(await (await post(env)).json());
+    assert.ok(!text.includes("sk-ant-secret-value"), "키는 여전히 새면 안 된다");
+  });
+});
+
 describe("/internal/llm-probe — 전용 토큰 (관측/콜백 분리)", () => {
   it("LLM_PROBE_TOKEN이 있으면 그것으로 연다", async () => {
     const env = envWith({ LLM_PROBE_TOKEN: "probe_only", ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });

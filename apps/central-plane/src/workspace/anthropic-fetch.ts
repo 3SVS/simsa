@@ -113,6 +113,12 @@ export function logAnthropicFailure(
     /** A′-1: 마지막으로 시도한 경로와 경로별 시도 횟수 — 어느 출구가 막히는지 집계용. */
     endpointKind?: EndpointKind;
     triedByEndpoint?: Record<string, number>;
+    /**
+     * ★Anthropic이 응답에 붙이는 `request-id` (2026-08-29).
+     * 지원팀이 자기네 로그에서 우리 요청을 찾으려면 **이것이 있어야 한다** — 상태
+     * 코드만으로는 조회가 안 된다. 403 원인 조사를 넘기려고 잡기 시작했다.
+     */
+    requestId?: string | null;
   },
 ): void {
   try {
@@ -136,6 +142,7 @@ export function logAnthropicFailure(
         reason: info.reason,
         ...(info.endpointKind ? { endpoint_kind: info.endpointKind } : {}),
         ...(info.triedByEndpoint ? { tried_by_endpoint: info.triedByEndpoint } : {}),
+        ...(info.requestId ? { request_id: info.requestId } : {}),
       }),
     );
   } catch {
@@ -463,6 +470,7 @@ export async function anthropicMessages(
 ): Promise<AnthropicMessagesData> {
   let lastErr: unknown = null;
   let lastStatus: number | null = null;
+  let lastRequestId: string | null = null;
   let attemptsMade = 0;
   /** 예산은 **재시도 대기의 총합**만 센다. 요청 자체의 소요는 포함하지 않는다 —
    *  포함하면 generate(성공도 ~45초)처럼 느린 호출이 재시도를 한 번도 못 받는다. */
@@ -541,6 +549,8 @@ export async function anthropicMessages(
       }
       const tail = await resp.text().catch(() => "");
       lastStatus = resp.status;
+      // 지원팀 조회용 — 상태 코드만으로는 그쪽 로그에서 우리 요청을 못 찾는다.
+      lastRequestId = resp.headers.get("request-id") ?? resp.headers.get("x-request-id");
       lastErr = new Error(`Anthropic ${resp.status}: ${tail.slice(0, 200)}`);
       if (!RETRYABLE.has(resp.status)) {
         logAnthropicFailure(callSite, body.model, {
@@ -548,6 +558,7 @@ export async function anthropicMessages(
           attempts: attempt,
           latencyMs: now() - startedAt,
           reason: "non_retryable",
+        requestId: lastRequestId,
           endpointKind: target.kind,
           triedByEndpoint,
         });
@@ -566,6 +577,7 @@ export async function anthropicMessages(
         attempts: attempt,
         latencyMs: now() - startedAt,
         reason: "budget_exhausted",
+        requestId: lastRequestId,
         endpointKind: lastKind,
         triedByEndpoint,
       });
@@ -580,6 +592,7 @@ export async function anthropicMessages(
     attempts: attemptsMade,
     latencyMs: now() - startedAt,
     reason: "attempts_exhausted",
+        requestId: lastRequestId,
     endpointKind: lastKind,
     triedByEndpoint,
   });
