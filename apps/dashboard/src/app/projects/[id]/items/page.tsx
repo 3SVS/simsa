@@ -23,7 +23,6 @@ import { saveProjectToDb } from "@/lib/workspace-check-api";
 import { ACCEPTANCE_CRITERIA } from "@/lib/mock-generators";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useI18n } from "@/i18n/I18nProvider";
-import { StepNextButton } from "@/components/StepNextButton";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 
 type EditDraft = { title: string; criteriaText: string; note: string };
@@ -310,7 +309,6 @@ export default function ItemsPage() {
 
       {/* Next step comes from the flow (StepNextButton) — the old builder-pack
           shortcut jumped from prepare straight to export and confused the map. */}
-      <StepNextButton />
     </div>
   );
 }

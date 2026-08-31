@@ -21,7 +21,6 @@ import { SpecCompleteness } from "@/components/SpecCompleteness";
 import { OpenQuestionCard } from "@/components/OpenQuestionCard";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/components/Toast";
-import { StepNextButton } from "@/components/StepNextButton";
 
 export default function SpecPage() {
   const { id } = useParams<{ id: string }>();
@@ -255,7 +254,6 @@ export default function SpecPage() {
         )}
       </div>
       )}
-      <StepNextButton />
     </div>
   );
 }

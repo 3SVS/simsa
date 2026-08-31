@@ -361,6 +361,11 @@ const EN = {
     lockNeedCode: "Connect your code first.",
     lockNeedBuild: "Get your builder pack and connect your app's URL first.",
     next: "Next",
+    // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
+    whySeeProblems: "The review found things that need attention. Here they are, with a fix for each.",
+    whyAfterFix: "Once you apply a fix, run the review again — that is the only way to know it actually worked.",
+    whyAllClear: "Nothing needs attention here. You can keep going when you want.",
+    whyContinue: "Pick up where you left off.",
     optionalTag: "optional",
   },
   branch: {
@@ -406,6 +411,8 @@ const EN = {
     specGenerate: "Turn it into a checklist",
   },
   overview: {
+    detailsTitle: "More about this project",
+    detailsHint: "the plan map, your brief, your checklist",
     specCompleteness: "Product brief completeness",
     resultsSummary: "Review summary",
     mustHaves: "Must-have items",
@@ -2984,6 +2991,11 @@ const KO = {
     lockNeedCode: "코드를 먼저 연결하세요.",
     lockNeedBuild: "빌더 팩을 받아 앱을 만들고, 앱 URL을 먼저 연결하세요.",
     next: "다음",
+    // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
+    whySeeProblems: "검수에서 살펴봐야 할 것이 나왔어요. 각각 어떻게 고치는지까지 함께 있습니다.",
+    whyAfterFix: "고친 뒤에는 다시 검수해야 해요 — 정말 고쳐졌는지는 돌려봐야 알 수 있습니다.",
+    whyAllClear: "여기서 더 손볼 것은 없어요. 원하실 때 이어서 가시면 됩니다.",
+    whyContinue: "하시던 곳에서 이어서 가요.",
     optionalTag: "선택",
   },
   branch: {
@@ -3029,6 +3041,8 @@ const KO = {
     specGenerate: "확인 항목으로 바꾸기",
   },
   overview: {
+    detailsTitle: "이 프로젝트 자세히",
+    detailsHint: "진행 지도 · 제품 설명서 · 확인 항목",
     specCompleteness: "제품 설명서 완성도",
     resultsSummary: "확인 결과 요약",
     mustHaves: "꼭 들어가야 할 것",

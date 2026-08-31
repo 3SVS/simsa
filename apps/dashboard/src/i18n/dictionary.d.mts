@@ -294,6 +294,10 @@ export type Dictionary = {
     lockNeedCode: string;
     lockNeedBuild: string;
     next: string;
+    whySeeProblems: string;
+    whyAfterFix: string;
+    whyAllClear: string;
+    whyContinue: string;
     optionalTag: string;
   };
   branch: {
@@ -337,6 +341,8 @@ export type Dictionary = {
     specGenerate: string;
   };
   overview: {
+    detailsTitle: string;
+    detailsHint: string;
     specCompleteness: string;
     resultsSummary: string;
     mustHaves: string;

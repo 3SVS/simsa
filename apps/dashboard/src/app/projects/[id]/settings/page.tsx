@@ -36,7 +36,6 @@ import {
   fetchTrainingConsent,
   saveTrainingConsent,
 } from "@/lib/workspace-training-consent-api";
-import { StepNextButton } from "@/components/StepNextButton";
 
 export default function SettingsPage() {
   const { id } = useParams<{ id: string }>();
@@ -957,7 +956,6 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
-      <StepNextButton />
     </div>
   );
 }

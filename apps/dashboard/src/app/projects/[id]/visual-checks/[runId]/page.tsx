@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, getUserKey } from "@/lib/workflow-store";
+import { getLocalProject, getUserKey, saveExtendedProjectData } from "@/lib/workflow-store";
 import {
   getVisualCheck,
   listVisualChecks,
@@ -574,6 +574,19 @@ export default function VisualCheckDetailPage() {
       if (res.ok) {
         setCheck(res.check);
         setPhase("done");
+        // 화면 검수 결과를 프로젝트 상태에 남긴다 — 하단 "다음 한 걸음" 바가
+        // 여기서 무엇을 가리킬지(고칠 것으로 갈지, 끝났다고 말할지) 정하려면
+        // 이 사실이 필요하고, 화면 검수는 `checkResults`에 아무것도 쓰지 않는다.
+        // 리포트 전체가 아니라 판단에 쓰는 최소만 저장한다.
+        if (res.check.status === "done") {
+          saveExtendedProjectData(id, {
+            visualCheck: {
+              decision: res.check.decision,
+              findingCount: res.check.report?.findings?.length ?? 0,
+              at: res.check.createdAt,
+            },
+          });
+        }
       } else if (res.error === "not_found" || res.error === "forbidden") {
         setPhase("notfound");
       } else {
