@@ -531,6 +531,7 @@ export type Dictionary = {
     compareRegressionTitle: string;
     compareRegressionHint: string;
     compareRecovered: string;
+    compareUncertain: string;
     shareButton: string;
     shareCreating: string;
     shareCopied: string;
@@ -2139,6 +2140,7 @@ export type Dictionary = {
     emptyBody: string;
     worksYes: string;
     worksNo: string;
+    worksNoProblems: string;
     worksUnknown: string;
     severityHigh: string;
     severityMedium: string;

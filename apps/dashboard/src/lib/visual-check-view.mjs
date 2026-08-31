@@ -21,6 +21,16 @@ import { isActiveStatus } from "./visual-check-run-state.mjs";
 export function verdictLabel(works, decision, t) {
   if (works === true) return { label: t.visualChecks.worksYes, tone: "passed" };
   if (works === false) return { label: t.visualChecks.worksNo, tone: "failed" };
+  // ★2026-09-01: `decision`을 받아놓고 쓰지 않아, **"문제를 찾지 못했어요"와
+  //  "확인 못 했어요"가 똑같이 "확인 필요" 칩**으로 나왔다. 리포트는 한 말을 하고
+  //  칩은 다른 말을 하는 상태였다(8/26 중간 판정을 넣으면서 생긴 모순).
+  //
+  //  둘은 사용자에게 완전히 다른 소식이다: 하나는 "따라가 봤는데 문제가 없었다",
+  //  다른 하나는 "따라가 보지도 못했다". 색도 달라야 한다 — 다만 초록(작동 확인)은
+  //  아니다. 우리는 확인한 게 아니라 **못 찾은** 것이다.
+  if (decision === "Conditionally Ready") {
+    return { label: t.visualChecks.worksNoProblems, tone: "clear" };
+  }
   return { label: t.visualChecks.worksUnknown, tone: "inconclusive" };
 }
 

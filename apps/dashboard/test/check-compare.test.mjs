@@ -103,3 +103,39 @@ test("확인 부족 → 통과는 recovered로 세지 않는다 — 나쁘다고
   const c = computeCheckComparison([{ itemId: "x", status: "inconclusive" }], [{ itemId: "x", status: "passed" }]);
   assert.equal(c.recovered.length, 0);
 });
+
+// ─── 칩과 리포트가 같은 말을 하는가 (2026-09-01) ──────────────────────────────
+//
+// 8/26에 "문제를 찾지 못했어요"(Conditionally Ready)를 넣었는데 verdictLabel이
+// `decision`을 받아놓고 쓰지 않아, **"확인 못 했어요"와 똑같은 칩**으로 나왔다.
+// 리포트는 한 말을 하고 칩은 다른 말을 하는 상태였다.
+test("★'문제를 찾지 못했어요'와 '확인 필요'는 다른 칩이다", async () => {
+  const { verdictLabel } = await import("../src/lib/visual-check-view.mjs");
+  const { getDictionary } = await import("../src/i18n/dictionary.mjs");
+  const t = getDictionary("ko");
+
+  const noProblems = verdictLabel(null, "Conditionally Ready", t);
+  const unknown = verdictLabel(null, "Not Verified", t);
+
+  assert.notEqual(noProblems.label, unknown.label, "둘은 사용자에게 다른 소식이다");
+  assert.notEqual(noProblems.tone, unknown.tone, "색도 달라야 한다");
+});
+
+test("★'문제를 찾지 못했어요'는 초록(작동 확인)이 아니다", async () => {
+  const { verdictLabel } = await import("../src/lib/visual-check-view.mjs");
+  const { getDictionary } = await import("../src/i18n/dictionary.mjs");
+  const t = getDictionary("ko");
+  // 우리는 확인한 게 아니라 못 찾은 것이다 — 확언 칩을 빌려 쓰면 과장이 된다.
+  assert.notEqual(verdictLabel(null, "Conditionally Ready", t).tone, "passed");
+  assert.equal(verdictLabel(true, "Ready", t).tone, "passed");
+});
+
+test("EN도 같은 구분을 지킨다", async () => {
+  const { verdictLabel } = await import("../src/lib/visual-check-view.mjs");
+  const { getDictionary } = await import("../src/i18n/dictionary.mjs");
+  const t = getDictionary("en");
+  assert.notEqual(
+    verdictLabel(null, "Conditionally Ready", t).label,
+    verdictLabel(null, "Not Verified", t).label,
+  );
+});

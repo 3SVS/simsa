@@ -62,6 +62,9 @@ import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 const TONE_CLASS: Record<VerdictTone, string> = {
   passed: "bg-green-50 text-green-700 border-green-200",
   failed: "bg-red-50 text-red-700 border-red-200",
+  // ★"문제를 찾지 못했어요" — 확인한 것(초록)도, 못 본 것(앰버)도 아닌 자리.
+  //  근거를 모아 따라가 봤고 결함이 없었다는 뜻이라 중립적 파랑을 쓴다.
+  clear: "bg-sky-50 text-sky-700 border-sky-200",
   inconclusive: "bg-amber-50 text-amber-700 border-amber-200",
 };
 

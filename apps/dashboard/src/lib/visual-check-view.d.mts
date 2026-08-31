@@ -2,7 +2,11 @@
 // project-overview next-action + relative-time helpers).
 import type { Dictionary } from "../i18n/dictionary.mjs";
 
-export type VerdictTone = "passed" | "failed" | "inconclusive";
+/**
+ * "clear" = 문제를 찾지 못했어요 — 확인한 것(passed)도, 못 본 것(inconclusive)도
+ * 아닌 자리. 8/26 중간 판정을 넣으면서 필요해졌다.
+ */
+export type VerdictTone = "passed" | "failed" | "clear" | "inconclusive";
 export type SeverityTone = "failed" | "inconclusive" | "decision";
 export type FindingSeverity = "high" | "medium" | "low" | "info";
 
