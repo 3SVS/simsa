@@ -37,6 +37,15 @@ export interface VisualCheckInput {
   /** Analytics/ads/fonts/telemetry failures — noise, shown only as an info note.
    *  Optional: old callers that don't split still work (no noise finding). */
   noiseFailures?: string[];
+  /**
+   * 검수를 막은 것들(계정 준비 단계 등). `app_gap`만 "고칠 것"으로 리포트에 오르고,
+   * `app_choice`(캡차·유료 가입)·`our_limit`은 오르지 않는다 — signup-plan.ts가 분류한다.
+   * 경계를 흐리면 남의 앱을 잘못 비난하게 된다.
+   */
+  blockerFindings?: Array<{
+    kind: "app_gap" | "app_choice" | "our_limit";
+    what?: string; why?: string; how?: string; unlocks?: string;
+  }>;
   /** One of the spike's decision states, e.g. "Needs Fix" / "Needs Clarification". */
   decision: string;
   /** Optional per-step flow outcomes (label + whether the step visibly succeeded). */
@@ -50,6 +59,11 @@ export interface NonDevFinding {
   why: string;
   how: string;
   evidence: string | null; // developer-only technical detail (not human prose)
+  /**
+   * 이걸 고치면 **다음 검수에서 무엇까지 확인해 드릴 수 있는지**(순환의 고리).
+   * 고칠 이유가 우리 편의가 아니라 사용자의 이익이어야 실제로 고친다.
+   */
+  unlocks?: string;
 }
 
 export interface NonDevReport {
@@ -460,6 +474,25 @@ export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale 
   const L = loc(locale);
   const s = REPORT_STR[L];
   const findings = classifyFindings(input, L);
+
+  // ★검수를 막은 것이 앱의 누락이면 **고칠 것**으로 올린다 (2026-09-01, Bae 제안).
+  //
+  //  검수를 막는 것 대부분은 실사용자도 겪는 문제다 — 가입이 안 되면 우리만 못
+  //  들어가는 게 아니라 손님도 못 들어간다. 다만 **캡차·유료 가입은 결함이 아니므로**
+  //  여기 올라오지 않는다(분류는 signup-plan.ts가 한다). 그 경계를 흐리면 남의 앱을
+  //  잘못 비난하게 된다.
+  for (const b of input.blockerFindings ?? []) {
+    if (b.kind !== "app_gap" || !b.what) continue;
+    findings.push({
+      severity: "medium",
+      what: b.what,
+      why: b.why ?? "",
+      how: b.how ?? "",
+      evidence: null,
+      // 순환의 고리 — 고치면 다음 검수에서 무엇까지 확인되는지.
+      ...(b.unlocks ? { unlocks: b.unlocks } : {}),
+    });
+  }
   const works = decisionToWorks(input.decision);
   const verdict = decisionLabel(input.decision, L);
 

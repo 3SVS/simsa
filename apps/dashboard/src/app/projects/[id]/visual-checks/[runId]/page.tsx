@@ -111,6 +111,14 @@ function FindingCard({ finding, t }: { finding: NonDevFinding; t: Dictionary }) 
           <dd className="mt-0.5 text-sm leading-relaxed text-gray-600">{finding.how}</dd>
         </div>
       </dl>
+      {/* ★순환의 고리 (2026-09-01) — "이걸 고치면 다음엔 여기까지 봅니다".
+          고칠 이유가 우리 편의가 아니라 **사용자의 이익**이어야 실제로 고친다.
+          그리고 고침이 다음 단계로 이어지는 게 눈에 보여야 한 바퀴가 돈다. */}
+      {finding.unlocks && (
+        <p className="mt-3 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-800">
+          {finding.unlocks}
+        </p>
+      )}
       {finding.evidence && (
         <details className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
           <summary className="cursor-pointer text-xs font-medium text-gray-500">{t.visualChecks.findingTech}</summary>

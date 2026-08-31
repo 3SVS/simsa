@@ -24,6 +24,7 @@ import { mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { planVisualFlow } from "./dist/visual-flow-plan.js";
 import { buildNonDevReport, buildAgentFixPrompt, isNoiseResource, decideFromEvidence } from "./dist/nondev-report.js";
+import { blockerToFinding } from "./dist/signup-plan.js";
 import { classifyActionSafety } from "./safety.mjs";
 import { attemptSignup } from "./signup-run.mjs";
 
@@ -194,6 +195,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     loginDepth: "L1",
     signupBlocker: null,
     signupBlockerMessage: null,
+    /** 막힘을 사용자 언어의 "고칠 것"으로 옮긴 것(app_gap만 리포트에 오른다). */
+    blockerFindings: null,
   };
 
   // E-corpus-1 재작성 (2026-07-19, #415): 예산에 도달하면 컨텍스트를 강제 종료해
@@ -267,6 +270,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       } else {
         evidence.signupBlocker = r.blocker;
         evidence.signupBlockerMessage = r.message;
+        const bf = blockerToFinding(r.blocker, locale);
+        evidence.blockerFindings = [bf];
         plog(`signup:blocked ${r.blocker}`);
       }
       // 가입 여정 뒤에는 화면이 달라져 있다 — 검수 대상 주소로 되돌아가 시작한다.
@@ -503,6 +508,9 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     noiseFailures,
     decision,
     steps: stepOutcomes,
+    // ★계정 준비가 막혔다면 그 이유를 리포트로 넘긴다 — 앱의 누락이면 "고칠 것"이
+    //  되고, 정당한 선택(캡차·유료)이나 우리 사정이면 오르지 않는다.
+    ...(evidence.blockerFindings?.length ? { blockerFindings: evidence.blockerFindings } : {}),
   };
   const report = buildNonDevReport(reportInput, locale);
   const agentPrompt = buildAgentFixPrompt(reportInput, locale);

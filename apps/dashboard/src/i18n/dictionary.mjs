@@ -2316,6 +2316,10 @@ const EN = {
     runHint:
       "Simsa opens your connected website in a real browser, walks the core flow, and writes a plain-language report.",
     intentLabel: "What should we verify? (optional)",
+    signupOptIn: "Also check what is behind the login",
+    signupOptInHint:
+      "We create one throwaway test account in your app, check the logged-in screens, then remove it. We never ask for your password.",
+    signupUnavailable: "Not available yet — we are not set up to receive the confirmation email.",
     intentPlaceholder: "e.g. Sign-up and the first core action should work end to end",
     runButton: "Run inspection",
     runSubmitting: "Requesting…",
@@ -4927,6 +4931,10 @@ const KO = {
     runTitle: "새 검수 실행",
     runHint: "연결된 웹사이트를 실제 브라우저로 열어 핵심 흐름을 따라가 보고, 쉬운 말로 리포트를 만들어요.",
     intentLabel: "무엇을 확인할까요? (선택)",
+    signupOptIn: "로그인 뒤 화면까지 확인할까요?",
+    signupOptInHint:
+      "저희가 이 앱에 일회용 테스트 계정을 하나 만들어 로그인 뒤 화면을 확인하고, 끝나면 정리해요. 비밀번호는 받지 않습니다.",
+    signupUnavailable: "아직 사용할 수 없어요 — 확인 메일을 받을 준비가 되어 있지 않습니다.",
     intentPlaceholder: "예: 회원가입과 핵심 기능이 끝까지 작동해야 해요",
     runButton: "지금 검수하기",
     runSubmitting: "요청하는 중이에요…",

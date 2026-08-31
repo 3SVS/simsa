@@ -34,6 +34,11 @@ export type NonDevFinding = {
   why: string;
   how: string;
   evidence?: string;
+  /**
+   * 이걸 고치면 **다음 검수에서 무엇까지 확인해 드릴 수 있는지**(순환의 고리).
+   * 검수를 막았던 앱의 누락(가입 불가·확인 메일 미도착·탈퇴 없음)에만 붙는다.
+   */
+  unlocks?: string;
 };
 
 export type NonDevReport = {
@@ -64,7 +69,14 @@ export type VisualCheckDetail = {
 };
 
 export type VisualChecksListResponse =
-  | { ok: true; checks: VisualCheckListItem[] }
+  | {
+      ok: true;
+      checks: VisualCheckListItem[];
+      /** 로그인 뒤 검수를 켤 수 있는 상태인가(메일 수신 설정 여부). 없으면 UI가
+       *  체크박스를 비활성으로 두고 이유를 말한다 — 켰는데 아무 일도 안 일어나는
+       *  것이 가장 나쁜 침묵이다. */
+      signupAvailable?: boolean;
+    }
   | { ok: false; error: string };
 
 export type VisualCheckDetailResponse =
@@ -75,6 +87,12 @@ export type VisualCheckDetailResponse =
 
 export type VisualCheckRunInput = {
   userKey: string;
+  /**
+   * 로그인 뒤 화면까지 확인할지 (기본 꺼짐). 켜면 우리가 그 앱에 **일회용 테스트
+   * 계정을 하나 만들고**, 확인이 끝나면 정리한다. 남의 앱에 계정을 만드는 일이라
+   * 사용자가 명시적으로 켜야 하고, 서버가 그 기본을 강제한다.
+   */
+  withSignup?: boolean;
   sourceId?: string;
   targetUrl?: string;
   intent?: string;

@@ -2172,6 +2172,9 @@ export type Dictionary = {
     runTitle: string;
     runHint: string;
     intentLabel: string;
+    signupOptIn: string;
+    signupOptInHint: string;
+    signupUnavailable: string;
     intentPlaceholder: string;
     runButton: string;
     runSubmitting: string;
