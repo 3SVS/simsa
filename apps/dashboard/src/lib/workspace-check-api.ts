@@ -39,6 +39,24 @@ export type CheckDraftResponse = {
   reviewMode?: "panel" | "council";
   /** RC-3 협의체 메타 — 참여 AI·라운드·불일치 수 (투명성). */
   council?: { vendors: string[]; rounds: number; disagreements: number };
+  /**
+   * 재검수 비교 (2026-09-01). 직전 검수가 있을 때만 온다.
+   * **회귀**(되던 것이 안 되게 됨)를 담고 있고, UI는 그걸 맨 위에 놓아야 한다 —
+   * 고친 자리만 보면 성공처럼 보이기 때문이다.
+   */
+  comparison?: {
+    items: Array<{
+      itemId: string;
+      title?: string;
+      from: "passed" | "failed" | "inconclusive" | "needs_decision" | null;
+      to: "passed" | "failed" | "inconclusive" | "needs_decision";
+      change: "fixed" | "still_broken" | "regressed" | "still_ok" | "uncertain" | "new";
+    }>;
+    counts: Record<"fixed" | "still_broken" | "regressed" | "still_ok" | "uncertain" | "new", number>;
+    /** "다 해결됐다"고 말할 수 있는 유일한 조건(불확실도 0이어야 한다). */
+    allResolved: boolean;
+    hasRegression: boolean;
+  };
 };
 
 export type FixSuggestionResponse = {
