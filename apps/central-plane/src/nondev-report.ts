@@ -266,6 +266,11 @@ export interface DecisionEvidence {
   /** D9 (2026-07-17): did the driven action visibly change anything (body text
    *  or route)? null/undefined = not measured (older callers stay valid). */
   visibleChangeAfterAction?: boolean | null;
+  /**
+   * 어느 깊이까지 봤는가 (2026-09-01). "L1"=공개 화면만, "L3"=로그인 뒤까지.
+   * 확언("작동해요")은 L3 + 재로그인 왕복이 함께 확인됐을 때만 나온다.
+   */
+  loginDepth?: "L1" | "L3" | null;
   /** D9: console error count — NEVER a verdict driver alone (noise lesson);
    *  only its CONJUNCTION with a dead action is a crash signal. */
   consoleErrorCount?: number;
@@ -325,7 +330,18 @@ export function decideFromEvidence(
   //  **"문제를 찾지 못했어요"**(Conditionally Ready). `works`는 여전히 null이다
   //  — 우리가 확인한 범위를 넘어서는 주장을 하지 않는다.
   //
-  //  더 강한 판정("작동해요")은 로그인 뒤 왕복까지 확인할 수 있을 때의 몫이다.
+  //  ★그리고 그 "더 강한 판정"이 아래다 (2026-09-01).
+  //
+  //  **로그인 뒤 왕복까지 확인했으면 확언한다.** 만들고 → 로그아웃하고 → 다시
+  //  로그인해서 → 그게 아직 있었다면, 그건 추측이 아니라 **증명**이다. 낙관적 UI로는
+  //  절대 통과할 수 없는 검사이기 때문이다(화면만 바뀌는 앱은 재로그인에서 사라진다).
+  //
+  //  이 조합에서만 works=true가 된다: 위의 모든 결함 신호에 걸리지 않았고 · 모든 스텝을
+  //  완주했고 · 주요 동작을 찾았고 · 실제로 눌렀고 · **로그인 뒤까지 들어갔고** ·
+  //  **재로그인 후에도 데이터가 남았다.**
+  //
+  //  하나라도 빠지면 확언하지 않는다 — 우리가 확인한 범위를 넘어서는 주장은 하지 않는다.
+  if (e.interacted && e.loginDepth === "L3" && e.persistedAfterReload === true) return "Ready";
   if (e.interacted) return "Conditionally Ready";
   return "Not Verified";
 }
