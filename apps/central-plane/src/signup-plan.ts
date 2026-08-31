@@ -215,3 +215,127 @@ export function blockerMessage(b: SignupBlocker, locale: "ko" | "en" = "ko"): st
   };
   return (locale === "en" ? en : ko)[b];
 }
+
+
+// ─── 막힌 이유를 "고칠 것"으로 바꾼다 (2026-09-01, Bae 제안) ──────────────────
+//
+// Bae: *"안 되면 그걸 우리가 피드백에 추가하면 되는 거야. '테스트 계정 생성은
+// 가능하지만 지우기 불가' 이런 식으로. 한번 이걸로 고치고 나서 다시 돌려서 이제는
+// 작동 여부까지 확인하는 순환 구조가 필요해."*
+//
+// 맞는 방향이고, 실제로 **검수를 막는 것 대부분은 실사용자도 겪는 문제**다.
+// 가입이 안 되면 우리만 못 들어가는 게 아니라 손님도 못 들어간다.
+//
+// ★그런데 셋을 반드시 구분해야 한다. 섞으면 거짓말이 된다:
+//
+//   app_gap    앱의 누락 — **고칠 것**. 리포트에 결함으로 올린다.
+//   app_choice 앱의 정당한 선택(캡차·유료 가입) — 결함이 아니다. 한계로만 말한다.
+//   our_limit  우리 사정(메일 수신 미설정·시간 초과) — 사용자 탓이 아니다.
+//
+// "캡차가 있는 건 문제입니다"라고 말하는 순간 우리가 틀린 쪽이 된다.
+
+export type BlockerKind = "app_gap" | "app_choice" | "our_limit";
+
+export type BlockerFinding = {
+  kind: BlockerKind;
+  /** app_gap일 때만 채운다 — 리포트의 "고칠 것" 목록에 올라간다. */
+  what?: string;
+  why?: string;
+  how?: string;
+  /** 이걸 고치면 다음 검수에서 **무엇까지 확인할 수 있게 되는가**(순환의 고리). */
+  unlocks?: string;
+};
+
+const BLOCKER_KIND: Record<SignupBlocker, BlockerKind> = {
+  no_signup_form: "app_gap",
+  verification_timeout: "app_gap",
+  captcha: "app_choice",
+  payment_required: "app_choice",
+  unsafe_action: "app_choice",
+  no_mail_domain: "our_limit",
+};
+
+/**
+ * 막힌 이유를 사용자 언어의 결함(또는 한계)으로 옮긴다.
+ *
+ * `app_gap`만 "고칠 것"이 되고, 나머지는 `what`이 비어 리포트에 결함으로 올라가지
+ * 않는다 — 호출부가 `kind`만 보고 판단하면 된다.
+ */
+export function blockerToFinding(b: SignupBlocker, locale: "ko" | "en" = "ko"): BlockerFinding {
+  const kind = BLOCKER_KIND[b];
+  if (kind !== "app_gap") return { kind };
+
+  const ko: Partial<Record<SignupBlocker, Omit<BlockerFinding, "kind">>> = {
+    no_signup_form: {
+      what: "회원가입 화면을 찾지 못했어요.",
+      why: "새로 온 손님이 계정을 만들 수 없으면 앱의 나머지를 아예 쓸 수 없어요. 저희도 로그인 뒤를 확인하지 못했습니다.",
+      how: "첫 화면에서 눈에 보이는 곳에 '회원가입' 버튼을 두고, 이메일·비밀번호로 가입할 수 있게 해주세요.",
+      unlocks: "가입이 되면 로그인 뒤 화면까지 확인해서 '정상 작동해요'까지 판정해 드릴 수 있어요.",
+    },
+    verification_timeout: {
+      what: "가입은 됐는데 확인 메일이 오지 않았어요.",
+      why: "확인 메일이 안 가면 손님이 가입을 끝내지 못하고 그대로 이탈해요. 실제로 가장 많이 놓치는 부분입니다.",
+      how: "메일 발송 설정(보내는 주소 인증, 발송 서비스 키)이 실제로 동작하는지 확인해 주세요. 스팸함으로 갔을 수도 있어요.",
+      unlocks: "메일이 오면 저희가 가입을 끝내고 로그인 뒤 기능까지 확인할 수 있어요.",
+    },
+  };
+  const en: Partial<Record<SignupBlocker, Omit<BlockerFinding, "kind">>> = {
+    no_signup_form: {
+      what: "We could not find a sign-up screen.",
+      why: "If a new visitor cannot create an account, they cannot use the rest of the app at all. We also could not check anything behind the login.",
+      how: "Put a visible 'Sign up' button on the first screen and let people register with an email and password.",
+      unlocks: "Once sign-up works we can check what is behind the login and give a definite 'it works' verdict.",
+    },
+    verification_timeout: {
+      what: "Sign-up went through, but the confirmation email never arrived.",
+      why: "If the confirmation email does not arrive, visitors cannot finish signing up and simply leave. This is one of the most commonly missed pieces.",
+      how: "Check that your email sending is actually working (sender domain verified, API key set). It may also be landing in spam.",
+      unlocks: "Once the email arrives we can finish sign-up and check the features behind the login.",
+    },
+  };
+  return { kind, ...((locale === "en" ? en : ko)[b] ?? {}) };
+}
+
+/**
+ * 정리(우리가 만든 계정 치우기) 결과를 사용자 언어로.
+ *
+ * **탈퇴 기능이 없는 것도 앱의 누락이다.** 우리만 불편한 게 아니라, 손님이 그만두고
+ * 싶을 때 그만둘 수 없다는 뜻이다(국내 서비스에서는 사실상 필수 기능이기도 하다).
+ * 다만 **정리 실패를 숨기지 않는다** — 우리가 남긴 것이 있으면 그대로 말한다.
+ */
+export function cleanupFinding(
+  result: "deleted" | "no_delete_feature" | "failed",
+  locale: "ko" | "en" = "ko",
+): BlockerFinding | null {
+  if (result === "deleted") return null;
+  if (locale === "en") {
+    return result === "no_delete_feature"
+      ? {
+          kind: "app_gap",
+          what: "There is no way to delete an account.",
+          why: "We created a test account and could not remove it — it is still in your app. More importantly, your own users cannot leave when they want to.",
+          how: "Add a 'Delete account' action in settings that removes the account and its data.",
+          unlocks: "With deletion available we can clean up after every review and leave nothing behind.",
+        }
+      : {
+          kind: "our_limit",
+          what: "We could not remove the test account we created.",
+          why: "The delete step did not complete, so a test account may still be in your app.",
+          how: "You can remove it manually — it is named \"Simsa 검수 테스트\".",
+        };
+  }
+  return result === "no_delete_feature"
+    ? {
+        kind: "app_gap",
+        what: "회원 탈퇴 기능이 없어요.",
+        why: "저희가 만든 테스트 계정을 지우지 못해 앱에 그대로 남았어요. 더 중요한 건, 손님이 그만두고 싶을 때 그만둘 수 없다는 점이에요.",
+        how: "설정 화면에 '회원 탈퇴'를 만들어 계정과 데이터를 지울 수 있게 해주세요.",
+        unlocks: "탈퇴가 되면 검수할 때마다 저희가 만든 것을 스스로 치우고 아무것도 남기지 않아요.",
+      }
+    : {
+        kind: "our_limit",
+        what: "저희가 만든 테스트 계정을 지우지 못했어요.",
+        why: "정리 단계가 끝까지 되지 않아 테스트 계정이 앱에 남아 있을 수 있어요.",
+        how: "직접 지우실 수 있어요 — 이름이 \"Simsa 검수 테스트\"입니다.",
+      };
+}
