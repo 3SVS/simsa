@@ -37,6 +37,9 @@ import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 const TONE_CLASS: Record<VerdictTone, string> = {
   passed: "bg-green-50 text-green-700 border-green-200",
   failed: "bg-red-50 text-red-700 border-red-200",
+  // ★"문제를 찾지 못했어요" — 확인한 것(초록)도, 못 본 것(앰버)도 아닌 자리.
+  //  근거를 모아 따라가 봤고 결함이 없었다는 뜻이라 중립적 파랑을 쓴다.
+  clear: "bg-sky-50 text-sky-700 border-sky-200",
   inconclusive: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
@@ -82,6 +85,10 @@ export default function VisualChecksPage() {
   // and let the backend's website_source_required answer drive the callout.
   const [hasWebsiteSource, setHasWebsiteSource] = useState(true);
   const [intent, setIntent] = useState("");
+  // ★로그인 뒤 검수 — **기본은 꺼짐.** 남의 앱에 계정을 만드는 일이라 사용자가
+  //  명시적으로 켜야 한다(서버도 같은 기본을 강제한다).
+  const [withSignup, setWithSignup] = useState(false);
+  const [signupAvailable, setSignupAvailable] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<RunNotice | null>(null);
 
@@ -89,6 +96,9 @@ export default function VisualChecksPage() {
     (res: Awaited<ReturnType<typeof listVisualChecks>>): void => {
       if (res.ok) {
         setChecks(res.checks);
+        // 서버가 알려주는 "로그인 뒤 검수 가능 여부" — 화면이 켤 수 없는 기능의
+        // 체크박스를 활성으로 보여주지 않게 한다.
+        setSignupAvailable(res.signupAvailable === true);
         setPhase("done");
       } else if (res.error === "project_not_found") {
         // A project that only exists in this browser has no server-side runs yet.
@@ -154,6 +164,7 @@ export default function VisualChecksPage() {
       userKey,
       locale,
       ...(trimmedIntent ? { intent: trimmedIntent } : {}),
+      ...(withSignup && signupAvailable ? { withSignup: true } : {}),
     });
     setSubmitting(false);
     if (res.ok) {
@@ -191,6 +202,30 @@ export default function VisualChecksPage() {
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-300 focus:border-gray-400 focus:outline-none"
           />
         </div>
+
+        {/* ★로그인 뒤 검수 입구 (2026-09-01).
+            서버 게이트만 있고 화면에 켤 방법이 없어서 **아무도 도달할 수 없던**
+            기능이다. 기본은 꺼짐이고, 켤 수 없는 상태면 비활성 + 이유를 말한다 —
+            켰는데 아무 일도 안 일어나는 것이 가장 나쁜 침묵이다. */}
+        <label className="mt-3 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={withSignup && signupAvailable === true}
+            disabled={signupAvailable !== true}
+            onChange={(e) => setWithSignup(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className={signupAvailable === true ? "text-gray-700" : "text-gray-400"}>
+            {t.visualChecks.signupOptIn}
+            <span className="mt-0.5 block text-xs text-gray-500">
+              {signupAvailable === true
+                ? t.visualChecks.signupOptInHint
+                : signupAvailable === false
+                  ? t.visualChecks.signupUnavailable
+                  : ""}
+            </span>
+          </span>
+        </label>
 
         <button
           onClick={handleRun}

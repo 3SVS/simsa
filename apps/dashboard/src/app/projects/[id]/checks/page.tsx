@@ -426,6 +426,24 @@ export default function ChecksPage() {
             {t.checks.compareRecovered.replace("{n}", String(comparison.recovered.length))}
           </div>
         )}
+        {/* ★"이번에 확인하지 못한 것"을 반드시 보여준다 (2026-09-01).
+            회귀가 없고 고쳐진 게 있으면 초록 배너만 보고 "다 됐구나" 하기 쉬운데,
+            그 옆에 못 잰 항목이 남아 있을 수 있다. 그게 정확히 이 제품이 없애려는
+            거짓 안심이다. 회귀가 아니므로 경고색은 쓰지 않되, 숨기지도 않는다. */}
+        {comparison && comparison.uncertain.length > 0 && (
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-sm text-gray-700">
+              {t.checks.compareUncertain.replace("{n}", String(comparison.uncertain.length))}
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {comparison.uncertain.map((u) => (
+                <li key={u.itemId} className="truncate text-xs text-gray-500">
+                  {u.title}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Next action — right under the verdict so "so what do I do" is
             visible in the 3-second glance, not below every detail card. */}

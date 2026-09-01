@@ -40,3 +40,15 @@ export function packReadiness(
   checkResults: { results?: Array<{ itemId: string; status: string }> } | null | undefined,
   fixSuggestions: Record<string, unknown> | null | undefined,
 ): PackReadiness;
+
+export type NextStepReason = "seeProblems" | "afterFix" | "allClear" | "continue";
+export function nextStepFromHere(
+  slug: string,
+  ctx?: {
+    entryPath?: "idea" | "code" | "spec" | null;
+    summary?: { failed?: number; needsDecision?: number } | null;
+    hasCheckRun?: boolean;
+    hasFixes?: boolean;
+    visual?: { findingCount?: number } | null;
+  },
+): { slug: string; reason: NextStepReason } | null;

@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, getUserKey } from "@/lib/workflow-store";
+import { getLocalProject, getUserKey, saveExtendedProjectData } from "@/lib/workflow-store";
 import {
   getVisualCheck,
   listVisualChecks,
@@ -62,6 +62,9 @@ import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 const TONE_CLASS: Record<VerdictTone, string> = {
   passed: "bg-green-50 text-green-700 border-green-200",
   failed: "bg-red-50 text-red-700 border-red-200",
+  // ★"문제를 찾지 못했어요" — 확인한 것(초록)도, 못 본 것(앰버)도 아닌 자리.
+  //  근거를 모아 따라가 봤고 결함이 없었다는 뜻이라 중립적 파랑을 쓴다.
+  clear: "bg-sky-50 text-sky-700 border-sky-200",
   inconclusive: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
@@ -108,6 +111,14 @@ function FindingCard({ finding, t }: { finding: NonDevFinding; t: Dictionary }) 
           <dd className="mt-0.5 text-sm leading-relaxed text-gray-600">{finding.how}</dd>
         </div>
       </dl>
+      {/* ★순환의 고리 (2026-09-01) — "이걸 고치면 다음엔 여기까지 봅니다".
+          고칠 이유가 우리 편의가 아니라 **사용자의 이익**이어야 실제로 고친다.
+          그리고 고침이 다음 단계로 이어지는 게 눈에 보여야 한 바퀴가 돈다. */}
+      {finding.unlocks && (
+        <p className="mt-3 rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-800">
+          {finding.unlocks}
+        </p>
+      )}
       {finding.evidence && (
         <details className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
           <summary className="cursor-pointer text-xs font-medium text-gray-500">{t.visualChecks.findingTech}</summary>
@@ -563,6 +574,19 @@ export default function VisualCheckDetailPage() {
       if (res.ok) {
         setCheck(res.check);
         setPhase("done");
+        // 화면 검수 결과를 프로젝트 상태에 남긴다 — 하단 "다음 한 걸음" 바가
+        // 여기서 무엇을 가리킬지(고칠 것으로 갈지, 끝났다고 말할지) 정하려면
+        // 이 사실이 필요하고, 화면 검수는 `checkResults`에 아무것도 쓰지 않는다.
+        // 리포트 전체가 아니라 판단에 쓰는 최소만 저장한다.
+        if (res.check.status === "done") {
+          saveExtendedProjectData(id, {
+            visualCheck: {
+              decision: res.check.decision,
+              findingCount: res.check.report?.findings?.length ?? 0,
+              at: res.check.createdAt,
+            },
+          });
+        }
       } else if (res.error === "not_found" || res.error === "forbidden") {
         setPhase("notfound");
       } else {

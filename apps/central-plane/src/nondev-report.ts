@@ -37,6 +37,15 @@ export interface VisualCheckInput {
   /** Analytics/ads/fonts/telemetry failures — noise, shown only as an info note.
    *  Optional: old callers that don't split still work (no noise finding). */
   noiseFailures?: string[];
+  /**
+   * 검수를 막은 것들(계정 준비 단계 등). `app_gap`만 "고칠 것"으로 리포트에 오르고,
+   * `app_choice`(캡차·유료 가입)·`our_limit`은 오르지 않는다 — signup-plan.ts가 분류한다.
+   * 경계를 흐리면 남의 앱을 잘못 비난하게 된다.
+   */
+  blockerFindings?: Array<{
+    kind: "app_gap" | "app_choice" | "our_limit";
+    what?: string; why?: string; how?: string; unlocks?: string;
+  }>;
   /** One of the spike's decision states, e.g. "Needs Fix" / "Needs Clarification". */
   decision: string;
   /** Optional per-step flow outcomes (label + whether the step visibly succeeded). */
@@ -50,6 +59,11 @@ export interface NonDevFinding {
   why: string;
   how: string;
   evidence: string | null; // developer-only technical detail (not human prose)
+  /**
+   * 이걸 고치면 **다음 검수에서 무엇까지 확인해 드릴 수 있는지**(순환의 고리).
+   * 고칠 이유가 우리 편의가 아니라 사용자의 이익이어야 실제로 고친다.
+   */
+  unlocks?: string;
 }
 
 export interface NonDevReport {
@@ -266,6 +280,11 @@ export interface DecisionEvidence {
   /** D9 (2026-07-17): did the driven action visibly change anything (body text
    *  or route)? null/undefined = not measured (older callers stay valid). */
   visibleChangeAfterAction?: boolean | null;
+  /**
+   * 어느 깊이까지 봤는가 (2026-09-01). "L1"=공개 화면만, "L3"=로그인 뒤까지.
+   * 확언("작동해요")은 L3 + 재로그인 왕복이 함께 확인됐을 때만 나온다.
+   */
+  loginDepth?: "L1" | "L3" | null;
   /** D9: console error count — NEVER a verdict driver alone (noise lesson);
    *  only its CONJUNCTION with a dead action is a crash signal. */
   consoleErrorCount?: number;
@@ -325,7 +344,18 @@ export function decideFromEvidence(
   //  **"문제를 찾지 못했어요"**(Conditionally Ready). `works`는 여전히 null이다
   //  — 우리가 확인한 범위를 넘어서는 주장을 하지 않는다.
   //
-  //  더 강한 판정("작동해요")은 로그인 뒤 왕복까지 확인할 수 있을 때의 몫이다.
+  //  ★그리고 그 "더 강한 판정"이 아래다 (2026-09-01).
+  //
+  //  **로그인 뒤 왕복까지 확인했으면 확언한다.** 만들고 → 로그아웃하고 → 다시
+  //  로그인해서 → 그게 아직 있었다면, 그건 추측이 아니라 **증명**이다. 낙관적 UI로는
+  //  절대 통과할 수 없는 검사이기 때문이다(화면만 바뀌는 앱은 재로그인에서 사라진다).
+  //
+  //  이 조합에서만 works=true가 된다: 위의 모든 결함 신호에 걸리지 않았고 · 모든 스텝을
+  //  완주했고 · 주요 동작을 찾았고 · 실제로 눌렀고 · **로그인 뒤까지 들어갔고** ·
+  //  **재로그인 후에도 데이터가 남았다.**
+  //
+  //  하나라도 빠지면 확언하지 않는다 — 우리가 확인한 범위를 넘어서는 주장은 하지 않는다.
+  if (e.interacted && e.loginDepth === "L3" && e.persistedAfterReload === true) return "Ready";
   if (e.interacted) return "Conditionally Ready";
   return "Not Verified";
 }
@@ -444,6 +474,25 @@ export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale 
   const L = loc(locale);
   const s = REPORT_STR[L];
   const findings = classifyFindings(input, L);
+
+  // ★검수를 막은 것이 앱의 누락이면 **고칠 것**으로 올린다 (2026-09-01, Bae 제안).
+  //
+  //  검수를 막는 것 대부분은 실사용자도 겪는 문제다 — 가입이 안 되면 우리만 못
+  //  들어가는 게 아니라 손님도 못 들어간다. 다만 **캡차·유료 가입은 결함이 아니므로**
+  //  여기 올라오지 않는다(분류는 signup-plan.ts가 한다). 그 경계를 흐리면 남의 앱을
+  //  잘못 비난하게 된다.
+  for (const b of input.blockerFindings ?? []) {
+    if (b.kind !== "app_gap" || !b.what) continue;
+    findings.push({
+      severity: "medium",
+      what: b.what,
+      why: b.why ?? "",
+      how: b.how ?? "",
+      evidence: null,
+      // 순환의 고리 — 고치면 다음 검수에서 무엇까지 확인되는지.
+      ...(b.unlocks ? { unlocks: b.unlocks } : {}),
+    });
+  }
   const works = decisionToWorks(input.decision);
   const verdict = decisionLabel(input.decision, L);
 

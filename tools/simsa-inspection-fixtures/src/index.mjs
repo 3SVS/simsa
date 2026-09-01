@@ -236,7 +236,93 @@ const INDEX = SHELL(
   <li><a href="/optimistic-ghost">F6 /optimistic-ghost — 화면만 추가, 저장 없음</a></li>
   <li><a href="/heavy-site">F7 /heavy-site — 무거운 랜딩(작동함, E-corpus-1)</a></li>
   <li><a href="/geo-gated">F8 /geo-gated — 위치권한 게이트(작동함, E-corpus-2)</a></li>
+  <li><a href="/login-app">F9 /login-app — 로그인 있는 앱(가입·격리·탈퇴)</a></li>
 </ul>`,
+);
+
+
+// ─── F9 — 로그인 있는 앱 (2026-09-01) ─────────────────────────────────────────
+//
+// 로그인 뒤 검수를 검증하기 위한 픽스처. 실제 앱처럼 **계정별로 데이터가 갈린다.**
+// 검증하려는 다섯 단계를 전부 담았다:
+//   ① 가입 화면을 찾는다  ② 필드를 채운다  ③ 제출한다
+//   ④ 로그인 상태가 된다   ⑤ 만든 것이 재로그인 후에도 남아 있다
+//
+// 이메일 인증은 **없다** — 메일 라우팅이 연결되기 전에 나머지 네 단계를 검증할 수
+// 있어야 하기 때문이다. 인증이 있는 변종(F10)은 라우팅 연결 뒤에 만든다.
+//
+// 계정별 격리도 담았다: 다른 계정으로 로그인하면 남의 메모가 보이지 않는다.
+// 그리고 **탈퇴 버튼**이 있다 — 우리가 만든 계정을 정리할 수 있어야 한다.
+const LOGIN_APP = SHELL(
+  "메모 보관함 🔐",
+  `<h1>🔐 메모 보관함</h1>
+<p class="sub">로그인하면 내 메모만 보여요</p>
+<div id="auth">
+  <div class="row"><input id="email" type="email" placeholder="이메일"></div>
+  <div class="row"><input id="pw" type="password" placeholder="비밀번호"></div>
+  <div class="row"><input id="nick" placeholder="이름"></div>
+  <div class="row"><button id="signup">회원가입</button> <button id="login">로그인</button></div>
+  <p id="msg" class="sub"></p>
+</div>
+<div id="app" style="display:none">
+  <p class="sub">안녕하세요, <span id="who"></span>님</p>
+  <div class="row"><input id="memo" placeholder="메모 내용"><button id="add">추가</button></div>
+  <ul id="list"></ul>
+  <div class="row"><button id="logout">로그아웃</button> <button id="delacct">회원 탈퇴</button></div>
+</div>
+<script>
+  const DB = () => JSON.parse(localStorage.getItem("f9_users") || "{}");
+  const save = (d) => localStorage.setItem("f9_users", JSON.stringify(d));
+  const session = () => localStorage.getItem("f9_session");
+  const msg = (t) => { document.getElementById("msg").textContent = t; };
+
+  function render() {
+    const me = session();
+    document.getElementById("auth").style.display = me ? "none" : "";
+    document.getElementById("app").style.display = me ? "" : "none";
+    if (!me) return;
+    const db = DB();
+    document.getElementById("who").textContent = db[me]?.nick || me;
+    // ★계정별 격리 — 내 메모만 그린다.
+    document.getElementById("list").innerHTML = (db[me]?.memos || [])
+      .map((m) => "<li>📝 " + m + "</li>").join("");
+  }
+
+  document.getElementById("signup").addEventListener("click", () => {
+    const e = document.getElementById("email").value.trim();
+    const p = document.getElementById("pw").value;
+    if (!e || !p) { msg("이메일과 비밀번호를 입력하세요"); return; }
+    const db = DB();
+    if (db[e]) { msg("이미 가입된 이메일이에요"); return; }
+    db[e] = { pw: p, nick: document.getElementById("nick").value.trim() || e, memos: [] };
+    save(db); localStorage.setItem("f9_session", e); render();
+  });
+
+  document.getElementById("login").addEventListener("click", () => {
+    const e = document.getElementById("email").value.trim();
+    const db = DB();
+    if (!db[e] || db[e].pw !== document.getElementById("pw").value) { msg("로그인 정보가 맞지 않아요"); return; }
+    localStorage.setItem("f9_session", e); render();
+  });
+
+  document.getElementById("add").addEventListener("click", () => {
+    const db = DB(); const me = session();
+    db[me].memos.push(document.getElementById("memo").value.trim() || "메모");
+    save(db); document.getElementById("memo").value = ""; render();
+  });
+
+  document.getElementById("logout").addEventListener("click", () => {
+    localStorage.removeItem("f9_session"); render();
+  });
+
+  // ★탈퇴 — 우리가 만든 계정을 정리할 수 있어야 한다.
+  document.getElementById("delacct").addEventListener("click", () => {
+    const db = DB(); const me = session();
+    delete db[me]; save(db); localStorage.removeItem("f9_session"); render();
+  });
+
+  render();
+</script>`,
 );
 
 const ROUTES = {
@@ -249,6 +335,7 @@ const ROUTES = {
   "/optimistic-ghost": OPTIMISTIC_GHOST,
   "/heavy-site": HEAVY_SITE,
   "/geo-gated": GEO_GATED,
+  "/login-app": LOGIN_APP,
 };
 
 export default {

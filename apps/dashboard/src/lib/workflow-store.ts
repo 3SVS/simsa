@@ -245,6 +245,13 @@ export type ExtendedProjectData = {
   /** Per-item free-text notes the user attaches to checking items (editable). */
   itemNotes?: Record<string, string>;
   checkResults?: CheckDraftResponse;
+  /**
+   * 가장 최근 **화면 검수**의 요약 (2026-09-01). 코드 리뷰 결과(`checkResults`)와
+   * 별개다 — 화면 검수는 거기에 아무것도 쓰지 않는다. 하단 "다음 한 걸음" 바가
+   * 검수 화면에서 무엇을 가리킬지 정하려면 이 사실이 필요하다.
+   * 리포트 전체가 아니라 **판단에 필요한 최소만** 둔다.
+   */
+  visualCheck?: { decision: string; findingCount: number; at: string };
   fixSuggestions?: Record<string, FixSuggestionResponse>;
   /** Which branch this project entered through — the progress map adapts to it
    *  (code branch: prepare step is optional, review never locks on items). */

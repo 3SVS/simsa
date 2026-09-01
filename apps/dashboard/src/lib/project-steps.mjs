@@ -231,3 +231,68 @@ export function packReadiness(checkResults, fixSuggestions) {
   }
   return { state: "fixes_ready", failedCount: failed.length, missingCount: 0 };
 }
+
+/**
+ * nextStepFromHere — **결과를 아는** 다음 한 걸음 (2026-09-01).
+ *
+ * ## 왜 정적 순서로는 안 되나
+ *
+ * Bae: *"유저들이 쉽게 따라오고 확인할 수 있도록 심플해야 하고 구성의 연결이
+ * 이어지도록 유도하는 기능이 필요해."*
+ *
+ * `nextScreenSlug`는 화면 순서를 고정으로 안다. 그런데 이번에 만든 순환 —
+ * 검수 → 결과 → 고칠 것 → **재검수** — 에서 다음 걸음은 **검수 결과에 따라
+ * 달라진다.** 문제가 없으면 여기서 멈춰도 되고, 있으면 고칠 것으로 가야 하고,
+ * 고쳤으면 다시 확인해야 한다. 고정 배열은 이 셋을 구분할 수 없다.
+ *
+ * ## 왜 순수 함수인가 (R5)
+ *
+ * 부르는 곳이 둘이다 — 모든 화면 하단의 안내 바와, 검수 결과 화면 자체.
+ * 같은 규칙이 두 군데 살면 반드시 갈라진다(#498에서 겪었다). 그래서 판단은
+ * 여기 하나뿐이고, 두 호출자는 자기가 아는 사실만 넘긴다.
+ *
+ * ## 왜 이유를 같이 돌려주나
+ *
+ * "다음 →"만으로는 유도가 안 된다. 왜 그게 다음인지 한 줄이 붙어야 따라온다.
+ * 문구는 i18n이 가지고, 여기서는 **키**만 정한다.
+ *
+ * @param {string} slug 지금 화면 ("" = 개요)
+ * @param {{
+ *   entryPath?: "idea"|"code"|"spec"|null,
+ *   summary?: {failed?: number, needsDecision?: number}|null,
+ *   hasCheckRun?: boolean,
+ *   hasFixes?: boolean,
+ *   visual?: {findingCount?: number}|null,
+ * }} ctx
+ * @returns {{slug: string, reason: "seeProblems"|"afterFix"|"allClear"|"continue"}|null}
+ */
+export function nextStepFromHere(slug, ctx = {}) {
+  const { entryPath = null, summary = null, hasCheckRun = false, hasFixes = false, visual = null } = ctx;
+
+  // ★검수를 본 직후 — 여기서만 결과가 다음을 정한다.
+  if (slug === "checks" || slug === "visual-checks") {
+    // 두 검수는 **결과가 다른 곳에 산다**: 코드 리뷰는 `checkResults`, 화면 검수는
+    // 시각 검수 실행에. 이 구분을 컴포넌트에 두면 반드시 갈라지므로(#498) 출처를
+    // 고르는 일까지 여기서 한다. 처음엔 `checkResults` 하나만 봤는데, 화면 검수는
+    // 거기에 아무것도 쓰지 않아 **정작 순환의 중심 화면만 안내가 비어 있었다**
+    // (2026-09-01 배포 전 확인에서 잡음).
+    const onVisual = slug === "visual-checks";
+    const ran = onVisual ? visual != null : hasCheckRun;
+    const problems = onVisual
+      ? (visual?.findingCount ?? 0)
+      : (summary?.failed ?? 0) + (summary?.needsDecision ?? 0);
+    if (!ran) return null; // 아직 결과가 없으면 다음을 말할 게 없다.
+    if (problems > 0) return { slug: "fixes", reason: "seeProblems" };
+    // 문제가 없으면 **끝났다고 말해준다.** 억지로 다음 화면으로 밀지 않는다 —
+    // 할 일이 없는데 다음을 주면 그게 바로 "무한 행진" 경험이다.
+    const onward = nextScreenSlug(slug, entryPath);
+    return onward ? { slug: onward, reason: "allClear" } : null;
+  }
+
+  // ★순환을 닫는 자리. 고칠 것을 받았으면 다음은 **재검수**다 — 고쳤다는 말은
+  //  다시 돌려보기 전까지 주장일 뿐이다(run-comparison.ts와 같은 입장).
+  if (slug === "fixes" && hasFixes) return { slug: "visual-checks", reason: "afterFix" };
+
+  const onward = nextScreenSlug(slug, entryPath);
+  return onward ? { slug: onward, reason: "continue" } : null;
+}

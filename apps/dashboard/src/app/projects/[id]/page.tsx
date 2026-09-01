@@ -52,6 +52,9 @@ import { listProjectSources } from "@/lib/workspace-sources-api";
 const VC_TONE_CLASS: Record<VerdictTone, string> = {
   passed: "bg-green-50 text-green-700 border-green-200",
   failed: "bg-red-50 text-red-700 border-red-200",
+  // ★"문제를 찾지 못했어요" — 확인한 것(초록)도, 못 본 것(앰버)도 아닌 자리.
+  //  근거를 모아 따라가 봤고 결함이 없었다는 뜻이라 중립적 파랑을 쓴다.
+  clear: "bg-sky-50 text-sky-700 border-sky-200",
   inconclusive: "bg-amber-50 text-amber-700 border-amber-200",
 };
 const VC_STATUS_SLATE_CLASS = "bg-slate-50 text-slate-600 border-slate-200";
@@ -148,18 +151,6 @@ export default function ProjectOverviewPage() {
           지도(Plan Map) 위에 둔다 — 기준이 정해져야 지도가 의미를 갖는다. */}
       {entryPath === "code" && <IntentConfirmCard projectId={id} />}
 
-      {/* Stage 183 — Plan Map ("Where are we?") read-only entry */}
-      <Link
-        href={`/projects/${id}/map`}
-        className="card mb-8 flex items-center justify-between gap-3 p-4 transition-colors hover:bg-gray-50"
-      >
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900">{t.planMap.title}</p>
-          <p className="mt-0.5 text-xs text-gray-500">{t.planMap.subtitle}</p>
-        </div>
-        <span className="flex-shrink-0 text-xs text-brand-700">{t.planMap.youAreHere} →</span>
-      </Link>
-
       {/* Stage 272 — inspection status at a glance + the single next action */}
       <VisualChecksOverviewCard
         projectId={id}
@@ -182,28 +173,6 @@ export default function ProjectOverviewPage() {
 
       <section className="mb-8">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title">{t.overview.specCompleteness}</h2>
-          <Link href={`/projects/${id}/spec`} className="text-xs text-brand-700 hover:underline">
-            {t.common.view} →
-          </Link>
-        </div>
-        <div className="card p-5">
-          <SpecCompleteness value={project.spec.completeness} />
-          {project.spec.openDecisions.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {project.spec.openDecisions.map((d, i) => (
-                <div key={i} className="flex gap-2 text-sm text-slate-700">
-                  <span className="mt-0.5 text-slate-400">•</span>
-                  <span>{d}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
           <h2 className="section-title">{t.overview.resultsSummary}</h2>
           <Link href={`/projects/${id}/checks`} className="text-xs text-brand-700 hover:underline">
             {t.common.viewAll} →
@@ -217,15 +186,68 @@ export default function ProjectOverviewPage() {
         </div>
       </section>
 
-      <section className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title">{t.overview.mustHaves}</h2>
-          <Link href={`/projects/${id}/items`} className="text-xs text-brand-700 hover:underline">
-            {t.common.viewAll} →
+      {/* ★한 화면에 8블록이었다 (2026-09-01 실측). "지금 할 일"을 하나 만들어 놓고
+          그 옆에 똑같이 눌러도 되는 것을 7개 더 두면, 하나를 고른 효과가 사라진다.
+          Bae: *"유저들이 쉽게 따라오고 확인할 수 있도록 심플해야 하고."*
+
+          여기 접는 셋 — 지도 · 제품 설명서 · 확인 항목 — 은 **사이드바에 이미 있고**,
+          지도는 지휘 센터의 3단계 설명과 같은 것을 세 번째로 말하고 있었다(같은 것을
+          여러 곳에서 말하면 어느 것도 믿기 어려워진다). 없애지는 않는다 — 필요할 때
+          펼치면 되고, 사이드바 경로도 그대로다.
+
+          결과 통계는 접지 않는다: 그건 중복이 아니라 **검수의 답** 자체다. */}
+      <details className="mb-8 rounded-lg border border-gray-100">
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm">
+          <span className="font-medium text-gray-700">{t.overview.detailsTitle}</span>
+          <span className="ml-2 text-xs text-gray-500">{t.overview.detailsHint}</span>
+        </summary>
+        <div className="border-t border-gray-100 px-4 pb-4 pt-4">
+          {/* Stage 183 — Plan Map ("Where are we?") read-only entry */}
+          <Link
+            href={`/projects/${id}/map`}
+            className="card mb-8 flex items-center justify-between gap-3 p-4 transition-colors hover:bg-gray-50"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900">{t.planMap.title}</p>
+              <p className="mt-0.5 text-xs text-gray-500">{t.planMap.subtitle}</p>
+            </div>
+            <span className="flex-shrink-0 text-xs text-brand-700">{t.planMap.youAreHere} →</span>
           </Link>
+
+          <section className="mb-8">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="section-title">{t.overview.specCompleteness}</h2>
+              <Link href={`/projects/${id}/spec`} className="text-xs text-brand-700 hover:underline">
+                {t.common.view} →
+              </Link>
+            </div>
+            <div className="card p-5">
+              <SpecCompleteness value={project.spec.completeness} />
+              {project.spec.openDecisions.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {project.spec.openDecisions.map((d, i) => (
+                    <div key={i} className="flex gap-2 text-sm text-slate-700">
+                      <span className="mt-0.5 text-slate-400">•</span>
+                      <span>{d}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="mb-8">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="section-title">{t.overview.mustHaves}</h2>
+              <Link href={`/projects/${id}/items`} className="text-xs text-brand-700 hover:underline">
+                {t.common.viewAll} →
+              </Link>
+            </div>
+            <RequirementsInlineList requirements={project.requirements} t={t} />
+          </section>
+
         </div>
-        <RequirementsInlineList requirements={project.requirements} t={t} />
-      </section>
+      </details>
 
       {/* Stage 81/82: evolution analytics. These are power-user "engine" gauges
           (experiments, action packs, benchmarks) that read as intimidating
