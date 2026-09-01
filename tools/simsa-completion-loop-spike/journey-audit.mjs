@@ -111,6 +111,9 @@ async function facts(page, label, note = "") {
       disabledLabels: disabled.slice(0, 5),
       bodyLen: body.length,
       errorish: (body.match(/문제가 발생|불러오지 못|오류가|실패했|다시 시도|something went wrong|failed to/gi) ?? []).length,
+      // ★개수만 남기면 "무슨 문구인지"를 못 본다 — 읽히지 않는 계측은 없는 계측이다
+      //  (2026-09-01: P0 1건의 정체를 소스에서 역추적해야 했다). 앞뒤를 같이 남긴다.
+      errorishHits: (body.match(/.{0,60}(문제가 발생|불러오지 못|오류가|실패했|다시 시도|something went wrong|failed to).{0,60}/gi) ?? []).slice(0, 5),
       guidanceish: (body.match(/연결해 주세요|연결하세요|먼저|필요해요|이렇게 하세요|설치|connect|first|install/gi) ?? []).length,
       koLeakChars: (body.match(/[가-힣]/g) ?? []).length,
       bodyHead: body.slice(0, 400),
@@ -357,7 +360,7 @@ for (const j of audit.journeys) {
   for (const s of j.steps) {
     const isBlockedStep = /막힘|시도/.test(s.label);
     if (s.errorish > 0 && !isBlockedStep) {
-      audit.findings.push({ sev: "P0", journey: j.name, locale: s.locale, step: s.label, what: `happy path 오류 카피 ${s.errorish}건 노출` });
+      audit.findings.push({ sev: "P0", journey: j.name, locale: s.locale, step: s.label, what: `happy path 오류 카피 ${s.errorish}건 노출 — ${(s.errorishHits ?? []).join(" ⟂ ")}` });
     }
     // 갈래 선택(chooser)은 3개의 동등한 문 설계라 primary-0이 정상 — 기준선
     // 판독(2026-07-21)에서 거짓 양성으로 확정, 규칙 예외. (추천 배지는 D16이
