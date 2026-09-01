@@ -61,6 +61,33 @@ async function newUserPage(locale = "ko") {
  *  - errorish/guidanceish: 오류·안내 카피 신호 (④)
  *  - koLeakChars: (EN 주행에서만 의미) 본문의 한글 문자 수 — EN 커버리지 누수
  */
+/**
+ * settleForNextAction — "다음 행동이 버튼으로 보이는가"를 재기 **전에** 화면이
+ * 정착하기를 기다린다 (2026-09-01).
+ *
+ * ## 왜
+ *
+ * 지휘 센터는 사실이 **하나라도 미확인이면 CTA를 내지 않는다** — 틀린 CTA가
+ * fetch 해소 뒤에 뒤집히는 것보다 없는 게 낫다는 의도된 설계다
+ * (`nextProjectAction`: 확정된 사실만 CTA를 만든다).
+ *
+ * 그런데 저장 직후 2초 스냅샷은 그 **로딩 창**을 찍고 "primary CTA 0 — 다음
+ * 행동이 안 보임"으로 P1을 냈다. 실제로는 사실이 도착하면 CTA가 나온다
+ * (실측: hasRepo/hasDeployUrl 확정 → get_pack).
+ *
+ * 로딩을 결함으로 세면 가짜 P1이 계속 쌓이고, 그러면 이 감사 자체를 안 믿게 된다.
+ * 반대로 라벨 예외를 늘리면 **진짜 결함까지 숨는다.** 그래서 둘 다 하지 않고,
+ * 정착을 기다린 뒤에 잰다 — 기다리고도 0이면 그건 진짜 결함이다.
+ */
+async function settleForNextAction(page, ms = 8000) {
+  await page
+    .waitForFunction(
+      () => !!document.querySelector("main .btn-primary, main button[class*='primary']"),
+      { timeout: ms },
+    )
+    .catch(() => {}); // 끝내 안 나오면 그대로 잰다 — 그때는 진짜 0이다.
+}
+
 async function facts(page, label, note = "") {
   const f = await page.evaluate(() => {
     const vis = (el) => el.offsetParent !== null;
@@ -214,6 +241,7 @@ async function runSpecJourney(locale) {
       await saveBtn.click();
       await page.waitForURL(/projects\/(?!new)/, { timeout: 30000 }).catch(() => {});
       await page.waitForTimeout(2000);
+      await settleForNextAction(page);
       await facts(page, "저장 후 랜딩 — 다음 행동");
     }
     await page.context().close();
