@@ -61,6 +61,33 @@ async function newUserPage(locale = "ko") {
  *  - errorish/guidanceish: 오류·안내 카피 신호 (④)
  *  - koLeakChars: (EN 주행에서만 의미) 본문의 한글 문자 수 — EN 커버리지 누수
  */
+/**
+ * settleForNextAction — "다음 행동이 버튼으로 보이는가"를 재기 **전에** 화면이
+ * 정착하기를 기다린다 (2026-09-01).
+ *
+ * ## 왜
+ *
+ * 지휘 센터는 사실이 **하나라도 미확인이면 CTA를 내지 않는다** — 틀린 CTA가
+ * fetch 해소 뒤에 뒤집히는 것보다 없는 게 낫다는 의도된 설계다
+ * (`nextProjectAction`: 확정된 사실만 CTA를 만든다).
+ *
+ * 그런데 저장 직후 2초 스냅샷은 그 **로딩 창**을 찍고 "primary CTA 0 — 다음
+ * 행동이 안 보임"으로 P1을 냈다. 실제로는 사실이 도착하면 CTA가 나온다
+ * (실측: hasRepo/hasDeployUrl 확정 → get_pack).
+ *
+ * 로딩을 결함으로 세면 가짜 P1이 계속 쌓이고, 그러면 이 감사 자체를 안 믿게 된다.
+ * 반대로 라벨 예외를 늘리면 **진짜 결함까지 숨는다.** 그래서 둘 다 하지 않고,
+ * 정착을 기다린 뒤에 잰다 — 기다리고도 0이면 그건 진짜 결함이다.
+ */
+async function settleForNextAction(page, ms = 8000) {
+  await page
+    .waitForFunction(
+      () => !!document.querySelector("main .btn-primary, main button[class*='primary']"),
+      { timeout: ms },
+    )
+    .catch(() => {}); // 끝내 안 나오면 그대로 잰다 — 그때는 진짜 0이다.
+}
+
 async function facts(page, label, note = "") {
   const f = await page.evaluate(() => {
     const vis = (el) => el.offsetParent !== null;
@@ -84,6 +111,9 @@ async function facts(page, label, note = "") {
       disabledLabels: disabled.slice(0, 5),
       bodyLen: body.length,
       errorish: (body.match(/문제가 발생|불러오지 못|오류가|실패했|다시 시도|something went wrong|failed to/gi) ?? []).length,
+      // ★개수만 남기면 "무슨 문구인지"를 못 본다 — 읽히지 않는 계측은 없는 계측이다
+      //  (2026-09-01: P0 1건의 정체를 소스에서 역추적해야 했다). 앞뒤를 같이 남긴다.
+      errorishHits: (body.match(/.{0,60}(문제가 발생|불러오지 못|오류가|실패했|다시 시도|something went wrong|failed to).{0,60}/gi) ?? []).slice(0, 5),
       guidanceish: (body.match(/연결해 주세요|연결하세요|먼저|필요해요|이렇게 하세요|설치|connect|first|install/gi) ?? []).length,
       koLeakChars: (body.match(/[가-힣]/g) ?? []).length,
       bodyHead: body.slice(0, 400),
@@ -214,6 +244,7 @@ async function runSpecJourney(locale) {
       await saveBtn.click();
       await page.waitForURL(/projects\/(?!new)/, { timeout: 30000 }).catch(() => {});
       await page.waitForTimeout(2000);
+      await settleForNextAction(page);
       await facts(page, "저장 후 랜딩 — 다음 행동");
     }
     await page.context().close();
@@ -329,7 +360,7 @@ for (const j of audit.journeys) {
   for (const s of j.steps) {
     const isBlockedStep = /막힘|시도/.test(s.label);
     if (s.errorish > 0 && !isBlockedStep) {
-      audit.findings.push({ sev: "P0", journey: j.name, locale: s.locale, step: s.label, what: `happy path 오류 카피 ${s.errorish}건 노출` });
+      audit.findings.push({ sev: "P0", journey: j.name, locale: s.locale, step: s.label, what: `happy path 오류 카피 ${s.errorish}건 노출 — ${(s.errorishHits ?? []).join(" ⟂ ")}` });
     }
     // 갈래 선택(chooser)은 3개의 동등한 문 설계라 primary-0이 정상 — 기준선
     // 판독(2026-07-21)에서 거짓 양성으로 확정, 규칙 예외. (추천 배지는 D16이
