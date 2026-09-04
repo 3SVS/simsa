@@ -1,5 +1,6 @@
 import { createApp } from "./router.js";
 import type { Env } from "./env.js";
+import { handleProbeEmail, type IncomingEmail } from "./probe-mailbox.js";
 import { assertPreflight } from "./preflight.js";
 import { selfHealWebhook } from "./webhook-heal.js";
 import { cleanupStuckJobs, cleanupStuckVisualChecks, cleanupStuckRepairJobs } from "./stuck-cleanup.js";
@@ -37,6 +38,24 @@ export default {
     }
     return app.fetch(request, env, ctx);
   },
+
+  /**
+   * ★Email Workers 진입점 (2026-08-26) — 검수용 일회용 메일함.
+   *
+   * 로그인 뒤 화면을 검수하려면 계정이 필요한데, **남의 비밀번호를 받아 보관하지
+   * 않는다.** 대신 우리가 일회용 계정을 만들고, 앱이 보내는 확인 메일을 여기서 받는다.
+   * `probe-<runId>@<수신도메인>` 앞으로 온 것만 처리하고 나머지는 조용히 버린다.
+   *
+   * 본문은 저장하지 않는다 — 제목과 링크만 남긴다(남의 앱 메일에는 그 앱 사용자의
+   * 정보가 담길 수 있다). 자세한 근거는 src/probe-mailbox.ts 헤더.
+   *
+   * 라우팅 규칙(어느 주소를 이 워커로 보낼지)은 Cloudflare 대시보드에서 연결한다.
+   * 연결 전에는 이 핸들러가 아무 일도 하지 않으므로 배포해도 무해하다.
+   */
+  async email(message: IncomingEmail, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await handleProbeEmail(env, message);
+  },
+
   // Scheduled handler for cron triggers.
   //
   // Multiple crons are wired to the same handler; we branch on

@@ -141,6 +141,11 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   const c = t.intentConfirm;
 
   return (
+    // 버튼은 **보조**다 (2026-09-01). 화면당 주 버튼은 하나여야 하고
+    // (uiux-redesign-instructions #5, journey-audit가 P1으로 잰다), 그 하나는
+    // **앞으로 가는 행동** — 지휘 센터의 "지금 할 일" — 이다. 이 카드는 우리가 한
+    // 추론이 맞는지 **확인받는** 자리이고 "나중에"로 건너뛸 수 있다. 대신 카드
+    // 자체를 브랜드 톤으로 띄워 눈에 걸리게 한다.
     <section className="mb-8">
       <div className="card border-brand-200 bg-brand-50/40 p-5">
         {phase === "loading" && <p className="text-sm text-gray-600">{c.loading}</p>}
@@ -180,7 +185,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
             <button
               onClick={confirm}
               disabled={!oneLine.trim()}
-              className="btn btn-primary btn-sm mt-3 disabled:opacity-50"
+              className="btn btn-secondary btn-sm mt-3 disabled:opacity-50"
             >
               {c.saveMine}
             </button>
@@ -248,7 +253,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
             )}
 
             <div className="mt-4 flex items-center gap-2">
-              <button onClick={confirm} className="btn btn-primary btn-sm">
+              <button onClick={confirm} className="btn btn-secondary btn-sm">
                 {c.confirm}
               </button>
               <button onClick={() => setPhase("done")} className="text-xs text-gray-500 underline hover:text-gray-700">

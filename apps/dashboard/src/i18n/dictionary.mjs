@@ -361,6 +361,11 @@ const EN = {
     lockNeedCode: "Connect your code first.",
     lockNeedBuild: "Get your builder pack and connect your app's URL first.",
     next: "Next",
+    // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
+    whySeeProblems: "The review found things that need attention. Here they are, with a fix for each.",
+    whyAfterFix: "Once you apply a fix, run the review again — that is the only way to know it actually worked.",
+    whyAllClear: "Nothing needs attention here. You can keep going when you want.",
+    whyContinue: "Pick up where you left off.",
     optionalTag: "optional",
   },
   branch: {
@@ -406,6 +411,8 @@ const EN = {
     specGenerate: "Turn it into a checklist",
   },
   overview: {
+    detailsTitle: "More about this project",
+    detailsHint: "the plan map, your brief, your checklist",
     specCompleteness: "Product brief completeness",
     resultsSummary: "Review summary",
     mustHaves: "Must-have items",
@@ -608,6 +615,7 @@ const EN = {
     compareRegressionTitle: "Changed since last check — items that passed before now have problems",
     compareRegressionHint: "Something in recent changes likely broke these. Check them first before anything else.",
     compareRecovered: "{n} item(s) that had problems last time now pass. The fixes worked.",
+    compareUncertain: "{n} item(s) we could not confirm this time — not broken, just unverified.",
     shareButton: "Create share link",
     shareCreating: "Creating…",
     shareCopied: "Link copied!",
@@ -2280,6 +2288,7 @@ const EN = {
       "A visual check opens your deployed app in a real browser, walks the core flow, and writes a plain-language report with screenshots. Runs appear here after an inspection finishes.",
     worksYes: "Works",
     worksNo: "Not working",
+    worksNoProblems: "No problems found",
     worksUnknown: "Needs a closer look",
     severityHigh: "Critical",
     severityMedium: "Check needed",
@@ -2314,6 +2323,10 @@ const EN = {
     runHint:
       "Simsa opens your connected website in a real browser, walks the core flow, and writes a plain-language report.",
     intentLabel: "What should we verify? (optional)",
+    signupOptIn: "Also check what is behind the login",
+    signupOptInHint:
+      "We create one throwaway test account in your app, check the logged-in screens, then remove it. We never ask for your password.",
+    signupUnavailable: "Not available yet — we are not set up to receive the confirmation email.",
     intentPlaceholder: "e.g. Sign-up and the first core action should work end to end",
     runButton: "Run inspection",
     runSubmitting: "Requesting…",
@@ -2978,6 +2991,11 @@ const KO = {
     lockNeedCode: "코드를 먼저 연결하세요.",
     lockNeedBuild: "빌더 팩을 받아 앱을 만들고, 앱 URL을 먼저 연결하세요.",
     next: "다음",
+    // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
+    whySeeProblems: "검수에서 살펴봐야 할 것이 나왔어요. 각각 어떻게 고치는지까지 함께 있습니다.",
+    whyAfterFix: "고친 뒤에는 다시 검수해야 해요 — 정말 고쳐졌는지는 돌려봐야 알 수 있습니다.",
+    whyAllClear: "여기서 더 손볼 것은 없어요. 원하실 때 이어서 가시면 됩니다.",
+    whyContinue: "하시던 곳에서 이어서 가요.",
     optionalTag: "선택",
   },
   branch: {
@@ -3023,6 +3041,8 @@ const KO = {
     specGenerate: "확인 항목으로 바꾸기",
   },
   overview: {
+    detailsTitle: "이 프로젝트 자세히",
+    detailsHint: "진행 지도 · 제품 설명서 · 확인 항목",
     specCompleteness: "제품 설명서 완성도",
     resultsSummary: "확인 결과 요약",
     mustHaves: "꼭 들어가야 할 것",
@@ -3225,6 +3245,7 @@ const KO = {
     compareRegressionTitle: "지난번과 달라졌어요 — 통과였던 항목이 이번에 걸렸어요",
     compareRegressionHint: "최근 변경 중 무언가가 이 항목들을 깨뜨렸을 가능성이 높아요. 다른 것보다 이것부터 확인하세요.",
     compareRecovered: "지난번에 걸렸던 {n}건이 이번엔 통과했어요. 고치기가 제대로 됐습니다.",
+    compareUncertain: "이번에 확인하지 못한 항목이 {n}개 있어요 — 망가진 건 아니고, 확인을 못 한 거예요.",
     shareButton: "공유 링크 만들기",
     shareCreating: "만드는 중…",
     shareCopied: "링크 복사됨!",
@@ -4890,6 +4911,7 @@ const KO = {
       "시각 검수는 배포된 앱을 실제 브라우저로 열어 핵심 흐름을 따라가 보고, 스크린샷과 함께 쉬운 말로 리포트를 만들어요. 검수가 끝나면 결과가 여기에 표시돼요.",
     worksYes: "작동해요",
     worksNo: "작동 안 해요",
+    worksNoProblems: "문제 없음",
     worksUnknown: "확인 필요",
     severityHigh: "심각",
     severityMedium: "확인 필요",
@@ -4923,6 +4945,10 @@ const KO = {
     runTitle: "새 검수 실행",
     runHint: "연결된 웹사이트를 실제 브라우저로 열어 핵심 흐름을 따라가 보고, 쉬운 말로 리포트를 만들어요.",
     intentLabel: "무엇을 확인할까요? (선택)",
+    signupOptIn: "로그인 뒤 화면까지 확인할까요?",
+    signupOptInHint:
+      "저희가 이 앱에 일회용 테스트 계정을 하나 만들어 로그인 뒤 화면을 확인하고, 끝나면 정리해요. 비밀번호는 받지 않습니다.",
+    signupUnavailable: "아직 사용할 수 없어요 — 확인 메일을 받을 준비가 되어 있지 않습니다.",
     intentPlaceholder: "예: 회원가입과 핵심 기능이 끝까지 작동해야 해요",
     runButton: "지금 검수하기",
     runSubmitting: "요청하는 중이에요…",

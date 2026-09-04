@@ -83,12 +83,27 @@ async function evalTarget(t) {
     });
     if (src.status >= 300) { row.runStatus = `source_failed(${src.status})`; return row; }
 
-    const run = await api("POST", `/workspace/projects/${projectId}/visual-checks/run`, {
-      userKey, locale: "ko", targetUrl: t.url, intent: t.intent,
-    });
-    const runId = run.json?.check?.id;
-    if (!runId || run.json?.dispatched !== true) {
-      row.runStatus = `dispatch_failed(${run.status} ${run.json?.note ?? ""})`; return row;
+    // ★용량 부족은 **측정 실패**이지 결과가 아니다 (2026-08-25).
+    // 첫 판에서 11개 중 6개가 `Maximum number of running container instances exceeded`로
+    // no-result가 됐다. 그걸 그대로 기록하면 표본이 조용히 절반으로 줄고, 대조 도구가
+    // 그걸 "퇴행"으로 오독할 뻔했다. 용량이면 **기다렸다 다시 시도**한다.
+    let run, runId;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      run = await api("POST", `/workspace/projects/${projectId}/visual-checks/run`, {
+        userKey, locale: "ko", targetUrl: t.url, intent: t.intent,
+      });
+      runId = run.json?.check?.id;
+      if (runId && run.json?.dispatched === true) break;
+      const note = String(run.json?.note ?? "");
+      const capacity = /Maximum number of running container instances|instances exceeded/i.test(note);
+      if (!capacity || attempt === 4) {
+        row.runStatus = `dispatch_failed(${run.status} ${note})`;
+        return row;
+      }
+      const waitMs = 45_000 * attempt;
+      process.stdout.write(`    용량 부족 — ${waitMs / 1000}초 후 재시도 (${attempt}/3)
+`);
+      await new Promise((r) => setTimeout(r, waitMs));
     }
 
     const started = Date.now();

@@ -37,6 +37,15 @@ export interface VisualCheckInput {
   /** Analytics/ads/fonts/telemetry failures — noise, shown only as an info note.
    *  Optional: old callers that don't split still work (no noise finding). */
   noiseFailures?: string[];
+  /**
+   * 검수를 막은 것들(계정 준비 단계 등). `app_gap`만 "고칠 것"으로 리포트에 오르고,
+   * `app_choice`(캡차·유료 가입)·`our_limit`은 오르지 않는다 — signup-plan.ts가 분류한다.
+   * 경계를 흐리면 남의 앱을 잘못 비난하게 된다.
+   */
+  blockerFindings?: Array<{
+    kind: "app_gap" | "app_choice" | "our_limit";
+    what?: string; why?: string; how?: string; unlocks?: string;
+  }>;
   /** One of the spike's decision states, e.g. "Needs Fix" / "Needs Clarification". */
   decision: string;
   /** Optional per-step flow outcomes (label + whether the step visibly succeeded). */
@@ -50,6 +59,11 @@ export interface NonDevFinding {
   why: string;
   how: string;
   evidence: string | null; // developer-only technical detail (not human prose)
+  /**
+   * 이걸 고치면 **다음 검수에서 무엇까지 확인해 드릴 수 있는지**(순환의 고리).
+   * 고칠 이유가 우리 편의가 아니라 사용자의 이익이어야 실제로 고친다.
+   */
+  unlocks?: string;
 }
 
 export interface NonDevReport {
@@ -70,7 +84,7 @@ export interface NonDevReport {
 const DECISION_LABEL: Record<ReportLocale, Record<string, string>> = {
   ko: {
     Ready: "정상 작동해요",
-    "Conditionally Ready": "대체로 되지만 확인이 필요해요",
+    "Conditionally Ready": "문제를 찾지 못했어요",
     "Needs Fix": "작동 안 해요 — 고쳐야 해요",
     "Not Verified": "확인 못 했어요",
     "Needs Clarification": "무엇을 확인해야 할지 애매해요",
@@ -83,7 +97,7 @@ const DECISION_LABEL: Record<ReportLocale, Record<string, string>> = {
   },
   en: {
     Ready: "It works",
-    "Conditionally Ready": "Mostly works, but needs a check",
+    "Conditionally Ready": "We could not find a problem",
     "Needs Fix": "It doesn't work — needs a fix",
     "Not Verified": "Couldn't verify",
     "Needs Clarification": "Unclear what to verify",
@@ -266,6 +280,11 @@ export interface DecisionEvidence {
   /** D9 (2026-07-17): did the driven action visibly change anything (body text
    *  or route)? null/undefined = not measured (older callers stay valid). */
   visibleChangeAfterAction?: boolean | null;
+  /**
+   * 어느 깊이까지 봤는가 (2026-09-01). "L1"=공개 화면만, "L3"=로그인 뒤까지.
+   * 확언("작동해요")은 L3 + 재로그인 왕복이 함께 확인됐을 때만 나온다.
+   */
+  loginDepth?: "L1" | "L3" | null;
   /** D9: console error count — NEVER a verdict driver alone (noise lesson);
    *  only its CONJUNCTION with a dead action is a crash signal. */
   consoleErrorCount?: number;
@@ -310,7 +329,34 @@ export function decideFromEvidence(
   if (e.interacted && e.visibleChangeAfterAction === true && e.persistedAfterReload === false) return "Needs Fix";
   if (steps.some((s) => !s.ok)) return e.interacted ? "User Acceptance Required" : "Needs Clarification";
   if (!e.primaryActionFound) return "Needs Clarification";
-  if (e.interacted) return "User Acceptance Required";
+  // ★2026-08-26 (Bae 결정 ②) — 여기가 **성공 경로**다: 모든 스텝이 끝까지 갔고,
+  //  주요 동작을 찾았고, 실제로 눌러봤고, 위의 어떤 결함 신호에도 걸리지 않았다.
+  //
+  //  그런데 종전엔 이 자리도 "직접 눈으로 확인이 필요해요"(UAR)였다. 즉 **이 시스템은
+  //  구조적으로 어떤 긍정 판정도 내리지 못했다** — `"Ready"`를 반환하는 코드가 최초
+  //  버전(#347)부터 아예 없었고, `works=true`의 유일한 조건이 그것이었다. 7월 정확도
+  //  평가에서 작동 픽스처가 계속 "판단보류"로 나온 원인이 이것인데, 그동안 모델과
+  //  프롬프트를 의심했다.
+  //
+  //  근거를 다 모아놓고 아무 말도 하지 않는 것은 정직이 아니라 회피에 가깝다.
+  //  그렇다고 "작동해요"를 확언할 수는 없다 — 우리는 **로그인 뒤를 보지 못하고**,
+  //  본 것도 한 흐름뿐이다. 그래서 확언과 침묵 사이의 정직한 자리를 쓴다:
+  //  **"문제를 찾지 못했어요"**(Conditionally Ready). `works`는 여전히 null이다
+  //  — 우리가 확인한 범위를 넘어서는 주장을 하지 않는다.
+  //
+  //  ★그리고 그 "더 강한 판정"이 아래다 (2026-09-01).
+  //
+  //  **로그인 뒤 왕복까지 확인했으면 확언한다.** 만들고 → 로그아웃하고 → 다시
+  //  로그인해서 → 그게 아직 있었다면, 그건 추측이 아니라 **증명**이다. 낙관적 UI로는
+  //  절대 통과할 수 없는 검사이기 때문이다(화면만 바뀌는 앱은 재로그인에서 사라진다).
+  //
+  //  이 조합에서만 works=true가 된다: 위의 모든 결함 신호에 걸리지 않았고 · 모든 스텝을
+  //  완주했고 · 주요 동작을 찾았고 · 실제로 눌렀고 · **로그인 뒤까지 들어갔고** ·
+  //  **재로그인 후에도 데이터가 남았다.**
+  //
+  //  하나라도 빠지면 확언하지 않는다 — 우리가 확인한 범위를 넘어서는 주장은 하지 않는다.
+  if (e.interacted && e.loginDepth === "L3" && e.persistedAfterReload === true) return "Ready";
+  if (e.interacted) return "Conditionally Ready";
   return "Not Verified";
 }
 
@@ -380,6 +426,8 @@ function firstMatch(arr: string[], re: RegExp): string | null {
 const REPORT_STR: Record<ReportLocale, {
   title: string;
   oneLineWorks: string;
+  /** ② 성공 경로 — 확언하지도, 침묵하지도 않는 자리. */
+  oneLineNoProblems: string;
   oneLineBroken: (firstWhat: string) => string;
   oneLineUnverified: (firstWhat: string) => string;
   nextTop: (how: string) => string;
@@ -390,6 +438,8 @@ const REPORT_STR: Record<ReportLocale, {
   ko: {
     title: "Simsa 검수 리포트",
     oneLineWorks: "핵심 흐름이 눈으로 확인한 범위에서 정상 동작했어요.",
+    oneLineNoProblems:
+      "핵심 흐름을 따라가 봤는데 문제를 찾지 못했어요. 다만 로그인 뒤 화면은 확인하지 않았습니다.",
     oneLineBroken: (w) => `핵심 흐름이 지금은 작동하지 않아요. ${w}`.trim(),
     oneLineUnverified: (w) => `아직 '작동한다'고 확정하기엔 확인이 더 필요해요. ${w}`.trim(),
     nextTop: (how) => `가장 급한 것부터: ${how}`,
@@ -404,6 +454,8 @@ const REPORT_STR: Record<ReportLocale, {
   en: {
     title: "Simsa Review Report",
     oneLineWorks: "The core flow worked correctly within what we could observe.",
+    oneLineNoProblems:
+      "We followed the core flow and could not find a problem. Anything behind a login was not checked.",
     oneLineBroken: (w) => `The core flow doesn't work right now. ${w}`.trim(),
     oneLineUnverified: (w) => `More checking is needed before we can confirm it "works". ${w}`.trim(),
     nextTop: (how) => `Most urgent first: ${how}`,
@@ -422,16 +474,44 @@ export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale 
   const L = loc(locale);
   const s = REPORT_STR[L];
   const findings = classifyFindings(input, L);
+
+  // ★검수를 막은 것이 앱의 누락이면 **고칠 것**으로 올린다 (2026-09-01, Bae 제안).
+  //
+  //  검수를 막는 것 대부분은 실사용자도 겪는 문제다 — 가입이 안 되면 우리만 못
+  //  들어가는 게 아니라 손님도 못 들어간다. 다만 **캡차·유료 가입은 결함이 아니므로**
+  //  여기 올라오지 않는다(분류는 signup-plan.ts가 한다). 그 경계를 흐리면 남의 앱을
+  //  잘못 비난하게 된다.
+  for (const b of input.blockerFindings ?? []) {
+    if (b.kind !== "app_gap" || !b.what) continue;
+    findings.push({
+      severity: "medium",
+      what: b.what,
+      why: b.why ?? "",
+      how: b.how ?? "",
+      evidence: null,
+      // 순환의 고리 — 고치면 다음 검수에서 무엇까지 확인되는지.
+      ...(b.unlocks ? { unlocks: b.unlocks } : {}),
+    });
+  }
   const works = decisionToWorks(input.decision);
   const verdict = decisionLabel(input.decision, L);
 
   const firstWhat = findings[0]?.what ?? "";
+  // ② "문제를 찾지 못했어요"는 실패가 아니다 — 종전 문구("확인이 더 필요해요")를
+  //    그대로 쓰면 성공 경로가 실패처럼 읽힌다. 판정과 문구를 같이 옮긴다.
+  const noProblems = input.decision === "Conditionally Ready";
   const oneLine =
-    works === true ? s.oneLineWorks : works === false ? s.oneLineBroken(firstWhat) : s.oneLineUnverified(firstWhat);
+    works === true
+      ? s.oneLineWorks
+      : works === false
+        ? s.oneLineBroken(firstWhat)
+        : noProblems
+          ? s.oneLineNoProblems
+          : s.oneLineUnverified(firstWhat);
 
   const nextSteps: string[] = [];
   if (findings[0]) nextSteps.push(s.nextTop(findings[0].how));
-  if (works === null && input.primaryActionFound === false) nextSteps.push(s.nextNoPrimary);
+  if (works === null && !noProblems && input.primaryActionFound === false) nextSteps.push(s.nextNoPrimary);
   nextSteps.push(s.nextRerun);
 
   return {

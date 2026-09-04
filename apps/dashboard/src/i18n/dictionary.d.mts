@@ -294,6 +294,10 @@ export type Dictionary = {
     lockNeedCode: string;
     lockNeedBuild: string;
     next: string;
+    whySeeProblems: string;
+    whyAfterFix: string;
+    whyAllClear: string;
+    whyContinue: string;
     optionalTag: string;
   };
   branch: {
@@ -337,6 +341,8 @@ export type Dictionary = {
     specGenerate: string;
   };
   overview: {
+    detailsTitle: string;
+    detailsHint: string;
     specCompleteness: string;
     resultsSummary: string;
     mustHaves: string;
@@ -531,6 +537,7 @@ export type Dictionary = {
     compareRegressionTitle: string;
     compareRegressionHint: string;
     compareRecovered: string;
+    compareUncertain: string;
     shareButton: string;
     shareCreating: string;
     shareCopied: string;
@@ -2139,6 +2146,7 @@ export type Dictionary = {
     emptyBody: string;
     worksYes: string;
     worksNo: string;
+    worksNoProblems: string;
     worksUnknown: string;
     severityHigh: string;
     severityMedium: string;
@@ -2170,6 +2178,9 @@ export type Dictionary = {
     runTitle: string;
     runHint: string;
     intentLabel: string;
+    signupOptIn: string;
+    signupOptInHint: string;
+    signupUnavailable: string;
     intentPlaceholder: string;
     runButton: string;
     runSubmitting: string;

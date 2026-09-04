@@ -16,6 +16,7 @@ import {
   WORKER_SYSTEM_PROMPT,
 } from "./prompts.js";
 import { parseRewriteToolUse, parseEditToolUse } from "./patch-parser.js";
+import { withOpenAiFallback, type FallbackOptions } from "./openai-fallback.js";
 import { actualCost, estimateCallCost } from "./pricing.js";
 import type { WorkerContext, WorkerOutcome, EditWorkerContext, EditWorkerOutcome } from "./types.js";
 
@@ -38,6 +39,16 @@ export interface ClaudeWorkerOptions {
    * (2026-07-21 실측: container server.mjs "Cannot find package").
    */
   baseURL?: string;
+  /**
+   * ★벤더 폴백 (2026-08-26). Anthropic이 Cloudflare egress에서 완전 차단된 뒤,
+   * 중앙 플레인의 LLM 호출에는 폴백을 붙였지만 **이 워커에는 없었다** — 검수는
+   * 문제를 짚어주는데 "고쳐줘"는 아무 일도 못 하는 상태였다.
+   * 키가 없으면 undefined로 두면 되고, 그러면 종전과 동일하게 동작한다.
+   */
+  openaiApiKey?: string;
+  openaiBaseUrl?: string;
+  /** 킬스위치 — Anthropic을 아예 건너뛴다(중앙 플레인 ANTHROPIC_ENABLED="off"와 같은 뜻). */
+  preferFallback?: boolean;
 }
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -81,12 +92,15 @@ export class ClaudeWorker {
   private readonly clientFactory: (apiKey: string, baseURL?: string) => Promise<AnthropicLike>;
   private readonly baseURL: string | undefined;
   private clientPromise: Promise<AnthropicLike> | null;
+  private readonly fallback: FallbackOptions | undefined;
 
   constructor(opts: ClaudeWorkerOptions = {}) {
     const key = opts.apiKey ?? process.env["ANTHROPIC_API_KEY"] ?? "";
-    if (!key && !opts.client) {
+    // 폴백 키만 있어도 동작해야 한다 — Anthropic이 막힌 상황에서 자동수리를
+    // 벤더 하나에 묶어두면 "고쳐줘"가 통째로 멈춘다.
+    if (!key && !opts.client && !opts.openaiApiKey) {
       throw new Error(
-        "ClaudeWorker: ANTHROPIC_API_KEY not set (pass opts.apiKey, opts.client, or the env var)",
+        "ClaudeWorker: no LLM configured (pass opts.apiKey, opts.openaiApiKey, opts.client, or the env var)",
       );
     }
     this.apiKey = key;
@@ -95,12 +109,28 @@ export class ClaudeWorker {
     this.gate = opts.gate ?? new EfficiencyGate();
     this.clientFactory = opts.clientFactory ?? defaultClientFactory;
     this.baseURL = opts.baseURL;
+    this.fallback = opts.openaiApiKey
+      ? {
+          openaiApiKey: opts.openaiApiKey,
+          ...(opts.openaiBaseUrl ? { openaiBaseUrl: opts.openaiBaseUrl } : {}),
+          ...(opts.preferFallback ? { preferFallback: true } : {}),
+        }
+      : undefined;
     this.clientPromise = opts.client ? Promise.resolve(opts.client) : null;
   }
 
   private async getClient(): Promise<AnthropicLike> {
     if (!this.clientPromise) {
-      this.clientPromise = this.clientFactory(this.apiKey, this.baseURL);
+      // 폴백이 설정돼 있으면 감싼다. Anthropic 키가 없어도(빈 문자열) 폴백만으로
+      // 동작한다 — 자동수리가 벤더 하나에 묶여 있지 않게 한다.
+      this.clientPromise = (async () => {
+        const primary = this.apiKey ? await this.clientFactory(this.apiKey, this.baseURL) : null;
+        if (!this.fallback) {
+          if (!primary) throw new Error("ClaudeWorker: no Anthropic key and no fallback configured");
+          return primary;
+        }
+        return withOpenAiFallback(primary, this.fallback);
+      })();
     }
     return this.clientPromise;
   }

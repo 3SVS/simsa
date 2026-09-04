@@ -24,7 +24,9 @@ import { mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { planVisualFlow } from "./dist/visual-flow-plan.js";
 import { buildNonDevReport, buildAgentFixPrompt, isNoiseResource, decideFromEvidence } from "./dist/nondev-report.js";
+import { blockerToFinding } from "./dist/signup-plan.js";
 import { classifyActionSafety } from "./safety.mjs";
+import { attemptSignup } from "./signup-run.mjs";
 
 /**
  * E-corpus-1 live-debug rev marker. Bump on every runner change — the first
@@ -106,7 +108,7 @@ const STEP_NOTES = {
  * sampleQuery has NO default here on purpose: planVisualFlow picks one from the
  * locale, and a default at this seam would silently win over it.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId, onPhase }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId, onPhase, signup }) {
   const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
   // E-corpus-1 phase log: one line per runner phase, elapsed-stamped, so the
   // LAST entry before silence names the exact operation that hangs.
@@ -189,6 +191,12 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     persistedAfterReload: null,
     // E-corpus-1 (2026-07-19): 시간 예산 초과로 일부 단계를 건너뛰었는가.
     timedOutPartial: false,
+    // 2026-08-26: 어느 깊이까지 봤는가. "L1"=공개 화면만, "L3"=로그인 뒤까지.
+    loginDepth: "L1",
+    signupBlocker: null,
+    signupBlockerMessage: null,
+    /** 막힘을 사용자 언어의 "고칠 것"으로 옮긴 것(app_gap만 리포트에 오른다). */
+    blockerFindings: null,
   };
 
   // E-corpus-1 재작성 (2026-07-19, #415): 예산에 도달하면 컨텍스트를 강제 종료해
@@ -240,6 +248,37 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     plog("snap:initial start");
     await snap("step-00-initial.png");
 
+    // ★로그인 뒤까지 들어가기 (2026-08-26) — **명시적 동의가 있을 때만.**
+    //
+    //  남의 앱에 계정을 만드는 일이라 기본은 꺼짐이다. 실패해도 던지지 않는다:
+    //  캡차·결제·메일 미도착에서 멈추면 "로그인 뒤는 못 봤습니다"로 돌아갈 뿐이고,
+    //  그건 지금도 하는 말이라 나빠지지 않는다. 있던 기능을 잃는 것이 더 나쁘다.
+    if (signup?.enabled) {
+      plog("signup:start");
+      const r = await attemptSignup({
+        page,
+        runId: signup.runId,
+        mailDomain: signup.mailDomain,
+        callbackBaseUrl: signup.callbackBaseUrl,
+        internalToken: signup.internalToken,
+        locale,
+        plog,
+      });
+      evidence.loginDepth = r.ok ? "L3" : "L1";
+      if (r.ok) {
+        plog(`signup:ok as ${r.email}`);
+      } else {
+        evidence.signupBlocker = r.blocker;
+        evidence.signupBlockerMessage = r.message;
+        const bf = blockerToFinding(r.blocker, locale);
+        evidence.blockerFindings = [bf];
+        plog(`signup:blocked ${r.blocker}`);
+      }
+      // 가입 여정 뒤에는 화면이 달라져 있다 — 검수 대상 주소로 되돌아가 시작한다.
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+    }
+
     plog("collect:ctas start");
     const ctas = await collectCtas(page);
     plog(`collect:ctas done n=${ctas.length}`);
@@ -268,8 +307,23 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // route), never as an absolute page size — the old `bodyLen > 200` check
     // failed every small app card regardless of actual behavior.
     const bodyTextAt = async () => (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+    /**
+     * ★"추가형 흐름"을 가르는 측정 (2026-08-26).
+     *
+     * 지속성 검사의 원래 의도는 **"추가한 것이 남아 있는가"** 인데, 종전 관문은
+     * "본문에 입력값이 들어 있는가"였다. 그건 너무 약하다 — 단위 변환기에 `5`를
+     * 넣으면 결과가 "5 km = 3.11 miles"라 관문을 통과하고, 새로고침하면 당연히
+     * 사라지므로 **작동하는 앱이 "낙관적 유령"으로 오판**됐다(F2 실측).
+     *
+     * 진짜 구분점은 **모음이 자랐는가**다: 기록장은 목록에 항목이 **추가**되고,
+     * 변환기는 결과 한 칸이 **교체**된다. 저장할 것이 없는 앱에 저장을 요구하지 않는다.
+     */
+    const countCollectionItems = async () =>
+      page.evaluate(() => document.querySelectorAll("li, tbody tr, [role='listitem']").length).catch(() => 0);
     plog(`plan:built steps=${plan.length} bodyBefore:start`);
     const bodyBefore = await bodyTextAt();
+    const itemsBefore = await countCollectionItems();
+    plog(`baseline:items=${itemsBefore}`);
     plog(`bodyBefore:done len=${bodyBefore.length}`);
     // D6: when the plan submits via a CLICK step, Enter after typing would
     // double-submit (or submit an incomplete form) — press Enter only when
@@ -349,14 +403,23 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     ) {
       try {
         plog("persist:check start");
-        const bodyAfterAction = await bodyTextAt();
-        if (bodyAfterAction.includes(typedStep.value)) {
+        const itemsAfter = await countCollectionItems();
+        const collectionGrew = itemsAfter > itemsBefore;
+        plog(`persist:gate itemsBefore=${itemsBefore} itemsAfter=${itemsAfter} grew=${collectionGrew}`);
+        // ★관문: **모음이 자란 흐름에서만** 지속성을 묻는다. 자라지 않았다면 이 앱은
+        //  애초에 "추가"를 하는 앱이 아니므로(계산기·변환기·조회 화면) 저장을
+        //  요구하는 것 자체가 틀렸다 — null 유지로 판정에 영향을 주지 않는다.
+        if (collectionGrew) {
           plog("persist:reload start");
           await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 });
           await page.waitForTimeout(1800);
           await snap(`step-${String(stepIdx + 1).padStart(2, "0")}-reload.png`);
           const bodyReload = await bodyTextAt();
-          evidence.persistedAfterReload = bodyReload.includes(typedStep.value);
+          const itemsReload = await countCollectionItems();
+          // 추가된 항목이 살아남았는가. 개수가 먼저이고(정렬·페이지네이션에 강함),
+          // 텍스트 잔존은 보조 신호다.
+          evidence.persistedAfterReload = itemsReload > itemsBefore || bodyReload.includes(typedStep.value);
+          plog(`persist:result itemsReload=${itemsReload} persisted=${evidence.persistedAfterReload}`);
           stepOutcomes.push({
             label: N.reloadCheck,
             ok: evidence.persistedAfterReload,
@@ -445,6 +508,9 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     noiseFailures,
     decision,
     steps: stepOutcomes,
+    // ★계정 준비가 막혔다면 그 이유를 리포트로 넘긴다 — 앱의 누락이면 "고칠 것"이
+    //  되고, 정당한 선택(캡차·유료)이나 우리 사정이면 오르지 않는다.
+    ...(evidence.blockerFindings?.length ? { blockerFindings: evidence.blockerFindings } : {}),
   };
   const report = buildNonDevReport(reportInput, locale);
   const agentPrompt = buildAgentFixPrompt(reportInput, locale);

@@ -180,6 +180,21 @@ export interface Env {
    */
   GH_APP_INSTALL_URL?: string;
   /**
+   * 킬스위치 — "off"면 Anthropic을 건너뛰고 곧장 OpenAI 폴백으로 간다.
+   * 2026-08-25 실측: 같은 키가 노트북에서 200, Worker에서 403 → egress 차단 확정.
+   * 복구 확인은 `/internal/llm-probe`, 되돌리기는 wrangler.toml에서 "on" + 배포.
+   * 설정 해석은 workspace/vendor-routing.ts 단일 출처.
+   */
+  ANTHROPIC_ENABLED?: string;
+  /**
+   * 검수용 일회용 메일 수신 도메인 (2026-08-26). 예: "probe.trysimsa.com".
+   * 로그인 뒤 검수를 하려면 우리가 일회용 계정을 만들어야 하고, 앱이 보내는 확인
+   * 메일을 `probe-<runId>@<이 도메인>` 으로 받는다. **비어 있으면 계정 준비 기능
+   * 자체가 꺼진다** — 받을 곳이 없는데 가입을 시도하면 중간에 멈춘 계정만 남는다.
+   * 라우팅 규칙은 Cloudflare 대시보드에서 이 워커로 연결한다.
+   */
+  PROBE_MAIL_DOMAIN?: string;
+  /**
    * Stage 17 — base URL of the dashboard. Used when building Telegram notification
    * message links. Defaults to https://app.trysimsa.com when unset (Stage 92).
    * Set via wrangler.toml [vars] or `wrangler secret put DASHBOARD_BASE_URL`.

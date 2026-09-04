@@ -313,3 +313,112 @@ test("아무것도 없으면 종전대로 연결을 요구한다 (무회귀)", a
     { action: "connect_code", slug: "settings" },
   );
 });
+
+// ─── nextStepFromHere — 결과를 아는 다음 한 걸음 (2026-09-01) ──────────────────
+//
+// 이 함수가 존재하는 이유는 순환을 닫기 위해서다: 검수 → (문제 있으면) 고칠 것 →
+// 재검수. 정적 순서(nextScreenSlug)로는 "문제가 있었는가"를 구분할 수 없다.
+
+import { nextStepFromHere } from "../src/lib/project-steps.mjs";
+
+test("검수 결과에 문제가 있으면 다음은 고칠 것", () => {
+  // ★checks(코드 리뷰) 화면. `summary`는 코드 리뷰 결과의 모양이므로 화면 검수
+  //  화면에 그대로 대입하지 않는다 — 두 결과는 사는 곳이 다르다(아래 출처 분리 참조).
+  const next = nextStepFromHere("checks", {
+    entryPath: "code",
+    hasCheckRun: true,
+    summary: { failed: 2, needsDecision: 0 },
+  });
+  assert.deepEqual(next, { slug: "fixes", reason: "seeProblems" });
+});
+
+test("needs_decision도 문제로 센다 — 사용자가 판단해야 할 것이 남아 있다", () => {
+  const next = nextStepFromHere("checks", {
+    entryPath: "code",
+    hasCheckRun: true,
+    summary: { failed: 0, needsDecision: 1 },
+  });
+  assert.equal(next?.slug, "fixes");
+});
+
+test("★순환을 닫는다 — 고칠 것을 받았으면 다음은 재검수", () => {
+  const next = nextStepFromHere("fixes", { entryPath: "code", hasFixes: true });
+  assert.deepEqual(next, { slug: "visual-checks", reason: "afterFix" });
+  // 정적 순서에서는 fixes가 끝이라 순환이 닫히지 않았다 — 이 함수가 필요한 이유.
+  assert.equal(nextScreenSlug("fixes", "code"), null);
+});
+
+test("고칠 것이 아직 없으면 재검수로 밀지 않는다", () => {
+  const next = nextStepFromHere("fixes", { entryPath: "code", hasFixes: false });
+  assert.notEqual(next?.reason, "afterFix");
+});
+
+test("검수 결과가 아직 없으면 다음을 말하지 않는다", () => {
+  assert.equal(nextStepFromHere("visual-checks", { entryPath: "code", hasCheckRun: false }), null);
+});
+
+test("문제가 없으면 억지로 다음 화면으로 밀지 않는다(할 일 없는 행진 금지)", () => {
+  // code 갈래에서 checks 다음은 fixes지만, 고칠 게 없으면 그 이유는 "이어서"다.
+  const next = nextStepFromHere("checks", {
+    entryPath: "code",
+    hasCheckRun: true,
+    summary: { failed: 0, needsDecision: 0 },
+  });
+  assert.notEqual(next?.reason, "seeProblems");
+});
+
+test("검수 화면이 아니면 기존 정적 순서를 그대로 따른다", () => {
+  for (const slug of ["idea", "spec", "items", "settings", "github"]) {
+    for (const entryPath of ["code", "idea"]) {
+      const next = nextStepFromHere(slug, { entryPath });
+      assert.equal(next?.slug ?? null, nextScreenSlug(slug, entryPath), `${slug}/${entryPath}`);
+    }
+  }
+});
+
+test("ctx를 안 줘도 터지지 않는다(상태 로딩 실패 시 fail-open)", () => {
+  assert.doesNotThrow(() => nextStepFromHere("items"));
+  assert.doesNotThrow(() => nextStepFromHere("visual-checks"));
+});
+
+// ★화면 검수는 코드 리뷰와 **결과가 사는 곳이 다르다**. 처음 구현은 `checkResults`
+//  하나만 봐서, 정작 순환의 중심 화면(visual-checks)에서 바가 통째로 비었다.
+//  아래 두 테스트는 그 시절 코드에서 실패한다(null이 돌아왔다).
+
+test("화면 검수에서 문제가 나오면 코드 리뷰 결과가 없어도 고칠 것을 가리킨다", () => {
+  const next = nextStepFromHere("visual-checks", {
+    entryPath: "code",
+    hasCheckRun: false, // 코드 리뷰는 돌린 적 없다 — 앱 주소만 낸 사용자
+    summary: null,
+    visual: { findingCount: 3 },
+  });
+  assert.deepEqual(next, { slug: "fixes", reason: "seeProblems" });
+});
+
+test("화면 검수에서 문제가 없으면 고칠 것으로 밀지 않는다", () => {
+  const next = nextStepFromHere("visual-checks", {
+    entryPath: "code",
+    visual: { findingCount: 0 },
+  });
+  assert.notEqual(next?.reason, "seeProblems");
+});
+
+test("화면 검수 기록이 없으면 코드 리뷰 결과로 대신 말하지 않는다", () => {
+  // 출처를 섞으면 "이 검수에서 나온 것"이 아닌 것을 이 화면의 결과처럼 말하게 된다.
+  const next = nextStepFromHere("visual-checks", {
+    entryPath: "code",
+    hasCheckRun: true,
+    summary: { failed: 5 },
+    visual: null,
+  });
+  assert.equal(next, null);
+});
+
+test("코드 리뷰 화면은 화면 검수 결과를 쓰지 않는다(반대 방향도 섞이지 않는다)", () => {
+  const next = nextStepFromHere("checks", {
+    entryPath: "code",
+    hasCheckRun: false,
+    visual: { findingCount: 9 },
+  });
+  assert.equal(next, null);
+});

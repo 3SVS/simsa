@@ -12,6 +12,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
+import { vendorFallback } from "../workspace/vendor-routing.js";
 import { ALLOWED_ORIGINS, CORS_ALLOW_METHODS } from "./cors.js";
 import { generateIdeaToSpecDraft, toClientDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
@@ -25,6 +26,7 @@ import {
 import { applyVerifyPanel } from "../workspace/verify-panel.js";
 import { runCouncilCheck } from "../workspace/council-review.js";
 import { resolvePlan } from "../plan.js";
+import { compareCheckRuns, type RunComparison, type ItemStatus } from "../run-comparison.js";
 import { generateUnstickAdvice, type WorkspaceUnstickRequest } from "../workspace/unstick.js";
 import {
   generateFixSuggestion,
@@ -42,6 +44,7 @@ import {
   listProjectsByUser,
   EXAMPLE_PROJECT_IDS,
   saveCheckRun,
+  getLatestCheckRun,
   saveFixSuggestion as saveFixSuggestionToDb,
 } from "../workspace/db.js";
 import {
@@ -64,13 +67,20 @@ import {
 } from "../workspace/beta-limits.js";
 
 /**
- * 벤더 폴백 설정 — Anthropic이 Worker egress에서 차단될 때(실측 403 100%)
- * 같은 프롬프트를 OpenAI로 넘긴다. 키가 없으면 undefined라 종전과 동일하게 동작.
- * `/internal/llm-probe` 실측: anthropic 0/4 · **openai 4/4**(2.9초) · gemini 지역 제한.
+ * 저장된 검수 결과에서 비교에 필요한 것만 꺼낸다. 모양이 다르면 **null** —
+ * 비교를 못 하는 것이지 회귀가 없는 것이 아니다(둘을 섞으면 거짓 안심이 된다).
  */
-function vendorFallback(env: Env): { openaiApiKey?: string; openaiBaseUrl?: string } | undefined {
-  if (!env.OPENAI_API_KEY) return undefined;
-  return { openaiApiKey: env.OPENAI_API_KEY, openaiBaseUrl: env.CF_AI_GATEWAY_OPENAI_URL };
+function extractComparableResults(raw: unknown): Array<{ itemId: string; status: ItemStatus }> | null {
+  const results = (raw as { results?: unknown })?.results;
+  if (!Array.isArray(results) || results.length === 0) return null;
+  const out: Array<{ itemId: string; status: ItemStatus }> = [];
+  for (const r of results) {
+    const itemId = (r as { itemId?: unknown }).itemId;
+    const status = (r as { status?: unknown }).status;
+    if (typeof itemId !== "string" || typeof status !== "string") continue;
+    out.push({ itemId, status: status as ItemStatus });
+  }
+  return out.length > 0 ? out : null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -595,6 +605,27 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       console.error("[workspace/check-draft] verify-panel error (kept single):", err);
     }
 
+    // ★재검수 비교 (2026-09-01) — **저장 전에** 직전 검수를 읽는다(순서가 뒤바뀌면
+    //  방금 저장한 자기 자신과 비교하게 된다).
+    //
+    //  목적은 "다 고쳤다"를 구조적으로 말할 수 없게 하는 것이다. 특히 **회귀**(되던 것이
+    //  안 되게 됨)는 AI 수정에서 가장 흔하고 가장 늦게 발견된다 — 고친 자리만 보면
+    //  성공처럼 보이기 때문이다. 비교 실패는 검수를 깨뜨리지 않는다(부가 정보).
+    let comparison: RunComparison | null = null;
+    if (req.projectId && checkProjectOwned) {
+      try {
+        const prev = await getLatestCheckRun(c.env, req.projectId);
+        const prevResults = extractComparableResults(prev?.result);
+        if (prevResults) {
+          comparison = compareCheckRuns(prevResults, result.results.map((r) => ({
+            itemId: r.itemId, status: r.status, title: r.title,
+          })));
+        }
+      } catch (err) {
+        console.warn("[workspace/check-draft] comparison skipped:", err);
+      }
+    }
+
     // Best-effort persist check run to D1 — only into projects the caller owns.
     if (req.projectId && checkProjectOwned) {
       saveCheckRun(c.env, req.projectId, result.source, result).catch(() => undefined);
@@ -610,7 +641,10 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       metadata: { source: result.source },
     });
 
-    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json", ...headers } });
+    return new Response(
+      JSON.stringify(comparison ? { ...result, comparison } : result),
+      { status: 200, headers: { "content-type": "application/json", ...headers } },
+    );
   });
 
   // ── POST /workspace/recommend-answer ─────────────────────────────────────────

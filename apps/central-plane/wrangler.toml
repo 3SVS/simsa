@@ -55,6 +55,19 @@ WORKSPACE_GH_SCOPES = "read:user public_repo"
 # 2026-07-05: dashboard.conclave-ai.dev is a DEAD domain (DNS gone) — post-connect
 # OAuth redirects were pointing at it. Live dashboard is app.trysimsa.com (Stage 92).
 WORKSPACE_GH_DASHBOARD_URL = "https://app.trysimsa.com"
+# ★킬스위치 — Anthropic egress 차단 대응 (2026-08-25).
+#
+# 실측: **같은 API 키가 노트북에서는 200, 이 Worker에서는 403** "Request not allowed".
+# 키·계정·지역 문제가 아니라 Cloudflare egress가 막힌 것이 확정됐다. 그렇다면
+# 요청마다 6회 재시도로 태우는 ~7초는 순손실이므로, Anthropic을 건너뛰고 곧장
+# OpenAI 폴백으로 간다(지연 16~21초 → 9~14초).
+#
+# 되돌리기: 이 값을 "on"으로 바꾸고 배포하면 끝. 복구 여부는
+# `POST /internal/llm-probe`의 anthropic 항목 usable로 확인한다.
+# 회로 차단기와 달리 이 스위치는 **스스로 복구하지 않는다** — 사람이 실측하고
+# 켜는 것이 의도된 설계다. 해석은 workspace/vendor-routing.ts 단일 출처.
+ANTHROPIC_ENABLED = "off"
+
 # Private-repo support — public install URL of the existing GitHub App
 # (e.g. "https://github.com/apps/<slug>/installations/new"). Shown to users
 # whose private repo needs the App installed. Empty = no install link surfaced.
@@ -150,11 +163,21 @@ new_sqlite_classes = ["ConclaveSandbox"]
 # instance_type "basic" (1 GiB memory / 4 GB disk): headless Chromium OOMs on
 # the default "dev" (256 MiB) instance. Image is built in CI by
 # deploy-central-plane.yml — first deploy after this lands builds + pushes it.
+#
+# ★max_instances 5 → 20 (2026-08-25). 정확도 평가를 **순차로** 돌렸는데도 11개 중
+# 6개가 `Maximum number of running container instances exceeded`로 실패했다.
+# 하나씩 돌려도 상한에 닿는다는 것은, 끝난 인스턴스가 곧바로 반환되지 않는다는 뜻이다.
+#
+# 제품 관점의 함의가 더 크다: **여러 사용자가 동시에 검수를 누르면 검수가 아예
+# 시작되지 않는다.** 오픈 전에 반드시 올려야 하는 값이었다.
+#
+# 상한을 올리는 것 자체는 과금되지 않는다(실제로 도는 인스턴스에만 과금).
+# 20은 잠정값 — 동시 검수 실측으로 조정한다.
 [[containers]]
 class_name = "SimsaInspector"
 image = "./inspector-container/Dockerfile"
 image_build_context = "../.."
-max_instances = 5
+max_instances = 20
 instance_type = "basic"
 
 [[durable_objects.bindings]]

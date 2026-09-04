@@ -74,7 +74,8 @@ export function StuckHelper({
         <button
           onClick={submit}
           disabled={!text.trim() || phase === "loading"}
-          className="btn btn-sm btn-primary disabled:opacity-50"
+          // 도움 요청은 보조 행동이다 — 화면의 주 버튼은 "지금 할 일" 하나뿐이다(#5).
+          className="btn btn-sm btn-secondary disabled:opacity-50"
         >
           {phase === "loading" ? t.stuckHelper.loading : t.stuckHelper.submit}
         </button>

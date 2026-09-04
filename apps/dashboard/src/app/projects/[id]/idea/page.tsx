@@ -16,7 +16,6 @@ import {
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/components/Toast";
-import { StepNextButton } from "@/components/StepNextButton";
 
 export default function IdeaPage() {
   const { id } = useParams<{ id: string }>();
@@ -147,7 +146,6 @@ export default function IdeaPage() {
       </div>
       </>
       )}
-      <StepNextButton />
     </div>
   );
 }

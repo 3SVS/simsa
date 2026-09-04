@@ -206,7 +206,11 @@ export function createWorkspaceVisualChecksRoutes(): Hono<{ Bindings: Env }> {
 
     try {
       const checks = await listVisualChecks(c.env, projectId);
-      return c.json({ ok: true, checks });
+      // ★로그인 뒤 검수를 켤 수 있는 상태인가 (2026-09-01).
+      //  화면이 **켤 수 없는 기능의 체크박스를 보여주면 안 된다** — 사용자가 켰는데
+      //  아무 일도 안 일어나는 것이 가장 나쁜 종류의 침묵이다. 메일 수신 도메인이
+      //  설정돼야 가입을 완주할 수 있으므로 그 사실을 그대로 알린다.
+      return c.json({ ok: true, checks, signupAvailable: Boolean(c.env.PROBE_MAIL_DOMAIN) });
     } catch (err) {
       console.error("[workspace/visual-checks GET] failed:", err);
       return c.json({ ok: false, error: "query_failed" }, 500);

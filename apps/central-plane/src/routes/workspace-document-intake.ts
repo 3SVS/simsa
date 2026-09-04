@@ -25,6 +25,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
+import { vendorFallback } from "../workspace/vendor-routing.js";
 import { corsMiddleware } from "./cors.js";
 import { getProject } from "../workspace/db.js";
 import { getProjectSourceById } from "../workspace/project-sources-db.js";
@@ -177,7 +178,7 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
 
     let result;
     try {
-      result = await generateIdeaToSpecDraft({ idea: input, locale }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, c.env.OPENAI_API_KEY ? { openaiApiKey: c.env.OPENAI_API_KEY, openaiBaseUrl: c.env.CF_AI_GATEWAY_OPENAI_URL } : undefined);
+      result = await generateIdeaToSpecDraft({ idea: input, locale }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
     } catch (err) {
       console.error("[workspace/document-intake] unexpected generate error:", err);
       return c.json({ ok: false, error: "internal_error" }, 500);
