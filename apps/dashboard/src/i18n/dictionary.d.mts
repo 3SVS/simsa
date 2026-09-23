@@ -2153,6 +2153,10 @@ export type Dictionary = {
     severityLow: string;
     severityInfo: string;
     evidenceCount: string;
+    metaCheckedAt: string;
+    shotInitial: string;
+    shotAfterStep: string;
+    shotFinal: string;
     executorLocal: string;
     executorContainer: string;
     open: string;
