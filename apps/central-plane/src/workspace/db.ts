@@ -29,6 +29,8 @@ export type DbProject = {
   topicTags: unknown;
   /** acquisition — where/how the user arrived ({ source, ... }). */
   acquisition: unknown;
+  /** SI 티어 A1: T0 개발 지시서(dev_spec_json). 없으면 null. */
+  devSpec: unknown;
   createdAt: string;
   updatedAt: string;
 };
@@ -131,7 +133,7 @@ export async function upsertProject(
 
 export async function getProject(env: Env, id: string): Promise<DbProject | null> {
   const row = await env.DB.prepare(
-    `SELECT id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, topic_tags_json, acquisition_json, created_at, updated_at
+    `SELECT id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, topic_tags_json, acquisition_json, dev_spec_json, created_at, updated_at
      FROM workspace_projects WHERE id = ?`,
   )
     .bind(id)
@@ -147,6 +149,7 @@ export async function getProject(env: Env, id: string): Promise<DbProject | null
       entry_path: string | null;
       topic_tags_json: string | null;
       acquisition_json: string | null;
+      dev_spec_json: string | null;
       created_at: string;
       updated_at: string;
     }>();
@@ -163,6 +166,7 @@ export async function getProject(env: Env, id: string): Promise<DbProject | null
     entryPath: row.entry_path ?? null,
     topicTags: safeJson(row.topic_tags_json ?? "null"),
     acquisition: safeJson(row.acquisition_json ?? "null"),
+    devSpec: row.dev_spec_json ? safeJson(row.dev_spec_json) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

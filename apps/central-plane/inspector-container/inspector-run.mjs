@@ -34,7 +34,7 @@ import { attemptSignup } from "./signup-run.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "ec2-fix1";
+export const RUNNER_REV = "a5-acceptance-1";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
@@ -108,7 +108,7 @@ const STEP_NOTES = {
  * sampleQuery has NO default here on purpose: planVisualFlow picks one from the
  * locale, and a default at this seam would silently win over it.
  */
-export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId, onPhase, signup }) {
+export async function runInspection({ targetUrl, intent, outDir, sampleQuery, locale = "ko", budgetMs, runId, onPhase, signup, acceptancePlan }) {
   const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
   // E-corpus-1 phase log: one line per runner phase, elapsed-stamped, so the
   // LAST entry before silence names the exact operation that hangs.
@@ -173,6 +173,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
 
   const evidenceFiles = [];
   const stepOutcomes = [];
+  // SI 티어 A5: 수용 기준(AC)별 시나리오 결과 — 핵심 흐름 뒤, 남은 예산 안에서만.
+  const acceptanceResults = [];
   const evidence = {
     urlLoaded: targetUrl,
     loadStatus: null,
@@ -432,6 +434,32 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       }
     }
 
+    // ── SI 티어 A5: 수용 기준 시나리오 ─────────────────────────────────────
+    // 지시서가 있으면 AC마다 "무엇을 눌러 무엇이 보여야 하는가"가 적혀 있다. 핵심 흐름을
+    // 마친 뒤 남은 예산 안에서 하나씩 돌린다. 어휘는 판정 사다리와 같은 입장:
+    //  - broken       = 시나리오 중 실패 신호(네트워크 실패·크래시 결합)가 있었다
+    //  - not_confirmed = 단계를 끝까지 못 갔거나 아무 변화가 없었다 (고장 아님)
+    //  - no_problem   = 단계를 밟았고 실패 신호 없이 화면이 반응했다
+    //  - not_run      = 예산 부족
+    // 핵심 흐름의 evidence(networkFailures 등)와 섞지 않는다 — 시나리오는 자기 페이지에서
+    // 자기 실패만 센다. 다만 broken/not_confirmed는 stepOutcomes에도 실패로 남겨 판정
+    // 사다리가 "다 확인했다"고 말하지 못하게 한다.
+    if (Array.isArray(acceptancePlan) && acceptancePlan.length > 0) {
+      plog(`acceptance:start n=${acceptancePlan.length}`);
+      for (const sc of acceptancePlan) {
+        if (overBudget()) {
+          acceptanceResults.push({ acceptanceId: sc.acceptanceId, featureTitle: sc.featureTitle, then: sc.then, status: "not_run", note: "budget" });
+          continue;
+        }
+        const r = await runAcceptanceScenario({ context, targetUrl, sc, locale, deadline, plog, shotsDir, evidenceFiles });
+        acceptanceResults.push(r);
+        if (r.status === "broken" || r.status === "not_confirmed") {
+          stepOutcomes.push({ label: `${sc.acceptanceId} ${sc.featureTitle}`, ok: false, note: r.note });
+        }
+      }
+      plog(`acceptance:done ${acceptanceResults.map((r) => `${r.acceptanceId}=${r.status}`).join(",")}`);
+    }
+
     // E-corpus-1: 예산 초과로 조기 종료했으면 정직하게 남긴다 — 이 스텝이
     // classifyFindings의 stepFailed로 잡혀 리포트에 "다 못 봤다"가 드러나고,
     // decideFromEvidence는 부분 증거 기준으로 (interacted면 UAR, 아니면 Needs
@@ -511,6 +539,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // ★계정 준비가 막혔다면 그 이유를 리포트로 넘긴다 — 앱의 누락이면 "고칠 것"이
     //  되고, 정당한 선택(캡차·유료)이나 우리 사정이면 오르지 않는다.
     ...(evidence.blockerFindings?.length ? { blockerFindings: evidence.blockerFindings } : {}),
+    // SI 티어 A5: 수용 기준별 결과(없으면 필드 자체가 없다 → 종전 리포트).
+    ...(acceptanceResults.length ? { acceptanceResults } : {}),
   };
   const report = buildNonDevReport(reportInput, locale);
   const agentPrompt = buildAgentFixPrompt(reportInput, locale);
@@ -542,5 +572,91 @@ function safeLogHost(url) {
     return new URL(url).host;
   } catch {
     return "invalid-url";
+  }
+}
+
+/**
+ * SI 티어 A5: 수용 기준 시나리오 하나를 자기 페이지에서 돌린다.
+ * 안전 레일은 핵심 흐름과 동일(forbidden 리스트로 계획, 클릭 시 classifyActionSafety 재확인).
+ * 절대 throw하지 않는다 — 실패는 결과의 status로만 돌아간다.
+ */
+async function runAcceptanceScenario({ context, targetUrl, sc, locale, deadline, plog, shotsDir, evidenceFiles }) {
+  const N = STEP_NOTES[locale === "en" ? "en" : "ko"];
+  const base = { acceptanceId: sc.acceptanceId, featureTitle: sc.featureTitle, then: sc.then };
+  // 시나리오당 예산: 남은 시간을 넘기지 않고 최대 40초.
+  const remaining = deadline === Infinity ? 40000 : deadline - Date.now();
+  const budget = Math.min(40000, remaining);
+  if (budget < 8000) return { ...base, status: "not_run", note: "budget" };
+  const scDeadline = Date.now() + budget;
+  const over = () => Date.now() > scDeadline;
+  const tag = String(sc.acceptanceId).replace(/[^A-Za-z0-9-]/g, "");
+  let page = null;
+  const netFailures = [];
+  const consoleErrors = [];
+  try {
+    page = await context.newPage();
+    page.setDefaultTimeout(Math.max(3000, Math.min(8000, budget)));
+    page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text().slice(0, 200)));
+    page.on("pageerror", (err) => consoleErrors.push(`Uncaught ${String(err).slice(0, 200)}`));
+    page.on("requestfailed", (r) => !isNoiseResource(r.url()) && netFailures.push(`${r.method()} ${r.url().slice(0, 160)} (${r.failure()?.errorText ?? "failed"})`));
+    page.on("response", (r) => r.status() >= 500 && !isNoiseResource(r.url()) && netFailures.push(`HTTP ${r.status()} ${r.url().slice(0, 160)}`));
+    plog(`acceptance:${tag} goto`);
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: Math.max(5000, Math.min(20000, budget - 3000)) });
+    await page.waitForTimeout(1200);
+    const ctas = await collectCtas(page);
+    const inputs = await collectInputs(page);
+    const plan = planVisualFlow({
+      intentAnchor: sc.anchor,
+      ctas: ctas.map((c) => ({ text: c.text, selector: c.selector })),
+      inputs,
+      forbidden: FORBIDDEN_ACTIONS,
+      locale,
+    });
+    const bodyBefore = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+    const routeBefore = page.url();
+    let interacted = false;
+    let failedStep = null;
+    let idx = 0;
+    for (const step of plan) {
+      if (over()) { failedStep = "budget"; break; }
+      idx += 1;
+      const shot = `ac-${tag}-step-${String(idx).padStart(2, "0")}.png`;
+      try {
+        if (step.action === "click") {
+          const safety = classifyActionSafety(step.targetText);
+          if (!safety.safe) { failedStep = N.unsafeSkipped(safety.category); break; }
+          await page.getByText(step.targetText, { exact: true }).first().click({ timeout: 6000 });
+          interacted = true;
+          await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {});
+          await page.waitForTimeout(1200);
+        } else if (step.action === "type") {
+          const field = step.placeholder ? page.getByPlaceholder(step.placeholder).first() : page.locator("input").first();
+          await field.fill(step.value, { timeout: 6000 });
+          if (!plan.some((s) => s.action === "click")) await field.press("Enter").catch(() => {});
+          interacted = true;
+          await page.waitForTimeout(1500);
+        }
+        const p = join(shotsDir, shot);
+        await page.screenshot({ path: p, fullPage: false }).then(() => evidenceFiles.push({ name: `screenshots/${shot}`, path: p })).catch(() => {});
+      } catch (err) {
+        failedStep = N.actionFailed(String(err?.message ?? err).slice(0, 100));
+        break;
+      }
+    }
+    const bodyAfter = await page.evaluate(() => document.body?.innerText ?? "").catch(() => bodyBefore);
+    const changed = bodyAfter !== bodyBefore || page.url() !== routeBefore;
+    const crashed = interacted && !changed && consoleErrors.length > 0;
+    if (netFailures.length > 0 || crashed) {
+      return { ...base, status: "broken", note: (netFailures[0] ?? consoleErrors[0] ?? "").slice(0, 200) };
+    }
+    if (failedStep) return { ...base, status: "not_confirmed", note: String(failedStep).slice(0, 200) };
+    if (!interacted) return { ...base, status: "not_confirmed", note: "no_primary_action" };
+    if (!changed) return { ...base, status: "not_confirmed", note: "no_visible_change" };
+    return { ...base, status: "no_problem" };
+  } catch (err) {
+    return { ...base, status: "not_confirmed", note: String(err?.message ?? err).slice(0, 200) };
+  } finally {
+    if (page) await page.close().catch(() => {});
+    plog(`acceptance:${tag} done`);
   }
 }

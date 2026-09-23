@@ -166,6 +166,8 @@ async function runJob(payload) {
     const result = await withTimeout(
       runInspection({
         targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId, onPhase,
+        // SI 티어 A5: 지시서의 수용 기준 시나리오(없으면 undefined → 종전 동작).
+        acceptancePlan: Array.isArray(payload.acceptancePlan) ? payload.acceptancePlan.slice(0, 8) : undefined,
         // ★로그인 뒤 검수 — Worker가 **명시적 동의가 있을 때만** 실어 보낸다.
         //  기본은 꺼짐이다. 남의 앱에 계정을 만드는 일이므로 자동으로 켜지지 않는다.
         signup: signup?.enabled
