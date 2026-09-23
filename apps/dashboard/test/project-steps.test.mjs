@@ -173,7 +173,8 @@ test("nextScreenSlug: idea/spec entries walk to the builder pack and STOP (no co
   // that funnel only exists after the app does (2026-07-10 live walkthrough).
   assert.equal(nextScreenSlug("idea"), "spec");
   assert.equal(nextScreenSlug("spec"), "items");
-  assert.equal(nextScreenSlug("items"), "export");
+  assert.equal(nextScreenSlug("items"), "dev-spec");
+  assert.equal(nextScreenSlug("dev-spec"), "export");
   assert.equal(nextScreenSlug("export"), null); // go build — return path is explicit, not a forced walk
   assert.equal(nextScreenSlug("settings"), null); // repo screens are outside the pre-build walk
   assert.equal(nextScreenSlug("github"), null);
@@ -191,8 +192,9 @@ test("nextScreenSlug: the CODE branch walks repo-connect FIRST (이미 만든 �
   // idea/spec are not on the code walk at all
   assert.equal(nextScreenSlug("idea", "code"), null);
   // other entries walk to the builder pack (pre-build — no repo screens)
-  assert.equal(nextScreenSlug("items", "idea"), "export");
-  assert.equal(nextScreenSlug("items", null), "export");
+  assert.equal(nextScreenSlug("items", "idea"), "dev-spec");
+  assert.equal(nextScreenSlug("items", null), "dev-spec");
+  assert.equal(nextScreenSlug("dev-spec", "idea"), "export");
 });
 
 // ── Fix-first routing (Bae 2026-07-17): 확인 결과 → 고쳐보기 → 빌더팩 ─────────
@@ -203,7 +205,7 @@ test("post-review walk (builder branches): checks → fixes → export", () => {
   assert.equal(nextScreenSlug("checks", "spec"), "fixes");
   assert.equal(nextScreenSlug("fixes", "spec"), "export");
   // pre-review walk unchanged: items → export is still the idea-branch end
-  assert.equal(nextScreenSlug("items", "idea"), "export");
+  assert.equal(nextScreenSlug("items", "idea"), "dev-spec");
   assert.equal(nextScreenSlug("export", "idea"), null);
   // code branch unchanged: its own order still ends at fixes (PR flow, not pack)
   assert.equal(nextScreenSlug("fixes", "code"), null);

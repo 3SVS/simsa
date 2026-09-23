@@ -51,6 +51,15 @@ export type NonDevReport = {
   findings?: NonDevFinding[];
   nextSteps?: string[];
   notes?: string[];
+  /** SI 티어 A5: 지시서 수용 기준별 결과(있을 때만). 개수이지 점수가 아니다. */
+  acceptance?: {
+    total: number;
+    noProblem: number;
+    notConfirmed: number;
+    broken: number;
+    notRun: number;
+    items: Array<{ acceptanceId: string; featureTitle: string; then: string; status: "no_problem" | "not_confirmed" | "broken" | "not_run"; note?: string }>;
+  };
 };
 
 export type VisualCheckDetail = {

@@ -197,7 +197,7 @@ export function AppSidebar() {
   const stepMeta: Record<string, { label: string; items: ReadonlyArray<readonly [string, string]> }> = {
     prepare: {
       label: t.stepsNav.prepare,
-      items: [["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items]],
+      items: [["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items], ["dev-spec", t.nav.devSpec]],
     },
     review: {
       label: t.stepsNav.review,

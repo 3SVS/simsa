@@ -773,6 +773,36 @@ export default function VisualCheckDetailPage() {
             )}
           </section>
 
+          {/* SI 티어 A5 — 지시서 수용 기준별 결과 (있을 때만). 개수이지 점수가 아니다. */}
+          {report?.acceptance && report.acceptance.items.length > 0 && (
+            <section className="space-y-3">
+              <h3 className="section-title">{t.visualChecks.acceptanceTitle}</h3>
+              <p className="text-xs text-gray-500">{t.visualChecks.acceptanceIntro}</p>
+              <ul className="space-y-2">
+                {report.acceptance.items.map((a) => (
+                  <li key={a.acceptanceId} className="card flex flex-wrap items-start gap-x-3 gap-y-1 p-3 text-sm">
+                    <span
+                      className={
+                        "rounded px-1.5 py-0.5 text-xs font-medium " +
+                        (a.status === "broken"
+                          ? "bg-red-50 text-red-700"
+                          : a.status === "no_problem"
+                            ? "bg-green-50 text-green-700"
+                            : "bg-gray-100 text-gray-600")
+                      }
+                    >
+                      {t.visualChecks.acceptanceStatus[a.status]}
+                    </span>
+                    <span className="font-medium text-gray-900">{a.featureTitle}</span>
+                    <span className="basis-full text-xs text-gray-500">
+                      {t.visualChecks.acceptanceExpected}: {a.then}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {/* Train M-1b — "왜 이 판정인가요?" 증거 체인 (펼침 시 lazy 로드) */}
           <EvidenceChainSection projectId={id} runId={runId} userKey={userKey} t={t} />
 
