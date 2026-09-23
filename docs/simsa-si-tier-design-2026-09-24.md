@@ -1,6 +1,6 @@
 # Simsa SI 티어 설계 — "기획을 넣으면 기획대로 작동하는 개발물이 나온다"
 
-**작성 2026-09-24 · 수정 2026-09-24 오후(Bae 결정: 기본 경로 = S Simsa 호스팅, A는 개발자 모드) · 상태: 설계 잠금 대기 (`design lock approved` 전까지 어떤 D도 발효되지 않음)**
+**작성 2026-09-24 · 수정 2026-09-24 오후(Bae 결정: 기본 경로 = S Simsa 호스팅, A는 개발자 모드) · 상태: `design lock approved` 2026-09-24 (Bae) — D-1~D-9·D-11·D-12·D-15~D-17 LOCKED 발효. Train A·N 착수 승인.**
 **티어 판정: T2-P** (프로덕션 데이터·과금 예정·멀티세션 위임 · 자기주도 제품 → 결정 잠금 + 스테이지 트레인 + literal 게이트)
 
 > Bae 지시(2026-09-24): "SI 업체에 개발을 맡긴 것처럼 기획에 맞게 작동하는 개발을 내놓을 수 있는
@@ -287,9 +287,10 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 
 | 게이트 | 문구 | 발효 일시 | 범위 |
 |---|---|---|---|
-| 설계 잠금 | `design lock approved` | — | D-1~D-9·D-11 LOCKED |
-| Train A 착수 | `train A start approved` | — | A1~A6 코드 작성만 |
-| Train B 착수 | `train B start approved` | — | B1~B8 코드 작성만 |
+| 설계 잠금 | `design lock approved` | 2026-09-24 (Bae) | D-1~D-9·D-11·D-12·D-15~D-17 LOCKED |
+| Train A 착수 | `train A start approved` | 2026-09-24 (Bae) | A1~A6 코드 작성만 |
+| Train N 착수 | `train N start approved` | 2026-09-24 (Bae) | N1~N7 코드 작성만 |
+| Train B 착수 | `train B start approved` | — | B1~B11 코드 작성만 |
 | Train C 착수 | `train C start approved` | — | C1~C4 코드 작성만 |
 | 머지 | `PR #N merge approved.` | — | 해당 PR |
 | 배포 | `deploy central-plane approved.` / `deploy dashboard approved.` | — | 1회 |
