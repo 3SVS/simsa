@@ -1,6 +1,6 @@
 # Simsa SI 티어 설계 — "기획을 넣으면 기획대로 작동하는 개발물이 나온다"
 
-**작성 2026-09-24 · 상태: 설계 잠금 대기 (`design lock approved` 전까지 어떤 D도 발효되지 않음)**
+**작성 2026-09-24 · 수정 2026-09-24 오후(Bae 결정: 기본 경로 = S Simsa 호스팅, A는 개발자 모드) · 상태: 설계 잠금 대기 (`design lock approved` 전까지 어떤 D도 발효되지 않음)**
 **티어 판정: T2-P** (프로덕션 데이터·과금 예정·멀티세션 위임 · 자기주도 제품 → 결정 잠금 + 스테이지 트레인 + literal 게이트)
 
 > Bae 지시(2026-09-24): "SI 업체에 개발을 맡긴 것처럼 기획에 맞게 작동하는 개발을 내놓을 수 있는
@@ -51,6 +51,29 @@ T0 기계검증 가능한 수용 기준  ──없으면──▶ T1 에이전�
 T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵심 흐름 하나"에 머무름 (지금 상태)
 ```
 
+### 0.4 초보자 기본 경로 — 유저가 만들 계정 0개, 클릭 3번 (Bae 2026-09-24 "초보자 대상인 거 알잖아")
+
+| 방식 | 유저 계정 | 클릭 | 우리가 지는 것 |
+|---|---|---|---|
+| A. 유저 인프라(GitHub·Vercel·Supabase 딥링크) — **개발자 모드로 유지** | 3 | ~15 | 없음. 초보자 이탈 |
+| M. OAuth 커넥터 | 2 | ~6 | 파트너 OAuth·토큰 보관 |
+| **S. Simsa 호스팅(기본)** — 코드는 Simsa 조직, 실행은 우리 Cloudflare, DB는 프로젝트당 D1 | **0** | **3** | 호스팅 비용·악용 대응·가동 책임. "내 계정으로 가져가기"로 상쇄 |
+
+초보자 여정(S): 기획 붙여넣기 → "이렇게 이해했어요, 맞나요?" → **만들기** → 진행 상태 → `내앱.simsa.app`에서 직접 눌러봄 →
+"여기 이상해요" 한 줄 → 수리 → 재확인 → (원하면) 내 GitHub로 가져가기. 지시서(ERD·API)는 접힌 "개발자용"에만 보인다.
+
+### 0.5 세 갈래 커버리지 — 아이디어 · 기획서 · 이미 만든 것 (Bae 질문 "그 3가지가 다 커버 가능한가")
+
+| 갈래 | T0 지시서 | T1 빌드 | T2 검수·인도 | 유저 계정 |
+|---|---|---|---|---|
+| **아이디어** | 인터뷰 → DevSpec | **S** (Simsa 호스팅) | S 배포 주소를 AC대로 검수·수리 | 0 |
+| **기획서 붙여넣기** | 변환 → DevSpec | **S** | 위와 동일 | 0 |
+| **이미 만든 앱 — 주소만**(Lovable·Bolt 등, 코드 없음) | 주소에서 **역추론 DevSpec**(AF 트레인의 의도 추론을 스키마로 승격) | 재빌드 없음. 선택지 **"Simsa에서 새로 만들기"**(역추론 DevSpec으로 S 빌드 — 기존 데이터 승계 안 됨을 명시) | 라이브 URL 검수(현행) + 그들 도구용 수정 지시(현행 fix brief) | 0 |
+| **이미 만든 앱 — GitHub 연결**(private 포함) | 저장소+주소에서 역추론 DevSpec | **A 모드**: 그들 저장소에 수리 PR(현행 워커) — 단 **D-4 빌드 검증을 수리 워커에도 적용**(지금은 문법 검사뿐). 스택이 S 템플릿과 호환이면 **"Simsa로 가져오기"** 제공(D-18) | 배포 URL 검수 + 수리 PR 라운드트립 | GitHub 1(이미 있음) |
+
+- 세 갈래 모두 **T0가 공통 척도**다. "이미 만든 것" 갈래는 T0를 *앞*이 아니라 *뒤*에서(역추론) 얻고, 검수는 그 AC를 기준으로 한다.
+- 정직성: 역추론 DevSpec은 `source: inferred`로 표시하고 must AC는 유저가 "맞나요?"에서 확인한 것만 인정한다.
+
 ---
 
 ## 1. 결정 (D-번호)
@@ -90,15 +113,20 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 - 워커: `packages/agent-worker` 확장 — `create_file`·`run_command`(allowlist: pnpm/node/git/ls/cat) 툴 추가. 기존 `submit_rewrite`·`submit_edits`·비밀 차단(`denied_file`·`introduces_secret`) 유지.
 - `[PILOT]` 상한: WBS당 반복 4회·잡 전체 45분·스냅샷 200KB 유지. 파일럿 후 고정.
 
-### D-5 [LOCKED] 저장소는 유저 계정에, 스택은 파일럿 동안 고정
-- GitHub App으로 **유저 계정/조직에 저장소 생성**(명시 동의 1회·저장소 이름 확인). Simsa 조직이 유저 코드를 소유하지 않는다.
-- T0는 스택 불가지(PRD 보편성 유지). **T1 파일럿 스택은 Next.js + Supabase + Vercel 하나로 고정**(Rule 4 패턴, 템플릿 저장소 1개). 다른 스택은 T0까지만 제공하고 "T1 준비 중"으로 표기.
-- `[PILOT]` 템플릿 내용(auth·RLS 템플릿·env 스캐폴드)은 파일럿 전 조정 가능.
+### D-5 [LOCKED] 코드는 Simsa 조직 private 저장소에, 소유권은 유저 것 — 스택은 파일럿 동안 Cloudflare 네이티브 하나
+*(2026-09-24 오후 수정 — 종전 "유저 계정에 생성 + Next.js/Supabase"는 A 모드로 강등)*
+- **S 모드(기본):** 프로젝트당 Simsa GitHub 조직에 private 저장소 자동 생성(유저 클릭 0). 유저는 언제든 **zip 다운로드**·**"내 GitHub로 가져가기"**(저장소 소유권 이전 — 그때 처음 GitHub 계정 필요)가 가능하고, 약관에 "코드는 유저 소유, Simsa는 보관·실행 대행"을 명시. 저장소 이름은 `simsa-hosted/<projectId>`.
+- **A 모드(개발자):** 유저 저장소에서 작업(D-15 경로). 새로 만들지 않고 **이미 있는** 저장소만 연결.
+- T0는 스택 불가지(PRD 보편성 유지). **S 템플릿은 Cloudflare 네이티브 하나로 고정: Hono Worker + React/Vite + D1**(우리가 호스팅하는 스택과 일치). Next.js + Supabase + Vercel은 "가져가기" 시 T0 지시서의 이전 안내에만 등장.
+- `[PILOT]` 템플릿 내용(라우팅·D1 마이그레이션·간단 세션)은 파일럿 전 조정 가능. **앱 내 로그인·결제·이메일 발송은 파일럿 범위 밖** — 지시서에 "이번 버전 제외"로 정직하게 표기(넣는 순간 계정 문제가 돌아온다).
 
-### D-6 [LOCKED] Simsa는 배포 토큰을 갖지 않는다 — 프리뷰는 자기 컨테이너에서 띄운다
-- 기존 결정(prep 옵션 A, 2026-07-06) 유지·**코드로 강제**: 환경변수 allowlist에 Vercel/Netlify/CF 배포 토큰 키 이름을 두지 않고, `run_command` allowlist에서 `vercel`·`netlify`·`wrangler deploy` 차단, 테스트로 고정.
-- T2 검수 대상 = **SimsaBuilder 컨테이너가 기동한 프리뷰**(Worker 경유 임시 URL, 잡 종료 시 소멸). Supabase는 유저의 prep-A 키(브라우저 주입) 또는 Supabase 로컬 에뮬레이터 `[OPEN → D-12]`.
-- 프로덕션 배포는 유저 몫(기존 MCP 안내 경로 유지). T2 영수증에 "프로덕션에는 아직 없음" 명시.
+### D-6 [LOCKED] 유저의 배포 토큰은 갖지 않는다 — 실행은 우리 Cloudflare 계정(Workers for Platforms)에서
+*(2026-09-24 오후 수정 — 종전 결정의 **의도**는 "유저 자격증명 미보관"이지 "유저 인프라에서 실행"이 아니었다)*
+- **S 모드:** 빌드 산출물을 **Cloudflare Workers for Platforms**(dispatch namespace, 테넌트별 격리)에 우리 계정 토큰으로 배포. 주소 `<slug>.simsa.app`(와일드카드 도메인, `[PILOT]` 도메인명). 이 토큰은 central-plane 배포와 같은 **운영 자격**이며 유저 자격증명이 아니다. 저장은 GitHub Actions/Worker secret만(로컬 wrangler 금지 — 기존 규율).
+- **유저 토큰 금지는 코드로 강제:** 환경변수 allowlist에 Vercel/Netlify/유저 CF 토큰 키 이름 없음, 워커 `run_command` allowlist에서 `vercel`·`netlify`·`wrangler deploy` 차단, 테스트로 고정.
+- T2 검수 대상 = **S 배포 주소 자체**(프리뷰=프로덕션 초기값). 유저가 "가져가기"로 옮기기 전까지 그 주소가 실서비스다. 영수증에 "Simsa 호스팅 중 · 언제든 가져갈 수 있음" 명시.
+- **A 모드:** 종전대로 유저가 자기 배포(딥링크·MCP 안내), Simsa는 URL만 검수.
+- **호스팅 사업자 의무(파일럿 전 필수, Train B 스테이지):** 프로젝트별 킬스위치·신고 링크·요청 상한·금지 콘텐츠 규칙(피싱·스팸·성인)·자동 정지 로그. 없으면 `pilot start approved` 불가.
 
 ### D-7 [LOCKED] 달러 예산은 잡 시작 전에 결정되고 UI에 보인다
 - `build_jobs.budget_usd`·`spent_usd`(벤더 usage 로그 합산). 상한 도달 시 **현재 WBS 단계에서 정지·push·상태 `failed(budget)`**. 조용한 초과 없음.
@@ -118,9 +146,9 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 ### D-11 [LOCKED] EN 우선 동등성
 - DevSpec 렌더·잡 상태·영수증은 **EN/KO 동시 출하**(YC 데모는 영어). 한쪽만 되는 화면은 배포 금지(기존 E 트레인 규율).
 
-### D-12 [OPEN] 프리뷰의 DB
-- 후보 A: 유저 prep-A Supabase 키를 컨테이너에 잡 수명 동안만 주입(서버 무저장 원칙과 충돌 — 메모리 내만 허용 시 가능). 후보 B: 컨테이너 안 Postgres + supabase 로컬 스택(무겁다). 후보 C: T2 파일럿은 DB 없는 템플릿부터.
-- **재검토 트리거:** Train B B5(빌드 게이트) 통과 시점. 권고: C로 시작 → A.
+### D-12 [LOCKED] S 모드의 DB = 프로젝트당 Cloudflare D1 하나 (2026-09-24 오후 해소)
+- 우리 계정 API로 생성·바인딩, 마이그레이션은 빌드 잡이 적용. 유저 키 0개. "가져가기" 시 D1 export(SQL 덤프)를 zip에 동봉.
+- A 모드는 종전 후보(유저 Supabase 키 잡 수명 메모리 전달)를 D-16에 둔다.
 
 ### D-13 [OPEN] 판정 모델 자체화 착수 임계
 - 트리거: 4중항 코퍼스 ≥ 5,000건 **또는** 검수 벤더 비용이 월 $2K 초과. 그 전엔 착수 금지.
@@ -129,6 +157,7 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 - 권고: **자체 agent-worker 루프**(이미 tool_use·벤더 폴백·비밀 차단 보유, CLI는 구독 인증·헤드리스 제약). 재검토 트리거: B4에서 WBS 3개 이상 연속 실패.
 
 ### D-15 [LOCKED] Private 저장소 — 지금도 되고, 계속 GitHub App 설치 토큰으로 간다 (Bae 질문 2026-09-24)
+*(적용 범위: **A 모드와 "이미 만든 앱 — GitHub" 갈래**. S 모드는 유저 GitHub이 아예 필요 없으므로 해당 없음. 아래 "새 저장소 생성 딥링크"는 A 모드 옵션으로만 남긴다.)*
 **현행 사실(코드):** 로그인 OAuth는 `public_repo` 범위라 **private 저장소를 보지 못한다**(`github-oauth.ts:170`). private는
 **GitHub App 설치 토큰으로 폴백**해 읽기·PR·푸시를 한다(`github-app-access.ts:144` `resolveRepoAccessToken`,
 OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `simsa-repair[bot]` 커밋으로 라이브 실증됨.
@@ -141,7 +170,8 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
   3) 그 뒤 모든 쓰기는 설치 토큰.
 - `[PILOT]` 후속: GitHub App **user-to-server 토큰 + Administration:write**로 1클릭 생성. 기존 설치자 전원에 권한 재승인 요청이 가므로 파일럿 뒤에 판단.
 
-### D-16 [LOCKED] DB·배포 권한 모델 — 배포 토큰 0, DB는 잡 수명 메모리 전달, OAuth 커넥터는 Supabase만 후순위
+### D-16 [LOCKED] A 모드(개발자)의 DB·배포 권한 모델 — 유저 토큰 0, DB 키는 잡 수명 메모리 전달, OAuth 커넥터는 Supabase만 후순위
+*(적용 범위: A 모드만. S 모드는 D-5·D-6·D-12로 유저 계정 0개.)*
 | 대상 | 파일럿(지금) | 후속 | Simsa가 갖는 것 |
 |---|---|---|---|
 | **Vercel(배포)** | 유저가 **자기 Vercel에 Git 연동 1회**(Simsa가 `vercel.com/new/clone?repository-url=…` 딥링크 제공). 이후 push마다 Vercel이 배포하고, Simsa는 **유저가 붙여넣은 배포 URL**을 검수(현행 `/p/{id}/connect`) | GitHub `deployment_status` 이벤트 구독으로 URL 자동 인지(코드 없음 — 현재 `source-evidence.ts:114`는 호스트명으로 vercel 여부만 판별) | **토큰 없음** (D-6 유지) |
@@ -150,6 +180,15 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | **Simsa 프리뷰** | 컨테이너 내부 기동(D-6). DB는 위 Supabase 키 주입 또는 D-12 C(DB 없는 템플릿) | — | — |
 - **prep-A 불변식 정정:** "서버 무저장"은 유지(영속 저장 없음), "브라우저 주입"은 **"잡 수명 동안 메모리 전달"**로 확장한다. 위반 감지 테스트: 잡 종료 후 D1·R2·로그에 키 문자열 0건.
 - 유저가 Supabase를 안 붙이면 T1은 **DB 없는 범위까지만** 만들고 영수증에 "DB 필요 기능 N개 미구현(키 미연결)"로 정직하게 표기.
+
+### D-17 [LOCKED] 기본 경로는 S, A는 "개발자 모드" 토글 — 초보자에게 계정을 요구하는 화면은 기본 흐름에 없다
+- 아이디어·기획서 갈래의 "만들기"는 **항상 S**. 설정 화면의 "개발자 모드"를 켠 유저에게만 A(내 GitHub·내 배포)가 보인다.
+- UI 규칙: 기본 흐름 어디에도 GitHub·Vercel·Supabase 단어가 나오지 않는다. 지시서 상세(ERD·API·WBS)는 "개발자용 보기"에 접힌다. 초보자 화면은 **"무엇을 만들지 · 화면 N개 · 저장하는 것 N가지 · 이번엔 안 만드는 것"** 4줄.
+- 여정 감사에 **"계정 요구 화면 0"** 검사를 추가한다(기본 흐름에서 외부 계정 CTA가 보이면 P0).
+
+### D-18 [PILOT] "이미 만든 앱"의 S 가져오기 — 호환 판정은 결정론
+- 연결된 저장소를 **결정론적 스택 감지**(PRD §6.1의 기존 감지기 확장: `wrangler.toml`/Vite/정적 HTML → 호환, Next.js·서버 프레임워크·네이티브 → 비호환)로 분류. 호환이면 "Simsa로 가져오기"(Simsa 조직에 fork → S 배포), 비호환이면 A 모드 수리 PR만 제공하고 이유를 한 줄로 표시.
+- `[PILOT]` 호환 목록은 파일럿에서 실측 후 고정. 재검토 트리거: 가져오기 요청의 50% 이상이 비호환으로 거절될 때(Next.js on Workers 지원 검토).
 
 ---
 
@@ -167,17 +206,20 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | A5 | 검수 계획 연결: 시각 검수가 `testPlan[]`을 소스로 사용(핵심 흐름 하나 → AC 전부) | 픽스처 앱에서 AC별 판정이 나옴 |
 | A6 | 배포 + 라이브 실증(한글 기획 실입력·EN 토글·장비 재측정) | 세 칸 보고: 라이브확인/테스트만/미측정 |
 
-### Train B — T1 빌드 (A1·A2 후 착수, B1은 A와 병렬 가능)
+### Train B — T1 빌드 + S 호스팅 (A1·A2 후 착수, B1·B2는 A와 병렬 가능)
 | # | 스테이지 | 완료 조건 |
 |---|---|---|
-| B1 | `SimsaBuilder` 컨테이너 클래스·이미지(egress·pnpm·playwright)·health | `containers instances`로 기동 확인, 30초 내 `pnpm -v` |
-| B2 | GitHub App 저장소 생성 동의 흐름 + `POST /user/repos`(또는 org) + 실패 시 롤백 | 테스트 계정에서 생성·삭제 라운드트립 |
-| B3 | 템플릿 저장소(Next+Supabase) + 스캐폴드 커밋 | 스캐폴드만으로 `pnpm build` green |
-| B4 | agent-worker 확장: `create_file`·`run_command` allowlist·배포 명령 차단 테스트(D-6) | 차단 테스트가 옛 코드에서 실패함을 확인 |
-| B5 | 빌드·테스트 게이트 + `build: unverified` 트레일러 + 잡 상태 머신·D1 `build_jobs` | 고의로 깨진 코드가 `failed(building)`으로 끝남 |
+| B1 | `SimsaBuilder` 컨테이너 클래스·이미지(egress·pnpm·wrangler·playwright)·health | `containers instances`로 기동 확인, 30초 내 `pnpm -v` |
+| B2 | **호스팅 기반**: Workers for Platforms dispatch namespace + 와일드카드 도메인 + 프로젝트당 D1 생성 API + 운영 토큰(Actions secret) | 빈 템플릿이 `<slug>.<host>`에서 200 + D1 read/write |
+| B3 | 템플릿 저장소(Hono + React/Vite + D1) + Simsa 조직 private 저장소 자동 생성 + 스캐폴드 커밋 | 스캐폴드만으로 `pnpm build` green·배포 green |
+| B4 | agent-worker 확장: `create_file`·`run_command` allowlist·**유저 배포 명령 차단 테스트(D-6)**·비밀 차단 유지 | 차단 테스트가 옛 코드에서 실패함을 확인 |
+| B5 | 빌드·테스트 게이트 + `build: unverified` 트레일러 + 잡 상태 머신·D1 `build_jobs` + **S 배포 단계** | 고의로 깨진 코드가 `failed(building)`으로 끝나고 배포되지 않음 |
 | B6 | 예산 계좌(D-7): 벤더 usage 합산·상한 정지·수리 워커 이관·일일 빌드 상한 | 상한 $0.5로 돌리면 WBS 중간에 정지 |
-| B7 | 대시보드 잡 진행 화면(EN/KO) + 다음 걸음 배선 | journey-audit 신규 여정 J6 추가, P0=P1=0 |
-| B8 | 파일럿: 실기획 3건 T0→T1 완주 | 3건 중 빌드 green 수·실패 사유 표, 정답지 선기록 |
+| B7 | **호스팅 사업자 의무(D-6)**: 프로젝트 킬스위치·신고 링크·요청 상한·금지 콘텐츠 규칙·정지 로그 | 관리자 1클릭 정지 → 주소 즉시 410 |
+| B8 | 대시보드: "만들기" 버튼(S 기본)·잡 진행 화면·내 앱 주소 카드·zip 다운로드·개발자 모드 토글(D-17) EN/KO | journey-audit 신규 여정 J6 + "계정 요구 화면 0" 검사, P0=P1=0 |
+| B9 | **"내 GitHub로 가져가기"**(저장소 이전 + D1 SQL 덤프 동봉) + T0 지시서에 이전 안내 | 테스트 계정으로 이전 라운드트립 |
+| B10 | 파일럿: 실기획 3건(한글 리얼 입력) T0→T1→S 배포 완주 | 3건 중 배포 green 수·실패 사유 표, 정답지 선기록 |
+| B11 | "이미 만든 앱" 갈래: 수리 워커에 D-4 빌드 검증 적용 + D-18 호환 판정·가져오기 | 비호환 저장소가 이유와 함께 A 모드로 안내됨 |
 
 ### Train C — T2 인도 (B5 후)
 | # | 스테이지 | 완료 조건 |
@@ -198,7 +240,7 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | Y4 | 창업자 풀타임·법인·SF 상주 답변 | **Bae 결정** |
 
 ### 일정 (추정, 단독 에이전트 기준)
-- Train A: ~1주 → 10/1 · Train B: ~2.5주 → 10/20 · Train C: ~1.5주 → 10/31 · Y1~Y3: 10/20~11/1
+- Train A: ~1주 → 10/1 · Train B: ~3주(호스팅 기반 추가) → 10/22 · Train C: ~1.5주 → 11/2 · Y는 보류
 - **speedrun 우선 창구 10/12~11/1 · YC 마감 11/2 20:00 PT.** T0+T1 파일럿(B8)까지가 데모 최소선. C는 마감 뒤 완성돼도 지원서엔 "다음 4주 계획"으로 쓴다.
 
 ---
@@ -222,8 +264,8 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 
 ## 5. Bae 결정 필요 (세션당 ≤3)
 
-1. **`design lock approved`** — D-1~D-9·D-11·D-15·D-16 LOCKED 발효. 구현 착수 아님.
-2. **T1 파일럿 스택 고정 확인** — Next.js + Supabase (D-5). 다른 스택이면 지금 말씀해 주십시오.
+1. **`design lock approved`** — D-1~D-9·D-11·D-12·D-15~D-17 LOCKED 발효(S 기본·A 개발자 모드 반영본). 구현 착수 아님.
+2. **호스팅 도메인**: `*.simsa.app`(구매 필요 여부 확인) 또는 `*.trysimsa.com` 하위. 파일럿은 `*.trysimsa.com`으로 시작 가능 — 이견 없으시면 그렇게 갑니다.
 3. **Cloudflare Email Routing 연결**(Bae 액션 3, 이월) — 로그인 뒤 검수의 스위치. 대시보드 → 도메인 `trysimsa.com` → Email → Email Routing → Catch-all → Action "Send to a Worker" → `conclave-ai` 선택 → 저장. 권장 서브도메인 `probe.trysimsa.com`(Resend 발송과 분리). 연결되면 검수 화면의 "확인 메일을 받을 준비가 되어 있지 않습니다" 문구가 사라지는지로 확인.
 
 ~~지원서용 답(풀타임·법인·SF 상주)~~ — Train Y 보류로 이번엔 묻지 않음.
