@@ -190,6 +190,24 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 - 연결된 저장소를 **결정론적 스택 감지**(PRD §6.1의 기존 감지기 확장: `wrangler.toml`/Vite/정적 HTML → 호환, Next.js·서버 프레임워크·네이티브 → 비호환)로 분류. 호환이면 "Simsa로 가져오기"(Simsa 조직에 fork → S 배포), 비호환이면 A 모드 수리 PR만 제공하고 이유를 한 줄로 표시.
 - `[PILOT]` 호환 목록은 파일럿에서 실측 후 고정. 재검토 트리거: 가져오기 요청의 50% 이상이 비호환으로 거절될 때(Next.js on Workers 지원 검토).
 
+### D-19 [LOCKED] 포지셔닝 = "독립 심사관 + 지시서 표준". T1 빌드는 초보자용 수단이지 정체성이 아니다
+*(2026-09-24 시장 조사 `docs/simsa-market-research-2026-09-24.md` 반영)*
+- 실브라우저 검증·계정 0 호스팅은 2026년 표준(Replit Agent 3·Lovable Cloud·Base44 Testing Agent). 차별은 **형식 수용 기준(FR↔AC↔화면↔테스트)에 대조해 판정하고 영수증을 내는 것**뿐이며, 빌더는 구조적으로 자기 산출물을 심사하지 못한다.
+- 따라서 **북극성 지표 = 영수증 발급 수**(빌드 수 아님). 랜딩·지원서·영수증 카피는 "만들어 주고"보다 "기획대로 됐는지 **독립적으로** 확인해 준다"를 앞세운다. T1(S 모드 빌드)은 "검수받을 대상이 없는 초보자에게 대상을 만들어 주는 수단"으로 설명한다.
+- Train B 착수 요청 시 이 문장을 인용한다. B의 우선순위는 **T0·T2 품질 → S 빌드**.
+
+### D-20 [LOCKED] 로컬 수용 기준 팩 — KR 먼저, 같은 형식으로 JP·TH·VN·ID
+- 글로벌 빌더의 현지화는 UI 번역 수준이고 **실패 지점은 로컬**이다: 결제(토스·PromptPay·GCash·PIX)·본인확인·법정 표기(통신판매업·개인정보처리방침)·문자 체계(한글 IME·태국어·일본어)·모바일 웹 비중.
+- `DevSpec.nonFunctional`과 `testPlan`에 **로컬 팩**(`locale-pack: kr`)이 결정론으로 주입할 수 있는 AC 템플릿을 둔다. 팩 = 데이터 파일(코드 아님) + 감지 규칙(예: 결제 언급 → 토스 AC 추가).
+- 순서: KR 팩(파일럿) → 실측으로 항목 확정 → JP → SEA(3SVS 발판). **한국 증거 전 확장 금지.**
+- 투자자 문장: "영어가 모국어가 아닌 세계 80%를 위한 AI 결과물 심사 레이어."
+
+### D-21 [LOCKED] 데이터는 "판다"가 아니라 "벤치마크 → 평가 → 라이선스" 순서. 동의·보상 먼저
+- 팔리는 것은 로그가 아니라 **검증된 4중항**(지시서·빌드 증거·검수 판정·수정)이다(D-8). 랩이 못 만드는 것은 실제 비개발자 의도+실패+검증된 해결+사람 수용 판정이 한 줄로 묶인 데이터.
+- 순서 고정: ① **공개 벤치마크**("한국 비개발자 기획 N건 × 빌더 5개 → AC 통과율") ② **평가 서비스**(벤더 신모델을 우리 코퍼스로 돌린 리포트) ③ **데이터 라이선스**(동의된 4중항, 익명화). ③은 규모가 된 뒤 마지막.
+- 전제: 랜딩 약속("Your work stays in your browser")과 충돌하지 않게 **opt-in 유지·익명 ID·보상(크레딧)·개인정보 마스킹**을 D-8 기록 경로에 코드로 둔다. 몰래 쌓지 않는다.
+- 기업가치 계단(추정, 조사 문서 §5·§7): 월 500~1,000 완주 + 벤치마크 1회 → 시드 $5~15M / 4중항 1만 건 + 평가 계약 2~3건 → 시리즈 A 서사.
+
 ---
 
 ## 2. 스테이지 트레인
@@ -290,6 +308,8 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | 설계 잠금 | `design lock approved` | 2026-09-24 (Bae) | D-1~D-9·D-11·D-12·D-15~D-17 LOCKED |
 | Train A 착수 | `train A start approved` | 2026-09-24 (Bae) | A1~A6 코드 작성만 |
 | Train N 착수 | `train N start approved` | 2026-09-24 (Bae) | N1~N7 코드 작성만 |
+| A1~A5 코드 완료 | — | 2026-09-24 | PR #521(central-plane A1~A5) · #524(dashboard A4+A5) — 머지·배포·마이그레이션은 아래 문구 대기 |
+| N1~N3·N2 PR | — | 2026-09-24 | #522 · #523 (Train N 에이전트) |
 | Train B 착수 | `train B start approved` | — | B1~B11 코드 작성만 |
 | Train C 착수 | `train C start approved` | — | C1~C4 코드 작성만 |
 | 머지 | `PR #N merge approved.` | — | 해당 PR |
@@ -336,3 +356,13 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 
 ### 유지할 것 (초보자 기준에 이미 맞음)
 - 첫 화면 문 3개 + 한 줄 설명 · "추천대로" 버튼 · 리포트의 무엇/왜/어떻게 3줄과 개발자용 접기 · 한국어 오류 번역 · 삭제 모달 ack 게이트 · "다음 →" 안내 바(레이아웃 단일 마운트).
+
+---
+
+## 9. 진행 로그
+
+### 2026-09-24 (설계 잠금 당일)
+- **Train A 코드 완료 (A1~A5)** — PR #521 central-plane: `dev-spec.ts`(Zod+무결성 13규칙) · `generate-dev-spec.ts`(3패스, 예시 폴백 없음) · `render-dev-spec.ts`(md 10종, EN/KO 동일) · `acceptance-plan.ts` + inspector 시나리오 실행(RUNNER_REV a5-acceptance-1) · `migrations/0067`. PR #524 dashboard: 개발 지시서 화면(초보자 4줄+개발자용) · 사이드바 · 다음 걸음 · 검수 상세 AC 섹션. 테스트: central 2263/2263 · dashboard 710/710. **라이브 0건 — A6는 머지·배포·0067 적용 뒤.**
+- **Train N** — 에이전트 위임, #522(N1+N3 개발자 질문·용어 제거 + 개발자 모드), #523(N2 로그인 순서) 오픈. N4~N7 진행 중.
+- **시장 조사** — `docs/simsa-market-research-2026-09-24.md`. 결론: 차별은 형식 AC 판정+영수증뿐 → D-19.
+- **대기 문구(순서):** `PR #520 merge approved.` → `PR #521 merge approved.` → `migration 0067 apply approved.` → `deploy central-plane approved.` → `PR #524 merge approved.` → `deploy dashboard approved.` → A6 라이브 실측(한글 리얼 기획 3건 + journey-audit).
