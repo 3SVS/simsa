@@ -28,6 +28,7 @@
  * retry right away. The stuck sweep (stuck-cleanup.ts) remains a backstop for
  * runs that dispatched but died silently.
  */
+import { acceptancePlanFromDevSpec, type AcceptanceScenario } from "../acceptance-plan.js";
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
@@ -100,6 +101,8 @@ export async function dispatchInspection(
     publicBaseUrl: string;
     /** 로그인 뒤 검수 동의(기본 false). 남의 앱에 계정을 만드는 일이라 자동으로 켜지지 않는다. */
     withSignup?: boolean;
+    /** SI 티어 A5: 지시서의 수용 기준 시나리오(없으면 종전 — 핵심 흐름 하나). */
+    acceptancePlan?: AcceptanceScenario[];
   },
 ): Promise<{ dispatched: boolean; note?: string }> {
   if (!env.INSPECTOR) {
@@ -123,6 +126,8 @@ export async function dispatchInspection(
     callbackUrl: `${base}/internal/visual-check-done`,
     runningUrl: `${base}/internal/visual-check-running`,
     callbackToken: env.INTERNAL_CALLBACK_TOKEN,
+    // SI 티어 A5: 수용 기준 시나리오 — 컨테이너가 핵심 흐름 뒤에 예산 안에서 돌린다.
+    ...(args.acceptancePlan && args.acceptancePlan.length > 0 ? { acceptancePlan: args.acceptancePlan } : {}),
     // ★로그인 뒤 검수 (2026-08-26) — **동의가 있고 메일 수신이 준비됐을 때만.**
     //
     //  남의 앱에 일회용 계정을 만드는 일이라 자동으로 켜지지 않는다. 그리고 메일
@@ -254,12 +259,15 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // 일이므로 기본값이 켜짐이 되어서는 안 된다(서버가 기본을 강제한다 — UI가
     // 체크박스를 빠뜨려도 켜지지 않는다).
     const withSignup = (body as Record<string, unknown>)["withSignup"] === true;
+    // SI 티어 A5: 지시서가 있으면 그 테스트 계획이 검수의 자(尺)가 된다.
+    const acceptancePlan = acceptancePlanFromDevSpec(project.devSpec);
     const dispatch = await dispatchInspection(c.env, {
       runId: run.id,
       projectId,
       userKey,
       targetUrl,
       intent,
+      acceptancePlan,
       locale,
       publicBaseUrl,
       ...(withSignup ? { withSignup: true } : {}),

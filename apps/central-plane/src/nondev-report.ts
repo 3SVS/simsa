@@ -50,6 +50,22 @@ export interface VisualCheckInput {
   decision: string;
   /** Optional per-step flow outcomes (label + whether the step visibly succeeded). */
   steps?: Array<{ label: string; ok: boolean; note?: string }>;
+  /**
+   * SI 티어 A5: 지시서의 수용 기준(AC)별 시나리오 결과. 없으면 종전(핵심 흐름 하나).
+   * 어휘는 판정 사다리와 같은 입장 — `broken`은 실패 신호(네트워크·크래시)가 있을 때만,
+   * 단계가 끝까지 못 간 것은 `not_confirmed`(확인 못 함)이지 고장이 아니다.
+   */
+  acceptanceResults?: AcceptanceResult[];
+}
+
+/** 수용 기준 하나의 시나리오 결과(컨테이너가 만들고 리포트가 그대로 싣는다). */
+export interface AcceptanceResult {
+  acceptanceId: string;
+  featureTitle: string;
+  then: string;
+  status: "no_problem" | "not_confirmed" | "broken" | "not_run";
+  /** 개발자용 원문(실패 단계·네트워크 원문). 사람 문장 아님. */
+  note?: string;
 }
 
 /** One finding, written for a non-developer. `evidence` is the raw developer-only detail. */
@@ -76,6 +92,15 @@ export interface NonDevReport {
   findings: NonDevFinding[];
   nextSteps: string[];
   notes: string[];
+  /** SI 티어 A5: 수용 기준별 결과 요약(있을 때만). 개수이지 점수가 아니다. */
+  acceptance?: {
+    total: number;
+    noProblem: number;
+    notConfirmed: number;
+    broken: number;
+    notRun: number;
+    items: AcceptanceResult[];
+  };
 }
 
 // ─── Decision labels ────────────────────────────────────────────────────────────
@@ -182,6 +207,8 @@ const FIND: Record<ReportLocale, {
   noiseInfo: WWH;
   noPrimary: WWH;
   stepFailed: (label: string, note?: string) => WWH;
+  acBroken: (featureTitle: string, then: string) => WWH;
+  acNotConfirmed: (featureTitle: string, then: string) => WWH;
 }> = {
   ko: {
     dns: {
@@ -224,6 +251,16 @@ const FIND: Record<ReportLocale, {
       why: note ? `이유: ${note}` : "그 단계에서 기대한 다음 화면/결과가 나타나지 않았어요.",
       how: "그 단계에서 무엇이 나와야 하는지 정하고, 눌렀을 때 그 결과가 실제로 뜨는지 확인하세요.",
     }),
+    acBroken: (featureTitle, then) => ({
+      what: `'${featureTitle}'이(가) 지시서대로 작동하지 않았어요.`,
+      why: `기대한 결과("${then}")를 확인하는 동안 앱이 실패 신호(데이터 못 가져옴·오류)를 냈어요.`,
+      how: "이 항목의 흐름을 직접 따라가 보고, 실패한 요청이나 오류부터 고친 뒤 다시 검수하세요.",
+    }),
+    acNotConfirmed: (featureTitle, then) => ({
+      what: `'${featureTitle}'은(는) 이번 검수에서 끝까지 확인하지 못했어요.`,
+      why: `기대한 결과("${then}")까지 가는 단계를 Simsa가 끝까지 밟지 못했어요. 고장이라는 뜻은 아니에요.`,
+      how: "이 항목은 직접 눈으로 확인하시거나, 시작 버튼·입력창을 더 분명히 만든 뒤 다시 검수하세요.",
+    }),
   },
   en: {
     dns: {
@@ -265,6 +302,16 @@ const FIND: Record<ReportLocale, {
       what: `The '${label}' step didn't complete.`,
       why: note ? `Reason: ${note}` : "The expected next screen/result didn't appear at that step.",
       how: "Decide what should appear at that step, and confirm the result actually shows when pressed.",
+    }),
+    acBroken: (featureTitle, then) => ({
+      what: `'${featureTitle}' did not work as the spec describes.`,
+      why: `While checking the expected result ("${then}") the app produced failure signals (data not loading or errors).`,
+      how: "Walk this item's flow yourself, fix the failed request or error first, then run the review again.",
+    }),
+    acNotConfirmed: (featureTitle, then) => ({
+      what: `'${featureTitle}' could not be fully confirmed in this review.`,
+      why: `Simsa could not complete the steps leading to the expected result ("${then}"). That does not mean it is broken.`,
+      how: "Confirm this item with your own eyes, or make the starting button/input clearer and run the review again.",
     }),
   },
 };
@@ -413,6 +460,16 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
     }
   }
 
+  // SI 티어 A5: 수용 기준별 결과. broken은 high(실패 신호가 있었다), not_confirmed는
+  // medium(확인 못 함 — 고장 아님). no_problem/not_run은 finding이 아니라 요약에만 오른다.
+  for (const a of input.acceptanceResults ?? []) {
+    if (a.status === "broken") {
+      findings.push({ severity: "high", ...t.acBroken(a.featureTitle, a.then), evidence: a.note ?? null });
+    } else if (a.status === "not_confirmed") {
+      findings.push({ severity: "medium", ...t.acNotConfirmed(a.featureTitle, a.then), evidence: a.note ?? null });
+    }
+  }
+
   return findings;
 }
 
@@ -434,9 +491,14 @@ const REPORT_STR: Record<ReportLocale, {
   nextNoPrimary: string;
   nextRerun: string;
   notes: string[];
+  /** SI 티어 A5: 수용 기준 요약 한 줄(개수만). */
+  acceptanceLine: (c: { total: number; noProblem: number; notConfirmed: number; broken: number; notRun: number }) => string;
 }> = {
   ko: {
     title: "Simsa 검수 리포트",
+    acceptanceLine: (c) =>
+      `지시서의 확인 항목 ${c.total}개 중 문제 없음 ${c.noProblem} · 확인 못 함 ${c.notConfirmed} · 작동 안 함 ${c.broken}` +
+      (c.notRun ? ` · 시간 부족으로 못 본 것 ${c.notRun}` : "") + ".",
     oneLineWorks: "핵심 흐름이 눈으로 확인한 범위에서 정상 동작했어요.",
     oneLineNoProblems:
       "핵심 흐름을 따라가 봤는데 문제를 찾지 못했어요. 다만 로그인 뒤 화면은 확인하지 않았습니다.",
@@ -453,6 +515,9 @@ const REPORT_STR: Record<ReportLocale, {
   },
   en: {
     title: "Simsa Review Report",
+    acceptanceLine: (c) =>
+      `Of ${c.total} spec items: ${c.noProblem} no problem · ${c.notConfirmed} not confirmed · ${c.broken} not working` +
+      (c.notRun ? ` · ${c.notRun} not reached in time` : "") + ".",
     oneLineWorks: "The core flow worked correctly within what we could observe.",
     oneLineNoProblems:
       "We followed the core flow and could not find a problem. Anything behind a login was not checked.",
@@ -514,6 +579,21 @@ export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale 
   if (works === null && !noProblems && input.primaryActionFound === false) nextSteps.push(s.nextNoPrimary);
   nextSteps.push(s.nextRerun);
 
+  // SI 티어 A5: 수용 기준 요약 — 있을 때만. 개수뿐이고 점수가 아니다.
+  const ar = input.acceptanceResults ?? [];
+  const acceptance =
+    ar.length > 0
+      ? {
+          total: ar.length,
+          noProblem: ar.filter((a) => a.status === "no_problem").length,
+          notConfirmed: ar.filter((a) => a.status === "not_confirmed").length,
+          broken: ar.filter((a) => a.status === "broken").length,
+          notRun: ar.filter((a) => a.status === "not_run").length,
+          items: ar,
+        }
+      : undefined;
+  const notes = acceptance ? [s.acceptanceLine(acceptance), ...s.notes] : s.notes;
+
   return {
     title: s.title,
     target: input.targetUrl,
@@ -523,7 +603,8 @@ export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale 
     works,
     findings,
     nextSteps,
-    notes: s.notes,
+    notes,
+    ...(acceptance ? { acceptance } : {}),
   };
 }
 
