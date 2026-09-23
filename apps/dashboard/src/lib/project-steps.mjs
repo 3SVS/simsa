@@ -189,7 +189,7 @@ export function nextScreenSlug(slug, entryPath) {
   const order =
     entryPath === "code"
       ? ["settings", "github", "items", "checks", "fixes"]
-      : ["idea", "spec", "items", "export"];
+      : ["idea", "spec", "items", "dev-spec", "export"];
   const i = order.indexOf(slug);
   if (i !== -1) return i === order.length - 1 ? null : order[i + 1];
 
