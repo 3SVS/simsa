@@ -363,6 +363,6 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 
 ### 2026-09-24 (설계 잠금 당일)
 - **Train A 코드 완료 (A1~A5)** — PR #521 central-plane: `dev-spec.ts`(Zod+무결성 13규칙) · `generate-dev-spec.ts`(3패스, 예시 폴백 없음) · `render-dev-spec.ts`(md 10종, EN/KO 동일) · `acceptance-plan.ts` + inspector 시나리오 실행(RUNNER_REV a5-acceptance-1) · `migrations/0067`. PR #524 dashboard: 개발 지시서 화면(초보자 4줄+개발자용) · 사이드바 · 다음 걸음 · 검수 상세 AC 섹션. 테스트: central 2263/2263 · dashboard 710/710. **라이브 0건 — A6는 머지·배포·0067 적용 뒤.**
-- **Train N** — 에이전트 위임, #522(N1+N3 개발자 질문·용어 제거 + 개발자 모드), #523(N2 로그인 순서) 오픈. N4~N7 진행 중.
+- **Train N 코드 완료** — #522(N1+N3) · #523(N2) · #525(N4+N5+N7 초안) · #526(N6 감사 장비). **프로덕션 기준선 P0=16**(초보자 기준 위반, 수정 전) 실측. 라이브 발견: **Google 로그인 프로덕션 미설정**(PROVIDER_NOT_FOUND) → Bae 액션(OAuth 클라이언트 + set-worker-secrets).
 - **시장 조사** — `docs/simsa-market-research-2026-09-24.md`. 결론: 차별은 형식 AC 판정+영수증뿐 → D-19.
 - **대기 문구(순서):** `PR #520 merge approved.` → `PR #521 merge approved.` → `migration 0067 apply approved.` → `deploy central-plane approved.` → `PR #524 merge approved.` → `deploy dashboard approved.` → A6 라이브 실측(한글 리얼 기획 3건 + journey-audit).
