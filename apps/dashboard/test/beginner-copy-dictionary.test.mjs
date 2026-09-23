@@ -18,7 +18,7 @@ function defaultFlowStrings(d) {
     d.account.workspaceInfo.localScoped,
     d.account.workspaceInfo.teamPlanned,
     d.commandCenter.getPackDesc,
-    d.commandCenter.gsStep2,
+    d.overview.gsStep2,
   ];
 }
 
