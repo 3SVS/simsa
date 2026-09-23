@@ -128,6 +128,29 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 ### D-14 [OPEN] T1 실행기 — 자체 agent-worker 루프 vs Claude Code/Codex CLI in-container
 - 권고: **자체 agent-worker 루프**(이미 tool_use·벤더 폴백·비밀 차단 보유, CLI는 구독 인증·헤드리스 제약). 재검토 트리거: B4에서 WBS 3개 이상 연속 실패.
 
+### D-15 [LOCKED] Private 저장소 — 지금도 되고, 계속 GitHub App 설치 토큰으로 간다 (Bae 질문 2026-09-24)
+**현행 사실(코드):** 로그인 OAuth는 `public_repo` 범위라 **private 저장소를 보지 못한다**(`github-oauth.ts:170`). private는
+**GitHub App 설치 토큰으로 폴백**해 읽기·PR·푸시를 한다(`github-app-access.ts:144` `resolveRepoAccessToken`,
+OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `simsa-repair[bot]` 커밋으로 라이브 실증됨.
+조건은 하나 — **유저가 App을 그 저장소에 설치**(설치 시 "선택한 저장소"면 추가 1클릭). 저장소가 설치에 추가되면
+`installation_repositories` 웹훅으로 즉시 인지한다(`saas-auth.ts:168`, #435 백필 포함).
+- 결정: T1도 같은 경로. **OAuth 범위를 `repo`로 넓히지 않는다**(전체 private 열쇠를 요구하면 비개발자가 가장 먼저 이탈).
+- **새 저장소 생성**은 설치 토큰으로 불가능(GitHub 제약: 유저 계정 저장소 생성은 유저 토큰 필요). 파일럿 경로:
+  1) Simsa가 템플릿 딥링크(`github.com/new?template_owner=…&template_name=…&name=<제안명>&visibility=private`)를 열어 **유저가 2클릭으로 자기 계정에 private 저장소를 만든다**
+  2) 이어서 App 설치/추가 화면으로 보내고, 웹훅이 오면 화면이 자동으로 "연결됨"으로 바뀐다(폴링 아님)
+  3) 그 뒤 모든 쓰기는 설치 토큰.
+- `[PILOT]` 후속: GitHub App **user-to-server 토큰 + Administration:write**로 1클릭 생성. 기존 설치자 전원에 권한 재승인 요청이 가므로 파일럿 뒤에 판단.
+
+### D-16 [LOCKED] DB·배포 권한 모델 — 배포 토큰 0, DB는 잡 수명 메모리 전달, OAuth 커넥터는 Supabase만 후순위
+| 대상 | 파일럿(지금) | 후속 | Simsa가 갖는 것 |
+|---|---|---|---|
+| **Vercel(배포)** | 유저가 **자기 Vercel에 Git 연동 1회**(Simsa가 `vercel.com/new/clone?repository-url=…` 딥링크 제공). 이후 push마다 Vercel이 배포하고, Simsa는 **유저가 붙여넣은 배포 URL**을 검수(현행 `/p/{id}/connect`) | GitHub `deployment_status` 이벤트 구독으로 URL 자동 인지(코드 없음 — 현재 `source-evidence.ts:114`는 호스트명으로 vercel 여부만 판별) | **토큰 없음** (D-6 유지) |
+| **Supabase(DB)** | prep-A 그대로: 유저가 프로젝트 만들고 URL·anon·service_role·DB URL을 **브라우저에 붙여넣기**. T1 잡 시작 시 브라우저→Worker→컨테이너로 **헤더 전달**(현행 `x-anthropic-key` 패턴과 동일), **컨테이너 메모리에만 잡 수명 동안** 존재, D1·로그·스냅샷 기록 금지(테스트로 고정). 에이전트가 마이그레이션 적용·RLS 생성 | **Supabase OAuth 앱**(Management API)로 프로젝트 생성·마이그레이션·키 발급 1클릭. 토큰은 `CONCLAVE_TOKEN_KEK`로 암호화 저장 — 이 순간부터 "Simsa가 유저 인프라 자격증명을 보관"하는 첫 사례라 **별도 승인 게이트** | 파일럿: 없음 / 후속: 암호화된 Supabase OAuth 토큰 1종 |
+| **GitHub** | D-15 | D-15 후속 | App 설치 토큰(일시)·OAuth `public_repo` |
+| **Simsa 프리뷰** | 컨테이너 내부 기동(D-6). DB는 위 Supabase 키 주입 또는 D-12 C(DB 없는 템플릿) | — | — |
+- **prep-A 불변식 정정:** "서버 무저장"은 유지(영속 저장 없음), "브라우저 주입"은 **"잡 수명 동안 메모리 전달"**로 확장한다. 위반 감지 테스트: 잡 종료 후 D1·R2·로그에 키 문자열 0건.
+- 유저가 Supabase를 안 붙이면 T1은 **DB 없는 범위까지만** 만들고 영수증에 "DB 필요 기능 N개 미구현(키 미연결)"로 정직하게 표기.
+
 ---
 
 ## 2. 스테이지 트레인
@@ -164,7 +187,9 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 | C3 | 영수증(receipt): must AC 표·미검증·"프로덕션 아님"·다음 행동(유저 배포 안내) EN/KO | `assertNoNumericScores` 통과 |
 | C4 | 4중항 코퍼스 기록(D-8) + 관리자 집계 | 파일럿 3건이 training-store에 적재 |
 
-### Train Y — YC / a16z 제출물 (A6 후 병렬, 이상적으로 B8 후)
+### Train Y — YC / a16z 제출물 — **보류** (Bae 2026-09-24 "지원서는 일단 생각하지 말고 개발부터")
+> 개발 트레인 A·B·C가 우선. Y는 B8(파일럿) 뒤에 재개하며, 그전까지 어떤 스테이지도 열지 않는다. 아래는 기록용.
+
 | # | 스테이지 | 완료 조건 |
 |---|---|---|
 | Y1 | 데모 대본(기획 붙여넣기 → 지시서 → 빌드 → 프리뷰 검수 → 영수증) 2분 | 실제 라이브로 끊김 없이 1회 녹화 |
@@ -197,9 +222,11 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 
 ## 5. Bae 결정 필요 (세션당 ≤3)
 
-1. **`design lock approved`** — D-1~D-9·D-11 LOCKED 발효. 구현 착수 아님.
+1. **`design lock approved`** — D-1~D-9·D-11·D-15·D-16 LOCKED 발효. 구현 착수 아님.
 2. **T1 파일럿 스택 고정 확인** — Next.js + Supabase (D-5). 다른 스택이면 지금 말씀해 주십시오.
-3. **지원서용 답:** 누가 풀타임인가 · 법인(3SVS 자회사? 신설?) · SF 3개월 상주 가능 여부. 개발을 막지는 않지만 Y2·Y4의 전제.
+3. **Cloudflare Email Routing 연결**(Bae 액션 3, 이월) — 로그인 뒤 검수의 스위치. 대시보드 → 도메인 `trysimsa.com` → Email → Email Routing → Catch-all → Action "Send to a Worker" → `conclave-ai` 선택 → 저장. 권장 서브도메인 `probe.trysimsa.com`(Resend 발송과 분리). 연결되면 검수 화면의 "확인 메일을 받을 준비가 되어 있지 않습니다" 문구가 사라지는지로 확인.
+
+~~지원서용 답(풀타임·법인·SF 상주)~~ — Train Y 보류로 이번엔 묻지 않음.
 
 ---
 
@@ -221,6 +248,6 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 ## 7. 이번 세션 실측 기록 (증거)
 - 인프라: simsa.dev 200 · app.trysimsa.com 307→/projects · Worker /health 200 · 카나리 3주 연속 green · 열린 PR 0 · 마지막 central 배포 2026-09-01(main `c4158eb`)
 - journey-audit KO: P0=0 P1=0 P2=10 (`tools/simsa-completion-loop-spike/journey-audit-result.json`)
-- 익명 스모크(`anonymous-smoke.mjs`): **장비 노후**(첫 화면 1칸 구조에서 `textarea` 셀렉터 2개 매칭) — 제품 결함 아님, 폐기 또는 갱신 대상
+- 익명 스모크(`anonymous-smoke.mjs`): 장비 노후 2건(첫 화면 `textarea` 2개 매칭 · 답한 질문의 '추천대로' 버튼이 사라져 인덱스 클릭 실패) → **같은 세션에서 수리, 프로덕션 재주행 8/8 PASS**(실 LLM 경유 생성 `proj_bb4rp470`·사이드바·GitHub 탭 숨김·삭제 QA ⓐⓑ)
 - 로그인 뒤 검수: UI에 "확인 메일을 받을 준비가 되어 있지 않습니다" (Bae 액션 3 Email Routing 미연결)
 - repo secret `LLM_PROBE_TOKEN` 2026-08-21 존재(워커 값 일치 여부 미확인)
