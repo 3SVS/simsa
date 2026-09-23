@@ -884,6 +884,8 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
           idea: dbProj.idea ?? "",
           productSpec: dbProj.productSpec ?? {},
           items: Array.isArray(dbProj.items) ? dbProj.items : [],
+          // SI 티어 A3: 지시서가 있으면 팩에 흡수(없으면 undefined → 종전 동일)
+          ...(dbProj.devSpec ? { devSpec: dbProj.devSpec } : {}),
         };
       } catch (err) {
         // Honest failure: a DB error must not become an empty "successful"

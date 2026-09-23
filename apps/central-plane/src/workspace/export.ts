@@ -23,6 +23,9 @@ import { detectNonWebBuildable } from "./generate.js";
  *  app shop. No agent prompt; instead a HANDOFF_BRIEF.md that states the
  *  target platform, what's decided/undecided, what is OUT of the web-review
  *  scope (when the idea needs a native build), and the acceptance checklist. */
+import { validateDevSpec } from "./dev-spec.js";
+import { renderDevSpecFiles } from "./render-dev-spec.js";
+
 export type ExportTarget = "claude_code" | "codex" | "both" | "web_builder" | "handoff";
 export type ExportFormat = "json" | "markdown_bundle";
 
@@ -118,6 +121,9 @@ export type WorkspaceExportBuilderPackRequest = {
     items: ExportItem[];
     checkResults?: ExportCheckResults;
     fixSuggestions?: Record<string, ExportFixSuggestion>;
+    /** SI 티어 A3 (D-1): T0 개발 지시서. 있고 유효하면 `dev-spec/` 10개 파일로 흡수.
+     *  없거나 깨졌으면 종전과 동일(추가 파일 0, 실패 아님) — 검증은 여기서 다시 한다. */
+    devSpec?: unknown;
   };
   /** When provided, only these item IDs are included in items.md, checks.md, fixes.md, and prompts.
    *  product.md always contains the full product context.
@@ -1987,6 +1993,19 @@ export function generateBuilderPack(
       path: "simsa-build-pack/HANDOFF_BRIEF.md",
       content: genHandoffBrief(title, project.idea ?? "", productSpec, effectiveItems, effectiveCheckResults, req.userProfile, locale),
     });
+  }
+
+  // ── SI 티어 A3 (D-1): 개발 지시서를 팩 안에 흡수 — 유효한 것만, 조용히 생략 ────
+  const devSpecCheck = project.devSpec !== undefined ? validateDevSpec(project.devSpec) : null;
+  if (devSpecCheck && devSpecCheck.ok) {
+    baseFiles.push(...renderDevSpecFiles(devSpecCheck.spec, locale, "simsa-build-pack/dev-spec/"));
+    const readmeFile = baseFiles[0];
+    if (readmeFile && readmeFile.path.endsWith("README.md")) {
+      readmeFile.content +=
+        locale === "en"
+          ? "\n\n## Development spec\n\n`dev-spec/` holds the full development spec (requirements · screens · data · API · work breakdown · test plan). Hand it to a developer or a coding AI as-is; `dev-spec/README.md` has the plain-language summary."
+          : "\n\n## 개발 지시서\n\n`dev-spec/`에 개발 지시서 전체(요구사항·화면·데이터·API·작업 분해·테스트 계획)가 있습니다. 개발자나 개발 AI에게 그대로 넘기면 됩니다. 쉬운 요약은 `dev-spec/README.md`에 있습니다.";
+    }
   }
 
   const hasIssues =
