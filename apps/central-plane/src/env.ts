@@ -186,6 +186,8 @@ export interface Env {
    * 설정 해석은 workspace/vendor-routing.ts 단일 출처.
    */
   ANTHROPIC_ENABLED?: string;
+  /** SI 티어 D-3 [PILOT]: T0 개발 지시서 생성 모델 override (기본 claude-opus-5; 킬스위치 시 폴백 모델이 실제). */
+  DEV_SPEC_MODEL?: string;
   /**
    * 검수용 일회용 메일 수신 도메인 (2026-08-26). 예: "probe.trysimsa.com".
    * 로그인 뒤 검수를 하려면 우리가 일회용 계정을 만들어야 하고, 앱이 보내는 확인
