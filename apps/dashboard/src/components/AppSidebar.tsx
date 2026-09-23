@@ -14,6 +14,8 @@ import { computeProjectSteps } from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { SIMSA_REPO_URL } from "@/lib/simsa-share.mjs";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
+import { sidebarDeveloperItems } from "@/lib/developer-mode.mjs";
 
 const MOCK_IDS = new Set(MOCK_PROJECTS.map((p) => p.id));
 
@@ -163,6 +165,9 @@ export function AppSidebar() {
 
   const project = projectId ? projects.find((p) => p.id === projectId) ?? null : null;
   const base = projectId ? `/projects/${projectId}` : "";
+  // Train N (D-17): developer-only affordances are hidden in the default view.
+  const [developerMode] = useDeveloperMode();
+  const devItems = sidebarDeveloperItems({ developerMode });
   const userKey = typeof window !== "undefined" ? getUserKey() : "";
   const initial = (userKey.replace(/^uk_/, "")[0] ?? "C").toUpperCase();
 
@@ -199,10 +204,12 @@ export function AppSidebar() {
       // 검수·준비 단계: 빌더팩이 기본. "코드 변경"(GitHub) 탭은 코드 갈래이거나
       // repo가 실제로 연결된 뒤에만 보인다 — 아이디어 갈래 유저에게 repo는 아직
       // 존재하지도, 알 필요도 없는 개념이다 (배님 2026-07-10 라이브 워크스루).
+      // Train N (§8-6): in the default view the same screen is called "Build
+      // guide" — "builder pack" is our word, not the user's.
       items:
         entryPath === "code" || hasRepo === true
-          ? [["github", t.nav.github], ["export", t.nav.export]]
-          : [["export", t.nav.export]],
+          ? [["github", t.nav.github], ["export", developerMode ? t.nav.export : t.nav.buildGuide]]
+          : [["export", developerMode ? t.nav.export : t.nav.buildGuide]],
     },
     results: {
       label: t.stepsNav.results,
@@ -339,6 +346,7 @@ export function AppSidebar() {
                 </div>
               );
             })}
+            {devItems.advancedGroup && (
             <div className="mb-4">
               <button
                 type="button"
@@ -361,6 +369,7 @@ export function AppSidebar() {
                 </ul>
               )}
             </div>
+            )}
             {/* Always available — not a step: connection/notification settings + sources */}
             <div className="mt-2 border-t border-gray-100 pt-2">
               <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">{t.nav.groupAnytime}</p>
@@ -406,6 +415,7 @@ export function AppSidebar() {
         >
           {t.nav.feedback}
         </button>
+        {devItems.starOnGithub && (
         <a
           href={SIMSA_REPO_URL}
           target="_blank"
@@ -417,6 +427,7 @@ export function AppSidebar() {
           </svg>
           {t.share.starGithub}
         </a>
+        )}
         {/* G9/G6 — 법적 문서 + 요금 링크 */}
         <div className="mb-1 flex flex-wrap gap-x-2 px-2.5 py-1 text-[11px] text-gray-400">
           <Link href="/pricing" className="hover:text-gray-600 hover:underline">{t.pricing.seePricing}</Link>

@@ -12,6 +12,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { DeveloperModeToggle } from "@/components/DeveloperModeToggle";
 import {
   readDisplayName,
   writeDisplayName,
@@ -277,6 +278,10 @@ function AccountInner() {
           <LanguageToggle />
         </div>
         <p className="mt-2 text-xs text-gray-500">{a.preferences.languageHelp}</p>
+        {/* Train N (D-17): developer mode lives with the other preferences. */}
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <DeveloperModeToggle compact />
+        </div>
       </section>
 
       {/* Data — one honest line, no badge farm. */}
