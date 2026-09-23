@@ -29,7 +29,7 @@ try {
   // ── 1. Create an idea-branch project (real LLM roundtrip) ──────────────
   await page.goto("https://app.trysimsa.com/projects/new?path=idea", { waitUntil: "networkidle", timeout: 45000 });
   const IDEA = "출장 경비 영수증을 사진으로 올리면 자동으로 분류하고 정산서를 만들어주는 앱";
-  await page.locator("textarea").fill(IDEA);
+  await page.locator("textarea:visible").first().fill(IDEA);
   await shot("10-idea-filled");
   await page.getByRole("button", { name: /제품 설명서 만들기/ }).click();
 
@@ -45,9 +45,12 @@ try {
 
     // Question step: answer EVERY question with the recommended default.
     // NB: the button stays visible after answering — click each ONCE by index.
-    const recCount = await page.getByRole("button", { name: /추천대로/ }).count();
-    for (let i = 0; i < recCount; i++) {
-      await page.getByRole("button", { name: /추천대로/ }).nth(i).click();
+    // 2026-09-24: answered questions now hide their button, so click the FIRST
+    // remaining one until none are left (bounded).
+    for (let i = 0; i < 20; i++) {
+      const rec = page.getByRole("button", { name: /추천대로/ });
+      if ((await rec.count()) === 0) break;
+      await rec.first().click();
       await page.waitForTimeout(700);
     }
     // built_with picker: choose Claude Code before the final start button
