@@ -76,12 +76,23 @@ export const ScreenSchema = z
   })
   .strict();
 
+/**
+ * `default`: 실제 기본값이 있을 때만 문자열. 모델은 "없음"을 `null`로 자주 보낸다(라이브
+ * 2026-09-24: 두 번 연속 null → 422). 스키마가 그걸 "없음"으로 받아들여야지, 재생성 사유가
+ * 되면 안 된다 — 사실을 전달하는 방식의 차이일 뿐 내용의 결함이 아니다. "unknown" 문자열도
+ * 기본값이 아니므로 같은 취급.
+ */
+const optionalDefault = z
+  .union([z.string().max(200), z.null()])
+  .optional()
+  .transform((v) => (v === null || v === undefined || v.trim() === "" || v.trim().toLowerCase() === "unknown" ? undefined : v));
+
 export const EntityFieldSchema = z
   .object({
     name: shortText,
     type: shortText,
     required: z.boolean(),
-    default: z.string().max(200).optional(),
+    default: optionalDefault,
   })
   .strict();
 
