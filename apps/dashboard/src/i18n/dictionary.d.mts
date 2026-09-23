@@ -250,6 +250,7 @@ export type Dictionary = {
     googleUnavailable: string;
     github: string;
     githubUnavailable: string;
+    githubDevCaption: string;
     or: string;
     name: string;
     email: string;

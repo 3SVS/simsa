@@ -2,8 +2,9 @@
 
 /**
  * /login — the value-moment promotion target (Plan B: anonymous start, sign in
- * once value is felt). GitHub-first (the vibe-coder audience has GitHub and
- * Simsa reviews GitHub repos), email+password secondary.
+ * once value is felt). Order for a NON-developer audience (Train N2, 설계
+ * §8-4): Google → email+password → GitHub last, labelled "for developers".
+ * The order lives in lib/login-providers.mjs so it is tested, not implied.
  *
  * The load-bearing rule: 로그인됨 ≠ 데이터연결됨. On EVERY successful sign-in
  * (email, sign-up, GitHub callback return, or already-signed-in visit) this
@@ -26,6 +27,7 @@ import {
   startGoogleLogin,
   claimWorkspace,
 } from "@/lib/auth-client.mjs";
+import { loginProviderPlan } from "@/lib/login-providers.mjs";
 
 function LoginInner() {
   const { t } = useI18n();
@@ -135,6 +137,9 @@ function LoginInner() {
     setPhase("idle");
   }
 
+  const plan = loginProviderPlan({ googleUnavailable, githubUnavailable: ghUnavailable });
+  const googleRow = plan.find((p) => p.id === "google");
+
   return (
     <main className="flex flex-1 items-center justify-center px-4 py-16">
       <div className="card w-full max-w-sm p-8">
@@ -142,28 +147,18 @@ function LoginInner() {
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.login.title}</h1>
         <p className="mb-8 mt-2 text-sm text-gray-500">{t.login.subtitle}</p>
 
-        {/* Google is the first-class social option for the non-developer beta
-            audience; GitHub is secondary (for the developer path). */}
+        {/* Google first for the non-developer audience. When the server has no
+            Google provider configured (live state 2026-09-24), the click
+            degrades to an honest note and the email form below is the path. */}
         <button
           onClick={handleGoogle}
           disabled={phase !== "idle"}
-          className="btn btn-primary w-full py-3"
+          className={`btn w-full py-3 ${googleRow?.available ? "btn-primary" : "btn-secondary"}`}
         >
           {phase === "claiming" ? t.login.linking : t.login.google}
         </button>
         {googleUnavailable && (
           <p className="mt-2 text-xs text-amber-600">{t.login.googleUnavailable}</p>
-        )}
-
-        <button
-          onClick={handleGithub}
-          disabled={phase !== "idle"}
-          className="btn btn-secondary mt-2 w-full py-3"
-        >
-          {t.login.github}
-        </button>
-        {ghUnavailable && (
-          <p className="mt-2 text-xs text-amber-600">{t.login.githubUnavailable}</p>
         )}
 
         <div className="my-6 flex items-center gap-3 text-xs text-gray-300">
@@ -206,6 +201,22 @@ function LoginInner() {
         >
           {mode === "signin" ? t.login.toSignUp : t.login.toSignIn}
         </button>
+
+        {/* GitHub — the developer door, last and captioned (Train N2). It stays
+            fully functional; it just no longer competes with the beginner path. */}
+        <div className="mt-6 border-t border-gray-100 pt-4">
+          <p className="mb-2 text-[11px] text-gray-400">{t.login.githubDevCaption}</p>
+          <button
+            onClick={handleGithub}
+            disabled={phase !== "idle"}
+            className="btn btn-secondary w-full py-2.5 text-sm"
+          >
+            {t.login.github}
+          </button>
+          {ghUnavailable && (
+            <p className="mt-2 text-xs text-amber-600">{t.login.githubUnavailable}</p>
+          )}
+        </div>
 
         <p className="mt-8 text-center text-xs text-gray-500">
           {t.login.keepsLocal}{" "}

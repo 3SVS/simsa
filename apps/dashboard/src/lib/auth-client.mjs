@@ -172,7 +172,7 @@ export async function signUpEmail(name, email, password, fetchImpl) {
 }
 
 /**
- * Start the GitHub social login (GitHub-first for the vibe-coder audience).
+ * Start the GitHub social login (the developer door — last on the login page, Train N2).
  * Returns the provider redirect URL — the caller navigates to it. Dormant
  * server-side until AUTH_GH_* is configured (then this returns an error the UI
  * degrades on). Never throws.

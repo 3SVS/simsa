@@ -324,7 +324,9 @@ const EN = {
     google: "Continue with Google",
     googleUnavailable: "Google sign-in isn't available right now — use email below.",
     github: "Continue with GitHub",
-    githubUnavailable: "GitHub sign-in isn't available right now — use email below.",
+    githubUnavailable: "GitHub sign-in isn't available right now — use email above.",
+    // Train N2 (§8-4): GitHub is the developer door — last, captioned.
+    githubDevCaption: "For developers — sign in with GitHub if your code lives there.",
     or: "or",
     name: "Name",
     email: "Email",
@@ -2966,7 +2968,9 @@ const KO = {
     google: "Google로 계속하기",
     googleUnavailable: "지금은 Google 로그인을 쓸 수 없어요 — 아래 이메일로 로그인해주세요.",
     github: "GitHub으로 계속하기",
-    githubUnavailable: "지금은 GitHub 로그인을 쓸 수 없어요 — 아래 이메일로 로그인해주세요.",
+    githubUnavailable: "지금은 GitHub 로그인을 쓸 수 없어요 — 위의 이메일로 로그인해주세요.",
+    // Train N2 (§8-4): GitHub은 개발자용 문 — 맨 아래, 설명 한 줄.
+    githubDevCaption: "개발자용 — 코드가 GitHub에 있다면 GitHub으로 로그인하세요.",
     or: "또는",
     name: "이름",
     email: "이메일",
