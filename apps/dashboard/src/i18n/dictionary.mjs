@@ -30,6 +30,8 @@ const EN = {
     checks: "Review results",
     fixes: "Remaining issues",
     export: "Builder pack",
+    // Train N (§8-6): beginner-mode label for the same screen.
+    buildGuide: "Build guide",
     settings: "Prep & connections",
     github: "Code changes",
     benchmark: "Benchmark",
@@ -293,6 +295,8 @@ const EN = {
     question: "Which tool did you build this with?",
     hint: "Pick any that apply. This helps us tailor reviews to how each tool works.",
     otherPlaceholder: "Other — type the tool name",
+    // Train N (§8-3): folded, optional — unanswered means "not sure".
+    optionalSummary: "Which tool made this app? (optional — skip if unsure)",
     tools: {
       v0: "v0",
       lovable: "Lovable",
@@ -304,6 +308,15 @@ const EN = {
       codex: "Codex",
       handCoded: "Hand-coded",
     },
+  },
+  // Train N (D-17): developer mode — the one switch that reveals developer
+  // affordances. Beginner default is OFF.
+  devMode: {
+    title: "Developer mode",
+    desc: "Shows developer tools: connecting a GitHub repository, code changes, Telegram alerts and advanced options. Off by default — you don't need any of it to build and check an app.",
+    stateOn: "On — developer sections are visible.",
+    stateOff: "Off — showing the simple view.",
+    settingsSimpleIntro: "Notifications and data choices for this project.",
   },
   login: {
     title: "Sign in to Simsa",
@@ -436,11 +449,11 @@ const EN = {
   },
   np: {
     title: "New project",
-    ideaPlaceholder: "e.g. An app that summarizes meeting recordings and sends the action items to Linear",
+    ideaPlaceholder: "e.g. An app that summarizes meeting recordings and turns them into a to-do list",
     examples: [
-      "An app that summarizes meeting recordings and sends the action items to Linear",
-      "A tool where uploading a photo auto-writes the e-commerce product description",
-      "A service that analyzes customer questions and organizes the FAQ automatically",
+      "A pickup-reservation app for my neighborhood bakery",
+      "An app that logs my dog's walks and shows the weekly distance",
+      "A tool where uploading a photo auto-writes the product description for my shop",
     ],
     examplesLabel: "Start from an example",
     generateSpec: "Create product brief",
@@ -2664,6 +2677,8 @@ const KO = {
     checks: "확인 결과",
     fixes: "남은 문제",
     export: "빌더 팩",
+    // Train N (§8-6): 기본(초보자) 모드에서 같은 화면의 이름.
+    buildGuide: "만들기 안내",
     settings: "준비·설정",
     github: "코드 변경",
     benchmark: "벤치마크",
@@ -2923,6 +2938,8 @@ const KO = {
     question: "이 앱을 어떤 도구로 만들었나요?",
     hint: "해당하는 것 모두 골라주세요. 각 도구의 방식에 맞춰 확인 품질을 높이는 데 써요.",
     otherPlaceholder: "기타 — 도구 이름을 입력하세요",
+    // Train N (§8-3): 접힘·선택 — 답하지 않으면 "모르겠어요"와 같다.
+    optionalSummary: "이 앱을 어떤 도구로 만들었나요? (선택 — 모르면 건너뛰세요)",
     tools: {
       v0: "v0",
       lovable: "Lovable",
@@ -2934,6 +2951,14 @@ const KO = {
       codex: "Codex",
       handCoded: "직접 코딩",
     },
+  },
+  // Train N (D-17): 개발자 모드 — 개발자용 기능을 드러내는 단 하나의 스위치. 기본 꺼짐.
+  devMode: {
+    title: "개발자 모드",
+    desc: "개발자용 도구를 보여줍니다: GitHub 저장소 연결, 코드 변경, Telegram 알림, 고급 옵션. 기본은 꺼짐이에요 — 앱을 만들고 확인하는 데는 필요 없습니다.",
+    stateOn: "켜짐 — 개발자용 항목이 보입니다.",
+    stateOff: "꺼짐 — 간단한 화면으로 보고 있어요.",
+    settingsSimpleIntro: "이 프로젝트의 알림과 데이터 설정이에요.",
   },
   login: {
     title: "Simsa 로그인",
@@ -3068,9 +3093,9 @@ const KO = {
     title: "새 프로젝트",
     ideaPlaceholder: "예) 회의 녹음 파일을 올리면 자동으로 요약하고 할 일을 정리해주는 앱",
     examples: [
-      "회의 녹음을 요약해서 할 일을 Linear로 보내주는 앱",
-      "사진을 올리면 쇼핑몰 상품 설명을 자동으로 써주는 도구",
-      "고객 문의를 분석해서 FAQ를 자동으로 정리해주는 서비스",
+      "동네 빵집 픽업 예약 앱",
+      "반려견 산책을 기록하고 주간 거리를 보여주는 앱",
+      "사진을 올리면 우리 가게 상품 설명을 자동으로 써주는 도구",
     ],
     examplesLabel: "예시로 시작하기",
     generateSpec: "제품 설명서 만들기",

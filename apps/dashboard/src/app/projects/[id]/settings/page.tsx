@@ -8,6 +8,9 @@ import { StackProfileCard } from "@/components/StackProfileCard";
 import { isExampleProject } from "@/lib/mock-data";
 import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { ServiceMcpSetup } from "@/components/ServiceMcpSetup";
+import { DeveloperModeToggle } from "@/components/DeveloperModeToggle";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
+import { settingsSectionVisibility } from "@/lib/developer-mode.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import {
   fetchGitHubStatus,
@@ -45,6 +48,15 @@ export default function SettingsPage() {
   // Example projects are shared read-only fixtures — the connect flow can never
   // succeed on them (their id is never mirrored under this user's key).
   const isExample = isExampleProject(id);
+
+  // Train N (D-17, §8-10): which sections this user should see. GitHub /
+  // services stay for developers, code-branch entrants and anyone with a repo
+  // already linked; Telegram is developer-only; email + consent for everyone.
+  const [developerMode] = useDeveloperMode();
+  const [entryPath, setEntryPath] = useState<string | null>(null);
+  useEffect(() => {
+    setEntryPath(loadExtendedProjectData(id)?.entryPath ?? null);
+  }, [id]);
 
   const [phase, setPhase] = useState<"loading" | "disconnected" | "status_error" | "connected" | "selecting">("loading");
   // 스택 답이 바뀌면 아래 서비스·배포 안내를 새 값으로 다시 그린다.
@@ -381,13 +393,21 @@ export default function SettingsPage() {
     ? repos.filter((r) => r.fullName.toLowerCase().includes(repoSearch.toLowerCase()))
     : repos;
 
+  const vis = settingsSectionVisibility({
+    developerMode,
+    entryPath,
+    hasLinkedRepo: linkedRepo !== null || phase === "connected" || phase === "selecting",
+  });
+
   return (
     <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="page-title">{t.github.connectTitle}</h1>
-        <p className="page-subtitle">{t.github.connectIntro}</p>
+        <p className="page-subtitle">{vis.github ? t.github.connectIntro : t.devMode.settingsSimpleIntro}</p>
       </div>
 
+      {vis.github && (
+      <>
       {/* Example projects: read-only — the connect flow can never succeed here. */}
       {isExample && (
         <div className="card p-8 text-center">
@@ -720,6 +740,8 @@ export default function SettingsPage() {
           );
         })()}
       </div>
+      </>
+      )}
 
       {/* ─── Email notifications (simple default) ────────────────────────── */}
       <div className="mt-10">
@@ -783,7 +805,9 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* ─── Telegram notifications ──────────────────────────────────────── */}
+      {/* ─── Telegram notifications (developer mode only — Train N §8-10) ── */}
+      {vis.telegram && (
+      <>
       <div className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.telegram.title}</h2>
         <p className="mb-4 mt-1 text-sm text-gray-500">{t.telegram.desc}</p>
@@ -910,6 +934,8 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* ─── Data & training consent (opt-in) ────────────────────────────── */}
       <div className="mt-10">
@@ -955,6 +981,12 @@ export default function SettingsPage() {
             <p className="text-xs text-red-600">{t.trainingConsent.saveError}</p>
           )}
         </div>
+      </div>
+
+      {/* ─── Developer mode (Train N, D-17) — the switch lives where the hidden
+          sections would be, so a developer looking for GitHub finds it. */}
+      <div className="mt-10">
+        <DeveloperModeToggle />
       </div>
     </div>
   );

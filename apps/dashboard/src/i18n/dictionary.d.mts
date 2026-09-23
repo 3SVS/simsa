@@ -32,6 +32,7 @@ export type Dictionary = {
     checks: string;
     fixes: string;
     export: string;
+    buildGuide: string;
     settings: string;
     github: string;
     benchmark: string;
@@ -228,6 +229,7 @@ export type Dictionary = {
     question: string;
     hint: string;
     otherPlaceholder: string;
+    optionalSummary: string;
     tools: {
       v0: string;
       lovable: string;
@@ -240,6 +242,7 @@ export type Dictionary = {
       handCoded: string;
     };
   };
+  devMode: { title: string; desc: string; stateOn: string; stateOff: string; settingsSimpleIntro: string };
   login: {
     title: string;
     subtitle: string;

@@ -366,7 +366,10 @@ function NewProjectInner() {
       spec: { completeness: 0, goal: "", included: [], excluded: [], openDecisions: [] },
       requirements: [],
     });
-    saveExtendedProjectData(id, { entryPath: "code" });
+    saveExtendedProjectData(id, {
+      entryPath: "code",
+      ...(builtWithTools.length ? { builtWithTools } : {}),
+    });
 
     // 프로젝트 행이 커밋되기 전에 소스를 붙이면 소유권 검사에서 404가 나고
     // 링크가 유실된다(과거 "저장소를 다시 연결해 주세요" 도돌이표의 원인).
@@ -380,6 +383,10 @@ function NewProjectInner() {
       understood: {},
       productSpec: {},
       items: [],
+      builtWith:
+        builtWithTools.length || builtWithOther.trim()
+          ? { tools: builtWithTools, other: builtWithOther.trim() || undefined }
+          : undefined,
       entryPath: "code",
     }).catch(() => null);
     if (!saveRes || saveRes.ok !== true) {
@@ -567,6 +574,38 @@ function NewProjectInner() {
               />
               <p className="mt-1.5 text-xs text-gray-500">{t.branch.submitHint}</p>
 
+              {/* Train N (§8-3): "which tool made this?" belongs to people who
+                  already have an app — and even here it is optional and folded,
+                  so the one-field entry (AF-1) stays one field. Unanswered =
+                  "not sure"; nothing is sent. */}
+              <details className="mt-3 rounded-lg border border-gray-100 bg-gray-50/60 px-4 py-2.5">
+                <summary className="cursor-pointer text-xs font-medium text-gray-600">{t.builtWith.optionalSummary}</summary>
+                <p className="mb-3 mt-2 text-xs text-gray-500">{t.builtWith.hint}</p>
+                <div className="flex flex-wrap gap-2">
+                  {BUILT_WITH_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => toggleBuiltWith(opt.id)}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        builtWithTools.includes(opt.id)
+                          ? "border-brand-300 bg-brand-50 text-brand-700"
+                          : "border-gray-200 text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      {t.builtWith.tools[opt.labelKey]}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={builtWithOther}
+                  onChange={(e) => setBuiltWithOther(e.target.value)}
+                  placeholder={t.builtWith.otherPlaceholder}
+                  className="input mt-3 text-sm"
+                />
+              </details>
+
               {/* 무엇으로 읽었는지 즉시 보여준다 — 저장소를 넣었는데 '앱 주소'로
                   읽혔다면 사용자가 바로 안다(조용한 오분류 방지). */}
               {parsedSubmission?.ok && (
@@ -717,37 +756,13 @@ function NewProjectInner() {
                   value={platform}
                   onChange={(v) => setPlatform(v as "web" | "mobile" | "unknown")}
                 />
-                <InterviewChipRow
-                  label={t.np.githubQ}
-                  options={[
-                    ["fluent", t.np.githubFluent],
-                    ["heard", t.np.githubHeard],
-                    ["new", t.np.githubNew],
-                  ]}
-                  value={githubLevel}
-                  onChange={(v) => setGithubLevel(v as "fluent" | "heard" | "new")}
-                />
-                <InterviewChipRow
-                  label={t.np.aiToolQ}
-                  options={[
-                    ["yes", t.np.aiToolYes],
-                    ["some", t.np.aiToolSome],
-                    ["no", t.np.aiToolNo],
-                  ]}
-                  value={aiToolLevel}
-                  onChange={(v) => setAiToolLevel(v as "yes" | "some" | "no")}
-                />
-                <StackProfileRows
-                  t={t}
-                  hostingId={hostingId}
-                  setHostingId={setHostingId}
-                  hostingOther={hostingOther}
-                  setHostingOther={setHostingOther}
-                  dataId={dataId}
-                  setDataId={setDataId}
-                  dataOther={dataOther}
-                  setDataOther={setDataOther}
-                />
+                {/* Train N (§8-1, D-17): the GitHub / AI-coding-tool / hosting /
+                    data rows were removed from the DEFAULT flow — an idea-only
+                    user has no infrastructure to describe, and the words
+                    themselves (GitHub, Vercel, Supabase…) read as "you should
+                    know this". The state vars stay (default unset) so the save
+                    payload shape is unchanged; developer-mode users can still
+                    describe their stack later on the prep/settings page. */}
               </div>
               <button
                 onClick={handleGenerateUnderstanding}
@@ -881,33 +896,9 @@ function NewProjectInner() {
           {/* Step 4: result */}
           {step === 4 && (specResult ?? result) && (
             <>
-              <div className="card mb-4 p-5">
-                <h3 className="text-sm font-semibold text-gray-800">{t.builtWith.question}</h3>
-                <p className="mb-3 mt-1 text-xs text-gray-500">{t.builtWith.hint}</p>
-                <div className="flex flex-wrap gap-2">
-                  {BUILT_WITH_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => toggleBuiltWith(opt.id)}
-                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                        builtWithTools.includes(opt.id)
-                          ? "border-brand-300 bg-brand-50 text-brand-700"
-                          : "border-gray-200 text-gray-600 hover:border-gray-300"
-                      }`}
-                    >
-                      {t.builtWith.tools[opt.labelKey]}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="text"
-                  value={builtWithOther}
-                  onChange={(e) => setBuiltWithOther(e.target.value)}
-                  placeholder={t.builtWith.otherPlaceholder}
-                  className="input mt-3 text-sm"
-                />
-              </div>
+              {/* Train N (§8-3): the "which tool built this app?" picker used to
+                  sit here — asked of people who have not built anything yet. It
+                  now lives only on the existing-app (code) branch, collapsed. */}
               {/* Spec branch never visited the question steps — its back goes to
                   the paste screen (step 1). Sending it to step 3 stranded the
                   user on an empty-questions screen with a blank step 2 behind it. */}
