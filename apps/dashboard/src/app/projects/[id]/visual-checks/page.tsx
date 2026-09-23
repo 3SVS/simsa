@@ -54,9 +54,8 @@ function formatDateTime(iso: string, locale: Locale): string {
   } catch { return iso; }
 }
 
-function executorLabel(t: Dictionary, executor: string): string {
-  return executor === "container" ? t.visualChecks.executorContainer : t.visualChecks.executorLocal;
-}
+// Train N4 (§8-7): the executor badge ("Cloud run"/"Local run") was removed
+// from the card — where a check ran is our operations detail, not the user's.
 
 /**
  * Chip for a non-terminal / failed run. Done (and unknown/legacy) statuses
@@ -207,25 +206,24 @@ export default function VisualChecksPage() {
             서버 게이트만 있고 화면에 켤 방법이 없어서 **아무도 도달할 수 없던**
             기능이다. 기본은 꺼짐이고, 켤 수 없는 상태면 비활성 + 이유를 말한다 —
             켰는데 아무 일도 안 일어나는 것이 가장 나쁜 침묵이다. */}
-        <label className="mt-3 flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={withSignup && signupAvailable === true}
-            disabled={signupAvailable !== true}
-            onChange={(e) => setWithSignup(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span className={signupAvailable === true ? "text-gray-700" : "text-gray-400"}>
-            {t.visualChecks.signupOptIn}
-            <span className="mt-0.5 block text-xs text-gray-500">
-              {signupAvailable === true
-                ? t.visualChecks.signupOptInHint
-                : signupAvailable === false
-                  ? t.visualChecks.signupUnavailable
-                  : ""}
+        {/* Train N4 (§8-7): when the server says the feature is not available
+            (no inbox to receive the confirmation mail yet), the option is not
+            shown at all — an operational state is ours to fix, not the user's
+            to read. It appears the moment the server reports it available. */}
+        {signupAvailable === true && (
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={withSignup}
+              onChange={(e) => setWithSignup(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="text-gray-700">
+              {t.visualChecks.signupOptIn}
+              <span className="mt-0.5 block text-xs text-gray-500">{t.visualChecks.signupOptInHint}</span>
             </span>
-          </span>
-        </label>
+          </label>
+        )}
 
         <button
           onClick={handleRun}
@@ -318,9 +316,6 @@ export default function VisualChecksPage() {
                     <span className="flex-shrink-0 text-xs text-gray-500">{formatDateTime(check.createdAt, locale)}</span>
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
-                    <span className="inline-flex items-center rounded-full border border-gray-200 px-2 py-0.5">
-                      {executorLabel(t, check.executor)}
-                    </span>
                     <span>{t.visualChecks.evidenceCount.replace("{count}", String(check.evidenceCount))}</span>
                     {transitionChip && (
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-medium ${transitionChip.cls}`}>

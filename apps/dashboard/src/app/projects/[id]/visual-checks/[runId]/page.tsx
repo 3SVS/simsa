@@ -22,6 +22,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject, getUserKey, saveExtendedProjectData } from "@/lib/workflow-store";
+import { screenshotCaption, screenshotFileName } from "@/lib/screenshot-caption.mjs";
 import {
   getVisualCheck,
   listVisualChecks,
@@ -246,9 +247,15 @@ function ComparisonSection({
               {evidencePairs.pairs.length === 0 && (
                 <p className="text-xs text-gray-500">{t.visualChecks.compare.noPairs}</p>
               )}
-              {evidencePairs.pairs.map((pair) => (
+              {evidencePairs.pairs.map((pair, pairIndex) => (
                 <div key={pair.name}>
-                  <p className="font-mono text-[10px] text-gray-500">{pair.name.replace(/^screenshots\//, "")}</p>
+                  <p title={screenshotFileName(pair.name)} className="text-[11px] font-medium text-gray-600">
+                    {screenshotCaption(pair.name, pairIndex, {
+                      initial: t.visualChecks.shotInitial,
+                      afterStep: t.visualChecks.shotAfterStep,
+                      final: t.visualChecks.shotFinal,
+                    })}
+                  </p>
                   <div className="mt-1.5 grid gap-3 sm:grid-cols-2">
                     {([
                       { label: t.visualChecks.compare.prevLabel, rid: prevRunId },
@@ -275,13 +282,13 @@ function ComparisonSection({
               {evidencePairs.prevOnly.length > 0 && (
                 <p className="text-[11px] leading-relaxed text-gray-500">
                   {t.visualChecks.compare.prevOnly}:{" "}
-                  <span className="font-mono">{evidencePairs.prevOnly.map((n) => n.replace(/^screenshots\//, "")).join(", ")}</span>
+                  <span>{evidencePairs.prevOnly.map((n, i) => screenshotCaption(n, i, { initial: t.visualChecks.shotInitial, afterStep: t.visualChecks.shotAfterStep, final: t.visualChecks.shotFinal })).join(", ")}</span>
                 </p>
               )}
               {evidencePairs.latestOnly.length > 0 && (
                 <p className="text-[11px] leading-relaxed text-gray-500">
                   {t.visualChecks.compare.latestOnly}:{" "}
-                  <span className="font-mono">{evidencePairs.latestOnly.map((n) => n.replace(/^screenshots\//, "")).join(", ")}</span>
+                  <span>{evidencePairs.latestOnly.map((n, i) => screenshotCaption(n, i, { initial: t.visualChecks.shotInitial, afterStep: t.visualChecks.shotAfterStep, final: t.visualChecks.shotFinal })).join(", ")}</span>
                 </p>
               )}
             </div>
@@ -735,10 +742,10 @@ export default function VisualCheckDetailPage() {
                 <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-500">{t.visualChecks.metaIntent}</dt>
                 <dd className="min-w-0 leading-relaxed text-gray-700">{report?.intent || check.intent}</dd>
               </div>
+              {/* Train N4 (§8-8): the timestamp is labelled as what it is —
+                  where the run executed is not something the user acts on. */}
               <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-500">
-                  {check.executor === "container" ? t.visualChecks.executorContainer : t.visualChecks.executorLocal}
-                </dt>
+                <dt className="w-40 flex-shrink-0 text-xs font-medium text-gray-500">{t.visualChecks.metaCheckedAt}</dt>
                 <dd className="text-gray-500">{formatDateTime(check.createdAt, locale)}</dd>
               </div>
             </dl>
@@ -774,7 +781,7 @@ export default function VisualCheckDetailPage() {
             <section className="space-y-3">
               <h3 className="section-title">{t.visualChecks.screenshotsTitle}</h3>
               <div className="grid gap-3 sm:grid-cols-2">
-                {evidence.screenshots.map((name) => (
+                {evidence.screenshots.map((name, shotIndex) => (
                   <figure key={name} className="card overflow-hidden">
                     {/* Evidence is served by the central plane behind the userKey — a
                         plain <img> keeps the private query URL out of Next's optimizer. */}
@@ -785,8 +792,17 @@ export default function VisualCheckDetailPage() {
                       loading="lazy"
                       className="w-full bg-gray-50"
                     />
-                    <figcaption className="border-t border-gray-100 px-3 py-1.5 font-mono text-[10px] text-gray-500">
-                      {name.replace(/^screenshots\//, "")}
+                    {/* Train N4 (§8-8): a step name, not a file name. The raw
+                        name stays in the title attribute for developers. */}
+                    <figcaption
+                      title={screenshotFileName(name)}
+                      className="border-t border-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-600"
+                    >
+                      {screenshotCaption(name, shotIndex, {
+                        initial: t.visualChecks.shotInitial,
+                        afterStep: t.visualChecks.shotAfterStep,
+                        final: t.visualChecks.shotFinal,
+                      })}
                     </figcaption>
                   </figure>
                 ))}
