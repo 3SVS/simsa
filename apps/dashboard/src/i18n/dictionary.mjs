@@ -2322,6 +2322,10 @@ const EN = {
   // Stage 262 — visual completion checks (시각 검수): the Korean non-dev inspection
   // report persisted by the central plane, rendered read-only in the dashboard.
   visualChecks: {
+    acceptanceTitle: "Spec items checked",
+    acceptanceIntro: "Each item from your development spec, checked as its own flow. Counts, not scores.",
+    acceptanceStatus: { no_problem: "No problem found", not_confirmed: "Couldn't confirm", broken: "Not working", not_run: "Not reached in time" },
+    acceptanceExpected: "Expected",
     title: "Visual checks",
     subtitle: "Real-browser inspections of your live app, explained in plain language.",
     loading: "Loading visual checks…",
@@ -4988,6 +4992,10 @@ const KO = {
   },
   // Stage 262 — 시각 검수: central plane에 저장된 비개발자용 검수 리포트를 읽기 전용으로 렌더.
   visualChecks: {
+    acceptanceTitle: "지시서 확인 항목",
+    acceptanceIntro: "개발 지시서의 항목을 하나씩 따로 따라가 본 결과예요. 개수이지 점수가 아니에요.",
+    acceptanceStatus: { no_problem: "문제 없음", not_confirmed: "확인 못 함", broken: "작동 안 함", not_run: "시간 부족으로 못 봄" },
+    acceptanceExpected: "기대한 결과",
     title: "시각 검수",
     subtitle: "실제 브라우저로 라이브 앱을 열어 확인하고, 쉬운 말로 정리한 리포트예요.",
     loading: "시각 검수를 불러오는 중이에요…",

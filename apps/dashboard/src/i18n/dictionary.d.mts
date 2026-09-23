@@ -2183,6 +2183,10 @@ export type Dictionary = {
     >;
   };
   visualChecks: {
+    acceptanceTitle: string;
+    acceptanceIntro: string;
+    acceptanceStatus: { no_problem: string; not_confirmed: string; broken: string; not_run: string };
+    acceptanceExpected: string;
     title: string;
     subtitle: string;
     loading: string;
