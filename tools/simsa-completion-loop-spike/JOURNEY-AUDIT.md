@@ -48,3 +48,16 @@ node journey-audit.mjs --ko-only  # KO만 (수정 후 빠른 재감사)
   변수로 교체). GitHub OAuth 실연동 여정은 여전히 수동 QA 영역.
 - 시각 품질("이 화면이 예쁜가")은 오라클 없음 — 스크린샷을 사람이 본다(§5 불변식 4)
 - LLM 생성 대기(spec 변환)는 최대 60s 폴링 — 그 이상 걸리면 스텝이 미완으로 기록됨
+
+## 초보자 기준 검사 (Train N6, 2026-09-24 — 설계 D-17 · §8)
+
+`lib/beginner-terms.mjs`(순수·테스트 있음)가 규칙을 갖고, `journey-audit.mjs`는 스텝마다 세 가지를 더 잰다.
+
+| 검사 | 무엇을 | 심각도 |
+|---|---|---|
+| 개발 용어 | GitHub·repo·PR·diff·Vercel·Netlify·Supabase·Firebase·Cursor·Codex·Windsurf·Lovable·Bolt·v0·클라우드·증거 파일·워크스페이스·owner/repo — **본문/셸 구분**, 문구 앞뒤 40자 동반 | 기본 흐름(J0·J2·J7) **P0** / 그 외 P2 |
+| 외부 계정 CTA | 버튼·링크 라벨의 GitHub·Google·Vercel·Netlify·Supabase·Firebase (URL 라벨=유저 앱 주소는 제외) | 위와 같음 |
+| 첫 방문 locale (J7) | 저장 선호 없이 브라우저 locale만으로 진입 — ko-KR은 한글 h1, en-US는 한글 없는 h1 | P0 |
+
+기준선(2026-09-24, N1~N5 배포 전): P0=16(전부 이 검사) · P2=32. 배포 후 J0·J2·J7의 P0는 0이어야 한다.
+

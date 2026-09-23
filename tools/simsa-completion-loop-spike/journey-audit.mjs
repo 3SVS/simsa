@@ -21,6 +21,7 @@
  * 배포 게이트 절차: ./JOURNEY-AUDIT.md
  */
 import { chromium } from "playwright";
+import { devTermHits, accountCtaLabels, isDefaultFlowJourney, firstVisitLocaleMismatch } from "./lib/beginner-terms.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const BASE = "https://app.trysimsa.com";
@@ -117,13 +118,30 @@ async function facts(page, label, note = "") {
       guidanceish: (body.match(/연결해 주세요|연결하세요|먼저|필요해요|이렇게 하세요|설치|connect|first|install/gi) ?? []).length,
       koLeakChars: (body.match(/[가-힣]/g) ?? []).length,
       bodyHead: body.slice(0, 400),
+      // Train N6 — raw material for the beginner-standard checks (matched in
+      // Node so the rule lives in one tested place, lib/beginner-terms.mjs).
+      // Page content vs the shared shell (sidebar/header/footer) — split so a
+      // finding says WHERE the word is; the shell repeats on every screen.
+      _mainText: (document.querySelector("main")?.innerText || "").replace(/\s+/g, " ").slice(0, 30000),
+      _shellText: [...document.querySelectorAll("aside, nav, header, footer")].filter(vis).map((e) => (e.innerText || "")).join(" ").replace(/\s+/g, " ").slice(0, 30000),
+      _actionTexts: texts("a, button, [role=button]").slice(0, 200),
     };
   });
-  const row = { label, note, locale: page._simsaLocale ?? "ko", url: page.url(), ...f };
+  // Beginner standard (D-17 / §8): which developer words and which external-
+  // account buttons this screen shows — with the text, never just a count.
+  const devTerms = [
+    ...devTermHits(f._mainText).map((h) => ({ ...h, where: "본문" })),
+    ...devTermHits(f._shellText).map((h) => ({ ...h, where: "셸" })),
+  ];
+  const accountCtas = accountCtaLabels(f._actionTexts);
+  delete f._mainText;
+  delete f._shellText;
+  delete f._actionTexts;
+  const row = { label, note, locale: page._simsaLocale ?? "ko", url: page.url(), ...f, devTerms, accountCtas };
   audit.journeys.at(-1).steps.push(row);
   const shotName = `${audit.journeys.length}-${audit.journeys.at(-1).steps.length}-${(page._simsaLocale ?? "ko")}-${label.replace(/[^\w가-힣-]/g, "_").slice(0, 40)}.png`;
   await page.screenshot({ path: `${SHOTS}/${shotName}` }).catch(() => {});
-  console.log(`  [${row.locale}|${label}] cta=${f.primaryCtaCount} exit=${f.hasExit} dis=${f.disabledCount} err=${f.errorish} ko=${f.koLeakChars}`);
+  console.log(`  [${row.locale}|${label}] cta=${f.primaryCtaCount} exit=${f.hasExit} dis=${f.disabledCount} err=${f.errorish} ko=${f.koLeakChars} dev=${devTerms.length} acct=${accountCtas.length}`);
   return row;
 }
 
@@ -322,8 +340,33 @@ async function runSeededResultJourney(locale) {
   }
 }
 
+/**
+ * J7 (Train N6, §8-12) — 첫 방문 locale. 저장된 선호 없이 브라우저 locale만으로
+ * 들어온 사용자가 자기 언어를 보는가. 한국 초보자의 첫 화면이 영어면 이탈이다.
+ * newUserPage()는 locale을 심어 두므로 여기서는 쓰지 않는다.
+ */
+async function runFirstVisitLocale(browserLocale) {
+  const tag = browserLocale === "ko-KR" ? "ko" : "en";
+  try {
+    journey("J7 첫 방문 locale — 저장된 선호 없이 브라우저 언어만으로", tag);
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: browserLocale });
+    const page = await ctx.newPage();
+    page._simsaLocale = tag;
+    await page.goto(`${BASE}/projects/new`, { waitUntil: "networkidle", timeout: 45000 });
+    const row = await facts(page, `첫 방문(${browserLocale}) — 갈래 선택 화면 언어`);
+    const check = firstVisitLocaleMismatch(browserLocale, row.h1);
+    if (check.mismatch) {
+      audit.findings.push({ sev: "P0", journey: "J7", locale: tag, step: row.label, what: `첫 방문 locale 분열 — ${check.reason}` });
+    }
+    await ctx.close();
+  } catch (err) {
+    audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
+  }
+}
+
 // ── 실행: KO 전체 + (기본) EN 축 ──────────────────────────────────────────────
 
+await runFirstVisitLocale("ko-KR");
 await runIdeaEntry("ko");
 await runCodeJourney("ko");
 await runRepoOnlyJourney("ko");
@@ -332,6 +375,7 @@ await runConnectJourney("ko");
 await runSeededResultJourney("ko");
 
 if (!KO_ONLY) {
+  await runFirstVisitLocale("en-US");
   await runIdeaEntry("en");
   await runCodeJourney("en");
   await runRepoOnlyJourney("en");
@@ -379,6 +423,18 @@ for (const j of audit.journeys) {
     }
     if (isBlockedStep && s.guidanceish === 0) {
       audit.findings.push({ sev: "P2", journey: j.name, locale: s.locale, step: s.label, what: "막힘 스텝인데 안내 카피 신호 0" });
+    }
+    // ★초보자 기준 (Train N6, D-17 / §8): 기본 흐름(J0·J2·J7)에서 개발 용어·외부
+    // 계정 버튼은 P0. 기존 앱·개발자 화면(J1·J3·J5)은 같은 신호를 P2로만 남긴다 —
+    // 거기서는 GitHub이 사용자 자신의 말이다. 문구를 같이 남긴다(개수만 세지 않는다).
+    const beginnerSev = isDefaultFlowJourney(j.name) ? "P0" : "P2";
+    if ((s.devTerms ?? []).length > 0) {
+      const list = s.devTerms.map((h) => `[${h.where}] ${h.term}: "${h.snippet}"`).join(" ⟂ ");
+      const mainCount = s.devTerms.filter((h) => h.where === "본문").length;
+      audit.findings.push({ sev: beginnerSev, journey: j.name, locale: s.locale, step: s.label, what: `개발 용어 노출 ${s.devTerms.length}건(본문 ${mainCount}) — ${list}` });
+    }
+    if ((s.accountCtas ?? []).length > 0) {
+      audit.findings.push({ sev: beginnerSev, journey: j.name, locale: s.locale, step: s.label, what: `외부 계정 CTA ${s.accountCtas.length}개 — ${s.accountCtas.join(" / ")}` });
     }
   }
 }
