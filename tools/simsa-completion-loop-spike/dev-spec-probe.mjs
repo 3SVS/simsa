@@ -29,6 +29,8 @@ const ONLY = opt("only") ? opt("only").split(",").map((s) => Number(s.trim())) :
 const TARGET = opt("target") ?? null;
 const KEEP = flag("keep");
 const SKIP_EN = flag("skip-en");
+// 로그인 뒤 검수(일회용 계정 가입 + probe 메일 수신)까지 — 대상 앱에 실제 계정이 생긴다. 명시할 때만.
+const SIGNUP = flag("signup");
 const STAMP = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "").slice(0, 12);
 const USER_KEY = opt("key") ?? `probe-devspec-${STAMP}`;
 const AC_INTENT_MAX = 1000;
@@ -191,7 +193,7 @@ async function runAcceptance(id, f, target) {
   const src = await api("POST", `/workspace/projects/${id}/sources`, { userKey: USER_KEY, type: "website", reference: target, label: "probe" });
   if (src.status !== 200 && src.status !== 201) return { skipped: `source ${src.status} ${src.text.slice(0, 100)}` };
   const intent = `${f.productSpec.oneLine}. ${f.items.map((i) => i.title).join(" / ")}`.slice(0, AC_INTENT_MAX);
-  const run = await api("POST", `/workspace/projects/${id}/visual-checks/run`, { userKey: USER_KEY, targetUrl: target, intent, locale: "ko" }, 30000);
+  const run = await api("POST", `/workspace/projects/${id}/visual-checks/run`, { userKey: USER_KEY, targetUrl: target, intent, locale: "ko", ...(SIGNUP ? { withSignup: true } : {}) }, 30000);
   if (run.status !== 200 && run.status !== 202) return { skipped: `run ${run.status} ${run.text.slice(0, 120)}` };
   const runId = run.json?.runId ?? run.json?.check?.id ?? run.json?.run?.id ?? run.json?.id;
   if (!runId) return { skipped: `run id missing: ${run.text.slice(0, 120)}` };
@@ -221,6 +223,9 @@ async function runAcceptance(id, f, target) {
     acShots,
     acIdsInSteps,
     notesHead: typeof report?.notes === "string" ? report.notes.split("\n")[0].slice(0, 80) : null,
+    signup: report?.signup ?? report?.login ?? report?.depth ?? null,
+    decision: last?.check?.decision ?? null,
+    reportKeys: report ? Object.keys(report) : null,
   };
 }
 

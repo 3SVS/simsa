@@ -141,3 +141,17 @@ describe("④ 메일함 경로는 무보호로 열리지 않는다", () => {
     assert.equal((await call({ DB: emptyDb, INTERNAL_CALLBACK_TOKEN: "t" }, "t", "DELETE")).status, 200);
   });
 });
+
+// Rule 6 (2026-09-25 라이브): 한글 제목 "테스트"가 `=?UTF-8?B?7YWM7Iqk7Yq4?=` 그대로 저장됐다.
+import { test as test2025 } from "node:test";
+import assert2025 from "node:assert/strict";
+const { decodeMimeHeader } = await import("../dist/probe-mailbox.js");
+test2025("decodeMimeHeader: 한글 B·Q 인코딩·인접 단어·혼합·깨진 조각", () => {
+  assert2025.equal(decodeMimeHeader("=?UTF-8?B?7YWM7Iqk7Yq4?="), "테스트");
+  assert2025.equal(decodeMimeHeader("=?utf-8?Q?=EB=B9=B5=EC=A7=91_=EC=98=88=EC=95=BD?="), "빵집 예약");
+  assert2025.equal(decodeMimeHeader("=?UTF-8?B?7ZmV7J24?= =?UTF-8?B?66mU7J28?="), "확인메일");
+  assert2025.equal(decodeMimeHeader("[Bakery] =?UTF-8?B?7ZmV7J24?= please"), "[Bakery] 확인 please");
+  assert2025.equal(decodeMimeHeader("Plain subject"), "Plain subject");
+  assert2025.equal(decodeMimeHeader("=?x-unknown?B?AAAA?="), "=?x-unknown?B?AAAA?=");
+  assert2025.equal(decodeMimeHeader(""), "");
+});

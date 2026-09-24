@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const { decideRoute, isValidSlug, SLUG_RE, RESERVED_SLUGS } = await import("../dist/route.js");
-const { handle } = await import("../dist/index.js");
+const { handle, isMissingWorker } = await import("../dist/index.js");
 
 const ROOT = "simsa.page";
 
@@ -55,6 +55,14 @@ describe("handle (DISPATCHER 모크)", () => {
     const r = await handle(req("app-abc.simsa.page"), env(() => { throw new Error("Worker not found: app-abc"); }));
     assert.equal(r.status, 404);
     assert.match(await r.text(), /not deployed/);
+  });
+  it("지워진 앱(다른 문구) → 404, 진짜 앱 오류는 502 유지", async () => {
+    for (const msg of ["Worker not found.", "Script not found", "This Worker was deleted", "script does not exist"]) {
+      assert.equal(isMissingWorker(msg), true, msg);
+      const r = await handle(req("app-abc.simsa.page"), env(() => ({ fetch: async () => { throw new Error(msg); } })));
+      assert.equal(r.status, 404, msg);
+    }
+    assert.equal(isMissingWorker("TypeError: Cannot read properties of undefined"), false);
   });
   it("유저 Worker 예외 → 502 (라우터 오류와 구분)", async () => {
     const r = await handle(req("app-abc.simsa.page"), env(() => ({ fetch: async () => { throw new Error("boom"); } })));
