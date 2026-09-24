@@ -1,0 +1,36 @@
+# ops-probe — 관측 전용 내부 엔드포인트를 repo secret 토큰으로 호출해 결과를 로그에 남긴다.
+#
+# 왜: LLM_PROBE_TOKEN은 repo secret에만 있고 노트북엔 없다(2026-09-24). 라이브 증거
+# (빌더 컨테이너 selfcheck, LLM 벤더 프로브)를 사람이 토큰을 복사하지 않고 얻기 위한 유일한 경로.
+# 토큰은 헤더로만 쓰이고 로그엔 마스킹된다. 쓰기 동작 없음(읽기·관측 전용 엔드포인트만).
+name: ops-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '프로브 대상'
+        required: true
+        default: 'builder-selfcheck'
+        type: choice
+        options: [builder-selfcheck, llm-probe]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TOKEN: ${{ secrets.LLM_PROBE_TOKEN }}
+      BASE: https://conclave-ai.seunghunbae.workers.dev
+    steps:
+      - name: Probe
+        run: |
+          set -uo pipefail
+          case "${{ inputs.target }}" in
+            builder-selfcheck) req=(-X GET "$BASE/internal/builder/selfcheck") ;;
+            llm-probe)         req=(-X POST "$BASE/internal/llm-probe?n=1") ;;
+          esac
+          code=$(curl -sS -m 150 -o /tmp/out.json -w '%{http_code} %{time_total}' -H "Authorization: Bearer $TOKEN" "${req[@]}")
+          echo "HTTP $code"
+          jq . /tmp/out.json || cat /tmp/out.json
+          case "$code" in 200*) exit 0 ;; *) echo "::warning::probe returned $code"; exit 1 ;; esac
