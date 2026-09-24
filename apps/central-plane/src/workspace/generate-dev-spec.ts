@@ -273,7 +273,7 @@ ${brief}
 ${p1}
 
 만들 것:
-- screens: 1~8개. route(경로)·purpose·components(주요 구성요소)·states(empty/loading/error/success 중 해당하는 것의 문구)·entryFrom·exitTo·featureIds. **priority가 must인 기능은 반드시 어떤 화면 또는 API의 featureIds에 등장**해야 한다.
+- screens: 1~8개. route(경로)·purpose·components(주요 구성요소)·states(empty/loading/error/success 중 해당하는 것의 문구 — 화면 고유 상태(locked·submitted 등)도 영문 소문자 키로 추가 가능, 12개 이하)·entryFrom·exitTo·featureIds. **priority가 must인 기능은 반드시 어떤 화면 또는 API의 featureIds에 등장**해야 한다.
 - dataModel: 저장할 엔티티. fields(name/type/required/default)·relations(to/kind)·ownership(누가 소유·열람하는지, 모르면 "unknown").
 - apis: 화면이 필요로 하는 서버 동작. method·path·request/response(형태 설명)·errors·auth(none/user/admin)·featureIds.
 - nonFunctional: performance/security/accessibility/i18n/cost/other 중 해당 항목. 모르면 requirement에 "unknown".
@@ -292,7 +292,7 @@ Requirements (JSON):
 ${p1}
 
 Produce:
-- screens: 1–8. route, purpose, components, states (copy for empty/loading/error/success where applicable), entryFrom, exitTo, featureIds. **Every must feature must appear in the featureIds of at least one screen or API.**
+- screens: 1–8. route, purpose, components, states (copy for empty/loading/error/success where applicable; screen-specific states such as locked/submitted are welcome as lowercase keys, max 12), entryFrom, exitTo, featureIds. **Every must feature must appear in the featureIds of at least one screen or API.**
 - dataModel: entities to persist. fields (name/type/required/default), relations (to/kind), ownership (who owns/reads rows; "unknown" if unsure).
 - apis: server actions the screens need. method, path, request/response (shape in words), errors, auth (none/user/admin), featureIds.
 - nonFunctional: whichever of performance/security/accessibility/i18n/cost/other apply; requirement "unknown" when unsure.
