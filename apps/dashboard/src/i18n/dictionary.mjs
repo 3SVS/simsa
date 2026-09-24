@@ -1255,7 +1255,7 @@ const EN = {
     saveError: "Could not save your choice. Please try again.",
     joinCta: "Join in",
     laterCta: "Maybe later",
-    manageInSettings: "Change anytime in Settings",
+    manageInSettings: "Change anytime in each project's Settings.",
   },
   github: {
     connectTitle: "Prep & connections",
@@ -3954,7 +3954,7 @@ const KO = {
     saveError: "선택을 저장하지 못했어요. 잠시 후 다시 시도해주세요.",
     joinCta: "참여하기",
     laterCta: "나중에",
-    manageInSettings: "설정에서 언제든 바꿀 수 있어요",
+    manageInSettings: "각 프로젝트의 설정에서 언제든 바꿀 수 있어요.",
   },
   github: {
     connectTitle: "준비와 연결",
