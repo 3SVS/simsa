@@ -4,24 +4,23 @@
 # `simsa-hosted` 안의 유저 Worker(스크립트 이름 = slug)로 보낸다. 유저 앱의 코드는 우리
 # 계정에서, 테넌트별로 격리되어 돈다. 유저 배포 토큰은 어디에도 없다.
 #
-# ★아직 배포하지 않는다. 필요한 것(Bae 결정, docs/simsa-dev-plan-2026-09-24.md §3):
-#   1) 호스팅 도메인 — 와일드카드 라우트는 Cloudflare 존이어야 한다. 후보: simsa.app(보유,
-#      Loopia NS → Cloudflare 이전 필요) / conclave-ai.dev 하위(즉시 가능).
-#   2) Workers for Platforms Paid($25/월) — 네임스페이스 생성 전제.
-# 결정 후: routes 패턴 + HOSTING_ROOT_DOMAIN 채움 → 네임스페이스 생성 → deploy.
+# 결정(2026-09-25): 도메인 conclave-ai.dev · WfP Paid 구독 완료(Bae).
+# 배포 순서: 네임스페이스 simsa-hosted 생성 → `*` 와일드카드 DNS → deploy.
 name = "simsa-hosting-dispatch"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
 [vars]
 # 예: "simsa.app" — 비어 있으면 모든 요청에 503 hosting_not_configured(정직하게 꺼짐).
-HOSTING_ROOT_DOMAIN = ""
+HOSTING_ROOT_DOMAIN = "conclave-ai.dev"
 
 [[dispatch_namespaces]]
 binding = "DISPATCHER"
 namespace = "simsa-hosted"
 
-# 결정 후 활성화:
-# [[routes]]
-# pattern = "*.simsa.app/*"
-# zone_name = "simsa.app"
+# 2026-09-25 Bae 결정: 호스팅 도메인 = conclave-ai.dev(이미 같은 계정의 Cloudflare 존, 대시보드
+# trysimsa.com과 등록 도메인이 달라 쿠키·평판 격리). 루트·www는 Vercel DNS-only 레코드라 이 라우트를
+# 타지 않는다. 전제: `*` 와일드카드 proxied DNS 레코드(배포 단계에서 추가).
+[[routes]]
+pattern = "*.conclave-ai.dev/*"
+zone_name = "conclave-ai.dev"

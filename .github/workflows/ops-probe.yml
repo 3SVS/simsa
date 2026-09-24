@@ -13,7 +13,11 @@ on:
         required: true
         default: 'builder-selfcheck'
         type: choice
-        options: [builder-selfcheck, llm-probe]
+        options: [builder-selfcheck, llm-probe, probe-mail]
+      run_id:
+        description: 'probe-mail 전용: 확인할 runId (probe-<runId>@PROBE_MAIL_DOMAIN)'
+        required: false
+        default: ''
 
 jobs:
   probe:
@@ -21,6 +25,7 @@ jobs:
     timeout-minutes: 5
     env:
       TOKEN: ${{ secrets.LLM_PROBE_TOKEN }}
+      INTERNAL_TOKEN: ${{ secrets.INTERNAL_CALLBACK_TOKEN }}
       BASE: https://conclave-ai.seunghunbae.workers.dev
     steps:
       - name: Probe
@@ -29,6 +34,7 @@ jobs:
           case "${{ inputs.target }}" in
             builder-selfcheck) req=(-X GET "$BASE/internal/builder/selfcheck") ;;
             llm-probe)         req=(-X POST "$BASE/internal/llm-probe?n=1") ;;
+            probe-mail)        req=(-X GET "$BASE/internal/probe-mail?runId=${{ inputs.run_id }}"); TOKEN="$INTERNAL_TOKEN" ;;
           esac
           code=$(curl -sS -m 150 -o /tmp/out.json -w '%{http_code} %{time_total}' -H "Authorization: Bearer $TOKEN" "${req[@]}")
           echo "HTTP $code"
