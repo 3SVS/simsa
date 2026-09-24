@@ -10,7 +10,6 @@
 // is respected — we never nag.
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getUserKey } from "@/lib/workflow-store";
 import { fetchTrainingConsent, saveTrainingConsent } from "@/lib/workspace-training-consent-api";
@@ -107,9 +106,10 @@ export function ImproveSimsaPrompt() {
           </button>
         </div>
         <p className="mt-3 text-[11px] text-gray-400">
-          <Link href="/settings" className="underline hover:text-gray-600">
-            {t.trainingConsent.manageInSettings}
-          </Link>
+          {/* 2026-09-25: 종전 `/settings` 링크는 존재하지 않는 경로였다(프로덕션 404 프리페치). 동의는
+              각 프로젝트의 설정 화면에서 바꾼다 — 이 프롬프트는 목록 화면에 떠서 가리킬 프로젝트가 없으므로
+              링크 대신 그 사실을 말한다. */}
+          {t.trainingConsent.manageInSettings}
         </p>
       </div>
     </div>
