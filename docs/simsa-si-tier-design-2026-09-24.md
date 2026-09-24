@@ -312,6 +312,7 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | A1~A5 코드 완료 | — | 2026-09-24 | PR #521(central-plane A1~A5) · #524(dashboard A4+A5) → 2026-09-24 밤 머지·0067·배포 완료 |
 | 머지 (집행) | `PR #527 merge approved.` `PR #528 merge approved.` | 2026-09-24 오전 (Bae) | #527 `a6f7445` · #528 `12f09a4` (앞서 #520~#526은 밤에 같은 문구로) |
 | 배포 (집행) | `deploy central-plane approved.` `deploy dashboard approved.` | 2026-09-24 오전 (Bae) | central run 35948123514 success(deployedSha 12f09a4) · dashboard `24v0yx3ud` Ready |
+| 머지·배포 (집행) | `PR #530 merge approved.` `deploy central-plane approved.` | 2026-09-24 오전 (Bae) | #530 `f09e99c` · central run 35951724360 success · 기획 3 en 422→200 실측 |
 | N1~N3·N2 PR | — | 2026-09-24 | #522 · #523 (Train N 에이전트) |
 | Train B 착수 | `train B start approved` | — | B1~B11 코드 작성만 |
 | Train C 착수 | `train C start approved` | — | C1~C4 코드 작성만 |
