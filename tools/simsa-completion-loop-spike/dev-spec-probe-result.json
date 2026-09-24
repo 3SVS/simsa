@@ -1,0 +1,65 @@
+{
+  "at": "2026-09-24T03:35:42.579Z",
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "userKey": "probe-devspec-202609240333",
+  "target": null,
+  "results": [
+    {
+      "n": 3,
+      "title": "아파트 반찬 공동구매 (101동·102동)",
+      "projectId": "wsp_ez92iohhi1",
+      "ideaRoundTrip": true,
+      "ko": {
+        "locale": "ko",
+        "status": 200,
+        "ms": 73558,
+        "ok": true,
+        "repaired": false,
+        "counts": {
+          "FR": 7,
+          "AC": 7,
+          "SCR": 4,
+          "ENT": 4,
+          "API": 4,
+          "NFR": 6,
+          "WBS": 12,
+          "TP": 7
+        },
+        "nullDefaults": 0,
+        "humanAc": 0,
+        "excludedLeaks": [],
+        "bodyHangul": 4136,
+        "metaLocale": "ko"
+      },
+      "en": {
+        "locale": "en",
+        "status": 200,
+        "ms": 51655,
+        "ok": true,
+        "repaired": false,
+        "counts": {
+          "FR": 7,
+          "AC": 8,
+          "SCR": 6,
+          "ENT": 4,
+          "API": 5,
+          "NFR": 7,
+          "WBS": 9,
+          "TP": 8
+        },
+        "nullDefaults": 0,
+        "humanAc": 0,
+        "excludedLeaks": [],
+        "bodyHangul": 0,
+        "metaLocale": "en"
+      },
+      "saved": {
+        "status": 200,
+        "hasSpec": true,
+        "updatedAt": "2026-09-24T03:35:42.118Z",
+        "savedLocale": "en"
+      },
+      "deleted": true
+    }
+  ]
+}
