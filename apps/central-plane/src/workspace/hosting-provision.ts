@@ -17,6 +17,8 @@
 
 export const HOSTING_NAMESPACE = "simsa-hosted";
 export const HOSTED_D1_PREFIX = "simsa-hosted-";
+/** 네임스페이스가 이미 있을 때 Cloudflare가 돌려주는 코드(라이브 실측 2026-09-25). */
+export const NAMESPACE_EXISTS_CODE = 100120;
 const API = "https://api.cloudflare.com/client/v4";
 
 export const SLUG_RE = /^[a-z0-9](?:[a-z0-9]|-(?!-)){1,38}[a-z0-9]$/;
@@ -89,7 +91,9 @@ export async function ensureNamespace(env: ProvisionEnv, fetchImpl: FetchLike = 
     headers: { authorization: `Bearer ${c.token}`, "content-type": "application/json" },
     body: JSON.stringify({ name: HOSTING_NAMESPACE }),
   }, () => ({ name: HOSTING_NAMESPACE, created: true }));
-  if (!r.ok && r.error === "cf_error" && (r.cfErrors ?? []).some((e) => /already exists/i.test(e.message))) {
+  // 라이브 실측(2026-09-25): 이미 있으면 400 + code 100120 "Invalid dispatch namespace name. Ensure it does
+  // not already exist and …". 메시지가 "already exists"가 아니라 "already exist"다 — 코드로 판정한다.
+  if (!r.ok && r.error === "cf_error" && (r.cfErrors ?? []).some((e) => e.code === NAMESPACE_EXISTS_CODE || /already exist/i.test(e.message))) {
     return { ok: true, value: { name: HOSTING_NAMESPACE, created: false } };
   }
   return r;
