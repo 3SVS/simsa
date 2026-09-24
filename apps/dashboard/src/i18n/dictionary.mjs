@@ -54,7 +54,7 @@ const EN = {
     noProjects: "No projects yet",
   },
   account: {
-    workspace: "Workspace",
+    workspace: "Account",
     plan: "Free beta",
     settings: "Settings",
     // Stage 170 — local account-settings stub (no auth).
@@ -73,7 +73,7 @@ const EN = {
       preferences: "Preferences",
       connectedAccounts: "Connected accounts",
       data: "Data & export",
-      workspace: "Workspace",
+      workspace: "Account scope",
     },
     profile: {
       displayName: "Display name",
@@ -100,9 +100,9 @@ const EN = {
       deleteRequiresSignIn: "Deleting your account requires sign-in.",
     },
     workspaceInfo: {
-      current: "Current workspace",
-      localScoped: "Local, browser-scoped workspace.",
-      teamPlanned: "Team workspaces are planned.",
+      current: "Current account",
+      localScoped: "Saved only in this browser.",
+      teamPlanned: "Team accounts are planned.",
       invitePlanned: "Inviting teammates is planned.",
     },
     auth: {
@@ -359,7 +359,7 @@ const EN = {
     addUrlDesc: "We have your repository. Add the address where the app runs and we can check the live screens.",
     connectCodeDesc: "Link the GitHub repository your app lives in — one step from your first review.",
     getPack: "Get your builder pack",
-    getPackDesc: "Your product spec and acceptance criteria are ready. Get the builder pack, build your app with whichever tool you use (e.g. Lovable, v0, Claude Code), then connect its URL to have Simsa check it.",
+    getPackDesc: "Your product brief and acceptance items are ready. Get the build guide, make the app with the AI tool you already use, then connect the app's address and Simsa will check it.",
     alreadyBuilt: "Already built your app?",
     connectUrl: "Connect its URL",
     runReview: "Run your first review",
@@ -436,7 +436,7 @@ const EN = {
     gettingStartedTitle: "Get started",
     gettingStartedIntro: "Three steps to your first code review:",
     gsStep1: "Check the product brief — make sure Simsa understood what you want to build.",
-    gsStep2: "Connect your code — link the GitHub repository where your AI-built code lives.",
+    gsStep2: "Connect your app — paste the address of the app you made. (Code repositories are under Developer mode.)",
     gsStep3: "Run a review — pick the code changes and check them against your acceptance items.",
     gsIdeaStep1: "Check the product brief — make sure Simsa understood what you want to build.",
     gsIdeaStep2: "Get the builder pack — paste it into your dev AI and it builds the app for you.",
@@ -2758,7 +2758,7 @@ const KO = {
     noProjects: "아직 프로젝트가 없어요",
   },
   account: {
-    workspace: "워크스페이스",
+    workspace: "내 계정",
     plan: "무료 베타",
     settings: "설정",
     // Stage 170 — 로컬 계정 설정 스텁(인증 없음).
@@ -2776,7 +2776,7 @@ const KO = {
       preferences: "환경설정",
       connectedAccounts: "연결된 계정",
       data: "데이터 및 내보내기",
-      workspace: "워크스페이스",
+      workspace: "계정 범위",
     },
     profile: {
       displayName: "표시 이름",
@@ -2803,9 +2803,9 @@ const KO = {
       deleteRequiresSignIn: "계정 삭제는 로그인이 필요합니다.",
     },
     workspaceInfo: {
-      current: "현재 워크스페이스",
-      localScoped: "로컬·브라우저 범위 워크스페이스입니다.",
-      teamPlanned: "팀 워크스페이스는 예정되어 있습니다.",
+      current: "현재 계정",
+      localScoped: "이 브라우저에만 저장돼 있어요.",
+      teamPlanned: "팀 계정은 예정되어 있습니다.",
       invitePlanned: "팀원 초대는 예정되어 있습니다.",
     },
     auth: {
@@ -3058,7 +3058,7 @@ const KO = {
     addUrlDesc: "저장소는 받았어요. 앱이 실제로 돌아가는 주소를 알려주시면 화면을 확인해 드릴게요.",
     connectCodeDesc: "앱이 있는 GitHub 저장소를 연결하세요 — 첫 검수까지 한 단계 남았어요.",
     getPack: "빌더 팩 받기",
-    getPackDesc: "제품설명서와 수용 기준이 준비됐어요. 빌더 팩을 받아 쓰시는 도구(예: Lovable·v0·Claude Code 등)로 앱을 만들고, 그 URL을 연결하면 심사가 확인해드려요.",
+    getPackDesc: "제품 설명서와 확인 항목이 준비됐어요. 만들기 안내를 받아 쓰시는 AI 도구로 앱을 만들고, 앱 주소를 연결하면 Simsa가 확인해드려요.",
     alreadyBuilt: "앱을 이미 만드셨나요?",
     connectUrl: "URL 연결하기",
     runReview: "첫 검수 실행하기",
@@ -3135,7 +3135,7 @@ const KO = {
     gettingStartedTitle: "시작하기",
     gettingStartedIntro: "첫 코드 확인까지 세 단계:",
     gsStep1: "제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요.",
-    gsStep2: "코드 저장소 연결 — AI가 만든 코드가 있는 GitHub 저장소를 연결하세요.",
+    gsStep2: "앱 연결 — 만든 앱의 주소를 붙여넣어 주세요. (코드 저장소 연결은 개발자 모드에 있어요.)",
     gsStep3: "확인 실행 — 코드 변경을 골라 검수 항목 기준으로 확인하세요.",
     gsIdeaStep1: "제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요.",
     gsIdeaStep2: "빌더 팩 받기 — 쓰시는 개발 AI에 붙여넣으면 앱을 만들어 드려요.",
