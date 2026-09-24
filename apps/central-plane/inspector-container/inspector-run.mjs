@@ -35,7 +35,7 @@ import { observeThen } from "./acceptance-observe.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "a5-acceptance-3";
+export const RUNNER_REV = "a5-acceptance-4";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [

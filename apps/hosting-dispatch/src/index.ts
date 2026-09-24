@@ -22,12 +22,15 @@ export interface Env {
 const errorMessage = (e: unknown) => String((e as Error)?.message ?? e).slice(0, 300);
 
 /**
- * "없는 앱"을 뜻하는 디스패치 오류인가. 한 번도 없던 이름은 `Worker not found`로 시작하지만,
- * **지워진 앱은 다른 문구로 던진다**(라이브 2026-09-25: 삭제 직후 계속 502). 없음 계열 문구를 넓게 받는다 —
- * 오판 비용이 비대칭이다(없는 앱을 502로 말하면 "앱이 고장"으로 오도, 404는 사실).
+ * "없는 앱"을 뜻하는 **디스패치 계층** 오류인가 — `Worker not found`로 시작하는 것만.
+ *
+ * 2026-09-25 라이브 교훈: 처음엔 "not found|has been deleted"까지 넓게 받았는데, 그러면 **살아 있는 유저
+ * 앱**이 던진 "User not found" 같은 오류도 "배포 안 됨 404"로 둔갑해 앱 고장을 가린다. 실제로 본 502는
+ * 스크립트 삭제 뒤에도 엣지에서 옛 코드가 한동안 실행되며(API상 script_count 0) 그 앱이 지워진 D1에서
+ * 낸 오류였다 — 라우터가 판정할 일이 아니라 **삭제 전파 지연**이다. 즉시 차단은 B7 라우터 차단(410)으로.
  */
 export function isMissingWorker(message: string): boolean {
-  return /worker not found|not found|was deleted|has been deleted|does not exist|no such (script|worker)/i.test(message);
+  return /^Worker not found/i.test(message.trim());
 }
 
 const text = (status: number, body: string, extra: Record<string, string> = {}) =>
