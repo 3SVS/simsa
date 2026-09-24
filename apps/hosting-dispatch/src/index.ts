@@ -19,6 +19,17 @@ export interface Env {
   HOSTING_ROOT_DOMAIN?: string;
 }
 
+const errorMessage = (e: unknown) => String((e as Error)?.message ?? e).slice(0, 300);
+
+/**
+ * "없는 앱"을 뜻하는 디스패치 오류인가. 한 번도 없던 이름은 `Worker not found`로 시작하지만,
+ * **지워진 앱은 다른 문구로 던진다**(라이브 2026-09-25: 삭제 직후 계속 502). 없음 계열 문구를 넓게 받는다 —
+ * 오판 비용이 비대칭이다(없는 앱을 502로 말하면 "앱이 고장"으로 오도, 404는 사실).
+ */
+export function isMissingWorker(message: string): boolean {
+  return /worker not found|not found|was deleted|has been deleted|does not exist|no such (script|worker)/i.test(message);
+}
+
 const text = (status: number, body: string, extra: Record<string, string> = {}) =>
   new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8", ...extra } });
 
@@ -37,7 +48,9 @@ export async function handle(request: Request, env: Env, isSuspended: (slug: str
       try {
         worker = env.DISPATCHER.get(d.slug);
       } catch (e) {
-        if (String((e as Error)?.message ?? e).startsWith("Worker not found")) return text(404, "app not deployed yet", { "x-simsa-hosted": d.slug });
+        const message = errorMessage(e);
+        console.log(JSON.stringify({ event: "dispatch_get_error", slug: d.slug, message }));
+        if (isMissingWorker(message)) return text(404, "app not deployed yet", { "x-simsa-hosted": d.slug });
         return text(502, "hosting router error", { "x-simsa-hosted": d.slug });
       }
       try {
@@ -46,7 +59,9 @@ export async function handle(request: Request, env: Env, isSuspended: (slug: str
         out.headers.set("x-simsa-hosted", d.slug);
         return out;
       } catch (e) {
-        if (String((e as Error)?.message ?? e).startsWith("Worker not found")) return text(404, "app not deployed yet", { "x-simsa-hosted": d.slug });
+        const message = errorMessage(e);
+        console.log(JSON.stringify({ event: "dispatch_fetch_error", slug: d.slug, message }));
+        if (isMissingWorker(message)) return text(404, "app not deployed yet", { "x-simsa-hosted": d.slug });
         return text(502, "the app failed to respond", { "x-simsa-hosted": d.slug });
       }
     }

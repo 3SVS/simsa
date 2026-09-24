@@ -27,6 +27,7 @@ import { buildNonDevReport, buildAgentFixPrompt, isNoiseResource, decideFromEvid
 import { blockerToFinding } from "./dist/signup-plan.js";
 import { classifyActionSafety } from "./safety.mjs";
 import { attemptSignup } from "./signup-run.mjs";
+import { observeThen } from "./acceptance-observe.mjs";
 
 /**
  * E-corpus-1 live-debug rev marker. Bump on every runner change — the first
@@ -34,7 +35,7 @@ import { attemptSignup } from "./signup-run.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "a5-acceptance-2";
+export const RUNNER_REV = "a5-acceptance-3";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
@@ -618,6 +619,9 @@ async function runAcceptanceScenario({ context, targetUrl, sc, locale, deadline,
     });
     const bodyBefore = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
     const routeBefore = page.url();
+    // 페이지를 열 때부터 난 오류(예: 하이드레이션)는 이 AC의 동작 탓이 아니다 — 기준선.
+    const netBase = netFailures.length;
+    const errBase = consoleErrors.length;
     let interacted = false;
     let failedStep = null;
     let idx = 0;
@@ -658,14 +662,21 @@ async function runAcceptanceScenario({ context, targetUrl, sc, locale, deadline,
     }
     const bodyAfter = await page.evaluate(() => document.body?.innerText ?? "").catch(() => bodyBefore);
     const changed = bodyAfter !== bodyBefore || page.url() !== routeBefore;
-    const crashed = interacted && !changed && consoleErrors.length > 0;
-    if (netFailures.length > 0 || crashed) {
-      return { ...base, status: "broken", note: (netFailures[0] ?? consoleErrors[0] ?? "").slice(0, 200) };
+    // A5.2(라이브 E2E 2026-09-25): 동작 **뒤에** 새로 난 오류만 이 AC의 결함으로 센다.
+    const newNet = netFailures.slice(netBase);
+    const newErr = consoleErrors.slice(errBase);
+    const crashed = interacted && !changed && newErr.length > 0;
+    if (newNet.length > 0 || crashed) {
+      return { ...base, status: "broken", note: (newNet[0] ?? newErr[0] ?? "").slice(0, 200) };
     }
     if (failedStep) return { ...base, status: "not_confirmed", note: String(failedStep).slice(0, 200) };
     if (!interacted) return { ...base, status: "not_confirmed", note: "no_primary_action" };
     if (!changed) return { ...base, status: "not_confirmed", note: "no_visible_change" };
-    return { ...base, status: "no_problem" };
+    // ★then 대조 — "눌렀고 바뀌었다"는 기획대로라는 뜻이 아니다. then의 내용어가 화면에 있어야 한다.
+    const obs = observeThen(sc.then, bodyAfter);
+    if (!obs.judgeable) return { ...base, status: "not_confirmed", note: "then_not_checkable" };
+    if (!obs.observed) return { ...base, status: "not_confirmed", note: `then_not_observed: ${obs.missing.join(", ")}`.slice(0, 200) };
+    return { ...base, status: "no_problem", note: `then_observed: ${obs.found.join(", ")}`.slice(0, 200) };
   } catch (err) {
     return { ...base, status: "not_confirmed", note: String(err?.message ?? err).slice(0, 200) };
   } finally {

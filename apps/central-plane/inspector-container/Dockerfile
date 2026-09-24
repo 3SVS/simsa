@@ -58,6 +58,8 @@ COPY apps/central-plane/inspector-container/inspector-run.mjs ./inspector-run.mj
 COPY apps/central-plane/inspector-container/safety.mjs ./safety.mjs
 # 일회용 계정으로 로그인 뒤까지 들어가는 실행 모듈(판단은 dist/signup-plan.js에 있다).
 COPY apps/central-plane/inspector-container/signup-run.mjs ./signup-run.mjs
+# A5.2: AC then 대조(순수, 의존성 0).
+COPY apps/central-plane/inspector-container/acceptance-observe.mjs ./acceptance-observe.mjs
 
 # Writable scratch space for per-run screenshots/video.
 RUN mkdir -p /var/lib/simsa && chmod 770 /var/lib/simsa

@@ -85,6 +85,42 @@ export type StoredProbeEmail = {
   receivedAt: string;
 };
 
+/**
+ * RFC 2047 인코딩 단어(`=?UTF-8?B?…?=` / `=?UTF-8?Q?…?=`)를 사람이 읽는 문자열로.
+ *
+ * 한글 제목은 거의 항상 인코딩된 채 헤더로 온다(라이브 2026-09-25: "테스트"가
+ * `=?UTF-8?B?7YWM7Iqk7Yq4?=`로 저장됐다 — Rule 6). 모르는 charset·깨진 조각은 원문 그대로 둔다
+ * (틀린 글자로 바꾸는 것보다 낫다). 인접한 인코딩 단어 사이 공백은 표준대로 지운다.
+ */
+export function decodeMimeHeader(value: string): string {
+  const s = String(value ?? "");
+  if (!s.includes("=?")) return s;
+  const joined = s.replace(/(\?=)\s+(?==\?)/g, "$1");
+  return joined.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (whole, charset: string, enc: string, text: string) => {
+    try {
+      let bytes: Uint8Array;
+      if (enc.toUpperCase() === "B") {
+        const bin = atob(text);
+        bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+      } else {
+        const q = text.replace(/_/g, " ");
+        const out: number[] = [];
+        for (let i = 0; i < q.length; i++) {
+          const ch = q[i]!;
+          if (ch === "=" && /^[0-9A-Fa-f]{2}$/.test(q.slice(i + 1, i + 3))) {
+            out.push(parseInt(q.slice(i + 1, i + 3), 16));
+            i += 2;
+          } else out.push(ch.charCodeAt(0));
+        }
+        bytes = Uint8Array.from(out);
+      }
+      return new TextDecoder(charset.trim().toLowerCase(), { fatal: true, ignoreBOM: false }).decode(bytes);
+    } catch {
+      return whole;
+    }
+  });
+}
+
 /** 받은 메일을 저장한다. 본문은 넣지 않는다(최소수집). */
 export async function storeProbeEmail(
   env: Env,
@@ -156,7 +192,7 @@ export async function handleProbeEmail(env: Env, message: IncomingEmail): Promis
       runId,
       toAddr: message.to,
       fromAddr: message.from,
-      subject: message.headers.get("subject") ?? "",
+      subject: decodeMimeHeader(message.headers.get("subject") ?? ""),
       links,
     });
     return "stored";
