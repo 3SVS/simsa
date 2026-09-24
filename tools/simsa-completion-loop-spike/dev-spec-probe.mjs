@@ -189,11 +189,11 @@ async function getSaved(id) {
 
 async function runAcceptance(id, f, target) {
   const src = await api("POST", `/workspace/projects/${id}/sources`, { userKey: USER_KEY, type: "website", reference: target, label: "probe" });
-  if (src.status !== 200) return { skipped: `source ${src.status} ${src.text.slice(0, 100)}` };
+  if (src.status !== 200 && src.status !== 201) return { skipped: `source ${src.status} ${src.text.slice(0, 100)}` };
   const intent = `${f.productSpec.oneLine}. ${f.items.map((i) => i.title).join(" / ")}`.slice(0, AC_INTENT_MAX);
   const run = await api("POST", `/workspace/projects/${id}/visual-checks/run`, { userKey: USER_KEY, targetUrl: target, intent, locale: "ko" }, 30000);
   if (run.status !== 200 && run.status !== 202) return { skipped: `run ${run.status} ${run.text.slice(0, 120)}` };
-  const runId = run.json?.runId ?? run.json?.run?.id ?? run.json?.id;
+  const runId = run.json?.runId ?? run.json?.check?.id ?? run.json?.run?.id ?? run.json?.id;
   if (!runId) return { skipped: `run id missing: ${run.text.slice(0, 120)}` };
   const t0 = Date.now();
   let last = null;
@@ -201,12 +201,12 @@ async function runAcceptance(id, f, target) {
     await new Promise((r) => setTimeout(r, 8000));
     const g = await api("GET", `/workspace/projects/${id}/visual-checks/${runId}?userKey=${encodeURIComponent(USER_KEY)}`);
     last = g.json;
-    const status = g.json?.run?.status ?? g.json?.status;
+    const status = g.json?.check?.status ?? g.json?.run?.status ?? g.json?.status;
     process.stdout.write(`  · run ${runId} ${status} ${Math.round((Date.now() - t0) / 1000)}s\r`);
     if (status === "done" || status === "failed" || status === "error") break;
   }
   process.stdout.write("\n");
-  const report = last?.run?.report ?? last?.report ?? null;
+  const report = last?.check?.report ?? last?.run?.report ?? last?.report ?? null;
   const acc = Array.isArray(report?.acceptance) ? report.acceptance : null;
   const raw = JSON.stringify(last ?? {});
   const acShots = (raw.match(/screenshots\/ac-[^"]+\.png/g) ?? []).length;
@@ -214,7 +214,7 @@ async function runAcceptance(id, f, target) {
   const acIdsInSteps = (stepsRaw.match(/\bAC-\d{3,}\b/g) ?? []).length; // A5.1 이후 0이어야 한다
   return {
     runId,
-    status: last?.run?.status ?? last?.status ?? null,
+    status: last?.check?.status ?? last?.run?.status ?? last?.status ?? null,
     seconds: Math.round((Date.now() - t0) / 1000),
     acceptanceCount: acc ? acc.length : null,
     acceptanceStatuses: acc ? Object.fromEntries(acc.map((a) => [a.acceptanceId ?? a.id, a.status])) : null,

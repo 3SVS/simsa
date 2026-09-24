@@ -308,7 +308,10 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | 설계 잠금 | `design lock approved` | 2026-09-24 (Bae) | D-1~D-9·D-11·D-12·D-15~D-17 LOCKED |
 | Train A 착수 | `train A start approved` | 2026-09-24 (Bae) | A1~A6 코드 작성만 |
 | Train N 착수 | `train N start approved` | 2026-09-24 (Bae) | N1~N7 코드 작성만 |
-| A1~A5 코드 완료 | — | 2026-09-24 | PR #521(central-plane A1~A5) · #524(dashboard A4+A5) — 머지·배포·마이그레이션은 아래 문구 대기 |
+| 설계 잠금 2차 | `design lock approved` | 2026-09-24 오전 (Bae) | D-19·D-20·D-21 LOCKED 발효 (어제 오후 논의분 — 이 행 전까지는 문서 표기만 LOCKED였음) |
+| A1~A5 코드 완료 | — | 2026-09-24 | PR #521(central-plane A1~A5) · #524(dashboard A4+A5) → 2026-09-24 밤 머지·0067·배포 완료 |
+| 머지 (집행) | `PR #527 merge approved.` `PR #528 merge approved.` | 2026-09-24 오전 (Bae) | #527 `a6f7445` · #528 `12f09a4` (앞서 #520~#526은 밤에 같은 문구로) |
+| 배포 (집행) | `deploy central-plane approved.` `deploy dashboard approved.` | 2026-09-24 오전 (Bae) | central run 35948123514 success(deployedSha 12f09a4) · dashboard `24v0yx3ud` Ready |
 | N1~N3·N2 PR | — | 2026-09-24 | #522 · #523 (Train N 에이전트) |
 | Train B 착수 | `train B start approved` | — | B1~B11 코드 작성만 |
 | Train C 착수 | `train C start approved` | — | C1~C4 코드 작성만 |
