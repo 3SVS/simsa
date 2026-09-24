@@ -1,0 +1,111 @@
+{
+  "at": "2026-09-24T02:23:00.535Z",
+  "base": "https://conclave-ai.seunghunbae.workers.dev",
+  "userKey": "probe-devspec-202609240219",
+  "target": null,
+  "results": [
+    {
+      "n": 1,
+      "title": "동네 빵집 픽업 예약",
+      "projectId": "wsp_ewmarr3uk9",
+      "ideaRoundTrip": true,
+      "ko": {
+        "locale": "ko",
+        "status": 422,
+        "ms": 34177,
+        "ok": false,
+        "error": "dev_spec_invalid",
+        "stage": "schema",
+        "issues": [
+          "dataModel.0.fields.4.default: Expected string, received boolean",
+          "dataModel.2.fields.4.default: Expected string, received number",
+          "dataModel.3.fields.4.default: Expected string, received boolean"
+        ]
+      },
+      "en": {
+        "locale": "en",
+        "status": 200,
+        "ms": 60582,
+        "ok": true,
+        "repaired": false,
+        "counts": {
+          "FR": 7,
+          "AC": 10,
+          "SCR": 6,
+          "ENT": 5,
+          "API": 6,
+          "NFR": 8,
+          "WBS": 9,
+          "TP": 10
+        },
+        "nullDefaults": 0,
+        "humanAc": 0,
+        "excludedLeaks": [
+          "온라인",
+          "배달",
+          "회원가입"
+        ],
+        "bodyHangul": 3942,
+        "metaLocale": "en"
+      },
+      "saved": {
+        "status": 200,
+        "hasSpec": true,
+        "updatedAt": "2026-09-24T02:21:29.651Z",
+        "savedLocale": "en"
+      },
+      "deleted": true
+    },
+    {
+      "n": 3,
+      "title": "아파트 반찬 공동구매 (101동·102동)",
+      "projectId": "wsp_ewodhg3eim",
+      "ideaRoundTrip": true,
+      "ko": {
+        "locale": "ko",
+        "status": 422,
+        "ms": 34311,
+        "ok": false,
+        "error": "dev_spec_invalid",
+        "stage": "schema",
+        "issues": [
+          "dataModel.0.fields.5.default: Expected string, received boolean",
+          "dataModel.1.fields.5.default: Expected string, received number",
+          "dataModel.1.fields.6.default: Expected string, received boolean",
+          "dataModel.3.fields.3.default: Expected string, received number"
+        ]
+      },
+      "en": {
+        "locale": "en",
+        "status": 200,
+        "ms": 53616,
+        "ok": true,
+        "repaired": false,
+        "counts": {
+          "FR": 5,
+          "AC": 6,
+          "SCR": 5,
+          "ENT": 4,
+          "API": 4,
+          "NFR": 8,
+          "WBS": 10,
+          "TP": 6
+        },
+        "nullDefaults": 0,
+        "humanAc": 0,
+        "excludedLeaks": [
+          "배송"
+        ],
+        "bodyHangul": 4126,
+        "metaLocale": "en"
+      },
+      "saved": {
+        "status": 200,
+        "hasSpec": true,
+        "updatedAt": "2026-09-24T02:22:59.605Z",
+        "savedLocale": "en"
+      },
+      "deleted": true
+    }
+  ]
+}

@@ -126,7 +126,7 @@ function bodyHangul(spec) {
   return countHangul(JSON.stringify(rest));
 }
 
-/** excluded 항목의 핵심 어구가 brief 밖 섹션에 등장하는지. */
+/** excluded 항목의 핵심 어구가 brief 밖 섹션에 등장하는지 — 휴리스틱(부정형 "회원가입 없이도 됨"은 오탐). 눈으로 확인용 힌트. */
 function excludedLeaks(spec, excluded) {
   const { brief: _brief, meta: _meta, ...rest } = spec ?? {};
   const hay = JSON.stringify(rest);
@@ -265,7 +265,7 @@ for (const f of fixtures) {
 // ── 세 칸 표 ─────────────────────────────────────────────────────────────────
 const lines = ["", "| 기획 | ko | en | 저장 | AC 검수 | 칸 |", "|---|---|---|---|---|---|"];
 for (const r of results) {
-  const g = (x) => (!x ? "미측정" : x.ok ? `200·${Math.round(x.ms / 1000)}s·rep=${x.repaired ? 1 : 0}·null=${x.nullDefaults}·leak=${x.excludedLeaks.length}${x.locale === "en" ? `·한글=${x.bodyHangul}` : ""}` : `${x.status} ${x.error}/${x.stage ?? "-"}`);
+  const g = (x) => (!x ? "미측정" : x.ok ? `200·${Math.round(x.ms / 1000)}s·rep=${x.repaired ? 1 : 0}·null=${x.nullDefaults}·leak?=${x.excludedLeaks.length}${x.locale === "en" ? `·한글=${x.bodyHangul}` : ""}` : `${x.status} ${x.error}/${x.stage ?? "-"}`);
   const a = r.acceptance ? (r.acceptance.skipped ? `skip(${r.acceptance.skipped})` : `${r.acceptance.status}·AC${r.acceptance.acceptanceCount}·shots=${r.acceptance.acShots}·dupInSteps=${r.acceptance.acIdsInSteps}`) : "미측정";
   lines.push(`| ${r.n} ${r.title} | ${g(r.ko)} | ${g(r.en)} | ${r.saved ? (r.saved.hasSpec ? "있음" : r.saved.status) : "미측정"} | ${a} | ${r.error ? "오류: " + r.error : "라이브확인"} |`);
 }
