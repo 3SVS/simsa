@@ -1,0 +1,20 @@
+{
+  "name": "@simsa/hosting-dispatch",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SI 티어 Train B — B2: S 모드 호스팅 라우터. <slug>.<호스팅 도메인> 요청을 Workers for Platforms dispatch namespace의 유저 Worker로 보낸다(D-6).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.83.0"
+  }
+}

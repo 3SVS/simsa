@@ -102,6 +102,13 @@ export interface Env {
    * 없으면 빌드 기능은 "지금은 불가"로 정직하게 꺼진다(builder_unavailable).
    */
   BUILDER?: DurableObjectNamespace;
+   * SI 티어 Train B — B2: S 모드 호스팅 운영 자격(D-6). 우리 Cloudflare 계정의 토큰·계정 id —
+   * **유저 자격증명이 아니다.** 권한: Workers for Platforms(dispatch scripts) Edit + D1 Edit.
+   * 둘 중 하나라도 없으면 프로비저닝은 `not_configured`로 정직하게 꺼진다.
+   * Actions `set-worker-secrets`로만 넣는다(로컬 wrangler 금지).
+   */
+  HOSTING_CF_API_TOKEN?: string;
+  HOSTING_CF_ACCOUNT_ID?: string;
   /**
    * Stage 261 — R2 bucket `simsa-evidence`: visual-check evidence
    * (screenshots/video under checks/{userKey}/{projectId}/{runId}/) and
