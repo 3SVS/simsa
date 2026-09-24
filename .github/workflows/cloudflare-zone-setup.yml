@@ -1,0 +1,62 @@
+# cloudflare-zone-setup — 도메인을 Cloudflare 존으로 추가하고 네임서버를 알려준다.
+#
+# 왜 (2026-09-24, Bae 승인 "옮기는거 좋아"): S 모드 호스팅(D-6)의 `<slug>.simsa.app` 와일드카드
+# 라우트와 Email Routing은 **Cloudflare 존**이어야 한다. simsa.app은 Loopia NS(파킹)라 존이 0개
+# (email-routing-setup check 실측). 노트북엔 CF 토큰이 없어 repo secret으로 Actions에서 호출한다.
+#
+# mode=status : 읽기만 — 존 존재·상태(pending/active)·배정된 네임서버·원래 NS.
+# mode=add    : 존 추가(type full, 멱등 — 있으면 status와 같다). 출력된 네임서버 2개를
+#               **등록기관(Loopia)에서 바꾸는 것은 Bae 몫**(등록기관 계정은 우리가 없다).
+# 권한 부족이면 Cloudflare 오류 코드를 그대로 찍고 끝난다 → 토큰에 Zone:Edit(계정) 추가 필요.
+name: cloudflare-zone-setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'status (read-only) 또는 add'
+        required: true
+        default: 'status'
+        type: choice
+        options: [status, add]
+      zone:
+        description: '도메인'
+        required: true
+        default: 'simsa.app'
+
+concurrency:
+  group: cloudflare-zone-setup
+  cancel-in-progress: false
+
+jobs:
+  zone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ZONE_NAME: ${{ inputs.zone }}
+    steps:
+      - name: Zone status / add
+        run: |
+          set -euo pipefail
+          api() { curl -sS -H "Authorization: Bearer $CF_TOKEN" -H "content-type: application/json" "$@"; }
+          show() {
+            api "https://api.cloudflare.com/client/v4/zones?name=$ZONE_NAME" \
+              | jq '{success, errors, zone: (.result[0] // null | if . == null then null else {id, name, status, type, name_servers, original_name_servers, original_registrar} end)}'
+          }
+          echo "## before"; show
+          if [ "${{ inputs.mode }}" = "add" ]; then
+            exists=$(api "https://api.cloudflare.com/client/v4/zones?name=$ZONE_NAME" | jq -r '.result | length')
+            if [ "$exists" = "0" ]; then
+              echo "## add"
+              body=$(jq -nc --arg n "$ZONE_NAME" --arg a "$CF_ACCOUNT" '{name: $n, account: {id: $a}, type: "full"}')
+              r=$(api -X POST "https://api.cloudflare.com/client/v4/zones" --data "$body")
+              echo "$r" | jq '{success, errors, id: .result.id, status: .result.status, name_servers: .result.name_servers}'
+              echo "$r" | jq -e '.success == true' >/dev/null || { echo "::error::존 추가 실패 — 토큰에 계정 수준 Zone:Edit 권한이 필요할 수 있다"; exit 1; }
+            else
+              echo "already exists — no change"
+            fi
+            echo "## after"; show
+            echo "다음(Bae): 등록기관(Loopia)에서 네임서버를 위 name_servers 2개로 변경 → 전파 후 status=active"
+          fi
