@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-24T02:49:27.525Z",
+  "startedAt": "2026-09-24T15:59:01.094Z",
   "version": 2,
   "journeys": [
     {
@@ -256,7 +256,7 @@
           "label": "생성 직후 랜딩 — 검수가 돌고 확인 카드가 보이는가",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_xonhsbvr",
+          "url": "https://app.trysimsa.com/projects/proj_pvy5pn6e",
           "h1": [
             "trysimsa"
           ],
@@ -301,7 +301,7 @@
           "label": "AF-4 의도 확인 카드 — 초안이 왔는가 / 정직하게 비었는가",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_xonhsbvr",
+          "url": "https://app.trysimsa.com/projects/proj_pvy5pn6e",
           "h1": [
             "trysimsa"
           ],
@@ -327,11 +327,11 @@
           "disabledLabels": [
             "도움받기"
           ],
-          "bodyLen": 1173,
+          "bodyLen": 1162,
           "errorish": 0,
           "errorishHits": [],
           "guidanceish": 2,
-          "koLeakChars": 734,
+          "koLeakChars": 728,
           "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 trysimsa 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 코드 변경 만들기 안내 3 결과·수정 코드를 먼저 연결하세요. 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO trysimsa 지금 할 일 1 준비 2 만들기·검수 3 결과·수정 코드가 연결됐어요. 검수를 실행하면 뭐가 통과하고 뭐가 부족한지 알 수 있어요. 첫 검수 실행하기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 앱 연결 — 만든 앱의 주소를 붙여넣어 주세요. (코드 저장소 연결은 개발자 모드에 있어요.) 3. 확인 실행 — 코드",
           "devTerms": [
             {
@@ -348,7 +348,7 @@
           "label": "개요 — 지금 할 일이 이 갈래에 맞는가",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_xonhsbvr",
+          "url": "https://app.trysimsa.com/projects/proj_pvy5pn6e",
           "h1": [
             "trysimsa"
           ],
@@ -374,11 +374,11 @@
           "disabledLabels": [
             "도움받기"
           ],
-          "bodyLen": 1168,
+          "bodyLen": 1157,
           "errorish": 0,
           "errorishHits": [],
           "guidanceish": 2,
-          "koLeakChars": 730,
+          "koLeakChars": 722,
           "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 trysimsa 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 코드 변경 만들기 안내 3 결과·수정 코드를 먼저 연결하세요. 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO trysimsa 지금 할 일 1 준비 2 만들기·검수 3 결과·수정 코드가 연결됐어요. 검수를 실행하면 뭐가 통과하고 뭐가 부족한지 알 수 있어요. 첫 검수 실행하기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 앱 연결 — 만든 앱의 주소를 붙여넣어 주세요. (코드 저장소 연결은 개발자 모드에 있어요.) 3. 확인 실행 — 코드",
           "devTerms": [
             {
@@ -395,7 +395,7 @@
           "label": "AF-5 검수 화면 — 깊이와 '못 본 것'이 표기되는가",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_xonhsbvr/visual-checks",
+          "url": "https://app.trysimsa.com/projects/proj_pvy5pn6e/visual-checks",
           "h1": [],
           "buttons": [
             "«",
@@ -411,14 +411,16 @@
           "primaryCtaCount": 1,
           "hasExit": true,
           "deadEnd": false,
-          "disabledCount": 0,
-          "disabledLabels": [],
-          "bodyLen": 380,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "지금 검수하기"
+          ],
+          "bodyLen": 503,
           "errorish": 0,
           "errorishHits": [],
           "guidanceish": 0,
-          "koLeakChars": 211,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 trysimsa 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 코드 변경 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO 시각 검수 실제 브라우저로 라이브 앱을 열어 확인하고, 쉬운 말로 정리한 리포트예요. 새 검수 실행 연결된 웹사이트를 실제 브라우저로 열어 핵심 흐름을 따라가 보고, 쉬운 말로 리포트를 만들어요. 무엇을 확인할까요? (선택) 지금 검수하기 문제 없음 https://app.trysimsa.com/ 2026년 9월 24일 오전 11:49 스크린샷 5장",
+          "koLeakChars": 297,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 trysimsa 개요 1 준비 선택 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 코드 변경 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO 시각 검수 실제 브라우저로 라이브 앱을 열어 확인하고, 쉬운 말로 정리한 리포트예요. 새 검수 실행 연결된 웹사이트를 실제 브라우저로 열어 핵심 흐름을 따라가 보고, 쉬운 말로 리포트를 만들어요. 무엇을 확인할까요? (선택) 로그인 뒤 화면까지 확인할까요? 저희가 이 앱에 일회용 테스트 계정을 하나 만들어 로그인 뒤 화면을 확인하고, 끝나면 정리해요. 비밀번호는 받지 않습니다. 지금",
           "devTerms": [],
           "accountCtas": []
         }
@@ -473,7 +475,7 @@
           "label": "★저장소만 있을 때 개요 — 비활성 버튼으로 보내지 않는가",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_xpu50msp",
+          "url": "https://app.trysimsa.com/projects/proj_px6x4qoz",
           "h1": [
             "simsa"
           ],
@@ -608,12 +610,12 @@
           "deadEnd": false,
           "disabledCount": 0,
           "disabledLabels": [],
-          "bodyLen": 2012,
+          "bodyLen": 2019,
           "errorish": 0,
           "errorishHits": [],
           "guidanceish": 2,
-          "koLeakChars": 1345,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO ✓ 제품 설명서 초안이 완성됐습니다 저장하면 프로젝트 페이지에서 언제든 확인할 수 있습니다. 멍산책 기록 반려견과의 산책을 쉽게 기록하고 주간 통계를 확인해 공유할 수 있는 웹앱 누가 쓰는 제품 반려견 보호자, 가족과 반려견 산책 정보를 나누고 싶은 사용자 해결하려는 문제 반려견 산책은 자주 하지만 언제 얼마나 걸었는지 꾸준히 남기기 어렵습니다. 보호자는 산책 습관을 한눈에 보고, 필요한 경우 다른 사람과 간단히 공유할 수 있는 쉬운 기록 도구가 필요합니다. 이번 버전에 포함 • 산책 시작 기록 • 산책 종료 기록 • 산책 시간 저장 • ",
+          "koLeakChars": 1362,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 전체 프로젝트 회의록 자동 요약 앱예시 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO ✓ 제품 설명서 초안이 완성됐습니다 저장하면 프로젝트 페이지에서 언제든 확인할 수 있습니다. 멍산책 기록 반려견과의 산책을 기록하고 주간 거리 변화를 한눈에 보는 웹앱 누가 쓰는 제품 반려견 보호자, 산책 습관을 꾸준히 관리하고 싶은 보호자, 가족·지인과 산책 기록을 공유하고 싶은 보호자 해결하려는 문제 반려견 산책은 매일 반복되지만 얼마나 자주, 얼마나 멀리 걸었는지 꾸준히 남기기 어렵습니다. 보호자가 산책 기록을 쉽게 남기고 주간 흐름을 확인할 수 있어야 산책 습관을 더 잘 관리할 수 있습니다. 이번 버전에 포함 • 산책 시작과 종료 ",
           "devTerms": [],
           "accountCtas": []
         },
@@ -621,7 +623,7 @@
           "label": "저장 후 랜딩 — 다음 행동",
           "note": "",
           "locale": "ko",
-          "url": "https://app.trysimsa.com/projects/proj_xqll4058",
+          "url": "https://app.trysimsa.com/projects/proj_pxwslykh",
           "h1": [
             "멍산책 기록"
           ],
@@ -645,12 +647,12 @@
           "disabledLabels": [
             "도움받기"
           ],
-          "bodyLen": 763,
+          "bodyLen": 757,
           "errorish": 0,
           "errorishHits": [],
           "guidanceish": 0,
-          "koLeakChars": 474,
-          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 멍산책 기록 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO 멍산책 기록 반려견과의 산책을 쉽게 기록하고 주간 통계를 확인해 공유할 수 있는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 제품 설명서와 확인 항목이 준비됐어요. 만들기 안내를 받아 쓰시는 AI 도구로 앱을 만들고, 앱 주소를 연결하면 Simsa가 확인해드려요. 빌더 팩 받기 → 앱을 이미 만드셨나요? URL 연결하기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 ",
+          "koLeakChars": 470,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 멍산책 기록 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 M 내 계정 로그인 → ⌃ EN KO 멍산책 기록 반려견과의 산책을 기록하고 주간 거리 변화를 한눈에 보는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 제품 설명서와 확인 항목이 준비됐어요. 만들기 안내를 받아 쓰시는 AI 도구로 앱을 만들고, 앱 주소를 연결하면 Simsa가 확인해드려요. 빌더 팩 받기 → 앱을 이미 만드셨나요? URL 연결하기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 ",
           "devTerms": [],
           "accountCtas": []
         }
@@ -924,6 +926,13 @@
       "locale": "ko",
       "step": "개요 — 지금 할 일이 이 갈래에 맞는가",
       "what": "외부 계정 CTA 1개 — GitHub 저장소를 알려주시면 코드도 함께 읽어요 →"
+    },
+    {
+      "sev": "P2",
+      "journey": "J1 기존-앱 갈래: 주소 하나로 검수까지 완주 (AF 트레인)",
+      "locale": "ko",
+      "step": "AF-5 검수 화면 — 깊이와 '못 본 것'이 표기되는가",
+      "what": "비활성 버튼 1개(지금 검수하기) — 이유 표시 스크린샷 확인"
     },
     {
       "sev": "P2",
