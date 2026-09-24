@@ -76,12 +76,30 @@ export const ScreenSchema = z
   })
   .strict();
 
+/**
+ * `default`: 실제 기본값이 있을 때만 문자열. 모델은 "없음"을 `null`로 자주 보낸다(라이브
+ * 2026-09-24: 두 번 연속 null → 422). 스키마가 그걸 "없음"으로 받아들여야지, 재생성 사유가
+ * 되면 안 된다 — 사실을 전달하는 방식의 차이일 뿐 내용의 결함이 아니다. "unknown" 문자열도
+ * 기본값이 아니므로 같은 취급.
+ */
+const optionalDefault = z
+  .union([z.string().max(200), z.boolean(), z.number(), z.null()])
+  .optional()
+  .transform((v) => {
+    // boolean/number 기본값(`isPublic: false`, `quantity: 1`)은 실제 기본값이다 — 문자열로 정규화해 보존한다
+    // (라이브 2026-09-24 두 번째 실측: "Expected string, received boolean" ×2로 ko·en 모두 422).
+    if (typeof v === "boolean" || typeof v === "number") return String(v);
+    if (v === null || v === undefined) return undefined;
+    const t = v.trim();
+    return t === "" || t.toLowerCase() === "unknown" ? undefined : v;
+  });
+
 export const EntityFieldSchema = z
   .object({
     name: shortText,
     type: shortText,
     required: z.boolean(),
-    default: z.string().max(200).optional(),
+    default: optionalDefault,
   })
   .strict();
 

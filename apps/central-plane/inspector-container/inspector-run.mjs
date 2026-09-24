@@ -34,7 +34,7 @@ import { attemptSignup } from "./signup-run.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "a5-acceptance-1";
+export const RUNNER_REV = "a5-acceptance-2";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
@@ -175,6 +175,9 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   const stepOutcomes = [];
   // SI 티어 A5: 수용 기준(AC)별 시나리오 결과 — 핵심 흐름 뒤, 남은 예산 안에서만.
   const acceptanceResults = [];
+  // AC 실패는 **판정 사다리에만** 실패로 들어간다(리포트 steps에는 넣지 않는다 — 라이브 2026-09-24:
+  // stepFailed finding과 acNotConfirmed finding이 같은 AC를 두 번 말했다).
+  const acceptanceStepFailures = [];
   const evidence = {
     urlLoaded: targetUrl,
     loadStatus: null,
@@ -454,7 +457,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
         const r = await runAcceptanceScenario({ context, targetUrl, sc, locale, deadline, plog, shotsDir, evidenceFiles });
         acceptanceResults.push(r);
         if (r.status === "broken" || r.status === "not_confirmed") {
-          stepOutcomes.push({ label: `${sc.acceptanceId} ${sc.featureTitle}`, ok: false, note: r.note });
+          acceptanceStepFailures.push({ label: `${sc.acceptanceId} ${sc.featureTitle}`, ok: false, note: r.note });
         }
       }
       plog(`acceptance:done ${acceptanceResults.map((r) => `${r.acceptanceId}=${r.status}`).join(",")}`);
@@ -521,7 +524,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   }
 
   evidence.consoleErrorCount = consoleErrors.length;
-  const decision = decideFromEvidence(evidence, stepOutcomes);
+  // AC 실패도 "다 확인했다"를 막아야 하므로 판정에는 합쳐 넣는다(리포트 steps와는 분리).
+  const decision = decideFromEvidence(evidence, stepOutcomes.concat(acceptanceStepFailures));
   plog(`decision=${decision} timedOutPartial=${evidence.timedOutPartial}`);
   const reportInput = {
     targetUrl,
@@ -640,8 +644,17 @@ async function runAcceptanceScenario({ context, targetUrl, sc, locale, deadline,
         await page.screenshot({ path: p, fullPage: false }).then(() => evidenceFiles.push({ name: `screenshots/${shot}`, path: p })).catch(() => {});
       } catch (err) {
         failedStep = N.actionFailed(String(err?.message ?? err).slice(0, 100));
+        // 실패한 그 순간의 화면이 가장 중요한 증거다 — 성공 때만 찍으면 실패 리포트가 빈손이 된다(라이브 2026-09-24).
+        const p = join(shotsDir, shot);
+        await page.screenshot({ path: p, fullPage: false }).then(() => evidenceFiles.push({ name: `screenshots/${shot}`, path: p })).catch(() => {});
         break;
       }
+    }
+    if (idx === 0) {
+      // 계획된 단계가 하나도 없었어도(주요 동작 못 찾음) 첫 화면은 남긴다.
+      const shot = `ac-${tag}-step-00.png`;
+      const p = join(shotsDir, shot);
+      await page.screenshot({ path: p, fullPage: false }).then(() => evidenceFiles.push({ name: `screenshots/${shot}`, path: p })).catch(() => {});
     }
     const bodyAfter = await page.evaluate(() => document.body?.innerText ?? "").catch(() => bodyBefore);
     const changed = bodyAfter !== bodyBefore || page.url() !== routeBefore;
