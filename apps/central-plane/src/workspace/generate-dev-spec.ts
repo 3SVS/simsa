@@ -171,7 +171,7 @@ const COMMON_RULES = {
 - 마크다운 코드블록·설명문 없이 **JSON만** 반환한다.
 - id 형식: FR-001 / AC-001 / SCR-001 / API-001 / WBS-001 (세 자리 이상, 중복 금지).
 - 모르는 것은 지어내지 말고 "unknown"이라고 쓴다. 숫자 점수(score/rating/grade) 필드를 만들지 않는다.
-- 데이터 필드의 default는 **실제 기본값이 있을 때만** 문자열로 쓰고, 없으면 그 키를 아예 생략한다(null·"unknown" 금지).
+- 데이터 필드의 default는 **실제 기본값이 있을 때만** 문자열로 쓰고(true/false·숫자도 "false"·"0"처럼 따옴표 안에), 없으면 그 키를 아예 생략한다(null·"unknown" 금지).
 - 모든 자유 텍스트는 **한국어**로 쓴다(id·경로·필드명·타입은 영문 그대로).
 - 이 문서는 개발자(또는 개발 AI)가 읽는 **개발 지시서**다. 기술 용어는 써도 되지만, 특정 상용 서비스 이름(Firebase, Supabase, Vercel 등)은 사용자가 직접 언급한 경우가 아니면 쓰지 않는다.
 - 이번 버전에서 제외된 것(excluded)은 어떤 섹션에도 넣지 않는다.`,
@@ -179,7 +179,7 @@ const COMMON_RULES = {
 - Return **JSON only** — no markdown fences, no prose.
 - Id format: FR-001 / AC-001 / SCR-001 / API-001 / WBS-001 (3+ digits, unique).
 - Never invent facts: write "unknown" when you do not know. Never add numeric score/rating/grade fields.
-- A data field's default is a string **only when a real default exists**; otherwise omit the key entirely (never null or "unknown").
+- A data field's default is a string **only when a real default exists** (quote booleans and numbers too: "false", "0"); otherwise omit the key entirely (never null or "unknown").
 - Write ALL free text in **English** — translate the brief and the items if they are in another language. Keep ids, routes, field names and types as they are.
 - This is a **development spec** read by a developer (or a coding AI). Technical terms are fine, but do not name specific commercial services (Firebase, Supabase, Vercel, …) unless the user named them.
 - Anything listed under excluded must not appear in any section.`,

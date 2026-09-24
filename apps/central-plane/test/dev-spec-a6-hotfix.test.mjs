@@ -49,6 +49,16 @@ describe("① default: null / \"unknown\" / \"\" → 없음으로 수용", () =>
     assert.equal(JSON.stringify(v.spec).includes('"default":null'), false);
   });
 
+  it("boolean·number default는 실제 기본값 — 문자열로 보존한다 (라이브 2회차: received boolean → 422)", () => {
+    const v = validateDevSpec(fullSpec([
+      { name: "isPublic", type: "boolean", required: true, default: false },
+      { name: "quantity", type: "integer", required: true, default: 1 },
+      { name: "ratio", type: "number", required: false, default: 0.5 },
+    ]));
+    assert.equal(v.ok, true, JSON.stringify(v));
+    assert.deepEqual(v.spec.dataModel[0].fields.map((f) => f.default), ["false", "1", "0.5"]);
+  });
+
   it("생성기: P2가 null default를 보내도 재시도 없이 통과한다", async () => {
     const log = [];
     const r = await generateDevSpec({ brief, items, locale: "ko", source: "generated" }, mock({ requirements: P1, surfaces: P2([{ name: "id", type: "text", required: true, default: null }]), plan: P3 }, log));

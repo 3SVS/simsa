@@ -83,9 +83,16 @@ export const ScreenSchema = z
  * 기본값이 아니므로 같은 취급.
  */
 const optionalDefault = z
-  .union([z.string().max(200), z.null()])
+  .union([z.string().max(200), z.boolean(), z.number(), z.null()])
   .optional()
-  .transform((v) => (v === null || v === undefined || v.trim() === "" || v.trim().toLowerCase() === "unknown" ? undefined : v));
+  .transform((v) => {
+    // boolean/number 기본값(`isPublic: false`, `quantity: 1`)은 실제 기본값이다 — 문자열로 정규화해 보존한다
+    // (라이브 2026-09-24 두 번째 실측: "Expected string, received boolean" ×2로 ko·en 모두 422).
+    if (typeof v === "boolean" || typeof v === "number") return String(v);
+    if (v === null || v === undefined) return undefined;
+    const t = v.trim();
+    return t === "" || t.toLowerCase() === "unknown" ? undefined : v;
+  });
 
 export const EntityFieldSchema = z
   .object({
