@@ -22,6 +22,11 @@ LEGACY_AUTO_REVIEW = "off"
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.
 AUTH_SIGNUP_MODE = "open"
+# 2026-09-25 (Bae 승인 "email routing도 추가하자") — 로그인 뒤 검수의 스위치.
+# conclave-ai.dev Email Routing(enabled·ready, catch-all → Worker conclave-ai)으로
+# `probe-<runId>@conclave-ai.dev` 확인 메일을 받는다. trysimsa.com·simsa.dev는 Vercel DNS라
+# Cloudflare Email Routing 불가 → Cloudflare 존인 conclave-ai.dev. 비우면 계정 준비 기능이 꺼진다.
+PROBE_MAIL_DOMAIN = "conclave-ai.dev"
 # Cloudflare AI Gateway (gateway "simsa") — REQUIRED: direct Worker→Anthropic
 # egress is ~90% 403 "Request not allowed" (measured 2026-07-05, retry-6 = 1/10).
 # The gateway path reaches Anthropic with no 403. Gateway must be UNAUTHENTICATED
