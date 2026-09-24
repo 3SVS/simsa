@@ -1,0 +1,102 @@
+# email-routing-setup — Cloudflare Email Routing을 API로 점검·연결한다.
+#
+# 왜 워크플로인가 (2026-09-24, HANDOFF-2026-08-31 §D 이월):
+#  - 로그인 뒤 검수는 앱이 보내는 확인 메일을 `probe-<runId>@<PROBE_MAIL_DOMAIN>`으로 받아야
+#    켜진다. 수신 경로 = Cloudflare Email Routing → Worker `conclave-ai`의 email() 핸들러.
+#  - trysimsa.com·simsa.dev는 Vercel DNS라 Email Routing을 못 쓴다(실측 nslookup NS).
+#    Cloudflare에 있는 존은 conclave-ai.dev 하나 → 기본 존 = conclave-ai.dev.
+#  - 노트북엔 Cloudflare 토큰이 없고(비대화식 wrangler 400), 토큰은 repo secret에만 있다.
+#    그래서 API 호출을 여기서 한다. 토큰에 존 권한(Email Routing Rules: Edit · Zone DNS: Edit)이
+#    없으면 그 사실을 정확히 출력하고 끝난다 — 그때 Bae 액션은 "토큰 권한 추가" 한 줄로 좁혀진다.
+#
+# mode=check  : 읽기만(존 조회·라우팅 상태·DNS 레코드 상태·catch-all 현재값). 항상 안전.
+# mode=apply  : enable → catch-all을 "worker: conclave-ai"로. 멱등(이미 같으면 변경 없음).
+name: email-routing-setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check (read-only) 또는 apply'
+        required: true
+        default: 'check'
+        type: choice
+        options: [check, apply]
+      zone:
+        description: 'Cloudflare 존 이름 (Email Routing이 붙을 도메인)'
+        required: true
+        default: 'conclave-ai.dev'
+      worker:
+        description: '수신 Worker 스크립트 이름'
+        required: true
+        default: 'conclave-ai'
+
+concurrency:
+  group: email-routing-setup
+  cancel-in-progress: false
+
+jobs:
+  routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ZONE_NAME: ${{ inputs.zone }}
+      WORKER_NAME: ${{ inputs.worker }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - name: Verify token
+        run: |
+          set -euo pipefail
+          r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify)
+          echo "$r" | jq '{success, status: .result.status, errors}'
+          echo "$r" | jq -e '.success == true' >/dev/null || { echo "::error::CLOUDFLARE_API_TOKEN 검증 실패"; exit 1; }
+
+      - name: Find zone
+        id: zone
+        run: |
+          set -euo pipefail
+          r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/zones?name=$ZONE_NAME")
+          echo "$r" | jq '{success, count: (.result|length), errors}'
+          zid=$(echo "$r" | jq -r '.result[0].id // empty')
+          if [ -z "$zid" ]; then
+            echo "::error::존 '$ZONE_NAME'을 이 토큰으로 볼 수 없다 — 존이 없거나 토큰에 Zone:Read가 없다"; exit 1
+          fi
+          echo "zone_id=$zid" >> "$GITHUB_OUTPUT"
+          echo "zone_id=$zid"
+
+      - name: Routing status (settings · dns · catch-all)
+        env:
+          ZID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          api() { curl -sS -H "Authorization: Bearer $CF_TOKEN" -H "content-type: application/json" "$@"; }
+          echo "## settings"; api "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing" | jq '{success, enabled: .result.enabled, status: .result.status, skip_wizard: .result.skip_wizard, errors}'
+          echo "## dns records required/current"; api "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing/dns" | jq '{success, errors, result: (.result | if type=="array" then map({type, name, content, priority}) else . end)}'
+          echo "## catch-all"; api "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing/rules/catch_all" | jq '{success, enabled: .result.enabled, actions: .result.actions, errors}'
+          echo "## rules"; api "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing/rules" | jq '{success, count: (.result|length), rules: (.result|map({name, enabled, matchers, actions}))}'
+
+      - name: Apply (enable + catch-all → worker)
+        if: inputs.mode == 'apply'
+        env:
+          ZID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          api() { curl -sS -H "Authorization: Bearer $CF_TOKEN" -H "content-type: application/json" "$@"; }
+          enabled=$(api "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing" | jq -r '.result.enabled // false')
+          if [ "$enabled" != "true" ]; then
+            echo "## enable"
+            r=$(api -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing/enable")
+            echo "$r" | jq '{success, enabled: .result.enabled, status: .result.status, errors}'
+            echo "$r" | jq -e '.success == true' >/dev/null || { echo "::error::enable 실패 — 토큰에 Email Routing Rules:Edit / Zone DNS:Edit 권한이 있는지 확인"; exit 1; }
+          else
+            echo "already enabled"
+          fi
+          echo "## catch-all → worker $WORKER_NAME"
+          body=$(jq -nc --arg w "$WORKER_NAME" '{name: "simsa probe mailbox → worker", enabled: true, matchers: [{type: "all"}], actions: [{type: "worker", value: [$w]}]}')
+          r=$(api -X PUT "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing/rules/catch_all" --data "$body")
+          echo "$r" | jq '{success, enabled: .result.enabled, actions: .result.actions, errors}'
+          echo "$r" | jq -e '.success == true' >/dev/null || { echo "::error::catch-all 설정 실패"; exit 1; }
+          echo "## final status"
+          api "https://api.cloudflare.com/client/v4/zones/$ZID/email/routing" | jq '{enabled: .result.enabled, status: .result.status}'
+          echo "다음: PR로 wrangler.toml [vars] PROBE_MAIL_DOMAIN=\"$ZONE_NAME\" 추가 → deploy central-plane → 실제 메일 수신 시험"
