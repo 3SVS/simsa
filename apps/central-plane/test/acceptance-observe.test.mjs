@@ -22,6 +22,11 @@ describe("thenTerms — 내용어 추출(한글 조사·어미·기능어 제거
     const t = thenTerms("예약 완료 화면에 예약 시간과 예약한 빵이 보인다.");
     assert.ok(t.includes("예약") && t.includes("시간") && t.includes("빵"), JSON.stringify(t));
   });
+  it("겹친 조사도 벗긴다(라이브: 품절된 빵에는 → 빵에)", () => {
+    const t = thenTerms("품절된 빵에는 품절 표시가 보인다.");
+    assert.ok(t.includes("빵") && !t.includes("빵에"), JSON.stringify(t));
+    assert.ok(thenTerms("예약 화면에서도 픽업 시간이 보인다.").includes("시간"));
+  });
   it("영어 then", () => {
     assert.deepEqual(thenTerms("The pickup time and the selected breads are shown on the confirmation screen."), ["pickup", "time", "breads"]);
   });

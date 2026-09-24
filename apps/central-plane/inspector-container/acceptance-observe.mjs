@@ -36,7 +36,12 @@ export function thenTerms(then) {
   for (const raw of tokens) {
     if (/[가-힣]/.test(raw)) {
       let t = raw.replace(KO_ENDINGS, "");
-      t = t.replace(KO_PARTICLES, "");
+      // 조사는 겹쳐 붙는다("빵에는"·"화면에서도") — 두 번까지 벗긴다(라이브 E2E: "빵에"가 남음).
+      for (let k = 0; k < 2; k++) {
+        const u = t.replace(KO_PARTICLES, "");
+        if (u === t || u.length === 0) break;
+        t = u;
+      }
       if (!t || KO_STOP.has(t) || KO_STOP.has(raw)) continue;
       out.push(t);
     } else if (/^[a-z0-9]+$/.test(raw)) {
