@@ -316,4 +316,6 @@ export { ConclaveSandbox } from "./container.js";
 // Same rule as ConclaveSandbox: exported ONLY from index.ts so node --test
 // consumers of router.ts never pull in `@cloudflare/containers`.
 export { SimsaInspector } from "./inspector-container.js";
+// SI 티어 Train B — B1: SimsaBuilder 컨테이너 DO. 같은 규칙: index.ts에서만 export.
+export { SimsaBuilder } from "./builder-container.js";
 export type { Env } from "./env.js";

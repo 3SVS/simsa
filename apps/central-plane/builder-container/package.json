@@ -1,0 +1,10 @@
+{
+  "name": "simsa-builder-container",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SI 티어 Train B — SimsaBuilder 컨테이너 런타임 deps. pnpm 워크스페이스 패키지가 아니다(글롭은 packages/* + apps/*) — Docker 이미지 안에서 npm으로 설치. playwright 버전은 Dockerfile의 mcr.microsoft.com/playwright 베이스 태그·inspector-container·tools/simsa-completion-loop-spike와 반드시 일치(test/builder-invariants.test.mjs).",
+  "dependencies": {
+    "playwright": "1.60.0"
+  }
+}

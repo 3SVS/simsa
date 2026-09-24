@@ -187,3 +187,28 @@ name = "INSPECTOR"
 [[migrations]]
 tag = "v2-inspector"
 new_sqlite_classes = ["SimsaInspector"]
+
+# SI 티어 Train B — B1: SimsaBuilder 컨테이너 (D-4 · D-10 [PILOT]).
+#
+# T1 빌드 잡(설치·구현·빌드·테스트·S 배포)을 우리 컨테이너 안에서 돌린다. 이미지는
+# 인스펙터와 같은 playwright 베이스(브라우저 테스트가 빌드 게이트의 일부) + pnpm·git·
+# gh·wrangler. 잡 상태 머신·D1 `build_jobs`·S 배포는 B5에서 붙는다 — B1은 기동·헬스·
+# 툴체인 자가점검(`/internal/builder/selfcheck`)까지.
+#
+# instance_type "standard"(2 vCPU / 4 GiB): pnpm install + vite build는 basic(1 GiB)에서
+# OOM 위험(D-10 추정, 파일럿에서 실측 후 고정). max_instances 5 = 동시 빌드 상한(과금은
+# 실제 도는 인스턴스에만). 유저 배포 토큰은 이미지·페이로드 어디에도 없다(D-6).
+[[containers]]
+class_name = "SimsaBuilder"
+image = "./builder-container/Dockerfile"
+image_build_context = "../.."
+max_instances = 5
+instance_type = "standard"
+
+[[durable_objects.bindings]]
+class_name = "SimsaBuilder"
+name = "BUILDER"
+
+[[migrations]]
+tag = "v3-builder"
+new_sqlite_classes = ["SimsaBuilder"]
