@@ -314,7 +314,7 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | 배포 (집행) | `deploy central-plane approved.` `deploy dashboard approved.` | 2026-09-24 오전 (Bae) | central run 35948123514 success(deployedSha 12f09a4) · dashboard `24v0yx3ud` Ready |
 | 머지·배포 (집행) | `PR #530 merge approved.` `deploy central-plane approved.` | 2026-09-24 오전 (Bae) | #530 `f09e99c` · central run 35951724360 success · 기획 3 en 422→200 실측 |
 | N1~N3·N2 PR | — | 2026-09-24 | #522 · #523 (Train N 에이전트) |
-| Train B 착수 | `train B start approved` | — | B1~B11 코드 작성만 |
+| Train B 착수 | `train B start approved` | 2026-09-24 오후 (Bae) | B1~B11 코드 작성만. B1 = PR(SimsaBuilder 컨테이너·BUILDER 바인딩·자가점검 프로브) |
 | Train C 착수 | `train C start approved` | — | C1~C4 코드 작성만 |
 | 머지 | `PR #N merge approved.` | — | 해당 PR |
 | 배포 | `deploy central-plane approved.` / `deploy dashboard approved.` | — | 1회 |
@@ -364,6 +364,10 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 ---
 
 ## 9. 진행 로그
+
+### 2026-09-24 오후 — Train B 착수 (B1)
+- `train B start approved`(Bae). **B1 코드**: `builder-container/`(Dockerfile playwright 베이스 + pnpm·git·gh·wrangler, server.mjs `/health`·`/selfcheck`·`POST /run`, builder-run.mjs 자가점검·상태 머신 상수·미구현 kind 정직 실패) · `src/builder-container.ts`(SimsaBuilder, sleepAfter 50m) · wrangler `[[containers]]` standard/max 5 + `BUILDER` + `v3-builder` · `GET /internal/builder/selfcheck`(관측 토큰) · 불변식 9 + 단위 13 테스트. `container-images.yml`(PR에서 이미지 빌드 + 빌더 /selfcheck 스모크 — 노트북 Docker 없음). **라이브 0** — 배포 승인 후 `/internal/builder/selfcheck`로 "30초 내 pnpm -v" 실측.
+- 같은 날: Google 로그인 프로덕션 라이브(시작 200), Email Routing은 Bae 선택 대기(대시보드 3클릭 / 토큰 권한).
 
 ### 2026-09-24 (설계 잠금 당일)
 - **Train A 코드 완료 (A1~A5)** — PR #521 central-plane: `dev-spec.ts`(Zod+무결성 13규칙) · `generate-dev-spec.ts`(3패스, 예시 폴백 없음) · `render-dev-spec.ts`(md 10종, EN/KO 동일) · `acceptance-plan.ts` + inspector 시나리오 실행(RUNNER_REV a5-acceptance-1) · `migrations/0067`. PR #524 dashboard: 개발 지시서 화면(초보자 4줄+개발자용) · 사이드바 · 다음 걸음 · 검수 상세 AC 섹션. 테스트: central 2263/2263 · dashboard 710/710. **라이브 0건 — A6는 머지·배포·0067 적용 뒤.**

@@ -96,6 +96,13 @@ export interface Env {
    */
   INSPECTOR?: DurableObjectNamespace;
   /**
+   * SI 티어 Train B — B1: SimsaBuilder 컨테이너 바인딩
+   * (apps/central-plane/builder-container/). T1 빌드 잡 하나당 인스턴스 하나
+   * (`build-<jobId>`). B1은 기동·헬스·툴체인 자가점검만; 잡 상태 머신은 B5.
+   * 없으면 빌드 기능은 "지금은 불가"로 정직하게 꺼진다(builder_unavailable).
+   */
+  BUILDER?: DurableObjectNamespace;
+  /**
    * Stage 261 — R2 bucket `simsa-evidence`: visual-check evidence
    * (screenshots/video under checks/{userKey}/{projectId}/{runId}/) and
    * uploaded project documents (PRD/md under docs/{userKey}/{projectId}/).

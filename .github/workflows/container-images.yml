@@ -1,0 +1,61 @@
+# container-images — 컨테이너 Dockerfile이 바뀐 PR에서 이미지를 **빌드만** 해 본다(푸시 없음).
+#
+# 왜: 노트북에 Docker가 없고(2026-09-24 실측), 이미지는 deploy-central-plane의 wrangler deploy가
+# 처음 빌드한다. 그 시점에 apt·npm 단계가 깨지면 배포가 통째로 실패한다(승인 문구까지 받은 뒤에).
+# PR에서 먼저 빌드해 두면 "머지는 됐는데 배포가 안 되는" 상태를 막는다.
+#
+# 대상: builder-container · inspector-container (가벼움). autofix sandbox(container/)는
+# 모노레포 전체 빌드라 무거워 제외 — 바뀔 때만 수동 dispatch로.
+name: container-images
+
+on:
+  pull_request:
+    paths:
+      - 'apps/central-plane/builder-container/**'
+      - 'apps/central-plane/inspector-container/**'
+      - 'apps/central-plane/src/visual-flow-plan.ts'
+      - 'apps/central-plane/src/nondev-report.ts'
+      - 'apps/central-plane/src/signup-plan.ts'
+      - '.github/workflows/container-images.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: container-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: builder
+            dockerfile: apps/central-plane/builder-container/Dockerfile
+          - name: inspector
+            dockerfile: apps/central-plane/inspector-container/Dockerfile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.image.name }} image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          push: false
+          load: true
+          tags: simsa-${{ matrix.image.name }}:pr
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+      - name: Smoke the image (builder only — /health + /selfcheck)
+        if: matrix.image.name == 'builder'
+        run: |
+          set -euo pipefail
+          cid=$(docker run -d -p 18080:8080 simsa-builder:pr)
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:18080/health && break || sleep 1; done
+          echo
+          curl -sf http://127.0.0.1:18080/health | jq .
+          curl -s http://127.0.0.1:18080/selfcheck | tee /tmp/selfcheck.json | jq '{ok, runnerRev, totalMs, forbiddenPresent, workRoot, tools: (.tools|map({name, ok, version, ms}))}'
+          jq -e '.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::builder selfcheck failed"; docker logs "$cid"; exit 1; }
+          docker rm -f "$cid" >/dev/null
