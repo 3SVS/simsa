@@ -69,7 +69,11 @@ describe("ensureNamespace", () => {
     assert.deepEqual(JSON.parse(calls[0].init.body), { name: "simsa-hosted" });
     assert.equal(calls[0].init.headers.authorization, "Bearer tok-SECRET-123");
   });
-  it("이미 있으면 created:false로 성공(멱등)", async () => {
+  it("이미 있으면 created:false로 성공(멱등) — 라이브 실제 응답(400 · code 100120)", async () => {
+    const { f } = mockFetch(() => ({ status: 400, body: { success: false, errors: [{ code: 100120, message: "Invalid dispatch namespace name. Ensure it does not already exist and the name is lowercase, alphanumeric, and contains no spaces or special characters except dashes." }] } }));
+    assert.deepEqual(await ensureNamespace(ENV, f), { ok: true, value: { name: HOSTING_NAMESPACE, created: false } });
+  });
+  it("이미 있으면 created:false로 성공(멱등) — 문구형", async () => {
     const { f } = mockFetch(() => ({ status: 409, body: { success: false, errors: [{ code: 10076, message: "A namespace with this name already exists." }] } }));
     assert.deepEqual(await ensureNamespace(ENV, f), { ok: true, value: { name: HOSTING_NAMESPACE, created: false } });
   });

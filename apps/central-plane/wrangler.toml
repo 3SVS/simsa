@@ -26,7 +26,10 @@ AUTH_SIGNUP_MODE = "open"
 # conclave-ai.dev Email Routing(enabled·ready, catch-all → Worker conclave-ai)으로
 # `probe-<runId>@conclave-ai.dev` 확인 메일을 받는다. trysimsa.com·simsa.dev는 Vercel DNS라
 # Cloudflare Email Routing 불가 → Cloudflare 존인 conclave-ai.dev. 비우면 계정 준비 기능이 꺼진다.
-PROBE_MAIL_DOMAIN = "conclave-ai.dev"
+# 2026-09-25 Bae: "도메인 샀는데 왜 conclave-ai.dev야" → simsa.page로. simsa.page Email Routing
+# enabled·ready, catch-all → Worker conclave-ai (라이브 설정 완료). conclave-ai.dev 수신도 켜진 채 남아
+# 있어 전환 중 도착한 메일도 받는다(주소 파싱은 로컬파트만 본다).
+PROBE_MAIL_DOMAIN = "simsa.page"
 # Cloudflare AI Gateway (gateway "simsa") — REQUIRED: direct Worker→Anthropic
 # egress is ~90% 403 "Request not allowed" (measured 2026-07-05, retry-6 = 1/10).
 # The gateway path reaches Anthropic with no 403. Gateway must be UNAUTHENTICATED
