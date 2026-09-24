@@ -168,7 +168,13 @@ export function AppSidebar() {
   // Train N (D-17): developer-only affordances are hidden in the default view.
   const [developerMode] = useDeveloperMode();
   const devItems = sidebarDeveloperItems({ developerMode });
-  const userKey = typeof window !== "undefined" ? getUserKey() : "";
+  // 렌더 중 `typeof window` 분기 금지 — 서버는 "" → "C", 클라이언트 첫 렌더는 실제 키의 첫 글자를 그려
+  // 텍스트가 어긋났다(React #418, 라이브 E2E 2026-09-25 /login · dev 서버로 컴포넌트 스택 확정: 계정
+  // 버튼의 <span>). 서버와 첫 클라이언트 렌더는 같은 값("")에서 시작하고, 마운트 뒤에 키를 읽는다.
+  const [userKey, setUserKey] = useState("");
+  useEffect(() => {
+    setUserKey(getUserKey());
+  }, []);
   const initial = (userKey.replace(/^uk_/, "")[0] ?? "C").toUpperCase();
 
   const filtered = query.trim()
