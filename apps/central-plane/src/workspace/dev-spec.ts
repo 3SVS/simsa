@@ -123,7 +123,12 @@ export const ApiSchema = z
     request: z.string().max(2000).optional(),
     response: z.string().max(2000).optional(),
     errors: z.array(shortText).max(20),
-    auth: z.enum(["none", "user", "admin"]),
+    /**
+     * 누가 호출할 수 있나. `unknown` = 기획에서 아직 안 정해짐(라이브 E2E 2026-09-25: 기획 2 en에서
+     * 모델이 5개 API 전부 "unknown"을 넣어 422 — 프롬프트의 "모르면 unknown" 규칙과 충돌). 지어내게
+     * 하는 것보다 "미정"으로 남겨 결정 질문으로 드러내는 게 정직하다.
+     */
+    auth: z.enum(["none", "user", "admin", "unknown"]),
     featureIds: z.array(FeatureId).max(40),
   })
   .strict();

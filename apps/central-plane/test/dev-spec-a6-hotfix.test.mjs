@@ -106,3 +106,23 @@ describe("③ screens.states — 화면 고유 상태 키 수용 (라이브 2026
     assert.ok(screensDoc.includes("locked: 마감됐어요"), screensDoc.slice(0, 400));
   });
 });
+
+describe("④ apis.auth: \"unknown\" — 미정으로 수용 (라이브 E2E 2026-09-25 기획 2 en 422)", () => {
+  it("스키마가 통과시키고 렌더러가 '미정'으로 표시한다", async () => {
+    const spec = fullSpec([{ name: "id", type: "text", required: true }]);
+    spec.apis = [{ id: "API-001", method: "POST", path: "/api/recordings", errors: [], auth: "unknown", featureIds: ["FR-001"] }];
+    const v = validateDevSpec(spec);
+    assert.equal(v.ok, true, JSON.stringify(v));
+    const { renderDevSpecFiles } = await import("../dist/workspace/render-dev-spec.js");
+    const ko = renderDevSpecFiles(v.spec, "ko").map((f) => f.content).join("\n");
+    const en = renderDevSpecFiles(v.spec, "en").map((f) => f.content).join("\n");
+    assert.ok(ko.includes("미정 — 결정 필요"), "ko label");
+    assert.ok(en.includes("undecided — needs a decision"), "en label");
+    assert.ok(!ko.includes("undefined") && !en.includes("undefined"));
+  });
+  it("그 외 값은 여전히 거부", () => {
+    const spec = fullSpec([{ name: "id", type: "text", required: true }]);
+    spec.apis = [{ id: "API-001", method: "POST", path: "/x", errors: [], auth: "owner", featureIds: ["FR-001"] }];
+    assert.equal(validateDevSpec(spec).ok, false);
+  });
+});
