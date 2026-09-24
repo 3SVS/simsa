@@ -135,9 +135,11 @@ function screens(spec: DevSpec, locale: RenderLocale): string {
   for (const s of spec.screens) {
     out.push(`## ${s.id} · \`${s.route}\``, "", s.purpose, "");
     out.push(`- **${t.components}:** ${s.components.join(", ") || t.none}`);
-    const states = (["empty", "loading", "error", "success"] as const)
-      .filter((k) => s.states[k])
-      .map((k) => `${t.st[k]}: ${s.states[k]}`);
+    // 기본 4상태는 번역 라벨, 화면 고유 상태(locked·merged…)는 키 그대로.
+    const isKnown = (k: string): k is keyof typeof t.st => k in t.st;
+    const states = Object.entries(s.states)
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${isKnown(k) ? t.st[k] : k}: ${v}`);
     out.push(`- **${t.states}:** ${states.join(" / ") || t.none}`);
     out.push(`- **${t.entry}:** ${s.entryFrom.join(", ") || t.none} · **${t.exit}:** ${s.exitTo.join(", ") || t.none}`);
     out.push(`- **${t.features}:** ${s.featureIds.join(", ") || t.none}`, "");

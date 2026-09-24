@@ -80,3 +80,29 @@ describe("② 프롬프트 언어·default 지침", () => {
     assert.ok(/모든 자유 텍스트는 \*\*한국어\*\*/.test(p));
   });
 });
+
+describe("③ screens.states — 화면 고유 상태 키 수용 (라이브 2026-09-24 기획 3 en: 'locked'·'validation'·'merged' 422)", () => {
+  const withStates = (states) => {
+    const spec = fullSpec([{ name: "id", type: "text", required: true }]);
+    spec.screens[0].states = states;
+    return spec;
+  };
+  it("locked·merged 같은 고유 상태를 통과시키고 값을 보존한다", () => {
+    const v = validateDevSpec(withStates({ empty: "아직 주문이 없어요", locked: "마감됐어요(목 22:00)", merged: "같은 호수 주문을 합쳤어요" }));
+    assert.equal(v.ok, true, JSON.stringify(v));
+    assert.deepEqual(Object.keys(v.spec.screens[0].states), ["empty", "locked", "merged"]);
+  });
+  it("키가 식별자가 아니거나 13개 이상이면 거부한다", () => {
+    assert.equal(validateDevSpec(withStates({ "마감 됨": "x" })).ok, false);
+    const many = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`s${i}`, "x"]));
+    assert.equal(validateDevSpec(withStates(many)).ok, false);
+  });
+  it("렌더러: 기본 상태는 번역 라벨, 고유 상태는 키 그대로", async () => {
+    const { renderDevSpecFiles } = await import("../dist/workspace/render-dev-spec.js");
+    const v = validateDevSpec(withStates({ empty: "비어요", locked: "마감됐어요" }));
+    const files = renderDevSpecFiles(v.spec, "ko");
+    const screensDoc = files.find((f) => /screen/i.test(f.path))?.content ?? "";
+    assert.ok(screensDoc.includes("비었을 때: 비어요"), screensDoc.slice(0, 400));
+    assert.ok(screensDoc.includes("locked: 마감됐어요"), screensDoc.slice(0, 400));
+  });
+});

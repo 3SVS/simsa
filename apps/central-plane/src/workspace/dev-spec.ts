@@ -62,14 +62,14 @@ export const ScreenSchema = z
     route: z.string().trim().min(1).max(200),
     purpose: longText,
     components: z.array(shortText).max(40),
+    /**
+     * 상태별 문구. empty/loading/error/success가 기본이지만 화면 고유 상태(`locked`=마감 뒤,
+     * `merged`=중복 주문 합침…)는 기획의 내용이다 — strict 4키로 거부하면 내용을 버리는 셈
+     * (라이브 2026-09-24 기획 3 en: 'locked'·'validation'·'merged'로 422). 키는 영문 식별자, ≤12개.
+     */
     states: z
-      .object({
-        empty: shortText.optional(),
-        loading: shortText.optional(),
-        error: shortText.optional(),
-        success: shortText.optional(),
-      })
-      .strict(),
+      .record(z.string().regex(/^[a-z][a-zA-Z0-9_-]{0,29}$/, "상태 키는 영문 소문자로 시작하는 식별자"), shortText)
+      .refine((r) => Object.keys(r).length <= 12, { message: "상태는 12개 이하" }),
     entryFrom: z.array(shortText).max(20),
     exitTo: z.array(shortText).max(20),
     featureIds: z.array(FeatureId).max(40),
