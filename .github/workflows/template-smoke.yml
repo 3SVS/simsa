@@ -1,0 +1,98 @@
+# template-smoke — S 모드 호스팅 템플릿을 실제로 빌드·배포·호출·정리한다 (B3 완료 조건의 라이브 증거).
+#
+# 순서(빌드 잡 B5가 컨테이너 안에서 할 것과 같다):
+#   1) pnpm install · pnpm run build (템플릿은 자기 pnpm-workspace.yaml을 가진 독립 루트)
+#   2) 프로젝트 D1 생성 → wrangler.toml의 자리 표시자 id를 실제 id로 치환 → 마이그레이션 원격 적용
+#   3) wrangler deploy --dispatch-namespace simsa-hosted --name tmpl-smoke-<run>
+#   4) https://tmpl-smoke-<run>.simsa.page/api/health · POST/GET /api/items(한글) · 정적 index.html
+#   5) 정리: 유저 Worker 삭제 + D1 삭제 (keep=true면 남김)
+# 자격은 HOSTING_CF_*(운영 토큰). 유저 토큰 없음. 수동 dispatch + 템플릿/워크플로 변경 PR에서 자동.
+name: template-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'true면 배포한 시험 앱·D1을 남긴다(눈으로 볼 때)'
+        required: false
+        default: 'false'
+  pull_request:
+    paths:
+      - 'templates/simsa-hosted-app/**'
+      - '.github/workflows/template-smoke.yml'
+
+concurrency:
+  group: template-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: templates/simsa-hosted-app
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.HOSTING_CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.HOSTING_CF_ACCOUNT_ID }}
+      NAMESPACE: simsa-hosted
+      HOST_ROOT: simsa.page
+    steps:
+      - uses: actions/checkout@v5
+      # 루트 package.json(packageManager pnpm@9)이 아니라 템플릿의 packageManager(pnpm@10)를 읽는다 —
+      # `version: 10`과 함께 두면 'Multiple versions of pnpm specified'로 실패(라이브 run 36213747698).
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: templates/simsa-hosted-app/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Install + build (standalone, like the builder container)
+        run: |
+          pnpm install
+          pnpm run build
+          test -f dist/client/index.html
+
+      - name: Create project D1 + patch wrangler.toml + apply migrations
+        id: d1
+        run: |
+          set -euo pipefail
+          SLUG="tmpl-smoke-${GITHUB_RUN_ID: -6}"
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+          r=$(curl -sS -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "content-type: application/json" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" --data "{\"name\":\"simsa-hosted-$SLUG\"}")
+          echo "$r" | jq '{success, name: .result.name, errors}'
+          D1_ID=$(echo "$r" | jq -r '.result.uuid // empty')
+          [ -n "$D1_ID" ] || { echo "::error::D1 create failed"; exit 1; }
+          echo "d1_id=$D1_ID" >> "$GITHUB_OUTPUT"
+          sed -i "s/00000000-0000-0000-0000-000000000000/$D1_ID/; s/database_name = \"simsa-hosted-app\"/database_name = \"simsa-hosted-$SLUG\"/" wrangler.toml
+          grep -n "database_id\|database_name" wrangler.toml
+          npx wrangler d1 migrations apply "simsa-hosted-$SLUG" --remote
+
+      - name: Deploy into the dispatch namespace
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dispatch-namespace "$NAMESPACE" --name "${{ steps.d1.outputs.slug }}" 2>&1 | tail -8
+
+      - name: Call the live app
+        run: |
+          set -euo pipefail
+          URL="https://${{ steps.d1.outputs.slug }}.$HOST_ROOT"
+          for i in $(seq 1 12); do code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/health"); [ "$code" = "200" ] && break; sleep 5; done
+          echo "health: $(curl -s "$URL/api/health")"
+          [ "$code" = "200" ] || { echo "::error::health $code"; exit 1; }
+          printf '%s' '{"title":"동네 빵집 소금빵 예약 — 한글 확인"}' > /tmp/body.json
+          echo "post: $(curl -s -X POST -H 'content-type: application/json' --data-binary @/tmp/body.json "$URL/api/items")"
+          list=$(curl -s "$URL/api/items"); echo "list: $list"
+          echo "$list" | jq -e '.ok == true and (.items | length) >= 1 and (.items[0].title | test("소금빵"))' >/dev/null || { echo "::error::D1 round-trip failed"; exit 1; }
+          html=$(curl -s "$URL/"); echo "$html" | grep -q '<div id="root">' || { echo "::error::static index.html not served"; exit 1; }
+          echo "hosted header: $(curl -sI "$URL/" | grep -i x-simsa-hosted || echo none)"
+          echo "✅ B3 live: build → D1 → deploy → $URL 200 · D1 write/read(한글) · static OK"
+
+      - name: Cleanup (unless keep)
+        if: always() && inputs.keep != 'true'
+        run: |
+          SLUG="${{ steps.d1.outputs.slug }}"; D1_ID="${{ steps.d1.outputs.d1_id }}"
+          [ -n "$SLUG" ] && curl -sS -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/dispatch/namespaces/$NAMESPACE/scripts/$SLUG" | jq -c '{script_deleted: .success}' || true
+          [ -n "$D1_ID" ] && curl -sS -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$D1_ID" | jq -c '{d1_deleted: .success}' || true

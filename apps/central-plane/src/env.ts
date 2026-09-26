@@ -111,6 +111,12 @@ export interface Env {
   HOSTING_CF_API_TOKEN?: string;
   HOSTING_CF_ACCOUNT_ID?: string;
   /**
+   * SI 티어 Train B — B3: S 모드 저장소를 만드는 GitHub 조직(D-5, 기본 "simsa-hosted"). 기존 GitHub App
+   * (GH_APP_*)이 이 조직에 설치되어 있어야 하며 권한은 Administration: write · Contents: write.
+   * wrangler.toml [vars]로 둔다(비밀 아님).
+   */
+  HOSTING_GH_ORG?: string;
+  /**
    * Stage 261 — R2 bucket `simsa-evidence`: visual-check evidence
    * (screenshots/video under checks/{userKey}/{projectId}/{runId}/) and
    * uploaded project documents (PRD/md under docs/{userKey}/{projectId}/).

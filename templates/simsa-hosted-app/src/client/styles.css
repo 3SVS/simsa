@@ -1,0 +1,15 @@
+:root { color-scheme: light; font-family: Pretendard, -apple-system, "Segoe UI", sans-serif; }
+body { margin: 0; background: #faf8f3; color: #1f1d1a; }
+.app { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+h1 { font-size: 22px; margin: 0 0 16px; }
+.row { display: flex; gap: 8px; }
+input[type="text"], input:not([type]) { flex: 1; padding: 10px 12px; border: 1px solid #d9d4ca; border-radius: 8px; font-size: 15px; background: #fff; }
+button { padding: 10px 14px; border: 0; border-radius: 8px; background: #5c111c; color: #fff; font-size: 14px; cursor: pointer; }
+button.ghost { background: transparent; color: #7a6f66; }
+.list { list-style: none; padding: 0; margin: 16px 0; }
+.list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 4px; border-bottom: 1px solid #ebe6dc; }
+.list li.done span { text-decoration: line-through; color: #9a8f85; }
+.list label { display: flex; gap: 10px; align-items: center; }
+.muted { color: #7a6f66; }
+.small { font-size: 12px; margin-top: 24px; }
+.error { color: #b00020; }
