@@ -20,7 +20,7 @@ import * as recheck from "../src/lib/visual-check-recheck.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const CHECK = {
-  id: "vc_abc123",
+  id: "wvc_abc123",
   projectId: "proj_1",
   targetUrl: "https://my-app.lovable.app",
   intent: "회원가입 후 첫 예약이 끝까지 되어야 한다",
@@ -36,7 +36,7 @@ describe("buildRecheckBody (C0 — 계약 1 클라이언트)", () => {
       userKey: "uk_1",
       locale: "ko",
       intent: "회원가입 후 첫 예약이 끝까지 되어야 한다",
-      sourceCheckId: "vc_abc123",
+      sourceCheckId: "wvc_abc123",
     });
   });
 
@@ -44,7 +44,7 @@ describe("buildRecheckBody (C0 — 계약 1 클라이언트)", () => {
     for (const intent of ["", "   ", undefined, null]) {
       const body = buildRecheckBody({ ...CHECK, intent }, "uk_1", "en");
       assert.equal("intent" in body, false, `intent=${JSON.stringify(intent)} should be omitted`);
-      assert.equal(body.sourceCheckId, "vc_abc123");
+      assert.equal(body.sourceCheckId, "wvc_abc123");
       assert.equal(body.locale, "en");
     }
   });

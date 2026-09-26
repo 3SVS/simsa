@@ -39,12 +39,13 @@ import {
 import {
   USER_VERDICT_OPTIONS,
   normalizeUserVerdict,
+  userVerdictErrorKey,
   userVerdictLabel,
   pickDefaultPromptTarget,
   fixPromptFor,
   availablePromptTargets,
 } from "@/lib/user-verdict.mjs";
-import type { UserVerdict, FixPromptTarget } from "@/lib/user-verdict.mjs";
+import type { UserVerdict, UserVerdictErrorKey, FixPromptTarget } from "@/lib/user-verdict.mjs";
 import {
   verdictLabel,
   severityLabel,
@@ -667,6 +668,9 @@ function UserVerdictSection({
   const s = t.visualChecks.userVerdict;
   const [verdict, setVerdict] = useState<UserVerdict | null>(initial);
   const [phase, setPhase] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // Why the last save failed: "unavailable" (the route is not on the server that
+  // answered — permanent for this session) vs "generic" (worth a retry).
+  const [errorKey, setErrorKey] = useState<UserVerdictErrorKey>("generic");
   // A new run detail (or a later server value) resets the selection.
   useEffect(() => { setVerdict(initial); setPhase("idle"); }, [initial, runId]);
 
@@ -677,10 +681,14 @@ function UserVerdictSection({
     setPhase("saving");
     const res = await submitUserVerdict(projectId, runId, userKey, next);
     if (res.ok) {
-      setVerdict(res.verdict);
+      // PR #552 검증 P2: the wire value is only a cast — normalize it like the read
+      // path does, and keep what the user just chose if the server echoes a value
+      // this UI does not know (never "saved" with no chip selected).
+      setVerdict(normalizeUserVerdict(res.verdict) ?? next);
       setPhase("saved");
     } else {
       setVerdict(previous);
+      setErrorKey(userVerdictErrorKey(res.error));
       setPhase("error");
     }
   }
@@ -713,7 +721,11 @@ function UserVerdictSection({
       </div>
       {phase === "saving" && <p className="mt-2 text-xs text-gray-500">{s.saving}</p>}
       {phase === "saved" && <p className="mt-2 text-xs text-gray-500">{s.saved}</p>}
-      {phase === "error" && <p className="mt-2 text-xs text-red-600">{s.saveError}</p>}
+      {phase === "error" && (
+        <p className="mt-2 text-xs text-red-600">
+          {errorKey === "unavailable" ? s.saveUnavailable : s.saveError}
+        </p>
+      )}
     </section>
   );
 }
@@ -749,6 +761,23 @@ export default function VisualCheckDetailPage() {
       .catch(() => { if (!cancelled) setHasRepo(null); });
     return () => { cancelled = true; };
   }, [id, userKey]);
+  // PR #552 검증 P2: does this run already have a repair job? It decides the entry
+  // mode together with the repo fact — an existing job (progress, PR link) must
+  // stay visible even when the repo lookup failed or timed out (hasRepo false /
+  // null), where the builder-paste card would otherwise replace it. Separate
+  // from RepairSection's own mount GET (that one renders the job's state).
+  // undefined = not looked yet · true = a job exists · false = none / unknown.
+  const [repairProbe, setRepairProbe] = useState<boolean | undefined>(undefined);
+  const probeRepair = check !== null && canRepair(check);
+  useEffect(() => {
+    setRepairProbe(undefined);
+    if (!probeRepair) return;
+    let cancelled = false;
+    void getRepair(id, runId, userKey).then((res) => {
+      if (!cancelled) setRepairProbe(res.ok && res.repair !== null);
+    });
+    return () => { cancelled = true; };
+  }, [probeRepair, id, runId, userKey]);
   // Stage 266 — the most recent done run older than this one, for comparison.
   const [prevCheck, setPrevCheck] = useState<VisualCheckDetail | null>(null);
 
@@ -865,11 +894,17 @@ export default function VisualCheckDetailPage() {
     promptTargets.length > 1 ? (promptTarget === "web_builder" ? "cli" : "web_builder") : null;
   // Train C — C2b: the user's own acceptance label from the server (old servers → null).
   const initialUserVerdict = check ? normalizeUserVerdict(check.userVerdict) : null;
-  // Train C — C2a: which "make it work" entry to show. "loading" only while the
-  // repo fact is still being read, so the area does not flash from one card to
-  // the other; a run that cannot be repaired at all shows neither.
-  const repairMode: "loading" | "repair" | "builder_paste" | "none" =
-    hasRepo === undefined ? (canRepair(check) ? "loading" : "none") : repairEntryMode(check, hasRepo);
+  // Train C — C2a: which "make it work" entry to show. "loading" while the repo
+  // fact — and, when no repo is known, the repair-job probe — is still pending, so
+  // the area does not flash from one card to the other; a run that cannot be
+  // repaired at all shows neither. An existing repair job keeps the repair card
+  // whatever the repo fact says (PR #552 검증 P2 — its PR link must not vanish).
+  const repairFactsPending = hasRepo === undefined || (hasRepo !== true && repairProbe === undefined);
+  const repairMode: "loading" | "repair" | "builder_paste" | "none" = !canRepair(check)
+    ? "none"
+    : repairFactsPending
+      ? "loading"
+      : repairEntryMode(check, hasRepo, { hasRepairJob: repairProbe === true });
   const verdict = check ? verdictLabel(check.works, check.decision, t) : null;
   const evidence = splitEvidenceKeys(check?.evidenceKeys ?? []);
   const findings = report?.findings ?? [];

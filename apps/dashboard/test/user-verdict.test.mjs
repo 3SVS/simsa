@@ -23,7 +23,10 @@ import {
 // 죽지 않고, 케이스별 실패 메시지가 남게.
 import * as uv from "../src/lib/user-verdict.mjs";
 import { DICTIONARIES, getDictionary } from "../src/i18n/dictionary.mjs";
-import { devTermHits } from "../../../tools/simsa-completion-loop-spike/lib/beginner-terms.mjs";
+import { DEV_TERMS, devTermHits } from "../../../tools/simsa-completion-loop-spike/lib/beginner-terms.mjs";
+
+// PR #552 검증 P2: 기본 흐름 카피에는 '저장소/repository'도 금칙어로 센다(repair-state.test.mjs와 같은 확장).
+const BEGINNER_TERMS = [...DEV_TERMS, "저장소", "리포지토리", "repository", "repositories"];
 
 describe("user_verdict — 4값 (계약 2)", () => {
   it("옵션은 정확히 이 네 값, 이 순서 (생각대로 / 되긴 하는데 달라 / 아직 안 돼 / 모르겠어)", () => {
@@ -131,8 +134,11 @@ describe("fixPromptFor / availablePromptTargets — 두 형식 토글", () => {
 });
 
 describe("C2b 사전 — KO/EN 둘 다, 초보자 금칙어 0, 점수 표기 0", () => {
-  const KEYS_VERDICT = ["title", "hint", "saving", "saved", "saveError"];
-  const KEYS_FIX = ["builderBody", "copyBuilder", "showCli", "showBuilder", "targetBuilder", "targetCli"];
+  // PR #552 검증 P2: saveUnavailable 추가(옛 서버 404 = 영구 조건은 '잠시 뒤' 카피로 가리지 않는다) ·
+  // targetBuilder/targetCli 삭제(어디서도 참조되지 않던 죽은 키 — 존재 고정 대신 참조 고정으로,
+  // train-c-wiring.test.mjs "fixPrompt.* 모든 키가 화면에서 쓰인다").
+  const KEYS_VERDICT = ["title", "hint", "saving", "saved", "saveError", "saveUnavailable"];
+  const KEYS_FIX = ["builderBody", "copyBuilder", "showCli", "showBuilder"];
 
   for (const loc of ["ko", "en"]) {
     it(`${loc}: userVerdict.* / fixPrompt.* 키가 모두 있고 비어 있지 않다`, () => {
@@ -150,7 +156,7 @@ describe("C2b 사전 — KO/EN 둘 다, 초보자 금칙어 0, 점수 표기 0",
         ...KEYS_FIX.map((k) => vc.fixPrompt[k]),
       ];
       for (const s of strings) {
-        const hits = devTermHits(s);
+        const hits = devTermHits(s, { terms: BEGINNER_TERMS });
         assert.deepEqual(hits, [], `"${s}" → ${JSON.stringify(hits)}`);
         assert.doesNotMatch(s, /\d+\s*(점|\/\s*\d+|%)/, `"${s}" looks like a score`);
       }
@@ -160,5 +166,36 @@ describe("C2b 사전 — KO/EN 둘 다, 초보자 금칙어 0, 점수 표기 0",
   it("복사 버튼 라벨은 계약 문구 그대로 (KO '빌더 채팅에 붙여넣기' / EN \"Paste into your builder's chat\")", () => {
     assert.equal(DICTIONARIES.ko.visualChecks.fixPrompt.copyBuilder, "빌더 채팅에 붙여넣기");
     assert.equal(DICTIONARIES.en.visualChecks.fixPrompt.copyBuilder, "Paste into your builder's chat");
+  });
+
+  // PR #552 검증 P2 (정직 카피 ⑥): user_verdict를 읽어 검수·고침 안내를 바꾸는 코드는 서버·대시보드
+  // 어디에도 없다 — "더 정확해져요"는 지키지 못하는 약속이다. 옛 카피에서 실패한다.
+  it("userVerdict.hint는 지키지 못할 약속(다음 검수·고침 안내가 더 정확해진다)을 하지 않는다", () => {
+    assert.doesNotMatch(DICTIONARIES.ko.visualChecks.userVerdict.hint, /정확/);
+    assert.doesNotMatch(DICTIONARIES.en.visualChecks.userVerdict.hint, /accurate|improve/i);
+  });
+
+  // PR #552 검증 P2: fixPrompt.builderBody가 '다시 확인' 버튼을 가리켰지만 repair 모드·none 모드
+  // 화면에는 그 이름의 버튼이 없다(수리 카드 버튼은 '수리 확인 재검수'). 버튼 이름을 인용하지 않는다.
+  it("fixPrompt.builderBody는 특정 버튼 이름을 인용하지 않는다 (같은 화면에 그 버튼이 없을 수 있다)", () => {
+    assert.doesNotMatch(DICTIONARIES.ko.visualChecks.fixPrompt.builderBody, /['"‘“]다시 확인['"’”]/);
+    assert.doesNotMatch(DICTIONARIES.en.visualChecks.fixPrompt.builderBody, /["“]Check again["”]/i);
+  });
+});
+
+// PR #552 검증 P2: 판정 저장 실패의 원인 분리. 옛 서버(라우트 없음)는 central-plane notFound 핸들러의
+// `{ error: "not found", path }`(JSON, ok 없음) 또는 본문 파싱 실패 시 "HTTP 404"로 돌아온다 — 영구
+// 조건이다. '잠시 뒤 다시 눌러주세요'로 가리지 않고 saveUnavailable 카피를 쓴다.
+// 이 describe는 고치기 전 코드에서 실패한다(userVerdictErrorKey 없음).
+describe("userVerdictErrorKey — 옛 서버(라우트 없음)와 일시 장애를 구분한다", () => {
+  it("라우트 없음(HTTP 404 · 'not found' · not_found) → unavailable", () => {
+    for (const e of ["HTTP 404", "not found", "not_found", "  HTTP 404 "]) {
+      assert.equal(uv.userVerdictErrorKey(e), "unavailable", JSON.stringify(e));
+    }
+  });
+  it("그 밖(런 없음 run_not_found · 403 · 네트워크 · 없음) → generic (다시 시도 카피)", () => {
+    for (const e of ["run_not_found", "project_not_found", "forbidden", "invalid_verdict", "HTTP 500", "TypeError: fetch failed", undefined, null, 404]) {
+      assert.equal(uv.userVerdictErrorKey(e), "generic", JSON.stringify(e));
+    }
   });
 });

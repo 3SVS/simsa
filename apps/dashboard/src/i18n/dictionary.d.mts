@@ -2235,8 +2235,6 @@ export type Dictionary = {
       copyBuilder: string;
       showCli: string;
       showBuilder: string;
-      targetBuilder: string;
-      targetCli: string;
     };
     userVerdict: {
       title: string;
@@ -2250,6 +2248,7 @@ export type Dictionary = {
       saving: string;
       saved: string;
       saveError: string;
+      saveUnavailable: string;
     };
     builderPaste: {
       title: string;

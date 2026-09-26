@@ -27,6 +27,8 @@ const page = readFileSync(
   path.join(SRC, "app/projects/[id]/visual-checks/[runId]/page.tsx"),
   "utf8",
 );
+const api = readFileSync(path.join(SRC, "lib/workspace-visual-checks-api.ts"), "utf8");
+const { DICTIONARIES } = await import("../src/i18n/dictionary.mjs");
 
 /** Body of `function confirm() { … }` in IntentConfirmCard (up to the next top-level `  }`). */
 function confirmBody(src) {
@@ -75,6 +77,37 @@ test("C2b-b: 리포트 하단에 user_verdict 제출이 배선돼 있다 (submit
   assert.match(page, /normalizeUserVerdict\(check\.userVerdict\)/);
 });
 
+test("C2b-b′ (PR #552 검증 P2): 저장 성공 응답의 verdict도 정규화한다 — 예상 밖 값이면 방금 고른 값을 유지", () => {
+  // 옛 코드: setVerdict(res.verdict) — `as UserVerdictResponse` 캐스트만 믿어, 서버가 예상 밖 값을 주면
+  // '저장했어요' 문구와 함께 어떤 칩도 선택되지 않은 상태가 됐다.
+  assert.ok(!/setVerdict\(res\.verdict\)/.test(page), "no raw trust of res.verdict");
+  assert.ok(/setVerdict\(normalizeUserVerdict\(res\.verdict\) \?\? next\)/.test(page), "normalize at the boundary, fall back to the chosen value");
+});
+
+test("C2b-b″ (PR #552 검증 P2): 저장 실패는 원인별 카피 — 옛 서버(라우트 없음)에 '잠시 뒤 다시' 카피를 쓰지 않는다", () => {
+  assert.ok(/userVerdictErrorKey\(res\.error\)/.test(page), "error key derived from the server answer");
+  assert.ok(/s\.saveUnavailable/.test(page) && /s\.saveError/.test(page), "both copies are wired");
+});
+
+test("C2b-d (PR #552 검증 P2): fixPrompt.* 사전 키는 모두 화면에서 쓰인다 — 죽은 키를 존재 고정으로 감추지 않는다", () => {
+  for (const k of Object.keys(DICTIONARIES.ko.visualChecks.fixPrompt)) {
+    assert.ok(page.includes(`fixPrompt.${k}`), `t.visualChecks.fixPrompt.${k} is never referenced by the page`);
+  }
+});
+
+test("계약 2·4 요청 모양 (PR #552 검증 P2, 정보성 가드): submitUserVerdict / recordFixPromptCopied", () => {
+  const sv = api.slice(api.indexOf("export async function submitUserVerdict"), api.indexOf("export type FixPromptCopyTarget"));
+  assert.ok(sv.length > 0, "submitUserVerdict exists");
+  assert.match(sv, /\/visual-checks\/\$\{encodeURIComponent\(runId\)\}\/verdict`/);
+  assert.match(sv, /method: "POST"/);
+  assert.match(sv, /body: JSON\.stringify\(\{ userKey, verdict \}\)/);
+  const ev = api.slice(api.indexOf("export async function recordFixPromptCopied"));
+  assert.ok(ev.length > 0, "recordFixPromptCopied exists");
+  assert.match(ev, /\/visual-checks\/\$\{encodeURIComponent\(runId\)\}\/events`/);
+  assert.match(ev, /body: JSON\.stringify\(\{ userKey, type: "fix_prompt_copied", target \}\)/);
+  assert.match(ev, /keepalive: true/);
+});
+
 test("C2b-c: 프롬프트 기본 형식은 '상태'가 아니라 '파생'이다 — 폴링으로 리포트가 도착해도 반영된다 (PR #552 검증 결함 #1)", () => {
   // 옛 코드: useState<FixPromptTarget>("cli") + load() 안에서만 setPromptTarget. 재검수 주 경로
   // (res.dispatched → 새 런으로 router.push)는 queued/running으로 들어오므로 report=null →
@@ -106,8 +139,16 @@ test("C2b-c′: 기본 형식 선택에 진입 모드를 반영한다 — 저장
   );
 });
 
-test("C2a: 고치기 진입이 repairEntryMode(check, hasRepo)로 갈린다 — canRepair(check) && 단독 렌더가 아니다", () => {
-  assert.match(page, /repairEntryMode\(check, hasRepo\)/);
+test("C2a: 고치기 진입이 repairEntryMode(check, hasRepo, …)로 갈린다 — canRepair(check) && 단독 렌더가 아니다", () => {
+  assert.ok(
+    /repairEntryMode\(check, hasRepo, \{ hasRepairJob: repairProbe === true \}\)/.test(page),
+    "entry mode takes the repo fact AND the existing-job probe",
+  );
+  // PR #552 검증 P2: 저장소 사실이 false/null이어도 이미 있는 수리 잡(PR 링크)은 보여야 한다 —
+  // 페이지가 잡 존재를 한 번 확인해(getRepair) 진입 모드에 넣는다. RepairSection 안의 마운트 GET과 별개.
+  const probe = page.indexOf("const [repairProbe, setRepairProbe]");
+  assert.ok(probe >= 0, "the page holds a repair-job probe");
+  assert.ok(/getRepair\(id, runId, userKey\)/.test(page), "the page probes the existing repair job by run");
   assert.doesNotMatch(page, /\{canRepair\(check\) && \(/);
   assert.match(page, /<BuilderPasteSection/);
   // 저장소 사실은 transient-null 재시도 헬퍼로 읽는다(3svs-os error-patterns/transient-null-hard-false).

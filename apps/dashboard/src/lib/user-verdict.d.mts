@@ -9,6 +9,11 @@ export const CLI_AGENT_TOOLS: readonly string[];
 
 export function normalizeUserVerdict(raw: unknown): UserVerdict | null;
 
+/** "unavailable" = the verdict route is not on this server (permanent); "generic" = retry. */
+export type UserVerdictErrorKey = "unavailable" | "generic";
+
+export function userVerdictErrorKey(error: unknown): UserVerdictErrorKey;
+
 export function userVerdictLabel(
   verdict: UserVerdict,
   t: { visualChecks: { userVerdict: { options: Record<UserVerdict, string> } } },

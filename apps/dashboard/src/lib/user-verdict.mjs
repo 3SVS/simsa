@@ -34,6 +34,22 @@ export function normalizeUserVerdict(raw) {
 }
 
 /**
+ * Why a verdict save failed, for the copy to show (PR #552 검증 P2).
+ *   "unavailable" — the route does not exist on the server that answered: the
+ *                   central-plane notFound handler's `{ error: "not found" }`
+ *                   (a JSON body without `ok`), a bare `HTTP 404` when the body
+ *                   was not JSON, or `not_found`. Permanent for this session, so
+ *                   "try again in a moment" would be a lie.
+ *   "generic"     — everything else (run_not_found, forbidden, network …): retry copy.
+ * @param {unknown} error the `error` field of a failed UserVerdictResponse
+ * @returns {"unavailable" | "generic"}
+ */
+export function userVerdictErrorKey(error) {
+  const e = typeof error === "string" ? error.trim() : "";
+  return /^HTTP\s+404$/i.test(e) || /^not[ _]found$/i.test(e) ? "unavailable" : "generic";
+}
+
+/**
  * Display label for a verdict from the dictionary (never hard-coded here).
  * @param {"as_intended" | "works_but_different" | "still_broken" | "unsure"} verdict
  * @param {{ visualChecks: { userVerdict: { options: Record<string, string> } } }} t

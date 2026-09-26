@@ -39,10 +39,22 @@ export function canRepair(check) {
  * default (builder_paste) rather than the GitHub path — the optional sentence
  * still leads a developer to the repair route, whereas the reverse would show
  * a beginner a button that ends in "connect GitHub first".
+ *
+ * `opts.hasRepairJob` (PR #552 검증 P2): a repair job already exists for this
+ * run (queued / running / done / failed). Then the entry is "repair" whatever
+ * the repo fact says — before this, a failed or timed-out repo lookup (false /
+ * null) replaced the card with builder-paste and the job's progress and PR
+ * link vanished from the report. A job can only exist when a repository was
+ * linked, so this never shows a beginner the GitHub path by accident.
+ *
+ * @param {{ status?: unknown, works?: unknown } | null | undefined} check
+ * @param {boolean | null | undefined} hasRepo
+ * @param {{ hasRepairJob?: boolean }} [opts]
+ * @returns {"repair" | "builder_paste" | "none"}
  */
-export function repairEntryMode(check, hasRepo) {
+export function repairEntryMode(check, hasRepo, opts = {}) {
   if (!canRepair(check)) return "none";
-  return hasRepo === true ? "repair" : "builder_paste";
+  return hasRepo === true || opts?.hasRepairJob === true ? "repair" : "builder_paste";
 }
 
 /**
