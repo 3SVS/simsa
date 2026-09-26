@@ -3,7 +3,7 @@ import type { Env } from "./env.js";
 import { handleProbeEmail, type IncomingEmail } from "./probe-mailbox.js";
 import { assertPreflight } from "./preflight.js";
 import { selfHealWebhook } from "./webhook-heal.js";
-import { cleanupStuckJobs, cleanupStuckVisualChecks, cleanupStuckRepairJobs } from "./stuck-cleanup.js";
+import { cleanupStuckJobs, cleanupStuckVisualChecks, cleanupStuckRepairJobs, cleanupStuckBuildJobs } from "./stuck-cleanup.js";
 import { refreshAllSources } from "./external-references.js";
 import { sweepPlaintextGithubTokens } from "./db/token-encrypt-sweep.js";
 import { retryPendingFeedback } from "./routes/feedback.js";
@@ -90,6 +90,13 @@ export default {
         console.log(JSON.stringify({ cron: "stuck-cleanup-repair-jobs", cronExpression: event.cron, ...result }));
       } catch (err) {
         console.error("[stuck-cleanup-repair-jobs] crashed:", err);
+      }
+      // B5 — 빌드 잡(60분 무진행)도 같은 틱에.
+      try {
+        const result = await cleanupStuckBuildJobs(env);
+        console.log(JSON.stringify({ cron: "stuck-cleanup-build-jobs", cronExpression: event.cron, ...result }));
+      } catch (err) {
+        console.error("[stuck-cleanup-build-jobs] crashed:", err);
       }
       return;
     }

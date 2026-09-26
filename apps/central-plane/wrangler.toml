@@ -30,6 +30,8 @@ AUTH_SIGNUP_MODE = "open"
 # enabled·ready, catch-all → Worker conclave-ai (라이브 설정 완료). conclave-ai.dev 수신도 켜진 채 남아
 # 있어 전환 중 도착한 메일도 받는다(주소 파싱은 로컬파트만 본다).
 PROBE_MAIL_DOMAIN = "simsa.page"
+# B5 — S 모드 호스팅 앱 주소 루트(hosting-dispatch와 동일). 잡 응답의 hostUrl·배포 주소에 쓴다.
+HOSTING_ROOT_DOMAIN = "simsa.page"
 # Cloudflare AI Gateway (gateway "simsa") — REQUIRED: direct Worker→Anthropic
 # egress is ~90% 403 "Request not allowed" (measured 2026-07-05, retry-6 = 1/10).
 # The gateway path reaches Anthropic with no 403. Gateway must be UNAUTHENTICATED
