@@ -1,5 +1,5 @@
 /**
- * workspace-visual-check-runs.ts — Stage 263
+ * workspace-visual-check-runs.ts — Stage 263 (+ Train C · C0/C2b/C4a, 2026-09-27)
  *
  * Cloud execution of Simsa visual completion checks. A dashboard/API client
  * asks "run inspection"; the Worker inserts a queued workspace_visual_checks
@@ -8,18 +8,25 @@
  * evidence through the EXISTING Stage 261 evidence endpoint and reports the
  * result back here.
  *
- *   POST /workspace/projects/:id/visual-checks/run   — queue + dispatch a run
- *   POST /internal/visual-check-running              — container ack: queued → running
- *   POST /internal/visual-check-done                 — container result: → done|failed
+ *   POST /workspace/projects/:id/visual-checks/run              — queue + dispatch a run
+ *   POST /internal/visual-check-running                         — container ack: queued → running
+ *   POST /internal/visual-check-done                            — container result: → done|failed
  *
  * SECURITY:
  *   - Ownership enforced (project belongs to userKey) — same pattern as the
  *     Stage 261 routes.
  *   - The Worker NEVER inspects arbitrary URLs. The target must be (or origin-
  *     match) one of the project's registered `website` sources; a project with
- *     no website source gets 400 website_source_required.
+ *     no website source gets 400 website_source_required. A re-check
+ *     (sourceCheckId) may reuse the ORIGIN run's target, which passed this gate
+ *     when it was created and belongs to the same project + userKey.
  *   - /internal/* endpoints require Bearer INTERNAL_CALLBACK_TOKEN (mirrors
  *     /internal/job-done in saas.ts).
+ *
+ * Train C (재정렬 2026-09-27):
+ *   - C0  (D-1 amend): "다시 확인"이 원 런의 intent·target을 물려받는다(sourceCheckId).
+ *     intent가 없고 원 런도 없으면 프로젝트의 확정 의도(productSpec.oneLine)가 기본.
+ *   - C4a (D-8 amend, 0069): region·envelope_json은 insert 시, finding_codes_json은 콜백 시.
  *
  * Graceful degradation: when the INSPECTOR DO binding / callback token is
  * absent or the container refuses the job (e.g. still provisioning), the row is
@@ -30,10 +37,12 @@
  */
 import { acceptancePlanFromDevSpec, type AcceptanceScenario } from "../acceptance-plan.js";
 import { Hono } from "hono";
+import { z } from "zod";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
-import { getProject } from "../workspace/db.js";
+import { getProject, type DbProject } from "../workspace/db.js";
 import { getProjectSourceById, listProjectSources } from "../workspace/project-sources-db.js";
+import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
 import {
   findActiveVisualCheckForProject,
   getVisualCheckById,
@@ -41,6 +50,7 @@ import {
   markVisualCheckDone,
   markVisualCheckFailed,
   markVisualCheckRunning,
+  type DbVisualCheck,
 } from "../workspace/visual-check-db.js";
 
 const MAX_INTENT_CHARS = 1000;
@@ -70,6 +80,20 @@ export function targetMatchesWebsiteSources(target: URL, references: string[]): 
     if (src && src.origin === target.origin) return true;
   }
   return false;
+}
+
+/**
+ * C0 — the project's CONFIRMED intent: the one-line the user accepted on the
+ * "맞나요?" card (productSpec.oneLine). Null when absent/blank, so the caller
+ * falls back to the generic default rather than inventing one.
+ */
+export function confirmedIntentFromProject(project: Pick<DbProject, "productSpec"> | null): string | null {
+  const spec = project?.productSpec;
+  if (typeof spec !== "object" || spec === null) return null;
+  const oneLine = (spec as { oneLine?: unknown }).oneLine;
+  if (typeof oneLine !== "string") return null;
+  const trimmed = oneLine.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, MAX_INTENT_CHARS) : null;
 }
 
 function requireInternalToken(c: {
@@ -162,6 +186,58 @@ export async function dispatchInspection(
   }
 }
 
+// ─── C4a: the container's report, as far as the callback needs to read it ──────
+
+/**
+ * The callback only READS these fields (to build the builder prompt and to
+ * collect finding codes); the report object itself is stored as the container
+ * sent it, plus `builderPrompt`. Anything the schema does not know passes
+ * through untouched (`passthrough`), so a newer container never loses data.
+ */
+const ReportFindingSchema = z
+  .object({
+    severity: z.string(),
+    what: z.string(),
+    why: z.string().optional(),
+    how: z.string().optional(),
+    evidence: z.string().nullable().optional(),
+    code: z.string().optional(),
+  })
+  .passthrough();
+
+const ReportForCallbackSchema = z
+  .object({
+    target: z.string().optional(),
+    intent: z.string().optional(),
+    verdict: z.string().optional(),
+    oneLine: z.string().optional(),
+    works: z.boolean().nullable().optional(),
+    findings: z.array(ReportFindingSchema),
+    builderPrompt: z.string().optional(),
+  })
+  .passthrough();
+
+/**
+ * Read the container's report for storage: pull `finding_codes` (C4a). Returns
+ * the object to serialize and the codes JSON. A report that is not a
+ * NonDevReport (legacy shape, error blob) is returned untouched with codes =
+ * null ("not recorded").
+ */
+export function enrichReportForStorage(
+  report: Record<string, unknown>,
+  _locale: "ko" | "en",
+): { report: Record<string, unknown>; findingCodesJson: string | null } {
+  const parsed = ReportForCallbackSchema.safeParse(report);
+  if (!parsed.success) return { report, findingCodesJson: null };
+  const r = parsed.data;
+
+  // Finding codes: [] when nothing was found (measured), null when findings exist
+  // but the container image predates codes (legacy — unknown, not "none").
+  const codes = r.findings.map((f) => f.code).filter((c): c is string => typeof c === "string" && c.length > 0);
+  const findingCodesJson = r.findings.length === 0 ? "[]" : codes.length > 0 ? JSON.stringify(codes) : null;
+  return { report, findingCodesJson };
+}
+
 export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
   app.use("/workspace/*", corsMiddleware);
@@ -176,6 +252,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       targetUrl?: unknown;
       intent?: unknown;
       locale?: unknown;
+      sourceCheckId?: unknown;
     };
     try {
       body = await c.req.json();
@@ -195,17 +272,37 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // (workspace-document-intake, workspace-github): unknown → "ko".
     const locale: "ko" | "en" = body.locale === "en" ? "en" : "ko";
 
-    // Intent: optional, ≤1000 chars, sensible Korean generic default.
-    let intent = DEFAULT_INSPECTION_INTENT;
+    // C0 — re-check of an earlier run. The origin must be THIS project's run
+    // owned by THIS user; anything else is 400 (no existence oracle across
+    // users: same code for foreign / unknown / malformed).
+    let sourceCheck: DbVisualCheck | null = null;
+    if (body.sourceCheckId !== undefined) {
+      const sourceCheckId = typeof body.sourceCheckId === "string" ? body.sourceCheckId.trim() : "";
+      sourceCheck = sourceCheckId ? await getVisualCheckById(c.env, sourceCheckId) : null;
+      if (!sourceCheck || sourceCheck.projectId !== projectId || sourceCheck.userKey !== userKey) {
+        return c.json({ ok: false, error: "invalid_source_check" }, 400);
+      }
+    }
+
+    // Intent: explicit (≤1000 chars) › inherited from the origin run › the
+    // project's confirmed one-line › generic default. The user's own words win
+    // over inheritance; inheritance wins over the project's line because a
+    // re-check is about THAT earlier run.
+    let intent: string;
     if (body.intent !== undefined) {
       if (typeof body.intent !== "string" || body.intent.trim().length === 0 || body.intent.length > MAX_INTENT_CHARS) {
         return c.json({ ok: false, error: "invalid_intent" }, 400);
       }
       intent = body.intent.trim();
+    } else if (sourceCheck) {
+      intent = sourceCheck.intent;
+    } else {
+      intent = confirmedIntentFromProject(project) ?? DEFAULT_INSPECTION_INTENT;
     }
 
     // Resolve the inspection target. NEVER an arbitrary URL: it must come
     // from — or origin-match — a registered website source of THIS project.
+    // Order: sourceId › targetUrl › origin run's target (C0) › latest website.
     let targetUrl: string;
     if (body.sourceId !== undefined) {
       const sourceId = typeof body.sourceId === "string" ? body.sourceId : "";
@@ -214,6 +311,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
         return c.json({ ok: false, error: "invalid_source" }, 400);
       }
       const parsed = parseHttpUrl(source.reference.trim());
+      if (!parsed) return c.json({ ok: false, error: "invalid_target_url" }, 400);
+      targetUrl = parsed.toString();
+    } else if (body.targetUrl === undefined && sourceCheck) {
+      // C0: the origin run's target passed the registered-source gate when it
+      // was created and belongs to the same project + user (verified above).
+      const parsed = parseHttpUrl(sourceCheck.targetUrl.trim());
       if (!parsed) return c.json({ ok: false, error: "invalid_target_url" }, 400);
       targetUrl = parsed.toString();
     } else {
@@ -245,10 +348,25 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: false, error: "run_already_active", activeRunId: active.id }, 409);
     }
 
+    // C4a (0069): the envelope is stamped at insert — that is when the edge
+    // country and the project snapshot are in hand. Nothing here is invented:
+    // absent values are null.
+    const region = regionFromRequest(c.req.raw);
+    const envelopeJson = JSON.stringify(buildRunEnvelope(project, locale, intent));
+
     let run;
     try {
       // 0065: 런 행에 locale 저장 — verify-sweep 자동 재검수가 원 런의 언어를 따른다.
-      run = await insertQueuedVisualCheck(c.env, { projectId, userKey, targetUrl, intent, locale });
+      run = await insertQueuedVisualCheck(c.env, {
+        projectId,
+        userKey,
+        targetUrl,
+        intent,
+        locale,
+        region,
+        envelopeJson,
+        sourceCheckId: sourceCheck?.id ?? null,
+      });
     } catch (err) {
       console.error("[visual-check-runs POST run] insert failed:", err);
       return c.json({ ok: false, error: "save_failed" }, 500);
@@ -299,6 +417,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
           works: run.works,
           status,
           executor: run.executor,
+          sourceCheckId: run.sourceCheckId,
           createdAt: run.createdAt,
         },
         dispatched: dispatch.dispatched,
@@ -364,8 +483,13 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const works = body.works === true ? true : body.works === false ? false : null;
 
     let reportJson = "{}";
-    if (body.report !== undefined && body.report !== null && typeof body.report === "object") {
-      const serialized = JSON.stringify(body.report);
+    let findingCodesJson: string | null = null;
+    if (body.report !== undefined && body.report !== null && typeof body.report === "object" && !Array.isArray(body.report)) {
+      // C2b/C4a — builderPrompt in the RUN's locale (the report prose is already
+      // in that language) + finding codes for the failure map.
+      const enriched = enrichReportForStorage(body.report as Record<string, unknown>, run.locale ?? "ko");
+      findingCodesJson = enriched.findingCodesJson;
+      const serialized = JSON.stringify(enriched.report);
       if (serialized.length > MAX_REPORT_BYTES) return c.json({ error: "report_too_large" }, 400);
       reportJson = serialized;
     }
@@ -378,6 +502,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       decision,
       works,
       reportJson,
+      findingCodesJson,
       ...(agentPrompt ? { agentPrompt } : {}),
     });
     return c.json({ ok: true, status: "done" });
