@@ -12,7 +12,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { makeFakeD1, projectRow, websiteSource, makeDoStub, send } from "./_train-c-fake-d1.mjs";
@@ -47,7 +47,11 @@ test("0069: file exists and contains ONLY additive ALTER TABLE ... ADD COLUMN st
   assert.doesNotMatch(code, /\b(DROP|DELETE|TRUNCATE|UPDATE|INSERT|CREATE|NOT NULL|DEFAULT)\b/i);
 });
 
-test("0069: exact column set per table (visual_checks 6 · repair_jobs 3 · projects 1), numbered after #548's 0068", () => {
+// Shape guard (not regression evidence — the file is new in this PR, so it passes by construction).
+// Numbering: 0069 is the next free number on this branch; 0068 belongs to #548 and is NOT in this
+// branch's migrations directory. D1 applies migrations by name, so the gap is harmless; the merge
+// order (#548 first) is a process note in the PR body, not something this test can see.
+test("0069: exact column set per table (visual_checks 6 · repair_jobs 3 · projects 1); 0069 is unique and the highest-numbered file on this branch", () => {
   const code = readCode();
   const cols = (table) =>
     [...code.matchAll(new RegExp(`ALTER TABLE ${table} ADD COLUMN (\\w+) (TEXT|INTEGER)`, "g"))].map((m) => `${m[1]}:${m[2]}`).sort();
@@ -59,6 +63,9 @@ test("0069: exact column set per table (visual_checks 6 · repair_jobs 3 · proj
   const files = [];
   for (const f of ["0067_dev_spec.sql", "0069_moat_envelope.sql"]) files.push(existsSync(join(here, "..", "migrations", f)));
   assert.deepEqual(files, [true, true]);
+  const numbered = readdirSync(join(here, "..", "migrations")).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
+  assert.equal(numbered.filter((f) => f.startsWith("0069_")).length, 1, "exactly one 0069 migration");
+  assert.equal(numbered.at(-1), "0069_moat_envelope.sql", "0069 is the newest migration on this branch");
 });
 
 // ─── ⑦' finding codes ───────────────────────────────────────────────────────────

@@ -8,6 +8,13 @@
 -- 선례: 0065(visual_check locale)·0052(repair_job mode) — ALTER TABLE ADD COLUMN, NULL 허용,
 -- 데이터 변경 없음. 모두 additive. 레거시 행은 NULL = "기록되지 않음"(코드에서 null 취급).
 --
+-- ★ 배포 순서(강제): additive는 옛 **행**에 안전할 뿐, 옛 **스키마**에는 안전하지 않다. 이 파일
+-- 뒤의 Worker는 아래 컬럼을 SELECT에 이름으로 박아 두므로, 0069 미적용 D1에 배포되면 getProject가
+-- throw → /workspace/projects/:id/* 전부 500. 순서는 `migration 0069 apply approved.` → 적용 확인 →
+-- `deploy central-plane approved.`. deploy-central-plane 워크플로와 `pnpm ship`은
+-- scripts/d1-migrations-gate.mjs로 이 순서를 코드로 강제한다(미적용 마이그레이션 있으면 배포 거부).
+-- 번호: 이 브랜치의 다음 빈 번호. 0068은 #548(org hosting) 몫이며 D1은 이름 기준 적용이라 공백은 무해.
+--
 -- workspace_visual_checks
 --   region             ISO-3166 국가 코드(request.cf.country, 거친 값·PII 아님). NULL = 미기록.
 --   envelope_json      런 시점 프로젝트 봉투 스냅샷 { builtWith, entryPath, topicTags, locale, contentLang }.

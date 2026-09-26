@@ -82,6 +82,18 @@ jobs:
         run: |
           npx wrangler d1 migrations apply --remote conclave-ai
 
+      - name: Gate — refuse to deploy while remote D1 has unapplied migrations
+        # ALWAYS runs (no `if`), including with apply-migrations=false. The Worker
+        # reads columns by name; a Worker ahead of its schema turns every
+        # workspace route into a 500 (PR #553 review P1). "Apply, then deploy"
+        # is enforced here, not in a PR body. Fail-closed: auth/network trouble
+        # also refuses. See apps/central-plane/scripts/d1-migrations-gate.mjs.
+        working-directory: apps/central-plane
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/d1-migrations-gate.mjs conclave-ai
+
       - name: Deploy Worker
         working-directory: apps/central-plane
         env:
