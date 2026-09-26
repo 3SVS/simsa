@@ -55,11 +55,12 @@ function makeDb({ projects = new Map(), checks = [], repos = [], connections = [
         return {
           async run() {
             if (sql.includes("INSERT INTO workspace_repair_jobs")) {
-              const [id, project_id, user_key, visual_check_id, repo_full_name, branch_name, env_cause, created_at, updated_at] = args;
+              // Bind order = repair-job-db.ts insertQueuedRepairJob (0069 adds region before created_at).
+              const [id, project_id, user_key, visual_check_id, repo_full_name, branch_name, env_cause, region, created_at, updated_at] = args;
               jobs.push({
                 id, project_id, user_key, visual_check_id, repo_full_name,
                 status: "queued", branch_name, pr_url: null, pr_number: null,
-                env_cause, error: null, created_at, updated_at,
+                env_cause, error: null, region, created_at, updated_at,
               });
               return { meta: { changes: 1 } };
             }
@@ -305,12 +306,17 @@ test("repair: missing agent_prompt → 400 run_not_repairable", async () => {
 
 // ─── repo + token resolution ──────────────────────────────────────────────────
 
-test("repair: no linked repo anywhere → 400 github_repo_required with Korean message", async () => {
+test("repair: no linked repo anywhere → 400 github_repo_required with a beginner-language Korean message", async () => {
   const env = makeEnv({ repos: [], sources: [] });
   const r = await req(env, "POST", REPAIR_PATH, { userKey: USER });
   assert.equal(r.status, 400);
   assert.equal(r.json.error, "github_repo_required");
-  assert.match(r.json.message, /저장소/);
+  // Train C · C2b (재정렬 §1 끊김 5, D-17 amend): the default flow no longer tells a
+  // non-developer to "connect a repository" — it points at the builder-chat path and
+  // offers code connection as optional. Developer vocabulary is out of this copy.
+  assert.match(r.json.message, /연결된 코드가 없어요/);
+  assert.match(r.json.message, /다시 확인/);
+  assert.doesNotMatch(r.json.message, /저장소|브랜치|터미널|커밋/);
 });
 
 test("repair: falls back to project_sources github_repo when no workspace repo link", async () => {

@@ -80,7 +80,27 @@ export interface NonDevFinding {
    * 고칠 이유가 우리 편의가 아니라 사용자의 이익이어야 실제로 고친다.
    */
   unlocks?: string;
+  /**
+   * C4a (재정렬 D-8 amend): 안정된 기계 코드 — 문장이 아니라 **분기의 이름**이다. 나라·도구·
+   * 유형별 실패 지도는 이 코드로 집계한다(문장은 locale마다 다르고 바뀐다). 리포트 텍스트에는
+   * 절대 노출하지 않는다. 옛 컨테이너 이미지가 만든 리포트에는 없다(optional).
+   */
+  code?: FindingCode;
 }
+
+/** classifyFindings의 분기 이름. 추가는 되고, 이름 변경은 집계를 깨므로 하지 않는다. */
+export type FindingCode =
+  | "dns_unresolved"
+  | "network_5xx"
+  | "broken_route"
+  | "network_failed"
+  | "console_error"
+  | "noise_third_party"
+  | "no_primary_action"
+  | "step_failed"
+  | "ac_broken"
+  | "ac_not_confirmed"
+  | "signup_blocker";
 
 export interface NonDevReport {
   title: string;
@@ -101,6 +121,13 @@ export interface NonDevReport {
     notRun: number;
     items: AcceptanceResult[];
   };
+  /**
+   * C2b (재정렬 D-17 amend): Lovable/Bolt/v0/Replit 같은 **채팅형 빌더의 대화창에 그대로
+   * 붙여넣는 한 덩어리** 고침 지시. 개발자 어휘 0(테스트로 고정). 서버 콜백이 리포트 locale로
+   * 생성해 넣는다 — 컨테이너 이미지 재빌드 없이 배포되기 때문. 고칠 것이 없으면 없다.
+   * (`agentPrompt`는 CLI 에이전트용으로 그대로 — 별도 저장 컬럼.)
+   */
+  builderPrompt?: string;
 }
 
 // ─── Decision labels ────────────────────────────────────────────────────────────
@@ -417,46 +444,48 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
   const netText = input.networkFailures.join(" ");
   const conText = input.consoleErrors.join(" ");
 
+  // C4a: 각 분기는 안정 코드(`code`)를 함께 싣는다 — 문장은 바뀌어도 코드는 남아 집계 축이 된다.
   if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|getaddrinfo/i.test(netText + " " + conText)) {
     findings.push({
       severity: "high",
+      code: "dns_unresolved",
       ...t.dns,
       evidence: firstMatch(input.networkFailures, /ERR_NAME_NOT_RESOLVED|ENOTFOUND/i) ?? firstMatch(input.consoleErrors, /ERR_NAME_NOT_RESOLVED/i),
     });
   }
 
   if (/\bHTTP 5\d\d\b|status 5\d\d/i.test(netText)) {
-    findings.push({ severity: "high", ...t.server5xx, evidence: firstMatch(input.networkFailures, /5\d\d/) });
+    findings.push({ severity: "high", code: "network_5xx", ...t.server5xx, evidence: firstMatch(input.networkFailures, /5\d\d/) });
   }
 
   if (input.interacted && input.routeAfterClick && /\/undefined|\/null|\/404|not-found|error/i.test(input.routeAfterClick)) {
-    findings.push({ severity: "high", ...t.brokenRoute, evidence: input.routeAfterClick });
+    findings.push({ severity: "high", code: "broken_route", ...t.brokenRoute, evidence: input.routeAfterClick });
   }
 
   if (input.networkFailures.length > 0 && !/ERR_NAME_NOT_RESOLVED|5\d\d/i.test(netText)) {
-    findings.push({ severity: "high", ...t.genericNet, evidence: input.networkFailures[0] ?? null });
+    findings.push({ severity: "high", code: "network_failed", ...t.genericNet, evidence: input.networkFailures[0] ?? null });
   }
 
   // Console errors are noisy and hard to attribute (third-party scripts throw
   // constantly on healthy sites), so they're INFORMATIONAL only — they never
   // drive the verdict (see decideFromEvidence) and are low severity here.
   if (input.consoleErrors.length > 0 && !/ERR_NAME_NOT_RESOLVED/i.test(conText)) {
-    findings.push({ severity: "low", ...t.consoleErr, evidence: input.consoleErrors[0] ?? null });
+    findings.push({ severity: "low", code: "console_error", ...t.consoleErr, evidence: input.consoleErrors[0] ?? null });
   }
 
   // Noise (analytics/ads/fonts) failed — say so honestly, but as info, so the
   // user isn't alarmed by a "broken" reading that's really a blocked tracker.
   if ((input.noiseFailures?.length ?? 0) > 0) {
-    findings.push({ severity: "info", ...t.noiseInfo, evidence: input.noiseFailures![0] ?? null });
+    findings.push({ severity: "info", code: "noise_third_party", ...t.noiseInfo, evidence: input.noiseFailures![0] ?? null });
   }
 
   if (!input.primaryActionFound && !input.interacted) {
-    findings.push({ severity: "medium", ...t.noPrimary, evidence: null });
+    findings.push({ severity: "medium", code: "no_primary_action", ...t.noPrimary, evidence: null });
   }
 
   for (const s of input.steps ?? []) {
     if (!s.ok) {
-      findings.push({ severity: "medium", ...t.stepFailed(s.label, s.note), evidence: s.note ?? null });
+      findings.push({ severity: "medium", code: "step_failed", ...t.stepFailed(s.label, s.note), evidence: s.note ?? null });
     }
   }
 
@@ -464,9 +493,9 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
   // medium(확인 못 함 — 고장 아님). no_problem/not_run은 finding이 아니라 요약에만 오른다.
   for (const a of input.acceptanceResults ?? []) {
     if (a.status === "broken") {
-      findings.push({ severity: "high", ...t.acBroken(a.featureTitle, a.then), evidence: a.note ?? null });
+      findings.push({ severity: "high", code: "ac_broken", ...t.acBroken(a.featureTitle, a.then), evidence: a.note ?? null });
     } else if (a.status === "not_confirmed") {
-      findings.push({ severity: "medium", ...t.acNotConfirmed(a.featureTitle, a.then), evidence: a.note ?? null });
+      findings.push({ severity: "medium", code: "ac_not_confirmed", ...t.acNotConfirmed(a.featureTitle, a.then), evidence: a.note ?? null });
     }
   }
 
@@ -550,6 +579,7 @@ export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale 
     if (b.kind !== "app_gap" || !b.what) continue;
     findings.push({
       severity: "medium",
+      code: "signup_blocker",
       what: b.what,
       why: b.why ?? "",
       how: b.how ?? "",
@@ -741,6 +771,85 @@ export function buildAgentFixPrompt(input: VisualCheckInput, locale: ReportLocal
   }
 
   lines.push("", ...p.rules);
+  return lines.join("\n");
+}
+
+// ─── Builder-chat fix prompt (C2b, per locale) ───────────────────────────────────
+
+/**
+ * 채팅형 빌더(Lovable·Bolt·v0·Replit·Base44) 대화창용 문구. **개발자 어휘 금지** — 이 사용자는
+ * 코드를 보지 않는다. 금칙어(테스트로 고정): branch·terminal·PR·commit·git·repo /
+ * 저장소·브랜치·터미널·커밋·깃. 대신 "앱", "고쳐 주세요", "다시 확인"으로 말한다.
+ */
+const BUILDER_STR: Record<ReportLocale, {
+  intro: string[];
+  appL: string; shouldL: string; nowL: string;
+  problems: string;
+  whyL: string; howL: string; detailL: string;
+  rules: string[];
+}> = {
+  ko: {
+    intro: [
+      "이 앱에서 아래 문제들을 고쳐 주세요.",
+      "아래 내용은 실제 브라우저로 이 앱을 열어 눈으로 확인한 사실입니다. 여기 적힌 문제만 고치고, 적히지 않은 문제를 새로 만들어내지 마세요.",
+    ],
+    appL: "앱 주소", shouldL: "이 앱이 해야 하는 것", nowL: "지금 상태",
+    problems: "고칠 문제 (급한 것부터)",
+    whyL: "왜 그런가", howL: "어떻게 고치나", detailL: "기술 정보",
+    rules: [
+      "지켜 주세요:",
+      "- 위에 적힌 원인만 고치고, 관계없는 부분은 바꾸지 마세요.",
+      "- API 키나 서버 주소 같은 비밀값을 코드 안에 직접 적지 마세요.",
+      "- 고친 뒤 같은 흐름을 처음부터 다시 따라가서 기대한 화면이 오류 없이 나오는지 확인해 주세요.",
+      "- 무엇을 왜 바꿨는지 3~5문장으로 알려 주세요.",
+    ],
+  },
+  en: {
+    intro: [
+      "Please fix the following problems in this app.",
+      "Everything below was observed by opening the live app in a real browser. Fix only what is described here and do not invent problems that are not listed.",
+    ],
+    appL: "App address", shouldL: "What this app should do", nowL: "Current state",
+    problems: "Problems to fix (most urgent first)",
+    whyL: "Why", howL: "How to fix", detailL: "Technical detail",
+    rules: [
+      "Please follow these rules:",
+      "- Fix only the causes listed above; leave unrelated parts as they are.",
+      "- Never put secret values such as API keys or server addresses directly into the code.",
+      "- After the fix, walk through the same flow from the start and make sure the expected screen appears with no errors.",
+      "- Tell me in 3–5 sentences what you changed and why.",
+    ],
+  },
+};
+
+/** The slice of a report the builder prompt reads — accepts a stored report_json too. */
+export type BuilderPromptSource = Pick<NonDevReport, "findings"> &
+  Partial<Pick<NonDevReport, "target" | "intent" | "verdict" | "oneLine" | "works">>;
+
+/**
+ * C2b — 리포트에서 **한 덩어리** 빌더용 고침 지시를 만든다. 결정론적, throw 안 함.
+ * 고칠 것(info가 아닌 finding)이 없으면 null — 대시보드는 종전 UI로 돌아간다.
+ * 기술 원문(evidence)은 실린다: 받는 쪽이 빌더의 모델이라 진단에 필요하다.
+ */
+export function buildBuilderFixPrompt(report: BuilderPromptSource, locale: ReportLocale = "ko"): string | null {
+  const L = loc(locale);
+  const s = BUILDER_STR[L];
+  const fixable = (Array.isArray(report.findings) ? report.findings : []).filter((f) => f && f.severity !== "info");
+  if (fixable.length === 0) return null;
+
+  const lines: string[] = [...s.intro, ""];
+  if (report.target) lines.push(`${s.appL}: ${report.target}`);
+  if (report.intent) lines.push(`${s.shouldL}: ${report.intent}`);
+  const now = [report.verdict, report.oneLine].filter((x): x is string => typeof x === "string" && x.trim().length > 0).join(" — ");
+  if (now) lines.push(`${s.nowL}: ${now}`);
+  lines.push("", `${s.problems}:`);
+  fixable.forEach((f, i) => {
+    lines.push(`${i + 1}. ${f.what}`);
+    if (f.why) lines.push(`   ${s.whyL}: ${f.why}`);
+    if (f.how) lines.push(`   ${s.howL}: ${f.how}`);
+    if (f.evidence) lines.push(`   ${s.detailL}: ${f.evidence}`);
+  });
+  lines.push("", ...s.rules);
   return lines.join("\n");
 }
 
