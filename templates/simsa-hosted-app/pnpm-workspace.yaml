@@ -1,0 +1,9 @@
+packages:
+  - "."
+allowBuilds:
+  esbuild: set this to true or false
+  workerd: set this to true or false
+# pnpm 10: 네이티브 빌드 스크립트 허용 목록(esbuild·workerd). 없으면 설치는 되지만 run이 거부된다.
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

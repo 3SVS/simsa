@@ -1,0 +1,25 @@
+# Simsa S 모드 호스팅 템플릿 (D-5 · D-6 · D-12).
+#
+# 이 앱은 Simsa 계정의 Workers for Platforms 네임스페이스 `simsa-hosted` 안에서 돈다.
+# 배포는 빌드 잡이 우리 운영 토큰으로 한다:
+#   wrangler deploy --dispatch-namespace simsa-hosted --name <slug>
+# 유저 토큰은 없다. `name`은 배포 시 `--name <slug>`로 덮고, D1 `database_id`는 빌드 잡이 프로젝트마다
+# 실제 id로 바꿔 넣는다(아래 0으로 채운 자리 표시자 — 그대로 배포하면 wrangler가 거부한다).
+name = "simsa-hosted-app"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+
+# React/Vite 산출물. 경로가 파일과 맞으면 정적으로 서빙, 아니면 Worker(Hono)로.
+# single-page-application: 알 수 없는 경로는 index.html (클라이언트 라우팅).
+[assets]
+directory = "./dist/client"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# 프로젝트당 D1 하나(D-12). 마이그레이션은 migrations/ 순서대로 빌드 잡이 적용한다.
+[[d1_databases]]
+binding = "DB"
+database_name = "simsa-hosted-app"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

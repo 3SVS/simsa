@@ -1,0 +1,34 @@
+{
+  "name": "simsa-hosted-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Simsa S 모드 호스팅 템플릿 — Hono Worker + React/Vite + D1 (SI 티어 D-5). 빌드 잡(B5)이 이 스캐폴드 위에서 지시서를 구현하고 simsa-hosted 네임스페이스에 배포한다.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "vite build && tsc -p tsconfig.worker.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "wrangler": "^4.83.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  },
+  "packageManager": "pnpm@10.34.5"
+}
