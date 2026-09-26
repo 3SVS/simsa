@@ -1,5 +1,5 @@
 /**
- * workspace/verify-sweep.ts — 기준평가 §3-1: find→fix→**verify** 원 닫기 (v1).
+ * workspace/verify-sweep.ts — 기준평가 §3-1: find→fix→**verify** 원 닫기 (v1 + Train C · C2a).
  *
  * 신호: App 설치 repo에서 수리 PR(head=fix/simsa-{runId})이 머지되면 웹훅이
  * `workspace_repair_merged` 이벤트를 기록한다(협의체 스폰 아님 — 킬스위치
@@ -14,13 +14,23 @@
  * 중복 방지는 결정론 — "이벤트 이후 그 프로젝트에 생성된 재검수 런 존재"면
  * 소비 완료로 간주(런 행 자체가 처리 장부).
  *
+ * Train C · C2a (재정렬 2026-09-27, W2~W3 (b)):
+ *   - 재검수 dispatch에 프로젝트 지시서의 **acceptancePlan**을 싣는다 — 원 런과 같은
+ *     자(尺)로 재야 "고쳐졌다"가 같은 기준의 답이 된다.
+ *   - 새 런 행 `source_check_id` = 원 런(C0 계보) · region/envelope는 원 런에서 복사
+ *     (크론에는 요청 컨텍스트가 없다).
+ *   - 원 런의 최근 수리 잡에 `verify_check_id` = 새 런 → 콜백이 `resolved`를 찍는다.
+ *
  * 정직 한계(v1, 기록):
  *   - App 미설치 repo는 머지 신호가 없다 → 기존 수동 "수리 확인 재검수" CTA 유지.
  *   - [해소 0065] 재검수 locale: 런 행에 locale이 저장되어 원 런의 언어를
  *     따른다. locale 미기록 레거시 행만 ko로 폴백.
  */
 import type { Env } from "../env.js";
+import { acceptancePlanFromDevSpec } from "../acceptance-plan.js";
+import { getProject } from "./db.js";
 import { listRecentUsageEventsByType } from "./usage-events-db.js";
+import { getLatestRepairJobForRun, setRepairJobVerifyCheck } from "./repair-job-db.js";
 import {
   getVisualCheckById,
   insertQueuedVisualCheck,
@@ -92,6 +102,11 @@ export async function runVerifySweep(
       continue;
     }
 
+    // C2a: 같은 자(尺) — 프로젝트 지시서의 수용 기준 시나리오. 지시서가 없으면 빈 배열
+    // (종전대로 핵심 흐름만). 프로젝트 조회 실패도 종전 동작으로 정직하게 폴백.
+    const project = await getProject(env, origin.projectId).catch(() => null);
+    const acceptancePlan = acceptancePlanFromDevSpec(project?.devSpec);
+
     let run;
     try {
       run = await insertQueuedVisualCheck(env, {
@@ -100,11 +115,23 @@ export async function runVerifySweep(
         targetUrl: origin.targetUrl,
         intent: origin.intent,
         locale: origin.locale ?? "ko",
+        // 0069: 크론에는 요청이 없다 — 봉투는 원 런에서 물려받고 계보를 남긴다.
+        region: origin.region,
+        envelopeJson: origin.envelopeJson,
+        sourceCheckId: origin.id,
       });
     } catch (err) {
       console.error("[verify-sweep] insert failed:", err);
       summary.dispatch_failures++;
       continue;
+    }
+    // C2a: 수리 잡 ↔ 재검수 런 연결. 콜백(/internal/visual-check-done)이 이 링크로
+    // resolved를 찍는다. 실패해도 재검수는 진행한다(계측이 UX를 막지 않는다).
+    const repairJob = await getLatestRepairJobForRun(env, runId).catch(() => null);
+    if (repairJob) {
+      await setRepairJobVerifyCheck(env, repairJob.id, run.id).catch((err) => {
+        console.error("[verify-sweep] verify_check_id link failed:", err);
+      });
     }
     const dispatch = await dispatchInspection(env, {
       runId: run.id,
@@ -113,6 +140,7 @@ export async function runVerifySweep(
       targetUrl: origin.targetUrl,
       intent: origin.intent,
       locale: origin.locale ?? "ko", // 0065: 원 런의 언어 — 레거시 행만 ko 폴백
+      acceptancePlan,
       publicBaseUrl: opts.publicBaseUrl ?? env.PUBLIC_BASE_URL ?? "https://conclave-ai.seunghunbae.workers.dev",
     });
     if (dispatch.dispatched) {

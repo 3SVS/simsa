@@ -49,6 +49,7 @@ import { getProject, type DbProject } from "../workspace/db.js";
 import { getProjectSourceById, listProjectSources } from "../workspace/project-sources-db.js";
 import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
+import { resolveRepairJobsByVerifyCheck } from "../workspace/repair-job-db.js";
 import { buildBuilderFixPrompt } from "../nondev-report.js";
 import {
   USER_VERDICTS,
@@ -642,6 +643,15 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       findingCodesJson,
       ...(agentPrompt ? { agentPrompt } : {}),
     });
+
+    // C2a (0069): a re-inspection closing a repair loop → stamp `resolved` on the
+    // repair job(s) that pointed at this run. Original runs (no source) have no
+    // repair to resolve, so no query is issued.
+    if (run.sourceCheckId) {
+      await resolveRepairJobsByVerifyCheck(c.env, run.id, works).catch((err) => {
+        console.error("[visual-check-runs done] resolve repair jobs failed:", err);
+      });
+    }
     return c.json({ ok: true, status: "done" });
   });
 
