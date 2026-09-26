@@ -9,6 +9,8 @@
  * result back here.
  *
  *   POST /workspace/projects/:id/visual-checks/run              — queue + dispatch a run
+ *   POST /workspace/projects/:id/visual-checks/:runId/verdict   — C2b: human acceptance label
+ *   POST /workspace/projects/:id/visual-checks/:runId/events    — C2b: fix-prompt copy telemetry
  *   POST /internal/visual-check-running                         — container ack: queued → running
  *   POST /internal/visual-check-done                            — container result: → done|failed
  *
@@ -26,6 +28,9 @@
  * Train C (재정렬 2026-09-27):
  *   - C0  (D-1 amend): "다시 확인"이 원 런의 intent·target을 물려받는다(sourceCheckId).
  *     intent가 없고 원 런도 없으면 프로젝트의 확정 의도(productSpec.oneLine)가 기본.
+ *   - C2b (D-17·D-19 amend): user_verdict(사람 수용 라벨) + builderPrompt(채팅형 빌더용
+ *     고침 지시 — 서버 콜백에서 생성해 report_json에 넣는다: 컨테이너 이미지 재빌드 없이
+ *     배포되기 때문) + 복사 계측 이벤트.
  *   - C4a (D-8 amend, 0069): region·envelope_json은 insert 시, finding_codes_json은 콜백 시.
  *
  * Graceful degradation: when the INSPECTOR DO binding / callback token is
@@ -43,13 +48,17 @@ import type { Env } from "../env.js";
 import { getProject, type DbProject } from "../workspace/db.js";
 import { getProjectSourceById, listProjectSources } from "../workspace/project-sources-db.js";
 import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
+import { insertUsageEvent } from "../workspace/usage-events-db.js";
+import { buildBuilderFixPrompt } from "../nondev-report.js";
 import {
+  USER_VERDICTS,
   findActiveVisualCheckForProject,
   getVisualCheckById,
   insertQueuedVisualCheck,
   markVisualCheckDone,
   markVisualCheckFailed,
   markVisualCheckRunning,
+  setVisualCheckUserVerdict,
   type DbVisualCheck,
 } from "../workspace/visual-check-db.js";
 
@@ -186,7 +195,22 @@ export async function dispatchInspection(
   }
 }
 
-// ─── C4a: the container's report, as far as the callback needs to read it ──────
+// ─── C2b: request bodies (Zod at the wire) ─────────────────────────────────────
+
+const VerdictBodySchema = z.object({
+  userKey: z.string().min(1),
+  verdict: z.enum(USER_VERDICTS),
+});
+
+const FixPromptCopiedBodySchema = z.object({
+  userKey: z.string().min(1),
+  // Only this one event type is accepted here (a wider client→server event bus
+  // is not this route's job).
+  type: z.literal("fix_prompt_copied"),
+  target: z.enum(["web_builder", "cli"]),
+});
+
+// ─── C2b/C4a: the container's report, as far as the callback needs to read it ──
 
 /**
  * The callback only READS these fields (to build the builder prompt and to
@@ -217,15 +241,22 @@ const ReportForCallbackSchema = z
   })
   .passthrough();
 
+type FindingSeverity = "high" | "medium" | "low" | "info";
+
+/** Unknown severity strings (a newer container) are treated as fixable, not as noise. */
+function normalizeSeverity(s: string): FindingSeverity {
+  return s === "high" || s === "medium" || s === "low" || s === "info" ? s : "medium";
+}
+
 /**
- * Read the container's report for storage: pull `finding_codes` (C4a). Returns
- * the object to serialize and the codes JSON. A report that is not a
- * NonDevReport (legacy shape, error blob) is returned untouched with codes =
- * null ("not recorded").
+ * Enrich the container's report for storage: add `builderPrompt` (C2b, in the
+ * run's locale) and pull `finding_codes` (C4a). Returns the object to serialize
+ * and the codes JSON. A report that is not a NonDevReport (legacy shape, error
+ * blob) is returned untouched with codes = null ("not recorded").
  */
 export function enrichReportForStorage(
   report: Record<string, unknown>,
-  _locale: "ko" | "en",
+  locale: "ko" | "en",
 ): { report: Record<string, unknown>; findingCodesJson: string | null } {
   const parsed = ReportForCallbackSchema.safeParse(report);
   if (!parsed.success) return { report, findingCodesJson: null };
@@ -235,7 +266,45 @@ export function enrichReportForStorage(
   // but the container image predates codes (legacy — unknown, not "none").
   const codes = r.findings.map((f) => f.code).filter((c): c is string => typeof c === "string" && c.length > 0);
   const findingCodesJson = r.findings.length === 0 ? "[]" : codes.length > 0 ? JSON.stringify(codes) : null;
-  return { report, findingCodesJson };
+
+  // Builder prompt: generated here (server) rather than in the container so it
+  // ships without an image rebuild. Never overwrite one the container sent.
+  if (typeof r.builderPrompt === "string" && r.builderPrompt.length > 0) return { report, findingCodesJson };
+  const builderPrompt = buildBuilderFixPrompt(
+    {
+      findings: r.findings.map((f) => ({
+        severity: normalizeSeverity(f.severity),
+        what: f.what,
+        why: f.why ?? "",
+        how: f.how ?? "",
+        evidence: f.evidence ?? null,
+      })),
+      ...(r.target !== undefined ? { target: r.target } : {}),
+      ...(r.intent !== undefined ? { intent: r.intent } : {}),
+      ...(r.verdict !== undefined ? { verdict: r.verdict } : {}),
+      ...(r.oneLine !== undefined ? { oneLine: r.oneLine } : {}),
+      ...(r.works !== undefined ? { works: r.works } : {}),
+    },
+    locale,
+  );
+  return { report: builderPrompt ? { ...report, builderPrompt } : report, findingCodesJson };
+}
+
+/** Shared ownership chain for the per-run C2b routes: project → userKey, run → project + userKey. */
+async function requireOwnedRun(
+  env: Env,
+  projectId: string,
+  runId: string,
+  userKey: string,
+): Promise<{ ok: true; run: DbVisualCheck } | { ok: false; status: 403 | 404; error: string }> {
+  const project = await getProject(env, projectId);
+  if (!project) return { ok: false, status: 404, error: "project_not_found" };
+  if (project.userKey !== userKey) return { ok: false, status: 403, error: "forbidden" };
+  const run = await getVisualCheckById(env, runId);
+  if (!run || run.projectId !== projectId || run.userKey !== userKey) {
+    return { ok: false, status: 404, error: "run_not_found" };
+  }
+  return { ok: true, run };
 }
 
 export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
@@ -425,6 +494,74 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       },
       202,
     );
+  });
+
+  // ── POST /workspace/projects/:id/visual-checks/:runId/verdict ──────────────
+  // C2b — the human acceptance label. This is the north star (D-19 amend):
+  // "as_intended" closes the loop; the other three tell us where the loop broke.
+  // Resubmission overwrites — the user's latest word stands.
+  app.post("/workspace/projects/:id/visual-checks/:runId/verdict", async (c) => {
+    const projectId = c.req.param("id");
+    const runId = c.req.param("runId");
+
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: "invalid_json" }, 400);
+    }
+    const parsed = VerdictBodySchema.safeParse(raw);
+    if (!parsed.success) return c.json({ ok: false, error: "invalid_request" }, 400);
+    const { userKey, verdict } = parsed.data;
+
+    const owned = await requireOwnedRun(c.env, projectId, runId, userKey);
+    if (!owned.ok) return c.json({ ok: false, error: owned.error }, owned.status);
+
+    const at = new Date().toISOString();
+    try {
+      await setVisualCheckUserVerdict(c.env, runId, verdict, at);
+    } catch (err) {
+      console.error("[visual-check-runs POST verdict] update failed:", err);
+      return c.json({ ok: false, error: "save_failed" }, 500);
+    }
+    await insertUsageEvent(c.env, {
+      userKey,
+      projectId,
+      eventType: "workspace_visual_check_verdict",
+      metadata: { runId, verdict },
+    }).catch(() => undefined);
+
+    return c.json({ ok: true, verdict, at });
+  });
+
+  // ── POST /workspace/projects/:id/visual-checks/:runId/events ───────────────
+  // C2b — copy telemetry for the fix prompt (which format the user actually
+  // took: builder chat vs CLI agent). Record-only; a failure here never blocks
+  // the UI (the dashboard fires and forgets).
+  app.post("/workspace/projects/:id/visual-checks/:runId/events", async (c) => {
+    const projectId = c.req.param("id");
+    const runId = c.req.param("runId");
+
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: "invalid_json" }, 400);
+    }
+    const parsed = FixPromptCopiedBodySchema.safeParse(raw);
+    if (!parsed.success) return c.json({ ok: false, error: "invalid_request" }, 400);
+    const { userKey, target } = parsed.data;
+
+    const owned = await requireOwnedRun(c.env, projectId, runId, userKey);
+    if (!owned.ok) return c.json({ ok: false, error: owned.error }, owned.status);
+
+    await insertUsageEvent(c.env, {
+      userKey,
+      projectId,
+      eventType: "workspace_fix_prompt_copied",
+      metadata: { runId, target },
+    }).catch(() => undefined);
+    return c.json({ ok: true });
   });
 
   // ── POST /internal/visual-check-running ────────────────────────────────────
