@@ -51,6 +51,13 @@ export type NonDevReport = {
   findings?: NonDevFinding[];
   nextSteps?: string[];
   notes?: string[];
+  /**
+   * Train C — C2b (계약 3): one paste-ready block for chat builders (Lovable /
+   * Bolt / v0 / Replit / Base44) in the report locale — no branch / terminal /
+   * PR / commit vocabulary. Absent on runs written before Train C; the CLI
+   * `agentPrompt` on the detail stays as before.
+   */
+  builderPrompt?: string;
   /** SI 티어 A5: 지시서 수용 기준별 결과(있을 때만). 개수이지 점수가 아니다. */
   acceptance?: {
     total: number;
@@ -77,6 +84,13 @@ export type VisualCheckDetail = {
   createdAt: string;
   /** Train C — C0: the run this one re-checked (null/absent for first runs and old servers). */
   sourceCheckId?: string | null;
+  /**
+   * Train C — C2b (계약 2): the human acceptance label the user chose on this
+   * report, if any. Kept as a plain string on the wire — normalizeUserVerdict()
+   * maps it to the four known values (unknown → null) before rendering.
+   */
+  userVerdict?: string | null;
+  userVerdictAt?: string | null;
 };
 
 export type VisualChecksListResponse =
@@ -296,6 +310,77 @@ export async function getVisualCheck(
     return data;
   } catch (err) {
     return { ok: false, error: String(err) };
+  }
+}
+
+// ── Train C — C2b (2026-09-27 재정렬, 계약 2·4) — 사람 수용 라벨 + 복사 계측 ────
+
+export type UserVerdictValue = "as_intended" | "works_but_different" | "still_broken" | "unsure";
+
+export type UserVerdictResponse =
+  | { ok: true; verdict: UserVerdictValue; at: string }
+  | { ok: false; error: string };
+
+/**
+ * Record how the user received this report (D-19 north star:
+ * `user_verdict = as_intended`). Re-submitting overwrites. Known error codes:
+ * forbidden (403), run_not_found / project_not_found (404), invalid_verdict (400).
+ * Until the server PR that adds this route is deployed the answer is a 404 —
+ * the section shows its save-error copy and keeps the previous selection.
+ */
+export async function submitUserVerdict(
+  projectId: string,
+  runId: string,
+  userKey: string,
+  verdict: UserVerdictValue,
+): Promise<UserVerdictResponse> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/visual-checks/${encodeURIComponent(runId)}/verdict`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userKey, verdict }),
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    const data = (await resp
+      .json()
+      .catch(() => ({ ok: false, error: `HTTP ${resp.status}` }))) as UserVerdictResponse;
+    return data;
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+export type FixPromptCopyTarget = "web_builder" | "cli";
+
+/**
+ * Contract 4 — usage event `workspace_fix_prompt_copied` { runId, target }.
+ * "How the result was used" is one of the six data axes (D-8 envelope) and had
+ * zero instrumentation before Train C. Fire-and-forget: measurement never
+ * blocks the UX, so every failure (404 on an old server, network, CORS) is
+ * swallowed here and the caller does not await the result.
+ */
+export async function recordFixPromptCopied(
+  projectId: string,
+  runId: string,
+  userKey: string,
+  target: FixPromptCopyTarget,
+): Promise<void> {
+  try {
+    await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/visual-checks/${encodeURIComponent(runId)}/events`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userKey, type: "fix_prompt_copied", target }),
+        keepalive: true,
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+  } catch {
+    // Telemetry only — never surface.
   }
 }
 

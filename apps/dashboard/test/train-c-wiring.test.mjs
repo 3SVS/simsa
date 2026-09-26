@@ -7,6 +7,9 @@
  *  C0-a  IntentConfirmCard.confirm()이 로컬 저장 뒤 mirrorLocalProjectToDb를 부른다
  *        (재정렬 §1 끊김 #1 — "맞나요?" 확정이 D1·검수 기준에 닿지 않았다)
  *  C0-b  리포트 상세의 재검수가 buildRecheckBody를 거친다 (끊김 #2 — 의도 유실)
+ *  C2b-a 복사 버튼이 계약 4 이벤트(recordFixPromptCopied)를 보낸다 (끊김 #12 — 활용 방식 미계측)
+ *  C2b-b 리포트 하단에 user_verdict 제출(submitUserVerdict)이 배선돼 있다 (W1-8)
+ *  C2b-c 프롬프트 기본 형식은 pickDefaultPromptTarget(built_with, builderPrompt 유무)로 고른다
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -47,4 +50,24 @@ test("C0-b: 재검수가 buildRecheckBody(check, userKey, locale)를 거친다 �
   assert.match(page, /import \{ buildRecheckBody \} from "@\/lib\/visual-check-recheck\.mjs"/);
   assert.match(page, /runVisualCheck\(projectId, buildRecheckBody\(check, userKey, locale\)\)/);
   assert.doesNotMatch(page, /runVisualCheck\(projectId, \{ userKey, locale \}\)/);
+});
+
+test("C2b-a: 고침 지시 복사가 계약 4 이벤트를 보낸다 (recordFixPromptCopied, 실패 무시) — 클립보드 성공 뒤에만", () => {
+  assert.match(page, /void recordFixPromptCopied\(id, runId, userKey, promptTarget\)/);
+  const copy = page.indexOf("async function handleCopyPrompt()");
+  assert.ok(copy >= 0);
+  const body = page.slice(copy, page.indexOf("\n  }\n", copy));
+  assert.ok(body.indexOf("navigator.clipboard.writeText(") < body.indexOf("recordFixPromptCopied("), "event after the copy succeeded");
+});
+
+test("C2b-b: 리포트 하단에 user_verdict 제출이 배선돼 있다 (submitUserVerdict → 서버값으로 복원)", () => {
+  assert.match(page, /submitUserVerdict\(projectId, runId, userKey, next\)/);
+  assert.match(page, /<UserVerdictSection/);
+  // 재열람 시 서버가 준 값으로 복원한다 — 옛 서버(필드 없음)는 null로 정규화.
+  assert.match(page, /normalizeUserVerdict\(check\.userVerdict\)/);
+});
+
+test("C2b-c: 프롬프트 기본 형식은 pickDefaultPromptTarget(built_with, builderPrompt 유무)로 고른다", () => {
+  assert.match(page, /pickDefaultPromptTarget\(/);
+  assert.match(page, /fixPromptFor\(check, promptTarget\)/);
 });

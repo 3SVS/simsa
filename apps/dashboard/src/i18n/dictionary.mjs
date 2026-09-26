@@ -2386,6 +2386,32 @@ const EN = {
     copyPrompt: "Copy fix instructions",
     copied: "Copied",
     noPrompt: "This run has no agent fix instructions attached.",
+    // Train C — C2b (contract 3): a paste-ready block for chat builders. The
+    // copy names no vendor (beginner-terms audit) — "the tool that built this app".
+    fixPrompt: {
+      builderBody:
+        "Copy the fix instructions below and paste them into the chat of the tool that built this app. Once the tool has applied the change and published it, use \"Check again\" to see the result.",
+      copyBuilder: "Paste into your builder's chat",
+      showCli: "Show the version for coding tools",
+      showBuilder: "Show the version for your builder's chat",
+      targetBuilder: "For your builder's chat",
+      targetCli: "For coding tools",
+    },
+    // Train C — C2b (contract 2, D-19 north star): the human acceptance label.
+    // Four answers, no score. Re-answering overwrites.
+    userVerdict: {
+      title: "How did this result land for you?",
+      hint: "Tell us what you saw when you tried the app yourself — it makes the next check and the fix guidance more accurate.",
+      options: {
+        as_intended: "It works the way I meant",
+        works_but_different: "It works, but not the way I meant",
+        still_broken: "It still doesn't work",
+        unsure: "I'm not sure",
+      },
+      saving: "Saving…",
+      saved: "Saved. You can change your answer anytime.",
+      saveError: "We couldn't save your answer. Please try again in a moment.",
+    },
     nextStepsTitle: "Next steps",
     notesTitle: "Notes",
     // Stage 264 — one-click inspection run + status polling.
@@ -5078,6 +5104,31 @@ const KO = {
     copyPrompt: "고침 지시 복사",
     copied: "복사됨",
     noPrompt: "이 검수에는 에이전트용 고침 지시가 없어요.",
+    // Train C — C2b (계약 3): 채팅형 빌더에 그대로 붙이는 한 덩어리. 도구 이름을
+    // 부르지 않는다(초보자 금칙어 감사) — "이 앱을 만든 도구".
+    fixPrompt: {
+      builderBody:
+        "아래 고침 지시를 복사해서, 이 앱을 만든 도구의 채팅창에 그대로 붙여넣으세요. 도구가 고친 내용을 게시하면 '다시 확인'으로 결과를 볼 수 있어요.",
+      copyBuilder: "빌더 채팅에 붙여넣기",
+      showCli: "코딩 도구용 지시 보기",
+      showBuilder: "빌더 채팅용 지시 보기",
+      targetBuilder: "빌더 채팅용",
+      targetCli: "코딩 도구용",
+    },
+    // Train C — C2b (계약 2, D-19 북극성): 사람 수용 라벨. 네 답, 점수 없음. 다시 답하면 덮어써요.
+    userVerdict: {
+      title: "이번 결과, 어떠셨어요?",
+      hint: "직접 써 보신 느낌을 알려주시면 다음 검수와 고침 안내가 더 정확해져요.",
+      options: {
+        as_intended: "생각대로 됐어요",
+        works_but_different: "되긴 하는데 달라요",
+        still_broken: "아직 안 돼요",
+        unsure: "모르겠어요",
+      },
+      saving: "저장하는 중이에요…",
+      saved: "답을 저장했어요. 언제든 바꿀 수 있어요.",
+      saveError: "답을 저장하지 못했어요. 잠시 뒤 다시 눌러주세요.",
+    },
     nextStepsTitle: "다음 단계",
     notesTitle: "참고",
     // Stage 264 — 원클릭 검수 실행 + 상태 폴링.

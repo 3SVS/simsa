@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, getUserKey, saveExtendedProjectData } from "@/lib/workflow-store";
+import { getLocalProject, getUserKey, loadExtendedProjectData, saveExtendedProjectData } from "@/lib/workflow-store";
 import { screenshotCaption, screenshotFileName } from "@/lib/screenshot-caption.mjs";
 import {
   getVisualCheck,
@@ -29,11 +29,22 @@ import {
   requestRepair,
   getRepair,
   runVisualCheck,
+  submitUserVerdict,
+  recordFixPromptCopied,
   CENTRAL_PLANE_URL,
   type VisualCheckDetail,
   type NonDevFinding,
   type RepairJob,
 } from "@/lib/workspace-visual-checks-api";
+import {
+  USER_VERDICT_OPTIONS,
+  normalizeUserVerdict,
+  userVerdictLabel,
+  pickDefaultPromptTarget,
+  fixPromptFor,
+  availablePromptTargets,
+} from "@/lib/user-verdict.mjs";
+import type { UserVerdict, FixPromptTarget } from "@/lib/user-verdict.mjs";
 import {
   verdictLabel,
   severityLabel,
@@ -566,6 +577,80 @@ function RepairSection({
   );
 }
 
+// Train C — C2b (계약 2, D-19 amend): "이번 결과, 어떠셨어요?" — the human
+// acceptance label. The machine verdict (works/decision) says what the browser
+// saw; this says what the PERSON accepted. Four answers, no score. The initial
+// value comes from the server on re-open (old servers: no field → nothing
+// selected). Re-answering overwrites; a failed save keeps the previous answer
+// and says so — a silently "saved" label that never reached the server is the
+// worst kind of quiet.
+function UserVerdictSection({
+  projectId,
+  runId,
+  userKey,
+  initial,
+  t,
+}: {
+  projectId: string;
+  runId: string;
+  userKey: string;
+  initial: UserVerdict | null;
+  t: Dictionary;
+}) {
+  const s = t.visualChecks.userVerdict;
+  const [verdict, setVerdict] = useState<UserVerdict | null>(initial);
+  const [phase, setPhase] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // A new run detail (or a later server value) resets the selection.
+  useEffect(() => { setVerdict(initial); setPhase("idle"); }, [initial, runId]);
+
+  async function choose(next: UserVerdict) {
+    if (phase === "saving") return;
+    const previous = verdict;
+    setVerdict(next);
+    setPhase("saving");
+    const res = await submitUserVerdict(projectId, runId, userKey, next);
+    if (res.ok) {
+      setVerdict(res.verdict);
+      setPhase("saved");
+    } else {
+      setVerdict(previous);
+      setPhase("error");
+    }
+  }
+
+  return (
+    <section className="card p-5">
+      <h3 className="section-title">{s.title}</h3>
+      <p className="section-desc leading-relaxed">{s.hint}</p>
+      <div role="radiogroup" aria-label={s.title} className="mt-3 flex flex-wrap gap-2">
+        {USER_VERDICT_OPTIONS.map((opt) => {
+          const selected = verdict === opt;
+          return (
+            <button
+              key={opt}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => void choose(opt)}
+              disabled={phase === "saving"}
+              className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                selected
+                  ? "border-brand-600 bg-brand-50 font-medium text-brand-700"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {userVerdictLabel(opt, t)}
+            </button>
+          );
+        })}
+      </div>
+      {phase === "saving" && <p className="mt-2 text-xs text-gray-500">{s.saving}</p>}
+      {phase === "saved" && <p className="mt-2 text-xs text-gray-500">{s.saved}</p>}
+      {phase === "error" && <p className="mt-2 text-xs text-red-600">{s.saveError}</p>}
+    </section>
+  );
+}
+
 export default function VisualCheckDetailPage() {
   const { id, runId } = useParams<{ id: string; runId: string }>();
   const { t, locale } = useI18n();
@@ -576,6 +661,10 @@ export default function VisualCheckDetailPage() {
   const [check, setCheck] = useState<VisualCheckDetail | null>(null);
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Train C — C2b (계약 3): which fix-instruction format is showing. The default
+  // follows the project's built_with (chat builder → builderPrompt, else CLI);
+  // the user can flip between the two when the run carries both.
+  const [promptTarget, setPromptTarget] = useState<FixPromptTarget>("cli");
   // Stage 266 — the most recent done run older than this one, for comparison.
   const [prevCheck, setPrevCheck] = useState<VisualCheckDetail | null>(null);
 
@@ -588,6 +677,14 @@ export default function VisualCheckDetailPage() {
       if (res.ok) {
         setCheck(res.check);
         setPhase("done");
+        // Train C — C2b: pick the fix-instruction format once per loaded run.
+        // Old runs (no builderPrompt) stay on the CLI prompt exactly as before.
+        setPromptTarget(
+          pickDefaultPromptTarget(
+            loadExtendedProjectData(id)?.builtWithTools,
+            fixPromptFor(res.check, "web_builder") !== null,
+          ),
+        );
         // 화면 검수 결과를 프로젝트 상태에 남긴다 — 하단 "다음 한 걸음" 바가
         // 여기서 무엇을 가리킬지(고칠 것으로 갈지, 끝났다고 말할지) 정하려면
         // 이 사실이 필요하고, 화면 검수는 `checkResults`에 아무것도 쓰지 않는다.
@@ -651,18 +748,30 @@ export default function VisualCheckDetailPage() {
   if (!project) return <p className="text-sm text-gray-500">{t.common.notFound}</p>;
 
   async function handleCopyPrompt() {
-    if (!check?.agentPrompt) return;
+    const text = fixPromptFor(check, promptTarget);
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(check.agentPrompt);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       if (copyTimer.current) clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopied(false), 2000);
+      // Train C — C2b (계약 4): "how the result was used" — recorded only after
+      // the copy actually happened, and never awaited (measurement must not
+      // block the UX; a 404 from an older server is swallowed inside).
+      void recordFixPromptCopied(id, runId, userKey, promptTarget);
     } catch {
       // Clipboard unavailable (permissions / insecure context) — leave the button as-is.
     }
   }
 
   const report = check?.report ?? null;
+  // Train C — C2b: the fix-instruction formats this run actually carries.
+  const promptTargets = availablePromptTargets(check);
+  const activePrompt = fixPromptFor(check, promptTarget);
+  const otherPromptTarget: FixPromptTarget | null =
+    promptTargets.length > 1 ? (promptTarget === "web_builder" ? "cli" : "web_builder") : null;
+  // Train C — C2b: the user's own acceptance label from the server (old servers → null).
+  const initialUserVerdict = check ? normalizeUserVerdict(check.userVerdict) : null;
   const verdict = check ? verdictLabel(check.works, check.decision, t) : null;
   const evidence = splitEvidenceKeys(check?.evidenceKeys ?? []);
   const findings = report?.findings ?? [];
@@ -866,18 +975,36 @@ export default function VisualCheckDetailPage() {
             <RepairSection projectId={id} runId={runId} check={check} userKey={userKey} t={t} locale={locale} />
           )}
 
-          {/* Copy-ready agent fix prompt */}
+          {/* Copy-ready fix prompt. Train C — C2b (계약 3): two formats. A chat
+              builder (Lovable/Bolt/v0/Replit/Base44 in built_with) sees the
+              paste-into-chat block by default; everyone else sees the CLI agent
+              prompt as before. When the run carries both, a text toggle flips.
+              Old runs without builderPrompt render exactly the pre-Train-C UI. */}
           <section className="card p-5">
             <h3 className="section-title">{t.visualChecks.fixTitle}</h3>
-            {check.agentPrompt ? (
+            {activePrompt ? (
               <>
-                <p className="section-desc leading-relaxed">{t.visualChecks.fixBody}</p>
-                <button
-                  onClick={handleCopyPrompt}
-                  className="btn btn-primary btn-sm mt-3"
-                >
-                  {copied ? t.visualChecks.copied : t.visualChecks.copyPrompt}
-                </button>
+                <p className="section-desc leading-relaxed">
+                  {promptTarget === "web_builder" ? t.visualChecks.fixPrompt.builderBody : t.visualChecks.fixBody}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button onClick={handleCopyPrompt} className="btn btn-primary btn-sm">
+                    {copied
+                      ? t.visualChecks.copied
+                      : promptTarget === "web_builder"
+                        ? t.visualChecks.fixPrompt.copyBuilder
+                        : t.visualChecks.copyPrompt}
+                  </button>
+                  {otherPromptTarget && (
+                    <button
+                      type="button"
+                      onClick={() => { setPromptTarget(otherPromptTarget); setCopied(false); }}
+                      className="text-xs text-gray-500 underline hover:text-gray-700"
+                    >
+                      {otherPromptTarget === "cli" ? t.visualChecks.fixPrompt.showCli : t.visualChecks.fixPrompt.showBuilder}
+                    </button>
+                  )}
+                </div>
               </>
             ) : (
               <p className="section-desc">{t.visualChecks.noPrompt}</p>
@@ -907,6 +1034,16 @@ export default function VisualCheckDetailPage() {
               </ul>
             </section>
           )}
+
+          {/* Train C — C2b (계약 2): the person's own verdict, last — after
+              they have read what we found and (maybe) tried the app again. */}
+          <UserVerdictSection
+            projectId={id}
+            runId={runId}
+            userKey={userKey}
+            initial={initialUserVerdict}
+            t={t}
+          />
         </>
       )}
     </div>
