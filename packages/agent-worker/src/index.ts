@@ -34,6 +34,7 @@ export {
   OPENAI_FALLBACK_MODEL,
 } from "./openai-fallback.js";
 export type { FallbackOptions } from "./openai-fallback.js";
+export { toOpenAiMessages } from "./openai-fallback.js";
 export type { ModelPricing, UsageBreakdown } from "./pricing.js";
 export type { AnthropicLike, AnthropicCreateParams, AnthropicResponse } from "./anthropic-types.js";
 export type {
