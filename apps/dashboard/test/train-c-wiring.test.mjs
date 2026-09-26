@@ -10,6 +10,8 @@
  *  C2b-a 복사 버튼이 계약 4 이벤트(recordFixPromptCopied)를 보낸다 (끊김 #12 — 활용 방식 미계측)
  *  C2b-b 리포트 하단에 user_verdict 제출(submitUserVerdict)이 배선돼 있다 (W1-8)
  *  C2b-c 프롬프트 기본 형식은 pickDefaultPromptTarget(built_with, builderPrompt 유무)로 고른다
+ *  C2a   고치기 진입이 canRepair 단독이 아니라 repairEntryMode(저장소 유무)로 갈린다
+ *        (끊김 #4·#5 — 주소만 앱에 GitHub CTA, D-17 amend)
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -70,4 +72,13 @@ test("C2b-b: 리포트 하단에 user_verdict 제출이 배선돼 있다 (submit
 test("C2b-c: 프롬프트 기본 형식은 pickDefaultPromptTarget(built_with, builderPrompt 유무)로 고른다", () => {
   assert.match(page, /pickDefaultPromptTarget\(/);
   assert.match(page, /fixPromptFor\(check, promptTarget\)/);
+});
+
+test("C2a: 고치기 진입이 repairEntryMode(check, hasRepo)로 갈린다 — canRepair(check) && 단독 렌더가 아니다", () => {
+  assert.match(page, /repairEntryMode\(check, hasRepo\)/);
+  assert.doesNotMatch(page, /\{canRepair\(check\) && \(/);
+  assert.match(page, /<BuilderPasteSection/);
+  // 저장소 사실은 transient-null 재시도 헬퍼로 읽는다(3svs-os error-patterns/transient-null-hard-false).
+  assert.match(page, /fetchProjectRepoSettled\(fetchProjectRepo, id, userKey/);
+  assert.match(page, /repoConnectedFact\(/);
 });

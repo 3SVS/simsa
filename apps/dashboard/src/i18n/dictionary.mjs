@@ -2412,6 +2412,17 @@ const EN = {
       saved: "Saved. You can change your answer anytime.",
       saveError: "We couldn't save your answer. Please try again in a moment.",
     },
+    // Train C — C2a (D-17 amend): address-only apps get this instead of the
+    // repair button. Connecting code is an optional sentence, never a gate.
+    builderPaste: {
+      title: "Fix it in the tool that built this app",
+      body: "No code is connected to this project, so the fix happens in the tool that built the app. Two steps and you're done.",
+      step1: "Copy the fix instructions below and paste them into that tool's chat.",
+      step2: "Once the tool has published its change, come back here and press \"Check again\" to see the result.",
+      recheckButton: "Check again",
+      repoOptional: "If you like, you can also connect a code repository so Simsa can fix things automatically.",
+      repoOptionalLink: "Connect",
+    },
     nextStepsTitle: "Next steps",
     notesTitle: "Notes",
     // Stage 264 — one-click inspection run + status polling.
@@ -5128,6 +5139,17 @@ const KO = {
       saving: "저장하는 중이에요…",
       saved: "답을 저장했어요. 언제든 바꿀 수 있어요.",
       saveError: "답을 저장하지 못했어요. 잠시 뒤 다시 눌러주세요.",
+    },
+    // Train C — C2a (D-17 amend): 주소만 있는 앱에는 고치기 버튼 대신 이 안내.
+    // 코드 연결은 선택 문구로만, 관문이 아니다.
+    builderPaste: {
+      title: "이 앱을 만든 도구로 고치기",
+      body: "이 프로젝트에는 코드가 연결돼 있지 않아서, 고침은 앱을 만든 도구에서 하시면 돼요. 두 단계면 끝나요.",
+      step1: "아래 고침 지시를 복사해 그 도구의 채팅창에 붙여넣으세요.",
+      step2: "도구가 고친 내용을 게시하면, 여기로 돌아와 '다시 확인'을 눌러 결과를 봐요.",
+      recheckButton: "다시 확인",
+      repoOptional: "원하시면 코드 저장소를 연결해 자동으로 고칠 수도 있어요.",
+      repoOptionalLink: "연결하기",
     },
     nextStepsTitle: "다음 단계",
     notesTitle: "참고",

@@ -15,6 +15,14 @@ export function canRepair(
   check: { status?: unknown; works?: unknown } | null | undefined,
 ): boolean;
 
+/** Train C — C2a: "repair" (linked repo) · "builder_paste" (address-only / unknown) · "none". */
+export type RepairEntryMode = "repair" | "builder_paste" | "none";
+
+export function repairEntryMode(
+  check: { status?: unknown; works?: unknown } | null | undefined,
+  hasRepo: boolean | null | undefined,
+): RepairEntryMode;
+
 export function isRepairActive(
   repair: { status?: unknown } | null | undefined,
 ): boolean;

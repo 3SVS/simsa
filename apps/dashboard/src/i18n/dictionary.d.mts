@@ -2251,6 +2251,15 @@ export type Dictionary = {
       saved: string;
       saveError: string;
     };
+    builderPaste: {
+      title: string;
+      body: string;
+      step1: string;
+      step2: string;
+      recheckButton: string;
+      repoOptional: string;
+      repoOptionalLink: string;
+    };
     nextStepsTitle: string;
     notesTitle: string;
     runTitle: string;

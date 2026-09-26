@@ -22,6 +22,30 @@ export function canRepair(check) {
 }
 
 /**
+ * Train C — C2a (재정렬 2026-09-27 §1 끊김 #4·#5, D-17 amend): which "make it
+ * work" entry the report shows.
+ *
+ *   "repair"        — canRepair AND a code repository is linked → the Stage 269
+ *                     "[고치기]" button (server repair job → PR → re-check loop).
+ *   "builder_paste" — canRepair but NO linked repository (address-only apps:
+ *                     Lovable / Bolt / v0 / Base44 …) → paste the builder prompt
+ *                     into the tool's chat, then "check again". Linking a repo is
+ *                     offered as an OPTIONAL sentence only — the default flow must
+ *                     not put an external-account CTA in front of a beginner.
+ *   "none"          — the run cannot be repaired at all (works, active, failed).
+ *
+ * `hasRepo` follows repo-settle.mjs: true = linked · false = confirmed none ·
+ * null/undefined = unknown (fetch failed). Unknown resolves to the beginner
+ * default (builder_paste) rather than the GitHub path — the optional sentence
+ * still leads a developer to the repair route, whereas the reverse would show
+ * a beginner a button that ends in "connect GitHub first".
+ */
+export function repairEntryMode(check, hasRepo) {
+  if (!canRepair(check)) return "none";
+  return hasRepo === true ? "repair" : "builder_paste";
+}
+
+/**
  * A repair job is "active" only while the backend can still move it forward:
  * queued → running → done|failed. null (no job yet), terminal statuses and
  * unknown/legacy statuses are all inactive (defensive: never poll forever on

@@ -9,8 +9,66 @@ import {
   nextRepairPollMs,
   repairErrorKey,
   repairFailureKind,
+  repairEntryMode,
 } from "../src/lib/repair-state.mjs";
 import { getDictionary } from "../src/i18n/dictionary.mjs";
+import { devTermHits, accountCtaLabels } from "../../../tools/simsa-completion-loop-spike/lib/beginner-terms.mjs";
+
+// Train C — C2a (재정렬 §1 끊김 #4·#5, D-17 amend): 주소만 있는 앱(Lovable·Base44 …)에는
+// "고치기"(GitHub 저장소 전제) 대신 빌더 채팅 붙여넣기 → 다시 확인 안내를 보인다.
+// 이 describe는 고치기 전 코드에서 실패한다(repairEntryMode가 없다).
+describe("repair-state: repairEntryMode (C2a — 저장소 유무로 진입이 갈린다)", () => {
+  const broken = { status: "done", works: false };
+
+  it("고칠 수 있는 런 + 저장소 연결됨 → repair (종전 '고치기' 흐름)", () => {
+    assert.equal(repairEntryMode(broken, true), "repair");
+    assert.equal(repairEntryMode({ status: "done", works: null }, true), "repair");
+  });
+
+  it("고칠 수 있는 런 + 저장소 없음(확인됨) → builder_paste (기본 흐름에 외부 계정 CTA 없음)", () => {
+    assert.equal(repairEntryMode(broken, false), "builder_paste");
+  });
+
+  it("저장소 여부를 모름(null: 조회 실패) → builder_paste — 초보자 기본 경로를 먼저, 연결은 선택 문구로", () => {
+    assert.equal(repairEntryMode(broken, null), "builder_paste");
+    assert.equal(repairEntryMode(broken, undefined), "builder_paste");
+  });
+
+  it("고칠 수 없는 런(작동함·진행 중·실패·없음)은 저장소가 있어도 none", () => {
+    assert.equal(repairEntryMode({ status: "done", works: true }, true), "none");
+    assert.equal(repairEntryMode({ status: "running", works: false }, true), "none");
+    assert.equal(repairEntryMode({ status: "failed", works: false }, false), "none");
+    assert.equal(repairEntryMode(null, true), "none");
+    assert.equal(repairEntryMode(undefined, false), "none");
+  });
+
+  it("canRepair와 일관: canRepair가 false면 언제나 none", () => {
+    for (const c of [{ status: "done", works: true }, { status: "queued" }, null]) {
+      for (const hasRepo of [true, false, null]) {
+        if (!canRepair(c)) assert.equal(repairEntryMode(c, hasRepo), "none");
+      }
+    }
+  });
+});
+
+describe("repair-state: builderPaste 사전 (C2a 안내 블록) — KO/EN, 초보자 금칙어 0, 계정 CTA 0", () => {
+  const KEYS = ["title", "body", "step1", "step2", "recheckButton", "repoOptional", "repoOptionalLink"];
+  for (const loc of ["ko", "en"]) {
+    it(`${loc}: 키가 모두 있고, GitHub·PR·Lovable 같은 개발 용어가 없고, 링크 라벨이 계정 CTA로 읽히지 않는다`, () => {
+      const b = getDictionary(loc).visualChecks.builderPaste;
+      for (const k of KEYS) assert.ok(typeof b?.[k] === "string" && b[k].trim().length > 0, `${loc}.visualChecks.builderPaste.${k}`);
+      for (const k of KEYS) {
+        const hits = devTermHits(b[k]);
+        assert.deepEqual(hits, [], `"${b[k]}" → ${JSON.stringify(hits)}`);
+      }
+      assert.deepEqual(accountCtaLabels([b.recheckButton, b.repoOptionalLink]), []);
+    });
+  }
+  it("저장소 연결은 '선택'으로만 말한다 (KO '원하시면' / EN 'If you like')", () => {
+    assert.match(getDictionary("ko").visualChecks.builderPaste.repoOptional, /원하시면/);
+    assert.match(getDictionary("en").visualChecks.builderPaste.repoOptional, /if you like/i);
+  });
+});
 
 describe("repair-state: repairFailureKind (auto_fix 성숙 2026-07-20)", () => {
   it("failed job with the container's repo_access_denied prefix → repoAccessDenied", () => {

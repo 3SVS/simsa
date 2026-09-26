@@ -60,6 +60,7 @@ import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { buildRecheckBody } from "@/lib/visual-check-recheck.mjs";
 import {
   canRepair,
+  repairEntryMode,
   isRepairActive,
   repairFailureKind,
   isEnvCause,
@@ -67,6 +68,8 @@ import {
   REPAIR_POLL_INTERVAL_MS,
 } from "@/lib/repair-state.mjs";
 import type { RepairErrorKey } from "@/lib/repair-state.mjs";
+import { fetchProjectRepo } from "@/lib/workspace-github-api";
+import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 import { EvidenceChainSection } from "@/components/EvidenceChainSection";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -318,6 +321,101 @@ function ComparisonSection({
 // Stage 266 comparison once done).
 type RecheckNotice = { kind: "queuedOnly" } | { kind: "error"; errorKey: RunErrorKey };
 
+// Stage 272 — same POST run dispatch as the Stage 264 list page. On a
+// dispatched run we navigate straight to its detail page; a queued-only
+// (degraded runner) or error answer keeps the user here with a callout.
+// Train C — C0 (계약 1): the re-check carries the ORIGINAL intent and the
+// source run id, so "check again after the fix" measures with the same
+// yardstick instead of the server's generic default sentence.
+// Train C — C2a: shared by the repair card (linked repo) and the builder-paste
+// card (address-only app) so both "check again" buttons behave identically.
+function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string, locale: Locale) {
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<RecheckNotice | null>(null);
+
+  async function run() {
+    if (submitting) return;
+    setSubmitting(true);
+    setNotice(null);
+    const res = await runVisualCheck(projectId, buildRecheckBody(check, userKey, locale));
+    if (res.ok && res.dispatched) {
+      // Keep the button disabled while the navigation happens.
+      router.push(`/projects/${projectId}/visual-checks/${res.check.id}`);
+      return;
+    }
+    if (res.ok) {
+      setNotice({ kind: "queuedOnly" });
+    } else {
+      setNotice({ kind: "error", errorKey: mapRunError(res.error) });
+    }
+    setSubmitting(false);
+  }
+
+  return { submitting, notice, run };
+}
+
+function RecheckNoticeView({ notice, t }: { notice: RecheckNotice | null; t: Dictionary }) {
+  if (!notice) return null;
+  if (notice.kind === "queuedOnly") {
+    return <div className="callout callout-info mt-2">{t.visualChecks.runQueuedOnly}</div>;
+  }
+  const soft = notice.errorKey === "runAlreadyActive" || notice.errorKey === "websiteSourceRequired";
+  return (
+    <div className={`callout mt-2 ${soft ? "callout-info" : "callout-error"}`}>
+      {t.visualChecks.runErrors[notice.errorKey]}
+    </div>
+  );
+}
+
+// Train C — C2a (재정렬 §1 끊김 #4·#5, D-17 amend): an address-only app
+// (Lovable / Bolt / v0 / Base44 … — no code repository linked) cannot use the
+// server repair job, and before Train C it still saw the "[고치기]" button,
+// which ended in "connect a GitHub repository first". Now it gets the two-step
+// path it can actually walk: paste the builder prompt into the tool's chat →
+// publish → "check again" (same intent, same yardstick — C0). Linking code is
+// offered as an optional sentence, never as the gate.
+function BuilderPasteSection({
+  projectId,
+  check,
+  userKey,
+  t,
+  locale,
+}: {
+  projectId: string;
+  check: VisualCheckDetail;
+  userKey: string;
+  t: Dictionary;
+  locale: Locale;
+}) {
+  const s = t.visualChecks.builderPaste;
+  const recheck = useRecheck(projectId, check, userKey, locale);
+  return (
+    <section className="card p-5">
+      <h3 className="section-title">{s.title}</h3>
+      <p className="section-desc leading-relaxed">{s.body}</p>
+      <ol className="mt-3 list-decimal space-y-1.5 pl-5">
+        <li className="text-sm leading-relaxed text-gray-600">{s.step1}</li>
+        <li className="text-sm leading-relaxed text-gray-600">{s.step2}</li>
+      </ol>
+      <button
+        onClick={() => void recheck.run()}
+        disabled={recheck.submitting}
+        className="btn btn-secondary btn-sm mt-3 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {recheck.submitting ? t.visualChecks.runSubmitting : s.recheckButton}
+      </button>
+      <RecheckNoticeView notice={recheck.notice} t={t} />
+      <p className="mt-3 text-xs leading-relaxed text-gray-500">
+        {s.repoOptional}{" "}
+        <Link href={`/projects/${projectId}/github`} className="underline hover:text-gray-700">
+          {s.repoOptionalLink}
+        </Link>
+      </p>
+    </section>
+  );
+}
+
 // Stage 269 — "[고치기]": dispatch a repair job for a done-but-not-working
 // run, poll it every 5s, and surface the resulting draft PR. Honest copy:
 // the PR carries the fix brief (SIMSA-FIX-BRIEF.md) — code changes are NOT
@@ -339,14 +437,12 @@ function RepairSection({
   locale: Locale;
 }) {
   const s = t.visualChecks.repair;
-  const router = useRouter();
   // null = no repair job yet (show the button); otherwise render the job state.
   const [repair, setRepair] = useState<RepairJob | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "submitting">("loading");
   const [errorKey, setErrorKey] = useState<RepairErrorKey | null>(null);
-  // Stage 272 — post-repair re-check dispatch state.
-  const [recheckSubmitting, setRecheckSubmitting] = useState(false);
-  const [recheckNotice, setRecheckNotice] = useState<RecheckNotice | null>(null);
+  // Stage 272 — post-repair re-check dispatch (shared hook, Train C — C0/C2a).
+  const recheck = useRecheck(projectId, check, userKey, locale);
 
   // On mount, GET once — if a repair already exists, render its state
   // instead of the bare button (and resume polling when it is still active).
@@ -398,30 +494,6 @@ function RepairSection({
       setErrorKey(key);
     }
     setPhase("ready");
-  }
-
-  // Stage 272 — same POST run dispatch as the Stage 264 list page. On a
-  // dispatched run we navigate straight to its detail page; a queued-only
-  // (degraded runner) or error answer keeps the user here with a callout.
-  // Train C — C0 (계약 1): the re-check carries the ORIGINAL intent and the
-  // source run id, so "check again after the fix" measures with the same
-  // yardstick instead of the server's generic default sentence.
-  async function handleRecheck() {
-    if (recheckSubmitting) return;
-    setRecheckSubmitting(true);
-    setRecheckNotice(null);
-    const res = await runVisualCheck(projectId, buildRecheckBody(check, userKey, locale));
-    if (res.ok && res.dispatched) {
-      // Keep the button disabled while the navigation happens.
-      router.push(`/projects/${projectId}/visual-checks/${res.check.id}`);
-      return;
-    }
-    if (res.ok) {
-      setRecheckNotice({ kind: "queuedOnly" });
-    } else {
-      setRecheckNotice({ kind: "error", errorKey: mapRunError(res.error) });
-    }
-    setRecheckSubmitting(false);
   }
 
   const isDone = repair !== null && repair.status === "done";
@@ -489,27 +561,13 @@ function RepairSection({
           <div className="mt-3 border-t border-green-200 pt-3">
             <p className="text-sm leading-relaxed text-green-700">{s.recheckExplainer}</p>
             <button
-              onClick={handleRecheck}
-              disabled={recheckSubmitting}
+              onClick={() => void recheck.run()}
+              disabled={recheck.submitting}
               className="btn btn-secondary btn-sm mt-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {recheckSubmitting ? t.visualChecks.runSubmitting : s.recheckButton}
+              {recheck.submitting ? t.visualChecks.runSubmitting : s.recheckButton}
             </button>
-            {recheckNotice?.kind === "queuedOnly" && (
-              <div className="callout callout-info mt-2">{t.visualChecks.runQueuedOnly}</div>
-            )}
-            {recheckNotice?.kind === "error" && (
-              <div
-                className={`callout mt-2 ${
-                  recheckNotice.errorKey === "runAlreadyActive" ||
-                  recheckNotice.errorKey === "websiteSourceRequired"
-                    ? "callout-info"
-                    : "callout-error"
-                }`}
-              >
-                {t.visualChecks.runErrors[recheckNotice.errorKey]}
-              </div>
-            )}
+            <RecheckNoticeView notice={recheck.notice} t={t} />
           </div>
         </div>
       )}
@@ -665,6 +723,20 @@ export default function VisualCheckDetailPage() {
   // follows the project's built_with (chat builder → builderPrompt, else CLI);
   // the user can flip between the two when the run carries both.
   const [promptTarget, setPromptTarget] = useState<FixPromptTarget>("cli");
+  // Train C — C2a: is a code repository linked? undefined = still looking ·
+  // true = linked · false = confirmed none · null = unknown (fetch failed).
+  // Read through repo-settle so a transient D1 null right after a link does not
+  // collapse to a hard false (3svs-os error-patterns/transient-null-hard-false).
+  const [hasRepo, setHasRepo] = useState<boolean | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHasRepo(undefined);
+    fetchProjectRepoSettled(fetchProjectRepo, id, userKey, { attempts: 1 })
+      .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
+      .catch(() => { if (!cancelled) setHasRepo(null); });
+    return () => { cancelled = true; };
+  }, [id, userKey]);
   // Stage 266 — the most recent done run older than this one, for comparison.
   const [prevCheck, setPrevCheck] = useState<VisualCheckDetail | null>(null);
 
@@ -772,6 +844,11 @@ export default function VisualCheckDetailPage() {
     promptTargets.length > 1 ? (promptTarget === "web_builder" ? "cli" : "web_builder") : null;
   // Train C — C2b: the user's own acceptance label from the server (old servers → null).
   const initialUserVerdict = check ? normalizeUserVerdict(check.userVerdict) : null;
+  // Train C — C2a: which "make it work" entry to show. "loading" only while the
+  // repo fact is still being read, so the area does not flash from one card to
+  // the other; a run that cannot be repaired at all shows neither.
+  const repairMode: "loading" | "repair" | "builder_paste" | "none" =
+    hasRepo === undefined ? (canRepair(check) ? "loading" : "none") : repairEntryMode(check, hasRepo);
   const verdict = check ? verdictLabel(check.works, check.decision, t) : null;
   const evidence = splitEvidenceKeys(check?.evidenceKeys ?? []);
   const findings = report?.findings ?? [];
@@ -970,9 +1047,22 @@ export default function VisualCheckDetailPage() {
           )}
 
           {/* Stage 269 — "[고치기]": only a finished run that did NOT verify
-              as working can dispatch a repair (draft fix-brief PR). */}
-          {canRepair(check) && (
+              as working can dispatch a repair (draft fix-brief PR).
+              Train C — C2a: and only when a code repository is linked; an
+              address-only app gets the builder-paste path instead (D-17). */}
+          {repairMode === "loading" && (
+            <section className="card p-5">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
+                {t.common.loading}
+              </div>
+            </section>
+          )}
+          {repairMode === "repair" && (
             <RepairSection projectId={id} runId={runId} check={check} userKey={userKey} t={t} locale={locale} />
+          )}
+          {repairMode === "builder_paste" && (
+            <BuilderPasteSection projectId={id} check={check} userKey={userKey} t={t} locale={locale} />
           )}
 
           {/* Copy-ready fix prompt. Train C — C2b (계약 3): two formats. A chat
