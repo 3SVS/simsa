@@ -786,6 +786,10 @@ const BUILDER_STR: Record<ReportLocale, {
   appL: string; shouldL: string; nowL: string;
   problems: string;
   whyL: string; howL: string; detailL: string;
+  /** Heading for items the report itself says are NOT defects (ac_not_confirmed). */
+  confirmOnly: string;
+  /** Builder-chat `how` for codes whose reader-facing `how` points at things a chat has no access to. */
+  howOverride: Partial<Record<FindingCode, string>>;
   rules: string[];
 }> = {
   ko: {
@@ -796,6 +800,10 @@ const BUILDER_STR: Record<ReportLocale, {
     appL: "앱 주소", shouldL: "이 앱이 해야 하는 것", nowL: "지금 상태",
     problems: "고칠 문제 (급한 것부터)",
     whyL: "왜 그런가", howL: "어떻게 고치나", detailL: "기술 정보",
+    confirmOnly: "확인만 해 주세요 (고장은 아니에요 — 검수가 끝까지 보지 못한 항목)",
+    howOverride: {
+      console_error: "아래 기술 정보의 오류 메시지를 보고 그 원인을 고쳐 주세요.",
+    },
     rules: [
       "지켜 주세요:",
       "- 위에 적힌 원인만 고치고, 관계없는 부분은 바꾸지 마세요.",
@@ -812,6 +820,10 @@ const BUILDER_STR: Record<ReportLocale, {
     appL: "App address", shouldL: "What this app should do", nowL: "Current state",
     problems: "Problems to fix (most urgent first)",
     whyL: "Why", howL: "How to fix", detailL: "Technical detail",
+    confirmOnly: "Please just confirm (not broken — the review could not see these through to the end)",
+    howOverride: {
+      console_error: "Use the error message in the technical detail below to find and fix its cause.",
+    },
     rules: [
       "Please follow these rules:",
       "- Fix only the causes listed above; leave unrelated parts as they are.",
@@ -827,15 +839,29 @@ export type BuilderPromptSource = Pick<NonDevReport, "findings"> &
   Partial<Pick<NonDevReport, "target" | "intent" | "verdict" | "oneLine" | "works">>;
 
 /**
+ * Codes the report itself defines as "not a defect": classifyFindings files
+ * `ac_not_confirmed` as "확인 못 함 — 고장 아님" and `noise_third_party` as info.
+ * A builder ordered to "fix" one of these will invent a change — the exact thing
+ * the prompt's own rule forbids (PR #553 review P2). They are listed under a
+ * "confirm only" heading instead. Legacy findings without a `code` keep the
+ * severity-only rule (we cannot know, so we do not guess).
+ */
+const BUILDER_NOT_A_FIX: ReadonlySet<FindingCode> = new Set<FindingCode>(["ac_not_confirmed", "noise_third_party"]);
+
+/**
  * C2b — 리포트에서 **한 덩어리** 빌더용 고침 지시를 만든다. 결정론적, throw 안 함.
- * 고칠 것(info가 아닌 finding)이 없으면 null — 대시보드는 종전 UI로 돌아간다.
- * 기술 원문(evidence)은 실린다: 받는 쪽이 빌더의 모델이라 진단에 필요하다.
+ * 고칠 것(info가 아닌 finding · 리포트가 "고장 아님"으로 정의한 코드 제외)이 없으면 null —
+ * 대시보드는 종전 UI로 돌아간다. 기술 원문(evidence)은 실린다: 받는 쪽이 빌더의 모델이라
+ * 진단에 필요하다. `ac_not_confirmed`는 "확인만" 절에 what/why만 싣는다(how 없음 — 지시가 아니다).
  */
 export function buildBuilderFixPrompt(report: BuilderPromptSource, locale: ReportLocale = "ko"): string | null {
   const L = loc(locale);
   const s = BUILDER_STR[L];
-  const fixable = (Array.isArray(report.findings) ? report.findings : []).filter((f) => f && f.severity !== "info");
+  const all = (Array.isArray(report.findings) ? report.findings : []).filter((f): f is NonDevFinding => Boolean(f));
+  const notAFix = (f: NonDevFinding): boolean => f.code !== undefined && BUILDER_NOT_A_FIX.has(f.code);
+  const fixable = all.filter((f) => f.severity !== "info" && !notAFix(f));
   if (fixable.length === 0) return null;
+  const confirmOnly = all.filter((f) => f.code === "ac_not_confirmed");
 
   const lines: string[] = [...s.intro, ""];
   if (report.target) lines.push(`${s.appL}: ${report.target}`);
@@ -846,9 +872,17 @@ export function buildBuilderFixPrompt(report: BuilderPromptSource, locale: Repor
   fixable.forEach((f, i) => {
     lines.push(`${i + 1}. ${f.what}`);
     if (f.why) lines.push(`   ${s.whyL}: ${f.why}`);
-    if (f.how) lines.push(`   ${s.howL}: ${f.how}`);
+    const how = (f.code !== undefined ? s.howOverride[f.code] : undefined) ?? f.how;
+    if (how) lines.push(`   ${s.howL}: ${how}`);
     if (f.evidence) lines.push(`   ${s.detailL}: ${f.evidence}`);
   });
+  if (confirmOnly.length > 0) {
+    lines.push("", `${s.confirmOnly}:`);
+    for (const f of confirmOnly) {
+      lines.push(`- ${f.what}`);
+      if (f.why) lines.push(`  ${f.why}`);
+    }
+  }
   lines.push("", ...s.rules);
   return lines.join("\n");
 }

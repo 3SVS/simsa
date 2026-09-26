@@ -179,6 +179,66 @@ test("buildBuilderFixPrompt (EN): English block, 0 developer-vocabulary words, n
   assert.match(prompt, /HTTP 502/);
 });
 
+/** Acceptance results: one truly broken item and one the report itself defines as "not a defect". */
+const AC_MIXED_KO = [
+  { acceptanceId: "AC-001", featureTitle: "코스 검색", then: "코스 목록이 보인다", status: "broken", note: "GET /courses → HTTP 502" },
+  { acceptanceId: "AC-002", featureTitle: "즐겨찾기", then: "별표가 저장된다", status: "not_confirmed", note: "no star button found" },
+];
+const AC_MIXED_EN = [
+  { acceptanceId: "AC-001", featureTitle: "course search", then: "the course list appears", status: "broken", note: "GET /courses → HTTP 502" },
+  { acceptanceId: "AC-002", featureTitle: "favorites", then: "the star is saved", status: "not_confirmed", note: "no star button found" },
+];
+
+// PR #553 review P2: the report defines ac_not_confirmed as "확인 못 함 — 고장 아님" and console_error as
+// informational (never drives the verdict). A builder told to "fix" a not-confirmed item will invent a
+// change — the exact thing the prompt's own rule forbids. And the reader-facing console_error `how`
+// points at "this report's 'for developers' section", which does not exist inside a builder chat.
+test("buildBuilderFixPrompt: not-a-defect items are never fix orders — ac_not_confirmed moves to a 'confirm only' note; console_error keeps a chat-usable 'how' (KO + EN, 0 developer words, EN has no Hangul)", () => {
+  const ko = buildBuilderFixPrompt(buildNonDevReport({ ...BROKEN, acceptanceResults: AC_MIXED_KO }, "ko"), "ko");
+  assert.equal(typeof ko, "string");
+  const numberedKo = ko.split("\n").filter((l) => /^\d+\. /.test(l));
+  assert.ok(numberedKo.some((l) => /코스 검색/.test(l)), "the broken acceptance item IS a fix order");
+  assert.ok(!numberedKo.some((l) => /즐겨찾기/.test(l)), `not-confirmed must not be numbered as a problem to fix: ${JSON.stringify(numberedKo)}`);
+  assert.match(ko, /확인만 해 주세요/, "…but it is carried as something to confirm");
+  assert.match(ko, /즐겨찾기/);
+  assert.doesNotMatch(ko, /'개발자용' 칸/, "console_error 'how' is rewritten for a chat with no report sections");
+  assert.ok(numberedKo.some((l) => /코드 오류가 났어요/.test(l)), "a real code error with evidence stays a fix order");
+  assert.doesNotMatch(ko, FORBIDDEN_KO);
+  assert.doesNotMatch(ko, FORBIDDEN_EN);
+  assert.ok(!/\n{3,}/.test(ko), "still one block");
+
+  const en = buildBuilderFixPrompt(buildNonDevReport({ ...BROKEN_EN, acceptanceResults: AC_MIXED_EN }, "en"), "en");
+  assert.equal(typeof en, "string");
+  const numberedEn = en.split("\n").filter((l) => /^\d+\. /.test(l));
+  assert.ok(numberedEn.some((l) => /course search/.test(l)));
+  assert.ok(!numberedEn.some((l) => /favorites/.test(l)), `not-confirmed must not be numbered: ${JSON.stringify(numberedEn)}`);
+  assert.match(en, /favorites/);
+  assert.doesNotMatch(en, /'for developers' section/);
+  assert.doesNotMatch(en, FORBIDDEN_EN);
+  assert.doesNotMatch(en, /[가-힣]/);
+});
+
+test("buildBuilderFixPrompt: only not-a-defect items (ac_not_confirmed + info noise) → null (nothing to fix → old UI)", () => {
+  const quiet = buildNonDevReport({
+    ...BROKEN, routeAfterClick: "/courses", consoleErrors: [], networkFailures: [], steps: [], decision: "Conditionally Ready",
+    acceptanceResults: [AC_MIXED_KO[1]],
+  }, "ko");
+  assert.ok(quiet.findings.some((f) => f.code === "ac_not_confirmed"), "fixture sanity: the report does carry the not-confirmed finding");
+  assert.equal(buildBuilderFixPrompt(quiet, "ko"), null);
+});
+
+test("buildBuilderFixPrompt: legacy report findings WITHOUT codes keep the pre-existing severity-only rule", () => {
+  const legacy = {
+    findings: [
+      { severity: "medium", what: "'즐겨찾기'은(는) 이번 검수에서 끝까지 확인하지 못했어요.", why: "", how: "", evidence: null },
+      { severity: "info", what: "외부 스크립트 일부가 불러와지지 않았어요.", why: "", how: "", evidence: null },
+    ],
+  };
+  const p = buildBuilderFixPrompt(legacy, "ko");
+  assert.equal(typeof p, "string", "no code → cannot know it is not-a-defect → stays a fix item (unchanged)");
+  assert.match(p, /^1\. '즐겨찾기'/m);
+});
+
 test("buildBuilderFixPrompt: nothing to fix (no fixable findings) → null, so the dashboard falls back to the old UI", () => {
   const clean = buildNonDevReport({ ...BROKEN, routeAfterClick: "/courses", consoleErrors: [], networkFailures: [], steps: [], decision: "Conditionally Ready" }, "ko");
   assert.equal(buildBuilderFixPrompt(clean, "ko"), null);
@@ -212,6 +272,45 @@ test("internal done: server generates report.builderPrompt from the container's 
   const odd = { verdict: "?", note: "legacy" };
   await send(app, env, "/internal/visual-check-done", { body: { runId: created2.json.check.id, ok: true, decision: "Not Verified", works: null, report: odd }, headers: auth });
   assert.deepEqual(JSON.parse(env.DB._checks[1].report_json), odd);
+});
+
+// PR #553 review P2: the container sizes its report to the 512KiB cap; the SERVER then appends
+// builderPrompt. Before this fix that could push a valid report over the cap → 400 report_too_large →
+// the run stayed `running` forever (the old code stored the same report fine). Enrichment must never be
+// the reason a report is refused: drop the enrichment, keep the container's report.
+test("internal done: a container report already sized to the 512KiB cap is NOT rejected because of the server-added builderPrompt — stored without builderPrompt, finding codes kept, run done; a report over the cap on its own still 400s", async () => {
+  const CAP = 512 * 1024;
+  const projects = new Map([[PROJECT, projectRow(PROJECT, USER)]]);
+  const env = { ENVIRONMENT: "test", INTERNAL_CALLBACK_TOKEN: TOKEN, DB: makeFakeD1({ projects, sources: [websiteSource(PROJECT, USER)] }), INSPECTOR: makeDoStub({ names: [], calls: [] }) };
+  const app = createApp();
+  const auth = { authorization: `Bearer ${TOKEN}` };
+
+  const created = await send(app, env, `/workspace/projects/${PROJECT}/visual-checks/run`, { body: { userKey: USER, locale: "ko" } });
+  const runId = created.json.check.id;
+  const base = buildNonDevReport(BROKEN, "ko");
+  const room = CAP - JSON.stringify({ ...base, padding: "" }).length;
+  const report = { ...base, padding: "x".repeat(room - 16) }; // what a cap-aware container sends: 16 bytes under
+  assert.ok(JSON.stringify(report).length <= CAP && JSON.stringify(report).length > CAP - 64, "fixture sanity: just under the cap");
+  assert.ok(typeof buildBuilderFixPrompt(base, "ko") === "string", "fixture sanity: this report DOES yield a builderPrompt");
+
+  const done = await send(app, env, "/internal/visual-check-done", { body: { runId, ok: true, decision: "Needs Fix", works: false, report }, headers: auth });
+  assert.equal(done.status, 200, JSON.stringify(done.json));
+  const row = env.DB._checks[0];
+  assert.equal(row.status, "done", "the run must not be left running");
+  const stored = JSON.parse(row.report_json);
+  assert.equal("builderPrompt" in stored, false, "the server-side enrichment is what gets dropped, never the container's report");
+  assert.equal(stored.padding.length, report.padding.length);
+  assert.deepEqual(JSON.parse(row.finding_codes_json), base.findings.map((f) => f.code), "finding codes are still recorded");
+
+  // Unchanged contract: a report that is over the cap by itself is still refused.
+  row.status = "done";
+  const created2 = await send(app, env, `/workspace/projects/${PROJECT}/visual-checks/run`, { body: { userKey: USER } });
+  const tooBig = await send(app, env, "/internal/visual-check-done", {
+    body: { runId: created2.json.check.id, ok: true, decision: "Needs Fix", works: false, report: { ...base, padding: "x".repeat(room + 64) } },
+    headers: auth,
+  });
+  assert.equal(tooBig.status, 400);
+  assert.equal(tooBig.json.error, "report_too_large");
 });
 
 // ─── ⑤ copy telemetry ──────────────────────────────────────────────────────────
