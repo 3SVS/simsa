@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { makeFakeD1, projectRow, websiteSource, checkRow, makeDoStub, send } from "./_train-c-fake-d1.mjs";
 
 const { createApp } = await import("../dist/router.js");
-const { DEFAULT_INSPECTION_INTENT } = await import("../dist/routes/workspace-visual-check-runs.js");
+const { DEFAULT_INSPECTION_INTENT, defaultInspectionIntent } = await import("../dist/routes/workspace-visual-check-runs.js");
 
 const USER = "uk_owner";
 const OTHER = "uk_intruder";
@@ -71,13 +71,50 @@ test("② no intent + no sourceCheckId → the project's confirmed intent (produ
   assert.equal(env.DB._checks[0].source_check_id, null);
 });
 
-test("② confirmed intent absent/blank → the pre-existing generic default is kept", async () => {
+// Discriminating form (PR #553 review P1): the plain-run half is a behavior guard the old code also
+// satisfied (it ignored productSpec entirely). The re-check half in the SAME env fails on pre-C0
+// code, which has no inheritance and answers DEFAULT_INSPECTION_INTENT for every sourceCheckId.
+test("② confirmed intent absent/blank → generic default for a plain run; an origin run's intent still beats it (priority origin › oneLine › default)", async () => {
+  const ORIGIN_INTENT = "골퍼가 코스 상태를 확인할 수 있어야 한다";
+  const origin = checkRow({ id: "wvc_orig", project_id: PROJECT, user_key: USER, intent: ORIGIN_INTENT });
   for (const productSpec of [{}, { oneLine: "" }, { oneLine: "   " }, { oneLine: 7 }]) {
-    const env = makeEnv({ productSpec });
-    const r = await send(createApp(), env, RUN_PATH, { body: { userKey: USER } });
-    assert.equal(r.status, 202);
-    assert.equal(r.json.check.intent, DEFAULT_INSPECTION_INTENT);
+    const env = makeEnv({ productSpec, checks: [origin] });
+    const app = createApp();
+    const plain = await send(app, env, RUN_PATH, { body: { userKey: USER } });
+    assert.equal(plain.status, 202, JSON.stringify(plain.json));
+    assert.equal(plain.json.check.intent, DEFAULT_INSPECTION_INTENT, `productSpec=${JSON.stringify(productSpec)}`);
+
+    env.DB._checks.at(-1).status = "done"; // release the one-active-run guard
+    const recheck = await send(app, env, RUN_PATH, { body: { userKey: USER, sourceCheckId: "wvc_orig" } });
+    assert.equal(recheck.status, 202, JSON.stringify(recheck.json));
+    assert.equal(recheck.json.check.intent, ORIGIN_INTENT, "inheritance beats the generic default");
+    assert.equal(recheck.json.check.sourceCheckId, "wvc_orig");
   }
+  // With a confirmed line present, the origin run STILL wins (a re-check is about that run).
+  const env = makeEnv({ productSpec: { oneLine: "산책을 기록하면 주간 통계가 보이는 웹앱" }, checks: [origin] });
+  const r = await send(createApp(), env, RUN_PATH, { body: { userKey: USER, sourceCheckId: "wvc_orig" } });
+  assert.equal(r.status, 202);
+  assert.equal(r.json.check.intent, ORIGIN_INTENT);
+});
+
+test("① sourceCheckId: null means 'absent' (a client serializing null for an ordinary run must not break) — 202, no inheritance, check.sourceCheckId null", async () => {
+  const env = makeEnv({ productSpec: { oneLine: "산책을 기록하면 주간 통계가 보이는 웹앱" } });
+  const r = await send(createApp(), env, RUN_PATH, { body: { userKey: USER, sourceCheckId: null } });
+  assert.equal(r.status, 202, JSON.stringify(r.json));
+  assert.equal(r.json.check.sourceCheckId, null);
+  assert.equal(r.json.check.intent, "산책을 기록하면 주간 통계가 보이는 웹앱");
+  assert.equal(env.DB._checks[0].source_check_id, null);
+});
+
+test("② EN run with no intent and no confirmed line → an ENGLISH generic default (no Hangul reaches the EN report / builder prompt); ko default unchanged", async () => {
+  const recorder = { names: [], calls: [] };
+  const env = makeEnv({ inspector: makeDoStub(recorder) });
+  const r = await send(createApp(), env, RUN_PATH, { body: { userKey: USER, locale: "en" } });
+  assert.equal(r.status, 202, JSON.stringify(r.json));
+  assert.doesNotMatch(r.json.check.intent, /[가-힣]/, "EN reader must not get the Korean default sentence");
+  assert.equal(r.json.check.intent, defaultInspectionIntent("en"));
+  assert.equal(recorder.calls[0].body.intent, r.json.check.intent, "the container is asked in the same language");
+  assert.equal(defaultInspectionIntent("ko"), DEFAULT_INSPECTION_INTENT, "ko default is the pre-existing constant");
 });
 
 test("③ explicit body.intent wins over the inherited one; explicit targetUrl still must be a registered origin", async () => {

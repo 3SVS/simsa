@@ -69,9 +69,22 @@ const MAX_REPORT_BYTES = 512 * 1024; // matches Stage 261 create route
 const MAX_PROMPT_BYTES = 64 * 1024;
 const MAX_ERROR_CHARS = 500;
 
-/** Generic Korean intent used when the caller doesn't provide one. */
+/** Generic Korean intent used when the caller doesn't provide one (kept as-is: ko default + legacy import name). */
 export const DEFAULT_INSPECTION_INTENT =
   "사용자가 앱을 열어 핵심 기능이 실제로 작동하는지 눈으로 확인할 수 있어야 한다";
+
+const DEFAULT_INSPECTION_INTENT_EN =
+  "A user should be able to open the app and see its core feature actually working";
+
+/**
+ * The generic intent in the RUN's language. The intent is echoed into the
+ * report ("이 앱이 해야 하는 것 / What this app should do") and into the C2b
+ * builder prompt, so an EN run must not carry the Korean sentence (PR #553
+ * review P2: Hangul leaking into the EN builder prompt via this constant).
+ */
+export function defaultInspectionIntent(locale: "ko" | "en"): string {
+  return locale === "en" ? DEFAULT_INSPECTION_INTENT_EN : DEFAULT_INSPECTION_INTENT;
+}
 
 function parseHttpUrl(raw: string): URL | null {
   try {
@@ -258,9 +271,9 @@ function normalizeSeverity(s: string): FindingSeverity {
 export function enrichReportForStorage(
   report: Record<string, unknown>,
   locale: "ko" | "en",
-): { report: Record<string, unknown>; findingCodesJson: string | null } {
+): { report: Record<string, unknown>; findingCodesJson: string | null; builderPromptAdded: boolean } {
   const parsed = ReportForCallbackSchema.safeParse(report);
-  if (!parsed.success) return { report, findingCodesJson: null };
+  if (!parsed.success) return { report, findingCodesJson: null, builderPromptAdded: false };
   const r = parsed.data;
 
   // Finding codes: [] when nothing was found (measured), null when findings exist
@@ -270,7 +283,9 @@ export function enrichReportForStorage(
 
   // Builder prompt: generated here (server) rather than in the container so it
   // ships without an image rebuild. Never overwrite one the container sent.
-  if (typeof r.builderPrompt === "string" && r.builderPrompt.length > 0) return { report, findingCodesJson };
+  if (typeof r.builderPrompt === "string" && r.builderPrompt.length > 0) {
+    return { report, findingCodesJson, builderPromptAdded: false };
+  }
   const builderPrompt = buildBuilderFixPrompt(
     {
       findings: r.findings.map((f) => ({
@@ -288,7 +303,9 @@ export function enrichReportForStorage(
     },
     locale,
   );
-  return { report: builderPrompt ? { ...report, builderPrompt } : report, findingCodesJson };
+  return builderPrompt
+    ? { report: { ...report, builderPrompt }, findingCodesJson, builderPromptAdded: true }
+    : { report, findingCodesJson, builderPromptAdded: false };
 }
 
 /** Shared ownership chain for the per-run C2b routes: project → userKey, run → project + userKey. */
@@ -345,8 +362,11 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // C0 — re-check of an earlier run. The origin must be THIS project's run
     // owned by THIS user; anything else is 400 (no existence oracle across
     // users: same code for foreign / unknown / malformed).
+    // `null` means "absent" (contract: optional string) — a client that
+    // serializes `sourceCheckId: null` for an ordinary run must not break
+    // every run (PR #553 review P2). Everything else non-string is rejected.
     let sourceCheck: DbVisualCheck | null = null;
-    if (body.sourceCheckId !== undefined) {
+    if (body.sourceCheckId !== undefined && body.sourceCheckId !== null) {
       const sourceCheckId = typeof body.sourceCheckId === "string" ? body.sourceCheckId.trim() : "";
       sourceCheck = sourceCheckId ? await getVisualCheckById(c.env, sourceCheckId) : null;
       if (!sourceCheck || sourceCheck.projectId !== projectId || sourceCheck.userKey !== userKey) {
@@ -367,7 +387,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     } else if (sourceCheck) {
       intent = sourceCheck.intent;
     } else {
-      intent = confirmedIntentFromProject(project) ?? DEFAULT_INSPECTION_INTENT;
+      intent = confirmedIntentFromProject(project) ?? defaultInspectionIntent(locale);
     }
 
     // Resolve the inspection target. NEVER an arbitrary URL: it must come
@@ -627,7 +647,15 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       // in that language) + finding codes for the failure map.
       const enriched = enrichReportForStorage(body.report as Record<string, unknown>, run.locale ?? "ko");
       findingCodesJson = enriched.findingCodesJson;
-      const serialized = JSON.stringify(enriched.report);
+      let serialized = JSON.stringify(enriched.report);
+      if (serialized.length > MAX_REPORT_BYTES && enriched.builderPromptAdded) {
+        // The container already sized its report to the cap; the SERVER-added
+        // builderPrompt must never be what rejects it (PR #553 review P2 — the
+        // old code stored this report; a 400 here leaves the run `running`).
+        // Drop the enrichment, keep the container's report byte-for-byte.
+        serialized = JSON.stringify(body.report);
+        console.warn(JSON.stringify({ at: "visual-check-done", runId: body.runId, note: "builderPrompt dropped: enriched report over cap" }));
+      }
       if (serialized.length > MAX_REPORT_BYTES) return c.json({ error: "report_too_large" }, 400);
       reportJson = serialized;
     }
