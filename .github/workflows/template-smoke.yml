@@ -39,9 +39,11 @@ jobs:
       HOST_ROOT: simsa.page
     steps:
       - uses: actions/checkout@v5
+      # 루트 package.json(packageManager pnpm@9)이 아니라 템플릿의 packageManager(pnpm@10)를 읽는다 —
+      # `version: 10`과 함께 두면 'Multiple versions of pnpm specified'로 실패(라이브 run 36213747698).
       - uses: pnpm/action-setup@v6
         with:
-          version: 10
+          package_json_file: templates/simsa-hosted-app/package.json
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
