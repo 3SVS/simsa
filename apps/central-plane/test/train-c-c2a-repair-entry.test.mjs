@@ -14,7 +14,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { makeFakeD1, projectRow, websiteSource, checkRow, makeDoStub, send } from "./_train-c-fake-d1.mjs";
 
 const { createApp } = await import("../dist/router.js");
@@ -64,12 +64,25 @@ function makeGitHubFetch({ appInstalled = true } = {}) {
   return fetchImpl;
 }
 
-function makeEnv({ repos = [repoRow()], connections = [], sandbox, appCreds = true, checks = [checkRow({ id: RUN, project_id: PROJECT, user_key: USER })] } = {}) {
+/** A `project_sources` github_repo row — what a user gets by TYPING a repo address (no OAuth involved). */
+function githubRepoSource(reference, over = {}) {
+  return {
+    id: "psrc_gh1", project_id: PROJECT, user_key: USER, type: "github_repo", reference,
+    label: null, content_type: null, size_bytes: null, created_at: "2026-09-27T00:00:00.000Z",
+    ...over,
+  };
+}
+
+function makeEnv({
+  repos = [repoRow()], connections = [], sandbox, appCreds = true,
+  checks = [checkRow({ id: RUN, project_id: PROJECT, user_key: USER })],
+  sources = [websiteSource(PROJECT, USER)],
+} = {}) {
   const projects = new Map([[PROJECT, projectRow(PROJECT, USER)]]);
   const env = {
     ENVIRONMENT: "test",
     INTERNAL_CALLBACK_TOKEN: TOKEN,
-    DB: makeFakeD1({ projects, sources: [websiteSource(PROJECT, USER)], checks, repos, connections }),
+    DB: makeFakeD1({ projects, sources, checks, repos, connections }),
   };
   if (sandbox) env.SANDBOX = sandbox;
   if (appCreds) { env.GH_APP_ID = "12345"; env.GH_APP_PRIVATE_KEY = GH_APP_PRIVATE_PEM; }
@@ -116,6 +129,54 @@ test("repair: no linked repo at all → 400 github_repo_required (unchanged; the
   assert.doesNotMatch(en.json.message, /[가-힣]/);
 });
 
+// P0 regression (PR #553 review): the App fallback must be reachable ONLY for a repo the user
+// linked through their own GitHub account (workspace_project_repos — link route requires an OAuth
+// connection). A `project_sources` github_repo row is a self-typed string with no ownership check
+// (github-repo-ref.ts: "관대하게 받되" — a normalizer, not a gate). Before this fix, typing
+// "victim-org/private-saas" with no OAuth at all minted an App installation token for that repo
+// (read/write) and dispatched clone + push + PR — cross-tenant.
+test("repair [P0]: no OAuth + no linked repo + self-typed github_repo source naming SOMEONE ELSE's repo + App installed there → 400 github_token_required; no App token minted, no job row, no container call", async () => {
+  const recorder = { names: [], calls: [] };
+  const gh = makeGitHubFetch({ appInstalled: true });
+  const env = makeEnv({
+    repos: [], connections: [],
+    sources: [websiteSource(PROJECT, USER), githubRepoSource("victim-org/private-saas")],
+    sandbox: makeDoStub(recorder),
+  });
+  const r = await send(createApp({ fetch: gh }), env, REPAIR_PATH, { body: { userKey: USER } });
+  assert.equal(r.status, 400, JSON.stringify(r.json));
+  assert.equal(r.json.error, "github_token_required", "the pre-C2a answer for a sources-only repo without OAuth");
+  assert.equal(env.DB._jobs.length, 0, "no repair job row may exist");
+  assert.equal(recorder.calls.length, 0, "the container must never be called");
+  const appCalls = gh.calls.filter((c) => /\/installation$/.test(c.url) || /\/access_tokens$/.test(c.url));
+  assert.equal(appCalls.length, 0, `no App installation lookup / token mint for an unproven repo — saw ${JSON.stringify(appCalls)}`);
+  assert.ok(!JSON.stringify(r.json).includes(APP_TOKEN));
+});
+
+test("repair [P0 control]: the same self-typed github_repo source WITH an OAuth connection still takes the pre-existing OAuth path (no App call)", async () => {
+  const recorder = { names: [], calls: [] };
+  const gh = makeGitHubFetch({ appInstalled: true });
+  const { encryptToken } = await import("../dist/crypto.js");
+  const KEK = randomBytes(32).toString("base64");
+  const accessTokenEnc = await encryptToken("gho_fixture_oauth_token", KEK);
+  const env = makeEnv({
+    repos: [],
+    connections: [{
+      id: "ghc_1", user_key: USER, github_user_id: "1", github_login: "owner", github_name: null, avatar_url: null,
+      access_token_enc: accessTokenEnc, scopes: "read:user public_repo",
+      created_at: "2026-09-27T00:00:00.000Z", updated_at: "2026-09-27T00:00:00.000Z",
+    }],
+    sources: [websiteSource(PROJECT, USER), githubRepoSource("https://github.com/acme/golf-now.git")],
+    sandbox: makeDoStub(recorder),
+  });
+  env.CONCLAVE_TOKEN_KEK = KEK;
+  const r = await send(createApp({ fetch: gh }), env, REPAIR_PATH, { body: { userKey: USER } });
+  assert.equal(r.status, 202, JSON.stringify(r.json));
+  assert.equal(recorder.calls[0].body.githubToken, "gho_fixture_oauth_token", "OAuth token, exactly as before C2a");
+  assert.equal(recorder.calls[0].body.repo, "acme/golf-now");
+  assert.equal(gh.calls.length, 0, "known-public fast path: zero GitHub calls");
+});
+
 // ─── ⑤ verify-sweep: acceptancePlan + source_check_id + verify_check_id ─────────
 
 function devSpec() {
@@ -138,7 +199,7 @@ function devSpec() {
 const NOW = Date.parse("2026-09-27T12:00:00Z");
 const iso = (msAgo) => new Date(NOW - msAgo).toISOString();
 
-function sweepEnv({ withDevSpec = true, inspector } = {}) {
+function sweepEnv({ withDevSpec = true, inspector, sources = [] } = {}) {
   const origin = checkRow({
     id: RUN, project_id: PROJECT, user_key: USER, locale: "en",
     region: "KR", envelope_json: JSON.stringify({ builtWith: { tools: ["bolt"] }, entryPath: "code", topicTags: null, locale: "en", contentLang: "ko" }),
@@ -159,7 +220,7 @@ function sweepEnv({ withDevSpec = true, inspector } = {}) {
     ENVIRONMENT: "test",
     INTERNAL_CALLBACK_TOKEN: TOKEN,
     PUBLIC_BASE_URL: "https://base",
-    DB: makeFakeD1({ projects, checks: [origin], jobs: [job], events }),
+    DB: makeFakeD1({ projects, sources, checks: [origin], jobs: [job], events }),
     ...(inspector ? { INSPECTOR: inspector } : {}),
   };
 }
@@ -212,21 +273,36 @@ test("internal done on a re-inspection: repair job resolved = 1 (works) / 0 (bro
   }
 });
 
-test("internal done on an ORIGINAL run (no source_check_id) never touches repair jobs", async () => {
-  const env = makeEnv({ sandbox: makeDoStub({ names: [], calls: [] }) });
-  env.INSPECTOR = makeDoStub({ names: [], calls: [] });
-  env.DB._jobs.push({
-    id: "wrj_x", project_id: PROJECT, user_key: USER, visual_check_id: "wvc_other", repo_full_name: "acme/golf-now",
-    status: "done", branch_name: "b", pr_url: null, pr_number: null, env_cause: 0, mode: null, changed_files: null, error: null,
-    region: null, verify_check_id: null, resolved: null, created_at: "2026-09-27T00:00:00.000Z", updated_at: "2026-09-27T00:00:00.000Z",
-  });
+// Paired contrast in ONE env (PR #553 review P1: the old negative-only test was true on any code
+// that had no `resolved` at all). First the re-inspection callback must issue exactly one
+// `SET resolved` write; then an ORIGINAL run's callback in the same env must add none — and must
+// not flip the verdict the re-inspection wrote (works=false here would turn 1 into 0 on over-reach).
+test("internal done: `resolved` is written exactly once by the re-inspection callback, and a later ORIGINAL run (no source_check_id) in the same env adds no write and leaves the verdict alone", async () => {
+  const recorder = { names: [], calls: [] };
+  const env = sweepEnv({ inspector: makeDoStub(recorder), sources: [websiteSource(PROJECT, USER)] });
   const app = createApp();
-  const created = await send(app, env, `/workspace/projects/${PROJECT}/visual-checks/run`, { body: { userKey: USER } });
-  const r = await send(app, env, "/internal/visual-check-done", {
-    body: { runId: created.json.check.id, ok: true, decision: "Ready", works: true, report: { findings: [] } },
-    headers: { authorization: `Bearer ${TOKEN}` },
+  const auth = { authorization: `Bearer ${TOKEN}` };
+  const resolvedWrites = () => env.DB.writes.filter((w) => /SET resolved = \?/.test(w.sql)).length;
+
+  await runVerifySweep(env, { nowMs: NOW });
+  const reRun = env.DB._checks.find((c) => c.id !== RUN);
+  assert.ok(reRun, "re-inspection row inserted");
+  const r1 = await send(app, env, "/internal/visual-check-done", {
+    body: { runId: reRun.id, ok: true, decision: "Ready", works: true, report: { findings: [] } },
+    headers: auth,
   });
-  assert.equal(r.status, 200);
-  assert.equal(env.DB._jobs[0].resolved, null);
-  assert.ok(!env.DB.writes.some((w) => /SET resolved = \?/.test(w.sql)), "no resolved UPDATE issued for an original run");
+  assert.equal(r1.status, 200);
+  assert.equal(resolvedWrites(), 1, "re-inspection callback writes resolved exactly once");
+  assert.equal(env.DB._jobs[0].resolved, 1);
+
+  const created = await send(app, env, `/workspace/projects/${PROJECT}/visual-checks/run`, { body: { userKey: USER } });
+  assert.equal(created.status, 202, JSON.stringify(created.json));
+  assert.equal(env.DB._checks.at(-1).source_check_id, null, "an original run has no source");
+  const r2 = await send(app, env, "/internal/visual-check-done", {
+    body: { runId: created.json.check.id, ok: true, decision: "Needs Fix", works: false, report: { findings: [] } },
+    headers: auth,
+  });
+  assert.equal(r2.status, 200);
+  assert.equal(resolvedWrites(), 1, "original-run callback adds no resolved write");
+  assert.equal(env.DB._jobs[0].resolved, 1, "the repair job's verdict is untouched by an unrelated original run");
 });

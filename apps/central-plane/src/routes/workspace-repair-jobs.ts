@@ -318,15 +318,31 @@ export function createWorkspaceRepairJobRoutes(
     let githubToken: string;
     if (access.ok) {
       githubToken = access.token;
-    } else {
+    } else if (projectRepo) {
       // Train C · C2a (재정렬 D-15 keep, D-17 amend): no OAuth connection (or an
       // unusable one) must not be the end of the road when the GitHub App is
       // installed on the repo — the App installation token can see it, and the
       // App is exactly what the default flow offers as the OPTIONAL "connect your
       // code" step. Still nothing here: then the old answer stands.
+      //
+      // ONLY for the LINKED repo (workspace_project_repos). That row exists only
+      // because this user, signed in to GitHub through OAuth, linked the repo
+      // (workspace-github.ts POST /workspace/projects/:id/repo → 401 without a
+      // connection). A `project_sources` github_repo row is a self-typed string:
+      // github-repo-ref.ts normalizes its FORMAT and nothing checks ownership
+      // ("관대하게 받되" — a normalizer, not a gate). Minting an App installation
+      // token for such a string would let anyone with no GitHub identity at all
+      // clone + push + open a PR on ANY repo that installed the Simsa App
+      // (PR #553 review P0, cross-tenant). The App can vouch for a repo; it
+      // cannot vouch for the requester — the link is what ties the two.
       const appAccess = await getAppInstallationToken(c.env, repoOwner, repoName, fetchImpl);
       if (!appAccess) return c.json(tokenRequired, 400);
       githubToken = appAccess.token;
+    } else {
+      // Sources-only repo without a usable OAuth token: exactly the pre-C2a
+      // answer. No App lookup is attempted (nothing proves this user may touch
+      // that repo), so no installation token is ever minted for it.
+      return c.json(tokenRequired, 400);
     }
 
     // One active repair per run.
