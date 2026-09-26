@@ -75,6 +75,8 @@ export type VisualCheckDetail = {
   agentPrompt?: string;
   evidenceKeys: string[];
   createdAt: string;
+  /** Train C — C0: the run this one re-checked (null/absent for first runs and old servers). */
+  sourceCheckId?: string | null;
 };
 
 export type VisualChecksListResponse =
@@ -112,6 +114,13 @@ export type VisualCheckRunInput = {
    * retranslate a finished report. Omitted → "ko".
    */
   locale?: "ko" | "en";
+  /**
+   * Train C — C0 (계약 1): the run this one re-checks. The server inherits that
+   * run's intent (when `intent` is absent) and targetUrl (when no sourceId /
+   * targetUrl is given), and stores `source_check_id` on the new row. Built by
+   * buildRecheckBody() — never hand-assembled in a page.
+   */
+  sourceCheckId?: string;
 };
 
 export type VisualCheckRunCheck = {
@@ -124,6 +133,8 @@ export type VisualCheckRunCheck = {
   status: string;
   executor: VisualCheckExecutor;
   createdAt: string;
+  /** Train C — C0: echoed back when the run was queued as a re-check. Absent on old servers. */
+  sourceCheckId?: string | null;
 };
 
 export type VisualCheckRunResponse =

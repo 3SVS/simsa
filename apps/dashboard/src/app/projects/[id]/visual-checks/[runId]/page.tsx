@@ -46,6 +46,7 @@ import { compareVisualChecks, pickPreviousDoneCheck } from "@/lib/visual-check-c
 import type { VisualCheckComparison, ComparedFinding } from "@/lib/visual-check-compare.mjs";
 import { isActiveStatus, mapRunError, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
+import { buildRecheckBody } from "@/lib/visual-check-recheck.mjs";
 import {
   canRepair,
   isRepairActive,
@@ -313,12 +314,15 @@ type RecheckNotice = { kind: "queuedOnly" } | { kind: "error"; errorKey: RunErro
 function RepairSection({
   projectId,
   runId,
+  check,
   userKey,
   t,
   locale,
 }: {
   projectId: string;
   runId: string;
+  /** Train C — C0: the run being repaired; its intent/id travel with the re-check. */
+  check: VisualCheckDetail;
   userKey: string;
   t: Dictionary;
   locale: Locale;
@@ -388,11 +392,14 @@ function RepairSection({
   // Stage 272 — same POST run dispatch as the Stage 264 list page. On a
   // dispatched run we navigate straight to its detail page; a queued-only
   // (degraded runner) or error answer keeps the user here with a callout.
+  // Train C — C0 (계약 1): the re-check carries the ORIGINAL intent and the
+  // source run id, so "check again after the fix" measures with the same
+  // yardstick instead of the server's generic default sentence.
   async function handleRecheck() {
     if (recheckSubmitting) return;
     setRecheckSubmitting(true);
     setRecheckNotice(null);
-    const res = await runVisualCheck(projectId, { userKey, locale });
+    const res = await runVisualCheck(projectId, buildRecheckBody(check, userKey, locale));
     if (res.ok && res.dispatched) {
       // Keep the button disabled while the navigation happens.
       router.push(`/projects/${projectId}/visual-checks/${res.check.id}`);
@@ -856,7 +863,7 @@ export default function VisualCheckDetailPage() {
           {/* Stage 269 — "[고치기]": only a finished run that did NOT verify
               as working can dispatch a repair (draft fix-brief PR). */}
           {canRepair(check) && (
-            <RepairSection projectId={id} runId={runId} userKey={userKey} t={t} locale={locale} />
+            <RepairSection projectId={id} runId={runId} check={check} userKey={userKey} t={t} locale={locale} />
           )}
 
           {/* Copy-ready agent fix prompt */}
