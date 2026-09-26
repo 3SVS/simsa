@@ -19,6 +19,9 @@ import {
   fixPromptFor,
   availablePromptTargets,
 } from "../src/lib/user-verdict.mjs";
+// 네임스페이스로도 읽는다 — 옛 코드에서 새 export가 없을 때 파일 전체가 링크 오류로
+// 죽지 않고, 케이스별 실패 메시지가 남게.
+import * as uv from "../src/lib/user-verdict.mjs";
 import { DICTIONARIES, getDictionary } from "../src/i18n/dictionary.mjs";
 import { devTermHits } from "../../../tools/simsa-completion-loop-spike/lib/beginner-terms.mjs";
 
@@ -69,6 +72,43 @@ describe("pickDefaultPromptTarget — 빌더 채팅 vs 코딩 도구 (계약 3)"
 
   it("builderPrompt가 없는 옛 런은 도구가 빌더여도 cli (없는 것을 기본으로 고르지 않는다)", () => {
     assert.equal(pickDefaultPromptTarget(["lovable"], false), "cli");
+  });
+});
+
+// ── PR #552 검증 결함 #3 (P1) — 주소만 앱(저장소 미연결)의 기본 형식 ──
+//
+// C2a는 저장소가 없거나(false) 모르면(null) BuilderPasteSection("아래 고침 지시를 복사해 그
+// 도구의 채팅창에 붙여넣으세요")을 보이는데, 옛 pickDefaultPromptTarget은 저장소 사실을 보지
+// 않아 도구 미응답·other·{tools:[]}이면 바로 아래 카드가 CLI 형식("Claude Code, Cursor 등")으로
+// 떴다 — 같은 화면에서 지시가 모순되고 기본 흐름에 금칙어(Cursor)가 노출됐다(D-17 amend 위반).
+// 이 describe는 고치기 전 코드에서 실패한다(옵션을 무시하고 "cli", CLI_AGENT_TOOLS 없음).
+describe("pickDefaultPromptTarget — addressOnly (C2a 진입 모드와 같은 편을 든다)", () => {
+  it("도구 미응답 / other / {tools:[]} + 저장소 없음 + builderPrompt 있음 → web_builder", () => {
+    for (const bw of [undefined, null, [], ["other"], { tools: [] }, { tools: ["other"] }]) {
+      assert.equal(uv.pickDefaultPromptTarget(bw, true, { addressOnly: true }), "web_builder", JSON.stringify(bw));
+    }
+  });
+
+  it("저장소가 없어도 builderPrompt가 없으면 cli (없는 것을 기본으로 고르지 않는다)", () => {
+    assert.equal(uv.pickDefaultPromptTarget(undefined, false, { addressOnly: true }), "cli");
+    assert.equal(uv.pickDefaultPromptTarget(["other"], false, { addressOnly: true }), "cli");
+  });
+
+  it("코딩 도구를 직접 골랐으면(cursor·claude-code·windsurf·codex·hand-coded) 저장소가 없어도 cli — 사용자가 말한 도구가 이긴다", () => {
+    assert.deepEqual(uv.CLI_AGENT_TOOLS, ["cursor", "claude-code", "windsurf", "codex", "hand-coded"]);
+    for (const tool of uv.CLI_AGENT_TOOLS) {
+      assert.equal(uv.pickDefaultPromptTarget([tool], true, { addressOnly: true }), "cli", tool);
+    }
+    // 빌더와 코딩 도구를 함께 골랐으면 빌더(채팅에 붙일 곳이 있다).
+    assert.equal(uv.pickDefaultPromptTarget(["cursor", "lovable"], true, { addressOnly: true }), "web_builder");
+  });
+
+  it("저장소 연결됨(addressOnly:false)·옵션 없음은 종전 규칙 그대로 — 미응답은 cli, 빌더는 web_builder", () => {
+    assert.equal(uv.pickDefaultPromptTarget(undefined, true, { addressOnly: false }), "cli");
+    assert.equal(uv.pickDefaultPromptTarget(["other"], true, {}), "cli");
+    assert.equal(uv.pickDefaultPromptTarget(["other"], true), "cli");
+    assert.equal(uv.pickDefaultPromptTarget(["lovable"], true, { addressOnly: false }), "web_builder");
+    assert.equal(uv.pickDefaultPromptTarget(["cursor"], true, { addressOnly: false }), "cli");
   });
 });
 

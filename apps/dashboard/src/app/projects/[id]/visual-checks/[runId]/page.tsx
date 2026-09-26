@@ -338,7 +338,16 @@ function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string
     if (submitting) return;
     setSubmitting(true);
     setNotice(null);
-    const res = await runVisualCheck(projectId, buildRecheckBody(check, userKey, locale));
+    // PR #552 검증 결함 #2: a first run carries the server's default sentence as its
+    // intent (projects/new sends none). That is not a yardstick anyone chose, so the
+    // project's confirmed one-line ("맞나요?" card) travels instead — otherwise the
+    // contract-1 cascade stops at body.intent and never reaches productSpec.oneLine.
+    const res = await runVisualCheck(
+      projectId,
+      buildRecheckBody(check, userKey, locale, {
+        confirmedIntent: loadExtendedProjectData(projectId)?.productSpec?.oneLine ?? null,
+      }),
+    );
     if (res.ok && res.dispatched) {
       // Keep the button disabled while the navigation happens.
       router.push(`/projects/${projectId}/visual-checks/${res.check.id}`);
@@ -719,10 +728,13 @@ export default function VisualCheckDetailPage() {
   const [check, setCheck] = useState<VisualCheckDetail | null>(null);
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Train C — C2b (계약 3): which fix-instruction format is showing. The default
-  // follows the project's built_with (chat builder → builderPrompt, else CLI);
-  // the user can flip between the two when the run carries both.
-  const [promptTarget, setPromptTarget] = useState<FixPromptTarget>("cli");
+  // Train C — C2b (계약 3): which fix-instruction format is showing. Only the
+  // user's explicit toggle is state; the DEFAULT is derived every render (see
+  // `promptTarget` below) from the run, built_with and the repo fact. It used to
+  // be state seeded in load() — so a run entered while queued/running (the
+  // re-check path: router.push to the new run) was pinned to "cli" and the poll
+  // that later delivered the builderPrompt never moved it (PR #552 검증 결함 #1).
+  const [explicitPromptTarget, setExplicitPromptTarget] = useState<FixPromptTarget | null>(null);
   // Train C — C2a: is a code repository linked? undefined = still looking ·
   // true = linked · false = confirmed none · null = unknown (fetch failed).
   // Read through repo-settle so a transient D1 null right after a link does not
@@ -749,14 +761,6 @@ export default function VisualCheckDetailPage() {
       if (res.ok) {
         setCheck(res.check);
         setPhase("done");
-        // Train C — C2b: pick the fix-instruction format once per loaded run.
-        // Old runs (no builderPrompt) stay on the CLI prompt exactly as before.
-        setPromptTarget(
-          pickDefaultPromptTarget(
-            loadExtendedProjectData(id)?.builtWithTools,
-            fixPromptFor(res.check, "web_builder") !== null,
-          ),
-        );
         // 화면 검수 결과를 프로젝트 상태에 남긴다 — 하단 "다음 한 걸음" 바가
         // 여기서 무엇을 가리킬지(고칠 것으로 갈지, 끝났다고 말할지) 정하려면
         // 이 사실이 필요하고, 화면 검수는 `checkResults`에 아무것도 쓰지 않는다.
@@ -787,6 +791,8 @@ export default function VisualCheckDetailPage() {
   // Best-effort: any list/detail failure just leaves the section hidden.
   const doneCreatedAt = phase === "done" && check?.status === "done" ? check.createdAt : null;
   useEffect(() => { setPrevCheck(null); }, [runId]);
+  // Train C — C2b: a new run starts from its own default format again.
+  useEffect(() => { setExplicitPromptTarget(null); }, [runId]);
   useEffect(() => {
     if (!doneCreatedAt) return;
     let cancelled = false;
@@ -818,6 +824,21 @@ export default function VisualCheckDetailPage() {
   }, [isRunActive, id, runId, userKey]);
 
   if (!project) return <p className="text-sm text-gray-500">{t.common.notFound}</p>;
+
+  // Train C — C2b (계약 3): the format showing right now. Derived, not stored, so a
+  // report that arrives through the 5s poll (or a repo fact that settles later)
+  // re-picks the default; the user's explicit toggle, when set, wins.
+  // `addressOnly` (PR #552 검증 결함 #3): while no code repository is linked —
+  // confirmed none, unknown, or still looking — the C2a card above says "paste it
+  // into that tool's chat", so an unknown tool defaults to the pasteable format
+  // instead of the CLI prompt that names Claude Code / Cursor (D-17 amend).
+  const promptTarget: FixPromptTarget =
+    explicitPromptTarget ??
+    pickDefaultPromptTarget(
+      loadExtendedProjectData(id)?.builtWithTools,
+      fixPromptFor(check, "web_builder") !== null,
+      { addressOnly: hasRepo !== true },
+    );
 
   async function handleCopyPrompt() {
     const text = fixPromptFor(check, promptTarget);
@@ -1088,7 +1109,7 @@ export default function VisualCheckDetailPage() {
                   {otherPromptTarget && (
                     <button
                       type="button"
-                      onClick={() => { setPromptTarget(otherPromptTarget); setCopied(false); }}
+                      onClick={() => { setExplicitPromptTarget(otherPromptTarget); setCopied(false); }}
                       className="text-xs text-gray-500 underline hover:text-gray-700"
                     >
                       {otherPromptTarget === "cli" ? t.visualChecks.fixPrompt.showCli : t.visualChecks.fixPrompt.showBuilder}

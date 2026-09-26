@@ -17,6 +17,13 @@ export const USER_VERDICT_OPTIONS = ["as_intended", "works_but_different", "stil
 export const WEB_BUILDER_TOOLS = ["lovable", "bolt", "v0", "replit", "base44"];
 
 /**
+ * Canonical built-with ids of coding tools / agents (and hand-coding) — the CLI
+ * agentPrompt is their native format. When the user named one of these, that
+ * choice wins even on an address-only project (the toggle still offers the other).
+ */
+export const CLI_AGENT_TOOLS = ["cursor", "claude-code", "windsurf", "codex", "hand-coded"];
+
+/**
  * Server value → one of the four verdicts, or null. Old servers return no field
  * at all; a typo'd/unknown value must never render as a selected option.
  * @param {unknown} raw
@@ -53,15 +60,28 @@ function builtWithIds(builtWith) {
 
 /**
  * Which fix-instruction format to show first (contract 3).
- *   - any web builder in built_with AND the report carries builderPrompt → "web_builder"
- *   - otherwise → "cli" (the pre-Train-C default; old runs without builderPrompt stay as they were)
+ *   - no builderPrompt on the run → "cli" (old runs stay exactly as before)
+ *   - any web builder in built_with → "web_builder"
+ *   - any coding tool in built_with → "cli" (the user told us their tool)
+ *   - tool unknown (no answer / "other"):
+ *       · addressOnly (no code repository linked — PR #552 검증 결함 #3): "web_builder".
+ *         The C2a card right above says "paste it into that tool's chat"; the
+ *         instructions below it must be the pasteable kind, and the default flow
+ *         must not name Claude Code / Cursor (D-17 amend — beginner default path).
+ *       · repository linked → "cli" (the pre-Train-C default)
  * @param {unknown} builtWith string[] | { tools: string[] } | undefined
  * @param {boolean} hasBuilderPrompt
+ * @param {{ addressOnly?: boolean }} [opts] addressOnly = the repo fact is not `true`
+ *   (false = confirmed none · null = unknown · undefined = still looking — all three
+ *   resolve to the beginner default, mirroring repairEntryMode).
  * @returns {"web_builder" | "cli"}
  */
-export function pickDefaultPromptTarget(builtWith, hasBuilderPrompt) {
+export function pickDefaultPromptTarget(builtWith, hasBuilderPrompt, opts = {}) {
   if (!hasBuilderPrompt) return "cli";
-  return builtWithIds(builtWith).some((id) => WEB_BUILDER_TOOLS.includes(id)) ? "web_builder" : "cli";
+  const ids = builtWithIds(builtWith);
+  if (ids.some((id) => WEB_BUILDER_TOOLS.includes(id))) return "web_builder";
+  if (ids.some((id) => CLI_AGENT_TOOLS.includes(id))) return "cli";
+  return opts?.addressOnly === true ? "web_builder" : "cli";
 }
 
 /**
