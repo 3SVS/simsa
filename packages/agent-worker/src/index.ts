@@ -48,3 +48,14 @@ export type {
   EditWorkerContext,
   EditWorkerOutcome,
 } from "./types.js";
+
+// SI 티어 Train B — B4: 빌드 에이전트(다중 턴 tool_use 루프 + 정책).
+export { runBuildLoop } from "./build-loop.js";
+export type { BuildLoopOptions, BuildLoopOutcome, BuildTask, BuildToolExecutor, CommandResult, DeniedCall } from "./build-loop.js";
+export { BUILD_TOOLS, BUILD_SYSTEM_PROMPT } from "./build-tools.js";
+export {
+  COMMAND_ALLOWLIST, DENIED_SUBCOMMANDS, DEPLOY_CLIS, ALLOWED_ENV_KEYS, BUILD_LIMITS,
+  decideCommand, decidePath, findSecretLike, filterEnv,
+} from "./build-policy.js";
+export type { CommandDecision, PathDecision } from "./build-policy.js";
+export type { AnthropicMessage, AnthropicContentBlock } from "./anthropic-types.js";

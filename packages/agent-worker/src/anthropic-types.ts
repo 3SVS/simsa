@@ -10,11 +10,22 @@ export interface AnthropicLike {
   };
 }
 
+/** B4 빌드 루프의 다중 턴 tool_use를 위해 content가 블록 배열일 수 있다. 단일 턴 워커는 문자열 그대로. */
+export type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: unknown }
+  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+
+export interface AnthropicMessage {
+  role: "user" | "assistant";
+  content: string | ReadonlyArray<AnthropicContentBlock>;
+}
+
 export interface AnthropicCreateParams {
   model: string;
   max_tokens: number;
   system?: string | ReadonlyArray<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>;
-  messages: ReadonlyArray<{ role: "user" | "assistant"; content: string }>;
+  messages: ReadonlyArray<AnthropicMessage>;
   tools?: ReadonlyArray<{
     name: string;
     description: string;

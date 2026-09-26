@@ -68,7 +68,11 @@ function toOpenAiBody(params: AnthropicCreateParams, model: string): Record<stri
   const messages: Array<{ role: string; content: string }> = [];
   const sys = systemText(params.system);
   if (sys) messages.push({ role: "system", content: sys });
-  for (const m of params.messages) messages.push({ role: m.role, content: m.content });
+  for (const m of params.messages) {
+    // B4 다중 턴 블록(tool_use/tool_result)은 OpenAI 형식으로 옮기지 않는다 — 폴백은 단일 턴 워커 전용.
+    if (typeof m.content !== "string") throw new Error("openai-fallback: multi-turn tool blocks are not supported (Anthropic-compatible client required)");
+    messages.push({ role: m.role, content: m.content });
+  }
 
   const body: Record<string, unknown> = {
     model,
