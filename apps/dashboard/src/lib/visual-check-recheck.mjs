@@ -31,12 +31,23 @@ export const SERVER_DEFAULT_INTENT =
   "사용자가 앱을 열어 핵심 기능이 실제로 작동하는지 눈으로 확인할 수 있어야 한다";
 
 /**
- * True when a run's intent is the server placeholder, i.e. nobody chose it.
+ * Mirror of central-plane `DEFAULT_INSPECTION_INTENT_EN` (PR #553 — an EN run
+ * stores the English placeholder, so an EN user's first run must be recognized
+ * as "nobody chose it" too; otherwise the confirmed one-line never reaches the
+ * re-check for EN users). Same drift test covers it once #553 is on main.
+ */
+export const SERVER_DEFAULT_INTENT_EN =
+  "A user should be able to open the app and see its core feature actually working";
+
+const SERVER_DEFAULT_INTENTS = new Set([SERVER_DEFAULT_INTENT, SERVER_DEFAULT_INTENT_EN]);
+
+/**
+ * True when a run's intent is a server placeholder (KO or EN), i.e. nobody chose it.
  * @param {unknown} raw
  * @returns {boolean}
  */
 export function isServerDefaultIntent(raw) {
-  return typeof raw === "string" && raw.trim() === SERVER_DEFAULT_INTENT;
+  return typeof raw === "string" && SERVER_DEFAULT_INTENTS.has(raw.trim());
 }
 
 /**

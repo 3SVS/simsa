@@ -88,6 +88,31 @@ describe("buildRecheckBody — 서버 기본 문장은 '의도 없음'이다 (�
     assert.equal(recheck.isServerDefaultIntent(undefined), false);
   });
 
+  it("EN 기본 문장도 '의도 없음'이다 — central-plane DEFAULT_INSPECTION_INTENT_EN과 같다 (표류 감시, #553 머지 전에는 리터럴만 검사)", () => {
+    const src = readFileSync(
+      path.resolve(HERE, "../../central-plane/src/routes/workspace-visual-check-runs.ts"),
+      "utf8",
+    );
+    const m = /const DEFAULT_INSPECTION_INTENT_EN =\s*"([^"]+)"/.exec(src);
+    if (m) assert.equal(recheck.SERVER_DEFAULT_INTENT_EN, m[1]);
+    assert.equal(typeof recheck.SERVER_DEFAULT_INTENT_EN, "string");
+    assert.ok(/^[ -~]+$/.test(recheck.SERVER_DEFAULT_INTENT_EN), "EN placeholder is ASCII prose");
+    assert.equal(recheck.isServerDefaultIntent(recheck.SERVER_DEFAULT_INTENT_EN), true);
+    assert.equal(recheck.isServerDefaultIntent(`  ${recheck.SERVER_DEFAULT_INTENT_EN}  `), true);
+    // EN 첫 런 + 확정 oneLine → 확정 oneLine이 명시 intent (옛 코드: EN 기본 문장을 '적은 의도'로 봐 그대로 전송 → 실패)
+    const body = recheck.buildRecheckBody(
+      { ...CHECK, intent: recheck.SERVER_DEFAULT_INTENT_EN },
+      "uk_1",
+      "en",
+      { confirmedIntent: "A visitor can book a table and get a confirmation" },
+    );
+    assert.equal(body.intent, "A visitor can book a table and get a confirmation");
+    assert.equal(body.locale, "en");
+    // EN 기본 문장 + 확정 없음 → intent 키 없음
+    const bare = recheck.buildRecheckBody({ ...CHECK, intent: recheck.SERVER_DEFAULT_INTENT_EN }, "uk_1", "en");
+    assert.equal("intent" in bare, false);
+  });
+
   it("첫 런(의도 미지정)의 재검수: 원 런 intent가 기본 문장이면 확정 oneLine을 명시 intent로 보낸다", () => {
     const body = recheck.buildRecheckBody(
       { ...CHECK, intent: recheck.SERVER_DEFAULT_INTENT },
