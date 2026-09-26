@@ -330,6 +330,7 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | Train B 착수 | `train B start approved` | 2026-09-24 오후 (Bae) | B1~B11 코드 작성만. B1 = PR(SimsaBuilder 컨테이너·BUILDER 바인딩·자가점검 프로브) |
 | 설계 잠금 3차 (재정렬) | `design lock approved`(재정렬) | 2026-09-27 (Bae) | D-1·D-2·D-7·D-8·D-13·D-17·D-19·D-20·D-21 amend 발효(문안 `docs/simsa-vision-realignment-2026-09-27.md` §2, PR #549) · Train C reopen(C0·C2a·C2b) · B10 정의 교체. D-4·D-15 keep |
 | Train C 착수 | `train C start approved` | 2026-09-27 (Bae) | C0·C2a·C2b·C3·C4 코드 작성만(머지·배포·마이그레이션 적용 아님). C1은 B5 뒤 |
+| C0·C2a·C2b·C4a 코드 완료 | — | 2026-09-27 | PR #553(central-plane, 0069 포함) · #552(dashboard). 3렌즈 검증에서 P0 1건(App 토큰 폴백 cross-tenant) 머지 전 수정. 머지·0068/0069 적용·배포는 대기 |
 | 머지 | `PR #N merge approved.` | — | 해당 PR |
 | 배포 | `deploy central-plane approved.` / `deploy dashboard approved.` | — | 1회 |
 | 마이그레이션 | `migration <id> apply approved.` | — | 1건 |
