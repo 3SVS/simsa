@@ -31,6 +31,8 @@ export type DbProject = {
   acquisition: unknown;
   /** SI 티어 A1: T0 개발 지시서(dev_spec_json). 없으면 null. */
   devSpec: unknown;
+  /** C4a (0069): 생성 시점 국가 코드(ISO-3166, request.cf.country). capture-once. null = 미기록. */
+  regionAtCreate: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -77,6 +79,8 @@ export async function upsertProject(
     entryPath?: string | null;
     topicTags?: unknown;
     acquisition?: unknown;
+    /** C4a (0069): 생성 요청의 국가 코드. 재저장은 덮어쓰지 않는다(capture-once, COALESCE). */
+    regionAtCreate?: string | null;
   },
 ): Promise<string> {
   const id = input.id ?? randId("wsp");
@@ -93,8 +97,8 @@ export async function upsertProject(
   // must never erase them. An explicit non-null value still overwrites.
   await env.DB.prepare(
     `INSERT INTO workspace_projects
-       (id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, topic_tags_json, acquisition_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, topic_tags_json, acquisition_json, region_at_create, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET
        title = excluded.title,
        idea = excluded.idea,
@@ -109,6 +113,7 @@ export async function upsertProject(
        acquisition_json = CASE
          WHEN excluded.acquisition_json IS NULL OR excluded.acquisition_json = 'null'
          THEN workspace_projects.acquisition_json ELSE excluded.acquisition_json END,
+       region_at_create = COALESCE(workspace_projects.region_at_create, excluded.region_at_create),
        updated_at = excluded.updated_at
      WHERE workspace_projects.user_key = excluded.user_key`,
   )
@@ -124,6 +129,7 @@ export async function upsertProject(
       input.entryPath ?? null,
       JSON.stringify(input.topicTags ?? null),
       JSON.stringify(input.acquisition ?? null),
+      input.regionAtCreate ?? null,
       now,
       now,
     )
@@ -133,7 +139,7 @@ export async function upsertProject(
 
 export async function getProject(env: Env, id: string): Promise<DbProject | null> {
   const row = await env.DB.prepare(
-    `SELECT id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, topic_tags_json, acquisition_json, dev_spec_json, created_at, updated_at
+    `SELECT id, user_key, title, idea, understood_json, product_spec_json, items_json, built_with_json, entry_path, topic_tags_json, acquisition_json, dev_spec_json, region_at_create, created_at, updated_at
      FROM workspace_projects WHERE id = ?`,
   )
     .bind(id)
@@ -150,6 +156,7 @@ export async function getProject(env: Env, id: string): Promise<DbProject | null
       topic_tags_json: string | null;
       acquisition_json: string | null;
       dev_spec_json: string | null;
+      region_at_create: string | null;
       created_at: string;
       updated_at: string;
     }>();
@@ -167,6 +174,7 @@ export async function getProject(env: Env, id: string): Promise<DbProject | null
     topicTags: safeJson(row.topic_tags_json ?? "null"),
     acquisition: safeJson(row.acquisition_json ?? "null"),
     devSpec: row.dev_spec_json ? safeJson(row.dev_spec_json) : null,
+    regionAtCreate: typeof row.region_at_create === "string" && row.region_at_create ? row.region_at_create : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

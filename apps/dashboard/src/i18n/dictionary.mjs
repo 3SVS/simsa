@@ -2386,6 +2386,49 @@ const EN = {
     copyPrompt: "Copy fix instructions",
     copied: "Copied",
     noPrompt: "This run has no agent fix instructions attached.",
+    // Train C — C2b (contract 3): a paste-ready block for chat builders. The
+    // copy names no vendor (beginner-terms audit) — "the tool that built this app".
+    fixPrompt: {
+      // Names no button: this card also renders in repair mode, where the
+      // re-check button is labelled differently (PR #552 검증 P2).
+      builderBody:
+        "Copy the fix instructions below and paste them into the chat of the tool that built this app. Once the tool has applied the change and published it, run another check to see the result.",
+      copyBuilder: "Paste into your builder's chat",
+      showCli: "Show the version for coding tools",
+      showBuilder: "Show the version for your builder's chat",
+    },
+    // Train C — C2b (contract 2, D-19 north star): the human acceptance label.
+    // Four answers, no score. Re-answering overwrites. The hint promises only what
+    // the code does (the answer is stored with the run) — nothing reads it back to
+    // change later checks yet (PR #552 검증 P2, honest copy).
+    userVerdict: {
+      title: "How did this result land for you?",
+      hint: "Tell us what you saw when you tried the app yourself. Your answer is kept with this check's result.",
+      options: {
+        as_intended: "It works the way I meant",
+        works_but_different: "It works, but not the way I meant",
+        still_broken: "It still doesn't work",
+        unsure: "I'm not sure",
+      },
+      saving: "Saving…",
+      saved: "Saved. You can change your answer anytime.",
+      saveError: "We couldn't save your answer. Please try again in a moment.",
+      // The route is not on the server that answered (older deployment) — a
+      // permanent condition, not a moment to wait out.
+      saveUnavailable: "Answers can't be saved here yet. Once this is ready, you'll be able to answer right here.",
+    },
+    // Train C — C2a (D-17 amend): address-only apps get this instead of the
+    // repair button. Connecting code is an optional sentence, never a gate.
+    builderPaste: {
+      title: "Fix it in the tool that built this app",
+      body: "No code is connected to this project, so the fix happens in the tool that built the app. Two steps and you're done.",
+      step1: "Copy the fix instructions below and paste them into that tool's chat.",
+      step2: "Once the tool has published its change, come back here and press \"Check again\" to see the result.",
+      recheckButton: "Check again",
+      // "your code", not "a repository" — this card is the beginner default path (PR #552 검증 P2).
+      repoOptional: "If you like, you can also connect your code so Simsa can fix things automatically.",
+      repoOptionalLink: "Connect",
+    },
     nextStepsTitle: "Next steps",
     notesTitle: "Notes",
     // Stage 264 — one-click inspection run + status polling.
@@ -5078,6 +5121,47 @@ const KO = {
     copyPrompt: "고침 지시 복사",
     copied: "복사됨",
     noPrompt: "이 검수에는 에이전트용 고침 지시가 없어요.",
+    // Train C — C2b (계약 3): 채팅형 빌더에 그대로 붙이는 한 덩어리. 도구 이름을
+    // 부르지 않는다(초보자 금칙어 감사) — "이 앱을 만든 도구".
+    fixPrompt: {
+      // 버튼 이름을 부르지 않는다 — 이 카드는 수리 모드에서도 뜨고, 그 화면의 재검수 버튼
+      // 이름은 다르다(PR #552 검증 P2).
+      builderBody:
+        "아래 고침 지시를 복사해서, 이 앱을 만든 도구의 채팅창에 그대로 붙여넣으세요. 도구가 고친 내용을 게시한 뒤 다시 검수하면 결과를 볼 수 있어요.",
+      copyBuilder: "빌더 채팅에 붙여넣기",
+      showCli: "코딩 도구용 지시 보기",
+      showBuilder: "빌더 채팅용 지시 보기",
+    },
+    // Train C — C2b (계약 2, D-19 북극성): 사람 수용 라벨. 네 답, 점수 없음. 다시 답하면 덮어써요.
+    // hint는 코드가 실제로 하는 것(런에 함께 기록)만 약속한다 — 아직 이 값을 읽어 다음 검수를
+    // 바꾸는 코드는 없다(PR #552 검증 P2, 정직 카피).
+    userVerdict: {
+      title: "이번 결과, 어떠셨어요?",
+      hint: "직접 써 보신 결과를 알려주세요. 이 검수 결과와 함께 기록돼요.",
+      options: {
+        as_intended: "생각대로 됐어요",
+        works_but_different: "되긴 하는데 달라요",
+        still_broken: "아직 안 돼요",
+        unsure: "모르겠어요",
+      },
+      saving: "저장하는 중이에요…",
+      saved: "답을 저장했어요. 언제든 바꿀 수 있어요.",
+      saveError: "답을 저장하지 못했어요. 잠시 뒤 다시 눌러주세요.",
+      // 응답한 서버에 이 기능이 없다(옛 배포) — 잠시 기다려 풀리는 일이 아니다.
+      saveUnavailable: "지금은 답을 저장할 수 없어요. 준비되면 여기서 바로 답할 수 있어요.",
+    },
+    // Train C — C2a (D-17 amend): 주소만 있는 앱에는 고치기 버튼 대신 이 안내.
+    // 코드 연결은 선택 문구로만, 관문이 아니다.
+    builderPaste: {
+      title: "이 앱을 만든 도구로 고치기",
+      body: "이 프로젝트에는 코드가 연결돼 있지 않아서, 고침은 앱을 만든 도구에서 하시면 돼요. 두 단계면 끝나요.",
+      step1: "아래 고침 지시를 복사해 그 도구의 채팅창에 붙여넣으세요.",
+      step2: "도구가 고친 내용을 게시하면, 여기로 돌아와 '다시 확인'을 눌러 결과를 봐요.",
+      recheckButton: "다시 확인",
+      // '저장소'가 아니라 '코드' — 이 카드는 초보자 기본 경로다(PR #552 검증 P2).
+      repoOptional: "원하시면 코드를 연결해 자동으로 고칠 수도 있어요.",
+      repoOptionalLink: "연결하기",
+    },
     nextStepsTitle: "다음 단계",
     notesTitle: "참고",
     // Stage 264 — 원클릭 검수 실행 + 상태 폴링.

@@ -22,6 +22,42 @@ export function canRepair(check) {
 }
 
 /**
+ * Train C — C2a (재정렬 2026-09-27 §1 끊김 #4·#5, D-17 amend): which "make it
+ * work" entry the report shows.
+ *
+ *   "repair"        — canRepair AND a code repository is linked → the Stage 269
+ *                     "[고치기]" button (server repair job → PR → re-check loop).
+ *   "builder_paste" — canRepair but NO linked repository (address-only apps:
+ *                     Lovable / Bolt / v0 / Base44 …) → paste the builder prompt
+ *                     into the tool's chat, then "check again". Linking a repo is
+ *                     offered as an OPTIONAL sentence only — the default flow must
+ *                     not put an external-account CTA in front of a beginner.
+ *   "none"          — the run cannot be repaired at all (works, active, failed).
+ *
+ * `hasRepo` follows repo-settle.mjs: true = linked · false = confirmed none ·
+ * null/undefined = unknown (fetch failed). Unknown resolves to the beginner
+ * default (builder_paste) rather than the GitHub path — the optional sentence
+ * still leads a developer to the repair route, whereas the reverse would show
+ * a beginner a button that ends in "connect GitHub first".
+ *
+ * `opts.hasRepairJob` (PR #552 검증 P2): a repair job already exists for this
+ * run (queued / running / done / failed). Then the entry is "repair" whatever
+ * the repo fact says — before this, a failed or timed-out repo lookup (false /
+ * null) replaced the card with builder-paste and the job's progress and PR
+ * link vanished from the report. A job can only exist when a repository was
+ * linked, so this never shows a beginner the GitHub path by accident.
+ *
+ * @param {{ status?: unknown, works?: unknown } | null | undefined} check
+ * @param {boolean | null | undefined} hasRepo
+ * @param {{ hasRepairJob?: boolean }} [opts]
+ * @returns {"repair" | "builder_paste" | "none"}
+ */
+export function repairEntryMode(check, hasRepo, opts = {}) {
+  if (!canRepair(check)) return "none";
+  return hasRepo === true || opts?.hasRepairJob === true ? "repair" : "builder_paste";
+}
+
+/**
  * A repair job is "active" only while the backend can still move it forward:
  * queued → running → done|failed. null (no job yet), terminal statuses and
  * unknown/legacy statuses are all inactive (defensive: never poll forever on

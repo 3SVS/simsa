@@ -26,8 +26,13 @@ const MAX_README_CHARS = 6000;
 const MAX_PAGE_CHARS = 4000;
 
 export type StackHint = {
-  /** stackProfile.hosting.id와 같은 어휘. 확신 없으면 넣지 않는다. */
-  hosting?: "vercel" | "netlify" | "builder_hosted";
+  /**
+   * stackProfile.hosting.id와 같은 어휘. 확신 없으면 넣지 않는다.
+   * C4a(재정렬 D-8 amend, detected_stack): 빌더가 호스팅해 주는 앱(lovable·bolt·replit·base44)은
+   * "어떤 도구로 만들었든"의 도구 축이므로 개별 이름으로 읽는다(집계 축). 소비자는 미지 id를
+   * 중립 처리한다(service-examples.ts).
+   */
+  hosting?: "vercel" | "netlify" | "builder_hosted" | "lovable" | "bolt" | "replit" | "base44";
   data?: "supabase" | "firebase";
   /** 감지된 프레임워크·도구 이름(표시용, 자유 문자열). */
   tools: string[];
@@ -113,11 +118,26 @@ export function hostingFromHeaders(headers: Headers, url: string): StackHint["ho
     const host = new URL(url).hostname.toLowerCase();
     if (host.endsWith(".vercel.app")) return "vercel";
     if (host.endsWith(".netlify.app")) return "netlify";
+    // C4a — 빌더 호스트. 등록 가능한 도메인의 **접미(레이블 경계)**로만 판정한다:
+    // `lovable.app.evil.example`은 lovable이 아니다.
+    for (const [suffix, hosting] of BUILDER_HOSTS) {
+      if (host === suffix || host.endsWith(`.${suffix}`)) return hosting;
+    }
   } catch {
     /* 주소가 이상하면 호스팅을 단정하지 않는다 */
   }
   return undefined;
 }
+
+/** 빌더가 자기 도메인으로 서빙하는 앱 주소 → 도구 이름. 벤더 공개 도메인만(추측 아님). */
+const BUILDER_HOSTS: ReadonlyArray<readonly [string, NonNullable<StackHint["hosting"]>]> = [
+  ["lovable.app", "lovable"],
+  ["lovableproject.com", "lovable"],
+  ["bolt.host", "bolt"],
+  ["replit.app", "replit"],
+  ["repl.co", "replit"],
+  ["base44.app", "base44"],
+];
 
 /** HTML에서 사람이 읽는 텍스트만 성기게 뽑는다. 파서를 들이지 않는다(Worker 예산). */
 export function textFromHtml(html: string): { title?: string; text: string } {

@@ -82,11 +82,13 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 실험 전 조정 가능, `[OPEN]`은 미결 + 재검토 트리거.
 
 ### D-1 [LOCKED] 제품 산출물 3티어 — T0는 항상 생산된다
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 기존 앱 문(안 됨·생각과 다름)의 최소 인도물 = "확인된 문제 + 수정 후 재확인 결과(user_verdict)". T0(inferred)는 판정 척도로 내부 생성하고 유저에게 문서 단계를 강요하지 않는다. T2 시작 조건 = "맞나요? 카드에서 확인한 must 항목 ≥1".
 - T0 개발 지시서 / T1 빌드 / T2 인도. **T0 없이는 T1·T2를 시작하지 않는다.**
 - 유저가 T1을 켜지 않아도 T0는 그 자체로 인도물이다(외부 개발사·유저 에디터에 그대로 줄 수 있어야 한다).
 - 기존 "빌더 팩"은 T0의 **렌더링 한 형태**로 흡수한다(별도 개념 폐지).
 
 ### D-2 [LOCKED] T0 스키마 — Zod로 정의하고 링크 무결성을 기계로 검사한다
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 추가만: `DevSpecMeta.provenance{ builtWith, entryPath, detectedStack, userConfirmedAcIds[] }`. 무결성 규칙 추가 — `source === "inferred"`이면 must AC는 `userConfirmedAcIds`에 있는 것만 must(출처 구분).
 `DevSpec` (D1 JSON 컬럼 + Zod, `apps/central-plane/src/workspace/dev-spec.ts` 신설):
 - `features[]` — `FR-001`… id·제목·설명·우선순위(must/should/could)
 - `acceptance[]` — `AC-001`… **Given/When/Then** 3필드·`featureId`·`verifiedBy: build|test|browser|human`
@@ -129,11 +131,13 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 - **호스팅 사업자 의무(파일럿 전 필수, Train B 스테이지):** 프로젝트별 킬스위치·신고 링크·요청 상한·금지 콘텐츠 규칙(피싱·스팸·성인)·자동 정지 로그. 없으면 `pilot start approved` 불가.
 
 ### D-7 [LOCKED] 달러 예산은 잡 시작 전에 결정되고 UI에 보인다
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** [PILOT] 수치 추가 — 검수·수리 라우트 유저당 일일 상한(검수 10/일·수리 5/일) + `INSPECTION_ENABLED`/`REPAIR_ENABLED` [vars] 킬스위치. BM 분석(#550 §1)이 확인한 build-loop 요청-모델 과금·pricing.ts 단가 결함은 이 결정의 집행 전제.
 - `build_jobs.budget_usd`·`spent_usd`(벤더 usage 로그 합산). 상한 도달 시 **현재 WBS 단계에서 정지·push·상태 `failed(budget)`**. 조용한 초과 없음.
 - 베타 일일 상한에 `builds/day` 추가(현행 검수 100·생성 20 옆에). 수리 워커도 같은 예산 계좌를 쓰도록 이관(현재 무예산 상태 해소).
 - `[PILOT]` 수치: 프로젝트당 T1 $10·T2 $5·일 3빌드. 과금 도입은 별도 결정(PRD §12 무료 유지 결정 존중).
 
 ### D-8 [LOCKED] 모든 T1·T2 실행은 acceptance 4중항을 남긴다 — 이것이 $500K의 사용처
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 기록 단위 = 4중항 + **맥락 봉투**(region·locale·content_lang·entry_path·built_with·detected_stack·topic_tags·acquisition, 스키마는 `training-store.ts EnvelopeInput` 그대로) + **사람 수용 라벨**(`finding_codes[]`·`user_verdict`·`resolved`). 검수 행(`workspace_visual_checks`)에 컬럼으로 존재해야 한다(0069, additive).
 - `(DevSpec, 빌드 증거, 검수 판정, 수정 diff)`를 training-store에 **기존 동의 정책 그대로**(opt-in, 익명 ID) 기록.
 - 목적: 생성기가 아니라 **판정기 자체화**(검수 판정·결함→수정 매핑 증류)의 코퍼스. 코퍼스 규모 임계 전에는 모델 학습 착수 금지 `[OPEN → D-13]`.
 
@@ -151,6 +155,7 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 - A 모드는 종전 후보(유저 Supabase 키 잡 수명 메모리 전달)를 D-16에 둔다.
 
 ### D-13 [OPEN] 판정 모델 자체화 착수 임계
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 주석 — 임계(4중항 ≥5,000 / 월 $2K)는 **모델 학습 착수**에만 적용. 집계·분석·프롬프트 튜닝은 첫 건부터.
 - 트리거: 4중항 코퍼스 ≥ 5,000건 **또는** 검수 벤더 비용이 월 $2K 초과. 그 전엔 착수 금지.
 
 ### D-14 [OPEN] T1 실행기 — 자체 agent-worker 루프 vs Claude Code/Codex CLI in-container
@@ -182,6 +187,7 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 - 유저가 Supabase를 안 붙이면 T1은 **DB 없는 범위까지만** 만들고 영수증에 "DB 필요 기능 N개 미구현(키 미연결)"로 정직하게 표기.
 
 ### D-17 [LOCKED] 기본 경로는 S, A는 "개발자 모드" 토글 — 초보자에게 계정을 요구하는 화면은 기본 흐름에 없다
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 기본 흐름의 첫 문을 세 개로 명시: "아이디어가 있어요 / 만든 앱이 안 돼요 / 만들었는데 생각과 달라요". 기존 앱 문에서만 "코드 연결(GitHub App 설치)"을 **선택 단계**로 허용 — 건너뛰면 빌더용 고침 지시 복사 → 재검수 → user_verdict 경로. 여정 감사 P0 검사를 J1(기존 앱)에도 적용.
 - 아이디어·기획서 갈래의 "만들기"는 **항상 S**. 설정 화면의 "개발자 모드"를 켠 유저에게만 A(내 GitHub·내 배포)가 보인다.
 - UI 규칙: 기본 흐름 어디에도 GitHub·Vercel·Supabase 단어가 나오지 않는다. 지시서 상세(ERD·API·WBS)는 "개발자용 보기"에 접힌다. 초보자 화면은 **"무엇을 만들지 · 화면 N개 · 저장하는 것 N가지 · 이번엔 안 만드는 것"** 4줄.
 - 여정 감사에 **"계정 요구 화면 0"** 검사를 추가한다(기본 흐름에서 외부 계정 CTA가 보이면 P0).
@@ -191,18 +197,21 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 - `[PILOT]` 호환 목록은 파일럿에서 실측 후 고정. 재검토 트리거: 가져오기 요청의 50% 이상이 비호환으로 거절될 때(Next.js on Workers 지원 검토).
 
 ### D-19 [LOCKED] 포지셔닝 = "독립 심사관 + 지시서 표준". T1 빌드는 초보자용 수단이지 정체성이 아니다
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 포지셔닝에 "어떤 도구로 만들었든, 안 되거나 생각과 다른 앱을 되게 만들고 그 결과를 독립적으로 확인해 준다" 추가. **북극성 = 접수 건 중 `user_verdict = as_intended`로 닫힌 건수**(컨시어지 개입 0건 완주 수 병기). 영수증은 "수리 diff"와 "재검수 증거"를 별도 섹션으로(고친 주체 ≠ 판정 주체). B 우선순위 문장 "T0·T2 품질 → S 빌드"는 "세 문 공통 엔진 → 문별 인도 경로"로.
 *(2026-09-24 시장 조사 `docs/simsa-market-research-2026-09-24.md` 반영)*
 - 실브라우저 검증·계정 0 호스팅은 2026년 표준(Replit Agent 3·Lovable Cloud·Base44 Testing Agent). 차별은 **형식 수용 기준(FR↔AC↔화면↔테스트)에 대조해 판정하고 영수증을 내는 것**뿐이며, 빌더는 구조적으로 자기 산출물을 심사하지 못한다.
 - 따라서 **북극성 지표 = 영수증 발급 수**(빌드 수 아님). 랜딩·지원서·영수증 카피는 "만들어 주고"보다 "기획대로 됐는지 **독립적으로** 확인해 준다"를 앞세운다. T1(S 모드 빌드)은 "검수받을 대상이 없는 초보자에게 대상을 만들어 주는 수단"으로 설명한다.
 - Train B 착수 요청 시 이 문장을 인용한다. B의 우선순위는 **T0·T2 품질 → S 빌드**.
 
 ### D-20 [LOCKED] 로컬 수용 기준 팩 — KR 먼저, 같은 형식으로 JP·TH·VN·ID
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 주석 — "한국 증거 전 확장 금지"는 로컬 팩 **출하**에만. region·locale 수집과 나라별 집계는 첫 건부터 전 지역(그것이 JP·SEA 순서를 정하는 증거).
 - 글로벌 빌더의 현지화는 UI 번역 수준이고 **실패 지점은 로컬**이다: 결제(토스·PromptPay·GCash·PIX)·본인확인·법정 표기(통신판매업·개인정보처리방침)·문자 체계(한글 IME·태국어·일본어)·모바일 웹 비중.
 - `DevSpec.nonFunctional`과 `testPlan`에 **로컬 팩**(`locale-pack: kr`)이 결정론으로 주입할 수 있는 AC 템플릿을 둔다. 팩 = 데이터 파일(코드 아님) + 감지 규칙(예: 결제 언급 → 토스 AC 추가).
 - 순서: KR 팩(파일럿) → 실측으로 항목 확정 → JP → SEA(3SVS 발판). **한국 증거 전 확장 금지.**
 - 투자자 문장: "영어가 모국어가 아닌 세계 80%를 위한 AI 결과물 심사 레이어."
 
 ### D-21 [LOCKED] 데이터는 "판다"가 아니라 "벤치마크 → 평가 → 라이선스" 순서. 동의·보상 먼저
+> **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** 순서 앞에 ⓪ "내부 활용: 나라·도구·유형별 실패 지도 → 수리 프롬프트·로컬 팩 개선(첫 건부터)". 동의 두 층: ⓐ **비식별 운영 메타**(ISO-3166 국가 코드만·locale·built_with·topic_tags·entry_path·finding_codes·user_verdict·resolved)는 개인정보처리방침 고지 후 운영 D1에 기록·집계 / ⓑ **내용 데이터**(의도 원문·diff·스크린샷)는 opt-in 유지. 법률 판단은 [미확인] — BM 결정 ⑥(대칭 opt-in + 비EU 보너스, #550 §9)과 정합.
 - 팔리는 것은 로그가 아니라 **검증된 4중항**(지시서·빌드 증거·검수 판정·수정)이다(D-8). 랩이 못 만드는 것은 실제 비개발자 의도+실패+검증된 해결+사람 수용 판정이 한 줄로 묶인 데이터.
 - 순서 고정: ① **공개 벤치마크**("한국 비개발자 기획 N건 × 빌더 5개 → AC 통과율") ② **평가 서비스**(벤더 신모델을 우리 코퍼스로 돌린 리포트) ③ **데이터 라이선스**(동의된 4중항, 익명화). ③은 규모가 된 뒤 마지막.
 - 전제: 랜딩 약속("Your work stays in your browser")과 충돌하지 않게 **opt-in 유지·익명 ID·보상(크레딧)·개인정보 마스킹**을 D-8 기록 경로에 코드로 둔다. 몰래 쌓지 않는다.
@@ -247,16 +256,20 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | B7 | **호스팅 사업자 의무(D-6)**: 프로젝트 킬스위치·신고 링크·요청 상한·금지 콘텐츠 규칙·정지 로그 | 관리자 1클릭 정지 → 주소 즉시 410 |
 | B8 | 대시보드: "만들기" 버튼(S 기본)·잡 진행 화면·내 앱 주소 카드·zip 다운로드·개발자 모드 토글(D-17) EN/KO | journey-audit 신규 여정 J6 + "계정 요구 화면 0" 검사, P0=P1=0 |
 | B9 | **"내 GitHub로 가져가기"**(저장소 이전 + D1 SQL 덤프 동봉) + T0 지시서에 이전 안내 | 테스트 계정으로 이전 라운드트립 |
-| B10 | 파일럿: 실기획 3건(한글 리얼 입력) T0→T1→S 배포 완주 | 3건 중 배포 green 수·실패 사유 표, 정답지 선기록 |
+| B10 | 파일럿 **[amend 2026-09-27]**: Bae 아이디어 20개 중 6건 — (a) 3건 T0→T1→S 배포 완주 + (b)(c) 3건은 같은 아이디어를 Lovable/v0/Bolt로 만들어 안 되는/다른 앱을 준비한 뒤 검수→수리→재검수→user_verdict 완주. 정답지 선기록 유지. (원문: 실기획 3건 T0→T1→S) | 6건의 user_verdict 분포·6축 채움률·기계 판정 vs 사람 라벨 일치율·문별 소요 시간·비용 |
 | B11 | "이미 만든 앱" 갈래: 수리 워커에 D-4 빌드 검증 적용 + D-18 호환 판정·가져오기 | 비호환 저장소가 이유와 함께 A 모드로 안내됨 |
 
-### Train C — T2 인도 (B5 후)
+### Train C — T2 인도 · 기존 앱 문 (b)(c) 인도 경로 **[amend 2026-09-27 — reopen, 기존 앱 문에 한해 B5 의존 해제]**
 | # | 스테이지 | 완료 조건 |
 |---|---|---|
-| C1 | 컨테이너 프리뷰 서빙(Worker 경유 임시 URL, 잡 종료 시 소멸) | 외부에서 200 + 내용 확인 |
-| C2 | AC 기반 검수(A5 재사용) → 수리 워커(기존) → 재검수 루프, 예산 공유 | 픽스처 결함 1건이 find→fix→verify 자동 완주 |
-| C3 | 영수증(receipt): must AC 표·미검증·"프로덕션 아님"·다음 행동(유저 배포 안내) EN/KO | `assertNoNumericScores` 통과 |
-| C4 | 4중항 코퍼스 기록(D-8) + 관리자 집계 | 파일럿 3건이 training-store에 적재 |
+| C0 | 공통 엔진 정합 (재정렬 W1 항목 1·6): 재검수가 원 intent·acceptancePlan 유지 + `source_check_id`; 의도 확정 카드 confirm → D1 미러(`mirrorLocalProjectToDb`) → 확정 oneLine이 검수 intent 기본값 | 옛 코드 실패 테스트 + 라이브 재검수 intent 동일(D1) + 한글 의도 3건 |
+| C2b | **주소만 앱** 경로 (W1 항목 7·8): 빌더용 고침 지시(`web_builder`, 채팅창 1덩어리, built_with가 lovable/bolt/v0/replit이면 기본) + `POST …/visual-checks/:runId/verdict`(user_verdict 4값) + 리포트 하단 1탭 | KO/EN 스냅샷 + 라이브 리포트 기본 노출 + **실제 Lovable 프로젝트 1건 붙여넣기→Publish→재검수 왕복 실측** + verdict D1 저장·재열람 유지 |
+| C2a | **코드 연결 앱** 경로: 수리 진입 완화(공개 저장소 OAuth 없음 → App 설치 토큰 폴백, D-15 범위 내) + verify-sweep에 acceptancePlan 전달 + `repair_jobs.resolved` 기록 + 주소만 유저에게 "고치기" 대신 C2b 안내(D-17) | 라이브 수리 잡 1건 + 자동 재검수 resolved ≥1 + 옛 코드 실패 테스트 |
+| C1 | 컨테이너 프리뷰 서빙(Worker 경유 임시 URL) — **기존 앱 문에 불필요, 문 (a) T1과 함께 B5 뒤로** | 외부에서 200 + 내용 확인 |
+| C3 | 영수증(receipt): must AC 표·미검증·"프로덕션 아님"·**수리 diff 섹션 ≠ 재검수 증거 섹션**(D-19 amend)·다음 행동 EN/KO | `assertNoNumericScores` 통과 |
+| C4 | 4중항 코퍼스 기록(D-8 amend: 봉투+라벨) + 관리자 집계 `GET /admin/moat-stats` JSON | 파일럿 6건이 training-store·검수 행에 적재, 6축 채움률 |
+
+원문(2026-09-24): C1 프리뷰 → C2 AC 검수→수리→재검수 루프 → C3 영수증 → C4 코퍼스. 재정렬로 C2를 C2a/C2b로 갈라 B5 의존을 풀고 C0을 앞세웠다.
 
 ### Train Y — YC / a16z 제출물 — **보류** (Bae 2026-09-24 "지원서는 일단 생각하지 말고 개발부터")
 > 개발 트레인 A·B·C가 우선. Y는 B8(파일럿) 뒤에 재개하며, 그전까지 어떤 스테이지도 열지 않는다. 아래는 기록용.
@@ -315,7 +328,10 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | 머지·배포 (집행) | `PR #530 merge approved.` `deploy central-plane approved.` | 2026-09-24 오전 (Bae) | #530 `f09e99c` · central run 35951724360 success · 기획 3 en 422→200 실측 |
 | N1~N3·N2 PR | — | 2026-09-24 | #522 · #523 (Train N 에이전트) |
 | Train B 착수 | `train B start approved` | 2026-09-24 오후 (Bae) | B1~B11 코드 작성만. B1 = PR(SimsaBuilder 컨테이너·BUILDER 바인딩·자가점검 프로브) |
-| Train C 착수 | `train C start approved` | — | C1~C4 코드 작성만 |
+| 설계 잠금 3차 (재정렬) | `design lock approved`(재정렬) | 2026-09-27 (Bae) | D-1·D-2·D-7·D-8·D-13·D-17·D-19·D-20·D-21 amend 발효(문안 `docs/simsa-vision-realignment-2026-09-27.md` §2, PR #549) · Train C reopen(C0·C2a·C2b) · B10 정의 교체. D-4·D-15 keep |
+| Train C 착수 | `train C start approved` | 2026-09-27 (Bae) | C0·C2a·C2b·C3·C4 코드 작성만(머지·배포·마이그레이션 적용 아님). C1은 B5 뒤 |
+| C0·C2a·C2b·C4a 코드 완료 | — | 2026-09-27 | PR #553(central-plane, 0069 포함) · #552(dashboard). 3렌즈 검증에서 P0 1건(App 토큰 폴백 cross-tenant) 머지 전 수정. 머지·0068/0069 적용·배포는 대기 |
+| 머지·마이그레이션·배포 (집행) | `PR #548 merge approved.` `PR #553 merge approved.` `migration 0068 apply approved.` `migration 0069 apply approved.` `deploy central-plane approved.` `PR #552 merge approved.` `deploy dashboard approved.` | 2026-09-27 새벽 (Bae) | #548 `e82f12e` · #553 `74b7e2f` · run 36284522877(0068·0069 ✅, 게이트 ok, Version 31864bcf) · #552 `1102c10` · dashboard `5lz22z9s6` Ready. 라이브: 새 라우트 400·청크에 새 카피 확인 |
 | 머지 | `PR #N merge approved.` | — | 해당 PR |
 | 배포 | `deploy central-plane approved.` / `deploy dashboard approved.` | — | 1회 |
 | 마이그레이션 | `migration <id> apply approved.` | — | 1건 |
@@ -364,6 +380,10 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 ---
 
 ## 9. 진행 로그
+
+### 2026-09-27 — 재정렬 design lock + Train C 착수
+- `design lock approved`(재정렬)·`train C start approved`(Bae). 근거 문서 #549(재정렬)·#550(BM). 열린 코드 PR #548(B5a)·#551(OpenAI 블록).
+- 착수 순서: C0(재검수 intent 유지·의도 확정→D1) → C2b(web_builder 고침 지시·user_verdict) → C2a(수리 진입 완화·verify-sweep AC·resolved). 0069(봉투 컬럼)는 #548 머지 뒤 번호 확정, `migration 0069 apply approved.` 별도.
 
 ### 2026-09-24 오후 — Train B 착수 (B1)
 - `train B start approved`(Bae). **B1 코드**: `builder-container/`(Dockerfile playwright 베이스 + pnpm·git·gh·wrangler, server.mjs `/health`·`/selfcheck`·`POST /run`, builder-run.mjs 자가점검·상태 머신 상수·미구현 kind 정직 실패) · `src/builder-container.ts`(SimsaBuilder, sleepAfter 50m) · wrangler `[[containers]]` standard/max 5 + `BUILDER` + `v3-builder` · `GET /internal/builder/selfcheck`(관측 토큰) · 불변식 9 + 단위 13 테스트. `container-images.yml`(PR에서 이미지 빌드 + 빌더 /selfcheck 스모크 — 노트북 Docker 없음). **라이브 0** — 배포 승인 후 `/internal/builder/selfcheck`로 "30초 내 pnpm -v" 실측.

@@ -18,6 +18,7 @@ import { generateIdeaToSpecDraft, toClientDraft, type IdeaToSpecDraftRequest } f
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { classifyTopics } from "../workspace/topic-tags.js";
+import { regionFromRequest } from "../workspace/envelope.js";
 import {
   generateCheckDraft,
   normalizeProductSpec,
@@ -424,6 +425,9 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         entryPath,
         topicTags,
         acquisition,
+        // C4a (0069, 재정렬 D-20 amend): 나라별 집계는 첫 건부터 전 지역 — 생성 시점 국가
+        // 코드를 capture-once로 찍는다(재저장은 COALESCE로 원값 유지).
+        regionAtCreate: regionFromRequest(c.req.raw),
       });
       return new Response(JSON.stringify({ ok: true, id }), { status: 200, headers: { "content-type": "application/json", ...headers } });
     } catch (err) {

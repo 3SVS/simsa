@@ -2230,6 +2230,35 @@ export type Dictionary = {
     copyPrompt: string;
     copied: string;
     noPrompt: string;
+    fixPrompt: {
+      builderBody: string;
+      copyBuilder: string;
+      showCli: string;
+      showBuilder: string;
+    };
+    userVerdict: {
+      title: string;
+      hint: string;
+      options: {
+        as_intended: string;
+        works_but_different: string;
+        still_broken: string;
+        unsure: string;
+      };
+      saving: string;
+      saved: string;
+      saveError: string;
+      saveUnavailable: string;
+    };
+    builderPaste: {
+      title: string;
+      body: string;
+      step1: string;
+      step2: string;
+      recheckButton: string;
+      repoOptional: string;
+      repoOptionalLink: string;
+    };
     nextStepsTitle: string;
     notesTitle: string;
     runTitle: string;
