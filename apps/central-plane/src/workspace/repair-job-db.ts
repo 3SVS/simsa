@@ -32,6 +32,12 @@ export type DbRepairJob = {
   /** Stage 270 — number of code files the worker actually changed (auto_fix). */
   changedFiles?: number;
   error?: string;
+  /** 0069 (C4a): ISO-3166 국가 코드(수리 요청 시점). null = 미기록. */
+  region: string | null;
+  /** 0069 (C2a): verify-sweep이 이 수리 뒤에 디스패치한 재검수 런 id. null = 아직/없음. */
+  verifyCheckId: string | null;
+  /** 0069 (C2a): 재검수 결과 — true(works) · false(broken) · null(판정 불가/미완). */
+  resolved: boolean | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -50,13 +56,17 @@ type RawRow = {
   mode: string | null;
   changed_files: number | null;
   error: string | null;
+  region: string | null;
+  verify_check_id: string | null;
+  resolved: number | null;
   created_at: string;
   updated_at: string;
 };
 
 const SELECT_COLS =
   `id, project_id, user_key, visual_check_id, repo_full_name, status,
-   branch_name, pr_url, pr_number, env_cause, mode, changed_files, error, created_at, updated_at`;
+   branch_name, pr_url, pr_number, env_cause, mode, changed_files, error,
+   region, verify_check_id, resolved, created_at, updated_at`;
 
 function randId(): string {
   const ts = Date.now().toString(36).slice(-6);
@@ -79,6 +89,9 @@ function fromRow(row: RawRow): DbRepairJob {
     mode: row.mode === "auto_fix" || row.mode === "brief_only" ? row.mode : undefined,
     changedFiles: typeof row.changed_files === "number" ? row.changed_files : undefined,
     error: row.error ?? undefined,
+    region: typeof row.region === "string" && row.region ? row.region : null,
+    verifyCheckId: typeof row.verify_check_id === "string" && row.verify_check_id ? row.verify_check_id : null,
+    resolved: row.resolved === 1 ? true : row.resolved === 0 ? false : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -93,6 +106,8 @@ export async function insertQueuedRepairJob(
     repoFullName: string;
     branchName: string;
     envCause: boolean;
+    /** 0069: request.cf.country at repair time. */
+    region?: string | null;
     now?: string;
   },
 ): Promise<DbRepairJob> {
@@ -101,8 +116,8 @@ export async function insertQueuedRepairJob(
   await env.DB.prepare(
     `INSERT INTO workspace_repair_jobs
        (id, project_id, user_key, visual_check_id, repo_full_name,
-        status, branch_name, pr_url, pr_number, env_cause, error, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'queued', ?, NULL, NULL, ?, NULL, ?, ?)`,
+        status, branch_name, pr_url, pr_number, env_cause, error, region, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'queued', ?, NULL, NULL, ?, NULL, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -112,6 +127,7 @@ export async function insertQueuedRepairJob(
       input.repoFullName,
       input.branchName,
       input.envCause ? 1 : 0,
+      input.region ?? null,
       now,
       now,
     )
@@ -125,9 +141,46 @@ export async function insertQueuedRepairJob(
     status: "queued",
     branchName: input.branchName,
     envCause: input.envCause,
+    region: input.region ?? null,
+    verifyCheckId: null,
+    resolved: null,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * C2a (0069) — link the repair to the re-inspection run verify-sweep dispatched
+ * after its PR merged. Leaves updated_at alone (stuck-sweep clock; the job is
+ * already terminal here).
+ */
+export async function setRepairJobVerifyCheck(env: Env, id: string, verifyCheckId: string): Promise<boolean> {
+  const res = await env.DB.prepare(
+    `UPDATE workspace_repair_jobs SET verify_check_id = ? WHERE id = ?`,
+  )
+    .bind(verifyCheckId, id)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+/**
+ * C2a (0069) — the re-inspection finished: works===true → resolved=1,
+ * works===false → 0, null (not verified) → leave NULL (never claim). Returns the
+ * number of repair jobs that pointed at this verify run (0 when none — e.g. a
+ * C2b builder-fix recheck has no repair job).
+ */
+export async function resolveRepairJobsByVerifyCheck(
+  env: Env,
+  verifyCheckId: string,
+  works: boolean | null,
+): Promise<number> {
+  if (works === null) return 0;
+  const res = await env.DB.prepare(
+    `UPDATE workspace_repair_jobs SET resolved = ? WHERE verify_check_id = ?`,
+  )
+    .bind(works ? 1 : 0, verifyCheckId)
+    .run();
+  return res.meta?.changes ?? 0;
 }
 
 export async function getRepairJobById(env: Env, id: string): Promise<DbRepairJob | null> {

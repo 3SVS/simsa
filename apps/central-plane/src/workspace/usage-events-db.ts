@@ -20,7 +20,10 @@ export type UsageEventType =
   | "workspace_telegram_notification_sent"
   | "workspace_telegram_notification_error"
   | "workspace_email_notification_sent"
-  | "workspace_email_notification_error";
+  | "workspace_email_notification_error"
+  // Train C · C2b (재정렬 D-19 amend): 북극성 계측 — 사람 수용 라벨 + 고침 지시 복사.
+  | "workspace_visual_check_verdict"
+  | "workspace_fix_prompt_copied";
 
 function randId(): string {
   const ts = Date.now().toString(36).slice(-6);

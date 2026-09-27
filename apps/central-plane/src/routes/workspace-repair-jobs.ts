@@ -41,7 +41,8 @@ import { getProject } from "../workspace/db.js";
 import { getVisualCheckById, type DbVisualCheck } from "../workspace/visual-check-db.js";
 import { getProjectRepo } from "../workspace/github-db.js";
 import { listProjectSources } from "../workspace/project-sources-db.js";
-import { resolveRepoAccessToken } from "../workspace/github-app-access.js";
+import { getAppInstallationToken, resolveRepoAccessToken } from "../workspace/github-app-access.js";
+import { regionFromRequest } from "../workspace/envelope.js";
 import type { FetchLike } from "../github.js";
 import {
   findActiveRepairJobForRun,
@@ -111,10 +112,32 @@ function repairJobView(job: DbRepairJob) {
     mode: job.mode ?? null,
     changedFiles: job.changedFiles ?? null,
     error: job.error ?? null,
+    // Train C · C2a (0069): the re-inspection verify-sweep dispatched after the
+    // PR merged, and its outcome (true/false; null = not verified yet/at all).
+    verifyCheckId: job.verifyCheckId,
+    resolved: job.resolved,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
 }
+
+/**
+ * Reader-facing messages for the two "cannot start" answers, EN/KO. The
+ * dashboard shows these verbatim, so an EN reader must not get Korean
+ * (재정렬 §1 끊김 5: 하드코딩 한국어). Wording deliberately avoids developer
+ * vocabulary for the repo case — the dashboard's default flow shows the C2b
+ * path (paste into your builder's chat) instead of a "connect" CTA (D-17 amend).
+ */
+const REPAIR_ENTRY_MESSAGES = {
+  ko: {
+    repoRequired: "이 프로젝트에 연결된 코드가 없어요. 빌더 채팅에 고침 지시를 붙여넣어 고친 뒤 '다시 확인'을 눌러 주세요. 코드를 연결하면 Simsa가 직접 고쳐 볼 수도 있어요.",
+    tokenRequired: "GitHub 계정 연결이 필요해요. 설정에서 GitHub을 다시 연결해 주세요.",
+  },
+  en: {
+    repoRequired: "This project has no code connected. Paste the fix instructions into your builder's chat, then press 'Check again'. If you connect your code, Simsa can also try the fix for you.",
+    tokenRequired: "A GitHub account connection is needed. Please reconnect GitHub in Settings.",
+  },
+} as const;
 
 /**
  * Dispatch the queued repair into the ConclaveSandbox container DO as a
@@ -271,15 +294,9 @@ export function createWorkspaceRepairJobRoutes(
         }
       }
     }
+    const messages = REPAIR_ENTRY_MESSAGES[locale];
     if (!repoFullName) {
-      return c.json(
-        {
-          ok: false,
-          error: "github_repo_required",
-          message: "연결된 GitHub 저장소가 없어요. 프로젝트 설정에서 저장소를 먼저 연결해 주세요.",
-        },
-        400,
-      );
+      return c.json({ ok: false, error: "github_repo_required", message: messages.repoRequired }, 400);
     }
 
     // Resolve the token that can actually SEE the repo. Public repos keep the
@@ -288,11 +305,7 @@ export function createWorkspaceRepairJobRoutes(
     // GitHub App installation token when the App is installed there
     // (github-app-access.ts) — before this, private repos always died in the
     // container with a clone 403 (실측 2026-07-19, simsa-autofix-test).
-    const tokenRequired = {
-      ok: false,
-      error: "github_token_required",
-      message: "GitHub 계정 연결이 필요해요. 설정에서 GitHub을 다시 연결해 주세요.",
-    };
+    const tokenRequired = { ok: false, error: "github_token_required", message: messages.tokenRequired };
     const slash = repoFullName.indexOf("/");
     const repoOwner = repoFullName.slice(0, slash);
     const repoName = repoFullName.slice(slash + 1);
@@ -302,10 +315,35 @@ export function createWorkspaceRepairJobRoutes(
       // repoPrivate:false is the documented fast path for that.
       repoPrivate: projectRepo ? projectRepo.private : false,
     });
-    if (!access.ok) {
+    let githubToken: string;
+    if (access.ok) {
+      githubToken = access.token;
+    } else if (projectRepo) {
+      // Train C · C2a (재정렬 D-15 keep, D-17 amend): no OAuth connection (or an
+      // unusable one) must not be the end of the road when the GitHub App is
+      // installed on the repo — the App installation token can see it, and the
+      // App is exactly what the default flow offers as the OPTIONAL "connect your
+      // code" step. Still nothing here: then the old answer stands.
+      //
+      // ONLY for the LINKED repo (workspace_project_repos). That row exists only
+      // because this user, signed in to GitHub through OAuth, linked the repo
+      // (workspace-github.ts POST /workspace/projects/:id/repo → 401 without a
+      // connection). A `project_sources` github_repo row is a self-typed string:
+      // github-repo-ref.ts normalizes its FORMAT and nothing checks ownership
+      // ("관대하게 받되" — a normalizer, not a gate). Minting an App installation
+      // token for such a string would let anyone with no GitHub identity at all
+      // clone + push + open a PR on ANY repo that installed the Simsa App
+      // (PR #553 review P0, cross-tenant). The App can vouch for a repo; it
+      // cannot vouch for the requester — the link is what ties the two.
+      const appAccess = await getAppInstallationToken(c.env, repoOwner, repoName, fetchImpl);
+      if (!appAccess) return c.json(tokenRequired, 400);
+      githubToken = appAccess.token;
+    } else {
+      // Sources-only repo without a usable OAuth token: exactly the pre-C2a
+      // answer. No App lookup is attempted (nothing proves this user may touch
+      // that repo), so no installation token is ever minted for it.
       return c.json(tokenRequired, 400);
     }
-    const githubToken = access.token;
 
     // One active repair per run.
     const active = await findActiveRepairJobForRun(c.env, runId);
@@ -327,6 +365,8 @@ export function createWorkspaceRepairJobRoutes(
         repoFullName,
         branchName: branch,
         envCause,
+        // C4a (0069): country at repair time — the failure map's region axis.
+        region: regionFromRequest(c.req.raw),
       });
     } catch (err) {
       console.error("[repair-jobs POST] insert failed:", err);

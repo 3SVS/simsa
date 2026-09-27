@@ -294,6 +294,11 @@ export function createWorkspaceVisualChecksRoutes(): Hono<{ Bindings: Env }> {
         report,
         agentPrompt: owned.run.agentPrompt,
         evidenceKeys: owned.run.evidenceKeys,
+        // Train C (0069): human acceptance label + re-check lineage. null on
+        // legacy rows — never undefined, so the dashboard can branch on it.
+        userVerdict: owned.run.userVerdict,
+        userVerdictAt: owned.run.userVerdictAt,
+        sourceCheckId: owned.run.sourceCheckId,
         createdAt: owned.run.createdAt,
       },
     });

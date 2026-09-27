@@ -4,6 +4,10 @@
  * D1 persistence for Simsa visual completion-check runs. The full non-dev
  * report snapshot lives in report_json; screenshots/video live in R2 and their
  * keys are tracked in evidence_keys_json (appended as each file is uploaded).
+ *
+ * 0069 (Train C · C4a, 재정렬 D-8 amend) adds the moat envelope + human
+ * acceptance labels: region · envelope_json · finding_codes_json ·
+ * user_verdict(+at) · source_check_id. All nullable; legacy rows read as null.
  */
 import type { Env } from "../env.js";
 
@@ -12,6 +16,10 @@ export type VisualCheckStatus = (typeof VISUAL_CHECK_STATUSES)[number];
 
 export const VISUAL_CHECK_EXECUTORS = ["local", "container"] as const;
 export type VisualCheckExecutor = (typeof VISUAL_CHECK_EXECUTORS)[number];
+
+/** C2b (재정렬 D-19 amend): 사람 수용 라벨. 북극성 = as_intended로 닫힌 건수. */
+export const USER_VERDICTS = ["as_intended", "works_but_different", "still_broken", "unsure"] as const;
+export type UserVerdict = (typeof USER_VERDICTS)[number];
 
 export type DbVisualCheck = {
   id: string;
@@ -28,6 +36,17 @@ export type DbVisualCheck = {
   evidenceKeys: string[];
   /** 0065: 런을 만든 사용자의 언어. null = 레거시 행(ko 취급). */
   locale: "ko" | "en" | null;
+  /** 0069: ISO-3166 국가 코드(request.cf.country). null = 미기록. */
+  region: string | null;
+  /** 0069: 런 시점 프로젝트 봉투 스냅샷(JSON 문자열 그대로). null = 미기록. */
+  envelopeJson: string | null;
+  /** 0069: 완료 콜백의 report.findings[].code. null = 미기록(레거시 컨테이너), [] = 발견 0. */
+  findingCodes: string[] | null;
+  /** 0069: 사람 수용 라벨. null = 아직 안 남김. */
+  userVerdict: UserVerdict | null;
+  userVerdictAt: string | null;
+  /** 0069: 재검수의 원 런 id. null = 원 런. */
+  sourceCheckId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -40,6 +59,9 @@ export type VisualCheckListItem = {
   status: VisualCheckStatus;
   executor: VisualCheckExecutor;
   evidenceCount: number;
+  userVerdict: UserVerdict | null;
+  userVerdictAt: string | null;
+  sourceCheckId: string | null;
   createdAt: string;
 };
 
@@ -57,9 +79,20 @@ type RawRow = {
   agent_prompt: string | null;
   evidence_keys_json: string;
   locale: string | null;
+  region: string | null;
+  envelope_json: string | null;
+  finding_codes_json: string | null;
+  user_verdict: string | null;
+  user_verdict_at: string | null;
+  source_check_id: string | null;
   created_at: string;
   updated_at: string;
 };
+
+const SELECT_COLS = `id, project_id, user_key, target_url, intent, decision, works,
+            status, executor, report_json, agent_prompt, evidence_keys_json, locale,
+            region, envelope_json, finding_codes_json, user_verdict, user_verdict_at, source_check_id,
+            created_at, updated_at`;
 
 function randId(): string {
   const ts = Date.now().toString(36).slice(-6);
@@ -76,9 +109,28 @@ function parseKeys(json: string): string[] {
   }
 }
 
+/** finding_codes_json → string[] | null. null/미파싱 = "기록되지 않음"(빈 배열과 구분). */
+function parseCodes(json: string | null | undefined): string[] | null {
+  if (typeof json !== "string") return null;
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isUserVerdict(v: unknown): v is UserVerdict {
+  return typeof v === "string" && (USER_VERDICTS as readonly string[]).includes(v);
+}
+
 function worksFromDb(n: number | null): boolean | null {
   if (n === null) return null;
   return n === 1;
+}
+
+function nullableText(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
 }
 
 function fromRow(row: RawRow): DbVisualCheck {
@@ -96,6 +148,12 @@ function fromRow(row: RawRow): DbVisualCheck {
     agentPrompt: row.agent_prompt ?? undefined,
     evidenceKeys: parseKeys(row.evidence_keys_json),
     locale: row.locale === "en" ? "en" : row.locale === "ko" ? "ko" : null,
+    region: nullableText(row.region),
+    envelopeJson: nullableText(row.envelope_json),
+    findingCodes: parseCodes(row.finding_codes_json),
+    userVerdict: isUserVerdict(row.user_verdict) ? row.user_verdict : null,
+    userVerdictAt: nullableText(row.user_verdict_at),
+    sourceCheckId: nullableText(row.source_check_id),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -155,6 +213,12 @@ export async function insertVisualCheck(
     agentPrompt: input.agentPrompt,
     evidenceKeys: [],
     locale: input.locale ?? null,
+    region: null,
+    envelopeJson: null,
+    findingCodes: null,
+    userVerdict: null,
+    userVerdictAt: null,
+    sourceCheckId: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -162,8 +226,7 @@ export async function insertVisualCheck(
 
 export async function listVisualChecks(env: Env, projectId: string): Promise<VisualCheckListItem[]> {
   const res = await env.DB.prepare(
-    `SELECT id, project_id, user_key, target_url, intent, decision, works,
-            status, executor, report_json, agent_prompt, evidence_keys_json, locale, created_at, updated_at
+    `SELECT ${SELECT_COLS}
        FROM workspace_visual_checks
       WHERE project_id = ?
       ORDER BY created_at DESC
@@ -179,14 +242,16 @@ export async function listVisualChecks(env: Env, projectId: string): Promise<Vis
     status: row.status,
     executor: row.executor,
     evidenceCount: parseKeys(row.evidence_keys_json).length,
+    userVerdict: isUserVerdict(row.user_verdict) ? row.user_verdict : null,
+    userVerdictAt: nullableText(row.user_verdict_at),
+    sourceCheckId: nullableText(row.source_check_id),
     createdAt: row.created_at,
   }));
 }
 
 export async function getVisualCheckById(env: Env, id: string): Promise<DbVisualCheck | null> {
   const row = (await env.DB.prepare(
-    `SELECT id, project_id, user_key, target_url, intent, decision, works,
-            status, executor, report_json, agent_prompt, evidence_keys_json, locale, created_at, updated_at
+    `SELECT ${SELECT_COLS}
        FROM workspace_visual_checks
       WHERE id = ?`,
   )
@@ -200,6 +265,10 @@ export async function getVisualCheckById(env: Env, id: string): Promise<DbVisual
  * report/decision later via /internal/visual-check-done; until then the row
  * carries a placeholder report and a 'Not Judged' decision so list/detail
  * render consistently while the run is in flight.
+ *
+ * 0069: region · envelope_json · source_check_id are captured HERE (insert time)
+ * because that is when the request context (edge country) and the project
+ * snapshot are in hand; finding codes arrive with the done callback.
  */
 export async function insertQueuedVisualCheck(
   env: Env,
@@ -209,6 +278,9 @@ export async function insertQueuedVisualCheck(
     targetUrl: string;
     intent: string;
     locale?: "ko" | "en";
+    region?: string | null;
+    envelopeJson?: string | null;
+    sourceCheckId?: string | null;
     now?: string;
   },
 ): Promise<DbVisualCheck> {
@@ -217,10 +289,23 @@ export async function insertQueuedVisualCheck(
   await env.DB.prepare(
     `INSERT INTO workspace_visual_checks
        (id, project_id, user_key, target_url, intent, decision, works,
-        status, executor, report_json, agent_prompt, evidence_keys_json, locale, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'Not Judged', NULL, 'queued', 'container', '{}', NULL, '[]', ?, ?, ?)`,
+        status, executor, report_json, agent_prompt, evidence_keys_json, locale,
+        region, envelope_json, source_check_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'Not Judged', NULL, 'queued', 'container', '{}', NULL, '[]', ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, input.projectId, input.userKey, input.targetUrl, input.intent, input.locale ?? null, now, now)
+    .bind(
+      id,
+      input.projectId,
+      input.userKey,
+      input.targetUrl,
+      input.intent,
+      input.locale ?? null,
+      input.region ?? null,
+      input.envelopeJson ?? null,
+      input.sourceCheckId ?? null,
+      now,
+      now,
+    )
     .run();
   return {
     id,
@@ -235,6 +320,12 @@ export async function insertQueuedVisualCheck(
     reportJson: "{}",
     evidenceKeys: [],
     locale: input.locale ?? null,
+    region: input.region ?? null,
+    envelopeJson: input.envelopeJson ?? null,
+    findingCodes: null,
+    userVerdict: null,
+    userVerdictAt: null,
+    sourceCheckId: input.sourceCheckId ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -268,15 +359,19 @@ export async function markVisualCheckRunning(env: Env, id: string): Promise<bool
   return (res.meta?.changes ?? 0) > 0;
 }
 
-/** Stage 263 — terminal success: store the container's report + verdict. */
+/**
+ * Stage 263 — terminal success: store the container's report + verdict.
+ * 0069: `findingCodesJson` — JSON array of report.findings[].code; null when the
+ * container image predates finding codes (legacy), "[]" when nothing was found.
+ */
 export async function markVisualCheckDone(
   env: Env,
   id: string,
-  input: { decision: string; works: boolean | null; reportJson: string; agentPrompt?: string },
+  input: { decision: string; works: boolean | null; reportJson: string; agentPrompt?: string; findingCodesJson?: string | null },
 ): Promise<void> {
   await env.DB.prepare(
     `UPDATE workspace_visual_checks
-        SET status = 'done', decision = ?, works = ?, report_json = ?, agent_prompt = ?, updated_at = ?
+        SET status = 'done', decision = ?, works = ?, report_json = ?, agent_prompt = ?, finding_codes_json = ?, updated_at = ?
       WHERE id = ?`,
   )
     .bind(
@@ -284,6 +379,7 @@ export async function markVisualCheckDone(
       input.works === null ? null : input.works ? 1 : 0,
       input.reportJson,
       input.agentPrompt ?? null,
+      input.findingCodesJson ?? null,
       new Date().toISOString(),
       id,
     )
@@ -308,6 +404,27 @@ export async function markVisualCheckFailed(env: Env, id: string, error: string)
   )
     .bind(JSON.stringify({ error: truncated }), new Date().toISOString(), id)
     .run();
+}
+
+/**
+ * C2b (0069) — the human acceptance label. Resubmission overwrites (the latest
+ * word is the user's). Does NOT touch updated_at: that column is the stuck-sweep
+ * clock for in-flight runs and a verdict is only ever left on a finished one.
+ */
+export async function setVisualCheckUserVerdict(
+  env: Env,
+  id: string,
+  verdict: UserVerdict,
+  at: string = new Date().toISOString(),
+): Promise<boolean> {
+  const res = await env.DB.prepare(
+    `UPDATE workspace_visual_checks
+        SET user_verdict = ?, user_verdict_at = ?
+      WHERE id = ?`,
+  )
+    .bind(verdict, at, id)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
 }
 
 /**

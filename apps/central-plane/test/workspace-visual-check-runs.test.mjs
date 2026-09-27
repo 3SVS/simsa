@@ -34,11 +34,13 @@ function makeDb({ projects = new Map(), sources = [], checks = [] } = {}) {
         return {
           async run() {
             if (sql.includes("INSERT INTO workspace_visual_checks") && sql.includes("'queued', 'container'")) {
-              const [id, project_id, user_key, target_url, intent, created_at, updated_at] = args;
+              // Bind order = visual-check-db.ts insertQueuedVisualCheck (0065 locale · 0069 region/envelope/source).
+              const [id, project_id, user_key, target_url, intent, locale, region, envelope_json, source_check_id, created_at, updated_at] = args;
               checks.push({
                 id, project_id, user_key, target_url, intent,
                 decision: "Not Judged", works: null, status: "queued", executor: "container",
                 report_json: "{}", agent_prompt: null, evidence_keys_json: "[]",
+                locale, region, envelope_json, source_check_id,
                 created_at, updated_at,
               });
               return { meta: { changes: 1 } };
@@ -50,9 +52,10 @@ function makeDb({ projects = new Map(), sources = [], checks = [] } = {}) {
               return { meta: { changes: row ? 1 : 0 } };
             }
             if (sql.includes("SET status = 'done'")) {
-              const [decision, works, report_json, agent_prompt, updated_at, id] = args;
+              // 0069: markVisualCheckDone also binds finding_codes_json (after agent_prompt).
+              const [decision, works, report_json, agent_prompt, finding_codes_json, updated_at, id] = args;
               const row = checks.find((r) => r.id === id);
-              if (row) Object.assign(row, { status: "done", decision, works, report_json, agent_prompt, updated_at });
+              if (row) Object.assign(row, { status: "done", decision, works, report_json, agent_prompt, finding_codes_json, updated_at });
               return { meta: { changes: row ? 1 : 0 } };
             }
             if (sql.includes("SET status = 'failed'")) {
