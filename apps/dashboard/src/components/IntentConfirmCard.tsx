@@ -28,6 +28,7 @@ import {
   saveProject,
 } from "@/lib/workflow-store";
 import { CENTRAL_PLANE_URL } from "@/lib/workspace-sources-api";
+import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 
 type InferredItem = { id: string; title: string; criteria?: string[] };
 type InferResponse = {
@@ -133,6 +134,12 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
       // 그리고 "누가 이 기준을 정했나"의 답이 되도록.
       intentConfirmedAt: new Date().toISOString(),
     } as Parameters<typeof saveExtendedProjectData>[1]);
+    // Train C — C0 (재정렬 §1 끊김 #1 · W1-6): 확정한 의도를 **판정의 자**로 만든다.
+    // 위 저장은 localStorage(+디바운스 ext 블롭)에만 닿았고, 검수·지시서가 읽는
+    // D1 workspace_projects(idea/productSpec/items)에는 닿지 않았다 — 그래서
+    // "맞나요?"에 답해도 검수 기준은 바뀌지 않았다. 로컬이 정본이므로 미러는
+    // 뒤에, 그리고 실패해도 조용히(확정 자체를 막지 않는다).
+    void mirrorLocalProjectToDb(projectId).catch(() => undefined);
     setPhase("done");
   }
 
