@@ -116,6 +116,10 @@ export interface Env {
    * wrangler.toml [vars]로 둔다(비밀 아님).
    */
   HOSTING_GH_ORG?: string;
+  /** B5: S 모드 앱 주소의 루트 도메인(예 "simsa.page"). hosting-dispatch의 HOSTING_ROOT_DOMAIN과 같아야 한다. [vars]. */
+  HOSTING_ROOT_DOMAIN?: string;
+  /** B5 [PILOT]: T1 구현 모델. 기본 claude-sonnet-4-6(워커 기본과 동일). 킬스위치 시 폴백. */
+  BUILD_MODEL?: string;
   /**
    * Stage 261 — R2 bucket `simsa-evidence`: visual-check evidence
    * (screenshots/video under checks/{userKey}/{projectId}/{runId}/) and
