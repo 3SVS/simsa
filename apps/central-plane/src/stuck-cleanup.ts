@@ -17,6 +17,7 @@ import { findInstallationByRepoSlug } from "./db/saas.js";
 import { postPrComment } from "./gh-app.js";
 import { listStuckVisualChecks, markVisualCheckFailed } from "./workspace/visual-check-db.js";
 import { listStuckRepairJobs, markRepairJobFailed } from "./workspace/repair-job-db.js";
+import { listStuckBuildJobs, markBuildJobFailed } from "./workspace/build-job-db.js";
 
 const STUCK_AFTER_MS = 30 * 60 * 1000; // 30 minutes
 const SWEEP_LIMIT = 50; // safety cap; never touch more than 50 rows in a single tick
@@ -147,6 +148,35 @@ export async function cleanupStuckRepairJobs(
     } catch (err) {
       errors += 1;
       console.error(`[stuck-cleanup] repair-job ${r.id} failed:`, err);
+    }
+  }
+  return { swept: rows.length, errors };
+}
+
+/**
+ * B5 — 빌드 잡은 검수보다 오래 걸린다(D-4 [PILOT] 잡 전체 45분). 컨테이너가 60분 넘게 아무 단계 콜백도
+ * 안 보내면(롤아웃·OOM·디스패치 유실) failed(stuck)으로 정직하게 닫는다. 진행 콜백이 updated_at을 갱신하므로
+ * 살아 있는 잡은 걸리지 않는다.
+ */
+const BUILD_STUCK_AFTER_MS = 60 * 60 * 1000;
+
+export async function cleanupStuckBuildJobs(env: Env): Promise<{ swept: number; errors: number }> {
+  const cutoff = new Date(Date.now() - BUILD_STUCK_AFTER_MS).toISOString();
+  let rows: Array<{ id: string; status: string }>;
+  try {
+    rows = await listStuckBuildJobs(env, cutoff, SWEEP_LIMIT);
+  } catch (err) {
+    // 0068 미적용 D1에서 다른 스윕을 깨지 않는다.
+    console.error("[stuck-cleanup] build-job query failed:", err);
+    return { swept: 0, errors: 1 };
+  }
+  let errors = 0;
+  for (const r of rows) {
+    try {
+      await markBuildJobFailed(env, r.id, { failedStage: r.status, error: "builder container did not report progress within 60 minutes — likely killed by a deploy rollout. Start the build again." });
+    } catch (err) {
+      errors += 1;
+      console.error(`[stuck-cleanup] build-job ${r.id} failed:`, err);
     }
   }
   return { swept: rows.length, errors };
