@@ -7,8 +7,7 @@
  *
  * 순수성: 이 모듈은 파일시스템·프로세스·네트워크에 직접 손대지 않는다(executor·client 주입).
  * LLM 호출은 EfficiencyGate.run 경유(CLAUDE.md "direct SDK calls are forbidden").
- * 폴백(OpenAI) 클라이언트는 tool_result 블록을 못 옮기므로 이 루프는 Anthropic 호환 클라이언트 전제 —
- * 폴백만 있는 환경에서는 첫 턴에서 llm_error로 정직하게 끝난다.
+ * 클라이언트는 AnthropicLike 어떤 것이든(withOpenAiFallback 포함 — B5에서 블록 변환을 붙여 OpenAI만으로도 돈다).
  */
 import { EfficiencyGate, estimateTokens } from "@simsa/core";
 import type { AnthropicLike, AnthropicCreateParams, AnthropicMessage, AnthropicResponse } from "./anthropic-types.js";

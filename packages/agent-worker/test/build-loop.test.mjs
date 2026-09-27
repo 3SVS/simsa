@@ -126,10 +126,10 @@ describe("runBuildLoop", () => {
     assert.match(client.seen[1].messages.at(-1).content[0].content, /ENOENT/);
   });
 
-  it("LLM 예외 → llm_error (폴백만 있는 환경에서의 정직 실패 경로)", async () => {
-    const client = { messages: { create: async () => { throw new Error("openai-fallback: multi-turn tool blocks are not supported"); } } };
+  it("LLM 예외 → llm_error (벤더 전멸 시 정직 실패 경로)", async () => {
+    const client = { messages: { create: async () => { throw new Error("OpenAI 503: vendor unavailable"); } } };
     const r = await runBuildLoop(TASK, { client, executor: fakeExecutor(), model: "m", gate });
     assert.equal(r.status, "llm_error");
-    assert.match(r.summary, /not supported/);
+    assert.match(r.summary, /vendor unavailable/);
   });
 });

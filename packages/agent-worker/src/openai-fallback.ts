@@ -25,7 +25,7 @@
  * 폴백이 없거나 그마저 실패하면 **원래 에러를 그대로 던진다.** 조용히 빈 패치를
  * 돌려주면 "고쳤다"는 거짓말이 된다. 어느 벤더가 응답했는지도 로그에 남긴다.
  */
-import type { AnthropicCreateParams, AnthropicLike, AnthropicResponse } from "./anthropic-types.js";
+import type { AnthropicCreateParams, AnthropicLike, AnthropicMessage, AnthropicResponse } from "./anthropic-types.js";
 
 export const OPENAI_FALLBACK_MODEL = "gpt-5.4";
 
@@ -64,15 +64,39 @@ function systemText(system: AnthropicCreateParams["system"]): string {
   return system.map((b) => b.text).join("\n\n");
 }
 
+/**
+ * B5: Anthropic 메시지(문자열 또는 블록 배열)를 OpenAI chat 메시지로.
+ *  - assistant의 text → content, tool_use → tool_calls[{id, function:{name, arguments}}]
+ *  - user의 tool_result → role:"tool" 메시지 하나씩(tool_call_id = tool_use id). 그 외 블록은 text로 합침.
+ * tool_use id는 OpenAI 응답의 call id를 그대로 보존하므로(toAnthropicResponse) 왕복이 맞는다.
+ * 이로써 B4 빌드 루프가 **OpenAI 폴백만으로도** 돈다(Anthropic 킬스위치 상태의 프로덕션 전제).
+ */
+export function toOpenAiMessages(m: AnthropicMessage): Array<Record<string, unknown>> {
+  if (typeof m.content === "string") return [{ role: m.role, content: m.content }];
+  if (m.role === "assistant") {
+    const text = m.content.filter((b): b is { type: "text"; text: string } => b.type === "text").map((b) => b.text).join("\n").trim();
+    const calls = m.content
+      .filter((b): b is { type: "tool_use"; id: string; name: string; input: unknown } => b.type === "tool_use")
+      .map((b) => ({ id: b.id, type: "function", function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) } }));
+    const out: Record<string, unknown> = { role: "assistant", content: text || null };
+    if (calls.length) out["tool_calls"] = calls;
+    return [out];
+  }
+  const out: Array<Record<string, unknown>> = [];
+  const texts: string[] = [];
+  for (const b of m.content) {
+    if (b.type === "tool_result") out.push({ role: "tool", tool_call_id: b.tool_use_id, content: b.content });
+    else if (b.type === "text") texts.push(b.text);
+  }
+  if (texts.length) out.push({ role: "user", content: texts.join("\n") });
+  return out;
+}
+
 function toOpenAiBody(params: AnthropicCreateParams, model: string): Record<string, unknown> {
-  const messages: Array<{ role: string; content: string }> = [];
+  const messages: Array<Record<string, unknown>> = [];
   const sys = systemText(params.system);
   if (sys) messages.push({ role: "system", content: sys });
-  for (const m of params.messages) {
-    // B4 다중 턴 블록(tool_use/tool_result)은 OpenAI 형식으로 옮기지 않는다 — 폴백은 단일 턴 워커 전용.
-    if (typeof m.content !== "string") throw new Error("openai-fallback: multi-turn tool blocks are not supported (Anthropic-compatible client required)");
-    messages.push({ role: m.role, content: m.content });
-  }
+  for (const m of params.messages) messages.push(...toOpenAiMessages(m));
 
   const body: Record<string, unknown> = {
     model,
