@@ -149,6 +149,21 @@ export function buildBriefOnlyDiagnosis(diag, locale) {
 }
 
 /**
+ * Train W · W-3 (contract 3) — the `buildVerified` value the repair-done
+ * callback carries. Only an auto_fix job changed code, so only it can be
+ * verified or not; the boolean comes from buildAutoFixPrContent (canonical
+ * repair-brief.ts). brief_only, or an in-image brief module that predates the
+ * field → null ("undecidable" — the Worker then records nothing).
+ *
+ * Pure. mode: "auto_fix" | "brief_only"; prContent: the autoFix.prContent object.
+ */
+export function repairBuildVerified(mode, prContent) {
+  if (mode !== "auto_fix") return null;
+  const v = prContent && typeof prContent === "object" ? prContent.buildVerified : undefined;
+  return typeof v === "boolean" ? v : null;
+}
+
+/**
  * Stage 268 — strip a secret from a message before it travels anywhere
  * (callback body, logs). Pure; no-op when the secret is empty.
  */

@@ -32,6 +32,7 @@ import {
   coerceResult,
   extractHeaderEnv,
   redactSecret,
+  repairBuildVerified,
   validateRepairPayload,
   validateRunPayload,
 } from "./coerce-result.mjs";
@@ -432,7 +433,14 @@ async function runJob(payload) {
  *   4. Commits code changes + SIMSA-FIX-BRIEF.md, pushes, opens a NON-draft
  *      PR "Simsa 자동 수리: ..." listing what changed per finding
  *   5. Reports {jobId, ok, prUrl, prNumber, branch, envCause, mode,
- *      changedFiles} to /internal/repair-done
+ *      changedFiles, buildVerified} to /internal/repair-done
+ *
+ * Train W · W-3 (D-4 keep — a label, not a gate): the only post-apply check is
+ * `node --check` on .js/.mjs/.cjs. When the change touched anything else the
+ * commit carries the `Simsa-Build: unverified` trailer, the PR body opens with
+ * a notice (job locale), the PR gets the `build: unverified` label (best
+ * effort) and the callback says buildVerified:false — all derived from the
+ * canonical buildAutoFixPrContent (repair-brief.ts).
  *
  * HONEST FALLBACK (Stage 268 semantics preserved): no key, zero parsed
  * findings, worker declines/errors, rewrites all rejected by the sanitizer,
@@ -516,6 +524,8 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
     }
     const mode = autoFix ? "auto_fix" : "brief_only";
     const changedFiles = autoFix ? autoFix.changedFiles : [];
+    // Train W · W-3: true/false only for auto_fix (null = brief_only/undecidable).
+    const buildVerified = repairBuildVerified(mode, autoFix ? autoFix.prContent : null);
     // brief_only 폴백의 사유 — 키 부재는 diag를 거치지 않으므로 직접 명명.
     let modeReason = null;
     let briefPrNote = null;
@@ -574,6 +584,15 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
     });
     console.log(`[repair ${jobId}] PR ready: #${pr.number} ${pr.html_url}`);
 
+    // 5b. Train W · W-3 — label the PR `build: unverified` when node --check did
+    //     not cover every changed file. Best effort: a label is not a gate (D-4),
+    //     so a missing permission never fails the repair (the trailer + the PR
+    //     body notice already say it).
+    if (buildVerified === false) {
+      const labels = Array.isArray(autoFix?.prContent?.labels) ? autoFix.prContent.labels : [];
+      await addRepairPrLabels({ repo, token: githubToken, number: pr.number, labels, jobId });
+    }
+
     // 6. Report done.
     await postCallback(callbackUrl, callbackToken, {
       jobId,
@@ -584,6 +603,7 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
       envCause: envCause === true,
       mode,
       changedFiles: changedFiles.length,
+      buildVerified,
       ...(modeReason ? { modeReason } : {}),
       durationMs: Date.now() - start,
     });
@@ -1039,6 +1059,34 @@ async function createOrReuseRepairPr({ repo, token, head, base, title, body, dra
     throw new Error(`PR create failed: ${res.status} ${JSON.stringify(res.json.message ?? res.json).slice(0, 300)}`);
   }
   return res.json;
+}
+
+/**
+ * Train W · W-3 — add labels to the repair PR (issues labels endpoint; GitHub
+ * creates a missing label). Best effort by design (D-4 keep: a label, not a
+ * gate): any failure — no permission, network — is logged and swallowed, and
+ * the token is redacted from the log line.
+ */
+async function addRepairPrLabels({ repo, token, number, labels, jobId }) {
+  if (!Array.isArray(labels) || labels.length === 0 || !Number.isInteger(number)) return;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}/issues/${number}/labels`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/vnd.github+json",
+        "content-type": "application/json",
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "simsa-repair",
+      },
+      body: JSON.stringify({ labels }),
+    });
+    if (!r.ok) {
+      console.warn(`[repair ${jobId}] label add returned ${r.status} (non-fatal)`);
+    }
+  } catch (err) {
+    console.warn(`[repair ${jobId}] label add failed (non-fatal):`, redactSecret(err?.message ?? String(err), token));
+  }
 }
 
 /**

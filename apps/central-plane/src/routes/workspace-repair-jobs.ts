@@ -33,11 +33,13 @@
  * queued rows later, and a wedged queued row would block the 409 guard for
  * 30 min until the stuck sweep.
  *
- * Train W (재정렬 D-7 amend [PILOT], 2026-09-28):
+ * Train W (재정렬 D-7 amend [PILOT] · D-4 keep, 2026-09-28):
  *   - W-2 킬스위치 REPAIR_ENABLED — 판정은 dispatchRepairJob **안**(service-switches.ts). 라우트는
  *     같은 헬퍼로 행·토큰 조회 전에 묻고 503 `repair_disabled`.
  *   - W-2 일일 상한 수리 5/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
  *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"repair", limit, resetAt }.
+ *   - W-3 잡 뷰 `buildVerified` — 컨테이너의 사후 검증(node --check)이 바뀐 파일을 전부 덮었는가.
+ *     auto_fix만 boolean, brief_only·레거시·판단 불가 = null (repair-job-db.ts, 새 컬럼 없음).
  */
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
@@ -120,6 +122,12 @@ function repairJobView(job: DbRepairJob) {
     // fallback). Null on legacy rows and while in flight.
     mode: job.mode ?? null,
     changedFiles: job.changedFiles ?? null,
+    // Train W · W-3 (contract 3, #558 showBuildUnverified): did the container's
+    // post-apply check (node --check) cover every file the repair changed?
+    // false → the dashboard's one line "we couldn't confirm the fixed code
+    // builds". Only an auto_fix job carries a boolean; brief_only / legacy /
+    // in-flight / undecidable → null (never a guess).
+    buildVerified: job.buildVerified,
     error: job.error ?? null,
     // Train C · C2a (0069): the re-inspection verify-sweep dispatched after the
     // PR merged, and its outcome (true/false; null = not verified yet/at all).
@@ -506,6 +514,8 @@ export function createWorkspaceRepairJobRoutes(
           mode?: string;
           changedFiles?: number;
           modeReason?: string;
+          /** Train W · W-3: true/false from the container; anything else = not recorded. */
+          buildVerified?: unknown;
           error?: string;
         }
       | null;
@@ -542,6 +552,11 @@ export function createWorkspaceRepairJobRoutes(
         body.mode === "brief_only" && typeof body.modeReason === "string" && body.modeReason
           ? body.modeReason
           : undefined,
+      // Train W · W-3 (contract 3): only an auto_fix job changed code, so only
+      // it can be "verified" or not. brief_only / old containers / non-boolean
+      // values leave it unrecorded (the view says null — no guess).
+      buildVerified:
+        body.mode === "auto_fix" && typeof body.buildVerified === "boolean" ? body.buildVerified : undefined,
     });
     return c.json({ ok: true, status: "done" });
   });
