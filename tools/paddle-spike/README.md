@@ -43,8 +43,13 @@ Train $ 스테이지 **$-0**(`train $ start approved`, 2026-09-28 — 샌드박�
 
 ## 증거
 
-`evidence/`(커밋 안 됨)에 `catalog.json`·`setup.json`·`pool.json`·`checkout-<변형>.json`·`S-A.json`…`S-F.json`·`verdict.json`·`shots/*.png`.
-증거 파일은 **요청·응답 요약**만 담고, 쓰기 전에 키·토큰·Bearer 헤더·이메일·카드 번호·카드 객체·고객 포털 URL·주소 줄을 가립니다(`lib/redact.mjs`). 가린 뒤에도 패턴이 남아 있으면 파일을 만들기 전에 멈춥니다(`assertNoLeak`). Paddle ID·금액·날짜·한글 프로젝트명은 남깁니다.
+`evidence/`(커밋 안 됨)에 JSON 증거 `catalog.json`·`setup.json`·`pool.json`·`checkout-<변형>.json`·`S-A.json`…`S-F.json`·`verdict.json`과 체크아웃 스크린샷 `shots/*.png`가 쌓입니다.
+
+- **JSON 증거**는 **요청·응답 요약**만 담고, 쓰기 전에 키·토큰·Bearer 헤더·이메일·카드 번호·카드 객체·고객 포털 URL·주소 줄을 가립니다(`lib/redact.mjs`). 가린 뒤에도 패턴이 남아 있으면 파일을 만들기 전에 멈춥니다(`assertNoLeak`). Paddle ID·금액·날짜·한글 프로젝트명은 남깁니다.
+- **스크린샷(`shots/*.png`)은 가리지 않습니다.** 이미지라 `redact`·`assertNoLeak`를 거치지 않고, Paddle 화면에 보이는 그대로(미리 채운 이메일·입력한 카드 번호 포함) 저장됩니다. 그래서 화면에 들어가는 값을 코드로 묶어 둡니다.
+  - 이메일: `PADDLE_SPIKE_CUSTOMER_EMAIL`은 예약 도메인 `example.com`·`example.net`·`example.org`(하위 도메인 포함)만 받습니다. 실제 주소를 넣으면 체크아웃을 열기 전에 멈춥니다(`serve.mjs` `buildCheckoutConfig`). 기본값은 `paddle-spike@example.com`.
+  - 카드: 코드 상수 `TEST_CARD`(Paddle 공개 테스트 카드 `4242 4242 4242 4242`)만 씁니다. env로 바꿀 수 없습니다.
+  - 그래도 스크린샷을 PR·문서·채팅에 붙이기 **전에 직접 열어 보고** 올립니다(Paddle 화면에 무엇이 더 나올지는 첫 실행 전에는 모릅니다).
 
 ## 종료 코드
 

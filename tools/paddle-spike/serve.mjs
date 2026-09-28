@@ -9,6 +9,7 @@
  *
  * /config.json 으로 페이지에 넘기는 것: client-side token(공개 가능 토큰 — Paddle 문서 "safe to publish"),
  * 가격 id, 고객 미리 채움(가짜 이메일·국가·우편번호), customData(한글 프로젝트명).
+ * 이메일은 예약 도메인(example.com·.net·.org)만 받는다 — 오버레이 화면에 보이고, 그 화면 스크린샷은 가려지지 않는다.
  * API 키는 이 서버에 절대 들어오지 않는다.
  */
 import { createServer } from "node:http";
@@ -32,10 +33,31 @@ export function assertSandboxClientToken(token) {
   return t;
 }
 
+/** 체크아웃 기본 이메일 — 예약 도메인(RFC 2606). */
+export const DEFAULT_CHECKOUT_EMAIL = "paddle-spike@example.com";
+
+/**
+ * 체크아웃에 미리 채울 수 있는 이메일 도메인: RFC 2606 예약 도메인(example.com·.net·.org)과 그 하위 도메인만.
+ * 이유: Paddle 오버레이는 미리 채운 이메일을 화면에 보여 주고, run-checkout 의 스크린샷
+ * (evidence/shots/*.png)은 이미지라 redact → assertNoLeak 를 거치지 않는다. 실제 주소가 PNG 에
+ * 가려지지 않은 채 남는 길을 여기서 막는다(README §증거).
+ */
+const RESERVED_EMAIL_DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*example\.(?:com|net|org)$/;
+const EMAIL_LOCAL_PART = /^[A-Za-z0-9._%+-]{1,64}$/;
+
 function assertCheckoutEmail(email) {
   // Paddle.js: 이메일은 올바른 형식이어야 하고 공백·비ASCII 불가(build-overlay-checkout, 2026-09-28 접근)
   if (typeof email !== "string" || !/^[\x21-\x7e]+@[\x21-\x7e]+\.[A-Za-z]{2,}$/.test(email)) {
     throw new TypeError("체크아웃 이메일은 공백·비ASCII 없는 형식이어야 합니다(한글은 프로젝트명에만)");
+  }
+  const parts = email.split("@");
+  const local = parts[0];
+  const domain = parts[1];
+  if (parts.length !== 2 || local === undefined || domain === undefined || !EMAIL_LOCAL_PART.test(local) || !RESERVED_EMAIL_DOMAIN.test(domain.toLowerCase())) {
+    // 값은 싣지 않는다 — 막으려는 것이 바로 그 주소다.
+    throw new TypeError(
+      "체크아웃 이메일은 예약 도메인(example.com·example.net·example.org)만 씁니다 — 체크아웃 스크린샷(evidence/shots/*.png)은 가려지지 않으므로 실제 주소를 넣지 마세요. 값은 출력하지 않았습니다",
+    );
   }
   return email;
 }
@@ -56,7 +78,7 @@ export function buildCheckoutConfig(p) {
     throw new Error(`가격 ${priceKey} 이(가) 없거나 샌드박스에서 거부(rejected)됐습니다 — 이 변형은 열 수 없습니다`);
   }
   const projectName = typeof p.projectName === "string" && p.projectName.trim() !== "" ? p.projectName.trim() : DEFAULT_PROJECT_NAME;
-  const email = assertCheckoutEmail(p.email ?? "paddle-spike@example.com");
+  const email = assertCheckoutEmail(p.email ?? DEFAULT_CHECKOUT_EMAIL);
   const countryCode = typeof p.countryCode === "string" && /^[A-Z]{2}$/.test(p.countryCode) ? p.countryCode : "US";
   const postalCode = typeof p.postalCode === "string" && p.postalCode.trim() !== "" ? p.postalCode.trim() : "10021";
   return {

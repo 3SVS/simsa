@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertSandboxClientToken, buildCheckoutConfig, routeRequest } from "../serve.mjs";
+import { TEST_CARD } from "../run-checkout.mjs";
 import { extractCompletedTransactionId } from "../lib/checkout-events.mjs";
 import { SandboxOnlyError } from "../paddle-client.mjs";
 import { SPIKE_TAG } from "../lib/catalog.mjs";
@@ -55,6 +56,52 @@ describe("buildCheckoutConfig", () => {
   });
   it("이메일에 공백·비ASCII 가 있으면 거부(Paddle.js 요건) — 한글은 프로젝트명에만", () => {
     assert.throws(() => buildCheckoutConfig({ clientToken: FAKE_CLIENT_TOKEN, catalog, variant: "trial19", email: "배 승훈@example.com" }), TypeError);
+  });
+});
+
+/**
+ * 체크아웃 스크린샷(evidence/shots/*.png)은 이미지라 redact → assertNoLeak 를 거치지 않는다.
+ * Paddle 오버레이는 미리 채운 이메일을 화면에 보여 준다. 그래서 화면에 들어갈 이메일을 코드로
+ * 예약 도메인(RFC 2606: example.com·example.net·example.org)으로 묶는다 — 실제 주소가 PNG 에
+ * 가려지지 않은 채 남는 길을 막는다.
+ */
+describe("체크아웃 이메일 = 예약 도메인만 (스크린샷은 가려지지 않는다)", () => {
+  const cfgWith = (email) => buildCheckoutConfig({ clientToken: FAKE_CLIENT_TOKEN, catalog, variant: "trial19", projectName: KO_PROJECT_NAME, email });
+
+  it("실제 메일 도메인은 체크아웃을 열기 전에 거부하고, 오류에 그 주소를 싣지 않는다", () => {
+    for (const email of [
+      "spike-operator@gmail.com",
+      "trupixel.owner@naver.com",
+      "ceo@trupixel.co.kr",
+      "x@notexample.com",
+      "x@example.com.evil.io",
+      "x@example.co",
+      "real.person@gmail.com@example.com",
+    ]) {
+      assert.throws(
+        () => cfgWith(email),
+        (e) => e instanceof TypeError && /example\.com/.test(e.message) && !e.message.includes(email),
+        email,
+      );
+    }
+  });
+
+  it("예약 도메인(대소문자·+태그·하위 도메인)은 그대로 통과", () => {
+    for (const email of ["bae.spike@example.com", "paddle-spike+2@EXAMPLE.org", "qa_1@example.net", "run-3@checkout.example.com"]) {
+      assert.equal(cfgWith(email).customer.email, email);
+    }
+  });
+
+  it("기본 이메일도 예약 도메인이다", () => {
+    const cfg = buildCheckoutConfig({ clientToken: FAKE_CLIENT_TOKEN, catalog, variant: "trial19" });
+    assert.match(cfg.customer.email, /@example\.com$/);
+  });
+});
+
+describe("체크아웃 카드 = Paddle 공개 테스트 카드 상수", () => {
+  it("스크린샷에 찍히는 카드는 env 가 아니라 코드 상수 4242(샌드박스 전용 공개 테스트 카드)뿐", () => {
+    assert.equal(TEST_CARD.number.replace(/\s/g, ""), "4242424242424242");
+    assert.ok(Object.isFrozen(TEST_CARD));
   });
 });
 

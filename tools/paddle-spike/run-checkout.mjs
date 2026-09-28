@@ -14,6 +14,10 @@
  * API 로 거래→구독 id → 구독 상태(trialing)·custom_data 한글 왕복 확인 → evidence/pool.json 에 추가.
  * 실패하면 스크린샷(evidence/shots/)과 이벤트를 남기고 다음 회차로.
  *
+ * 스크린샷은 이미지라 redact → assertNoLeak 를 거치지 않는다(JSON 증거만 가려진다). 그래서 화면에 들어가는
+ * 값을 코드로 묶는다: 이메일은 예약 도메인만(serve.mjs buildCheckoutConfig), 카드는 공개 테스트 카드 상수 TEST_CARD.
+ * 새 입력값을 화면에 넣게 되면 같은 규칙을 먼저 건다.
+ *
  * 테스트 카드(developer.paddle.com/concepts/payment-methods/credit-debit-card, 2026-09-28 접근):
  *   성공(3DS 없음) 4242 4242 4242 4242 · 이름 아무거나 · 만료 미래 · CVC 아무 3자리. 샌드박스에서만 동작.
  * 입력 칸 찾기는 라벨/placeholder 추정(한·영)이다 — 첫 실행에서 실패하면 스크린샷을 보고 셀렉터를 고친다.
