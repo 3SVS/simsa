@@ -14,6 +14,13 @@
  *
  * 네임스페이스 import — 옛 코드에서 새 함수가 없으면 **그 검사만** 실패한다(파일 전체 로드 실패가
  * 아니라). 각 검사는 고치기 전 코드에서 실패하고, "행동 보존" 표시가 붙은 것만 옛 코드에서도 통과한다.
+ *
+ * 표시 규칙(#558 검증 P2-12 — 회귀 증거를 부풀리지 않는다):
+ *   [행동 보존]         옛 코드에서도 통과 — 회귀 증거 아님.
+ *   [행동 보존·새 API]  옛 코드에서는 "함수 없음(TypeError)"으로만 실패 — 종전 동작을 새 함수 이름으로
+ *                       확인하는 것이라 역시 회귀 증거로 세지 않는다.
+ *   표시 없음           새 동작. 옛 코드에서 값이 달라서 또는 새 API가 없어서 실패(PR 코멘트 표에 둘을 나눠 적음).
+ * 픽스처 id는 프로덕션 모양(수리 잡 wrj_ · 검수 wvc_ 접두어, P2-15).
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -70,12 +77,12 @@ describe("W-2 검수 요청: runErrorNotice(응답 본문 전체) — resetAt을
 
   it("상한이 아닌 오류는 resetAt을 싣지 않는다 (엉뚱한 본문의 resetAt 무시)", () => {
     assert.deepEqual(
-      runState.runErrorNotice({ ok: false, error: "run_already_active", resetAt: RESET }),
+      runState.runErrorNotice({ ok: false, error: "run_already_active", activeRunId: "wvc_mfk2a1b3c", resetAt: RESET }),
       { errorKey: "runAlreadyActive", resetAt: null },
     );
   });
 
-  it("옛 서버·네트워크 실패·쓰레기 → generic", () => {
+  it("[행동 보존·새 API] 옛 서버·네트워크 실패·쓰레기 → generic", () => {
     assert.deepEqual(runState.runErrorNotice({ ok: false, error: "HTTP 429" }), { errorKey: "generic", resetAt: null });
     assert.deepEqual(runState.runErrorNotice({ ok: false, error: "TypeError: fetch failed" }), {
       errorKey: "generic",
@@ -135,8 +142,8 @@ describe("W-2 수리 요청: repairErrorKey·repairErrorNotice (kind별 — 수�
     });
   });
 
-  it("옛 서버의 기존 코드는 그대로 (repair_already_active 등) · 모르는 코드는 generic", () => {
-    assert.deepEqual(repairState.repairErrorNotice({ ok: false, error: "repair_already_active", activeJobId: "rj_1" }), {
+  it("[행동 보존·새 API] 옛 서버의 기존 코드는 그대로 (repair_already_active 등) · 모르는 코드는 generic", () => {
+    assert.deepEqual(repairState.repairErrorNotice({ ok: false, error: "repair_already_active", activeJobId: "wrj_mfk2a1b3c" }), {
       errorKey: "alreadyActive",
       resetAt: null,
     });
@@ -209,7 +216,7 @@ describe("W-3 ③ 수리 결과: repairDoneKind — 코드를 실제로 고친 �
     assert.equal(repairState.repairDoneKind({ status: "done", mode: "auto_fix" }), "autoFix");
   });
 
-  it("brief_only · null(Stage 270 이전 행) · 모르는 값 → briefOnly (지시서만)", () => {
+  it("[행동 보존·새 API] brief_only · null(Stage 270 이전 행) · 모르는 값 → briefOnly (지시서만)", () => {
     assert.equal(repairState.repairDoneKind({ status: "done", mode: "brief_only" }), "briefOnly");
     assert.equal(repairState.repairDoneKind({ status: "done", mode: null }), "briefOnly");
     assert.equal(repairState.repairDoneKind({ status: "done" }), "briefOnly");
