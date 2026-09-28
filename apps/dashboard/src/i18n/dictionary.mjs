@@ -401,7 +401,8 @@ const EN = {
     codeStepSub: "Paste its address or GitHub repository. That is all we need to start.",
     submitLabel: "App address or GitHub repository",
     submitPlaceholder: "https://my-app.example.com  ·  or a GitHub repository link",
-    submitHint: "Either one works. A public repository needs no GitHub sign-in.",
+    // Train W — W-3 ②: "no sign-in" covers READING only; fixing needs a connection.
+    submitHint: "Either one works. A public repository can be read without a GitHub sign-in — reading only. To have Simsa fix it, you'll connect it later.",
     submitCta: "Start the review",
     submitWorking: "Setting up…",
     submitErrEmpty: "Paste your app's address or GitHub repository.",
@@ -2443,18 +2444,32 @@ const EN = {
     intentPlaceholder: "e.g. Sign-up and the first core action should work end to end",
     runButton: "Run inspection",
     runSubmitting: "Requesting…",
+    // Train W — W-3 ①: a check that could not be handed to the runner is marked
+    // failed by the server right away (nothing picks it up later) — so this
+    // must not promise a queue that will "pick it up".
     runQueuedOnly:
-      "The runner is not ready yet, so this inspection was only added to the queue. It will be picked up once the runner is available.",
+      "We couldn't start this check just now — the part that runs checks isn't ready yet. Please try again in a moment.",
     runActiveNotice: "An inspection is already in progress. A new one can start once it finishes.",
     runNeedWebsite: "Connect your website address first so Simsa knows what to inspect.",
     goToSources: "Connect a website",
-    statusQueued: "Waiting",
+    // #558 검증 2차 P2-4: "queued" is the short gap between hand-off and the
+    // runner's "running" ack — there is no queue or slot (dispatch is
+    // fire-once; over the instance cap a check does not wait, it fails to start).
+    statusQueued: "Starting",
     statusRunning: "Inspecting",
     statusDone: "Done",
     statusFailed: "Failed",
     progressTitle: "Inspection in progress",
+    // Train W — W-3 ① / #558 검증 2차 P2-5: durations only where measured, as a
+    // range that covers both samples — a basic check (no dev-spec acceptance
+    // plan) 48–51 s (HANDOFF 07-02 wvc_34jy60jbe5 51 s · 07-20 +50 s · 08-20
+    // container 48 s); with the dev spec's acceptance scenarios 191–249 s
+    // (HANDOFF 09-24 wvc_exyd0xaiaj 191 s · 09-25 E4 249 s; BM 2026-09-27 T2
+    // 170–250 s) → "1–4 minutes".
     progressBody:
-      "Simsa is opening your app in a real browser and walking the core flow. This page updates automatically when the report is ready.",
+      "Simsa is opening your app in a real browser and walking the core flow. From request to report usually takes 1–4 minutes. This page updates automatically when the report is ready.",
+    progressBodyQueued:
+      "Starting the check. From request to report usually takes 1–4 minutes. This page updates automatically.",
     failedTitle: "This inspection could not be completed",
     failedBody: "Something went wrong while inspecting the app. Please run a new inspection.",
     runErrors: {
@@ -2463,7 +2478,28 @@ const EN = {
       projectNotFound: "Project not found. It may only exist in another browser.",
       forbidden: "You do not have access to this project.",
       invalidIntent: "The description is too long. Please keep it under 1000 characters.",
+      // Train W — W-2 (D-7 amend): 429 daily cap / 503 kill switch.
+      dailyLimitReached: "You've used all of today's checks. You can check again tomorrow (after midnight UTC).",
+      dailyLimitReachedAt: "You've used all of today's checks. You can check again {when}.",
+      // #558 검증 P2-1: the notice is still on screen after resetAt passed.
+      dailyLimitCleared: "Your daily checks have reset. You can check again now.",
+      inspectionDisabled: "Checks are paused for now. We'll reopen them soon.",
       generic: "Could not start the inspection. Please try again.",
+    },
+    // Train W — W-2 "{when}" for the daily cap (#558 검증 P2-11: every word and
+    // the word order live here; lib/daily-limit.mjs only fills numbers in).
+    // {time} = time or timeWithMinute · {period} = am/pm · {hour} = 12-hour
+    // number (midnightHour at 00:xx) · {minute} = 0–59 · {mm} = two digits.
+    resetWhen: {
+      today: "after {time} today",
+      tomorrow: "after {time} tomorrow",
+      onDate: "after {time} on {month} {day}",
+      time: "{hour} {period}",
+      timeWithMinute: "{hour}:{mm} {period}",
+      am: "AM",
+      pm: "PM",
+      midnightHour: "12",
+      months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
     },
     // Stage 266 — before/after comparison with the previous completed inspection.
     compare: {
@@ -2487,19 +2523,31 @@ const EN = {
       latestOnly: "Only in this inspection",
       noPairs: "No matching screenshots to compare side by side.",
     },
-    // Stage 269 — "[고치기]" repair button: dispatches a Stage 268 repair job
-    // that opens a DRAFT PR carrying the fix brief (no auto-applied code).
+    // Stage 269 — "[고치기]" repair button: dispatches a repair job. Since Stage
+    // 270 it either changes the code (auto_fix) or, when it can't, falls back to
+    // the fix brief (brief_only). Before start / in flight the mode is unknown,
+    // so desc and progressBody promise neither (#558 검증 P2-10).
     repair: {
       title: "Start a repair",
-      desc: "Simsa creates a repair branch on your connected GitHub repository and opens a draft pull request containing the fix brief (SIMSA-FIX-BRIEF.md). Code changes are not applied automatically yet — the PR is the starting point for your coding agent or developer to pick up.",
+      desc: "Simsa tries to fix this problem directly in your connected project and puts the change up for you to look over. When it can't fix it directly, it adds a fix brief (SIMSA-FIX-BRIEF.md) instead, for your coding agent or developer to pick up.",
       button: "Fix it",
       submitting: "Requesting…",
       progressTitle: "Repair in progress",
-      progressBody: "Simsa is preparing the repair branch and the draft PR. This section updates automatically when it is ready.",
-      statusQueued: "Waiting",
+      progressBody: "Simsa is preparing the fix. This section updates automatically when it is ready.",
+      // Train W — W-3 ①: no duration here — there is no measured sample for repairs yet.
+      // #558 검증 2차 P2-4: no queue/slot — the repair container acks "running" on receipt.
+      progressBodyQueued: "Starting the repair. This section updates automatically when it is ready.",
+      statusQueued: "Starting",
       statusRunning: "Preparing",
       doneTitle: "The repair starting-point PR is ready",
       doneBody: "A draft PR with the fix brief (SIMSA-FIX-BRIEF.md) was opened. Code changes are not applied automatically yet — hand this PR to your coding agent or developer to continue.",
+      // Train W — W-3 ③: a job that really changed code (mode auto_fix, Stage 270)
+      // gets its own done copy — the brief-only copy above says code was NOT changed.
+      // #558 검증 P2-3·P2-9: no developer terms (was "…as a PR … before you merge it").
+      doneTitleAutoFix: "The fix is ready",
+      doneBodyAutoFix: "Simsa changed the code to fix this problem. Look it over before it goes into your live app.",
+      // Contract 4 — only when the server says buildVerified === false.
+      buildUnverified: "We couldn't confirm that the fixed code actually builds.",
       openPr: "Open the repair PR on GitHub",
       branchLabel: "Branch",
       noPrNote: "The PR address was not returned. Please check the branch on your GitHub repository.",
@@ -2523,6 +2571,11 @@ const EN = {
         alreadyActive: "A repair is already in progress for this inspection.",
         notFound: "This inspection or project was not found. It may only exist in another browser.",
         forbidden: "You do not have access to this project.",
+        // Train W — W-2 (D-7 amend): 429 daily cap / 503 kill switch.
+        dailyLimitReached: "You've used all of today's fixes. You can try again tomorrow (after midnight UTC).",
+        dailyLimitReachedAt: "You've used all of today's fixes. You can try again {when}.",
+        dailyLimitCleared: "Your daily fixes have reset. You can try again now.",
+        repairDisabled: "Fixing is paused for now. We'll reopen it soon.",
         generic: "Could not start the repair. Please try again.",
       },
     },
@@ -2654,11 +2707,12 @@ const EN = {
     websiteHint: "The deployed app or landing page to inspect (http/https URL).",
     websitePlaceholder: "https://your-app.example.com",
     githubTitle: "GitHub repository",
-    githubHint: "Paste the repository's address, or type it as owner/repo. No GitHub sign-in needed for a public repository.",
+    // Train W — W-3 ②: "no sign-in" covers READING only; fixing needs a connection.
+    githubHint: "Paste the repository's address, or type it as owner/repo. A public repository can be read without a GitHub sign-in — reading only. To have Simsa fix it, connect GitHub.",
     githubPlaceholder: "https://github.com/owner/repo",
     reach: {
       siteReadable: "The address responded. Simsa can inspect what is visible without signing in.",
-      repoReadablePublic: "The repository is readable. No GitHub sign-in needed.",
+      repoReadablePublic: "The repository is readable without a GitHub sign-in — reading only. To have Simsa fix it, connect GitHub.",
       repoReadablePrivate: "The repository is private and your GitHub account can read it.",
       repoNeedsAccess:
         "Saved, but Simsa cannot read it yet. If it is private, give Simsa access below. If it is public, check the address for a typo.",
@@ -3143,7 +3197,8 @@ const KO = {
     codeStepSub: "앱 주소나 GitHub 저장소를 붙여넣기만 하면 됩니다.",
     submitLabel: "앱 주소 또는 GitHub 저장소",
     submitPlaceholder: "https://내앱주소.com  ·  또는 GitHub 저장소 링크",
-    submitHint: "둘 중 아무거나 괜찮아요. 공개 저장소는 GitHub 로그인이 필요 없습니다.",
+    // Train W — W-3 ②: "로그인 불필요"는 **읽기**까지만. 고치려면 연결이 필요하다.
+    submitHint: "둘 중 아무거나 괜찮아요. 공개 저장소는 GitHub 로그인 없이 읽을 수 있어요(읽기만). 고치려면 나중에 연결이 필요해요.",
     submitCta: "검수 시작하기",
     submitWorking: "준비하는 중…",
     submitErrEmpty: "앱 주소나 GitHub 저장소를 붙여넣어 주세요.",
@@ -5175,16 +5230,25 @@ const KO = {
     intentPlaceholder: "예: 회원가입과 핵심 기능이 끝까지 작동해야 해요",
     runButton: "지금 검수하기",
     runSubmitting: "요청하는 중이에요…",
-    runQueuedOnly: "실행기가 아직 준비되지 않아 대기열에만 등록됐어요. 실행기가 준비되면 순서대로 진행돼요.",
+    // Train W — W-3 ①: 실행기에 넘기지 못한 검수는 서버가 **즉시 실패로** 바꾼다(나중에
+    // 집어 가는 곳이 없다). "대기열에서 순서대로 진행"이라고 약속하면 안 된다.
+    runQueuedOnly: "지금은 확인을 시작하지 못했어요. 확인을 돌리는 쪽이 아직 준비되지 않았어요 — 잠시 뒤 다시 눌러 주세요.",
     runActiveNotice: "이미 검수가 진행 중이에요. 끝나면 새 검수를 시작할 수 있어요.",
     runNeedWebsite: "먼저 웹사이트 주소를 연결하세요. 그래야 Simsa가 무엇을 검수할지 알 수 있어요.",
     goToSources: "웹사이트 연결하기",
-    statusQueued: "대기 중",
+    // #558 검증 2차 P2-4: queued = 실행기에 넘긴 뒤 실행기가 "시작했다"를 알리기까지의 짧은
+    // 구간이다. 대기열·차례는 없다(디스패치는 한 번, 인스턴스 상한을 넘으면 기다리지 않고 시작 실패).
+    statusQueued: "시작하는 중",
     statusRunning: "검수 중",
     statusDone: "완료",
     statusFailed: "실패",
     progressTitle: "검수가 진행 중이에요",
-    progressBody: "실제 브라우저로 앱을 열어 핵심 흐름을 확인하고 있어요. 리포트가 준비되면 이 화면이 자동으로 갱신돼요.",
+    // Train W — W-3 ① / #558 검증 2차 P2-5: 시간은 실측된 것만, 두 표본을 모두 덮는 범위로 —
+    // 지시서 없는 기본 검수 48~51초(HANDOFF 07-02 wvc_34jy60jbe5 51초 · 07-20 +50s · 08-20 컨테이너
+    // 48초), 개발 지시서의 AC 시나리오까지 도는 검수 191~249초(HANDOFF 09-24 wvc_exyd0xaiaj 191s ·
+    // 09-25 E4 249s, BM 2026-09-27 T2 170~250초) → "보통 1~4분".
+    progressBody: "실제 브라우저로 앱을 열어 핵심 흐름을 확인하고 있어요. 요청부터 리포트까지 보통 1~4분 걸려요. 리포트가 준비되면 이 화면이 자동으로 갱신돼요.",
+    progressBodyQueued: "확인을 시작하고 있어요. 요청부터 리포트까지 보통 1~4분 걸리고, 이 화면은 자동으로 갱신돼요.",
     failedTitle: "검수를 마치지 못했어요",
     failedBody: "앱을 검수하는 중에 문제가 생겼어요. 새 검수를 다시 실행해주세요.",
     runErrors: {
@@ -5193,7 +5257,27 @@ const KO = {
       projectNotFound: "프로젝트를 찾을 수 없어요. 다른 브라우저에만 있는 프로젝트일 수 있어요.",
       forbidden: "이 프로젝트에 접근할 수 없어요.",
       invalidIntent: "설명이 너무 길어요. 1000자 이내로 줄여주세요.",
+      // Train W — W-2 (D-7 amend): 429 일일 상한 / 503 킬스위치. 계약 문장 그대로.
+      dailyLimitReached: "오늘 확인 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
+      dailyLimitReachedAt: "오늘 확인 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
+      // #558 검증 P2-1: 알림이 떠 있는 채로 resetAt이 지난 경우.
+      dailyLimitCleared: "확인 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
+      inspectionDisabled: "지금은 확인을 잠시 멈췄어요. 곧 다시 열게요.",
       generic: "검수를 시작하지 못했어요. 다시 시도해주세요.",
+    },
+    // Train W — W-2 상한의 "{when}" (#558 검증 P2-11: 단어와 어순은 전부 여기 —
+    // lib/daily-limit.mjs는 숫자만 채운다). {time} = time 또는 timeWithMinute ·
+    // {period} = am/pm · {hour} = 12시간제 숫자(00시대는 midnightHour) · {minute} = 0~59 · {mm} = 두 자리.
+    resetWhen: {
+      today: "오늘 {time} 이후",
+      tomorrow: "내일 {time} 이후",
+      onDate: "{month}월 {day}일 {time} 이후",
+      time: "{period} {hour}시",
+      timeWithMinute: "{period} {hour}시 {minute}분",
+      am: "오전",
+      pm: "오후",
+      midnightHour: "0",
+      months: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
     },
     // Stage 266 — 직전 완료 검수와의 전/후 비교.
     compare: {
@@ -5217,19 +5301,30 @@ const KO = {
       latestOnly: "이번 검수에만 있어요",
       noPairs: "나란히 비교할 수 있는 같은 이름의 스크린샷이 없어요.",
     },
-    // Stage 269 — "[고치기]" 버튼: Stage 268 수리 작업을 시작해 고침 지시서를
-    // 담은 초안(Draft) PR을 열어요 (코드 자동 수정은 아직 아님).
+    // Stage 269 — "[고치기]" 버튼: 수리 작업을 시작해요. Stage 270부터는 코드를 실제로
+    // 고치거나(auto_fix), 어려우면 고침 지시서로 대신해요(brief_only). 시작 전·진행 중에는
+    // 어느 쪽이 될지 모르므로 desc·progressBody는 둘 중 하나를 약속하지 않아요(#558 검증 P2-10).
     repair: {
       title: "고치기 시작",
-      desc: "Simsa가 연결된 GitHub 저장소에 수리 브랜치를 만들고, 고침 지시서(SIMSA-FIX-BRIEF.md)를 담은 초안(Draft) PR을 열어요. 코드가 자동으로 수정되는 건 아직 아니에요 — 이 PR은 코딩 에이전트나 개발자가 이어받는 수리 시작점이에요.",
+      desc: "Simsa가 연결된 프로젝트에서 이 문제를 직접 고쳐 보고, 고친 내용을 살펴보실 수 있게 올려 둬요. 바로 고치기 어려우면 무엇을 어떻게 고칠지 적은 고침 지시서(SIMSA-FIX-BRIEF.md)를 대신 올려요 — 코딩 에이전트나 개발자가 이어받을 수 있어요.",
       button: "고치기",
       submitting: "요청하는 중이에요…",
       progressTitle: "고치는 중이에요",
-      progressBody: "수리 브랜치와 초안 PR을 준비하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
-      statusQueued: "대기 중",
+      progressBody: "고칠 내용을 준비하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
+      // Train W — W-3 ①: 수리는 실측 표본이 없어 시간을 말하지 않는다.
+      // #558 검증 2차 P2-4: 대기열·차례는 없다 — 수리 컨테이너도 받자마자 "시작했다"를 알린다.
+      progressBodyQueued: "고치기를 시작하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
+      statusQueued: "시작하는 중",
       statusRunning: "준비 중",
       doneTitle: "수리 시작점 PR이 준비됐어요",
       doneBody: "고침 지시서(SIMSA-FIX-BRIEF.md)를 담은 초안 PR이 열렸어요. 코드가 자동으로 수정된 건 아직 아니에요 — 이 PR을 코딩 에이전트나 개발자에게 넘겨 이어서 진행하세요.",
+      // Train W — W-3 ③: 실제로 코드를 고친 잡(mode auto_fix, Stage 270)의 완료 문구 —
+      // 위 문구는 "코드는 안 바뀌었다"는 지시서 전용이다.
+      // #558 검증 P2-3·P2-9: 개발자 용어 없이("PR이 준비됐어요 … PR로 올렸어요" 교체).
+      doneTitleAutoFix: "고친 내용이 준비됐어요",
+      doneBodyAutoFix: "Simsa가 이 문제를 고치도록 코드를 바꿔 두었어요. 실제 앱에 반영하기 전에 한번 살펴봐 주세요.",
+      // 계약 4 — 서버가 buildVerified === false라고 할 때만.
+      buildUnverified: "고친 코드가 실제로 빌드되는지는 확인하지 못했어요.",
       openPr: "GitHub에서 수리 PR 열기",
       branchLabel: "브랜치",
       noPrNote: "PR 주소를 받지 못했어요. GitHub 저장소에서 브랜치를 확인해주세요.",
@@ -5253,6 +5348,11 @@ const KO = {
         alreadyActive: "이 검수에 대한 고치기가 이미 진행 중이에요.",
         notFound: "검수나 프로젝트를 찾을 수 없어요. 다른 브라우저에만 있을 수 있어요.",
         forbidden: "이 프로젝트에 접근할 수 없어요.",
+        // Train W — W-2 (D-7 amend): 429 일일 상한 / 503 킬스위치 — 검수와 같은 패턴.
+        dailyLimitReached: "오늘 고치기 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
+        dailyLimitReachedAt: "오늘 고치기 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
+        dailyLimitCleared: "고치기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
+        repairDisabled: "지금은 고치기를 잠시 멈췄어요. 곧 다시 열게요.",
         generic: "고치기를 시작하지 못했어요. 다시 시도해주세요.",
       },
     },
@@ -5382,11 +5482,12 @@ const KO = {
     websiteHint: "검수할 배포된 앱이나 랜딩 페이지 주소예요 (http/https URL).",
     websitePlaceholder: "https://your-app.example.com",
     githubTitle: "GitHub 저장소",
-    githubHint: "저장소 주소를 그대로 붙여넣거나 owner/repo 형식으로 입력하세요. 공개 저장소는 GitHub 로그인 없이 됩니다.",
+    // Train W — W-3 ②: "로그인 없이"는 **읽기**까지만. 고치려면 연결이 필요하다.
+    githubHint: "저장소 주소를 그대로 붙여넣거나 owner/repo 형식으로 입력하세요. 공개 저장소는 GitHub 로그인 없이 읽을 수 있어요(읽기만). 고치려면 GitHub 연결이 필요해요.",
     githubPlaceholder: "https://github.com/owner/repo",
     reach: {
       siteReadable: "주소가 응답했어요. 로그인 없이 보이는 화면을 검수할 수 있습니다.",
-      repoReadablePublic: "저장소를 읽을 수 있어요. GitHub 로그인이 필요 없습니다.",
+      repoReadablePublic: "저장소를 읽을 수 있어요 — GitHub 로그인 없이 읽기만 해요. 고치려면 GitHub 연결이 필요해요.",
       repoReadablePrivate: "비공개 저장소이고, 연결된 GitHub 계정으로 읽을 수 있어요.",
       repoNeedsAccess:
         "저장은 됐지만 아직 읽지 못해요. 비공개 저장소라면 아래에서 접근 권한을 주시고, 공개 저장소라면 주소에 오타가 없는지 확인해 주세요.",

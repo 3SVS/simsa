@@ -7,6 +7,10 @@ export type RepairErrorKey =
   | "alreadyActive"
   | "notFound"
   | "forbidden"
+  /** Train W — W-2: 429 daily_limit_reached (수리 5/일, UTC 일 기준). */
+  | "dailyLimitReached"
+  /** Train W — W-2: 503 repair_disabled (REPAIR_ENABLED="off"). */
+  | "repairDisabled"
   | "generic";
 
 export const REPAIR_POLL_INTERVAL_MS: number;
@@ -42,3 +46,20 @@ export type RepairFailureKind = "repoAccessDenied" | "generic";
 export function repairFailureKind(
   repair: { status?: unknown; error?: unknown } | null | undefined,
 ): RepairFailureKind | null;
+
+/** Train W — W-2: the whole answer → error key + resetAt (daily cap only; null otherwise). */
+export function repairErrorNotice(res: unknown): { errorKey: RepairErrorKey; resetAt: string | null };
+
+/** Callout tone: today's cap and a paused service are information, not a red error. */
+export function repairErrorTone(key: RepairErrorKey): "info" | "error";
+
+/**
+ * Train W — W-3 ③: true only for a finished `mode: "auto_fix"` job whose server says
+ * buildVerified === false (same test as repairDoneKind; brief_only → server sends null).
+ */
+export function showBuildUnverified(
+  repair: { status?: unknown; mode?: unknown; buildVerified?: unknown } | null | undefined,
+): boolean;
+
+/** "autoFix" (real code changes, Stage 270) · "briefOnly" (fix-brief draft PR, legacy/unknown). */
+export function repairDoneKind(repair: { mode?: unknown } | null | undefined): "autoFix" | "briefOnly";

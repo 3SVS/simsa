@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Paddle 샌드박스 체크아웃 (스파이크)</title>
+  <!-- Paddle.js v2 (developer.paddle.com/build/checkout/build-overlay-checkout, 2026-09-28 접근) -->
+  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+  <style>
+    :root { color-scheme: light; --ink: #1c1917; --muted: #57534e; --line: #e7e5e4; --bg: #faf8f3; --accent: #5c111c; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--ink); font: 15px/1.6 system-ui, -apple-system, "Pretendard", sans-serif; }
+    main { max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 16px 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; word-break: break-all; }
+    button { padding: 10px 16px; border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px; font: inherit; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    pre { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 12px; font-size: 12px; overflow-x: auto; max-height: 320px; }
+    .banner { border: 1px solid var(--line); background: #fff; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="banner">샌드박스 전용 스파이크 페이지입니다. 실제 결제가 일어나지 않습니다. 테스트 카드만 쓰세요.</div>
+  <h1>Build guarantee — 카드 등록(트라이얼)</h1>
+  <p>works-or-free 검증용: 카드만 받아 두고, 빌드가 성공했을 때만 서버가 일회 청구합니다.</p>
+  <dl>
+    <dt>환경</dt><dd id="env">불러오는 중…</dd>
+    <dt>변형</dt><dd id="variant">—</dd>
+    <dt>가격</dt><dd id="price">—</dd>
+    <dt>프로젝트명</dt><dd id="project">—</dd>
+  </dl>
+  <button id="open" type="button" disabled>체크아웃 열기</button>
+  <h2 style="font-size:15px;margin:24px 0 8px">이벤트</h2>
+  <pre id="log">(아직 없음)</pre>
+</main>
+<script>
+  // Playwright(run-checkout.mjs)가 읽는 이벤트 버퍼. 페이지 밖으로 보내지 않는다.
+  window.__spikeEvents = [];
+  window.__spikeReady = false;
+
+  function logEvent(name, data) {
+    const entry = { name: name, at: new Date().toISOString(), data: data || null };
+    window.__spikeEvents.push(entry);
+    const el = document.getElementById("log");
+    el.textContent = window.__spikeEvents.map(function (e) { return e.at + "  " + e.name; }).join("\n");
+  }
+
+  async function boot() {
+    const res = await fetch("/config.json", { cache: "no-store" });
+    const cfg = await res.json();
+    if (cfg.environment !== "sandbox") throw new Error("sandbox 설정이 아닙니다");
+    document.getElementById("env").textContent = cfg.environment;
+    document.getElementById("variant").textContent = cfg.variant;
+    document.getElementById("price").textContent = cfg.priceId;
+    document.getElementById("project").textContent = cfg.customData.simsa_project_name;
+
+    // 샌드박스 고정 — 설정값과 무관하게 이 페이지는 라이브로 초기화하지 않는다.
+    Paddle.Environment.set("sandbox");
+    Paddle.Initialize({
+      token: cfg.clientToken,
+      eventCallback: function (ev) {
+        // checkout.completed 등의 data 는 거래와 비슷한 모양(transaction_id 포함). 그대로 버퍼에 둔다 —
+        // 증거로 저장할 때 run-checkout.mjs 가 가린다(이메일·카드 등).
+        logEvent(ev && ev.name ? ev.name : "unknown", ev && ev.data ? ev.data : null);
+      },
+    });
+
+    const btn = document.getElementById("open");
+    btn.disabled = false;
+    btn.addEventListener("click", function () {
+      Paddle.Checkout.open({
+        items: [{ priceId: cfg.priceId, quantity: 1 }],
+        customer: cfg.customer,
+        customData: cfg.customData,
+        settings: cfg.settings,
+      });
+    });
+    window.__spikeReady = true;
+  }
+
+  boot().catch(function (e) {
+    logEvent("page.error", { message: String(e && e.message ? e.message : e) });
+  });
+</script>
+</body>
+</html>

@@ -22,6 +22,8 @@ type ToastContextValue = {
   push: (t: ToastInput & { onAction?: () => void }) => string;
   success: (message: string, opts?: Partial<ToastInput> & { onAction?: () => void }) => string;
   error: (message: string, opts?: Partial<ToastInput> & { onAction?: () => void }) => string;
+  /** Information that is not the reader's mistake (today's cap, a paused service). */
+  info: (message: string, opts?: Partial<ToastInput> & { onAction?: () => void }) => string;
   dismiss: (id: string) => void;
 };
 
@@ -29,7 +31,8 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 /**
  * Bottom-right toast system. One shared queue (reducer-backed), success + error
- * variants, ~3s auto-dismiss, optional single action (e.g. Undo). Action results
+ * + info variants (info = neutral, not the reader's mistake), ~3s auto-dismiss
+ * by default, optional single action (e.g. Undo). Action results
  * that were previously invisible (save/send/copy/connect success, and
  * server-sync-failed-saved-on-device) surface here. Inline callouts stay for
  * form validation only.
@@ -60,9 +63,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message, opts) => push({ ...opts, message, variant: "error" }),
     [push]
   );
+  const info = useCallback<ToastContextValue["info"]>(
+    (message, opts) => push({ ...opts, message, variant: "info" }),
+    [push]
+  );
 
   return (
-    <ToastContext.Provider value={{ push, success, error, dismiss }}>
+    <ToastContext.Provider value={{ push, success, error, info, dismiss }}>
       {children}
       <div
         className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2"
@@ -94,7 +101,7 @@ function ToastCard({
   onDismiss,
   onAction,
 }: {
-  toast: { id: string; variant: "success" | "error"; message: string; actionLabel?: string; duration: number };
+  toast: { id: string; variant: "success" | "error" | "info"; message: string; actionLabel?: string; duration: number };
   dismissLabel: string;
   onDismiss: () => void;
   onAction: () => void;
@@ -107,11 +114,14 @@ function ToastCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast.id, toast.duration]);
 
+  // info reuses the callout-info slate tokens (globals.css) — neutral, not red.
   const tone =
     toast.variant === "error"
       ? "border-red-200 bg-red-50 text-red-800"
-      : "border-green-200 bg-green-50 text-green-800";
-  const dotTone = toast.variant === "error" ? "bg-red-500" : "bg-green-500";
+      : toast.variant === "info"
+        ? "border-slate-200 bg-slate-50 text-slate-700"
+        : "border-green-200 bg-green-50 text-green-800";
+  const dotTone = toast.variant === "error" ? "bg-red-500" : toast.variant === "info" ? "bg-slate-400" : "bg-green-500";
 
   return (
     <div
@@ -146,5 +156,5 @@ export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (ctx) return ctx;
   const noop = () => "";
-  return { push: noop, success: noop, error: noop, dismiss: () => {} };
+  return { push: noop, success: noop, error: noop, info: noop, dismiss: () => {} };
 }
