@@ -50,3 +50,6 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 
 CREATE INDEX IF NOT EXISTS llm_usage_kind_created_idx ON llm_usage(job_kind, created_at);
 CREATE INDEX IF NOT EXISTS llm_usage_job_idx ON llm_usage(job_id);
+-- /admin/usage-stats의 기간 조회(job_kind 조건 없음)는 (job_kind, created_at)의 선두 컬럼이 없어 그 인덱스를
+-- 못 탄다(전체 SCAN). created_at 단독 인덱스로 범위 검색 + 최신순 역스캔(ORDER BY created_at DESC LIMIT).
+CREATE INDEX IF NOT EXISTS llm_usage_created_idx ON llm_usage(created_at);

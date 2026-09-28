@@ -10,6 +10,10 @@
  *   - 콜백 usage[]는 신뢰 경계 밖 — Zod로 항목별 검증, 잘못된 항목은 버리고 **본 처리는 계속**(400 아님),
  *     최대 200개.
  *   - project_id·user_key는 호출자가 **소유권을 확인한 값**만 넘긴다(콜백은 잡 행에서, 동기 요청은 소유 확인 뒤).
+ *
+ * ★커버리지(#562 결함 4): 이 원장은 **모든** LLM 원가가 아니다. 원장 밖 경로는 LEDGER_NOT_METERED에 있고
+ * /admin/usage-stats가 응답에 그대로 싣는다(totals를 [확정] 전체 원가로 읽지 않게). 목록은 테스트
+ * (train-l-l5 ⑥)가 src를 훑어 대조한다 — LLM을 부르면서 배선이 없는 파일이 목록에 없으면 CI가 깨진다.
  */
 import { z } from "zod";
 import { sha256Hex } from "../util.js";
@@ -18,6 +22,38 @@ import type { LlmUsageEvent, LlmUsageSink } from "./anthropic-fetch.js";
 
 export const LLM_JOB_KINDS = ["generate", "dev_spec", "check", "council", "repair", "build", "inspection", "other"] as const;
 export type LlmJobKind = (typeof LLM_JOB_KINDS)[number];
+
+/** 원장이 보지 않는 LLM 호출 경로 하나. source는 앱 루트 기준 경로. */
+export type NotMeteredPath = { callSite: string; source: string; trigger: string };
+
+/**
+ * 원장(llm_usage)에 **기록되지 않는** LLM 호출 경로 — 후속 배선 대상(job_kind 'other' + call_site = 아래 callSite).
+ * 대부분은 `anthropic_usage` 로그에만 남거나(anthropicMessages 경유) 아무 계측도 없다(api.anthropic.com 직행).
+ * 2026-09 현재 프로덕션은 Anthropic 직행이 막혀 있어 직행 경로의 실비용은 0에 가까울 수 있지만(미측정),
+ * 키나 경로가 살아나면 원장 totals가 **과소 보고**된다.
+ */
+export const LEDGER_NOT_METERED: readonly NotMeteredPath[] = [
+  // Worker 동기 요청 — anthropicMessages 경유(anthropic_usage 로그에는 남는다), 원장 싱크 미배선.
+  { callSite: "fix", source: "src/workspace/fix.ts", trigger: "Worker 요청(수정 제안)" },
+  { callSite: "recommend", source: "src/workspace/recommend.ts", trigger: "Worker 요청(추천 답변)" },
+  { callSite: "unstick", source: "src/workspace/unstick.ts", trigger: "Worker 요청(막힘 풀기)" },
+  { callSite: "pr-review", source: "src/workspace/pr-review.ts", trigger: "Worker 요청(PR 검토)" },
+  // 크론·백그라운드 — api.anthropic.com 직행 fetch(계측 없음). index.ts scheduled()가 부른다.
+  { callSite: "external-references", source: "src/external-references.ts", trigger: "cron 0 3 * * *" },
+  { callSite: "feedback-classify", source: "src/feedback-classifier.ts", trigger: "cron 0 */6 * * *(재시도) + 피드백 제출" },
+  { callSite: "seed-promoter", source: "src/seed-promoter.ts", trigger: "cron 0 4 * * *" },
+  { callSite: "source-discovery", source: "src/source-discovery.ts", trigger: "cron 0 5 * * 7" },
+  { callSite: "oss-pr-miner", source: "src/oss-pr-miner.ts", trigger: "cron 0 6 * * *" },
+  { callSite: "changelog-monitor", source: "src/changelog-monitor.ts", trigger: "cron 0 7 * * 1" },
+  { callSite: "deploy-trend-watcher", source: "src/deploy-trend-watcher.ts", trigger: "cron 0 7 * * 1" },
+  { callSite: "agent-spawner", source: "src/agent-spawner.ts", trigger: "cron 0 8 * * 1" },
+  // 그 밖의 직행 경로.
+  { callSite: "demo", source: "src/routes/demo.ts", trigger: "POST /saas/demo/review" },
+  { callSite: "llm-probe", source: "src/routes/llm-probe.ts", trigger: "운영자 프로브 /internal/llm-probe" },
+  { callSite: "legacy-autofix-sandbox", source: "src/routes/saas.ts", trigger: "레거시 /saas 자동수정 컨테이너(키를 헤더로 넘김)" },
+  // 수리 컨테이너 중 콜백 usage[]가 실리지 않는 경로(수집기가 그 스코프에 없다).
+  { callSite: "repair-container-crash", source: "container/server.mjs", trigger: "SIGTERM 종료·runRepairJob 바깥 크래시 콜백" },
+];
 
 export type LlmUsageRowInput = LlmUsageEvent & {
   jobKind: LlmJobKind;

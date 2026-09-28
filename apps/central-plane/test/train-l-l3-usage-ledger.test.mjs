@@ -174,6 +174,8 @@ describe("① 0070_llm_usage.sql 형태", () => {
     assert.match(c, /job_kind TEXT NOT NULL CHECK \(job_kind IN \('generate','dev_spec','check','council','repair','build','inspection','other'\)\)/);
     assert.match(c, /CREATE INDEX IF NOT EXISTS \w+ ON llm_usage\s*\(job_kind, created_at\)/);
     assert.match(c, /CREATE INDEX IF NOT EXISTS \w+ ON llm_usage\s*\(job_id\)/);
+    // #562 결함 6: /admin/usage-stats의 기간 조회(선두 컬럼 job_kind 없음)는 (job_kind, created_at)을 못 탄다.
+    assert.match(c, /CREATE INDEX IF NOT EXISTS \w+ ON llm_usage\s*\(created_at\)/, "created_at 단독 인덱스");
     const numbered = readdirSync(join(here, "..", "migrations")).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
     assert.equal(numbered.filter((f) => f.startsWith("0070_")).length, 1, "0070은 하나");
   });

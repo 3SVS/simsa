@@ -60,3 +60,28 @@ describe("실제 SQLite — 원장 INSERT", { skip }, () => {
     assert.throws(() => stmt.run(...args(row({ id: "lu_fixed_2", job_kind: "없는종류" }))), /CHECK constraint failed/);
   });
 });
+
+describe("실제 SQLite — /admin/usage-stats 조회 계획 (#562 결함 6)", { skip }, () => {
+  it("★기간 조회가 created_at 인덱스를 탄다(전체 SCAN 아님), 정렬용 임시 B-tree도 없다", async () => {
+    const { USAGE_STATS_SQL } = await import("../dist/routes/admin-usage-stats.js");
+    assert.equal(typeof USAGE_STATS_SQL, "string", "USAGE_STATS_SQL export");
+    const db = freshDb();
+    const plan = db.prepare(`EXPLAIN QUERY PLAN ${USAGE_STATS_SQL}`).all("2026-09-21T00:00:00.000Z", "2026-09-28T00:00:00.000Z", 50_000).map((r) => r.detail);
+    const text = plan.join(" | ");
+    assert.match(text, /USING (COVERING )?INDEX llm_usage_created_idx/, text);
+    assert.doesNotMatch(text, /SCAN llm_usage(?! USING)/, text);
+    assert.doesNotMatch(text, /TEMP B-TREE/, text);
+  });
+
+  it("최신 순으로 LIMIT만큼 — 실제 엔진에서 잘린 결과가 가장 최근 행이다", async () => {
+    const { USAGE_STATS_SQL } = await import("../dist/routes/admin-usage-stats.js");
+    const { LLM_USAGE_INSERT_SQL } = await import("../dist/workspace/llm-usage.js");
+    const db = freshDb();
+    const ins = db.prepare(LLM_USAGE_INSERT_SQL);
+    for (let i = 0; i < 5; i++) ins.run(...COLS.map((c) => row({ id: `lu_old_${i}`, job_kind: "build", created_at: `2026-09-22T00:00:0${i}.000Z` })[c]));
+    for (let i = 0; i < 5; i++) ins.run(...COLS.map((c) => row({ id: `lu_new_${i}`, job_kind: "check", created_at: `2026-09-27T00:00:0${i}.000Z` })[c]));
+    const got = db.prepare(USAGE_STATS_SQL).all("2026-09-21T00:00:00.000Z", "2026-09-28T00:00:00.000Z", 5);
+    assert.equal(got.length, 5);
+    assert.ok(got.every((r) => r.job_kind === "check"), JSON.stringify(got.map((r) => r.job_kind)));
+  });
+});
