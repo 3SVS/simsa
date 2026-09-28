@@ -181,9 +181,11 @@ test("⑧-c nextStepFromHere가 개발자 모드를 nextScreenSlug까지 전달�
   assert.equal(nextStepFromHere("visual-checks", { entryPath: "code", visual: { findingCount: 0 } })?.slug, "items");
   assert.equal(nextStepFromHere("github", { entryPath: "code", developerMode: true })?.slug, "items");
   // ★정정 (#559 검증 결함 4·13): 기본 모드에서도 PR 화면에 오는 사람이 있다 — PR 검토 이력이
-  //  있는 비개발자(사이드바가 보여 준다)·확인 결과 화면의 PR 링크·북마크. 순서 밖이라고 null을
-  //  주면 그들의 하단 "다음 →"이 사라진다. 개발자 순서의 다음 칸으로 잇는다.
-  assert.equal(nextStepFromHere("github", { entryPath: "code" })?.slug, "items");
+  //  있는 비개발자(사이드바가 보여 준다)·확인 결과 화면의 PR 링크·북마크.
+  // ★의도된 변경 (#559 여정 렌즈 결함 4): 그 화면의 바는 화면 자신의 "실제 앱 확인하기"와 같은
+  //  곳으로 — 주소가 있으면 실제 앱 확인, 주소 사실을 모르거나 없으면 바 없음(화면 버튼이 길).
+  assert.equal(nextStepFromHere("github", { entryPath: "code", hasDeployUrl: true })?.slug, "visual-checks");
+  assert.equal(nextStepFromHere("github", { entryPath: "code" }), null);
 });
 
 // ─── D6 — 앱 있음 판정 · 단계 라벨 · 사이드바 항목 ───────────────────────────────
@@ -355,7 +357,9 @@ const NEW_KEYS = [
   "commandCenter.addUrlStarting",
   "commandCenter.addUrlHelpToggle",
   "commandCenter.addUrlHelpLovable",
-  "commandCenter.addUrlHelpBoltV0",
+  // ★의도된 변경 (#559 여정 렌즈 결함 1): 묶인 "Bolt·v0" 줄 → 도구별 한 줄씩 (버튼 위치가 다르다).
+  "commandCenter.addUrlHelpBolt",
+  "commandCenter.addUrlHelpV0",
   "commandCenter.addUrlHelpReplit",
   "commandCenter.addUrlHelpSelf",
   "commandCenter.addUrlHelpNotLive",
@@ -386,11 +390,13 @@ const PR_ALLOWED = new Set(["nav.githubDev", "github.noPulls", "github.noPullsDe
 const TOOL_NAMES_ALLOWED = new Set([
   "commandCenter.addUrlPlaceholder",
   "commandCenter.addUrlHelpLovable",
-  "commandCenter.addUrlHelpBoltV0",
+  "commandCenter.addUrlHelpBolt",
+  "commandCenter.addUrlHelpV0",
   "commandCenter.addUrlHelpReplit",
   "github.noPulls",
 ]);
-const TOOL_NAMES = new Set(["Lovable", "Bolt", "v0"]);
+// "Vercel": v0 줄이 보여 주는 사용자 자기 앱 주소의 끝 모양(…vercel.app) — 계정 연결 안내가 아니다.
+const TOOL_NAMES = new Set(["Lovable", "Bolt", "v0", "Vercel"]);
 
 /** 초보자 기본 흐름 금칙어 (지시서 목록 — 브랜치·PR·터미널·저장소·커밋·diff·토큰·푸시·새로고침). */
 const FORBIDDEN_KO_EN = [

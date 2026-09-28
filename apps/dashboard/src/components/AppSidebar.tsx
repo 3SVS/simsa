@@ -19,7 +19,7 @@ import {
   reviewRunFact,
   sourceFacts,
 } from "@/lib/project-steps.mjs";
-import { publishAppPresence } from "@/lib/app-presence.mjs";
+import { publishAppAddress, publishAppPresence } from "@/lib/app-presence.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
@@ -45,6 +45,11 @@ export function AppSidebar() {
   const projectId = useProjectId(pathname);
 
   const [collapsed, setCollapsed] = useState(false);
+  // #559 여정 렌즈 결함 11: the server and the first client paint know neither the
+  // locale (read from storage after mount → English) nor this browser's projects
+  // (localStorage → "No projects yet", untrue for anyone who has some). Until
+  // mounted, the sidebar draws a wordless placeholder instead of that verdict.
+  const [mounted, setMounted] = useState(false);
   // Mobile (<md): the sidebar is hidden and replaced by a fixed top bar with a
   // menu button that opens the SAME expanded body as an overlay drawer. Without
   // this the fixed w-60 rail left ~120px of content on a 360px phone.
@@ -97,6 +102,9 @@ export function AppSidebar() {
     // Optimistic first paint from whatever bucket is active; syncSession then
     // reconciles to the confirmed identity and reloads.
     setProjects([...loadLocalProjects(), ...MOCK_PROJECTS]);
+    // Batched with the locale the I18nProvider reads in the same commit — the
+    // first full paint is already in the user's language, with their projects.
+    setMounted(true);
     void syncSession();
     const onAuthChanged = () => void syncSession();
     window.addEventListener("simsa:auth-changed", onAuthChanged);
@@ -167,9 +175,22 @@ export function AppSidebar() {
     if (!projectId) return;
     let cancelled = false;
     const uk = getUserKey();
-    const repo = fetchProjectRepoSettled(fetchProjectRepo, projectId, uk)
+    // #559 여정 렌즈 결함 12: settle on the FIRST repo answer. For an idea-branch
+    // project "no repo" is the usual answer, and waiting out the read-after-write
+    // retries (700ms × 3) held the step-2 label and items for 3–4.5 s on every
+    // visit. The retries still run; a repo linked a moment ago replaces the
+    // provisional answer when they find it.
+    let firstSettled: () => void = () => {};
+    const repoFirst = new Promise<void>((resolve) => { firstSettled = resolve; });
+    fetchProjectRepoSettled(fetchProjectRepo, projectId, uk, {
+      onFirst: (first) => {
+        if (!cancelled) setHasRepo(repoConnectedFact(first));
+        firstSettled();
+      },
+    })
       .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => firstSettled());
     listProjectReviewHistory(projectId, uk, { limit: 1 })
       .then((res) => { if (!cancelled) setHasReviewRun(reviewRunFact(res)); })
       .catch(() => {});
@@ -183,7 +204,8 @@ export function AppSidebar() {
       .catch(() => {});
     // Stays true across navigations inside the project (facts reset only when
     // the project changes), so the hold happens once per project, not per click.
-    void Promise.all([repo, sources]).then(() => { if (!cancelled) setAppFactsSettled(true); });
+    // The repo side counts as answered at its first answer (결함 12, above).
+    void Promise.all([repoFirst, sources]).then(() => { if (!cancelled) setAppFactsSettled(true); });
     // Finished runs only — a queued/running/failed run is not "checked" (결함 2).
     listVisualChecks(projectId, uk)
       .then((res) => { if (!cancelled) setHasVisualCheck(visualCheckFact(res)); })
@@ -287,6 +309,12 @@ export function AppSidebar() {
   useEffect(() => {
     if (projectId && factsProjectId === projectId && view.known) publishAppPresence(projectId, hasApp);
   }, [projectId, factsProjectId, view.known, hasApp]);
+  // #559 여정 렌즈 결함 4: the address fact too — the PR screen's bar follows that
+  // screen's "실제 앱 확인하기" (the check when an address exists, else nothing).
+  // Unknown (null) is ignored by the store.
+  useEffect(() => {
+    if (projectId && factsProjectId === projectId) publishAppAddress(projectId, hasDeployUrl);
+  }, [projectId, factsProjectId, hasDeployUrl]);
   const stepSlugs = sidebarStepItems({
     hasApp: view.known ? hasApp : null,
     developerMode,
@@ -326,6 +354,33 @@ export function AppSidebar() {
   const statusGlyph = (status: string) =>
     status === "done" ? "✓" : status === "current" ? "●" : "○";
   const advancedItems = [["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] as const;
+
+  // ── Before mount: a wordless placeholder (#559 여정 렌즈 결함 11) ────────────
+  // Same footprint as the real sidebar (mobile top bar + desktop rail) so nothing
+  // jumps; only the brand mark, which reads the same in every language.
+  if (!mounted) {
+    return (
+      <>
+        <div aria-hidden className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-2 border-b border-gray-200 bg-white px-3 md:hidden">
+          <span className="h-9 w-9" />
+          <StampMark size={24} />
+          <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
+        </div>
+        <aside aria-busy="true" className="sticky top-0 hidden h-screen w-60 flex-shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
+          <div className="flex items-center gap-2.5 px-4 pb-2 pt-4">
+            <StampMark size={24} />
+            <span className="text-[15px] font-semibold tracking-[-0.02em] text-gray-900">{t.brand.wordmark}</span>
+          </div>
+          <div aria-hidden className="space-y-2.5 px-5 py-4">
+            <span className="block h-6 w-32 animate-pulse rounded-full bg-gray-100" />
+            <span className="block h-3 w-40 animate-pulse rounded bg-gray-100" />
+            <span className="block h-3 w-28 animate-pulse rounded bg-gray-100" />
+            <span className="block h-3 w-36 animate-pulse rounded bg-gray-100" />
+          </div>
+        </aside>
+      </>
+    );
+  }
 
   // ── Expanded body (shared by the desktop aside and the mobile drawer) ──────
   const expandedBody = (

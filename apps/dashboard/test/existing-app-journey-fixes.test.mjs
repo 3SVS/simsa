@@ -168,9 +168,12 @@ test("결함3: 개요와 사이드바가 같은 보류 규칙(stepMapView)을 �
 
 // ─── 결함 4 [P2] 비개발자 모드의 /github에서도 '다음 →'이 이어진다 ───────────────
 
-test("결함4: /github(개발자용 화면)에 비개발자가 와도 다음 걸음이 있다 — 확인 항목", () => {
-  assert.equal(steps.nextScreenSlug("github", "code"), "items");
-  assert.equal(steps.nextStepFromHere("github", { entryPath: "code" })?.slug, "items");
+// ★의도된 변경 (#559 여정 렌즈 결함 4): 1차 정정은 "확인 항목"으로 이었는데, 그 화면의 primary
+//  "실제 앱 확인하기"와 다른 두 번째 답이었다. 이제 바는 그 버튼과 같은 곳 — 주소가 있으면 실제
+//  앱 확인 — 이고, 주소 사실을 모르면 바 없이 화면 버튼이 유일한 길이다(막다른 길 아님).
+test("결함4: /github(개발자용 화면)에 비개발자가 와도 다음 걸음이 있다 — 화면 버튼과 같은 곳", () => {
+  assert.equal(steps.nextScreenSlug("github", "code", { hasDeployUrl: true }), "visual-checks");
+  assert.equal(steps.nextStepFromHere("github", { entryPath: "code", hasDeployUrl: true })?.slug, "visual-checks");
   // 기본 순서에는 여전히 넣지 않는다 (D9).
   assert.equal(steps.nextScreenSlug("visual-checks", "code"), "items");
 });

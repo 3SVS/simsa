@@ -44,3 +44,38 @@ export function readAppPresence(projectId) {
   const v = known.get(projectId);
   return typeof v === "boolean" ? v : null;
 }
+
+// ─── The app's address (#559 여정 렌즈 결함 4) ───────────────────────────────
+//
+// The PR screen's own way out is "실제 앱 확인하기" — to the real-app check when
+// an address is connected, else to the overview's address box. The bottom bar
+// must agree with it, so it needs the same address fact; the sidebar already
+// holds it (sourceFacts) and publishes it here, same rules as above.
+
+/** @type {Map<string, boolean>} */
+const addressKnown = new Map();
+
+/**
+ * @param {string} projectId
+ * @param {boolean | null | undefined} hasDeployUrl null/undefined = not known yet (ignored)
+ * @param {{ dispatchEvent?: (e: Event) => unknown } | null | undefined} [target] defaults to window
+ */
+export function publishAppAddress(projectId, hasDeployUrl, target) {
+  if (!projectId || typeof hasDeployUrl !== "boolean") return;
+  if (addressKnown.get(projectId) === hasDeployUrl) return;
+  addressKnown.set(projectId, hasDeployUrl);
+  const t = target ?? (typeof window !== "undefined" ? window : null);
+  if (t && typeof t.dispatchEvent === "function" && typeof CustomEvent === "function") {
+    t.dispatchEvent(new CustomEvent(APP_PRESENCE_EVENT, { detail: { projectId, hasDeployUrl } }));
+  }
+}
+
+/**
+ * @param {string | null | undefined} projectId
+ * @returns {boolean | null} null = not known yet
+ */
+export function readAppAddress(projectId) {
+  if (!projectId) return null;
+  const v = addressKnown.get(projectId);
+  return typeof v === "boolean" ? v : null;
+}

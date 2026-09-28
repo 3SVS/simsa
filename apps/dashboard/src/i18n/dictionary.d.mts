@@ -289,7 +289,8 @@ export type Dictionary = {
     addUrlStarting: string;
     addUrlHelpToggle: string;
     addUrlHelpLovable: string;
-    addUrlHelpBoltV0: string;
+    addUrlHelpBolt: string;
+    addUrlHelpV0: string;
     addUrlHelpReplit: string;
     addUrlHelpSelf: string;
     addUrlHelpNotLive: string;
@@ -304,9 +305,10 @@ export type Dictionary = {
     };
     connectCodeDesc: string;
     getPack: string;
+    getGuide: string;
     getPackDesc: string;
     alreadyBuilt: string;
-    connectUrl: string;
+    addUrlFoldLink: string;
     runReview: string;
     runReviewDesc: string;
     viewResults: string;
@@ -327,6 +329,7 @@ export type Dictionary = {
     whyAfterFix: string;
     whyAllClear: string;
     whyContinue: string;
+    whyCheckLiveApp: string;
     optionalTag: string;
   };
   branch: {
@@ -380,6 +383,7 @@ export type Dictionary = {
     gsStep1: string;
     gsIdeaStep1: string;
     gsIdeaStep2: string;
+    gsIdeaStep2Guide: string;
     gsIdeaStep3: string;
     sampleBanner: string;
     sampleCta: string;
@@ -550,6 +554,7 @@ export type Dictionary = {
     generateError: string;
     title: string;
     reviewFirst: string;
+    liveResultNote: string;
     allPassed: string;
     analyzing: string;
     getDecisionHelp: string;
@@ -573,6 +578,9 @@ export type Dictionary = {
     pageSubtitle: string;
     draftTitle: string;
     draftDesc: string;
+    liveTitle: string;
+    liveDesc: string;
+    liveCta: string;
     prTitle: string;
     prDesc: string;
     reRun: string;
@@ -2301,7 +2309,6 @@ export type Dictionary = {
     runQueuedOnly: string;
     runActiveNotice: string;
     runNeedWebsite: string;
-    goToSources: string;
     statusQueued: string;
     statusRunning: string;
     statusDone: string;

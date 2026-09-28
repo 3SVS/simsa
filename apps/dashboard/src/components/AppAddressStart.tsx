@@ -39,7 +39,20 @@ import {
 
 type ErrorKey = AppAddressErrorKey | "empty";
 
-export function AppAddressStart({ projectId, t, locale }: { projectId: string; t: Dictionary; locale: Locale }) {
+export function AppAddressStart({
+  projectId,
+  t,
+  locale,
+  emphasis = "primary",
+}: {
+  projectId: string;
+  t: Dictionary;
+  locale: Locale;
+  // "secondary" when the box is an auxiliary path next to a screen's own primary
+  // (the builder-pack card's "already built?" fold, #559 여정 렌즈 결함 8) — one
+  // screen, one filled button.
+  emphasis?: "primary" | "secondary";
+}) {
   const router = useRouter();
   const [value, setValue] = useState("");
   const [working, setWorking] = useState(false);
@@ -137,7 +150,11 @@ export function AppAddressStart({ projectId, t, locale }: { projectId: string; t
           aria-describedby={errorKey ? `${APP_ADDRESS_ANCHOR}-error` : undefined}
           className="min-w-0 flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-300 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
         />
-        <button type="submit" disabled={working} className="btn btn-md btn-primary flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-60">
+        <button
+          type="submit"
+          disabled={working}
+          className={`btn btn-md ${emphasis === "secondary" ? "btn-secondary" : "btn-primary"} flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-60`}
+        >
           {working ? cc.addUrlStarting : cc.addUrlStart}
         </button>
       </div>
@@ -151,8 +168,10 @@ export function AppAddressStart({ projectId, t, locale }: { projectId: string; t
           {cc.addUrlHelpToggle}
         </summary>
         <ul className="mt-2 space-y-1 text-xs leading-relaxed text-gray-600">
+          {/* #559 여정 렌즈 결함 1: one line per tool, in the tool's own button names. */}
           <li>{cc.addUrlHelpLovable}</li>
-          <li>{cc.addUrlHelpBoltV0}</li>
+          <li>{cc.addUrlHelpBolt}</li>
+          <li>{cc.addUrlHelpV0}</li>
           <li>{cc.addUrlHelpReplit}</li>
           <li>{cc.addUrlHelpSelf}</li>
         </ul>

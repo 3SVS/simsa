@@ -18,13 +18,23 @@
  * @param {(id: string, userKey: string) => Promise<{ok:boolean, repo?:unknown}>} fetchProjectRepo
  * @param {string} id
  * @param {string} userKey
- * @param {{ attempts?: number, delayMs?: number }} [opts]
+ * @param {{ attempts?: number, delayMs?: number, onFirst?: (res: {ok:boolean, repo?:unknown}) => void }} [opts]
+ *   onFirst: called once with the FIRST answer, before any retry (#559 여정 렌즈
+ *   결함 12). "No repo" is by far the common answer for an idea-branch project,
+ *   and waiting out the read-after-write retries (700ms × 3) held the overview's
+ *   next step and the sidebar's step-2 label for 3–4.5 s on every visit. A caller
+ *   may draw from the first answer and correct it from the settled one — the
+ *   retries still run, so a repo linked a moment ago is still found (it then
+ *   replaces the provisional "no repo"; it is never collapsed into a hard false).
  * @returns {Promise<{ok:boolean, repo?:unknown}>}
  */
 export async function fetchProjectRepoSettled(fetchProjectRepo, id, userKey, opts = {}) {
   const attempts = opts.attempts ?? 3;
   const delayMs = opts.delayMs ?? 700;
   let res = await fetchProjectRepo(id, userKey);
+  if (typeof opts.onFirst === "function") {
+    try { opts.onFirst(res); } catch { /* a caller's callback never breaks the settle */ }
+  }
   for (let i = 0; i < attempts && res.ok && !res.repo; i++) {
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
     res = await fetchProjectRepo(id, userKey);

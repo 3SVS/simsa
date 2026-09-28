@@ -35,16 +35,43 @@
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { navLabelKey, nextStepFromHere, projectHasApp } from "@/lib/project-steps.mjs";
+import { navLabelKey, nextBarEmphasis, nextStepFromHere, projectHasApp } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
-import { useAppPresence } from "@/lib/use-app-presence";
+import { useAppAddress, useAppPresence } from "@/lib/use-app-presence";
 
 function projectIdFrom(pathname: string): string | null {
   const seg = pathname.split("/").filter(Boolean);
   if (seg[0] !== "projects" || !seg[1] || seg[1] === "new") return null;
   return seg[1];
+}
+
+/**
+ * Does the screen this bar sits under already carry a filled (primary) button?
+ * (#559 여정 렌즈 결함 2) The bar is mounted once in the project layout, right
+ * after the screen, so "the screen" is the bar's parent minus the bar itself.
+ * Screens draw asynchronously (fetches, polling), so it is re-read on every DOM
+ * change. null until the bar is on screen — the caller treats that as "don't
+ * know" and never draws a second primary meanwhile.
+ */
+function useScreenHasPrimary(bar: HTMLElement | null): boolean | null {
+  const [has, setHas] = useState<boolean | null>(null);
+  useEffect(() => {
+    const container = bar?.parentElement;
+    if (!bar || !container) {
+      setHas(null);
+      return;
+    }
+    const check = () =>
+      setHas(Array.from(container.querySelectorAll(".btn-primary")).some((el) => !bar.contains(el)));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [bar]);
+  return has;
 }
 
 export function StepNextButton() {
@@ -57,6 +84,11 @@ export function StepNextButton() {
   // #559 검증 결함 5: "does the app already exist?" as the sidebar settled it
   // (same fetch, same rule) — null until then.
   const presence = useAppPresence(projectId);
+  // #559 여정 렌즈 결함 4: whether the app's address is connected (sidebar-settled)
+  // — the PR screen's bar goes where that screen's own "실제 앱 확인하기" goes.
+  const hasDeployUrl = useAppAddress(projectId);
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  const screenHasPrimary = useScreenHasPrimary(bar);
   if (!projectId) return null;
   const slug = pathname.split("/").filter(Boolean)[2] ?? "";
 
@@ -81,6 +113,7 @@ export function StepNextButton() {
     visual: data?.visualCheck ? { findingCount: data.visualCheck.findingCount } : null,
     developerMode,
     hasApp,
+    hasDeployUrl,
   });
   if (!next) return null;
 
@@ -92,20 +125,23 @@ export function StepNextButton() {
     afterFix: t.stepsNav.whyAfterFix,
     allClear: t.stepsNav.whyAllClear,
     continue: t.stepsNav.whyContinue,
+    checkLiveApp: t.stepsNav.whyCheckLiveApp,
   };
 
   // 고칠 것이 기다리거나 재검수가 필요한 순간에만 채운 버튼(primary)을 쓴다 —
   // 그때는 이게 화면에서 가장 중요한 행동이 맞다. 그 외에는 화면 자체의 주
-  // 행동과 경쟁하지 않도록 물러선다(UIUX #5).
-  const urgent = next.reason === "seeProblems" || next.reason === "afterFix";
+  // 행동과 경쟁하지 않도록 물러선다(UIUX #5). ★급해도 화면에 이미 primary가
+  // 있으면 물러선다 — 한 화면에 채운 버튼은 하나(#559 여정 렌즈 결함 2: 결과 화면의
+  // "고치기"와 "다음: 남은 문제 →"가 나란히 채워져 있었다).
+  const emphasis = nextBarEmphasis({ reason: next.reason, screenHasPrimary });
 
   return (
-    <div className="mt-10 border-t border-gray-100 pt-4">
+    <div ref={setBar} className="mt-10 border-t border-gray-100 pt-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-gray-600">{why[next.reason]}</p>
         <Link
           href={`/projects/${projectId}/${next.slug}`}
-          className={`btn btn-md flex-shrink-0 ${urgent ? "btn-primary" : "btn-secondary"}`}
+          className={`btn btn-md flex-shrink-0 ${emphasis === "primary" ? "btn-primary" : "btn-secondary"}`}
         >
           {t.stepsNav.next}: {nextLabel} →
         </Link>

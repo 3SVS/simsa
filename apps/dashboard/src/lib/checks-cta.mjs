@@ -16,14 +16,23 @@
  *   - draftHasResults: when nothing is actionable elsewhere and the pre-check
  *     hasn't run, running it IS the primary ("run_precheck").
  *
+ * v3 (2026-09-28, #559 여정 렌즈 결함 3): the default check is the REAL APP
+ * (D1). After a first real-app check the sidebar's current step 3 item led here
+ * — a screen that held no real-app result at all, only the brief pre-check and
+ * its "run" primary. `liveResult` (a finished real-app check exists) now puts
+ * "see that result" first — behind only a developer's PR review that found real
+ * problems. Without it every answer is exactly as before (connect_pr and pr_fix
+ * never both apply, so their relative order is unchanged).
+ *
  * Pure, no I/O.
  *
- * @param {{ prSectionVisible: boolean, prReviewLoaded: boolean, hasPrReview: boolean, prNeedsAction: number, draftNeedsAction: number, draftHasResults: boolean }} facts
- * @returns {"connect_pr" | "pr_fix" | "draft_fix" | "run_precheck" | "none"}
+ * @param {{ prSectionVisible: boolean, prReviewLoaded: boolean, hasPrReview: boolean, prNeedsAction: number, draftNeedsAction: number, draftHasResults: boolean, liveResult?: boolean }} facts
+ * @returns {"connect_pr" | "pr_fix" | "view_live" | "draft_fix" | "run_precheck" | "none"}
  */
-export function checksPrimaryCta({ prSectionVisible, prReviewLoaded, hasPrReview, prNeedsAction, draftNeedsAction, draftHasResults }) {
-  if (prSectionVisible && prReviewLoaded && !hasPrReview) return "connect_pr"; // no real review yet → get one
+export function checksPrimaryCta({ prSectionVisible, prReviewLoaded, hasPrReview, prNeedsAction, draftNeedsAction, draftHasResults, liveResult }) {
   if (hasPrReview && prNeedsAction > 0) return "pr_fix"; // real review has issues → fix them
+  if (liveResult === true) return "view_live"; // the real app was checked → see that result
+  if (prSectionVisible && prReviewLoaded && !hasPrReview) return "connect_pr"; // no real review yet → get one
   if (draftNeedsAction > 0) return "draft_fix"; // only the pre-check has issues
   if (!draftHasResults) return "run_precheck"; // nothing anywhere yet → run the pre-check
   return "none";

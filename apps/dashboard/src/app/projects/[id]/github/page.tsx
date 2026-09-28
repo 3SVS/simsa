@@ -26,7 +26,8 @@ import {
 } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
-import { githubPullsView, liveAppCheckHref, sourceFacts } from "@/lib/project-steps.mjs";
+import { githubPullsView, liveAppCheckHref, screenAppView, sourceFacts } from "@/lib/project-steps.mjs";
+import { useAppPresence } from "@/lib/use-app-presence";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusText } from "@/components/StatusText";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -91,8 +92,14 @@ export default function GitHubPage() {
   }, [id, isExample]);
   const liveAppHref = liveAppCheckHref(id, hasDeployUrl);
   const pullsView = githubPullsView({ pullsPhase, openCount: pulls.length, linkedCount: linkedPulls.length });
+  // #559 여정 렌즈 결함 7: does the app already exist? (the sidebar's settled
+  // answer + this screen's address fact). "Get the builder pack" and "why
+  // connect a code repo here?" are for a project with no app yet — shown only
+  // once that is CONFIRMED, never to someone whose app is live.
+  const presence = useAppPresence(id);
 
   const ext = loadExtendedProjectData(id);
+  const appView = screenAppView({ entryPath: ext?.entryPath ?? null, presence, hasDeployUrl });
   const checkResultMap = new Map(
     (ext?.checkResults?.results ?? []).map((r) => [r.itemId, r.status as ItemStatus]),
   );
@@ -376,8 +383,10 @@ export default function GitHubPage() {
           while a repo isn't linked yet — once connected it's just noise. The
           CODE branch skips it entirely: someone who said "이미 만든 앱이
           있어요" starts here on purpose, so re-explaining why code needs
-          connecting is pure noise (Bae, 2026-07-10). */}
-      {!isExample && loadPhase !== "ready" && ext?.entryPath !== "code" && (
+          connecting is pure noise (Bae, 2026-07-10). #559 여정 렌즈 결함 7: the
+          same holds for any project whose app already exists (a restored idea
+          project with its address) — only a CONFIRMED no-app project gets it. */}
+      {!isExample && loadPhase !== "ready" && appView.known && !appView.hasApp && (
         <div className="rounded-lg border border-brand-100 bg-brand-50 p-4">
           <p className="text-sm font-semibold text-brand-800">{t.github.bridgeTitle}</p>
           <p className="mt-1 text-sm leading-relaxed text-brand-700">{t.github.bridgeBody}</p>
@@ -410,15 +419,26 @@ export default function GitHubPage() {
               {t.github.goConnectRepo}
             </Link>
           </div>
-          {/* Forward exit so a user who hasn't built yet isn't trapped bouncing
-              between this card, settings, and the PR screens (Bae's loop). Their
-              real next action is to get the pack and build. */}
-          <p className="mx-auto mt-5 max-w-md border-t border-gray-100 pt-4 text-xs text-gray-500">
-            {t.github.noRepoBuildHint}{" "}
-            <Link href={`/projects/${id}/export`} className="font-medium text-brand-600 hover:text-brand-700">
-              {t.github.getPack} →
+          {/* #559 여정 렌즈 결함 7: say what this screen is and where the default
+              check lives here too (D8 had it only once a repo was linked). */}
+          <p className="mx-auto mt-5 max-w-md border-t border-gray-100 pt-4 text-xs leading-relaxed text-gray-500">
+            {t.github.devScreenNote}{" "}
+            <Link href={liveAppHref} className="font-medium text-brand-700 hover:underline">
+              {t.github.checkLiveApp} →
             </Link>
           </p>
+          {/* Forward exit so a user who hasn't built yet isn't trapped bouncing
+              between this card, settings, and the PR screens (Bae's loop). Their
+              real next action is to get the pack and build — only when the app
+              is CONFIRMED not to exist yet (결함 7). */}
+          {appView.known && !appView.hasApp && (
+            <p className="mx-auto mt-3 max-w-md text-xs text-gray-500">
+              {t.github.noRepoBuildHint}{" "}
+              <Link href={`/projects/${id}/export`} className="font-medium text-brand-600 hover:text-brand-700">
+                {t.github.getPack} →
+              </Link>
+            </p>
+          )}
         </div>
       )}
 
@@ -433,6 +453,12 @@ export default function GitHubPage() {
           <button onClick={() => void loadInitial()} className="btn btn-md btn-primary">
             {t.common.retry}
           </button>
+          <p className="mx-auto mt-5 max-w-md border-t border-gray-100 pt-4 text-xs leading-relaxed text-gray-500">
+            {t.github.devScreenNote}{" "}
+            <Link href={liveAppHref} className="font-medium text-brand-700 hover:underline">
+              {t.github.checkLiveApp} →
+            </Link>
+          </p>
         </div>
       )}
 

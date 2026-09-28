@@ -28,7 +28,9 @@ import {
 } from "@/lib/workspace-github-api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { checksPrimaryCta } from "@/lib/checks-cta.mjs";
-import { prReviewVisible } from "@/lib/project-steps.mjs";
+import { latestFinishedRunId, prReviewVisible } from "@/lib/project-steps.mjs";
+import { listVisualChecks, type VisualCheckListItem } from "@/lib/workspace-visual-checks-api";
+import { verdictLabel } from "@/lib/visual-check-view.mjs";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { StatCard } from "@/components/StatCard";
 import type { ItemStatus } from "@/lib/labels";
@@ -126,6 +128,19 @@ export default function ChecksPage() {
       setResults(ext.checkResults);
       setPhase("done");
     }
+  }, [id]);
+
+  // #559 여정 렌즈 결함 3: the latest FINISHED real-app check. After a first
+  // real-app check the sidebar's current step (결과·수정) leads here — and this
+  // screen held only the brief pre-check, so the result the user just got was
+  // nowhere to be seen. Best-effort: a failed list simply shows no card.
+  const [liveChecks, setLiveChecks] = useState<VisualCheckListItem[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    listVisualChecks(id, getUserKey())
+      .then((res) => { if (!cancelled) setLiveChecks(res.ok ? res.checks : null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [id]);
 
   // RC-4: resolve the plan once — failure keeps "free" (B stays locked).
@@ -251,6 +266,9 @@ export default function ChecksPage() {
     developerMode,
     hasPrReviewHistory: latestPrReview != null || linkedPulls.length > 0,
   });
+  const liveRunId = latestFinishedRunId(liveChecks);
+  const liveRun = liveRunId ? (liveChecks?.find((c) => c.id === liveRunId) ?? null) : null;
+  const liveVerdict = liveRun ? verdictLabel(liveRun.works, liveRun.decision, t) : null;
   const primaryCta = checksPrimaryCta({
     prSectionVisible,
     prReviewLoaded: prLoadPhase === "done",
@@ -258,6 +276,8 @@ export default function ChecksPage() {
     prNeedsAction,
     draftNeedsAction: needsAction,
     draftHasResults: Boolean(results),
+    // The real app was checked → seeing that result is the step (D1).
+    liveResult: liveRunId !== null,
   });
   const btnClass = (isPrimary: boolean) => (isPrimary ? "btn btn-md btn-primary" : "btn btn-md btn-secondary");
 
@@ -267,6 +287,30 @@ export default function ChecksPage() {
         <h1 className="page-title">{t.nav.checks}</h1>
         <p className="page-subtitle">{t.checks.pageSubtitle}</p>
       </div>
+
+      {/* ─── #559 여정 렌즈 결함 3: the latest real-app check, first ───
+          The default check is the real app (D1); its findings and how to fix
+          them live on the run's page, so this card says so and links there.
+          Its button takes the screen's one primary slot (checksPrimaryCta). */}
+      {liveRunId && (
+        <section className="card p-5">
+          <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.checks.liveTitle}</h2>
+          <p className="mt-0.5 text-xs text-gray-500">{t.checks.liveDesc}</p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              {liveVerdict ? (
+                <span className="inline-flex flex-shrink-0 items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-xs font-medium text-gray-700">
+                  {liveVerdict.label}
+                </span>
+              ) : null}
+              <span className="truncate text-sm text-gray-700">{liveRun?.targetUrl ?? ""}</span>
+            </div>
+            <Link href={`/projects/${id}/visual-checks/${liveRunId}`} className={btnClass(primaryCta === "view_live")}>
+              {t.checks.liveCta} →
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* ─── Section 1: Draft review ─── */}
       <section>

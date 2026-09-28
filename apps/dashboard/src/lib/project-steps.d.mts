@@ -31,7 +31,7 @@ export function computeProjectSteps(facts: ProjectStepFacts): ProjectStep[];
 export function nextScreenSlug(
   slug: string,
   entryPath?: "idea" | "code" | "spec" | null,
-  opts?: { developerMode?: boolean; hasApp?: boolean },
+  opts?: { developerMode?: boolean; hasApp?: boolean; hasDeployUrl?: boolean | null },
 ): string | null;
 
 export type NextProjectAction =
@@ -86,12 +86,37 @@ export function prReviewVisible(
 
 export function explainerKind(facts: AppFacts | null | undefined): "idea" | "app";
 
+export function howItWorksVisible(input: {
+  hasReviewActivity: boolean;
+  hasVisualCheck: boolean | null;
+  hasReviewRun: boolean | null;
+}): boolean;
+
+export function resultsSummaryVisible(input: {
+  hasReviewActivity: boolean;
+  hasPrecheck: boolean;
+  hasReviewRun: boolean | null;
+}): boolean;
+
+export function screenAppView(input: {
+  entryPath?: "idea" | "code" | "spec" | null;
+  presence: boolean | null;
+  hasDeployUrl: boolean | null;
+}): { known: boolean; hasApp: boolean };
+
+export function packCopyKeys(
+  developerMode: boolean,
+): { label: "getGuide" | "getPack"; step2: "gsIdeaStep2Guide" | "gsIdeaStep2" };
+
 export function visualCheckFact(
   res: { ok: boolean; checks?: Array<{ status?: string }>; error?: string } | null | undefined,
 ): boolean | null;
 export function visualCheckActiveFact(
   res: { ok: boolean; checks?: Array<{ status?: string }>; error?: string } | null | undefined,
 ): boolean | null;
+export function latestFinishedRunId(
+  checks: Array<{ id?: string; status?: string; createdAt?: string }> | null | undefined,
+): string | null;
 export function reviewRunFact(
   res: { ok: boolean; runs?: unknown[]; error?: string } | null | undefined,
 ): boolean | null;
@@ -118,7 +143,7 @@ export function packReadiness(
   fixSuggestions: Record<string, unknown> | null | undefined,
 ): PackReadiness;
 
-export type NextStepReason = "seeProblems" | "afterFix" | "allClear" | "continue";
+export type NextStepReason = "seeProblems" | "afterFix" | "allClear" | "continue" | "checkLiveApp";
 export function nextStepFromHere(
   slug: string,
   ctx?: {
@@ -129,5 +154,17 @@ export function nextStepFromHere(
     visual?: { findingCount?: number } | null;
     developerMode?: boolean;
     hasApp?: boolean;
+    hasDeployUrl?: boolean | null;
   },
 ): { slug: string; reason: NextStepReason } | null;
+
+export function nextBarEmphasis(input: {
+  reason: string;
+  screenHasPrimary: boolean | null;
+}): "primary" | "secondary";
+
+export function fixesEntryView(input: {
+  projectId: string;
+  hasCheckResults: boolean;
+  visualCheck: { findingCount?: number; runId?: string } | null | undefined;
+}): { kind: "items" } | { kind: "live"; href: string } | { kind: "review_first" };

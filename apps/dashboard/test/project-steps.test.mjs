@@ -199,9 +199,11 @@ test("nextScreenSlug: the CODE branch walks prep → real-app check FIRST (이�
   //  github는 개발자 모드에서만 순서에 들어간다(existing-app-journey.test.mjs ⑧).
   assert.equal(nextScreenSlug("settings", "code"), "visual-checks");
   assert.equal(nextScreenSlug("visual-checks", "code"), "items");
-  // ★의도된 변경 (#559 검증 결함 4): 기본 순서 밖이어도 PR 화면에 온 사람(PR 이력이 있는
-  //  비개발자·북마크)에게 다음 걸음은 있다 — 개발자 순서의 다음 칸(확인 항목).
-  assert.equal(nextScreenSlug("github", "code"), "items");
+  // ★의도된 변경 (#559 검증 결함 4 → 여정 렌즈 결함 4): 기본 순서 밖의 PR 화면에서 바는 그
+  //  화면의 "실제 앱 확인하기"와 같은 곳으로 — 주소가 있으면 실제 앱 확인, 모르면 없음(화면의
+  //  버튼이 유일한 길). 1차 정정의 "확인 항목"은 그 버튼과 다른 두 번째 답이었다.
+  assert.equal(nextScreenSlug("github", "code"), null);
+  assert.equal(nextScreenSlug("github", "code", { hasDeployUrl: true }), "visual-checks");
   assert.equal(nextScreenSlug("items", "code"), "checks");
   assert.equal(nextScreenSlug("checks", "code"), "fixes");
   assert.equal(nextScreenSlug("fixes", "code"), null);
@@ -406,14 +408,20 @@ test("ctx를 안 줘도 터지지 않는다(상태 로딩 실패 시 fail-open)"
 //  하나만 봐서, 정작 순환의 중심 화면(visual-checks)에서 바가 통째로 비었다.
 //  아래 두 테스트는 그 시절 코드에서 실패한다(null이 돌아왔다).
 
-test("화면 검수에서 문제가 나오면 코드 리뷰 결과가 없어도 고칠 것을 가리킨다", () => {
+// ★의도된 변경 (#559 여정 렌즈 결함 2, 2026-09-28): 화면 검수에서 문제가 나왔을 때 이
+//  테스트는 "고칠 것(/fixes)"을 정답으로 고정했다. 그런데 /fixes는 코드 리뷰의 `checkResults`만
+//  읽어서, 실제 앱 확인만 한 사용자는 "확인 결과로 이동" → /checks(실제 앱 결과 없음)로 도는
+//  빈 순환에 빠졌다 — 그것도 결과 화면의 "고치기"와 나란한 두 번째 primary로. 발견과 고칠
+//  방법은 그 결과 화면에 있으므로 바는 말하지 않는다. (코드 리뷰 쪽 seeProblems는 그대로 —
+//  existing-app-journey-copy.test.mjs 결함2 행동 보존 가드.)
+test("화면 검수에서 문제가 나오면 결과 없는 '고칠 것'으로 보내지 않는다 (고칠 방법은 그 결과 화면에)", () => {
   const next = nextStepFromHere("visual-checks", {
     entryPath: "code",
     hasCheckRun: false, // 코드 리뷰는 돌린 적 없다 — 앱 주소만 낸 사용자
     summary: null,
     visual: { findingCount: 3 },
   });
-  assert.deepEqual(next, { slug: "fixes", reason: "seeProblems" });
+  assert.equal(next, null);
 });
 
 test("화면 검수에서 문제가 없으면 고칠 것으로 밀지 않는다", () => {

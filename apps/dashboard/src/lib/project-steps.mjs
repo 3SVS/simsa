@@ -267,15 +267,18 @@ export function nextProjectAction(facts) {
  * #559 검증에서 고친 것:
  *  - 결함 4: the PR screen stays reachable outside developer mode (the sidebar
  *    shows it to anyone with PR reviews, the results screen links to it, old
- *    bookmarks). Leaving it out of the default walk must not strand them: from
- *    "github" the walk continues where the developer walk would.
+ *    bookmarks). Leaving it out of the default walk must not strand them.
+ *    (여정 렌즈 결함 4, 2026-09-28: the first fix continued to "items", which
+ *    disagreed with the screen's own "실제 앱 확인하기" — now the bar follows
+ *    that button: the real-app check when an address exists, else nothing.)
  *  - 결함 5: "the app already exists" is not only the code branch. A restored
  *    project defaults to entryPath "idea" even when its repo or address is
  *    known; walking it to the builder pack contradicts the sidebar, which hides
  *    that screen once an app exists. `hasApp: true` walks the app route.
  * @param {string} slug current screen slug ("" = overview)
  * @param {"idea" | "code" | "spec" | null} [entryPath] the branch this project entered through
- * @param {{ developerMode?: boolean, hasApp?: boolean }} [opts]
+ * @param {{ developerMode?: boolean, hasApp?: boolean, hasDeployUrl?: boolean | null }} [opts]
+ *   hasDeployUrl: the app's address is connected (only read on the PR screen).
  * @returns {string | null} next slug, or null when there is no obvious next
  */
 export function nextScreenSlug(slug, entryPath, opts) {
@@ -295,12 +298,14 @@ export function nextScreenSlug(slug, entryPath, opts) {
     : ["idea", "spec", "items", "dev-spec", "export"];
   const i = order.indexOf(slug);
   if (i !== -1) return i === order.length - 1 ? null : (order[i + 1] ?? null);
-  // A screen left out of the default app walk (the PR screen) continues where
-  // the developer walk would — never a dead end (결함 4).
-  if (appWalk) {
-    const k = fullAppWalk.indexOf(slug);
-    if (k !== -1 && k < fullAppWalk.length - 1) return fullAppWalk[k + 1] ?? null;
-  }
+  // The PR screen outside developer mode (the sidebar shows it to anyone with
+  // PR reviews; old bookmarks). Its own way out is "실제 앱 확인하기" — to the
+  // real-app check when an address exists, else to the overview's address box
+  // (liveAppCheckHref). The bottom bar must agree with that button, never offer
+  // a second answer (#559 여정 렌즈 결함 4 — it used to say "다음: 확인 항목"):
+  // with an address it points at the same check; otherwise it stays silent and
+  // the screen's own button is the one way on.
+  if (appWalk && slug === "github") return opts?.hasDeployUrl === true ? "visual-checks" : null;
 
   // Post-review loop on the builder branches (Bae 2026-07-17): once a review
   // exists the right order is 확인 결과 → 고쳐보기 → 빌더팩 — the pack is handed
@@ -468,6 +473,72 @@ export function explainerKind(facts) {
   return projectHasApp(facts) ? "app" : "idea";
 }
 
+/**
+ * Is the overview's "how this works" list still worth showing? (#559 여정 렌즈 결함 9)
+ *
+ * It is a first-use explanation. Once the project has been checked — a finished
+ * real-app check, a PR review, or local review activity — the list only pushes
+ * the actual result further down (it also told a user whose address was already
+ * connected to "1. add the address"). Unknown facts keep it (fail-open: a failed
+ * request never hides the explanation from a first-time user); the caller waits
+ * until the check requests have finished before drawing it, so it never
+ * appears and then vanishes.
+ * @param {{ hasReviewActivity: boolean, hasVisualCheck: boolean | null, hasReviewRun: boolean | null }} input
+ * @returns {boolean}
+ */
+export function howItWorksVisible(input) {
+  return input?.hasReviewActivity !== true && input?.hasVisualCheck !== true && input?.hasReviewRun !== true;
+}
+
+/**
+ * Does the overview's "review summary" (passed / failed / … counts) have
+ * anything to summarize? (#559 여정 렌즈 결함 3)
+ *
+ * Those counts come from PR reviews and the brief-based pre-check — never from
+ * a real-app check. Shown next to a "not working" real-app result as 0/0/0/0
+ * they contradicted it, and their "view all →" led to a screen without that
+ * result. So they appear only when one of their own sources exists.
+ * @param {{ hasReviewActivity: boolean, hasPrecheck: boolean, hasReviewRun: boolean | null }} input
+ * @returns {boolean}
+ */
+export function resultsSummaryVisible(input) {
+  return input?.hasReviewActivity === true || input?.hasPrecheck === true || input?.hasReviewRun === true;
+}
+
+/**
+ * "Does this project's app already exist?" for a screen that is not the
+ * overview or the sidebar (#559 여정 렌즈 결함 5·7) — from what it can know
+ * without fetching the repo again: the entry branch, the answer the sidebar
+ * settled (app-presence), and its own address fact.
+ *
+ * A confirmed positive decides at once (code branch · presence true · an
+ * address). "No app" is only known once the sidebar settled it — until then
+ * `known` is false and the screen holds whatever depends on the answer (a
+ * title, a "get the builder pack" hint) instead of drawing one and swapping it.
+ * @param {{ entryPath?: "idea" | "code" | "spec" | null, presence: boolean | null, hasDeployUrl: boolean | null }} input
+ * @returns {{ known: boolean, hasApp: boolean }}
+ */
+export function screenAppView(input) {
+  const hasApp = input?.entryPath === "code" || input?.presence === true || input?.hasDeployUrl === true;
+  if (hasApp) return { known: true, hasApp: true };
+  return { known: input?.presence === false, hasApp: false };
+}
+
+/**
+ * The builder-pack door's copy keys, named like the sidebar item for the same
+ * screen (#559 여정 렌즈 결함 10): "만들기 안내" in the default view, "빌더 팩"
+ * for developers — navLabelKey("export") follows the same rule (Train N §8-6).
+ * The overview's CTA said "빌더 팩 받기" while its own description and the
+ * sidebar said "만들기 안내".
+ * @param {boolean} developerMode
+ * @returns {{ label: "getGuide" | "getPack", step2: "gsIdeaStep2Guide" | "gsIdeaStep2" }}
+ */
+export function packCopyKeys(developerMode) {
+  return developerMode === true
+    ? { label: "getPack", step2: "gsIdeaStep2" }
+    : { label: "getGuide", step2: "gsIdeaStep2Guide" };
+}
+
 // ─── Facts from API responses — one rule for the overview and the sidebar ───
 //
 // Both screens read the same three lists. If each mapped responses on its own,
@@ -519,6 +590,23 @@ export function visualCheckFact(res) {
  */
 export function visualCheckActiveFact(res) {
   return anyRun(res, (s) => ACTIVE_RUN_STATUSES.has(s));
+}
+
+/**
+ * The most recent FINISHED real-app check (done / uploaded) — the result the
+ * results screen and the fixes screen point at (#559 여정 렌즈 결함 2·3). Same
+ * "finished" rule as visualCheckFact. null when there is none.
+ * @param {Array<{ id?: string, status?: string, createdAt?: string }> | null | undefined} checks
+ * @returns {string | null}
+ */
+export function latestFinishedRunId(checks) {
+  if (!Array.isArray(checks)) return null;
+  let best = null;
+  for (const c of checks) {
+    if (!c || typeof c.id !== "string" || !FINISHED_RUN_STATUSES.has(String(c.status ?? ""))) continue;
+    if (!best || String(c.createdAt ?? "") > String(best.createdAt ?? "")) best = c;
+  }
+  return best ? best.id : null;
 }
 
 /**
@@ -651,14 +739,21 @@ export function packReadiness(checkResults, fixSuggestions) {
  *   visual?: {findingCount?: number}|null,
  *   developerMode?: boolean,
  *   hasApp?: boolean,
+ *   hasDeployUrl?: boolean | null,
  * }} ctx developerMode: the PR screen joins the code walk only for developers (D9).
  *   hasApp: the app already exists (restored idea-branch project with a repo or
  *   address) → walk the app route, never to the builder pack (#559 검증 결함 5).
- * @returns {{slug: string, reason: "seeProblems"|"afterFix"|"allClear"|"continue"}|null}
+ *   hasDeployUrl: the app's address is connected — decides where the PR
+ *   screen's bar goes (#559 여정 렌즈 결함 4).
+ * @returns {{slug: string, reason: "seeProblems"|"afterFix"|"allClear"|"continue"|"checkLiveApp"}|null}
  */
 export function nextStepFromHere(slug, ctx = {}) {
   const { entryPath = null, summary = null, hasCheckRun = false, hasFixes = false, visual = null } = ctx;
-  const walk = { developerMode: ctx.developerMode === true, hasApp: ctx.hasApp === true };
+  const walk = {
+    developerMode: ctx.developerMode === true,
+    hasApp: ctx.hasApp === true,
+    hasDeployUrl: ctx.hasDeployUrl ?? null,
+  };
 
   // ★검수를 본 직후 — 여기서만 결과가 다음을 정한다.
   if (slug === "checks" || slug === "visual-checks") {
@@ -673,7 +768,13 @@ export function nextStepFromHere(slug, ctx = {}) {
       ? (visual?.findingCount ?? 0)
       : (summary?.failed ?? 0) + (summary?.needsDecision ?? 0);
     if (!ran) return null; // 아직 결과가 없으면 다음을 말할 게 없다.
-    if (problems > 0) return { slug: "fixes", reason: "seeProblems" };
+    if (problems > 0) {
+      // ★화면 검수의 발견과 고칠 방법(바로 고치게 하기 · 고치기 · 고칠 내용 복사)은 **그 결과
+      //  화면에 산다.** "고칠 것"(/fixes)은 코드 리뷰의 `checkResults`만 읽어서, 실제 앱 확인
+      //  뒤 "다음: 남은 문제 →"는 결과 없는 순환(/fixes → /checks)으로 보냈다 — 게다가 급한
+      //  primary로 결과 화면의 버튼과 경쟁했다(#559 여정 렌즈 결함 2). 그래서 여기선 말하지 않는다.
+      return onVisual ? null : { slug: "fixes", reason: "seeProblems" };
+    }
     // 문제가 없으면 **끝났다고 말해준다.** 억지로 다음 화면으로 밀지 않는다 —
     // 할 일이 없는데 다음을 주면 그게 바로 "무한 행진" 경험이다.
     const onward = nextScreenSlug(slug, entryPath, walk);
@@ -685,5 +786,49 @@ export function nextStepFromHere(slug, ctx = {}) {
   if (slug === "fixes" && hasFixes) return { slug: "visual-checks", reason: "afterFix" };
 
   const onward = nextScreenSlug(slug, entryPath, walk);
-  return onward ? { slug: onward, reason: "continue" } : null;
+  if (!onward) return null;
+  // From the PR screen the next step is the real-app check — say why in those
+  // words, not "pick up where you left off" (#559 여정 렌즈 결함 4).
+  if (slug === "github" && onward === "visual-checks") return { slug: onward, reason: "checkLiveApp" };
+  return { slug: onward, reason: "continue" };
+}
+
+/**
+ * How the bottom "다음 →" bar is drawn (#559 여정 렌즈 결함 2).
+ *
+ * A problem to fix (seeProblems) or a fix to verify (afterFix) makes the bar the
+ * screen's most important action — but only when the screen has no primary of
+ * its own. One screen, one filled button: a screen that already carries its own
+ * primary keeps it, and the bar recedes. While the answer is unknown (the screen
+ * is still drawing) the bar stays secondary — a second primary even for a
+ * moment is exactly what this rule forbids.
+ * @param {{ reason: string, screenHasPrimary: boolean | null }} input
+ * @returns {"primary" | "secondary"}
+ */
+export function nextBarEmphasis(input) {
+  const urgent = input?.reason === "seeProblems" || input?.reason === "afterFix";
+  return urgent && input?.screenHasPrimary === false ? "primary" : "secondary";
+}
+
+/**
+ * What the "고칠 것" (/fixes) screen shows when it opens (#559 여정 렌즈 결함 2).
+ *
+ *  - items: code-review / pre-check results exist → the fix list (as before).
+ *  - live: only a real-app check result exists. Its findings and how to fix
+ *    them live on that run's page (paste-into-your-tool, repair, copy-ready
+ *    prompt) — so the screen points there instead of "go to review results",
+ *    which holds no real-app results at all (the old loop /fixes → /checks).
+ *  - review_first: nothing yet → as before.
+ * @param {{ projectId: string, hasCheckResults: boolean, visualCheck: { findingCount?: number, runId?: string } | null | undefined }} input
+ * @returns {{ kind: "items" } | { kind: "live", href: string } | { kind: "review_first" }}
+ */
+export function fixesEntryView(input) {
+  if (input?.hasCheckResults) return { kind: "items" };
+  const vc = input?.visualCheck;
+  if (vc) {
+    const base = `/projects/${encodeURIComponent(String(input.projectId ?? ""))}/visual-checks`;
+    const runId = typeof vc.runId === "string" && vc.runId ? vc.runId : null;
+    return { kind: "live", href: runId ? `${base}/${encodeURIComponent(runId)}` : base };
+  }
+  return { kind: "review_first" };
 }

@@ -141,7 +141,9 @@ describe("visual-check-run-state: run/status dictionary copy", () => {
       const d = getDictionary(loc);
       for (const k of [
         "runTitle", "runHint", "intentLabel", "intentPlaceholder", "runButton", "runSubmitting",
-        "runQueuedOnly", "runActiveNotice", "runNeedWebsite", "goToSources",
+        // ★의도된 변경 (#559 여정 렌즈 결함 5): "goToSources"(웹사이트 연결하기 → /sources) 은퇴 —
+        //  주소가 없으면 이 화면 안의 주소 칸(AppAddressStart)이 받는다.
+        "runQueuedOnly", "runActiveNotice", "runNeedWebsite",
         "statusQueued", "statusRunning", "statusDone", "statusFailed",
         "progressTitle", "progressBody", "failedTitle", "failedBody",
       ]) {

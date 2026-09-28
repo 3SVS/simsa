@@ -5,4 +5,6 @@ export declare function checksPrimaryCta(facts: {
   prNeedsAction: number;
   draftNeedsAction: number;
   draftHasResults: boolean;
-}): "connect_pr" | "pr_fix" | "draft_fix" | "run_precheck" | "none";
+  /** A finished real-app check exists (#559 여정 렌즈 결함 3). */
+  liveResult?: boolean;
+}): "connect_pr" | "pr_fix" | "view_live" | "draft_fix" | "run_precheck" | "none";

@@ -44,14 +44,19 @@ import {
   nextProjectAction,
   stepMapView,
   explainerKind,
+  howItWorksVisible,
+  resultsSummaryVisible,
+  packCopyKeys,
   visualCheckFact,
   visualCheckActiveFact,
   reviewRunFact,
   sourceFacts,
+  APP_ADDRESS_ANCHOR,
 } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { StuckHelper } from "@/components/StuckHelper";
 import { AppAddressStart } from "@/components/AppAddressStart";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
@@ -101,16 +106,32 @@ export default function ProjectOverviewPage() {
   // when a request failed and the fact stays unknown.
   const [repoSettled, setRepoSettled] = useState(false);
   const [sourcesSettled, setSourcesSettled] = useState(false);
+  // #559 여정 렌즈 결함 9: the how-it-works list also waits for the two "has this
+  // been checked?" requests, so it never appears and then vanishes.
+  const [reviewSettled, setReviewSettled] = useState(false);
+  const [visualSettled, setVisualSettled] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const uk = getUserKey();
-    fetchProjectRepoSettled(fetchProjectRepo, id, uk)
+    // #559 여정 렌즈 결함 12: settle on the FIRST repo answer — "no repo" is the
+    // usual answer for an idea-branch project, and waiting out the
+    // read-after-write retries (700ms × 3) left the next step and the step-2
+    // label blank for 3–4.5 s on every visit. The retries still run; a repo
+    // linked a moment ago replaces the provisional answer when they find it.
+    fetchProjectRepoSettled(fetchProjectRepo, id, uk, {
+      onFirst: (first) => {
+        if (cancelled) return;
+        setHasRepo(repoConnectedFact(first));
+        setRepoSettled(true);
+      },
+    })
       .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
       .catch(() => {})
       .finally(() => { if (!cancelled) setRepoSettled(true); });
     listProjectReviewHistory(id, uk, { limit: 1 })
       .then((res) => { if (!cancelled) setHasReviewRun(reviewRunFact(res)); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setReviewSettled(true); });
     listProjectSources(id, uk)
       .then((res) => {
         if (cancelled) return;
@@ -129,10 +150,14 @@ export default function ProjectOverviewPage() {
         // Any other failure keeps the card hidden (best-effort, never blocks).
         setVisualChecks(res.ok ? res.checks : res.error === "project_not_found" ? [] : null);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setVisualSettled(true); });
     return () => { cancelled = true; };
   }, [id]);
-  const entryPath = loadExtendedProjectData(id)?.entryPath ?? null;
+  // #559 여정 렌즈 결함 10: the builder-pack door is named like the sidebar item.
+  const [developerMode] = useDeveloperMode();
+  const ext = loadExtendedProjectData(id);
+  const entryPath = ext?.entryPath ?? null;
   // Locally-created projects live in localStorage (client-only); mock demos are
   // bundled. Read on the client so real projects resolve.
   const project = getLocalProject(id) ?? getProject(id);
@@ -173,7 +198,11 @@ export default function ProjectOverviewPage() {
         t={t}
         locale={locale}
         hasItems={project.requirements.length > 0}
-        showExplainer={!hasReviewActivity}
+        // #559 여정 렌즈 결함 9: a finished real-app check or a PR review also means
+        // "already checked" (D3) — the first-use list stops pushing the result down.
+        showExplainer={howItWorksVisible({ hasReviewActivity, hasVisualCheck, hasReviewRun })}
+        checksSettled={reviewSettled && visualSettled}
+        developerMode={developerMode}
         hasRepo={hasRepo}
         hasRepoSource={hasRepoSource}
         hasReviewRun={hasReviewRun}
@@ -212,20 +241,26 @@ export default function ProjectOverviewPage() {
         />
       </div>
 
-      <section className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title">{t.overview.resultsSummary}</h2>
-          <Link href={`/projects/${id}/checks`} className="text-xs text-brand-700 hover:underline">
-            {t.common.viewAll} →
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label={statusLabel(t, "passed")} value={stats.passed} colorClass="text-green-600" />
-          <StatCard label={statusLabel(t, "failed")} value={stats.failed} colorClass="text-red-600" />
-          <StatCard label={statusLabel(t, "inconclusive")} value={stats.inconclusive} colorClass="text-amber-600" />
-          <StatCard label={statusLabel(t, "needs_decision")} value={stats.needsDecision} colorClass="text-slate-600" />
-        </div>
-      </section>
+      {/* #559 여정 렌즈 결함 3: these counts come from PR reviews and the brief
+          pre-check — never from a real-app check. Shown as 0/0/0/0 right next
+          to a "not working" real-app result they contradicted it, so they
+          appear only when one of their own sources exists. */}
+      {resultsSummaryVisible({ hasReviewActivity, hasPrecheck: Boolean(ext?.checkResults), hasReviewRun }) && (
+        <section className="mb-8">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="section-title">{t.overview.resultsSummary}</h2>
+            <Link href={`/projects/${id}/checks`} className="text-xs text-brand-700 hover:underline">
+              {t.common.viewAll} →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label={statusLabel(t, "passed")} value={stats.passed} colorClass="text-green-600" />
+            <StatCard label={statusLabel(t, "failed")} value={stats.failed} colorClass="text-red-600" />
+            <StatCard label={statusLabel(t, "inconclusive")} value={stats.inconclusive} colorClass="text-amber-600" />
+            <StatCard label={statusLabel(t, "needs_decision")} value={stats.needsDecision} colorClass="text-slate-600" />
+          </div>
+        </section>
+      )}
 
       {/* ★한 화면에 8블록이었다 (2026-09-01 실측). "지금 할 일"을 하나 만들어 놓고
           그 옆에 똑같이 눌러도 되는 것을 7개 더 두면, 하나를 고른 효과가 사라진다.
@@ -344,6 +379,8 @@ function CommandCenterCard({
   locale,
   hasItems,
   showExplainer,
+  checksSettled,
+  developerMode,
   hasRepo,
   hasRepoSource,
   hasReviewRun,
@@ -359,6 +396,9 @@ function CommandCenterCard({
   locale: Locale;
   hasItems: boolean;
   showExplainer: boolean;
+  // The PR-review and real-app-check list requests have both finished.
+  checksSettled: boolean;
+  developerMode: boolean;
   hasRepo: boolean | null;
   hasRepoSource: boolean | null;
   hasReviewRun: boolean | null;
@@ -375,14 +415,24 @@ function CommandCenterCard({
   // The repo and sources requests have both finished (whatever the result).
   factsSettled: boolean;
 }) {
+  // #559 여정 렌즈 결함 8: the builder-pack card's "already built?" opens the same
+  // address box right here. Arriving from "실제 앱 확인하기" elsewhere
+  // (…#app-address) opens it — the box then puts the cursor in itself.
+  const [foldOpen, setFoldOpen] = useState(false);
+  useEffect(() => {
+    if (window.location.hash === `#${APP_ADDRESS_ANCHOR}`) setFoldOpen(true);
+  }, []);
+
   const facts = { hasItems, hasRepo, hasRepoSource, hasReviewRun, hasVisualCheck, visualCheckActive, hasDeployUrl, entryPath };
   const next = nextProjectAction(facts);
+  // #559 여정 렌즈 결함 10: "만들기 안내" in the default view, like the sidebar.
+  const pack = packCopyKeys(developerMode);
 
   const copy: Record<string, { label: string; desc: string }> = {
     create_items: { label: t.commandCenter.createItems, desc: t.commandCenter.createItemsDesc },
     connect_code: { label: t.commandCenter.connectCode, desc: t.commandCenter.connectCodeDesc },
     add_url: { label: t.commandCenter.addUrl, desc: t.commandCenter.addUrlDesc },
-    get_pack: { label: t.commandCenter.getPack, desc: t.commandCenter.getPackDesc },
+    get_pack: { label: t.commandCenter[pack.label], desc: t.commandCenter.getPackDesc },
     run_review: { label: t.commandCenter.runReview, desc: t.commandCenter.runReviewDesc },
     view_progress: { label: t.commandCenter.viewProgress, desc: t.commandCenter.viewProgressDesc },
     view_results: { label: t.commandCenter.viewResults, desc: t.commandCenter.viewResultsDesc },
@@ -407,7 +457,9 @@ function CommandCenterCard({
     review: view.reviewLabelKey ? t.stepsNav[view.reviewLabelKey] : null,
     results: t.stepsNav.results,
   };
-  const explainerReady = view.known;
+  // …and, for whether it shows at all, on whether the project was already
+  // checked (결함 9) — so it waits for those requests too.
+  const explainerReady = view.known && checksSettled;
   const explainer = explainerKind(facts);
 
   return (
@@ -459,14 +511,24 @@ function CommandCenterCard({
         </div>
       )}
       {/* Builder building-state: the app may already exist elsewhere — keep the
-          "connect your deploy URL" door open at all times (no GitHub required). */}
+          "add your app's address" door open at all times (no GitHub required).
+          #559 여정 렌즈 결함 8: it used to link to the Sources screen (two
+          "connect" buttons, an "owner/repo" field, and no way forward after
+          connecting) while the list below promised "paste the address here".
+          Now it is the same address box as the app branch, folded, with a
+          secondary button — the card's primary stays "get the build guide". */}
       {next?.action === "get_pack" && (
-        <p className="mt-2 text-xs text-gray-500">
-          {t.commandCenter.alreadyBuilt}{" "}
-          <Link href={`/projects/${projectId}/sources`} className="font-medium text-brand-700 hover:underline">
-            {t.commandCenter.connectUrl} →
-          </Link>
-        </p>
+        <details
+          open={foldOpen}
+          onToggle={(e) => setFoldOpen((e.currentTarget as HTMLDetailsElement).open)}
+          className="mt-3"
+        >
+          <summary className="cursor-pointer list-none text-xs text-gray-500">
+            {t.commandCenter.alreadyBuilt}{" "}
+            <span className="font-medium text-brand-700 hover:underline">{t.commandCenter.addUrlFoldLink} →</span>
+          </summary>
+          {foldOpen && <AppAddressStart projectId={projectId} t={t} locale={locale} emphasis="secondary" />}
+        </details>
       )}
       {/* Flow-audit B-1 (2026-07-17): the explainer must match the situation —
           before an app exists the path is builder pack → build with a dev AI →
@@ -479,12 +541,17 @@ function CommandCenterCard({
           {explainer === "idea" ? (
             <>
               <li>1. {t.overview.gsIdeaStep1}</li>
-              <li>2. {t.overview.gsIdeaStep2}</li>
+              <li>2. {t.overview[pack.step2]}</li>
               <li>3. {t.overview.gsIdeaStep3}</li>
             </>
           ) : (
             <>
-              <li>1. {t.overview.gsStep1}</li>
+              {/* #559 여정 렌즈 결함 9: an address already connected is shown as
+                  done — "1. add the address" under "your address is connected"
+                  read as an instruction to do it again. */}
+              <li className={hasDeployUrl === true ? "text-gray-400" : undefined}>
+                {hasDeployUrl === true ? "✓" : "1."} {t.overview.gsStep1}
+              </li>
               <li>2. {t.overview.gsStep2}</li>
               <li>3. {t.overview.gsStep3}</li>
             </>
@@ -533,7 +600,9 @@ function VisualChecksOverviewCard({
   return (
     <section className="mb-8">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="section-title">{t.visualChecks.title}</h2>
+        {/* #559 여정 렌즈 결함 5: a run exists, so the app does — the same name the
+            sidebar gives that screen ("앱 확인하기"), not a third one. */}
+        <h2 className="section-title">{t.nav.checkApp}</h2>
         <Link
           href={`/projects/${projectId}/visual-checks`}
           className="text-xs text-brand-700 hover:underline"

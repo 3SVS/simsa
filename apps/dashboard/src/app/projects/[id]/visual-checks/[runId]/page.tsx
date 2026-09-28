@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { ProjectNotFound } from "@/components/ProjectNotFound";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject, getUserKey, loadExtendedProjectData, saveExtendedProjectData } from "@/lib/workflow-store";
 import { screenshotCaption, screenshotFileName } from "@/lib/screenshot-caption.mjs";
@@ -322,6 +323,21 @@ function ComparisonSection({
 // Stage 266 comparison once done).
 type RecheckNotice = { kind: "queuedOnly" } | { kind: "error"; errorKey: RunErrorKey };
 
+// 화면 검수 결과를 프로젝트 상태에 남긴다 — 하단 "다음 한 걸음" 바가 여기서 무엇을
+// 가리킬지 정하려면 이 사실이 필요하고, 화면 검수는 `checkResults`에 아무것도 쓰지
+// 않는다. 리포트 전체가 아니라 판단에 쓰는 최소만 저장한다. runId(#559 여정 렌즈
+// 결함 2): "고칠 것" 화면이 이 결과 화면을 가리킬 수 있게.
+function rememberVisualResult(projectId: string, check: VisualCheckDetail): void {
+  saveExtendedProjectData(projectId, {
+    visualCheck: {
+      decision: check.decision,
+      findingCount: check.report?.findings?.length ?? 0,
+      at: check.createdAt,
+      runId: check.id,
+    },
+  });
+}
+
 // Stage 272 — same POST run dispatch as the Stage 264 list page. On a
 // dispatched run we navigate straight to its detail page; a queued-only
 // (degraded runner) or error answer keeps the user here with a callout.
@@ -416,9 +432,12 @@ function BuilderPasteSection({
         {recheck.submitting ? t.visualChecks.runSubmitting : s.recheckButton}
       </button>
       <RecheckNoticeView notice={recheck.notice} t={t} />
+      {/* #559 여정 렌즈 결함 7: "connect your code" goes where connecting actually
+          happens (준비·연결). It used to open the code-changes (PR) screen, which
+          for an unlinked project only said "connect a repository first". */}
       <p className="mt-3 text-xs leading-relaxed text-gray-500">
         {s.repoOptional}{" "}
-        <Link href={`/projects/${projectId}/github`} className="underline hover:text-gray-700">
+        <Link href={`/projects/${projectId}/settings`} className="underline hover:text-gray-700">
           {s.repoOptionalLink}
         </Link>
       </p>
@@ -794,15 +813,7 @@ export default function VisualCheckDetailPage() {
         // 여기서 무엇을 가리킬지(고칠 것으로 갈지, 끝났다고 말할지) 정하려면
         // 이 사실이 필요하고, 화면 검수는 `checkResults`에 아무것도 쓰지 않는다.
         // 리포트 전체가 아니라 판단에 쓰는 최소만 저장한다.
-        if (res.check.status === "done") {
-          saveExtendedProjectData(id, {
-            visualCheck: {
-              decision: res.check.decision,
-              findingCount: res.check.report?.findings?.length ?? 0,
-              at: res.check.createdAt,
-            },
-          });
-        }
+        if (res.check.status === "done") rememberVisualResult(id, res.check);
       } else if (res.error === "not_found" || res.error === "forbidden") {
         setPhase("notfound");
       } else {
@@ -848,11 +859,17 @@ export default function VisualCheckDetailPage() {
       const res = await getVisualCheck(id, runId, userKey);
       if (cancelled || !res.ok) return;
       setCheck(res.check);
+      // A run that finishes while this page is open (the first check started
+      // from the overview lands here while still running) is remembered too.
+      if (res.check.status === "done") rememberVisualResult(id, res.check);
     }, RUN_POLL_INTERVAL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [isRunActive, id, runId, userKey]);
 
-  if (!project) return <p className="text-sm text-gray-500">{t.common.notFound}</p>;
+  // #559 여정 렌즈 결함 11 (D10 잔존): this is where the address box lands. It
+  // printed a bare English "Not found." on the server / first paint (no local
+  // storage there yet); the shared card waits for mount like every other screen.
+  if (!project) return <ProjectNotFound />;
 
   // Train C — C2b (계약 3): the format showing right now. Derived, not stored, so a
   // report that arrives through the 5s poll (or a repo fact that settles later)
