@@ -32,6 +32,12 @@
  * immediately marked failed with dispatched:false + note — nothing consumes
  * queued rows later, and a wedged queued row would block the 409 guard for
  * 30 min until the stuck sweep.
+ *
+ * Train W (재정렬 D-7 amend [PILOT], 2026-09-28):
+ *   - W-2 킬스위치 REPAIR_ENABLED — 판정은 dispatchRepairJob **안**(service-switches.ts). 라우트는
+ *     같은 헬퍼로 행·토큰 조회 전에 묻고 503 `repair_disabled`.
+ *   - W-2 일일 상한 수리 5/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
+ *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"repair", limit, resetAt }.
  */
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
@@ -43,6 +49,9 @@ import { getProjectRepo } from "../workspace/github-db.js";
 import { listProjectSources } from "../workspace/project-sources-db.js";
 import { getAppInstallationToken, resolveRepoAccessToken } from "../workspace/github-app-access.js";
 import { regionFromRequest } from "../workspace/envelope.js";
+import { REPAIR_DISABLED, repairEnabled } from "../workspace/service-switches.js";
+import { consumeUserDailyLimit, refundUserDailyLimit } from "../workspace/rate-limit.js";
+import { REPAIR_DAILY_BUCKET, dailyLimitReachedBody, repairDailyLimit } from "../workspace/beta-limits.js";
 import type { FetchLike } from "../github.js";
 import {
   findActiveRepairJobForRun,
@@ -145,6 +154,10 @@ const REPAIR_ENTRY_MESSAGES = {
  * — the container acks 202 and reports back via /internal/repair-*.
  * The GitHub token travels only in the job payload (memory → container env),
  * never in a D1 row or response body.
+ *
+ * Train W · W-2: the REPAIR_ENABLED kill switch is enforced HERE, so every
+ * caller passes the same gate (`disabled: true` = switched off, as opposed to
+ * the sandbox being unavailable).
  */
 export async function dispatchRepairJob(
   env: Env,
@@ -166,7 +179,10 @@ export async function dispatchRepairJob(
     locale: "ko" | "en";
     publicBaseUrl: string;
   },
-): Promise<{ dispatched: boolean; note?: string }> {
+): Promise<{ dispatched: boolean; note?: string; disabled?: boolean }> {
+  if (!repairEnabled(env)) {
+    return { dispatched: false, note: REPAIR_DISABLED, disabled: true };
+  }
   if (!env.SANDBOX) {
     return { dispatched: false, note: "sandbox_unavailable" };
   }
@@ -263,6 +279,13 @@ export function createWorkspaceRepairJobRoutes(
       return c.json({ ok: false, error: "run_not_found" }, 404);
     }
 
+    // Train W · W-2 — kill switch, asked BEFORE any row exists and before any
+    // token is resolved (same helper dispatchRepairJob enforces). After the
+    // ownership chain: a stranger still gets 403/404, never a hint.
+    if (!repairEnabled(c.env)) {
+      return c.json({ ok: false, error: REPAIR_DISABLED }, 503);
+    }
+
     // Repairable gate: only a finished check that did NOT verify as working
     // and that carries the deterministic fix prompt can be repaired.
     const agentPrompt = run.agentPrompt ?? "";
@@ -351,6 +374,17 @@ export function createWorkspaceRepairJobRoutes(
       return c.json({ ok: false, error: "repair_already_active", activeJobId: active.id }, 409);
     }
 
+    // Train W · W-2 — the user's daily repair cap (D-7 amend [PILOT], 5/day).
+    // Same placement as the inspection route: after ownership + validation +
+    // the one-active-repair guard, refunded below if the job never starts.
+    const dailyLimit = repairDailyLimit(c.env);
+    const slot = await consumeUserDailyLimit(c.env, REPAIR_DAILY_BUCKET, userKey, dailyLimit);
+    if (slot.limited) {
+      c.header("Retry-After", String(slot.retryAfterSeconds));
+      return c.json(dailyLimitReachedBody("repair", dailyLimit, slot.resetAt), 429);
+    }
+    const refundSlot = () => refundUserDailyLimit(c.env, REPAIR_DAILY_BUCKET, userKey, slot.dayUtc);
+
     // Honest boundary: env-cause evidence still dispatches (fallback-style
     // code fixes are legitimate) but flags the row so the UI can warn.
     const envCause = detectEnvCause(agentPrompt, run.reportJson ?? "");
@@ -370,6 +404,7 @@ export function createWorkspaceRepairJobRoutes(
       });
     } catch (err) {
       console.error("[repair-jobs POST] insert failed:", err);
+      await refundSlot();
       return c.json({ ok: false, error: "save_failed" }, 500);
     }
 
@@ -395,6 +430,8 @@ export function createWorkspaceRepairJobRoutes(
     // nothing will ever pick up would wedge the 409 guard until the sweep.
     let status = job.status;
     if (!dispatch.dispatched) {
+      // W-2: nothing ran — the user's slot goes back.
+      await refundSlot();
       try {
         await markRepairJobFailed(c.env, job.id, dispatch.note ?? "dispatch_failed");
         status = "failed";

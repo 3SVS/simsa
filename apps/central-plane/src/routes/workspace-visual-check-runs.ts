@@ -33,6 +33,14 @@
  *     배포되기 때문) + 복사 계측 이벤트.
  *   - C4a (D-8 amend, 0069): region·envelope_json은 insert 시, finding_codes_json은 콜백 시.
  *
+ * Train W · W-2 (재정렬 D-7 amend [PILOT], 2026-09-28):
+ *   - 킬스위치 INSPECTION_ENABLED — 판정은 dispatchInspection **안**(service-switches.ts 단일
+ *     헬퍼)이라 라우트·verify-sweep·향후 자동 검수가 같은 게이트를 지난다. 라우트는 같은 헬퍼로
+ *     행을 만들기 전에 묻고 503 `inspection_disabled`.
+ *   - 일일 상한 검수 10/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
+ *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"inspection",
+ *     limit, resetAt }. 시스템 재검수(verify-sweep)는 이 라우트를 거치지 않아 차감되지 않는다.
+ *
  * Graceful degradation: when the INSPECTOR DO binding / callback token is
  * absent or the container refuses the job (e.g. still provisioning), the row is
  * created, immediately marked failed (fail-fast — nothing consumes queued rows
@@ -50,6 +58,13 @@ import { getProjectSourceById, listProjectSources } from "../workspace/project-s
 import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { resolveRepairJobsByVerifyCheck } from "../workspace/repair-job-db.js";
+import { INSPECTION_DISABLED, inspectionEnabled } from "../workspace/service-switches.js";
+import { consumeUserDailyLimit, refundUserDailyLimit } from "../workspace/rate-limit.js";
+import {
+  INSPECTION_DAILY_BUCKET,
+  dailyLimitReachedBody,
+  inspectionDailyLimit,
+} from "../workspace/beta-limits.js";
 import { buildBuilderFixPrompt } from "../nondev-report.js";
 import {
   USER_VERDICTS,
@@ -135,6 +150,12 @@ function requireInternalToken(c: {
  * Dispatch the queued run into the SimsaInspector container DO. Mirrors
  * spawnSandbox in saas.ts: fire-and-forget from the caller's perspective —
  * the container acks 202 and reports back via /internal/visual-check-*.
+ *
+ * Train W · W-2: the INSPECTION_ENABLED kill switch is enforced HERE (not in a
+ * route), so every caller — the run route, the verify-sweep cron, any future
+ * automatic inspection after a build — passes the same gate. `disabled: true`
+ * tells a caller the service is switched off (as opposed to the container
+ * being unavailable); callers that create rows ask inspectionEnabled() first.
  */
 export async function dispatchInspection(
   env: Env,
@@ -151,7 +172,10 @@ export async function dispatchInspection(
     /** SI 티어 A5: 지시서의 수용 기준 시나리오(없으면 종전 — 핵심 흐름 하나). */
     acceptancePlan?: AcceptanceScenario[];
   },
-): Promise<{ dispatched: boolean; note?: string }> {
+): Promise<{ dispatched: boolean; note?: string; disabled?: boolean }> {
+  if (!inspectionEnabled(env)) {
+    return { dispatched: false, note: INSPECTION_DISABLED, disabled: true };
+  }
   if (!env.INSPECTOR) {
     return { dispatched: false, note: "inspector_unavailable" };
   }
@@ -355,6 +379,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     if (!project) return c.json({ ok: false, error: "project_not_found" }, 404);
     if (project.userKey !== userKey) return c.json({ ok: false, error: "forbidden" }, 403);
 
+    // Train W · W-2 — kill switch, asked BEFORE any row exists (same helper
+    // dispatchInspection enforces). After ownership: a stranger still gets 403.
+    if (!inspectionEnabled(c.env)) {
+      return c.json({ ok: false, error: INSPECTION_DISABLED }, 503);
+    }
+
     // Report language. Same shape as every other workspace route
     // (workspace-document-intake, workspace-github): unknown → "ko".
     const locale: "ko" | "en" = body.locale === "en" ? "en" : "ko";
@@ -438,6 +468,20 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: false, error: "run_already_active", activeRunId: active.id }, 409);
     }
 
+    // Train W · W-2 — the user's daily inspection cap (D-7 amend [PILOT], 10/day).
+    // Charged only here, after ownership + validation + the one-active-run guard
+    // (a 409 never costs a slot), and handed back below when the job never starts
+    // (row not saved / container refused). Taking the slot before the dispatch —
+    // not after it — keeps the concurrent window as small as every other daily
+    // cap (read-then-increment, ms) instead of spanning the container call.
+    const dailyLimit = inspectionDailyLimit(c.env);
+    const slot = await consumeUserDailyLimit(c.env, INSPECTION_DAILY_BUCKET, userKey, dailyLimit);
+    if (slot.limited) {
+      c.header("Retry-After", String(slot.retryAfterSeconds));
+      return c.json(dailyLimitReachedBody("inspection", dailyLimit, slot.resetAt), 429);
+    }
+    const refundSlot = () => refundUserDailyLimit(c.env, INSPECTION_DAILY_BUCKET, userKey, slot.dayUtc);
+
     // C4a (0069): the envelope is stamped at insert — that is when the edge
     // country and the project snapshot are in hand. Nothing here is invented:
     // absent values are null.
@@ -459,6 +503,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       });
     } catch (err) {
       console.error("[visual-check-runs POST run] insert failed:", err);
+      await refundSlot();
       return c.json({ ok: false, error: "save_failed" }, 500);
     }
 
@@ -487,6 +532,8 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // honest and lets the user retry immediately (live finding, Stage 263.1).
     let status = run.status;
     if (!dispatch.dispatched) {
+      // W-2: nothing ran — the user's slot goes back.
+      await refundSlot();
       try {
         await markVisualCheckFailed(c.env, run.id, dispatch.note ?? "dispatch_failed");
         status = "failed";

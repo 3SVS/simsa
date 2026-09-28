@@ -166,6 +166,17 @@ export interface Env {
    */
   LEGACY_AUTO_REVIEW?: string;
   /**
+   * Train W · W-2 (재정렬 D-7 amend) — 검수 킬스위치. **정확히 "off"일 때만 꺼진다**
+   * (미설정·"on"·다른 값 = 켜짐 — 설정이 빠진 배포가 서비스를 끄지 않는다).
+   * 꺼지면 검수 라우트는 행을 만들기 전에 503 `inspection_disabled`, verify-sweep은
+   * 행 없이 skipped_disabled. 판정은 workspace/service-switches.ts 단일 출처이고,
+   * dispatchInspection 내부에서도 같은 헬퍼로 막는다(크론·향후 자동 검수 포함).
+   * wrangler.toml [vars]에 "on"으로 명시. 끄기 = "off" + deploy-central-plane.
+   */
+  INSPECTION_ENABLED?: string;
+  /** Train W · W-2 — 수리 킬스위치. INSPECTION_ENABLED와 같은 규칙(503 `repair_disabled`, dispatchRepairJob 내부 게이트). */
+  REPAIR_ENABLED?: string;
+  /**
    * 2026-07-09 — Langfuse minimal wiring (Simsa flow observability).
    * All three must be set for traces to be sent; otherwise the workspace
    * routes silently skip Langfuse (fail-open — never blocks a user call).
@@ -300,6 +311,13 @@ export interface Env {
   /** RC-3 협의체의 Gemini 호출용 게이트웨이 URL (google-ai-studio). Unset = direct. */
   CF_AI_GATEWAY_GOOGLE_URL?: string;
   BETA_PROJECT_CREATE_DAILY_LIMIT?: string;
+  /**
+   * Train W · W-2 (D-7 amend [PILOT]) — 유저(userKey)당 검수·수리 일일 상한 override.
+   * 기본 검수 10/일 · 수리 5/일(workspace/beta-limits.ts). 양의 정수만, 그 외 = 기본값.
+   * [PILOT]: 수치는 파일럿 전에 조정 가능 — 코드 변경 없이 [vars]로.
+   */
+  BETA_INSPECTION_DAILY_LIMIT?: string;
+  BETA_REPAIR_DAILY_LIMIT?: string;
   /**
    * In-app feedback (workspace-feedback.ts) admin notification targets.
    * ADMIN_TELEGRAM_CHAT_ID: numeric chat id to DM new feedback to (uses the

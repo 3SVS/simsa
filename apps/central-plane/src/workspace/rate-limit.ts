@@ -23,8 +23,15 @@ function currentHourUtc(): string {
 }
 
 /** UTC day bucket, e.g. "2026-07-03" — resets at UTC midnight. */
-function currentDayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
+function currentDayUtc(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/** ISO instant of the next UTC midnight after `now` — when a day bucket rolls over. */
+export function nextDayUtcIso(now: Date = new Date()): string {
+  const next = new Date(now);
+  next.setUTCHours(24, 0, 0, 0);
+  return next.toISOString();
 }
 
 /** Seconds until the next UTC midnight (floor 60s). */
@@ -79,6 +86,14 @@ export type HourlyLimitResult = {
   retryAfterSeconds: number;
 };
 
+/** Daily result: adds the bucket the slot came from (for a refund) and when it resets. */
+export type DailyLimitResult = HourlyLimitResult & {
+  /** The UTC day key the check/consume used ("2026-09-28") — pass it back to refundUserDailyLimit. */
+  dayUtc: string;
+  /** ISO instant the bucket rolls over (next UTC midnight). */
+  resetAt: string;
+};
+
 /**
  * Check + consume one slot from a per-userKey hourly bucket.
  * Attempt-based: the counter is bumped as soon as the check passes, so retry
@@ -111,15 +126,48 @@ export async function consumeUserDailyLimit(
   bucket: string,
   userKey: string,
   limitPerDay: number,
-): Promise<HourlyLimitResult> {
+): Promise<DailyLimitResult> {
+  const now = new Date();
   const hash = await sha256Hex(`${bucket}::${userKey}`);
-  const dayUtc = currentDayUtc();
+  const dayUtc = currentDayUtc(now);
+  const resetAt = nextDayUtcIso(now);
   const count = await getCount(env.DB, hash, dayUtc);
   if (count >= limitPerDay) {
-    return { limited: true, retryAfterSeconds: secondsUntilNextDayUtc() };
+    return { limited: true, retryAfterSeconds: secondsUntilNextDayUtc(), dayUtc, resetAt };
   }
   await increment(env.DB, hash, dayUtc);
-  return { limited: false, retryAfterSeconds: 0 };
+  return { limited: false, retryAfterSeconds: 0, dayUtc, resetAt };
+}
+
+/**
+ * Train W · W-2 — hand back one slot taken by consumeUserDailyLimit when the
+ * work it paid for never started (the row could not be saved, or the container
+ * refused the job). Our infrastructure failing is not the user's attempt.
+ *
+ * `dayUtc` is the bucket the slot came from (DailyLimitResult.dayUtc) — a refund
+ * after UTC midnight must not credit the new day. Never goes below 0. Fail-open
+ * like the rest of this file: a D1 error only logs (the worst case is one slot
+ * lost for the day, never a blocked request).
+ */
+export async function refundUserDailyLimit(
+  env: Env,
+  bucket: string,
+  userKey: string,
+  dayUtc: string,
+): Promise<void> {
+  try {
+    const hash = await sha256Hex(`${bucket}::${userKey}`);
+    await env.DB
+      .prepare(
+        `UPDATE workspace_rate_limit
+            SET count = count - 1, last_at = ?
+          WHERE ip_hash = ? AND hour_utc = ? AND count > 0`,
+      )
+      .bind(new Date().toISOString(), hash, dayUtc)
+      .run();
+  } catch (err) {
+    console.warn(`[workspace/rate-limit] refund failed (non-fatal):`, err);
+  }
 }
 
 /** Parse an hourly-limit env var with a default (invalid/absent → default). */
