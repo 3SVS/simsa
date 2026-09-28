@@ -519,6 +519,8 @@ const REPORT_STR: Record<ReportLocale, {
   nextTop: (how: string) => string;
   nextNoPrimary: string;
   nextRerun: string;
+  /** 고칠 것이 없을 때(정상 작동·문제 못 찾음 + 정보 항목만)의 다음 할 일. '고친 뒤 다시'를 말하지 않는다. */
+  nextNothingToFix: string;
   notes: string[];
   /** SI 티어 A5: 수용 기준 요약 한 줄(개수만). */
   acceptanceLine: (c: { total: number; noProblem: number; notConfirmed: number; broken: number; notRun: number }) => string;
@@ -536,6 +538,8 @@ const REPORT_STR: Record<ReportLocale, {
     nextTop: (how) => `가장 급한 것부터: ${how}`,
     nextNoPrimary: "사용자가 처음에 눌러야 할 버튼/검색창을 분명히 만든 뒤 다시 검수하세요.",
     nextRerun: "고친 뒤 이 검수를 한 번 더 돌려서, 아래 스크린샷이 정상 화면으로 바뀌는지 눈으로 확인하세요.",
+    nextNothingToFix:
+      "지금 고칠 것은 없어요. 앱이 생각과 다르게 움직이는 부분이 있다면 알려 주세요 — 그 부분을 기준으로 다시 확인해 드려요.",
     notes: [
       "이 검수는 실제 브라우저로 앱을 열어 눈에 보이는 것을 확인한 결과예요. 모든 버그를 찾았다는 뜻은 아니에요.",
       "'무엇이/왜/어떻게'는 사람이 읽기 쉬운 설명이고, 정확한 기술 원인은 각 항목의 '개발자용' 정보에 있어요.",
@@ -555,6 +559,8 @@ const REPORT_STR: Record<ReportLocale, {
     nextTop: (how) => `Most urgent first: ${how}`,
     nextNoPrimary: "Make the first button/search box the user should press clear, then run the review again.",
     nextRerun: "After fixing, run this review once more and confirm with your own eyes that the screenshots below turn into a working screen.",
+    nextNothingToFix:
+      "Nothing needs fixing right now. If the app behaves differently from what you expected, tell us — we'll check again against that.",
     notes: [
       "This review opened the app in a real browser and checked what was visible. It does not mean every bug was found.",
       "The what/why/how is a plain-language explanation; the exact technical cause is in each item's 'for developers' detail.",
@@ -604,10 +610,15 @@ export function buildNonDevReport(input: VisualCheckInput, locale: ReportLocale 
           ? s.oneLineNoProblems
           : s.oneLineUnverified(firstWhat);
 
+  // 다음 할 일 (2026-09-28 실측 수정): '가장 급한 것'과 '고친 뒤 다시'는 **고칠 것**이 있을 때만.
+  //  정보 항목(외부 스크립트 잡음 등, severity "info")은 고칠 것이 아니다 — 종전엔 "문제를 찾지 못했어요"
+  //  판정 아래에 "가장 급한 것부터: 특별히 고칠 필요는 없어요"와 "고친 뒤 다시 돌려서…"가 함께 떴다.
+  const actionable = findings.filter((f) => f.severity !== "info");
   const nextSteps: string[] = [];
-  if (findings[0]) nextSteps.push(s.nextTop(findings[0].how));
+  if (actionable[0]) nextSteps.push(s.nextTop(actionable[0].how));
   if (works === null && !noProblems && input.primaryActionFound === false) nextSteps.push(s.nextNoPrimary);
-  nextSteps.push(s.nextRerun);
+  const somethingToFix = actionable.length > 0 || works === false || (works === null && !noProblems);
+  nextSteps.push(somethingToFix ? s.nextRerun : s.nextNothingToFix);
 
   // SI 티어 A5: 수용 기준 요약 — 있을 때만. 개수뿐이고 점수가 아니다.
   const ar = input.acceptanceResults ?? [];
