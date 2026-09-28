@@ -332,6 +332,8 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 | Train C 착수 | `train C start approved` | 2026-09-27 (Bae) | C0·C2a·C2b·C3·C4 코드 작성만(머지·배포·마이그레이션 적용 아님). C1은 B5 뒤 |
 | C0·C2a·C2b·C4a 코드 완료 | — | 2026-09-27 | PR #553(central-plane, 0069 포함) · #552(dashboard). 3렌즈 검증에서 P0 1건(App 토큰 폴백 cross-tenant) 머지 전 수정. 머지·0068/0069 적용·배포는 대기 |
 | 머지·마이그레이션·배포 (집행) | `PR #548 merge approved.` `PR #553 merge approved.` `migration 0068 apply approved.` `migration 0069 apply approved.` `deploy central-plane approved.` `PR #552 merge approved.` `deploy dashboard approved.` | 2026-09-27 새벽 (Bae) | #548 `e82f12e` · #553 `74b7e2f` · run 36284522877(0068·0069 ✅, 게이트 ok, Version 31864bcf) · #552 `1102c10` · dashboard `5lz22z9s6` Ready. 라이브: 새 라우트 400·청크에 새 카피 확인 |
+| Train W·L·$ 착수 | `train W start approved` `train L start approved` `train $ start approved` | 2026-09-28 (Bae) | W(상한·킬스위치·정직성·방침 고지)·L(L0 계측)·$-0(Paddle 샌드박스 도구) 코드 작성만. 계획 정본 `docs/simsa-pricing-entity-consent-plan-2026-09-27.md` §5 |
+| 머지·배포 (집행) | `PR #556 merge approved.` `deploy central-plane approved.` | 2026-09-28 (Bae) | #556 `f8ad95e`(설치 리다이렉트·호스팅 전용 App 분리) · run 36380871543 Version 4f234bda. 호스팅 App 시크릿 Worker 반영(run 36381296460) |
 | 머지 | `PR #N merge approved.` | — | 해당 PR |
 | 배포 | `deploy central-plane approved.` / `deploy dashboard approved.` | — | 1회 |
 | 마이그레이션 | `migration <id> apply approved.` | — | 1건 |
