@@ -80,11 +80,20 @@ export function normalizeModelId(model: string): string {
   return model.trim().replace(/-\d{4}-\d{2}-\d{2}$/, "").replace(/-\d{8}$/, "");
 }
 
+/**
+ * 가격표 조회는 **자기 키만**. `raw in PRICING`·`PRICING[k]`는 Object.prototype 키(constructor·__proto__·
+ * toString…)에도 참/truthy라, 모델 문자열이 신뢰 경계 밖(응답 model·콜백 본문)에서 오면 단가 필드가
+ * undefined인 "알려진 모델"이 되어 비용이 NaN(→ 예산 게이트 무력)이 된다(#562 결함 7).
+ */
+function ownPricing(key: string): ModelPricing | undefined {
+  return Object.hasOwn(PRICING, key) ? PRICING[key] : undefined;
+}
+
 /** 모델 → (단가, 가격표 키). 표에 없거나 유효 구간을 넘으면 보수 단가 + pricedAs null. */
 export function resolvePricing(model: string, totalInputTokens = 0): { pricing: ModelPricing; pricedAs: string | null } {
   const raw = (model ?? "").trim();
-  const key = raw in PRICING ? raw : normalizeModelId(raw);
-  const p = PRICING[key];
+  const key = Object.hasOwn(PRICING, raw) ? raw : normalizeModelId(raw);
+  const p = ownPricing(key);
   if (!p) return { pricing: CONSERVATIVE_PRICING, pricedAs: null };
   if (p.maxPricedInputTokens !== undefined && totalInputTokens > p.maxPricedInputTokens) {
     return { pricing: CONSERVATIVE_PRICING, pricedAs: null };
@@ -103,8 +112,11 @@ export function priceUsage(model: string, usage: UsageBreakdown): PricedUsage {
   const read = nonNeg(usage.cacheReadTokens);
   const output = nonNeg(usage.outputTokens);
   const { pricing: p, pricedAs } = resolvePricing(model, input + write + read);
-  const costUsd =
-    (input * p.inputPerMTok + write * p.cacheWritePerMTok + read * p.cacheReadPerMTok + output * p.outputPerMTok) / 1_000_000;
+  const costOf = (q: ModelPricing): number =>
+    (input * q.inputPerMTok + write * q.cacheWritePerMTok + read * q.cacheReadPerMTok + output * q.outputPerMTok) / 1_000_000;
+  const costUsd = costOf(p);
+  // 방어선: 어떤 경로로든 유한수가 아니면(NaN·Infinity) 조용히 넘기지 않고 보수 단가 + unpriced.
+  if (!Number.isFinite(costUsd)) return { costUsd: costOf(CONSERVATIVE_PRICING), unpriced: true, pricedAs: null };
   return { costUsd, unpriced: pricedAs === null, pricedAs };
 }
 

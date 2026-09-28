@@ -58,11 +58,17 @@ export function priceTokens(model: string, t: TokenCounts): { costUsd: number; u
   const write = nonNeg(t.cacheWriteTokens);
   const output = nonNeg(t.outputTokens);
   const raw = (model ?? "").trim();
-  const key = raw in LLM_PRICING ? raw : normalizeModelId(raw);
-  const known = LLM_PRICING[key];
+  // 자기 키만 조회한다 — `in`·`[]`는 Object.prototype 키(constructor·__proto__·toString…)에도 참/truthy라
+  // 콜백 본문·응답의 model이 그 이름이면 단가 undefined → NaN 비용이 unpriced=0으로 통과했다(#562 결함 7).
+  const key = Object.hasOwn(LLM_PRICING, raw) ? raw : normalizeModelId(raw);
+  const known = Object.hasOwn(LLM_PRICING, key) ? LLM_PRICING[key] : undefined;
   const withinRange = known && (known.maxPricedInputTokens === undefined || input + read + write <= known.maxPricedInputTokens);
   const p = known && withinRange ? known : CONSERVATIVE_PRICING;
   const pricedAs = known && withinRange ? key : null;
-  const costUsd = (input * p.inputPerMTok + write * p.cacheWritePerMTok + read * p.cacheReadPerMTok + output * p.outputPerMTok) / 1_000_000;
+  const costOf = (q: ModelPricing): number =>
+    (input * q.inputPerMTok + write * q.cacheWritePerMTok + read * q.cacheReadPerMTok + output * q.outputPerMTok) / 1_000_000;
+  const costUsd = costOf(p);
+  // 방어선: 유한수가 아니면 조용히 넘기지 않고 보수 단가 + unpriced.
+  if (!Number.isFinite(costUsd)) return { costUsd: costOf(CONSERVATIVE_PRICING), unpriced: true, pricedAs: null };
   return { costUsd, unpriced: pricedAs === null, pricedAs };
 }

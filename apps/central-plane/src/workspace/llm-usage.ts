@@ -105,7 +105,8 @@ async function bindingsFor(row: LlmUsageRowInput): Promise<unknown[]> {
     tokens.cacheWriteTokens,
     tokens.outputTokens,
     Number.isFinite(priced.costUsd) && priced.costUsd > 0 ? priced.costUsd : 0,
-    priced.unpriced ? 1 : 0,
+    // 비용을 유한수로 못 매겼으면 0달러를 확정 원가처럼 남기지 않는다(unpriced=1).
+    priced.unpriced || !Number.isFinite(priced.costUsd) ? 1 : 0,
     intOf(row.latencyMs),
     containerSeconds,
   ];

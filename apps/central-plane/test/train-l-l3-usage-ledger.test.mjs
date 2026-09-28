@@ -193,6 +193,32 @@ describe("③ recordLlmUsage — 해시·실응답 단가·fail-open", () => {
     assert.equal(db.ledger[0].user_key_hash, null);
   });
 
+  it("★Object.prototype 키 모델명(constructor·__proto__·toString…)은 미지 모델이다 — 보수 단가 + unpriced, NaN 없음 (#562 결함 7)", async () => {
+    const { priceTokens } = await import("../dist/workspace/llm-pricing.js");
+    const u = { inputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1_000_000 };
+    for (const m of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty", "isPrototypeOf", "constructor-20251001"]) {
+      const p = priceTokens(m, u);
+      assert.equal(p.unpriced, true, `${m}: unpriced`);
+      assert.equal(p.pricedAs, null, `${m}: pricedAs`);
+      near(p.costUsd, 30);
+    }
+  });
+
+  it("★repair-done 콜백의 modelActual 'constructor'도 cost_usd>0 · unpriced=1로 남는다(조용한 $0 금지)", async () => {
+    const db = makeDb({ repairJobs: [repairJobRow()] });
+    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/repair-done", {
+      jobId: "wrj_1", ok: false, error: "worker_call_failed",
+      usage: [usageItem({ modelActual: "constructor", inputTokens: 5_000_000, cacheReadTokens: 0, outputTokens: 5_000_000 }), usageItem({ modelActual: "__proto__", inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 0 })],
+    }, AUTH);
+    assert.equal(r.status, 200);
+    assert.equal(db.ledger.length, 2);
+    const [a, b] = db.ledger;
+    assert.equal(a.unpriced, 1, "constructor → unpriced");
+    near(a.cost_usd, 150);
+    assert.equal(b.unpriced, 1, "__proto__ → unpriced");
+    near(b.cost_usd, 5);
+  });
+
   it("★fail-open: 기록 실패는 false를 돌려주고 던지지 않으며 console.error 한 줄 JSON", async () => {
     const { recordLlmUsage, recordLlmUsageBatch } = await import("../dist/workspace/llm-usage.js");
     const errs = [];

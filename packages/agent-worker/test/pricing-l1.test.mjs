@@ -75,6 +75,30 @@ describe("L-1 공식 단가 스냅샷", () => {
     near(p.costUsd, 300_000 * 5 / 1_000_000);
   });
 
+  it("★⑤ Object.prototype 키 모델명은 '알려진 모델'이 아니다 — 보수 단가 + unpriced, NaN 없음 (#562 결함 7)", () => {
+    // `raw in PRICING`은 상속 키도 참이다: 'constructor' in {} === true, PRICING.constructor는 Object 함수(truthy)
+    // → 단가 필드가 undefined라 비용이 NaN인데 unpriced:false로 "알려진 모델"처럼 통과했다.
+    const u = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
+    for (const m of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty", "isPrototypeOf", "constructor-20251001"]) {
+      const p = pricing.priceUsage(m, u);
+      assert.equal(p.unpriced, true, `${m}: unpriced`);
+      assert.equal(p.pricedAs, null, `${m}: pricedAs`);
+      near(p.costUsd, 30, `${m}: 보수 단가`);
+      near(actualCost(m, u), 30, `${m}: actualCost`);
+      near(estimateCallCost(m, 1_000_000, 1_000_000), 30, `${m}: estimateCallCost`);
+    }
+  });
+
+  it("★⑤ 실응답 model이 프로토타입 키여도 D-7 예산 게이트가 꺼지지 않는다(NaN spent 금지)", async () => {
+    const { EfficiencyGate, BudgetExceededError } = await import("@simsa/core");
+    const rec = pricing.usageRecordFromResponse("claude-sonnet-4-6", { model: "constructor", usage: { input_tokens: 10_000_000, output_tokens: 10_000_000 } }, 1);
+    assert.ok(Number.isFinite(rec.costUsd), `costUsd는 유한수여야 한다: ${rec.costUsd}`);
+    assert.equal(rec.unpriced, true);
+    const gate = new EfficiencyGate({ perPrUsd: 1 });
+    gate.budget.commit(rec.costUsd);
+    assert.throws(() => gate.budget.reserve(0.9), BudgetExceededError, "상한을 넘긴 뒤 다음 호출은 막혀야 한다");
+  });
+
   it("④ input_tokens는 캐시 제외분이다 — 캐시 읽기 10k가 있어도 입력 1k는 과금된다", () => {
     const c = actualCost("claude-sonnet-4-6", { inputTokens: 1_000, cacheReadTokens: 10_000, outputTokens: 0 });
     near(c, (1_000 * 3 + 10_000 * 0.3) / 1_000_000);

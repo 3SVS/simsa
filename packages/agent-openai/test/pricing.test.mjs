@@ -40,3 +40,12 @@ test("estimateCallCost: deterministic pre-flight", () => {
   const est = estimateCallCost("gpt-5-mini", 5_000, 1_000);
   assert.equal(est.toFixed(4), "0.0045");
 });
+
+// PR #562 결함 7 회귀 전수 — `PRICING[model]`은 상속 키(constructor·__proto__·toString…)도 truthy로
+// 돌려줘 비용이 NaN인 채 "알려진 모델"처럼 통과했다. 모르는 모델은 조용히 NaN이 아니라 던져야 한다.
+test("pricing: Object.prototype keys are unknown models (throw, never NaN)", () => {
+  for (const m of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    assert.throws(() => actualCost(m, { inputTokens: 1_000, outputTokens: 1_000 }), /unknown/, `actualCost ${m}`);
+    assert.throws(() => estimateCallCost(m, 1_000, 1_000), /unknown/, `estimateCallCost ${m}`);
+  }
+});

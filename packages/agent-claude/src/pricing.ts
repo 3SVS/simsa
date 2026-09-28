@@ -45,7 +45,8 @@ export interface UsageBreakdown {
 
 /** Compute actual USD cost from an Anthropic API usage breakdown. */
 export function actualCost(model: string, usage: UsageBreakdown): number {
-  const p = PRICING[model];
+  // Own keys only — `PRICING[model]` is truthy for inherited keys ("constructor", "__proto__", …) → NaN cost.
+  const p = Object.hasOwn(PRICING, model) ? PRICING[model] : undefined;
   if (!p) throw new Error(`pricing: unknown model "${model}"`);
   const baseInput = usage.inputTokens - (usage.cacheCreationTokens ?? 0) - (usage.cacheReadTokens ?? 0);
   return (
@@ -62,7 +63,8 @@ export function actualCost(model: string, usage: UsageBreakdown): number {
  * cache read (worst case) and a typical 25% output-to-input ratio.
  */
 export function estimateCallCost(model: string, estimatedInputTokens: number, maxOutputTokens: number): number {
-  const p = PRICING[model];
+  // Own keys only — `PRICING[model]` is truthy for inherited keys ("constructor", "__proto__", …) → NaN cost.
+  const p = Object.hasOwn(PRICING, model) ? PRICING[model] : undefined;
   if (!p) throw new Error(`pricing: unknown model "${model}"`);
   return (estimatedInputTokens * p.inputPerMTok + maxOutputTokens * p.outputPerMTok) / 1_000_000;
 }
