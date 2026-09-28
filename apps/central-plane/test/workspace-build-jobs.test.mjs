@@ -111,7 +111,7 @@ function envFor({ db, builder = makeBuilder(), hosting = true, llm = true, token
     DB: db, BUILDER: builder, INTERNAL_CALLBACK_TOKEN: token, PUBLIC_BASE_URL: "https://cp.example",
     ...(hosting ? { HOSTING_CF_API_TOKEN: "cf-ops-SECRET", HOSTING_CF_ACCOUNT_ID: "acc1", HOSTING_ROOT_DOMAIN: "simsa.page" } : {}),
     ...(llm ? { ANTHROPIC_API_KEY: "sk-ant-SECRET", OPENAI_API_KEY: "sk-oa-SECRET", CF_AI_GATEWAY_ANTHROPIC_URL: "https://gw.example/anthropic" } : {}),
-    GH_APP_ID: "1", GH_APP_PRIVATE_KEY: "", // App 미설정 → 저장소 없이 진행
+    HOSTING_GH_APP_ID: "1", HOSTING_GH_APP_PRIVATE_KEY: "", // 호스팅 App 미설정 → 저장소 없이 진행
     __fetch: fetchImpl,
   };
 }

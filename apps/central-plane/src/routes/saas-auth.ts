@@ -61,6 +61,20 @@ import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { REPAIR_MERGED_EVENT } from "../workspace/verify-sweep.js";
 import { spawnSandbox } from "./saas.js";
 
+const APP_SETUP_ACTIONS = new Set(["install", "update", "request"]);
+
+/**
+ * App 설치 직후 도착지 URL. 대시보드 주소는 env(WORKSPACE_GH_DASHBOARD_URL, 없으면 app.trysimsa.com)만 쓰고
+ * 요청 쿼리는 숫자 installation_id와 허용된 setup_action만 옮긴다 — 그 밖의 값은 버린다.
+ */
+export function appSetupRedirect(env: Pick<Env, "WORKSPACE_GH_DASHBOARD_URL">, installationId: string | undefined, setupAction: string | undefined): string {
+  const base = (env.WORKSPACE_GH_DASHBOARD_URL || "https://app.trysimsa.com").replace(/\/+$/, "");
+  const url = new URL(`${base}/github/connected`);
+  if (setupAction && APP_SETUP_ACTIONS.has(setupAction)) url.searchParams.set("app", setupAction);
+  if (installationId && /^\d{1,20}$/.test(installationId)) url.searchParams.set("installation_id", installationId);
+  return url.toString();
+}
+
 export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
 
@@ -543,6 +557,13 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
     const qs = new URLSearchParams(params).toString();
     return c.redirect("/auth/github/callback" + (qs ? "?" + qs : ""), 301);
   });
+  // --- GET /github/app/setup ------------------------------------------------
+  // GitHub App 설치 직후 도착지(App 설정의 Setup URL). GitHub은 `installation_id`와
+  // `setup_action`(install|update|request)만 붙여 보낸다 — 로그인이 아니다. 2026-09-28 Bae 라이브 신고:
+  // Setup URL이 아래 CLI 로그인 콜백을 가리켜 설치 성공 뒤 "Missing ?code or ?state" 오류 화면이 떴다.
+  // 대시보드의 연결 완료 화면으로 보낸다. 넘기는 값은 숫자 id와 허용된 동작 이름뿐(열린 리다이렉트 금지).
+  app.get("/github/app/setup", (c) => c.redirect(appSetupRedirect(c.env, c.req.query("installation_id"), c.req.query("setup_action")), 302));
+
   app.get("/auth/github/callback", async (c) => {
     const code = c.req.query("code");
     const state = c.req.query("state"); // we set this to the user_code
@@ -551,6 +572,12 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
 
     if (errParam) {
       return c.html(htmlError(`GitHub denied authorization: ${errParam}`), 400);
+    }
+    // App 설치 직후 리다이렉트(Setup URL이 아직 이 경로를 가리키는 경우) — 로그인 아님.
+    const installationId = c.req.query("installation_id");
+    const setupAction = c.req.query("setup_action");
+    if (!code && !state && installationId && setupAction) {
+      return c.redirect(appSetupRedirect(env, installationId, setupAction), 302);
     }
     if (!code || !state) {
       return c.html(htmlError("Missing ?code or ?state — cannot complete login."), 400);

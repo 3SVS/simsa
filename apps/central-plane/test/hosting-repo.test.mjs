@@ -12,7 +12,9 @@ const { hostingOrg, ensureHostedRepo, pushScaffold, getOrgInstallationToken, toB
 import { generateKeyPairSync } from "node:crypto";
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const PEM = privateKey.export({ type: "pkcs8", format: "pem" });
-const ENV = { GH_APP_ID: "12345", GH_APP_PRIVATE_KEY: PEM, HOSTING_GH_ORG: "simsa-hosted" };
+// 저장소 생성은 **전용 호스팅 App**(HOSTING_GH_APP_*)으로만 한다 — 유저가 설치하는 App(GH_APP_*)에
+// Administration 권한을 얹지 않기 위해서다(최소 권한, 2026-09-28).
+const ENV = { HOSTING_GH_APP_ID: "12345", HOSTING_GH_APP_PRIVATE_KEY: PEM, HOSTING_GH_ORG: "simsa-hosted" };
 const TOKEN = "ghs_INSTALL_SECRET";
 
 /** 경로별 응답을 정하는 가짜 GitHub. 호출 기록을 남긴다. */
@@ -152,5 +154,28 @@ describe("pushScaffold (Git Data API)", () => {
     const r = await pushScaffold({ token: TOKEN, org: "simsa-hosted", name: "app-abc", files, message: "m" }, g.f);
     assert.equal(r.ok, false);
     assert.match(r.message, /blob package\.json: too large/);
+  });
+});
+
+describe("호스팅 App 분리 — 최소 권한 (2026-09-28)", () => {
+  it("유저용 App 자격(GH_APP_*)만 있으면 저장소 생성은 not_configured — GitHub 호출 0", async () => {
+    const { f, calls } = fakeGitHub();
+    const r = await getOrgInstallationToken({ GH_APP_ID: "999", GH_APP_PRIVATE_KEY: PEM, HOSTING_GH_ORG: "simsa-hosted" }, f);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "not_configured");
+    assert.equal(calls.length, 0);
+  });
+
+  it("호스팅 App 자격으로 발급한 JWT의 iss는 HOSTING_GH_APP_ID (유저용 App id가 아님)", async () => {
+    const seen = [];
+    const { f } = fakeGitHub({
+      "GET /orgs/simsa-hosted/installation": (init) => { seen.push(init.headers); return { status: 200, body: { id: 777 } }; },
+    });
+    const r = await getOrgInstallationToken({ ...ENV, GH_APP_ID: "999", GH_APP_PRIVATE_KEY: PEM }, f);
+    assert.equal(r.ok, true);
+    const auth = seen[0]?.authorization ?? seen[0]?.Authorization ?? "";
+    const jwt = String(auth).replace(/^Bearer\s+/i, "");
+    const payload = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
+    assert.equal(String(payload.iss), "12345");
   });
 });

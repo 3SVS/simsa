@@ -4,8 +4,10 @@
  * 프로젝트당 **Simsa GitHub 조직에 private 저장소를 자동 생성**하고(유저 클릭 0), 템플릿 스캐폴드를
  * 첫 커밋으로 넣는다. 유저는 언제든 zip 다운로드·"내 GitHub로 가져가기"(B9)가 가능하다.
  *
- * 자격: 기존 GitHub App(GH_APP_ID·GH_APP_PRIVATE_KEY)의 **조직 설치 토큰**. 유저 토큰은 없다.
- *   필요 권한(App 설정, Bae 액션): Repository → Administration: write(생성) · Contents: write(커밋).
+ * 자격: **호스팅 전용 GitHub App**(HOSTING_GH_APP_ID·HOSTING_GH_APP_PRIVATE_KEY)의 **조직 설치 토큰**.
+ *   유저 토큰은 없다. 유저가 설치하는 App(GH_APP_*)은 쓰지 않는다 — 저장소 생성에 필요한 Administration:
+ *   write를 유저 저장소에 설치되는 App에 얹지 않기 위해서다(최소 권한, 2026-09-28 분리).
+ *   필요 권한(호스팅 App 설정, Bae 액션): Repository → Administration: write(생성) · Contents: write(커밋).
  *   조직은 env `HOSTING_GH_ORG`(기본 "simsa-hosted", D-5). 조직이 없거나 App 미설치면 `not_installed`로
  *   정직하게 실패한다 — 예시 저장소를 꾸미지 않는다.
  *
@@ -56,15 +58,27 @@ function ghErr<T>(res: Response, body: Record<string, unknown>): RepoResult<T> {
 }
 
 /**
+ * 호스팅 전용 App 자격으로 바꾼 env 사본. gh-app.ts의 JWT·설치 토큰 함수는 GH_APP_ID·GH_APP_PRIVATE_KEY를
+ * 읽으므로, 그 두 칸만 호스팅 App 값으로 덮은 사본을 넘긴다. 유저용 App 값으로 **폴백하지 않는다**.
+ */
+function hostingAppEnv(env: Env): Env | null {
+  const id = (env.HOSTING_GH_APP_ID ?? "").trim();
+  const key = env.HOSTING_GH_APP_PRIVATE_KEY ?? "";
+  if (!id || !key.trim()) return null;
+  return { ...env, GH_APP_ID: id, GH_APP_PRIVATE_KEY: key };
+}
+
+/**
  * 조직 설치 토큰. App JWT → `GET /orgs/{org}/installation` → 설치 토큰(60분).
  * 404 = 조직이 없거나 App이 그 조직에 설치되지 않음 → `not_installed`.
  */
 export async function getOrgInstallationToken(env: Env, fetchImpl: FetchLike = fetch): Promise<RepoResult<{ token: string; installationId: number; org: string }>> {
-  if (!env.GH_APP_ID || !env.GH_APP_PRIVATE_KEY) return { ok: false, error: "not_configured" };
+  const appEnv = hostingAppEnv(env);
+  if (!appEnv) return { ok: false, error: "not_configured" };
   const org = hostingOrg(env);
   let jwt: string;
   try {
-    jwt = await mintAppJwt(env);
+    jwt = await mintAppJwt(appEnv);
   } catch (err) {
     return { ok: false, error: "not_configured", message: String((err as Error)?.message ?? err).slice(0, 120) };
   }
@@ -80,7 +94,7 @@ export async function getOrgInstallationToken(env: Env, fetchImpl: FetchLike = f
   const installationId = typeof body["id"] === "number" ? body["id"] : NaN;
   if (!Number.isFinite(installationId)) return { ok: false, error: "gh_error", status: res.status, message: "installation id missing" };
   try {
-    const t = await getInstallationToken(env, installationId, fetchImpl);
+    const t = await getInstallationToken(appEnv, installationId, fetchImpl);
     return { ok: true, value: { token: t.token, installationId, org } };
   } catch (err) {
     return { ok: false, error: "gh_error", message: String((err as Error)?.message ?? err).slice(0, 200) };
