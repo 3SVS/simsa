@@ -111,11 +111,20 @@ export interface Env {
   HOSTING_CF_API_TOKEN?: string;
   HOSTING_CF_ACCOUNT_ID?: string;
   /**
-   * SI 티어 Train B — B3: S 모드 저장소를 만드는 GitHub 조직(D-5, 기본 "simsa-hosted"). 기존 GitHub App
-   * (GH_APP_*)이 이 조직에 설치되어 있어야 하며 권한은 Administration: write · Contents: write.
+   * SI 티어 Train B — B3: S 모드 저장소를 만드는 GitHub 조직(D-5, 기본 "simsa-hosted").
    * wrangler.toml [vars]로 둔다(비밀 아님).
    */
   HOSTING_GH_ORG?: string;
+  /**
+   * B3 저장소 생성 전용 GitHub App(2026-09-28 분리). **유저가 설치하는 App(GH_APP_*)과 다른 App이다** —
+   * 저장소 생성에는 Administration: write가 필요한데, 그 권한을 유저 저장소에 설치되는 App에 얹으면
+   * 모든 유저 설치 화면에 "관리자 권한"이 뜨고 저장소 삭제까지 가능한 권한을 요구하게 된다(최소 권한 위반).
+   * 이 App은 simsa-hosted 조직에만 설치한다. 권한: Administration write · Contents write · Metadata read.
+   * 둘 중 하나라도 없으면 저장소 생성은 `not_configured`(빌드는 저장소 없이 진행 — B3 설계).
+   * Actions `set-worker-secrets`로만 넣는다(로컬 wrangler 금지).
+   */
+  HOSTING_GH_APP_ID?: string;
+  HOSTING_GH_APP_PRIVATE_KEY?: string;
   /** B5: S 모드 앱 주소의 루트 도메인(예 "simsa.page"). hosting-dispatch의 HOSTING_ROOT_DOMAIN과 같아야 한다. [vars]. */
   HOSTING_ROOT_DOMAIN?: string;
   /** B5 [PILOT]: T1 구현 모델. 기본 claude-sonnet-4-6(워커 기본과 동일). 킬스위치 시 폴백. */
