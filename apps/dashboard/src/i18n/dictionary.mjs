@@ -2452,17 +2452,24 @@ const EN = {
     runActiveNotice: "An inspection is already in progress. A new one can start once it finishes.",
     runNeedWebsite: "Connect your website address first so Simsa knows what to inspect.",
     goToSources: "Connect a website",
-    statusQueued: "Waiting its turn",
+    // #558 검증 2차 P2-4: "queued" is the short gap between hand-off and the
+    // runner's "running" ack — there is no queue or slot (dispatch is
+    // fire-once; over the instance cap a check does not wait, it fails to start).
+    statusQueued: "Starting",
     statusRunning: "Inspecting",
     statusDone: "Done",
     statusFailed: "Failed",
     progressTitle: "Inspection in progress",
-    // Train W — W-3 ①: durations only where measured — request → report took
-    // 170–250 s in live runs (BM economics 2026-09-27 T2 row; HANDOFF 09-24/25).
+    // Train W — W-3 ① / #558 검증 2차 P2-5: durations only where measured, as a
+    // range that covers both samples — a basic check (no dev-spec acceptance
+    // plan) 48–51 s (HANDOFF 07-02 wvc_34jy60jbe5 51 s · 07-20 +50 s · 08-20
+    // container 48 s); with the dev spec's acceptance scenarios 191–249 s
+    // (HANDOFF 09-24 wvc_exyd0xaiaj 191 s · 09-25 E4 249 s; BM 2026-09-27 T2
+    // 170–250 s) → "1–4 minutes".
     progressBody:
-      "Simsa is opening your app in a real browser and walking the core flow. From request to report usually takes 3–4 minutes. This page updates automatically when the report is ready.",
+      "Simsa is opening your app in a real browser and walking the core flow. From request to report usually takes 1–4 minutes. This page updates automatically when the report is ready.",
     progressBodyQueued:
-      "Waiting its turn. It starts as soon as a slot is free — from request to report usually takes 3–4 minutes. This page updates automatically.",
+      "Starting the check. From request to report usually takes 1–4 minutes. This page updates automatically.",
     failedTitle: "This inspection could not be completed",
     failedBody: "Something went wrong while inspecting the app. Please run a new inspection.",
     runErrors: {
@@ -2528,8 +2535,9 @@ const EN = {
       progressTitle: "Repair in progress",
       progressBody: "Simsa is preparing the fix. This section updates automatically when it is ready.",
       // Train W — W-3 ①: no duration here — there is no measured sample for repairs yet.
-      progressBodyQueued: "Waiting its turn. It starts as soon as a slot is free. This section updates automatically.",
-      statusQueued: "Waiting its turn",
+      // #558 검증 2차 P2-4: no queue/slot — the repair container acks "running" on receipt.
+      progressBodyQueued: "Starting the repair. This section updates automatically when it is ready.",
+      statusQueued: "Starting",
       statusRunning: "Preparing",
       doneTitle: "The repair starting-point PR is ready",
       doneBody: "A draft PR with the fix brief (SIMSA-FIX-BRIEF.md) was opened. Code changes are not applied automatically yet — hand this PR to your coding agent or developer to continue.",
@@ -5228,15 +5236,19 @@ const KO = {
     runActiveNotice: "이미 검수가 진행 중이에요. 끝나면 새 검수를 시작할 수 있어요.",
     runNeedWebsite: "먼저 웹사이트 주소를 연결하세요. 그래야 Simsa가 무엇을 검수할지 알 수 있어요.",
     goToSources: "웹사이트 연결하기",
-    statusQueued: "순서 기다리는 중",
+    // #558 검증 2차 P2-4: queued = 실행기에 넘긴 뒤 실행기가 "시작했다"를 알리기까지의 짧은
+    // 구간이다. 대기열·차례는 없다(디스패치는 한 번, 인스턴스 상한을 넘으면 기다리지 않고 시작 실패).
+    statusQueued: "시작하는 중",
     statusRunning: "검수 중",
     statusDone: "완료",
     statusFailed: "실패",
     progressTitle: "검수가 진행 중이에요",
-    // Train W — W-3 ①: 시간은 실측된 것만 — 요청→리포트 170~250초(BM 2026-09-27 T2 행,
-    // HANDOFF 09-24 done 191s · 09-25 done 249s).
-    progressBody: "실제 브라우저로 앱을 열어 핵심 흐름을 확인하고 있어요. 요청부터 리포트까지 보통 3~4분 걸려요. 리포트가 준비되면 이 화면이 자동으로 갱신돼요.",
-    progressBodyQueued: "순서를 기다리는 중이에요. 차례가 오면 바로 시작하고, 요청부터 리포트까지 보통 3~4분 걸려요. 이 화면은 자동으로 갱신돼요.",
+    // Train W — W-3 ① / #558 검증 2차 P2-5: 시간은 실측된 것만, 두 표본을 모두 덮는 범위로 —
+    // 지시서 없는 기본 검수 48~51초(HANDOFF 07-02 wvc_34jy60jbe5 51초 · 07-20 +50s · 08-20 컨테이너
+    // 48초), 개발 지시서의 AC 시나리오까지 도는 검수 191~249초(HANDOFF 09-24 wvc_exyd0xaiaj 191s ·
+    // 09-25 E4 249s, BM 2026-09-27 T2 170~250초) → "보통 1~4분".
+    progressBody: "실제 브라우저로 앱을 열어 핵심 흐름을 확인하고 있어요. 요청부터 리포트까지 보통 1~4분 걸려요. 리포트가 준비되면 이 화면이 자동으로 갱신돼요.",
+    progressBodyQueued: "확인을 시작하고 있어요. 요청부터 리포트까지 보통 1~4분 걸리고, 이 화면은 자동으로 갱신돼요.",
     failedTitle: "검수를 마치지 못했어요",
     failedBody: "앱을 검수하는 중에 문제가 생겼어요. 새 검수를 다시 실행해주세요.",
     runErrors: {
@@ -5300,8 +5312,9 @@ const KO = {
       progressTitle: "고치는 중이에요",
       progressBody: "고칠 내용을 준비하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
       // Train W — W-3 ①: 수리는 실측 표본이 없어 시간을 말하지 않는다.
-      progressBodyQueued: "순서를 기다리는 중이에요. 차례가 오면 바로 시작해요. 준비되면 이 영역이 자동으로 갱신돼요.",
-      statusQueued: "순서 기다리는 중",
+      // #558 검증 2차 P2-4: 대기열·차례는 없다 — 수리 컨테이너도 받자마자 "시작했다"를 알린다.
+      progressBodyQueued: "고치기를 시작하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
+      statusQueued: "시작하는 중",
       statusRunning: "준비 중",
       doneTitle: "수리 시작점 PR이 준비됐어요",
       doneBody: "고침 지시서(SIMSA-FIX-BRIEF.md)를 담은 초안 PR이 열렸어요. 코드가 자동으로 수정된 건 아직 아니에요 — 이 PR을 코딩 에이전트나 개발자에게 넘겨 이어서 진행하세요.",
