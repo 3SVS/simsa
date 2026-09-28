@@ -35,8 +35,7 @@ export function nextDayUtcIso(now: Date = new Date()): string {
 }
 
 /** Seconds until the next UTC midnight (floor 60s). */
-export function secondsUntilNextDayUtc(): number {
-  const now = new Date();
+export function secondsUntilNextDayUtc(now: Date = new Date()): number {
   const next = new Date(now);
   next.setUTCHours(24, 0, 0, 0);
   return Math.max(60, Math.floor((next.getTime() - now.getTime()) / 1000));
@@ -86,14 +85,6 @@ export type HourlyLimitResult = {
   retryAfterSeconds: number;
 };
 
-/** Daily result: adds the bucket the slot came from (for a refund) and when it resets. */
-export type DailyLimitResult = HourlyLimitResult & {
-  /** The UTC day key the check/consume used ("2026-09-28") — pass it back to refundUserDailyLimit. */
-  dayUtc: string;
-  /** ISO instant the bucket rolls over (next UTC midnight). */
-  resetAt: string;
-};
-
 /**
  * Check + consume one slot from a per-userKey hourly bucket.
  * Attempt-based: the counter is bumped as soon as the check passes, so retry
@@ -126,38 +117,104 @@ export async function consumeUserDailyLimit(
   bucket: string,
   userKey: string,
   limitPerDay: number,
-): Promise<DailyLimitResult> {
-  const now = new Date();
+): Promise<HourlyLimitResult> {
   const hash = await sha256Hex(`${bucket}::${userKey}`);
-  const dayUtc = currentDayUtc(now);
-  const resetAt = nextDayUtcIso(now);
+  const dayUtc = currentDayUtc();
   const count = await getCount(env.DB, hash, dayUtc);
   if (count >= limitPerDay) {
-    return { limited: true, retryAfterSeconds: secondsUntilNextDayUtc(), dayUtc, resetAt };
+    return { limited: true, retryAfterSeconds: secondsUntilNextDayUtc() };
   }
   await increment(env.DB, hash, dayUtc);
-  return { limited: false, retryAfterSeconds: 0, dayUtc, resetAt };
+  return { limited: false, retryAfterSeconds: 0 };
 }
 
+// ─── Train W · W-2 — atomic daily caps for the container paths ─────────────────
+//
+// consumeUserDailyLimit above is "read, then increment": two D1 round trips, so
+// requests that arrive together all read the same count and all pass (PR #561
+// review P2 — 15 concurrent inspections against a cap of 10 were all accepted).
+// That is tolerable for the older soft caps; it is not for the paths that start
+// a container on our bill. These use ONE statement per bucket: the conditional
+// upsert below only bumps the counter while it is under the limit, so a result
+// of zero changed rows means "full" and SQLite never lets two requests take the
+// last slot (D1 runs one statement at a time; meta.changes is sqlite3_changes —
+// a no-op upsert is 0, measured on the real 0026 schema in the test suite).
+//
+// And one bucket is not enough (PR #561 review P1): userKey is a client-made
+// anonymous id, so a per-userKey cap is a guard against mistakes, not a cost
+// ceiling — a loop that mints a fresh key per call walks right past it. The
+// same consume therefore also takes a slot from a per-network bucket (hashed
+// cf-connecting-ip) and a service-wide bucket; whichever is full first answers.
+
 /**
- * Train W · W-2 — hand back one slot taken by consumeUserDailyLimit when the
- * work it paid for never started (the row could not be saved, or the container
- * refused the job). Our infrastructure failing is not the user's attempt.
- *
- * `dayUtc` is the bucket the slot came from (DailyLimitResult.dayUtc) — a refund
- * after UTC midnight must not credit the new day. Never goes below 0. Fail-open
- * like the rest of this file: a D1 error only logs (the worst case is one slot
- * lost for the day, never a blocked request).
+ * The single-statement consume. Binds: (hash, dayKey, nowIso, nowIso, limit).
+ * 1 changed row = slot taken; 0 = the bucket is already at `limit`.
+ * Exported so a test can run the exact text against the real 0026 schema.
  */
-export async function refundUserDailyLimit(
-  env: Env,
-  bucket: string,
-  userKey: string,
-  dayUtc: string,
-): Promise<void> {
+export const DAILY_SLOT_CONSUME_SQL = `INSERT INTO workspace_rate_limit (ip_hash, hour_utc, count, first_at, last_at)
+     VALUES (?, ?, 1, ?, ?)
+     ON CONFLICT (ip_hash, hour_utc) DO UPDATE SET
+       count = workspace_rate_limit.count + 1, last_at = excluded.last_at
+     WHERE workspace_rate_limit.count < ?`;
+
+/** Who a daily cap protects against. The response differs (see beta-limits.ts). */
+export type DailyCapScope = "user" | "network" | "service";
+
+export type DailyCap = {
+  scope: DailyCapScope;
+  /** Bucket name — also the hash salt (`${bucket}::${key}`). */
+  bucket: string;
+  /** userKey · client IP · a fixed service key. Hashed before it is stored. */
+  key: string;
+  limit: number;
+};
+
+export type DailyCapsResult =
+  | {
+      limited: false;
+      /** The UTC day the slots came from ("2026-09-29"). */
+      dayUtc: string;
+      resetAt: string;
+      /** Hand every slot back (the work never started). Idempotent, fail-open. */
+      refund: () => Promise<void>;
+    }
+  | {
+      limited: true;
+      /** The first cap that was full, in the order given. */
+      scope: DailyCapScope;
+      limit: number;
+      dayUtc: string;
+      resetAt: string;
+      retryAfterSeconds: number;
+    };
+
+/**
+ * One atomic slot. false ONLY when D1 reports that the statement changed no row
+ * (the bucket is full). true = taken — and also on D1 trouble or a result
+ * without a change count (fail-open, like every limiter in this file).
+ */
+async function takeDailySlot(db: D1Database, hash: string, dayUtc: string, limit: number): Promise<boolean> {
+  const nowIso = new Date().toISOString();
   try {
-    const hash = await sha256Hex(`${bucket}::${userKey}`);
-    await env.DB
+    // Widened on purpose: only a numeric 0 means "full"; anything else is taken.
+    const result: { meta?: { changes?: unknown } } | null | undefined = await db
+      .prepare(DAILY_SLOT_CONSUME_SQL)
+      .bind(hash, dayUtc, nowIso, nowIso, limit)
+      .run();
+    const changes = result?.meta?.changes;
+    return !(typeof changes === "number" && changes === 0);
+  } catch (err) {
+    // Same stance as every limiter in this file: infrastructure trouble never
+    // blocks a legitimate request (the kill switch is the hard stop).
+    console.warn(`[workspace/rate-limit] daily slot upsert failed (non-fatal):`, err);
+    return true;
+  }
+}
+
+/** Give one slot back to a day bucket. Never below 0; a D1 error only logs. */
+async function returnDailySlot(db: D1Database, hash: string, dayUtc: string): Promise<void> {
+  try {
+    await db
       .prepare(
         `UPDATE workspace_rate_limit
             SET count = count - 1, last_at = ?
@@ -168,6 +225,45 @@ export async function refundUserDailyLimit(
   } catch (err) {
     console.warn(`[workspace/rate-limit] refund failed (non-fatal):`, err);
   }
+}
+
+/**
+ * Take one slot from EVERY cap, in order, each with a single atomic statement.
+ * When one is full, the slots already taken are handed back and the full cap is
+ * named — so a request stopped by the service bucket costs its user nothing.
+ * On success the caller gets `refund()` for when the work never starts (row not
+ * saved, container refused, lost a concurrent start): our failure is not the
+ * user's attempt. The refund goes to the day the slots came from, never to a
+ * new day after UTC midnight.
+ */
+export async function consumeDailyCaps(
+  env: Env,
+  caps: readonly DailyCap[],
+  now: Date = new Date(),
+): Promise<DailyCapsResult> {
+  const dayUtc = currentDayUtc(now);
+  const resetAt = nextDayUtcIso(now);
+  const taken: string[] = [];
+  const giveBack = async () => {
+    const hashes = taken.splice(0, taken.length);
+    for (const hash of hashes) await returnDailySlot(env.DB, hash, dayUtc);
+  };
+  for (const cap of caps) {
+    const hash = await sha256Hex(`${cap.bucket}::${cap.key}`);
+    if (!(await takeDailySlot(env.DB, hash, dayUtc, cap.limit))) {
+      await giveBack();
+      return {
+        limited: true,
+        scope: cap.scope,
+        limit: cap.limit,
+        dayUtc,
+        resetAt,
+        retryAfterSeconds: secondsUntilNextDayUtc(now),
+      };
+    }
+    taken.push(hash);
+  }
+  return { limited: false, dayUtc, resetAt, refund: giveBack };
 }
 
 /** Parse an hourly-limit env var with a default (invalid/absent → default). */

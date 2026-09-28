@@ -34,6 +34,7 @@ const brief = await import("../dist/workspace/repair-brief.js");
 const coerce = await import("../container/coerce-result.mjs");
 const { createApp } = await import("../dist/router.js");
 const { encryptToken } = await import("../dist/crypto.js");
+const { dailyCapsRun } = await import("./_daily-caps-fake.mjs");
 
 const noHangul = (s) => !/[가-힣]/.test(s);
 
@@ -189,6 +190,7 @@ const GH_TOKEN_ENC = await encryptToken("gho_fakeOauthTokenForTests", KEK);
 
 function makeDb() {
   const jobs = [];
+  const rate = new Map(); // daily caps — modeled, see _daily-caps-fake.mjs
   const checks = [{
     id: RUN, project_id: PROJECT, user_key: USER,
     target_url: "https://apply.example.app/", intent: "신청서 제출",
@@ -218,6 +220,8 @@ function makeDb() {
       function h(args) {
         return {
           async run() {
+            const capped = dailyCapsRun(rate, sql, args);
+            if (capped) return capped;
             if (sql.includes("INSERT INTO workspace_repair_jobs")) {
               const [id, project_id, user_key, visual_check_id, repo_full_name, branch_name, env_cause, region, created_at, updated_at] = args;
               jobs.push({

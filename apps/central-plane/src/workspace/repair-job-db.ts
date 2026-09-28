@@ -240,6 +240,32 @@ export async function findActiveRepairJobForRun(
   return row ?? null;
 }
 
+/**
+ * Train W (PR #561 review P2) — the in-flight repair of a run that was INSERTED
+ * first (rowid = insertion order). Same role as firstActiveVisualCheckIdForProject:
+ * after its own insert a request keeps going only if its row is this one, so two
+ * containers never force-push the same fix/simsa-<runId> branch at once.
+ */
+export async function firstActiveRepairJobIdForRun(
+  env: Env,
+  visualCheckId: string,
+): Promise<string | null> {
+  const row = (await env.DB.prepare(
+    `SELECT id FROM workspace_repair_jobs
+      WHERE visual_check_id = ? AND status IN ('queued', 'running')
+      ORDER BY rowid ASC
+      LIMIT 1`,
+  )
+    .bind(visualCheckId)
+    .first()) as { id?: unknown } | null;
+  return row && typeof row.id === "string" ? row.id : null;
+}
+
+/** Remove a repair job this request just inserted and never dispatched (lost a concurrent start). */
+export async function discardQueuedRepairJob(env: Env, id: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM workspace_repair_jobs WHERE id = ? AND status = 'queued'`).bind(id).run();
+}
+
 /** Latest repair job for a run (dashboard polling). */
 export async function getLatestRepairJobForRun(
   env: Env,

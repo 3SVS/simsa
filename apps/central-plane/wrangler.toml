@@ -26,6 +26,9 @@ LEGACY_AUTO_REVIEW = "off"
 # 끄기 = 값을 "off"로 + deploy-central-plane 1회. 다시 켜기 = "on" + 배포.
 INSPECTION_ENABLED = "on"
 REPAIR_ENABLED = "on"
+# 일일 상한 [PILOT] (코드 기본값, 설정 줄 없음 = 기본값): 검수 유저 10 · 네트워크 30 · 서비스 전체 300,
+# 수리 유저 5 · 네트워크 15 · 서비스 전체 50. 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL]
+# 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
 # Stage 271 — public sign-up OPEN (Bae approved 2026-07-02: "env 변경도 저건 승인할게").
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.

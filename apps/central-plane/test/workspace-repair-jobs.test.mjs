@@ -26,6 +26,7 @@ const { detectEnvCause, isRunRepairable, normalizeRepoReference } = await import
   "../dist/routes/workspace-repair-jobs.js"
 );
 const { encryptToken } = await import("../dist/crypto.js");
+const { dailyCapsRun } = await import("./_daily-caps-fake.mjs");
 const { validateRepairPayload, redactSecret, buildRepairPrContent, classifyCloneError } = await import(
   "../container/coerce-result.mjs"
 );
@@ -48,12 +49,15 @@ const ENV_PROMPT =
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 function makeDb({ projects = new Map(), checks = [], repos = [], connections = [], sources = [], jobs = [] } = {}) {
+  const rate = new Map(); // daily caps (Train W) — modeled, see _daily-caps-fake.mjs
   return {
     _jobs: jobs,
     prepare(sql) {
       function handler(args) {
         return {
           async run() {
+            const capped = dailyCapsRun(rate, sql, args);
+            if (capped) return capped;
             if (sql.includes("INSERT INTO workspace_repair_jobs")) {
               // Bind order = repair-job-db.ts insertQueuedRepairJob (0069 adds region before created_at).
               const [id, project_id, user_key, visual_check_id, repo_full_name, branch_name, env_cause, region, created_at, updated_at] = args;

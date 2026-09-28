@@ -319,6 +319,16 @@ export interface Env {
   BETA_INSPECTION_DAILY_LIMIT?: string;
   BETA_REPAIR_DAILY_LIMIT?: string;
   /**
+   * PR #561 review P1 — userKey is anonymous, so the per-user cap is not a cost
+   * ceiling. Per-network (hashed cf-connecting-ip; default 검수 30 · 수리 15) and
+   * service-wide (default 검수 300 · 수리 50) daily caps on the same consume.
+   * Same override rule ([PILOT], positive integers only).
+   */
+  BETA_INSPECTION_DAILY_LIMIT_PER_IP?: string;
+  BETA_INSPECTION_DAILY_LIMIT_GLOBAL?: string;
+  BETA_REPAIR_DAILY_LIMIT_PER_IP?: string;
+  BETA_REPAIR_DAILY_LIMIT_GLOBAL?: string;
+  /**
    * In-app feedback (workspace-feedback.ts) admin notification targets.
    * ADMIN_TELEGRAM_CHAT_ID: numeric chat id to DM new feedback to (uses the
    * existing TELEGRAM_BOT_TOKEN). ADMIN_FEEDBACK_EMAIL: fallback recipient

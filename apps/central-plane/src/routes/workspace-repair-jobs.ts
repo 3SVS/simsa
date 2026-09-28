@@ -38,6 +38,8 @@
  *     같은 헬퍼로 행·토큰 조회 전에 묻고 503 `repair_disabled`.
  *   - W-2 일일 상한 수리 5/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
  *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"repair", limit, resetAt }.
+ *     PR #561 검증 후속: 네트워크 15/일·서비스 전체 50/일 버킷을 같은 차감에(원자적), 진행 중
+ *     1개 가드는 삽입 뒤 rowid 순으로 한 번 더(같은 수리 브랜치를 두 컨테이너가 동시에 밀지 않게).
  *   - W-3 잡 뷰 `buildVerified` — 컨테이너의 사후 검증(node --check)이 바뀐 파일을 전부 덮었는가.
  *     auto_fix만 boolean, brief_only·레거시·판단 불가 = null (repair-job-db.ts, 새 컬럼 없음).
  */
@@ -52,11 +54,13 @@ import { listProjectSources } from "../workspace/project-sources-db.js";
 import { getAppInstallationToken, resolveRepoAccessToken } from "../workspace/github-app-access.js";
 import { regionFromRequest } from "../workspace/envelope.js";
 import { REPAIR_DISABLED, repairEnabled } from "../workspace/service-switches.js";
-import { consumeUserDailyLimit, refundUserDailyLimit } from "../workspace/rate-limit.js";
-import { REPAIR_DAILY_BUCKET, dailyLimitReachedBody, repairDailyLimit } from "../workspace/beta-limits.js";
+import { consumeDailyCaps } from "../workspace/rate-limit.js";
+import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
 import type { FetchLike } from "../github.js";
 import {
+  discardQueuedRepairJob,
   findActiveRepairJobForRun,
+  firstActiveRepairJobIdForRun,
   getLatestRepairJobForRun,
   getRepairJobById,
   insertQueuedRepairJob,
@@ -382,16 +386,18 @@ export function createWorkspaceRepairJobRoutes(
       return c.json({ ok: false, error: "repair_already_active", activeJobId: active.id }, 409);
     }
 
-    // Train W · W-2 — the user's daily repair cap (D-7 amend [PILOT], 5/day).
-    // Same placement as the inspection route: after ownership + validation +
-    // the one-active-repair guard, refunded below if the job never starts.
-    const dailyLimit = repairDailyLimit(c.env);
-    const slot = await consumeUserDailyLimit(c.env, REPAIR_DAILY_BUCKET, userKey, dailyLimit);
-    if (slot.limited) {
-      c.header("Retry-After", String(slot.retryAfterSeconds));
-      return c.json(dailyLimitReachedBody("repair", dailyLimit, slot.resetAt), 429);
+    // Train W · W-2 — daily caps (D-7 amend [PILOT]): this user 5 · this network
+    // 15 · the whole service 50 (beta-limits.ts). Same placement as the
+    // inspection route: after ownership + validation + the one-active-repair
+    // guard, one atomic statement per bucket, refunded below if the job never
+    // starts.
+    const caps = await consumeDailyCaps(c.env, dailyCapsFor("repair", c.env, userKey, clientNetworkKey(c.req.raw)));
+    if (caps.limited) {
+      const rejection = dailyCapRejection("repair", caps);
+      c.header("Retry-After", String(rejection.retryAfterSeconds));
+      return c.json(rejection.body, rejection.status);
     }
-    const refundSlot = () => refundUserDailyLimit(c.env, REPAIR_DAILY_BUCKET, userKey, slot.dayUtc);
+    const refundSlot = caps.refund;
 
     // Honest boundary: env-cause evidence still dispatches (fallback-style
     // code fixes are legitimate) but flags the row so the UI can warn.
@@ -414,6 +420,22 @@ export function createWorkspaceRepairJobRoutes(
       console.error("[repair-jobs POST] insert failed:", err);
       await refundSlot();
       return c.json({ ok: false, error: "save_failed" }, 500);
+    }
+
+    // One active repair per run, under concurrency (PR #561 review P2): the
+    // 409 check above is read-then-insert, so requests that arrive together all
+    // pass it — and two containers would force-push the same fix branch. The
+    // in-flight job inserted FIRST wins; a later one backs out (row removed,
+    // slots returned, the same 409). A D1 error here keeps going (fail-open).
+    const firstActiveId = await firstActiveRepairJobIdForRun(c.env, runId).catch(() => null);
+    if (firstActiveId !== null && firstActiveId !== job.id) {
+      const jobId = job.id;
+      await discardQueuedRepairJob(c.env, jobId).catch(async (err) => {
+        console.error("[repair-jobs POST] discard after lost start failed:", err);
+        await markRepairJobFailed(c.env, jobId, "superseded_by_concurrent_repair").catch(() => undefined);
+      });
+      await refundSlot();
+      return c.json({ ok: false, error: "repair_already_active", activeJobId: firstActiveId }, 409);
     }
 
     const publicBaseUrl = c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;

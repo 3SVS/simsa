@@ -40,6 +40,10 @@
  *   - 일일 상한 검수 10/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
  *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"inspection",
  *     limit, resetAt }. 시스템 재검수(verify-sweep)는 이 라우트를 거치지 않아 차감되지 않는다.
+ *   - PR #561 검증 후속: userKey는 익명이라 같은 차감에 네트워크(30/일)·서비스 전체(300/일)
+ *     버킷을 더했다(네트워크 초과 429 scope=network, 서비스 초과 503 reason=daily_capacity).
+ *     차감은 버킷마다 문장 하나(원자적), 진행 중 1개 가드는 삽입 뒤 rowid 순으로 한 번 더 —
+ *     동시에 들어온 요청이 상한·409를 함께 넘지 못한다.
  *
  * Graceful degradation: when the INSPECTOR DO binding / callback token is
  * absent or the container refuses the job (e.g. still provisioning), the row is
@@ -59,16 +63,14 @@ import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { resolveRepairJobsByVerifyCheck } from "../workspace/repair-job-db.js";
 import { INSPECTION_DISABLED, inspectionEnabled } from "../workspace/service-switches.js";
-import { consumeUserDailyLimit, refundUserDailyLimit } from "../workspace/rate-limit.js";
-import {
-  INSPECTION_DAILY_BUCKET,
-  dailyLimitReachedBody,
-  inspectionDailyLimit,
-} from "../workspace/beta-limits.js";
+import { consumeDailyCaps } from "../workspace/rate-limit.js";
+import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
 import { buildBuilderFixPrompt } from "../nondev-report.js";
 import {
   USER_VERDICTS,
+  discardQueuedVisualCheck,
   findActiveVisualCheckForProject,
+  firstActiveVisualCheckIdForProject,
   getVisualCheckById,
   insertQueuedVisualCheck,
   markVisualCheckDone,
@@ -468,19 +470,23 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: false, error: "run_already_active", activeRunId: active.id }, 409);
     }
 
-    // Train W · W-2 — the user's daily inspection cap (D-7 amend [PILOT], 10/day).
-    // Charged only here, after ownership + validation + the one-active-run guard
-    // (a 409 never costs a slot), and handed back below when the job never starts
-    // (row not saved / container refused). Taking the slot before the dispatch —
-    // not after it — keeps the concurrent window as small as every other daily
-    // cap (read-then-increment, ms) instead of spanning the container call.
-    const dailyLimit = inspectionDailyLimit(c.env);
-    const slot = await consumeUserDailyLimit(c.env, INSPECTION_DAILY_BUCKET, userKey, dailyLimit);
-    if (slot.limited) {
-      c.header("Retry-After", String(slot.retryAfterSeconds));
-      return c.json(dailyLimitReachedBody("inspection", dailyLimit, slot.resetAt), 429);
+    // Train W · W-2 — daily caps (D-7 amend [PILOT]): this user 10 · this network
+    // 30 · the whole service 300 (beta-limits.ts — userKey is anonymous, so the
+    // user cap alone is not a cost ceiling; PR #561 review P1). Charged only
+    // here, after ownership + validation + the one-active-run guard (a 409 never
+    // costs a slot), one atomic statement per bucket (no read-then-increment
+    // window), and handed back below when the job never starts (row not saved /
+    // lost a concurrent start / container refused).
+    const caps = await consumeDailyCaps(
+      c.env,
+      dailyCapsFor("inspection", c.env, userKey, clientNetworkKey(c.req.raw)),
+    );
+    if (caps.limited) {
+      const rejection = dailyCapRejection("inspection", caps);
+      c.header("Retry-After", String(rejection.retryAfterSeconds));
+      return c.json(rejection.body, rejection.status);
     }
-    const refundSlot = () => refundUserDailyLimit(c.env, INSPECTION_DAILY_BUCKET, userKey, slot.dayUtc);
+    const refundSlot = caps.refund;
 
     // C4a (0069): the envelope is stamped at insert — that is when the edge
     // country and the project snapshot are in hand. Nothing here is invented:
@@ -505,6 +511,25 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       console.error("[visual-check-runs POST run] insert failed:", err);
       await refundSlot();
       return c.json({ ok: false, error: "save_failed" }, 500);
+    }
+
+    // One active run per project, under concurrency (PR #561 review P2). The
+    // 409 check above is read-then-insert: requests that arrive together all
+    // pass it. Now that our row exists, the in-flight row inserted FIRST wins;
+    // any later one (ours included) backs out — row removed, slots returned,
+    // the same 409 as the check above. A D1 error here keeps going (fail-open,
+    // exactly like the read before it).
+    const firstActiveId = await firstActiveVisualCheckIdForProject(c.env, projectId).catch(() => null);
+    if (firstActiveId !== null && firstActiveId !== run.id) {
+      const runId = run.id;
+      await discardQueuedVisualCheck(c.env, runId).catch(async (err) => {
+        // Never leave a queued row nothing will pick up (it would wedge this
+        // guard until the stuck sweep) — fall back to a final state.
+        console.error("[visual-check-runs POST run] discard after lost start failed:", err);
+        await markVisualCheckFailed(c.env, runId, "superseded_by_concurrent_run").catch(() => undefined);
+      });
+      await refundSlot();
+      return c.json({ ok: false, error: "run_already_active", activeRunId: firstActiveId }, 409);
     }
 
     const publicBaseUrl = c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
