@@ -35,8 +35,29 @@ const DAY_MS = 86_400_000;
  * }} ResetWords
  */
 
+// Strict ISO-8601 date-time WITH an offset (#558 검증 2차 P2-2). Date.parse alone
+// is lenient: "Sep 29" (V8 → 2001-09-29), "1", "2026" pass, and an offset-less
+// "2026-09-29T00:00:00" is read in the READER's time zone (Seoul would see
+// "tomorrow 0 AM" instead of "9 AM"). The server sends toISOString() ("…Z").
+const ISO_WITH_OFFSET = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+
 function isValidIso(v) {
-  return typeof v === "string" && v.trim().length > 0 && !Number.isNaN(Date.parse(v));
+  if (typeof v !== "string") return false;
+  const m = ISO_WITH_OFFSET.exec(v);
+  if (!m) return false;
+  const ms = Date.parse(v);
+  if (Number.isNaN(ms)) return false;
+  // Calendar round trip: V8 rolls "2026-02-30" over to March 2 instead of
+  // rejecting it. Shift back to the written offset and compare the fields.
+  const offsetMin = m[6] ? (m[6] === "-" ? -1 : 1) * (Number(m[7]) * 60 + Number(m[8])) : 0;
+  const w = new Date(ms + offsetMin * 60_000);
+  return (
+    w.getUTCFullYear() === Number(m[1]) &&
+    w.getUTCMonth() + 1 === Number(m[2]) &&
+    w.getUTCDate() === Number(m[3]) &&
+    w.getUTCHours() === Number(m[4]) &&
+    w.getUTCMinutes() === Number(m[5])
+  );
 }
 
 function nowFrom(opts) {
@@ -64,7 +85,9 @@ function isResetWords(w) {
 /**
  * Read a 429 daily-limit body. The body crosses a wire (JSON cast in the API
  * client), so every field is checked here; a malformed field becomes null
- * while the "you hit today's cap" fact is kept.
+ * while the "you hit today's cap" fact is kept. resetAt must be a strict
+ * ISO-8601 date-time with an offset that exists on the calendar (see
+ * isValidIso) — anything else falls back to the general sentence.
  *
  * @param {unknown} body
  * @returns {{ kind: "inspection" | "repair" | null, limit: number | null, resetAt: string | null } | null}

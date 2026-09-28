@@ -70,6 +70,50 @@ describe("daily-limit: readDailyLimit (429 본문 파서 — 외부 경계라 �
   });
 });
 
+// #558 검증 2차 P2-2 — isValidIso가 `!isNaN(Date.parse(v))`만 봤다. Date.parse는 관대해서
+// "Sep 29"(V8: 2001-09-29)·"1"·"2026"을 통과시키고, 오프셋 없는 "2026-09-29T00:00:00"은 **읽는 사람의
+// 시간대**로 해석해 서울에서 "내일 오전 0시 이후"(기대: 오전 9시)를 만들었다. 2월 30일은 3월 2일로
+// 넘겨 버린다. 외부 경계의 값이므로 엄격한 ISO-8601(날짜+시각+오프셋) + 달력 왕복 검사로 거른다.
+describe("P2-2(2차): resetAt은 엄격한 ISO-8601만 — Date.parse의 관대한 해석을 믿지 않는다", () => {
+  const capped = (resetAt) => ({ ok: false, error: "daily_limit_reached", kind: "inspection", limit: 10, resetAt });
+
+  it("ISO 모양이 아닌 값('Sep 29'·'1'·'2026')은 resetAt=null — 상한이라는 사실은 유지", () => {
+    for (const v of ["Sep 29", "1", "2026", "Tue Sep 29 2026 09:00:00 GMT+0900"]) {
+      assert.deepEqual(readDailyLimit(capped(v)), { kind: "inspection", limit: 10, resetAt: null }, v);
+    }
+  });
+
+  it("오프셋 없는 시각·날짜만 있는 값도 null — 읽는 사람의 시간대로 해석돼 시각이 어긋난다", () => {
+    for (const v of ["2026-09-29T00:00:00", "2026-09-29T00:00", "2026-09-29"]) {
+      assert.equal(readDailyLimit(capped(v)).resetAt, null, v);
+      assert.equal(formatResetAt(v, KO, { now: new Date("2026-09-28T05:00:00Z"), timeZone: "Asia/Seoul" }), null, v);
+    }
+  });
+
+  it("달력에 없는 날짜·시각(2월 30일·25시)은 null — V8은 다음 달로 넘겨 버린다", () => {
+    for (const v of ["2026-02-30T00:00:00Z", "2026-09-29T25:00:00Z", "2026-13-01T00:00:00Z"]) {
+      assert.equal(readDailyLimit(capped(v)).resetAt, null, v);
+    }
+  });
+
+  it("오프셋 없는 resetAt은 일반 문장 — 서울 독자에게 '내일 오전 0시 이후'를 만들지 않는다", () => {
+    const e = getDictionary("ko").visualChecks.runErrors;
+    const now = new Date("2026-09-28T05:00:00Z");
+    assert.equal(
+      errorNoticeText(e, "dailyLimitReached", "2026-09-29T00:00:00", KO, { now, timeZone: "Asia/Seoul" }),
+      e.dailyLimitReached,
+    );
+  });
+
+  it("[행동 보존] 서버가 보내는 모양(toISOString·밀리초 유무·초 생략·Z·+09:00)은 그대로 받는다", () => {
+    for (const v of [RESET, "2026-09-29T00:00:00Z", "2026-09-29T00:00Z", "2026-09-29T09:00:00+09:00", "2026-09-28T20:00:00-04:00"]) {
+      assert.equal(readDailyLimit(capped(v)).resetAt, v, v);
+    }
+    const now = new Date("2026-09-28T05:00:00Z");
+    assert.equal(formatResetAt("2026-09-29T09:00:00+09:00", KO, { now, timeZone: "Asia/Seoul" }), "내일 오전 9시 이후");
+  });
+});
+
 describe("daily-limit: formatResetAt (유저 로캘 사전·시간대의 '언제부터')", () => {
   it("한국: 오후에 막히면 → '내일 오전 9시 이후'", () => {
     const now = new Date("2026-09-28T05:00:00Z"); // 서울 14:00
