@@ -35,3 +35,6 @@ export function runErrorTone(key: RunErrorKey): "info" | "error";
 
 /** Daily cap or kill switch — the automatic first inspection must not swallow these. */
 export function isServiceGateKey(key: unknown): key is "dailyLimitReached" | "inspectionDisabled";
+
+/** Duration (ms) of the new-project flow's service-gate info toast (default toast = 3 s). */
+export const SERVICE_GATE_TOAST_MS: number;

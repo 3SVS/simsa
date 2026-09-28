@@ -45,13 +45,25 @@ test("W-2b: 리포트 상세 — 재검수와 [고치기]가 본문 전체를 �
   assert.match(detailPage, /repairErrorTone\(errorNotice\.errorKey\)/);
 });
 
-test("W-2c: 새 프로젝트의 자동 첫 검수가 상한·일시 중지면 토스트로 알린다", () => {
+// #558 검증 P2-4·P2-14 — 이 안내는 runErrorTone이 'info'로 정한 두 경우(상한·일시 중지)인데 빨간
+// error 토스트(role=alert, 3초)로 뜨고 곧바로 화면을 옮겨 놓치기 쉬웠다 → info 톤 + 오래 머문다.
+test("W-2c: 새 프로젝트의 자동 첫 검수가 상한·일시 중지면 info 토스트로, 충분히 오래 알린다", () => {
   const i = newPage.indexOf("await runVisualCheck(id, { userKey, locale })");
   assert.ok(i >= 0, "auto first inspection call");
   const tail = newPage.slice(i, i + 900);
   assert.match(tail, /runErrorNotice\(/);
   assert.match(tail, /isServiceGateKey\(/);
-  assert.match(tail, /toast\.error\(errorNoticeText\(t\.visualChecks\.runErrors/);
+  assert.match(tail, /toast\.info\(\s*errorNoticeText\(t\.visualChecks\.runErrors/);
+  assert.match(tail, /duration: SERVICE_GATE_TOAST_MS/);
+  assert.ok(!/toast\.error\(\s*errorNoticeText/.test(tail), "red error toast for a non-error notice");
+});
+
+test("Toast: info 변형이 있다 — 빨간색·role=alert가 아니다", () => {
+  const toastTsx = read("components/Toast.tsx");
+  assert.match(toastTsx, /\binfo: \(message: string/);
+  assert.match(toastTsx, /variant: "info"/);
+  assert.match(toastTsx, /toast\.variant === "info"/);
+  assert.match(toastTsx, /role=\{toast\.variant === "error" \? "alert" : "status"\}/);
 });
 
 test("W-3a: 진행 화면 — queued는 queued 전용 본문(검수·수리)", () => {

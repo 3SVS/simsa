@@ -1,4 +1,5 @@
-export type ToastVariant = "success" | "error";
+/** "info" = information that is not the reader's mistake (neutral tone, role=status). */
+export type ToastVariant = "success" | "error" | "info";
 
 export type Toast = {
   id: string;

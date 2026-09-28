@@ -96,6 +96,11 @@ describe("W-2 검수 요청: runErrorTone — 상한·멈춤은 사용자 잘못
     }
   });
 
+  it("SERVICE_GATE_TOAST_MS — 약 50자 문장을 읽을 시간 (기본 3초 토스트보다 길게, #558 검증 P2-4)", () => {
+    assert.equal(typeof runState.SERVICE_GATE_TOAST_MS, "number");
+    assert.ok(runState.SERVICE_GATE_TOAST_MS >= 8000, String(runState.SERVICE_GATE_TOAST_MS));
+  });
+
   it("isServiceGateKey — 새 프로젝트의 자동 첫 검수가 조용히 삼키면 안 되는 두 경우", () => {
     assert.equal(runState.isServiceGateKey("dailyLimitReached"), true);
     assert.equal(runState.isServiceGateKey("inspectionDisabled"), true);

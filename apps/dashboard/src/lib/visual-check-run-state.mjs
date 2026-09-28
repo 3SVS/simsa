@@ -116,6 +116,13 @@ export function runErrorTone(key) {
 }
 
 /**
+ * How long the new-project flow's service-gate toast stays (#558 검증 P2-4).
+ * The default toast lasts 3 s; this ~50-character sentence appears right as
+ * the page navigates away, so it needs time to be read.
+ */
+export const SERVICE_GATE_TOAST_MS = 10_000;
+
+/**
  * The two answers that mean "the service said no for now" (daily cap, kill
  * switch). The new-project flow starts the first inspection automatically and
  * swallows ordinary failures (the reader can retry from the project page) —
