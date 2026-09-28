@@ -93,12 +93,19 @@ describe("L-2 빌드 루프는 실제 응답 모델로 과금한다", () => {
     assert.equal(r.usage[0].cacheReadTokens, 800);
   });
 
-  it("② 미지 모델 응답은 $0이 아니다 — 보수 단가 + unpricedCalls 집계", async () => {
+  it("② 미지 모델 응답은 $0이 아니다 — 보수 단가 + unpricedCalls 집계 (실제 EfficiencyGate: forceModel을 따른다)", async () => {
+    // #562 결함 8: 예전엔 passGate(모델을 claude-sonnet-4-6으로 고정, forceModel 무시)를 써서 옛 코드에서도
+    // sonnet 단가 $3이 나왔다 — '$0으로 삼킴'(D-7 우회)을 재현하지 못했다. 실제 게이트는 forceModel(=요청 모델)을
+    // 실행 함수에 넘기므로, 요청·응답이 모두 미지 모델이면 옛 safeEstimate/safeActual은 $0을 냈다.
+    const { EfficiencyGate } = await import("@simsa/core");
+    const gate = new EfficiencyGate({ perPrUsd: 100 });
     const client = { messages: { create: async () => finishResponse("test-model", { input_tokens: 1_000_000, output_tokens: 0 }) } };
-    const r = await runBuildLoop(TASK, { client, executor: noopExecutor, model: "test-model", gate: passGate });
+    const r = await runBuildLoop(TASK, { client, executor: noopExecutor, model: "test-model", gate });
+    assert.equal(r.status, "done");
     near(r.costUsd, 5);
     assert.equal(r.unpricedCalls, 1);
     assert.equal(r.usage[0].unpriced, true);
+    assert.equal(r.usage[0].modelRequested, "test-model", "게이트가 넘긴 모델 = 요청 모델");
   });
 
   it("⑥ onUsage로 턴마다 한 번씩 흘려보낸다(컨테이너 콜백 usage[]의 원천)", async () => {
