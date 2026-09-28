@@ -52,7 +52,9 @@ GITHUB_CLIENT_ID = "Ov23ctqhuNRdhunT36Y9"
 
 # Stage 18 — Admin usage stats key. Must be a hard-to-guess secret.
 # Set via: wrangler secret put ADMIN_USAGE_STATS_KEY
-# Without it, GET /admin/usage-stats returns 503 disabled.
+# Without it, GET /admin/usage-stats (x-admin-key requests) returns 503 disabled.
+# Train L — L-5: the same path without x-admin-key serves the llm_usage ledger stats
+# (Bearer INTERNAL_CALLBACK_TOKEN; see src/routes/admin-usage-stats.ts).
 
 # Stage 9 — Workspace GitHub OAuth (Web Application Flow).
 # Register a NEW OAuth App at https://github.com/settings/developers
