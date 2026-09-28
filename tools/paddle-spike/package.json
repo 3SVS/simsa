@@ -1,0 +1,18 @@
+{
+  "name": "simsa-paddle-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Train $ stage $-0 SANDBOX-ONLY spike: does works-or-free (charge only on success) hold on Paddle Billing? NOT a workspace package; not wired into CI, the Worker, or production. Live Paddle URLs/keys are rejected before any request.",
+  "scripts": {
+    "setup": "node setup.mjs",
+    "serve": "node serve.mjs",
+    "checkout": "node run-checkout.mjs",
+    "scenarios": "node scenarios.mjs",
+    "verdict": "node scenarios.mjs verdict",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.60.0"
+  }
+}
