@@ -13,15 +13,13 @@ import { EfficiencyGate, estimateTokens } from "@simsa/core";
 import type { AnthropicLike, AnthropicCreateParams, AnthropicMessage, AnthropicResponse } from "./anthropic-types.js";
 import { BUILD_LIMITS, decideCommand, decidePath, filterEnv, findSecretLike } from "./build-policy.js";
 import { BUILD_SYSTEM_PROMPT, BUILD_TOOLS } from "./build-tools.js";
-import { actualCost, estimateCallCost } from "./pricing.js";
+import { estimateCallCost, usageRecordFromResponse, type LlmUsageRecord } from "./pricing.js";
 
-/** 가격표에 없는 모델(새 모델·테스트 더블)은 비용 0으로 — 비용을 모르는 것이 빌드 실패 사유가 되면 안 된다. */
-function safeEstimate(model: string, inTok: number, outTok: number): number {
-  try { return estimateCallCost(model, inTok, outTok); } catch { return 0; }
-}
-function safeActual(model: string, usage: Parameters<typeof actualCost>[1]): number {
-  try { return actualCost(model, usage); } catch { return 0; }
-}
+// L-1/L-2 (Train L): 종전의 safeEstimate/safeActual은 가격표에 없는 모델을 **$0으로 삼켰고**(예산 게이트 우회),
+// 비용을 **요청 모델**로 계산했다(프로덕션은 ANTHROPIC_ENABLED=off라 실제 응답은 gpt-5.4). 이제
+// estimateCallCost/priceUsage는 던지지 않고 미지 모델을 보수 단가로 계산하며, 실제 비용은
+// usageRecordFromResponse가 **응답의 model**로 매긴다(없으면 요청 모델). 비용을 모르는 것은 여전히
+// 빌드 실패 사유가 아니다 — 대신 unpriced로 드러난다.
 
 export type CommandResult = { ok: boolean; code: number; stdout: string; stderr: string; timedOut?: boolean };
 
@@ -60,6 +58,10 @@ export type BuildLoopOutcome = {
   costUsd: number;
   /** 마지막 빌드 명령의 종료 코드(있으면). done인데 0이 아니면 호출자가 신뢰하지 않는다(D-4 게이트). */
   lastBuildExitCode: number | null;
+  /** L-2/L-3: 턴별 LLM 사용량(요청·실제 모델·벤더·토큰·비용). 컨테이너 콜백 `usage[]`의 원천. */
+  usage: LlmUsageRecord[];
+  /** L-1: 공식 단가를 몰라 보수 단가로 계산한 호출 수. 0이 아니면 costUsd는 상한 추정이다. */
+  unpricedCalls: number;
 };
 
 export interface BuildLoopOptions {
@@ -72,6 +74,8 @@ export interface BuildLoopOptions {
   /** 자식 프로세스 env의 원천(보통 process.env). filterEnv로 걸러진다. */
   baseEnv?: Readonly<Record<string, string | undefined>>;
   onEvent?: (line: string) => void;
+  /** L-3: 턴마다 사용량 레코드를 흘려보낸다(빌더 컨테이너가 build-progress 콜백 usage[]로 싣는다). 던져도 루프는 계속. */
+  onUsage?: (u: LlmUsageRecord) => void;
 }
 
 type ToolUseBlock = { type: "tool_use"; id: string; name: string; input: unknown };
@@ -107,7 +111,7 @@ export async function runBuildLoop(task: BuildTask, opts: BuildLoopOptions): Pro
   const messages: AnthropicMessage[] = [{ role: "user", content: taskPrompt(task) }];
   const out: BuildLoopOutcome = {
     status: "limit_turns", summary: "", commitMessage: null, filesWritten: [], commandsRun: [], denied: [],
-    turns: 0, toolCalls: 0, tokensUsed: 0, costUsd: 0, lastBuildExitCode: null,
+    turns: 0, toolCalls: 0, tokensUsed: 0, costUsd: 0, lastBuildExitCode: null, usage: [], unpricedCalls: 0,
   };
 
   for (let turn = 0; turn < limits.maxTurnsPerTask; turn++) {
@@ -115,7 +119,9 @@ export async function runBuildLoop(task: BuildTask, opts: BuildLoopOptions): Pro
     let response: AnthropicResponse;
     try {
       const serialized = JSON.stringify(messages);
-      const est = safeEstimate(opts.model, estimateTokens(BUILD_SYSTEM_PROMPT) + estimateTokens(serialized), maxTokens);
+      const est = estimateCallCost(opts.model, estimateTokens(BUILD_SYSTEM_PROMPT) + estimateTokens(serialized), maxTokens);
+      // 콜백 안에서 채워진다 — 지역 let은 TS 흐름 분석이 null로 좁히므로 상자에 담는다.
+      const turnUsage: { record: LlmUsageRecord | null } = { record: null };
       const r = await gate.run<AnthropicResponse>(
         { agent: "build-worker", cacheablePrefix: BUILD_SYSTEM_PROMPT, prompt: BUILD_SYSTEM_PROMPT + "\n" + serialized, estimatedCostUsd: est, forceModel: opts.model },
         async ({ model }) => {
@@ -129,18 +135,27 @@ export async function runBuildLoop(task: BuildTask, opts: BuildLoopOptions): Pro
             tool_choice: { type: "any" },
           };
           const res = await opts.client.messages.create(params);
+          const latencyMs = Date.now() - started;
+          const record = usageRecordFromResponse(model, res, latencyMs);
+          turnUsage.record = record;
           return {
             result: res,
             inputTokens: res.usage.input_tokens,
             outputTokens: res.usage.output_tokens,
-            costUsd: safeActual(model, { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens, cacheCreationTokens: res.usage.cache_creation_input_tokens, cacheReadTokens: res.usage.cache_read_input_tokens }),
-            latencyMs: Date.now() - started,
+            costUsd: record.costUsd,
+            latencyMs,
           };
         },
       );
       response = r.result;
       out.tokensUsed += r.metric.inputTokens + r.metric.outputTokens;
       out.costUsd += r.metric.costUsd;
+      const rec = turnUsage.record;
+      if (rec) {
+        out.usage.push(rec);
+        if (rec.unpriced) out.unpricedCalls += 1;
+        try { opts.onUsage?.(rec); } catch { /* 계측 싱크가 빌드를 깨면 안 된다 */ }
+      }
     } catch (err) {
       out.status = "llm_error";
       out.summary = `llm_error: ${String((err as Error)?.message ?? err).slice(0, 200)}`;

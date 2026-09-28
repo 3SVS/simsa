@@ -159,13 +159,97 @@ export type AnthropicMessagesBody = {
 export type AnthropicMessagesData = {
   content?: Array<{ type: string; text?: string }>;
   stop_reason?: string;
+  /** Anthropic 응답이 싣는 실제 모델(폴백이면 OpenAI 응답의 model). */
+  model?: string;
+  /**
+   * L-2 (Train L): 실제로 응답한 벤더와 모델. anthropicMessages가 항상 채운다.
+   * 호출자는 usage 라벨·과금·원장에 **이 값**을 쓴다(요청 모델이 아니라).
+   */
+  vendor?: "anthropic" | "openai";
+  modelActual?: string;
   usage?: {
+    /** Anthropic 의미: 캐시 쓰기·읽기를 제외한 입력 토큰. 폴백도 이 의미로 맞춘다. */
     input_tokens?: number;
     output_tokens?: number;
     cache_creation_input_tokens?: number;
     cache_read_input_tokens?: number;
   };
 };
+
+/**
+ * L-2/L-3 (Train L): 성공한 LLM 호출 1건의 사용량. 원장(llm_usage)·Langfuse·BM 원가표의 공통 단위.
+ * 비용은 여기서 계산하지 않는다 — 원장 기록 시 modelActual 기준으로(llm-pricing.ts).
+ */
+export type LlmUsageEvent = {
+  vendor: string;
+  modelRequested: string;
+  modelActual: string;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  latencyMs: number;
+  /** 어느 호출 지점인지(generate·dev-spec·check·verify-panel·council-round1…). */
+  callSite?: string;
+};
+
+/** 사용량 싱크. 라우트가 모아서 원장에 기록한다. 던져도 호출은 깨지지 않는다(호출부가 감싼다). */
+export type LlmUsageSink = (u: LlmUsageEvent) => void;
+
+function tokenCount(n: unknown): number {
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/** 싱크를 부르되 절대 던지지 않는다. */
+export function emitLlmUsage(sink: LlmUsageSink | undefined, u: LlmUsageEvent): void {
+  if (!sink) return;
+  try {
+    sink(u);
+  } catch {
+    // 계측이 사용자 요청을 깨면 안 된다
+  }
+}
+
+/** Anthropic 형태 usage → LlmUsageEvent. */
+export function usageEventFrom(
+  vendor: string,
+  modelRequested: string,
+  modelActual: string,
+  usage: AnthropicMessagesData["usage"],
+  latencyMs: number,
+  callSite?: string,
+): LlmUsageEvent {
+  return {
+    vendor,
+    modelRequested,
+    modelActual,
+    inputTokens: tokenCount(usage?.input_tokens),
+    cacheReadTokens: tokenCount(usage?.cache_read_input_tokens),
+    cacheWriteTokens: tokenCount(usage?.cache_creation_input_tokens),
+    outputTokens: tokenCount(usage?.output_tokens),
+    latencyMs: tokenCount(latencyMs),
+    ...(callSite ? { callSite } : {}),
+  };
+}
+
+/**
+ * OpenAI chat usage → Anthropic 의미의 usage. OpenAI의 prompt_tokens는 캐시 적중분을 **포함**하므로
+ * input = prompt − cached, cache_read = cached. 종전엔 cached를 버려 캐시 할인이 원가에 안 잡혔다.
+ */
+export function openAiUsageToAnthropic(u: unknown): NonNullable<AnthropicMessagesData["usage"]> {
+  const x = (typeof u === "object" && u !== null ? u : {}) as {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    prompt_tokens_details?: { cached_tokens?: unknown } | null;
+  };
+  const prompt = tokenCount(x.prompt_tokens);
+  const cached = Math.min(tokenCount(x.prompt_tokens_details?.cached_tokens), prompt);
+  return {
+    input_tokens: prompt - cached,
+    output_tokens: tokenCount(x.completion_tokens),
+    ...(cached > 0 ? { cache_read_input_tokens: cached } : {}),
+  };
+}
 
 /**
  * One structured JSON line per successful LLM call — the minimal cost/usage
@@ -181,14 +265,16 @@ export function logAnthropicUsage(
   latencyMs: number,
   /** A′-1: 성공한 경로와 몇 번째 시도였는지 — 경로별 성공률 집계의 반쪽.
    *  vendor: 실제로 응답한 벤더(폴백 시 openai). 정직성상 반드시 남긴다. */
-  meta?: { endpointKind?: EndpointKind; attempt?: number; vendor?: string },
+  meta?: { endpointKind?: EndpointKind; attempt?: number; vendor?: string; modelRequested?: string },
 ): void {
   try {
     console.log(
       JSON.stringify({
         event: "anthropic_usage",
         call_site: callSite,
+        // L-2: model = 실제로 응답한 모델. 요청 모델은 model_requested로 따로.
         model,
+        model_requested: meta?.modelRequested ?? model,
         input_tokens: usage?.input_tokens ?? 0,
         output_tokens: usage?.output_tokens ?? 0,
         cache_creation_input_tokens: usage?.cache_creation_input_tokens ?? 0,
@@ -315,13 +401,18 @@ async function callOpenAiAsAnthropic(
       throw new Error(`OpenAI ${r.status}: ${tail.slice(0, 200)}`);
     }
     const j = (await r.json()) as {
+      model?: unknown;
       choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
       usage?: {
         prompt_tokens?: number;
         completion_tokens?: number;
         completion_tokens_details?: { reasoning_tokens?: number };
+        prompt_tokens_details?: { cached_tokens?: number };
       };
     };
+    // L-2: 실제로 응답한 모델(예 "gpt-5.4-2026-03-05"). 없으면 요청한 폴백 모델.
+    const requestedFallbackModel = fb.model ?? OPENAI_FALLBACK_MODEL;
+    const modelActual = typeof j.model === "string" && j.model.trim() ? j.model.trim() : requestedFallbackModel;
     const choice = j.choices?.[0];
     // prefill을 쓴 호출부는 응답 앞에 그 조각을 되붙인다 — 벤더 차이를 여기서 흡수한다.
     const text = stripAssistantPrefill(choice?.message?.content ?? "", body.messages);
@@ -334,7 +425,7 @@ async function callOpenAiAsAnthropic(
         console.log(
           JSON.stringify({
             event: "llm_fallback_truncated",
-            model: fb.model ?? OPENAI_FALLBACK_MODEL,
+            model: modelActual,
             requested_max: fallbackOutputBudget(body.max_tokens),
             completion_tokens: j.usage?.completion_tokens ?? 0,
             reasoning_tokens: reasoning,
@@ -346,7 +437,10 @@ async function callOpenAiAsAnthropic(
     return {
       content: [{ type: "text", text }],
       ...(stop ? { stop_reason: stop } : {}),
-      usage: { input_tokens: j.usage?.prompt_tokens ?? 0, output_tokens: j.usage?.completion_tokens ?? 0 },
+      model: modelActual,
+      vendor: "openai",
+      modelActual,
+      usage: openAiUsageToAnthropic(j.usage),
     };
   } finally {
     clearTimeout(timer);
@@ -378,14 +472,19 @@ async function fallbackOrThrow(
   startedAt: number,
   lastStatus: number | null,
   lastErr: unknown,
+  onUsage?: LlmUsageSink,
 ): Promise<AnthropicMessagesData> {
   const primaryErr = lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   if (!fb?.openaiApiKey) throw primaryErr;
   try {
     const data = await callOpenAiAsAnthropic(fb, body, timeoutMs, fetchImpl);
-    logAnthropicUsage(callSite, fb.model ?? OPENAI_FALLBACK_MODEL, data.usage, now() - startedAt, {
+    const modelActual = data.modelActual ?? fb.model ?? OPENAI_FALLBACK_MODEL;
+    const latencyMs = now() - startedAt;
+    logAnthropicUsage(callSite, modelActual, data.usage, latencyMs, {
       vendor: "openai",
+      modelRequested: body.model,
     });
+    emitLlmUsage(onUsage, usageEventFrom("openai", body.model, modelActual, data.usage, latencyMs, callSite));
     try {
       console.log(
         JSON.stringify({
@@ -466,6 +565,11 @@ export async function anthropicMessages(
     randomImpl?: () => number;
     /** ★벤더 폴백: Anthropic이 끝내 실패하면 여기로 같은 프롬프트를 던진다. */
     fallback?: VendorFallback;
+    /**
+     * L-2/L-3: 성공한 호출마다 사용량 이벤트(벤더·요청/실제 모델·토큰·지연)를 받는다.
+     * 라우트가 모아서 llm_usage 원장에 기록한다. 싱크가 던져도 호출은 성공한다.
+     */
+    onUsage?: LlmUsageSink;
   } = {},
 ): Promise<AnthropicMessagesData> {
   let lastErr: unknown = null;
@@ -490,7 +594,7 @@ export async function anthropicMessages(
     } catch { /* logging must not break the call */ }
     return fallbackOrThrow(
       opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt,
-      null, new Error("Anthropic skipped: disabled by configuration"),
+      null, new Error("Anthropic skipped: disabled by configuration"), opts.onUsage,
     );
   }
 
@@ -503,7 +607,7 @@ export async function anthropicMessages(
     } catch { /* logging must not break the call */ }
     return fallbackOrThrow(
       opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt,
-      null, new Error("Anthropic skipped: circuit breaker open"),
+      null, new Error("Anthropic skipped: circuit breaker open"), opts.onUsage,
     );
   }
   let lastKind: EndpointKind = rotation[0]!.kind;
@@ -537,14 +641,22 @@ export async function anthropicMessages(
     let retryAfterMs: number | null = null;
     if (resp) {
       if (resp.ok) {
-        const data = (await resp.json()) as AnthropicMessagesData;
+        const raw: unknown = await resp.json();
+        const data = (typeof raw === "object" && raw !== null ? raw : {}) as AnthropicMessagesData;
         breakerRecordSuccess(); // Anthropic이 살아 있다 — 차단 해제.
+        // L-2: 누가·어느 모델이 답했는지 반환에 싣는다(요청 모델을 라벨로 쓰지 않게).
+        const modelActual = typeof data.model === "string" && data.model.trim() ? data.model.trim() : body.model;
+        data.vendor = "anthropic";
+        data.modelActual = modelActual;
         // latency_ms is wall time including retries — what the user waited.
-        logAnthropicUsage(callSite, body.model, data.usage, now() - startedAt, {
+        const latencyMs = now() - startedAt;
+        logAnthropicUsage(callSite, modelActual, data.usage, latencyMs, {
           endpointKind: target.kind,
           attempt,
           vendor: "anthropic",
+          modelRequested: body.model,
         });
+        emitLlmUsage(opts.onUsage, usageEventFrom("anthropic", body.model, modelActual, data.usage, latencyMs, callSite));
         return data;
       }
       const tail = await resp.text().catch(() => "");
@@ -582,7 +694,7 @@ export async function anthropicMessages(
         triedByEndpoint,
       });
       breakerRecordFailure(now());
-      return fallbackOrThrow(opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt, lastStatus, lastErr);
+      return fallbackOrThrow(opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt, lastStatus, lastErr, opts.onUsage);
     }
     sleptTotalMs += delay;
     await sleep(delay);
@@ -597,5 +709,5 @@ export async function anthropicMessages(
     triedByEndpoint,
   });
   breakerRecordFailure(now());
-  return fallbackOrThrow(opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt, lastStatus, lastErr);
+  return fallbackOrThrow(opts.fallback, body, timeoutMs, fetchImpl, callSite, now, startedAt, lastStatus, lastErr, opts.onUsage);
 }
