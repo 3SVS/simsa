@@ -2,11 +2,13 @@
 //
 // 개인정보처리방침 §1 "운영 정보(비식별)" 문단의 내용. 페이지(app/legal/privacy/page.tsx)는 이
 // 모듈을 그리기만 한다 — 문구와 "서버가 실제로 기록하는 것"의 대응을 테스트
-// (test/privacy-ops-info.test.mjs)가 0069 마이그레이션·envelope.ts와 대조해 고정한다.
+// (test/privacy-ops-info.test.mjs)가 0069 **이상 모든** 마이그레이션·0055/0056 P1 캡처 컬럼·
+// envelope.ts와 대조해 고정한다.
 //
-//  - `columns`  : 이 항목이 설명하는 D1 컬럼(0069_moat_envelope.sql)
+//  - `columns`  : 이 항목이 설명하는 D1 컬럼(0069 이상 마이그레이션 + 0055/0056 프로젝트 행 컬럼)
 //  - `envelope` : 이 항목이 설명하는 봉투 필드(central-plane src/workspace/envelope.ts RunEnvelope)
-//  서버에 컬럼·봉투 필드가 늘었는데 여기 항목이 없으면 테스트가 실패한다(고지 누락 = 버그).
+//  서버에 컬럼·테이블·봉투 필드가 늘었는데 여기 항목이 없으면 테스트가 실패한다(고지 누락 = 버그).
+//  운영 메타가 아닌 추가분은 테스트의 NOT_OPS_META에 이유와 함께 넣는다 — 고지 여부를 결정하게 강제.
 //
 // ★없는 기능을 약속하지 않는다: '기록 끄기' 토글은 아직 없다 → 문의 이메일로 요청 + "준비 중".
 // ★법적 근거·문구는 Bae 검토 1회 대상(가격·동의 계획 결정 ⑥). KO가 정본(legal/layout.tsx).
@@ -45,17 +47,27 @@ export const OPS_INFO_ITEMS = [
     // 주소로 빌더를 알아내는 source-evidence.ts는 응답으로만 돌려주고 저장하지 않는다 → '추정'은 적지 않는다.
     // 추정값을 실제로 저장하게 되면 그때 이 문장에 더한다.
     detail: "앱을 만든 도구 — 직접 고르신 도구, 그리고 기타 칸에 직접 적으신 도구 이름·모델 메모(적으신 그대로).",
+    columns: ["built_with_json"],
     envelope: ["builtWith"],
   },
   {
     label: "앱 유형 태그",
     detail: "예약·쇼핑처럼 앱의 종류를 나타내는 짧은 태그.",
+    columns: ["topic_tags_json"],
     envelope: ["topicTags"],
   },
   {
     label: "진입 경로",
     detail: "아이디어·만든 앱·기획서 중 어느 입구로 시작하셨는지.",
+    columns: ["entry_path"],
     envelope: ["entryPath"],
+  },
+  {
+    label: "유입 경로",
+    // 0056 acquisition_json — 생성 시 1회(capture-once). 대시보드는 값을 보내지 않아 지금은 기본값
+    // "direct"만 쌓이지만, 서버는 요청 본문의 짧은 출처 값(최대 40자)을 받는다.
+    detail: "프로젝트를 처음 만드실 때 어디서 오셨는지를 나타내는 짧은 값(예: 직접 방문).",
+    columns: ["acquisition_json"],
   },
   {
     label: "실패 유형 코드",

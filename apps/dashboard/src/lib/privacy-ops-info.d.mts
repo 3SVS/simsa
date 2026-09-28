@@ -3,7 +3,7 @@
 export type OpsInfoItem = {
   label: string;
   detail: string;
-  /** D1 columns (0069_moat_envelope.sql) this item discloses. */
+  /** D1 columns this item discloses (0069+ migrations, and the 0055/0056 project capture columns). */
   columns?: readonly string[];
   /** RunEnvelope fields (central-plane workspace/envelope.ts) this item discloses. */
   envelope?: readonly string[];
