@@ -194,10 +194,12 @@ export type RepairJob = {
   mode?: string | null;
   /**
    * Train W — W-3 ③ (contract 3): did the repair container's post-apply check
-   * cover every changed file? false = something outside `node --check` (.js /
-   * .mjs) changed → the card says "we couldn't confirm the fixed code builds".
-   * true = all .js/.mjs and passed; null = legacy / undecidable. Absent on old
-   * servers. Read only through showBuildUnverified().
+   * cover every changed file? Computed over `autoFix.changedFiles` only
+   * (SIMSA-FIX-BRIEF.md, committed alongside, is excluded). false = something
+   * outside `node --check` (.js / .mjs) changed → on an auto_fix card the line
+   * "we couldn't confirm the fixed code builds". true = all .js/.mjs and
+   * passed; null = brief_only (no code changed) / legacy / undecidable. Absent
+   * on old servers. Read only through showBuildUnverified().
    */
   buildVerified?: boolean | null;
 };

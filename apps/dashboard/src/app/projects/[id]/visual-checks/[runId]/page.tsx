@@ -552,7 +552,8 @@ function RepairSection({
 
       {/* Done — the repair PR is ready. Train W — W-3 ③: a job that really
           changed code (auto_fix) says so; a brief-only job keeps the "code was
-          not changed" copy. The build line appears only on buildVerified === false. */}
+          not changed" copy. The build line appears only on an auto_fix job with
+          buildVerified === false (same test as the done copy — never both). */}
       {isDone && repair && (
         <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
           <p className="text-sm font-medium text-green-800">

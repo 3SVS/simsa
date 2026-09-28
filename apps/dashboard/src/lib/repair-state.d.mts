@@ -53,7 +53,10 @@ export function repairErrorNotice(res: unknown): { errorKey: RepairErrorKey; res
 /** Callout tone: today's cap and a paused service are information, not a red error. */
 export function repairErrorTone(key: RepairErrorKey): "info" | "error";
 
-/** Train W — W-3 ③: true only for a finished code-changing job whose server says buildVerified === false. */
+/**
+ * Train W — W-3 ③: true only for a finished `mode: "auto_fix"` job whose server says
+ * buildVerified === false (same test as repairDoneKind; brief_only → server sends null).
+ */
 export function showBuildUnverified(
   repair: { status?: unknown; mode?: unknown; buildVerified?: unknown } | null | undefined,
 ): boolean;

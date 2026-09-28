@@ -8,8 +8,9 @@
  *      repairErrorNotice)이 각자의 문구로 말한다. 옛 서버(코드 없음·본문 없는 429/503)는
  *      "상한"이나 "멈춤"을 **주장하지 않고** 일반 문구로 돌아간다 — 인프라 503을 "우리가 멈췄어요"로
  *      말하면 그것도 거짓말이다.
- *  W-3 ③ (D-4 keep — 게이트가 아닌 라벨): 수리 잡 뷰 buildVerified === false일 때만
- *      "고친 코드가 실제로 빌드되는지는 확인하지 못했어요" 1줄. true·null·필드 없음(옛 서버)은 표기 없음.
+ *  W-3 ③ (D-4 keep — 게이트가 아닌 라벨): 코드를 실제로 고친 잡(mode auto_fix)의 buildVerified === false일
+ *      때만 "고친 코드가 실제로 빌드되는지는 확인하지 못했어요" 1줄. true·null·필드 없음(옛 서버)은 표기 없음.
+ *      brief_only 잡은 서버가 buildVerified=null을 낸다(계약 확정, #558 검증 P2-2·P2-13).
  *
  * 네임스페이스 import — 옛 코드에서 새 함수가 없으면 **그 검사만** 실패한다(파일 전체 로드 실패가
  * 아니라). 각 검사는 고치기 전 코드에서 실패하고, "행동 보존" 표시가 붙은 것만 옛 코드에서도 통과한다.
@@ -152,10 +153,30 @@ describe("W-2 수리 요청: repairErrorKey·repairErrorNotice (kind별 — 수�
 describe("W-3 ③ 수리 결과: showBuildUnverified (계약 3 — false일 때만)", () => {
   const done = { status: "done", mode: "auto_fix" };
 
-  it("buildVerified === false → 표기", () => {
+  it("auto_fix + buildVerified === false → 표기", () => {
     assert.equal(repairState.showBuildUnverified({ ...done, buildVerified: false }), true);
-    // mode를 모르는 행이라도 서버가 false라고 했으면 말한다.
-    assert.equal(repairState.showBuildUnverified({ status: "done", mode: null, buildVerified: false }), true);
+  });
+
+  // PR #558 검증 P2-2·P2-13 — mode가 null(레거시·모르는 값)이면 카드는 repairDoneKind → briefOnly
+  // ("코드가 자동으로 수정된 건 아직 아니에요")를 그리는데, 옛 코드는 같은 카드에 "고친 코드가 빌드되는지
+  // 확인 못 했어요"를 같이 띄웠다. 계약 확정: 빌드 표기는 **코드를 실제로 고친 잡(auto_fix)**에만.
+  // 서버 쪽 계약 문장: brief_only → buildVerified=null, 계산 대상은 autoFix.changedFiles만
+  // (SIMSA-FIX-BRIEF.md 제외) — 서버 PR이 같은 값을 고정한다.
+  it("mode가 null·모르는 값이면 buildVerified:false라도 표기하지 않는다 (지시서 문구와 모순 금지)", () => {
+    assert.equal(repairState.showBuildUnverified({ status: "done", mode: null, buildVerified: false }), false);
+    assert.equal(repairState.showBuildUnverified({ status: "done", buildVerified: false }), false);
+    assert.equal(repairState.showBuildUnverified({ status: "done", mode: "magic", buildVerified: false }), false);
+  });
+
+  it("빌드 표기가 뜨면 완료 문구는 반드시 auto_fix 문구다 (같은 기준)", () => {
+    for (const mode of ["auto_fix", "brief_only", null, undefined, "magic"]) {
+      for (const buildVerified of [true, false, null, undefined]) {
+        const job = { status: "done", mode, buildVerified };
+        if (repairState.showBuildUnverified(job)) {
+          assert.equal(repairState.repairDoneKind(job), "autoFix", JSON.stringify(job));
+        }
+      }
+    }
   });
 
   it("true · null(레거시 판단 불가) · 필드 없음(옛 서버) → 표기 없음", () => {

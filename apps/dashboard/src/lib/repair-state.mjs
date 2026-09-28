@@ -177,13 +177,17 @@ export function repairErrorTone(key) {
  * container's only post-apply check is `node --check` on .js/.mjs; the server
  * reports `buildVerified:false` when the change touched anything else (ts,
  * tsx, css, json, html …). Show the one-line "we couldn't confirm the fixed
- * code builds" ONLY on an explicit false:
+ * code builds" ONLY on an explicit false from a job that really changed code:
  *   - true  → verified by that check → nothing to say
  *   - null  → legacy / undecidable  → nothing to say (no guess)
  *   - absent (old server)           → nothing to say
- * A brief-only job changed no code (it carries the fix brief only), so a build
- * claim about "the fixed code" would be meaningless there even if the server
- * computed false from the brief file's extension.
+ *
+ * Contract (server ↔ dashboard, #558 검증 P2-2·P2-13): buildVerified is about
+ * the code the repair changed — computed over `autoFix.changedFiles` only
+ * (SIMSA-FIX-BRIEF.md, committed alongside, is excluded); a `brief_only` job
+ * changed no code → `buildVerified: null`. The dashboard uses the SAME test as
+ * repairDoneKind (`mode === "auto_fix"`), so the build line never appears on a
+ * card whose done copy says "code was not changed" (mode null/unknown included).
  *
  * @param {{ status?: unknown, mode?: unknown, buildVerified?: unknown } | null | undefined} repair
  * @returns {boolean}
@@ -191,7 +195,7 @@ export function repairErrorTone(key) {
 export function showBuildUnverified(repair) {
   if (!repair || typeof repair !== "object") return false;
   if (repair.status !== "done") return false;
-  if (repair.mode === "brief_only") return false;
+  if (repairDoneKind(repair) !== "autoFix") return false;
   return repair.buildVerified === false;
 }
 
