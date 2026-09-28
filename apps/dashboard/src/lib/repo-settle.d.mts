@@ -1,4 +1,4 @@
-export type RepoFetchResult = { ok: boolean; repo?: unknown };
+export type RepoFetchResult = { ok: boolean; repo?: unknown; error?: string };
 
 /**
  * Generic on the fetch's own result type so callers keep their concrete `repo`
@@ -11,5 +11,5 @@ export function fetchProjectRepoSettled<T extends RepoFetchResult>(
   opts?: { attempts?: number; delayMs?: number },
 ): Promise<T>;
 
-/** true = linked · false = confirmed no repo · null = unknown (don't lock). */
+/** true = linked · false = confirmed no repo (incl. 404: not saved / not this key) · null = unknown (don't lock). */
 export function repoConnectedFact(res: RepoFetchResult): boolean | null;

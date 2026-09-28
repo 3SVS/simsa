@@ -36,9 +36,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/i18n/I18nProvider";
-import { nextStepFromHere } from "@/lib/project-steps.mjs";
+import { navLabelKey, nextStepFromHere, projectHasApp } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
+import { useAppPresence } from "@/lib/use-app-presence";
+
+function projectIdFrom(pathname: string): string | null {
+  const seg = pathname.split("/").filter(Boolean);
+  if (seg[0] !== "projects" || !seg[1] || seg[1] === "new") return null;
+  return seg[1];
+}
 
 export function StepNextButton() {
   const { t } = useI18n();
@@ -46,39 +53,40 @@ export function StepNextButton() {
   // 2026-09-28 (D9): the PR screen is a developer tool — it joins the walk
   // only in developer mode (the default walk goes to the real-app check).
   const [developerMode] = useDeveloperMode();
-  const seg = pathname.split("/").filter(Boolean);
-  if (seg[0] !== "projects" || !seg[1] || seg[1] === "new") return null;
-  const projectId = seg[1];
-  const slug = seg[2] ?? "";
+  const projectId = projectIdFrom(pathname);
+  // #559 검증 결함 5: "does the app already exist?" as the sidebar settled it
+  // (same fetch, same rule) — null until then.
+  const presence = useAppPresence(projectId);
+  if (!projectId) return null;
+  const slug = pathname.split("/").filter(Boolean)[2] ?? "";
 
   // 검수 결과 상세(`visual-checks/<runId>`)도 검수 화면으로 취급한다 — 결과를
   // 방금 본 사람에게 다음을 말해주는 자리가 정확히 여기다.
   const here = slug === "visual-checks" ? "visual-checks" : slug;
 
   const data = loadExtendedProjectData(projectId);
+  const entryPath = data?.entryPath ?? null;
+  // A restored project defaults to the idea branch even when its repo or
+  // address is known. Until the sidebar has settled whether the app exists,
+  // the walk (idea route → builder pack vs. app route → real-app check) is
+  // unknown — show nothing rather than a "다음" that changes under the reader.
+  if (entryPath !== "code" && presence === null) return null;
+  const hasApp = projectHasApp({ entryPath }) || presence === true;
   const next = nextStepFromHere(here, {
-    entryPath: data?.entryPath ?? null,
+    entryPath,
     summary: data?.checkResults?.summary ?? null,
     hasCheckRun: Boolean(data?.checkResults),
     hasFixes: Object.keys(data?.fixSuggestions ?? {}).length > 0,
     // 화면 검수 결과는 `checkResults`에 없다 — 어느 쪽을 볼지는 순수 함수가 고른다.
     visual: data?.visualCheck ? { findingCount: data.visualCheck.findingCount } : null,
     developerMode,
+    hasApp,
   });
   if (!next) return null;
 
-  const labels: Record<string, string> = {
-    idea: t.nav.idea,
-    spec: t.nav.spec,
-    items: t.nav.items,
-    settings: t.nav.settings,
-    github: t.nav.githubDev,
-    export: t.nav.export,
-    checks: t.nav.checks,
-    fixes: t.nav.fixes,
-    // Same name as the sidebar item for the same screen (D6).
-    "visual-checks": t.nav.checkApp,
-  };
+  // Same name as the sidebar item for the same screen (D6 · 결함 13).
+  const labelKey = navLabelKey(next.slug, { hasApp, developerMode });
+  const nextLabel = labelKey ? t.nav[labelKey] : next.slug;
   const why: Record<string, string> = {
     seeProblems: t.stepsNav.whySeeProblems,
     afterFix: t.stepsNav.whyAfterFix,
@@ -99,7 +107,7 @@ export function StepNextButton() {
           href={`/projects/${projectId}/${next.slug}`}
           className={`btn btn-md flex-shrink-0 ${urgent ? "btn-primary" : "btn-secondary"}`}
         >
-          {t.stepsNav.next}: {labels[next.slug] ?? next.slug} →
+          {t.stepsNav.next}: {nextLabel} →
         </Link>
       </div>
     </div>

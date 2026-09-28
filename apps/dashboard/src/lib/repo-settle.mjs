@@ -36,9 +36,17 @@ export async function fetchProjectRepoSettled(fetchProjectRepo, id, userKey, opt
  * The repo-connected fact for the progress map, from a settled fetch result.
  * true = linked · false = confirmed no repo (after retries) · null = unknown
  * (fetch failed) → callers must treat null as "don't lock the flow".
- * @param {{ok:boolean, repo?:unknown}} res
+ *
+ * A 404 is a confirmed "no repo", not an unknown (#559 검증 결함 7): the server's
+ * ownership gate answers 404 when the project is not saved there (or not under
+ * this key) — such a project has no linked repo for this user. The sibling
+ * facts (sources, runs, PR reviews — project-steps.mjs) already read 404 that
+ * way; reading it as unknown here left a project whose server copy failed to
+ * save with no next action at all. Transient failures (5xx, network) stay null.
+ * @param {{ok:boolean, repo?:unknown, error?:string}} res
  * @returns {boolean | null}
  */
 export function repoConnectedFact(res) {
-  return res.ok ? Boolean(res.repo) : null;
+  if (res.ok) return Boolean(res.repo);
+  return res.error === "HTTP 404" || res.error === "not_found" || res.error === "project_not_found" ? false : null;
 }

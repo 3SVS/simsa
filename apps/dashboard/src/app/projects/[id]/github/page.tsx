@@ -26,7 +26,7 @@ import {
 } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
-import { liveAppCheckHref, sourceFacts } from "@/lib/project-steps.mjs";
+import { githubPullsView, liveAppCheckHref, sourceFacts } from "@/lib/project-steps.mjs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusText } from "@/components/StatusText";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -90,6 +90,7 @@ export default function GitHubPage() {
     return () => { cancelled = true; };
   }, [id, isExample]);
   const liveAppHref = liveAppCheckHref(id, hasDeployUrl);
+  const pullsView = githubPullsView({ pullsPhase, openCount: pulls.length, linkedCount: linkedPulls.length });
 
   const ext = loadExtendedProjectData(id);
   const checkResultMap = new Map(
@@ -459,9 +460,10 @@ export default function GitHubPage() {
 
           {/* ★2026-09-28 (D8): say what this screen is — a developer tool — and
               where the default check lives, BEFORE anyone loads a PR list. Hidden
-              in the empty state below, which carries the same way out as its
-              primary (one screen, one "what now"). */}
-          {!(pullsPhase === "done" && pulls.length === 0) && (
+              next to the "action" empty state, which carries the same way out as
+              its primary (one screen, one "what now"). What shows when is decided
+              in one pure place (githubPullsView, #559 검증 결함 8·12). */}
+          {pullsView.devNote && (
             <p className="text-xs leading-relaxed text-gray-500">
               {t.github.devScreenNote}{" "}
               <Link href={liveAppHref} className="font-medium text-brand-700 hover:underline">
@@ -477,7 +479,7 @@ export default function GitHubPage() {
             </div>
           )}
 
-          {pullsPhase === "done" && pulls.length === 0 && (
+          {pullsView.empty === "action" && (
             // ★D8 — zero PRs was a dead end ("0 open" + "push, then refresh").
             // For Lovable/Bolt/v0 users no PR is the NORMAL state: say so, and
             // hand over the real next step as the one primary action.
@@ -490,7 +492,14 @@ export default function GitHubPage() {
             </div>
           )}
 
-          {pullsPhase === "done" && pulls.length > 0 && (
+          {pullsView.empty === "quiet" && (
+            // Zero open PRs, but earlier PRs are linked below (merged/closed
+            // since): a plain sentence only — those cards carry their own buttons,
+            // and "having no PR is normal" next to a list of PRs would contradict it.
+            <p className="text-sm text-gray-600">{t.github.noPullsLinked}</p>
+          )}
+
+          {pullsView.list && (
             <div className="card overflow-hidden">
               <p className="border-b border-gray-100 px-5 py-4 text-sm font-semibold text-gray-700">
                 {pulls.length} {t.github.openPulls}

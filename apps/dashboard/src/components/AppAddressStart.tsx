@@ -19,17 +19,23 @@
  *
  * Failures keep what the user typed and say in plain words what happened. A
  * retry after a saved address but a failed start does not register the address
- * twice.
+ * twice — and a retry with a CORRECTED address replaces the one this box saved
+ * instead of leaving it behind (addressSubmitPlan).
  */
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
-import { connectProjectSource } from "@/lib/workspace-sources-api";
+import { connectProjectSource, deleteProjectSource } from "@/lib/workspace-sources-api";
 import { runVisualCheck } from "@/lib/workspace-visual-checks-api";
 import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { getUserKey } from "@/lib/workflow-store";
 import { APP_ADDRESS_ANCHOR } from "@/lib/project-steps.mjs";
-import { normalizeAppAddress, appAddressErrorKey, type AppAddressErrorKey } from "@/lib/app-address.mjs";
+import {
+  normalizeAppAddress,
+  appAddressErrorKey,
+  addressSubmitPlan,
+  type AppAddressErrorKey,
+} from "@/lib/app-address.mjs";
 
 type ErrorKey = AppAddressErrorKey | "empty";
 
@@ -64,7 +70,17 @@ export function AppAddressStart({ projectId, t, locale }: { projectId: string; t
     setWorking(true);
     const userKey = getUserKey();
 
-    let sourceId = saved.current && saved.current.url === norm.url ? saved.current.sourceId : null;
+    // Same address again → reuse what this box saved. A corrected address →
+    // remove the one this box saved a moment ago (a typo or the wrong app), then
+    // save the new one — never leave a stray address behind (#559 검증 결함 9).
+    const plan = addressSubmitPlan(saved.current, norm.url);
+    let sourceId = plan.reuseSourceId;
+    if (plan.removeSourceId) {
+      // Best effort: if this fails the old address simply stays in the Sources
+      // list (nothing is lost) — the new one is still saved and checked.
+      await deleteProjectSource(projectId, plan.removeSourceId, userKey).catch(() => null);
+      saved.current = null;
+    }
     if (!sourceId) {
       const input = { userKey, type: "website" as const, reference: norm.url };
       let res = await connectProjectSource(projectId, input);

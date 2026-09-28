@@ -177,9 +177,13 @@ test("⑧-b nextScreenSlug: 개발자 모드면 코드 갈래 순서에 github�
 
 test("⑧-c nextStepFromHere가 개발자 모드를 nextScreenSlug까지 전달한다", () => {
   assert.equal(nextStepFromHere("settings", { entryPath: "code" })?.slug, "visual-checks");
+  assert.equal(nextStepFromHere("visual-checks", { entryPath: "code", developerMode: true, visual: { findingCount: 0 } })?.slug, "github");
+  assert.equal(nextStepFromHere("visual-checks", { entryPath: "code", visual: { findingCount: 0 } })?.slug, "items");
   assert.equal(nextStepFromHere("github", { entryPath: "code", developerMode: true })?.slug, "items");
-  // 기본 모드에선 github가 순서 밖이라 거기서 이어갈 곳이 없다(사이드바로 도달한 개발자 화면).
-  assert.equal(nextStepFromHere("github", { entryPath: "code" }), null);
+  // ★정정 (#559 검증 결함 4·13): 기본 모드에서도 PR 화면에 오는 사람이 있다 — PR 검토 이력이
+  //  있는 비개발자(사이드바가 보여 준다)·확인 결과 화면의 PR 링크·북마크. 순서 밖이라고 null을
+  //  주면 그들의 하단 "다음 →"이 사라진다. 개발자 순서의 다음 칸으로 잇는다.
+  assert.equal(nextStepFromHere("github", { entryPath: "code" })?.slug, "items");
 });
 
 // ─── D6 — 앱 있음 판정 · 단계 라벨 · 사이드바 항목 ───────────────────────────────
@@ -263,7 +267,9 @@ test("explainerKind (D7): 아이디어 안내 목록은 앱이 없는 아이디�
 
 test("visualCheckFact / reviewRunFact / sourceFacts: 성공·없음·실패를 구분한다", () => {
   const { visualCheckFact, reviewRunFact, sourceFacts } = steps;
-  assert.equal(visualCheckFact({ ok: true, checks: [{ id: "a" }] }), true);
+  // 모크는 실제 API 모양(VisualCheckListItem, status 포함)으로 — #559 검증 결함 2 이후
+  // 끝난 런(done·uploaded)만 센다(existing-app-journey-fixes.test.mjs).
+  assert.equal(visualCheckFact({ ok: true, checks: [{ id: "a", status: "done" }] }), true);
   assert.equal(visualCheckFact({ ok: true, checks: [] }), false);
   assert.equal(visualCheckFact({ ok: false, error: "project_not_found" }), false, "서버에 아직 없는 프로젝트엔 런도 없다");
   assert.equal(visualCheckFact({ ok: false, error: "HTTP 500" }), null);
@@ -419,7 +425,16 @@ for (const loc of ["ko", "en"]) {
   });
 }
 
-test("PR을 쓰는 새 문구는 스스로 개발자용이라고 밝힌다", () => {
+// #559 검증 결함 14: 제목이 범위보다 넓었다. PR_ALLOWED 중 github.noPulls는 D8이 문장을
+// 그대로 지정했고(빌더에겐 PR 0개가 "보통"이라는 설명), 스스로 개발자용이라고 밝히지 않는다 —
+// 그 문장 바로 아래에 noPullsDevNote("PR 검토는 개발자용 기능이에요")가 붙는다. 그래서 여기선
+// noPulls를 뺀 나머지 셋만 검사한다.
+test("PR 허용 키 중 D8 지정 문장(noPulls)을 뺀 나머지는 스스로 개발자용이라고 밝힌다", () => {
+  assert.deepEqual(
+    [...PR_ALLOWED].filter((k) => k !== "github.noPulls").sort(),
+    ["github.devScreenNote", "github.noPullsDevNote", "nav.githubDev"],
+    "PR 허용 키가 늘면 이 테스트에 함께 넣는다",
+  );
   for (const loc of ["ko", "en"]) {
     const label = at(DICTIONARIES[loc], "nav.githubDev");
     assert.match(label, loc === "ko" ? /개발자용/ : /developer/i);
@@ -490,14 +505,17 @@ test("/github (D8): 빈 상태에 실제 앱 확인 primary가 있고, 옛 '0개
 });
 
 test("사이드바 (D6): 단계 라벨과 항목을 순수 헬퍼로 고르고, 실제 앱 확인 사실을 읽는다", () => {
-  assert.match(sidebar, /reviewStepLabelKey\(/);
+  // 라벨은 stepMapView가 고른다(안에서 reviewStepLabelKey — #559 검증 결함 3의 보류 규칙 포함).
+  assert.match(sidebar, /stepMapView\(/);
+  assert.match(sidebar, /view\.reviewLabelKey \? t\.stepsNav\[view\.reviewLabelKey\]/);
   assert.match(sidebar, /sidebarStepItems\(/);
   assert.match(sidebar, /visualCheckFact\(/);
 });
 
 test("다음 버튼 (D9): 개발자 모드를 다음 걸음 계산에 넘긴다", () => {
   assert.match(nextBtn, /useDeveloperMode\(\)/);
-  assert.match(nextBtn, /developerMode,?\s/);
+  // #559 검증 결함 12: 식별자가 파일 어딘가에 있는지가 아니라, nextStepFromHere 호출 인자로 넘기는지.
+  assert.match(nextBtn, /nextStepFromHere\(here, \{[\s\S]*?\n\s+developerMode,\n[\s\S]*?\}\)/);
 });
 
 test("확인 결과 화면 (회귀 전수 검색): 코드 갈래라는 이유만으로 PR 화면을 primary로 내밀지 않는다", () => {

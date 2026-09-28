@@ -74,3 +74,28 @@ export function appAddressErrorKey(code) {
       return "generic";
   }
 }
+
+/**
+ * What a press of "확인 시작" does with the address THIS box already saved
+ * (#559 검증 결함 9). The box registers the address, then starts the check; if
+ * the start fails (busy, network) the address stays registered.
+ *
+ *  - Same address pressed again → reuse that source (never register it twice).
+ *  - The user corrected the address → the one saved a moment ago was a typo or
+ *    the wrong app; remove it, then register the new one. Otherwise every
+ *    corrected retry leaves a stray address behind, taking one of the
+ *    project's limited slots and showing up in the Sources list. Removing it
+ *    FIRST keeps a stray from being the reason the new one hits that limit.
+ *
+ * Only an address saved by this box in this visit is ever removed — nothing
+ * the user added elsewhere, nothing a check already ran against.
+ *
+ * @param {{ url: string, sourceId: string } | null | undefined} saved
+ * @param {string} url the normalized address being submitted now
+ * @returns {{ reuseSourceId: string | null, removeSourceId: string | null }}
+ */
+export function addressSubmitPlan(saved, url) {
+  if (!saved) return { reuseSourceId: null, removeSourceId: null };
+  if (saved.url === url) return { reuseSourceId: saved.sourceId, removeSourceId: null };
+  return { reuseSourceId: null, removeSourceId: saved.sourceId };
+}

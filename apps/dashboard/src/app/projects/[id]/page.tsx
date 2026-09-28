@@ -42,10 +42,10 @@ import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import {
   nextProjectAction,
-  computeProjectSteps,
-  reviewStepLabelKey,
+  stepMapView,
   explainerKind,
   visualCheckFact,
+  visualCheckActiveFact,
   reviewRunFact,
   sourceFacts,
 } from "@/lib/project-steps.mjs";
@@ -91,6 +91,9 @@ export default function ProjectOverviewPage() {
   // 실제 앱 확인을 끝낸 사람에게도 개요가 계속 "첫 검수"를 권했다. 목록은 여기서
   // 한 번만 받아 시각 검수 카드와 나눠 쓴다(둘이 다른 답을 할 수 없게).
   const [hasVisualCheck, setHasVisualCheck] = useState<boolean | null>(null);
+  // #559 검증 결함 2: a queued/running run is not a result — the command center
+  // says "in progress" instead of "your latest review is in".
+  const [visualCheckActive, setVisualCheckActive] = useState<boolean | null>(null);
   const [visualChecks, setVisualChecks] = useState<VisualCheckListItem[] | null>(null);
   // Whether the repo / sources requests have FINISHED (with any result). The
   // "how it works" list depends on whether an app exists; it waits for both
@@ -121,6 +124,7 @@ export default function ProjectOverviewPage() {
       .then((res) => {
         if (cancelled) return;
         setHasVisualCheck(visualCheckFact(res));
+        setVisualCheckActive(visualCheckActiveFact(res));
         // A project that only exists in this browser has no server-side runs.
         // Any other failure keeps the card hidden (best-effort, never blocks).
         setVisualChecks(res.ok ? res.checks : res.error === "project_not_found" ? [] : null);
@@ -174,6 +178,8 @@ export default function ProjectOverviewPage() {
         hasRepoSource={hasRepoSource}
         hasReviewRun={hasReviewRun}
         hasVisualCheck={hasVisualCheck}
+        visualCheckActive={visualCheckActive}
+        activeRunId={activeRunId(visualChecks)}
         hasDeployUrl={hasDeployUrl}
         entryPath={entryPath}
         factsSettled={repoSettled && sourcesSettled}
@@ -315,6 +321,13 @@ export default function ProjectOverviewPage() {
   );
 }
 
+/** The real-app check still running, if any — the command center's "see how it's going" goes there. */
+function activeRunId(checks: VisualCheckListItem[] | null): string | null {
+  if (!checks) return null;
+  const a = overviewNextAction(checks);
+  return a.kind === "inProgress" ? a.runId : null;
+}
+
 /**
  * STEP 4 — the overview's command center. Computes the SINGLE next action from
  * confirmed facts (nextProjectAction) and renders one primary CTA. While facts
@@ -335,6 +348,8 @@ function CommandCenterCard({
   hasRepoSource,
   hasReviewRun,
   hasVisualCheck,
+  visualCheckActive,
+  activeRunId,
   hasDeployUrl,
   entryPath,
   factsSettled,
@@ -347,8 +362,12 @@ function CommandCenterCard({
   hasRepo: boolean | null;
   hasRepoSource: boolean | null;
   hasReviewRun: boolean | null;
-  // At least one real-app check exists — counts as "checked" together with PR reviews.
+  // At least one FINISHED real-app check exists — counts as "checked" together with PR reviews.
   hasVisualCheck: boolean | null;
+  // A real-app check is queued or running (no result yet).
+  visualCheckActive: boolean | null;
+  // That running check's id, when known — "see how it's going" opens it directly.
+  activeRunId: string | null;
   // A connected deploy/website URL — the builder path's alternative to a repo,
   // so an idea-only project reaches its results without connecting GitHub.
   hasDeployUrl: boolean | null;
@@ -356,7 +375,7 @@ function CommandCenterCard({
   // The repo and sources requests have both finished (whatever the result).
   factsSettled: boolean;
 }) {
-  const facts ={ hasItems, hasRepo, hasRepoSource, hasReviewRun, hasVisualCheck, hasDeployUrl, entryPath };
+  const facts = { hasItems, hasRepo, hasRepoSource, hasReviewRun, hasVisualCheck, visualCheckActive, hasDeployUrl, entryPath };
   const next = nextProjectAction(facts);
 
   const copy: Record<string, { label: string; desc: string }> = {
@@ -365,23 +384,30 @@ function CommandCenterCard({
     add_url: { label: t.commandCenter.addUrl, desc: t.commandCenter.addUrlDesc },
     get_pack: { label: t.commandCenter.getPack, desc: t.commandCenter.getPackDesc },
     run_review: { label: t.commandCenter.runReview, desc: t.commandCenter.runReviewDesc },
+    view_progress: { label: t.commandCenter.viewProgress, desc: t.commandCenter.viewProgressDesc },
     view_results: { label: t.commandCenter.viewResults, desc: t.commandCenter.viewResultsDesc },
   };
   const c = next ? copy[next.action] : null;
+  // The running check opens directly (the inspection card below links the same run).
+  const nextHref =
+    next?.action === "view_progress" && activeRunId
+      ? `/projects/${projectId}/visual-checks/${activeRunId}`
+      : `/projects/${projectId}/${next?.slug ?? ""}`;
 
   if (!c && !showExplainer) return null;
 
-  const steps = computeProjectSteps(facts);
-  const stepLabel: Record<string, string> = {
+  // D6 · #559 검증 결함 3: the progress row, the step-2 label ("앱 확인" when the
+  // app exists) and the how-it-works list (D7) all depend on whether an app
+  // exists — for a non-code project known only once the repo/address requests
+  // finish. One hold rule (stepMapView) keeps all three from swapping under the reader.
+  const view = stepMapView(facts, factsSettled);
+  const steps = view.steps;
+  const stepLabel: Record<string, string | null> = {
     prepare: t.stepsNav.prepare,
-    // D6: an app that already exists is not being "built" — the step is checking it.
-    review: t.stepsNav[reviewStepLabelKey(facts)],
+    review: view.reviewLabelKey ? t.stepsNav[view.reviewLabelKey] : null,
     results: t.stepsNav.results,
   };
-  // D7: which "how it works" list. It depends on whether an app exists, which
-  // for a non-code project is only known once the repo/address requests finish —
-  // hold the list until then so it never swaps under the reader.
-  const explainerReady = entryPath === "code" || factsSettled;
+  const explainerReady = view.known;
   const explainer = explainerKind(facts);
 
   return (
@@ -407,7 +433,10 @@ function CommandCenterCard({
                 {done ? "✓" : i + 1}
               </span>
               <span className={`text-xs ${current ? "font-semibold text-gray-900" : done ? "text-gray-600" : "text-gray-400"}`}>
-                {stepLabel[step.key]}
+                {stepLabel[step.key] ?? (
+                  // App presence not known yet — hold the label (결함 3).
+                  <span aria-hidden className="inline-block h-3 w-14 animate-pulse rounded bg-gray-100 align-middle" />
+                )}
               </span>
               {i < steps.length - 1 && <span aria-hidden className="mx-0.5 h-px w-4 bg-gray-200" />}
             </li>
@@ -424,7 +453,7 @@ function CommandCenterCard({
       {c && next && next.action !== "add_url" && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-700">{c.desc}</p>
-          <Link href={`/projects/${projectId}/${next.slug}`} className="btn btn-md btn-primary">
+          <Link href={nextHref} className="btn btn-md btn-primary">
             {c.label} →
           </Link>
         </div>

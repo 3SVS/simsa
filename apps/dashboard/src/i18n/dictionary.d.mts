@@ -311,6 +311,8 @@ export type Dictionary = {
     runReviewDesc: string;
     viewResults: string;
     viewResultsDesc: string;
+    viewProgress: string;
+    viewProgressDesc: string;
   };
   stepsNav: {
     prepare: string;
@@ -318,7 +320,7 @@ export type Dictionary = {
     reviewApp: string;
     results: string;
     lockNeedItems: string;
-    lockNeedCode: string;
+    lockNeedUrl: string;
     lockNeedBuild: string;
     next: string;
     whySeeProblems: string;
@@ -1234,6 +1236,7 @@ export type Dictionary = {
     pullsLoadError: string;
     openPulls: string;
     noPulls: string;
+    noPullsLinked: string;
     selectItemsForPr: string;
     noItemsYet: string;
     noItemsHint: string;

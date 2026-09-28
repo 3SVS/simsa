@@ -41,10 +41,13 @@ test("builder path: deploy URL + a visual-check run → review done, results cur
   assert.equal(s.results.status, "current");
 });
 
-test("CODE branch keeps the GitHub gate: no repo → results locked need_code", () => {
+test("CODE branch: nothing known (no repo, no address) → results locked need_url", () => {
+  // ★의도된 변경 (#559 검증 결함 6): 잠금 사유가 "코드를 먼저 연결하세요"(need_code)에서
+  //  "앱 주소를 먼저 넣으세요"(need_url)로 — 개요가 같은 순간 요구하는 것(add_url)과 같은 말.
+  //  코드 연결은 코드 갈래에서도 선택이다(D-17 amend).
   const s = byKey(computeProjectSteps({ hasItems: true, hasRepo: false, hasReviewRun: false, hasDeployUrl: false, entryPath: "code" }));
   assert.equal(s.results.status, "locked");
-  assert.equal(s.results.lockReason, "need_code");
+  assert.equal(s.results.lockReason, "need_url");
 });
 
 test("items + repo, no run yet: step3 unlocked (todo), step2 still current", () => {
@@ -82,9 +85,10 @@ test("CODE branch: no items is NORMAL — review never locks, prepare is optiona
   assert.equal(s.review.status, "current"); // the code branch starts here
   assert.equal(s.prepare.optional, true); // "이 갈래는 원래 그럼" — optional, not incomplete
   assert.equal(s.prepare.status, "todo"); // neutral, never a red/current demand
-  // results still locks on no code — that gate is branch-independent
+  // results still locks when nothing is known — on the code branch the
+  // prerequisite is the app's address (#559 검증 결함 6: need_code → need_url)
   assert.equal(s.results.status, "locked");
-  assert.equal(s.results.lockReason, "need_code");
+  assert.equal(s.results.lockReason, "need_url");
 });
 
 test("CODE branch: repo connected + run → review done, results current (full path w/o idea step)", () => {
@@ -195,7 +199,9 @@ test("nextScreenSlug: the CODE branch walks prep → real-app check FIRST (이�
   //  github는 개발자 모드에서만 순서에 들어간다(existing-app-journey.test.mjs ⑧).
   assert.equal(nextScreenSlug("settings", "code"), "visual-checks");
   assert.equal(nextScreenSlug("visual-checks", "code"), "items");
-  assert.equal(nextScreenSlug("github", "code"), null);
+  // ★의도된 변경 (#559 검증 결함 4): 기본 순서 밖이어도 PR 화면에 온 사람(PR 이력이 있는
+  //  비개발자·북마크)에게 다음 걸음은 있다 — 개발자 순서의 다음 칸(확인 항목).
+  assert.equal(nextScreenSlug("github", "code"), "items");
   assert.equal(nextScreenSlug("items", "code"), "checks");
   assert.equal(nextScreenSlug("checks", "code"), "fixes");
   assert.equal(nextScreenSlug("fixes", "code"), null);

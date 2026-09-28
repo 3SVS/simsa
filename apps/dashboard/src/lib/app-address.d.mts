@@ -7,3 +7,8 @@ export function normalizeAppAddress(
 export type AppAddressErrorKey = "invalid" | "limit" | "notSaved" | "forbidden" | "busy" | "generic";
 
 export function appAddressErrorKey(code: unknown): AppAddressErrorKey;
+
+export function addressSubmitPlan(
+  saved: { url: string; sourceId: string } | null | undefined,
+  url: string,
+): { reuseSourceId: string | null; removeSourceId: string | null };

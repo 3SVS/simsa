@@ -11,14 +11,15 @@ import { StampMark } from "@/components/brand/StampMark";
 import { Tooltip } from "@/components/Tooltip";
 import { getAuthSession, signOutAuth } from "@/lib/auth-client.mjs";
 import {
-  computeProjectSteps,
   projectHasApp,
-  reviewStepLabelKey,
+  stepMapView,
   sidebarStepItems,
+  navLabelKey,
   visualCheckFact,
   reviewRunFact,
   sourceFacts,
 } from "@/lib/project-steps.mjs";
+import { publishAppPresence } from "@/lib/app-presence.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
@@ -67,6 +68,14 @@ export function AppSidebar() {
   const [hasRepoSource, setHasRepoSource] = useState<boolean | null>(null);
   const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
   const [hasVisualCheck, setHasVisualCheck] = useState<boolean | null>(null);
+  // #559 검증 결함 3: whether the repo AND sources requests for this project
+  // have finished (any result) — until then a non-code project's app presence is
+  // unknown, and the step-2 label/items are held instead of drawn and swapped.
+  const [appFactsSettled, setAppFactsSettled] = useState(false);
+  // The project the facts above belong to. On the first render after switching
+  // projects they still hold the previous project's answers (the reset effect
+  // has not run yet) — never publish those under the new project's id.
+  const [factsProjectId, setFactsProjectId] = useState<string | null>(null);
 
   // Fetch the session, reconcile local storage to that identity, then (re)load
   // the project list from the now-correct account bucket. Called on mount and
@@ -151,18 +160,20 @@ export function AppSidebar() {
     setHasRepoSource(null);
     setHasDeployUrl(null);
     setHasVisualCheck(null);
+    setAppFactsSettled(false);
+    setFactsProjectId(projectId);
   }, [projectId]);
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     const uk = getUserKey();
-    fetchProjectRepoSettled(fetchProjectRepo, projectId, uk)
+    const repo = fetchProjectRepoSettled(fetchProjectRepo, projectId, uk)
       .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
       .catch(() => {});
     listProjectReviewHistory(projectId, uk, { limit: 1 })
       .then((res) => { if (!cancelled) setHasReviewRun(reviewRunFact(res)); })
       .catch(() => {});
-    listProjectSources(projectId, uk)
+    const sources = listProjectSources(projectId, uk)
       .then((res) => {
         if (cancelled) return;
         const facts = sourceFacts(res);
@@ -170,6 +181,10 @@ export function AppSidebar() {
         setHasDeployUrl(facts.hasDeployUrl);
       })
       .catch(() => {});
+    // Stays true across navigations inside the project (facts reset only when
+    // the project changes), so the hold happens once per project, not per click.
+    void Promise.all([repo, sources]).then(() => { if (!cancelled) setAppFactsSettled(true); });
+    // Finished runs only — a queued/running/failed run is not "checked" (결함 2).
     listVisualChecks(projectId, uk)
       .then((res) => { if (!cancelled) setHasVisualCheck(visualCheckFact(res)); })
       .catch(() => {});
@@ -235,19 +250,30 @@ export function AppSidebar() {
   // prepare is optional, review never locks on items; skipping idea is normal).
   const entryPath = projectId ? (loadExtendedProjectData(projectId)?.entryPath ?? null) : null;
   const appFacts = { entryPath, hasRepo, hasRepoSource, hasDeployUrl };
-  const steps = computeProjectSteps({
-    hasItems,
-    hasRepo,
-    hasRepoSource,
-    hasReviewRun,
-    hasVisualCheck,
-    entryPath,
-    // The sidebar uses the address fact only to UNLOCK (a known address means
-    // results are reachable). It never passes a confirmed "no address": on the
-    // builder branch the results step also holds the brief-based pre-check,
-    // which works before any app exists, so the sidebar stays fail-open there.
-    hasDeployUrl: hasDeployUrl === true ? true : null,
-  });
+  // #559 검증 결함 3: one hold rule with the overview (stepMapView) — while a
+  // non-code project's app presence is unknown, no step is current/locked/done
+  // and the step-2 label and items wait, instead of drawing the idea branch's
+  // "만들기·검수 · 만들기 안내" and swapping it when the repo answer arrives.
+  const view = stepMapView(
+    {
+      hasItems,
+      hasRepo,
+      hasRepoSource,
+      hasReviewRun,
+      hasVisualCheck,
+      entryPath,
+      // The address fact on the builder branch is used only to UNLOCK (a known
+      // address means results are reachable) — never a confirmed "no address":
+      // there the results step also holds the brief-based pre-check, which works
+      // before any app exists, so the sidebar stays fail-open. On the code
+      // branch the confirmed answer is passed as is (결함 6): its results lock is
+      // "add your app's address first", the same prerequisite the overview asks
+      // for, and only confirmed facts lock it.
+      hasDeployUrl: entryPath === "code" ? hasDeployUrl : hasDeployUrl === true ? true : null,
+    },
+    appFactsSettled,
+  );
+  const steps = view.steps;
   // ★2026-09-28 (D6): 이미 만든 앱이 있는 사람에게 2단계는 "만들기"가 아니다.
   // 종전엔 저장소가 연결되면 "코드 변경"(PR) 탭을 2단계 맨 앞에 두어, PR을 만들지
   // 않는 빌더 사용자가 0개 PR 화면에서 멈췄다(Bae 라이브 신고). 이제 앱이 있으면
@@ -256,22 +282,30 @@ export function AppSidebar() {
   // Train N (§8-6): in the default view the builder pack is called "Build
   // guide" — "builder pack" is our word, not the user's.
   const hasApp = projectHasApp(appFacts);
-  const stepSlugs = sidebarStepItems({ hasApp, developerMode, hasPrReviewHistory: hasReviewRun });
-  const slugLabel: Record<string, string> = {
-    "visual-checks": t.nav.checkApp,
-    github: t.nav.githubDev,
-    export: developerMode ? t.nav.export : t.nav.buildGuide,
-    checks: t.nav.checks,
-  };
+  // The bottom "다음 →" bar reads this same answer (결함 5) — published only once
+  // known, and only when the facts are this project's own.
+  useEffect(() => {
+    if (projectId && factsProjectId === projectId && view.known) publishAppPresence(projectId, hasApp);
+  }, [projectId, factsProjectId, view.known, hasApp]);
+  const stepSlugs = sidebarStepItems({
+    hasApp: view.known ? hasApp : null,
+    developerMode,
+    hasPrReviewHistory: hasReviewRun,
+  });
+  // Same name as the bottom bar for the same screen (결함 13): "앱 확인하기"
+  // only once the app exists; before that the former "시각 검수".
   const labelled = (slugs: string[]) =>
-    slugs.map((slug) => [slug, slugLabel[slug] ?? slug] as const);
-  const stepMeta: Record<string, { label: string; items: ReadonlyArray<readonly [string, string]> }> = {
+    slugs.map((slug) => {
+      const key = navLabelKey(slug, { hasApp, developerMode });
+      return [slug, key ? t.nav[key] : slug] as const;
+    });
+  const stepMeta: Record<string, { label: string | null; items: ReadonlyArray<readonly [string, string]> }> = {
     prepare: {
       label: t.stepsNav.prepare,
       items: [["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items], ["dev-spec", t.nav.devSpec]],
     },
     review: {
-      label: t.stepsNav[reviewStepLabelKey(appFacts)],
+      label: view.reviewLabelKey ? t.stepsNav[view.reviewLabelKey] : null,
       items: labelled(stepSlugs.review),
     },
     results: {
@@ -281,9 +315,9 @@ export function AppSidebar() {
       items: labelled(stepSlugs.results),
     },
   };
-  const lockHint = (reason: "need_items" | "need_code" | "need_build" | null) =>
-    reason === "need_code"
-      ? t.stepsNav.lockNeedCode
+  const lockHint = (reason: "need_items" | "need_url" | "need_build" | null) =>
+    reason === "need_url"
+      ? t.stepsNav.lockNeedUrl
       : reason === "need_build"
         ? t.stepsNav.lockNeedBuild
         : reason === "need_items"
@@ -375,7 +409,10 @@ export function AppSidebar() {
                     >
                       {step.status === "done" ? "✓" : i + 1}
                     </span>
-                    {meta.label}
+                    {meta.label ?? (
+                      // App presence not known yet — hold the label (결함 3).
+                      <span aria-hidden className="inline-block h-3 w-16 animate-pulse rounded bg-gray-100" />
+                    )}
                     {step.optional && (
                       <span className="rounded-full border border-gray-200 bg-white px-1.5 py-px text-[9px] font-medium text-gray-500">
                         {t.stepsNav.optionalTag}

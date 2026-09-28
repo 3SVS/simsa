@@ -392,6 +392,9 @@ const EN = {
     runReviewDesc: "Your app's address is connected. We'll open it, click through it, and tell you in plain words what works and what doesn't.",
     viewResults: "View review results",
     viewResultsDesc: "Your latest review is in — see what passed and fix what remains.",
+    // #559 검증 결함 2: a check that is still running is not a result yet.
+    viewProgress: "See how it's going",
+    viewProgressDesc: "We're opening your app and clicking through it. This can take a few minutes.",
   },
   stepsNav: {
     prepare: "Prepare",
@@ -403,7 +406,9 @@ const EN = {
     reviewApp: "Check your app",
     results: "Results & fixes",
     lockNeedItems: "Create your checklist first.",
-    lockNeedCode: "Connect your code first.",
+    // #559 검증 결함 6: the code branch's results need the app's address (the
+    // overview asks for the same thing) — linking code is optional (D-17 amend).
+    lockNeedUrl: "Add your app's address first.",
     lockNeedBuild: "Get your builder pack and connect your app's URL first.",
     next: "Next",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
@@ -1364,6 +1369,8 @@ const EN = {
     // 2026-09-28 (D8): zero PRs is the NORMAL state for chat builders — say so,
     // and hand the user the real next step instead of "go push, then refresh".
     noPulls: "There are no open code changes (PRs). Tools like Lovable, Bolt and v0 save changes directly, so having no PRs is normal.",
+    // #559 검증 결함 8: none open, but earlier ones are linked below — no second primary, no "normal" claim.
+    noPullsLinked: "No code changes are open right now. The ones you linked before are below.",
     selectItemsForPr: "Choose the acceptance items related to this PR.",
     noItemsYet: "No checking items yet — reviews check the code change against your items.",
     noItemsHint: "Tell us in one line what your app should do, and we'll draft the checking items right here.",
@@ -3170,6 +3177,9 @@ const KO = {
     runReviewDesc: "앱 주소가 연결됐어요. 실제로 열어서 눌러 보고, 되는 것과 안 되는 것을 쉬운 말로 알려드려요.",
     viewResults: "검수 결과 보기",
     viewResultsDesc: "최근 검수 결과가 있어요 — 통과한 것과 남은 문제를 확인하세요.",
+    // #559 검증 결함 2: 아직 도는 확인은 결과가 아니다.
+    viewProgress: "진행 상황 보기",
+    viewProgressDesc: "앱을 열어 눌러 보는 중이에요. 몇 분 걸릴 수 있어요.",
   },
   stepsNav: {
     prepare: "준비",
@@ -3180,7 +3190,9 @@ const KO = {
     reviewApp: "앱 확인",
     results: "결과·수정",
     lockNeedItems: "확인 항목을 먼저 만드세요.",
-    lockNeedCode: "코드를 먼저 연결하세요.",
+    // #559 검증 결함 6: 코드 갈래의 결과는 앱 주소가 있어야 나온다(개요도 같은 것을 요구) —
+    // 코드 연결은 선택이다(D-17 amend).
+    lockNeedUrl: "앱 주소를 먼저 넣으세요.",
     lockNeedBuild: "빌더 팩을 받아 앱을 만들고, 앱 URL을 먼저 연결하세요.",
     next: "다음",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
@@ -4141,6 +4153,8 @@ const KO = {
     // 2026-09-28 (D8): PR 0개는 채팅형 빌더에겐 **정상 상태**다 — 그렇다고 말하고,
     // "푸시한 뒤 새로고침" 대신 진짜 다음 걸음(실제 앱 확인)을 건넨다.
     noPulls: "열린 코드 변경(PR)이 없어요. Lovable·Bolt·v0 같은 도구는 변경을 바로 저장하기 때문에 PR이 없는 게 보통이에요.",
+    // #559 검증 결함 8: 열린 건 없지만 전에 연결한 것이 아래에 있다 — primary를 또 두지 않고, "보통"이라 말하지 않는다.
+    noPullsLinked: "지금 열려 있는 코드 변경은 없어요. 전에 연결해 둔 것은 아래에 있어요.",
     selectItemsForPr: "이 PR과 관련된 항목을 선택하세요.",
     noItemsYet: "확인 항목이 아직 없어요 — 검수는 확인 항목을 기준으로 진행돼요.",
     noItemsHint: "앱이 무엇을 해야 하는지 한 줄로 알려주시면, 여기서 바로 확인 항목을 만들어 드려요.",
