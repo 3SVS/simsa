@@ -618,39 +618,41 @@ function errorResult(agentId: string, reason: string): ReviewResult {
 }
 
 /**
- * Approximate USD cost for a vision call on Claude Opus 4.7. We don't
- * import `@simsa/agent-claude`'s pricing table to keep the
- * dependency graph tight; the efficiency gate uses this only for the
- * per-PR budget accounting. Accuracy within ~20% is good enough.
+ * Official Anthropic per-1M-token rates (accessed 2026-09-28,
+ * https://platform.claude.com/docs/en/about-claude/pricing) — the same rows as
+ * `@simsa/agent-worker` src/pricing.ts (Train L · L-1). We don't import a pricing
+ * package to keep the dependency graph tight; the efficiency gate uses this for
+ * the per-PR budget accounting.
+ *
+ * PR #562 (결함 5, sibling sweep): this used haiku $0.25/$1.25 (official $1/$5,
+ * 4x under) and opus-4-7 $15/$75 (official $5/$25, 3x over), and subtracted the
+ * cache tokens from `input_tokens` — which Anthropic already reports WITHOUT
+ * cache tokens — so a cache hit dropped the non-cached input from billing.
  */
+type DesignModelPricing = { inputPerMTok: number; outputPerMTok: number; cacheReadPerMTok: number; cacheWritePerMTok: number };
+const DESIGN_PRICING: Readonly<Record<string, DesignModelPricing>> = {
+  "claude-haiku-4-5": { inputPerMTok: 1, outputPerMTok: 5, cacheReadPerMTok: 0.1, cacheWritePerMTok: 1.25 },
+  "claude-sonnet-4-6": { inputPerMTok: 3, outputPerMTok: 15, cacheReadPerMTok: 0.3, cacheWritePerMTok: 3.75 },
+  "claude-opus-4-7": { inputPerMTok: 5, outputPerMTok: 25, cacheReadPerMTok: 0.5, cacheWritePerMTok: 6.25 },
+};
+/** Unknown model -> the table's per-component maximum (never a silent under-count). */
+const DESIGN_CONSERVATIVE: DesignModelPricing = { inputPerMTok: 5, outputPerMTok: 25, cacheReadPerMTok: 0.5, cacheWritePerMTok: 6.25 };
+
 function estimateActualCost(
   model: string,
   usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number },
 ): number {
-  // Defaults: claude-opus-4-7 — $15/1M input, $75/1M output.
-  let inputPerMTok = 15;
-  let outputPerMTok = 75;
-  let cacheReadPerMTok = 1.5;
-  let cacheWritePerMTok = 18.75;
-  if (model === "claude-haiku-4-5") {
-    inputPerMTok = 0.25;
-    outputPerMTok = 1.25;
-    cacheReadPerMTok = 0.025;
-    cacheWritePerMTok = 0.3125;
-  } else if (model === "claude-sonnet-4-6") {
-    inputPerMTok = 3;
-    outputPerMTok = 15;
-    cacheReadPerMTok = 0.3;
-    cacheWritePerMTok = 3.75;
-  }
+  // Own keys only — an inherited key ("constructor", ...) is not a priced model.
+  const p = (Object.hasOwn(DESIGN_PRICING, model) ? DESIGN_PRICING[model] : undefined) ?? DESIGN_CONSERVATIVE;
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;
-  const baseInput = Math.max(0, usage.input_tokens - cacheRead - cacheWrite);
+  // Anthropic semantics: input_tokens already excludes cache reads/writes.
+  const baseInput = Math.max(0, usage.input_tokens);
   return (
-    (baseInput * inputPerMTok +
-      cacheRead * cacheReadPerMTok +
-      cacheWrite * cacheWritePerMTok +
-      usage.output_tokens * outputPerMTok) /
+    (baseInput * p.inputPerMTok +
+      cacheRead * p.cacheReadPerMTok +
+      cacheWrite * p.cacheWritePerMTok +
+      usage.output_tokens * p.outputPerMTok) /
     1_000_000
   );
 }
