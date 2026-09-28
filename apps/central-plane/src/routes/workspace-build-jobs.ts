@@ -8,9 +8,17 @@
  *   POST /internal/build-done                          — 컨테이너 최종 콜백
  *
  * L-3 (Train L) 콜백 계약 확장: 두 콜백 모두 선택 필드
- *   usage: Array<{ vendor, modelRequested, modelActual, inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens, latencyMs }>
- * 를 받아 llm_usage 원장(0070)에 job_kind "build"로 쓴다(agent-worker runBuildLoop의 outcome.usage / onUsage가 원천).
- * 최대 200개, 잘못된 항목은 버리고 본 처리는 계속(400 아님). 옛 컨테이너가 안 보내면 무시.
+ *   usage: Array<{ vendor, modelRequested, modelActual, inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens, latencyMs, callSite?, callId? }>
+ * 를 받아 llm_usage 원장(0070)에 job_kind "build"로 쓴다. 최대 200개, 잘못된 항목은 버리고 본 처리는 계속
+ * (400 아님). 옛 컨테이너가 안 보내면 무시.
+ *
+ * ★델타 규약(#562 결함 2 — B-5b-2 구현자 필독): 각 콜백은 **직전 콜백 이후 새로 생긴 호출만** 싣는다.
+ *   - build-progress: 그 사이 runBuildLoop `onUsage`로 받은 레코드만
+ *   - build-done: 아직 보내지 않은 나머지만 — `outcome.usage`(누적 전체)를 **통째로 다시 보내지 않는다**
+ *   - 각 항목에 `callId`(잡 안에서 유일, 재전송에 불변: 예 `<실행 nonce>:<태스크 id>:<턴>`)를 싣는다.
+ *     runBuildLoop는 태스크마다 턴 번호를 0부터 다시 세므로 태스크 id를 넣지 않으면 충돌한다.
+ * 규약을 어겨도 원가가 2배가 되지는 않는다 — 행 id가 (job_kind, job_id, callId|내용)에서 결정론적으로 나오고
+ * `ON CONFLICT(id) DO NOTHING`이라 겹친 항목은 한 번만 남는다(llm-usage.ts CallbackUsageItemSchema 주석).
  *
  * 시작 시 Worker가 하는 것(컨테이너에 비밀을 덜 주기 위해 여기서 프로비저닝):
  *   1) 지시서(dev_spec)에서 WBS 목록·지시서 마크다운을 만든다

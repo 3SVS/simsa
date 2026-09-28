@@ -19,7 +19,7 @@ const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-12, `${msg ?? ""} exp
 
 const openAiJson = (extra = {}) => ({
   id: "cc_1",
-  choices: [{ message: { tool_calls: [{ id: "c1", function: { name: "rewrite_files", arguments: "{}" } }] }, finish_reason: "tool_calls" }],
+  choices: [{ message: { tool_calls: [{ id: "c1", type: "function", function: { name: "rewrite_files", arguments: "{}" } }] }, finish_reason: "tool_calls" }],
   usage: { prompt_tokens: 1_000, completion_tokens: 50, prompt_tokens_details: { cached_tokens: 800 } },
   ...extra,
 });

@@ -30,6 +30,11 @@ export type LlmUsageRowInput = LlmUsageEvent & {
   /** 가격표 계산 대신 쓸 값(컨테이너 시간 행: 단가 미정 → 0 + unpriced). */
   costOverride?: { costUsd: number; unpriced: boolean };
   createdAt?: string;
+  /**
+   * 재전송에 안전한 행 키(콜백 행). 있으면 행 id = `lu_` + sha256(job_kind, job_id, rowKey) 앞 32자 —
+   * 같은 호출이 두 번 와도 `ON CONFLICT(id) DO NOTHING`으로 한 행만 남는다. 없으면(동기 요청) 무작위 id.
+   */
+  rowKey?: string;
 };
 
 type LedgerEnv = { DB: D1Database };
@@ -38,7 +43,12 @@ const COLUMNS = [
   "id", "created_at", "job_kind", "job_id", "project_id", "user_key_hash", "vendor", "model_requested", "model_actual", "call_site",
   "input_tokens", "cache_read_tokens", "cache_write_tokens", "output_tokens", "cost_usd", "unpriced", "latency_ms", "container_seconds",
 ] as const;
-const INSERT_SQL = `INSERT INTO llm_usage (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")})`;
+/**
+ * 원장 INSERT. `ON CONFLICT(id) DO NOTHING` — 콜백 행 id는 결정론적이라(rowKey) 재전송·누적 재전송이
+ * 같은 행에 부딪히면 조용히 건너뛴다(#562 결함 1·2). PK 충돌에만 적용되고 다른 제약 위반은 그대로 오류다.
+ */
+export const LLM_USAGE_INSERT_SQL = `INSERT INTO llm_usage (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")}) ON CONFLICT(id) DO NOTHING`;
+const INSERT_SQL = LLM_USAGE_INSERT_SQL;
 
 function clip(s: string | null | undefined, max: number): string | null {
   if (typeof s !== "string") return null;
@@ -51,6 +61,11 @@ function intOf(n: unknown): number {
 
 function newRowId(): string {
   return `lu_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+}
+
+/** 콜백 행의 결정론적 id — 같은 (job_kind, job_id, rowKey)는 언제 와도 같은 id. */
+async function deterministicRowId(jobKind: string, jobId: string, rowKey: string): Promise<string> {
+  return `lu_${(await sha256Hex(JSON.stringify([jobKind, jobId, rowKey]))).slice(0, 32)}`;
 }
 
 /** 동기 요청(검수·생성 등)의 여러 호출을 한 job_id로 묶기 위한 요청 id. */
@@ -89,8 +104,9 @@ async function bindingsFor(row: LlmUsageRowInput): Promise<unknown[]> {
     typeof row.containerSeconds === "number" && Number.isFinite(row.containerSeconds) && row.containerSeconds >= 0
       ? row.containerSeconds
       : null;
+  const id = typeof row.rowKey === "string" && row.rowKey ? await deterministicRowId(row.jobKind, row.jobId ?? "", row.rowKey) : newRowId();
   return [
-    newRowId(),
+    id,
     row.createdAt ?? new Date().toISOString(),
     row.jobKind,
     clip(row.jobId, 80),
@@ -159,7 +175,20 @@ export const CALLBACK_USAGE_MAX = 200;
 
 const tokenField = z.number().finite().nonnegative().max(50_000_000).transform((n) => Math.floor(n));
 
-/** 콜백 계약(빌더·수리 컨테이너 → /internal/build-progress · build-done · repair-done). */
+/**
+ * 콜백 계약(빌더·수리 컨테이너 → /internal/build-progress · build-done · repair-done).
+ *
+ * ★ 재전송·중복 규약(#562 결함 1·2) — 생산자는 이것을 지킨다:
+ *   1. 각 콜백은 **직전 콜백 이후 새로 생긴 호출만(델타)** 싣는다. build-done은 아직 보내지 않은 나머지만.
+ *      (runBuildLoop의 onUsage(턴별)와 outcome.usage(누적)를 **둘 다** 보내지 않는다.)
+ *   2. 각 항목에 `callId`를 싣는다 — **그 잡 안에서 유일**하고 재전송해도 **같은 값**(예: `<실행 nonce>:<순번>`).
+ *      잡이 여러 번 실행될 수 있거나 runBuildLoop를 여러 번 부르면 nonce/태스크 id를 넣어 겹치지 않게 한다.
+ *   3. 그래도 겹쳐 오면(성공 콜백 실패 → 같은 snapshot으로 실패 콜백, 누적 재전송) Worker가 한 번만 쓴다:
+ *      행 id = sha256(job_kind, job_id, callId) → `ON CONFLICT(id) DO NOTHING`.
+ *      callId가 없는 옛 생산자는 **항목 내용**(벤더·모델·토큰·지연·callSite) + 같은 콜백 안에서 같은 내용의 순번이
+ *      키다 — 내용이 완전히 같은 서로 다른 호출이 **다른 콜백**으로 오면 한 번으로 합쳐질 수 있다(과소 방향,
+ *      지연 ms까지 같아야 하므로 드묾). 그래서 callId를 권한다.
+ */
 export const CallbackUsageItemSchema = z.object({
   vendor: z.string().trim().min(1).max(40),
   modelRequested: z.string().trim().max(120),
@@ -170,7 +199,12 @@ export const CallbackUsageItemSchema = z.object({
   outputTokens: tokenField,
   latencyMs: z.number().finite().nonnegative().max(86_400_000).transform((n) => Math.floor(n)),
   callSite: z.string().trim().max(60).optional(),
+  /** 잡 안에서 유일·재전송에 불변인 호출 id(권장). 원장 행 id의 원천. */
+  callId: z.string().trim().min(1).max(80).optional(),
 });
+
+/** 콜백 항목 + 재전송 안전 행 키. */
+export type CallbackUsageItem = LlmUsageEvent & { rowKey: string };
 
 /**
  * 콜백 본문의 usage 필드를 읽는다. 절대 던지지 않고, 잘못된 값 때문에 본 처리를 막지 않는다.
@@ -178,12 +212,14 @@ export const CallbackUsageItemSchema = z.object({
  *   - 배열 아님 → 빈 목록 + dropped 1
  *   - 항목별 검증: 통과한 것만, 실패는 dropped로 센다
  *   - 200개 초과 → 앞 200개 + truncated
+ *   - 각 항목의 rowKey: callId가 있으면 `call:<callId>`, 없으면 `content:<정규화 내용>#<같은 내용의 순번>`
  */
-export function parseCallbackUsage(raw: unknown): { items: LlmUsageEvent[]; dropped: number; truncated: number } {
+export function parseCallbackUsage(raw: unknown): { items: CallbackUsageItem[]; dropped: number; truncated: number } {
   if (raw === undefined || raw === null) return { items: [], dropped: 0, truncated: 0 };
   if (!Array.isArray(raw)) return { items: [], dropped: 1, truncated: 0 };
   const truncated = Math.max(0, raw.length - CALLBACK_USAGE_MAX);
-  const items: LlmUsageEvent[] = [];
+  const items: CallbackUsageItem[] = [];
+  const seenContent = new Map<string, number>();
   let dropped = 0;
   for (const entry of raw.slice(0, CALLBACK_USAGE_MAX)) {
     const p = CallbackUsageItemSchema.safeParse(entry);
@@ -192,7 +228,7 @@ export function parseCallbackUsage(raw: unknown): { items: LlmUsageEvent[]; drop
       continue;
     }
     const v = p.data;
-    items.push({
+    const event: LlmUsageEvent = {
       vendor: v.vendor,
       modelRequested: v.modelRequested || v.modelActual,
       modelActual: v.modelActual,
@@ -202,7 +238,20 @@ export function parseCallbackUsage(raw: unknown): { items: LlmUsageEvent[]; drop
       outputTokens: v.outputTokens,
       latencyMs: v.latencyMs,
       ...(v.callSite ? { callSite: v.callSite } : {}),
-    });
+    };
+    let rowKey: string;
+    if (v.callId) {
+      rowKey = `call:${v.callId}`;
+    } else {
+      const content = JSON.stringify([
+        event.vendor, event.modelRequested, event.modelActual, event.inputTokens, event.cacheReadTokens,
+        event.cacheWriteTokens, event.outputTokens, event.latencyMs, event.callSite ?? null,
+      ]);
+      const nth = seenContent.get(content) ?? 0;
+      seenContent.set(content, nth + 1);
+      rowKey = `content:${content}#${nth}`;
+    }
+    items.push({ ...event, rowKey });
   }
   return { items, dropped, truncated };
 }

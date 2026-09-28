@@ -37,18 +37,36 @@ const LEDGER_COLS = [
   "input_tokens", "cache_read_tokens", "cache_write_tokens", "output_tokens", "cost_usd", "unpriced", "latency_ms", "container_seconds",
 ];
 
-/** 관대한 가짜 D1: llm_usage INSERT는 행으로 모으고, 잡·프로젝트 조회만 흉내낸다. 나머지는 성공. */
-function makeDb({ buildJobs = [], repairJobs = [], projects = new Map(), failLedger = false, paidUsers = [] } = {}) {
+/**
+ * 관대한 가짜 D1: llm_usage INSERT는 행으로 모으고, 잡·프로젝트 조회만 흉내낸다. 나머지는 성공.
+ *   - llm_usage.id는 PRIMARY KEY다: 같은 id가 다시 오면 평문 INSERT는 실제 SQLite처럼 UNIQUE 오류,
+ *     `ON CONFLICT(id) DO NOTHING`이면 조용히 건너뛴다(changes 0).
+ *   - withBatch: 실제 D1Database처럼 batch()가 있다(프로덕션 원장 쓰기는 100% 이 분기). batch는 트랜잭션 —
+ *     한 문장이라도 실패하면 그 batch의 행을 전부 되돌리고 던진다.
+ *   - failOnce(sql): 참인 첫 쓰기(원장 외) 한 번만 던진다 — 상태 전이 D1 일시 장애 흉내.
+ */
+function makeDb({ buildJobs = [], repairJobs = [], projects = new Map(), failLedger = false, paidUsers = [], withBatch = false, failOnce = null } = {}) {
   const ledger = [];
   const writes = [];
+  const batches = [];
+  let failOnceArmed = typeof failOnce === "function";
   function handler(sql, args) {
     return {
       async run() {
         if (sql.includes("INSERT INTO llm_usage")) {
           if (failLedger) throw new Error("D1_ERROR: no such table: llm_usage");
           assert.equal(args.length, LEDGER_COLS.length, "INSERT 바인딩 수 = 컬럼 수");
-          ledger.push(Object.fromEntries(LEDGER_COLS.map((c, i) => [c, args[i]])));
+          const row = Object.fromEntries(LEDGER_COLS.map((c, i) => [c, args[i]]));
+          if (ledger.some((x) => x.id === row.id)) {
+            if (/ON CONFLICT\s*\(\s*id\s*\)\s*DO NOTHING/i.test(sql)) return { meta: { changes: 0 } };
+            throw new Error("D1_ERROR: UNIQUE constraint failed: llm_usage.id: SQLITE_CONSTRAINT");
+          }
+          ledger.push(row);
           return { meta: { changes: 1 } };
+        }
+        if (failOnceArmed && failOnce(sql)) {
+          failOnceArmed = false;
+          throw new Error("D1_ERROR: simulated transient failure");
         }
         writes.push(sql);
         return { meta: { changes: 1 } };
@@ -63,13 +81,33 @@ function makeDb({ buildJobs = [], repairJobs = [], projects = new Map(), failLed
       async all() { return { results: [] }; },
     };
   }
-  return {
-    ledger, writes,
+  const db = {
+    ledger, writes, batches,
     prepare(sql) {
       return { bind: (...a) => handler(sql, a), run: () => handler(sql, []).run(), first: () => handler(sql, []).first(), all: () => handler(sql, []).all() };
     },
   };
+  if (withBatch) {
+    db.batch = async (stmts) => {
+      batches.push(stmts.length);
+      const before = ledger.length;
+      try {
+        const out = [];
+        for (const s of stmts) out.push(await s.run());
+        return out.map((r) => ({ success: true, ...r }));
+      } catch (err) {
+        ledger.length = before; // 트랜잭션 롤백
+        throw err;
+      }
+    };
+  }
+  return db;
 }
+/** 프로덕션 원장 쓰기 경로 두 가지(batch 있음 = 실제 D1, 없음 = 순차 폴백) 모두에서 같은 단언을 돌린다. */
+const D1_MODES = [
+  { label: "D1 batch", withBatch: true },
+  { label: "순차 폴백", withBatch: false },
+];
 
 const buildJobRow = (o = {}) => ({
   id: "bj_1", project_id: PROJECT, user_key: USER, slug: "app-bakery", status: "implementing", failed_stage: null, error: null,
@@ -77,14 +115,14 @@ const buildJobRow = (o = {}) => ({
   build_exit_code: null, locale: "ko", created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:00Z", ...o,
 });
 const repairJobRow = (o = {}) => ({
-  id: "wrj_1", project_id: PROJECT, user_key: USER, visual_check_id: "vc_1", repo_full_name: "someone/빵집-app", status: "running",
-  branch_name: "fix/simsa-vc_1", pr_url: null, pr_number: null, env_cause: 0, mode: null, changed_files: null, error: null,
+  id: "wrj_1", project_id: PROJECT, user_key: USER, visual_check_id: "wvc_1", repo_full_name: "someone/빵집-app", status: "running",
+  branch_name: "fix/simsa-wvc_1", pr_url: null, pr_number: null, env_cause: 0, mode: null, changed_files: null, error: null,
   region: "KR", verify_check_id: null, resolved: null, created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:00Z", ...o,
 });
 const projectRow = (o = {}) => ({
   id: PROJECT, user_key: USER, title: "동네 빵집 픽업 예약", idea: "빵을 미리 예약하고 픽업", understood_json: "{}",
   product_spec_json: JSON.stringify({ productName: "동네 빵집 픽업 예약", oneLine: "빵 예약", targetUsers: ["손님"], problem: "헛걸음", included: ["예약"], excluded: [], userFlow: [], decisions: [], openQuestions: [] }),
-  items_json: JSON.stringify([{ title: "빵 목록", criteria: ["목록이 보인다", "품절 표시"] }]),
+  items_json: JSON.stringify([{ id: "req_001", title: "빵 목록", criteria: ["목록이 보인다", "품절 표시"] }]),
   built_with_json: null, entry_path: "idea", topic_tags_json: "[]", acquisition_json: null, dev_spec_json: null, region_at_create: "KR",
   created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:00Z", ...o,
 });
@@ -314,7 +352,7 @@ describe("⑤ 콜백 usage[] → 원장 (project/user는 잡 행에서)", () => 
     const app = createApp();
     const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
     const r = await post(app, env, "/internal/repair-done", {
-      jobId: "wrj_1", ok: true, prUrl: "https://github.com/someone/app/pull/3", prNumber: 3, branch: "fix/simsa-vc_1", mode: "auto_fix", changedFiles: 1, durationMs: 42_000,
+      jobId: "wrj_1", ok: true, prUrl: "https://github.com/someone/app/pull/3", prNumber: 3, branch: "fix/simsa-wvc_1", mode: "auto_fix", changedFiles: 1, durationMs: 42_000,
       usage: [usageItem({ modelRequested: "claude-sonnet-4-6" }), usageItem({ inputTokens: 10 })],
     }, AUTH);
     assert.equal(r.status, 200);
@@ -347,9 +385,129 @@ describe("⑤ 콜백 usage[] → 원장 (project/user는 잡 행에서)", () => 
   });
 });
 
+// ─── ⑧ 콜백 재전송 멱등성 (#562 결함 1·2) ─────────────────────────────────────────
+//
+// 수리 컨테이너는 성공 콜백이 non-2xx·네트워크 오류면 catch에서 **같은 usage.snapshot()**으로 실패 콜백을
+// 다시 보낸다(server.mjs runRepairJob). 빌더 계약은 progress(턴별)와 done(누적)을 둘 다 원천으로 적어 두었다.
+// 원장 행 id가 무작위면 같은 호출이 두 번 쌓여 원가가 2배가 된다.
+
+const sumCost = (rows) => rows.reduce((a, r) => a + r.cost_usd, 0);
+const REPAIR_USAGE = [usageItem({ modelRequested: "claude-sonnet-4-6" }), usageItem({ inputTokens: 10, latencyMs: 1_200 })];
+
+describe("⑧ 콜백 재전송이 원장을 두 배로 만들지 않는다", () => {
+  for (const mode of D1_MODES) {
+    it(`★[${mode.label}] 같은 repair-done이 두 번 와도 원장은 3행(LLM 2 + 컨테이너 1)`, async () => {
+      const db = makeDb({ repairJobs: [repairJobRow()], withBatch: mode.withBatch });
+      const app = createApp();
+      const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
+      const body = { jobId: "wrj_1", ok: true, prUrl: "https://github.com/someone/빵집-app/pull/3", prNumber: 3, branch: "fix/simsa-wvc_1", mode: "auto_fix", changedFiles: 1, durationMs: 42_000, usage: REPAIR_USAGE };
+      assert.equal((await post(app, env, "/internal/repair-done", body, AUTH)).status, 200);
+      const once = db.ledger.map((r) => ({ ...r }));
+      assert.equal(once.length, 3);
+      assert.equal((await post(app, env, "/internal/repair-done", body, AUTH)).status, 200);
+      assert.equal(db.ledger.length, 3, "재전송은 행을 늘리지 않는다");
+      near(sumCost(db.ledger), sumCost(once));
+    });
+
+    it(`★[${mode.label}] 성공 콜백이 500(상태 전이 D1 일시 장애) → 같은 snapshot의 실패 콜백 → 3행, 비용 합 1배`, async () => {
+      const db = makeDb({
+        repairJobs: [repairJobRow()],
+        withBatch: mode.withBatch,
+        failOnce: (sql) => sql.includes("UPDATE workspace_repair_jobs") && sql.includes("status = 'done'"),
+      });
+      const app = createApp();
+      const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
+      const ok = await quiet(() => post(app, env, "/internal/repair-done", { jobId: "wrj_1", ok: true, mode: "auto_fix", changedFiles: 1, durationMs: 42_000, usage: REPAIR_USAGE }, AUTH));
+      assert.equal(ok.status, 500, "성공 콜백이 상태 전이에서 실패했다");
+      const afterSuccess = db.ledger.map((r) => ({ ...r }));
+      assert.equal(afterSuccess.length, 3);
+      // 컨테이너 catch 경로: 같은 usage.snapshot(), durationMs는 조금 늘었다.
+      const failed = await post(app, env, "/internal/repair-done", { jobId: "wrj_1", ok: false, error: "callback 500: internal_error", durationMs: 42_310, usage: REPAIR_USAGE }, AUTH);
+      assert.equal(failed.status, 200);
+      assert.equal(failed.body.status, "failed");
+      assert.equal(db.ledger.filter((r) => r.model_actual !== "container").length, 2, "실제 LLM 호출 2건");
+      assert.equal(db.ledger.filter((r) => r.model_actual === "container").length, 1, "컨테이너 1회");
+      near(sumCost(db.ledger), sumCost(afterSuccess));
+      assert.equal(db.ledger.find((r) => r.model_actual === "container").container_seconds, 42, "먼저 온 값이 남는다");
+    });
+
+    it(`★[${mode.label}] build: progress가 보낸 호출을 done이 누적으로 다시 보내도 한 번 — callId 계약`, async () => {
+      const db = makeDb({ buildJobs: [buildJobRow()], withBatch: mode.withBatch });
+      const app = createApp();
+      const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
+      const t1 = usageItem({ callId: "run-a:0", inputTokens: 1_000 });
+      const t2 = usageItem({ callId: "run-a:1", inputTokens: 2_000 });
+      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 0, usage: [t1] }, AUTH);
+      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 1, usage: [t2] }, AUTH);
+      await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "build", error: "빌드 실패", spentUsd: 0.01, usage: [t1, t2] }, AUTH);
+      assert.equal(db.ledger.length, 2, "턴 2개 = 2행(누적 재전송은 무시)");
+      assert.deepEqual(db.ledger.map((r) => r.input_tokens).sort((a, b) => a - b), [1_000, 2_000]);
+    });
+
+    it(`★[${mode.label}] build: callId 없는 옛 생산자도 같은 호출의 누적 재전송은 한 번(내용 키)`, async () => {
+      const db = makeDb({ buildJobs: [buildJobRow()], withBatch: mode.withBatch });
+      const app = createApp();
+      const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
+      const a = usageItem({ inputTokens: 1_000, latencyMs: 2_100 });
+      const b = usageItem({ inputTokens: 2_000, latencyMs: 3_400 });
+      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 0, usage: [a] }, AUTH);
+      await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "build", error: "빌드 실패", spentUsd: 0.01, usage: [a, b] }, AUTH);
+      assert.equal(db.ledger.length, 2);
+    });
+
+    it(`[${mode.label}] 행동 보존: 한 콜백 안의 같은 내용 N건은 N행, 다른 잡의 같은 usage는 따로 기록`, async () => {
+      const db = makeDb({ repairJobs: [repairJobRow(), repairJobRow({ id: "wrj_2" })], withBatch: mode.withBatch });
+      const app = createApp();
+      const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
+      const same = [usageItem(), usageItem(), usageItem()];
+      await post(app, env, "/internal/repair-done", { jobId: "wrj_1", ok: false, error: "x", usage: same }, AUTH);
+      await post(app, env, "/internal/repair-done", { jobId: "wrj_2", ok: false, error: "x", usage: same }, AUTH);
+      assert.equal(db.ledger.filter((r) => r.job_id === "wrj_1").length, 3, "한 콜백 안의 동일 항목은 서로 다른 호출");
+      assert.equal(db.ledger.filter((r) => r.job_id === "wrj_2").length, 3, "잡 경계를 넘어 지우지 않는다");
+      assert.equal(new Set(db.ledger.map((r) => r.id)).size, 6);
+    });
+  }
+});
+
+// ─── ⑨ D1 batch 경로 (#562 결함 9) ────────────────────────────────────────────────
+
+describe("⑨ 프로덕션 D1(batch 있음)에서도 같은 계약", () => {
+  it("build-done 201건 → 200행, batch는 50개씩 4번", async () => {
+    const db = makeDb({ buildJobs: [buildJobRow()], withBatch: true });
+    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "budget", error: "예산 초과", spentUsd: 10.2, usage: Array.from({ length: 201 }, (_, i) => usageItem({ latencyMs: 1_000 + i })) }, AUTH);
+    assert.equal(r.status, 200);
+    assert.equal(db.ledger.length, 200);
+    assert.deepEqual(db.batches, [50, 50, 50, 50]);
+  });
+
+  it("★원장 장애여도 본 처리는 200, 실패는 청크 단위 한 줄 JSON(fail-open)", async () => {
+    const { recordLlmUsageBatch } = await import("../dist/workspace/llm-usage.js");
+    const errs = [];
+    const orig = console.error;
+    console.error = (...a) => errs.push(a);
+    let res;
+    try {
+      const broken = makeDb({ repairJobs: [repairJobRow()], failLedger: true, withBatch: true });
+      res = await post(createApp(), { DB: broken, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/repair-done", { jobId: "wrj_1", ok: true, mode: "brief_only", usage: [usageItem()] }, AUTH);
+      const rows = Array.from({ length: 60 }, (_, i) => ({ jobKind: "build", jobId: "bj_1", vendor: "openai", modelRequested: "a", modelActual: "gpt-5.4", inputTokens: i, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1, latencyMs: 1 }));
+      assert.deepEqual(await recordLlmUsageBatch({ DB: makeDb({ failLedger: true, withBatch: true }) }, rows), { written: 0, failed: 60 });
+    } finally {
+      console.error = orig;
+    }
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, "done");
+    const ledgerErrs = errs.filter((e) => typeof e[0] === "string" && e[0].includes("llm_usage_record_failed"));
+    assert.ok(ledgerErrs.length >= 3, "콜백 1 청크 + 60행 2 청크");
+    for (const e of ledgerErrs) {
+      assert.equal(e.length, 1, "한 인자(한 줄)");
+      assert.equal(JSON.parse(e[0]).event, "llm_usage_record_failed");
+    }
+  });
+});
+
 // ─── ⑥ Worker 호출 지점 ─────────────────────────────────────────────────────────
 
-const isOpenAi = (url) => String(url).includes("/chat/completions");
+const isOpenAi =(url) => String(url).includes("/chat/completions");
 const openAiReply = (content) =>
   new Response(JSON.stringify({ model: "gpt-5.4-2026-03-05", choices: [{ message: { content } }], usage: { prompt_tokens: 1_000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 0 } } }), { status: 200 });
 const LLM_ENV = {
@@ -455,9 +613,24 @@ describe("⑦ 수리 컨테이너 — 워커 usage를 모아 repair-done에 싣�
     col.onUsage(null);
     const snap = col.snapshot();
     assert.equal(snap.length, 200);
-    assert.deepEqual(Object.keys(snap[0]).sort(), ["cacheReadTokens", "cacheWriteTokens", "inputTokens", "latencyMs", "modelActual", "modelRequested", "outputTokens", "vendor"]);
+    assert.deepEqual(Object.keys(snap[0]).sort(), ["cacheReadTokens", "cacheWriteTokens", "callId", "inputTokens", "latencyMs", "modelActual", "modelRequested", "outputTokens", "vendor"]);
     snap.pop();
     assert.equal(col.snapshot().length, 200, "snapshot은 사본");
+  });
+
+  it("★callId: 잡 안에서 호출마다 유일, 재전송(snapshot 두 번)에도 같은 값, 다른 실행(수집기)과는 겹치지 않는다 (#562 결함 1·2)", async () => {
+    const { createUsageCollector } = await import("../container/coerce-result.mjs");
+    const rec = (i) => ({ vendor: "openai", modelRequested: "claude-sonnet-4-6", modelActual: "gpt-5.4", inputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1, latencyMs: 10 + i });
+    const a = createUsageCollector();
+    a.onUsage(rec(0));
+    a.onUsage(rec(0)); // 내용이 같은 두 번째 호출도 다른 호출이다
+    const first = a.snapshot().map((x) => x.callId);
+    assert.equal(new Set(first).size, 2);
+    assert.deepEqual(a.snapshot().map((x) => x.callId), first, "성공·실패 콜백의 snapshot은 같은 callId");
+    for (const id of first) assert.match(id, /^[A-Za-z0-9._:-]{1,80}$/);
+    const b = createUsageCollector();
+    b.onUsage(rec(0));
+    assert.ok(!first.includes(b.snapshot()[0].callId), "다른 실행의 callId와 겹치지 않는다");
   });
 
   it("server.mjs: ClaudeWorker에 onUsage를 넘기고 repair-done 콜백(성공·실패 모두)에 usage를 싣는다", () => {

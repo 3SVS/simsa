@@ -101,6 +101,10 @@ function requireInternalToken(c: {
  * L-3 (Train L): 수리 완료 콜백의 usage[](워커 LLM 호출)와 컨테이너 실행 시간을 원장에 쓴다.
  * 컨테이너 행은 vendor "cloudflare" · model_actual "container" · 비용 0 + unpriced=1(단가 미정 —
  * 0달러를 확정 원가처럼 보이지 않게). 절대 던지지 않는다.
+ *
+ * ★멱등(#562 결함 1): 상태 전이보다 먼저, 전이 결과와 상관없이 부른다. 컨테이너는 성공 콜백이 non-2xx·
+ * 네트워크 오류면 **같은 usage.snapshot()**으로 실패 콜백을 다시 보내므로, 행 id를 결정론적으로 만들어
+ * (usage 항목 = callId/내용 키, 컨테이너 행 = "container") 같은 호출·같은 실행이 두 번 쌓이지 않게 한다.
  */
 async function recordRepairUsage(env: Env, job: DbRepairJob, rawUsage: unknown, rawDurationMs: unknown): Promise<void> {
   try {
@@ -120,6 +124,8 @@ async function recordRepairUsage(env: Env, job: DbRepairJob, rawUsage: unknown, 
         callSite: "repair-container",
         containerSeconds: rawDurationMs / 1000,
         costOverride: { costUsd: 0, unpriced: true },
+        // 잡당 컨테이너 실행은 한 번 — 성공 콜백 실패 뒤 실패 콜백이 다시 와도 한 행(먼저 온 값이 남는다).
+        rowKey: "container",
       });
     }
   } catch (err) {
