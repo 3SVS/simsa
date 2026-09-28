@@ -254,7 +254,7 @@ export default function VisualChecksPage() {
           <div
             className={`callout mt-3 ${runErrorTone(notice.errorKey) === "info" ? "callout-info" : "callout-error"}`}
           >
-            {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, locale)}
+            {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen)}
           </div>
         )}
 

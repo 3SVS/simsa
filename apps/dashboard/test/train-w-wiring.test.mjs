@@ -29,7 +29,8 @@ const api = read("lib/workspace-visual-checks-api.ts");
 
 test("W-2a: 검수 목록 — runErrorNotice(res)로 매핑하고 errorNoticeText로 그린다 (resetAt 전달)", () => {
   assert.match(listPage, /runErrorNotice\(res\)/);
-  assert.match(listPage, /errorNoticeText\(t\.visualChecks\.runErrors, notice\.errorKey, notice\.resetAt, locale\)/);
+  // #558 검증 P2-11: 네 번째 인자는 locale이 아니라 사전 조각(t.visualChecks.resetWhen).
+  assert.match(listPage, /errorNoticeText\(t\.visualChecks\.runErrors, notice\.errorKey, notice\.resetAt, t\.visualChecks\.resetWhen\)/);
   assert.ok(!/t\.visualChecks\.runErrors\[notice\.errorKey\]/.test(listPage), "raw runErrors[...] lookup drops resetAt");
   assert.match(listPage, /runErrorTone\(notice\.errorKey\)/);
 });
@@ -37,8 +38,8 @@ test("W-2a: 검수 목록 — runErrorNotice(res)로 매핑하고 errorNoticeTex
 test("W-2b: 리포트 상세 — 재검수와 [고치기]가 본문 전체를 매핑하고 사전 문구에 resetAt을 넣는다", () => {
   assert.match(detailPage, /runErrorNotice\(res\)/);
   assert.match(detailPage, /repairErrorNotice\(res\)/);
-  assert.match(detailPage, /errorNoticeText\(t\.visualChecks\.runErrors, notice\.errorKey, notice\.resetAt, locale\)/);
-  assert.match(detailPage, /errorNoticeText\(s\.errors, errorNotice\.errorKey, errorNotice\.resetAt, locale\)/);
+  assert.match(detailPage, /errorNoticeText\(t\.visualChecks\.runErrors, notice\.errorKey, notice\.resetAt, t\.visualChecks\.resetWhen\)/);
+  assert.match(detailPage, /errorNoticeText\(s\.errors, errorNotice\.errorKey, errorNotice\.resetAt, t\.visualChecks\.resetWhen\)/);
   assert.ok(!/t\.visualChecks\.runErrors\[notice\.errorKey\]/.test(detailPage), "raw runErrors lookup");
   assert.ok(!/s\.errors\[errorKey\]/.test(detailPage), "raw repair errors lookup");
   assert.match(detailPage, /repairErrorTone\(errorNotice\.errorKey\)/);

@@ -2474,8 +2474,25 @@ const EN = {
       // Train W — W-2 (D-7 amend): 429 daily cap / 503 kill switch.
       dailyLimitReached: "You've used all of today's checks. You can check again tomorrow (after midnight UTC).",
       dailyLimitReachedAt: "You've used all of today's checks. You can check again {when}.",
+      // #558 검증 P2-1: the notice is still on screen after resetAt passed.
+      dailyLimitCleared: "Your daily checks have reset. You can check again now.",
       inspectionDisabled: "Checks are paused for now. We'll reopen them soon.",
       generic: "Could not start the inspection. Please try again.",
+    },
+    // Train W — W-2 "{when}" for the daily cap (#558 검증 P2-11: every word and
+    // the word order live here; lib/daily-limit.mjs only fills numbers in).
+    // {time} = time or timeWithMinute · {period} = am/pm · {hour} = 12-hour
+    // number (midnightHour at 00:xx) · {minute} = 0–59 · {mm} = two digits.
+    resetWhen: {
+      today: "after {time} today",
+      tomorrow: "after {time} tomorrow",
+      onDate: "after {time} on {month} {day}",
+      time: "{hour} {period}",
+      timeWithMinute: "{hour}:{mm} {period}",
+      am: "AM",
+      pm: "PM",
+      midnightHour: "12",
+      months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
     },
     // Stage 266 — before/after comparison with the previous completed inspection.
     compare: {
@@ -2549,6 +2566,7 @@ const EN = {
         // Train W — W-2 (D-7 amend): 429 daily cap / 503 kill switch.
         dailyLimitReached: "You've used all of today's fixes. You can try again tomorrow (after midnight UTC).",
         dailyLimitReachedAt: "You've used all of today's fixes. You can try again {when}.",
+        dailyLimitCleared: "Your daily fixes have reset. You can try again now.",
         repairDisabled: "Fixing is paused for now. We'll reopen it soon.",
         generic: "Could not start the repair. Please try again.",
       },
@@ -5230,8 +5248,24 @@ const KO = {
       // Train W — W-2 (D-7 amend): 429 일일 상한 / 503 킬스위치. 계약 문장 그대로.
       dailyLimitReached: "오늘 확인 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
       dailyLimitReachedAt: "오늘 확인 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
+      // #558 검증 P2-1: 알림이 떠 있는 채로 resetAt이 지난 경우.
+      dailyLimitCleared: "확인 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
       inspectionDisabled: "지금은 확인을 잠시 멈췄어요. 곧 다시 열게요.",
       generic: "검수를 시작하지 못했어요. 다시 시도해주세요.",
+    },
+    // Train W — W-2 상한의 "{when}" (#558 검증 P2-11: 단어와 어순은 전부 여기 —
+    // lib/daily-limit.mjs는 숫자만 채운다). {time} = time 또는 timeWithMinute ·
+    // {period} = am/pm · {hour} = 12시간제 숫자(00시대는 midnightHour) · {minute} = 0~59 · {mm} = 두 자리.
+    resetWhen: {
+      today: "오늘 {time} 이후",
+      tomorrow: "내일 {time} 이후",
+      onDate: "{month}월 {day}일 {time} 이후",
+      time: "{period} {hour}시",
+      timeWithMinute: "{period} {hour}시 {minute}분",
+      am: "오전",
+      pm: "오후",
+      midnightHour: "0",
+      months: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
     },
     // Stage 266 — 직전 완료 검수와의 전/후 비교.
     compare: {
@@ -5304,6 +5338,7 @@ const KO = {
         // Train W — W-2 (D-7 amend): 429 일일 상한 / 503 킬스위치 — 검수와 같은 패턴.
         dailyLimitReached: "오늘 고치기 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
         dailyLimitReachedAt: "오늘 고치기 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
+        dailyLimitCleared: "고치기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
         repairDisabled: "지금은 고치기를 잠시 멈췄어요. 곧 다시 열게요.",
         generic: "고치기를 시작하지 못했어요. 다시 시도해주세요.",
       },

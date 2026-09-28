@@ -371,7 +371,7 @@ function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string
   return { submitting, notice, run };
 }
 
-function RecheckNoticeView({ notice, t, locale }: { notice: RecheckNotice | null; t: Dictionary; locale: Locale }) {
+function RecheckNoticeView({ notice, t }: { notice: RecheckNotice | null; t: Dictionary }) {
   if (!notice) return null;
   if (notice.kind === "queuedOnly") {
     return <div className="callout callout-info mt-2">{t.visualChecks.runQueuedOnly}</div>;
@@ -379,7 +379,7 @@ function RecheckNoticeView({ notice, t, locale }: { notice: RecheckNotice | null
   const soft = runErrorTone(notice.errorKey) === "info";
   return (
     <div className={`callout mt-2 ${soft ? "callout-info" : "callout-error"}`}>
-      {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, locale)}
+      {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen)}
     </div>
   );
 }
@@ -421,7 +421,7 @@ function BuilderPasteSection({
       >
         {recheck.submitting ? t.visualChecks.runSubmitting : s.recheckButton}
       </button>
-      <RecheckNoticeView notice={recheck.notice} t={t} locale={locale} />
+      <RecheckNoticeView notice={recheck.notice} t={t} />
       <p className="mt-3 text-xs leading-relaxed text-gray-500">
         {s.repoOptional}{" "}
         <Link href={`/projects/${projectId}/github`} className="underline hover:text-gray-700">
@@ -599,7 +599,7 @@ function RepairSection({
             >
               {recheck.submitting ? t.visualChecks.runSubmitting : s.recheckButton}
             </button>
-            <RecheckNoticeView notice={recheck.notice} t={t} locale={locale} />
+            <RecheckNoticeView notice={recheck.notice} t={t} />
           </div>
         </div>
       )}
@@ -652,7 +652,7 @@ function RepairSection({
       )}
       {errorNotice !== null && errorNotice.errorKey !== "repoRequired" && errorNotice.errorKey !== "tokenRequired" && (
         <div className={`callout mt-4 ${repairErrorTone(errorNotice.errorKey) === "info" ? "callout-info" : "callout-error"}`}>
-          {errorNoticeText(s.errors, errorNotice.errorKey, errorNotice.resetAt, locale)}
+          {errorNoticeText(s.errors, errorNotice.errorKey, errorNotice.resetAt, t.visualChecks.resetWhen)}
         </div>
       )}
 

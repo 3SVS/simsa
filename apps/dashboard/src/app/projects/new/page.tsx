@@ -419,7 +419,7 @@ function NewProjectInner() {
       if (first && !first.ok) {
         const notice = runErrorNotice(first);
         if (isServiceGateKey(notice.errorKey)) {
-          toast.error(errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, locale));
+          toast.error(errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen));
         }
       }
     }
