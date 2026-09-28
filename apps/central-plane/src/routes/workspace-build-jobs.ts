@@ -7,6 +7,11 @@
  *   POST /internal/build-progress                      — 컨테이너 단계 콜백(Bearer INTERNAL_CALLBACK_TOKEN)
  *   POST /internal/build-done                          — 컨테이너 최종 콜백
  *
+ * L-3 (Train L) 콜백 계약 확장: 두 콜백 모두 선택 필드
+ *   usage: Array<{ vendor, modelRequested, modelActual, inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens, latencyMs }>
+ * 를 받아 llm_usage 원장(0070)에 job_kind "build"로 쓴다(agent-worker runBuildLoop의 outcome.usage / onUsage가 원천).
+ * 최대 200개, 잘못된 항목은 버리고 본 처리는 계속(400 아님). 옛 컨테이너가 안 보내면 무시.
+ *
  * 시작 시 Worker가 하는 것(컨테이너에 비밀을 덜 주기 위해 여기서 프로비저닝):
  *   1) 지시서(dev_spec)에서 WBS 목록·지시서 마크다운을 만든다
  *   2) 네임스페이스 보장 + 프로젝트 D1 생성(hosting-provision) — 실패면 잡을 만들지 않는다(정직)
@@ -28,6 +33,23 @@ import {
   type BuildJobStatus,
 } from "../workspace/build-job-db.js";
 import { RESERVED_SLUGS_FOR_HOSTING } from "../workspace/hosting-reserved.js";
+import { recordCallbackUsage } from "../workspace/llm-usage.js";
+
+/**
+ * L-3 (Train L): 콜백 본문의 선택 필드 `usage[]`를 원장에 쓴다. project·user는 **D1 잡 행에서**
+ * (콜백 본문 값은 쓰지 않는다). 모르는 잡이면 쓰지 않는다. 옛 컨테이너가 안 보내면 아무 일도 없다.
+ * 절대 던지지 않고, 잘못된 usage 때문에 본 처리(상태 전이)를 막지 않는다.
+ */
+async function recordBuildUsage(env: Env, jobId: string, raw: unknown): Promise<void> {
+  if (raw === undefined || raw === null) return;
+  try {
+    const job = await getBuildJobById(env, jobId);
+    if (!job) return;
+    await recordCallbackUsage(env, raw, { jobKind: "build", jobId: job.id, projectId: job.projectId, userKey: job.userKey });
+  } catch (err) {
+    console.error(JSON.stringify({ event: "llm_usage_record_failed", job_kind: "build", job_id: jobId, reason: String((err as Error)?.message ?? err).slice(0, 200) }));
+  }
+}
 
 const MAX_ERROR_CHARS = 500;
 
@@ -180,6 +202,7 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
     const jobId = typeof body["jobId"] === "string" ? body["jobId"] : "";
     const status = typeof body["status"] === "string" ? body["status"] : "";
     if (!jobId || !(BUILD_JOB_STATUSES as readonly string[]).includes(status) || status === "done" || status === "failed") return c.json({ ok: false, error: "invalid_progress" }, 400);
+    await recordBuildUsage(c.env, jobId, body["usage"]);
     const ok = await advanceBuildJob(c.env, jobId, {
       status: status as Exclude<BuildJobStatus, "done" | "failed">,
       wbsDone: typeof body["wbsDone"] === "number" ? body["wbsDone"] : undefined,
@@ -201,6 +224,7 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
     try { body = (await c.req.json()) as Record<string, unknown>; } catch { return c.json({ ok: false, error: "invalid_json" }, 400); }
     const jobId = typeof body["jobId"] === "string" ? body["jobId"] : "";
     if (!jobId) return c.json({ ok: false, error: "jobId_required" }, 400);
+    await recordBuildUsage(c.env, jobId, body["usage"]);
     const spentUsd = typeof body["spentUsd"] === "number" ? body["spentUsd"] : 0;
     const buildExitCode = typeof body["buildExitCode"] === "number" ? body["buildExitCode"] : null;
     if (body["ok"] === true) {

@@ -22,6 +22,7 @@ import { consumeUserDailyLimit } from "../workspace/rate-limit.js";
 import { betaProjectCreateDailyLimit } from "../workspace/beta-limits.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
+import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 
 /** 베타 일일 상한 버킷 — 지시서 생성은 프로젝트 생성과 같은 한도(기본 20/day)를 따로 센다. */
 export const BETA_DEV_SPEC_DAILY_BUCKET = "beta-dev-spec-daily";
@@ -116,11 +117,16 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
       );
     }
 
-    const call = makeDevSpecLlmCaller(c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), c.env.DEV_SPEC_MODEL || undefined);
+    // L-3 (Train L): 패스·재시도 호출마다 원장 1행(job_kind dev_spec, 한 job_id). 422·503이어도 기록 — 비용은 났다.
+    const usage = createUsageCollector();
+    const call = makeDevSpecLlmCaller(c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), c.env.DEV_SPEC_MODEL || undefined, usage.sink);
     const result = await generateDevSpec(
       { brief: owned.productSpec, items: owned.items, idea: owned.idea, locale, source: "generated" },
       call,
     );
+    if (usage.events.length > 0) {
+      await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "dev_spec", jobId: newLlmJobId("dsp"), projectId, userKey }));
+    }
 
     // 관측: 패스 기록은 로그로, 토큰은 Langfuse로(사용자 응답에는 넣지 않는다 — llmUsage strip 규율).
     console.log(JSON.stringify({ event: "dev_spec_generate", project: projectId, ok: result.ok, passes: result.passes }));

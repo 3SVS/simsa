@@ -30,6 +30,7 @@ import {
   buildRepairPrContent,
   classifyCloneError,
   coerceResult,
+  createUsageCollector,
   extractHeaderEnv,
   redactSecret,
   validateRepairPayload,
@@ -458,6 +459,9 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
   } = payload;
 
   const start = Date.now();
+  // Train L — L-3: 워커 LLM 호출별 사용량을 모아 완료 콜백(성공·실패 모두)의 usage[]로 싣는다.
+  // 옛 Worker는 이 필드를 무시한다(additive).
+  const usage = createUsageCollector();
   console.log(`[repair ${jobId}] start: ${repo} branch=${branch} envCause=${envCause} keyPresent=${Boolean(anthropicApiKey)}`);
 
   // Ack running (best effort — the Worker treats queued/running the same for
@@ -504,7 +508,7 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
     const diag = { skippedOversize: [], reason: null };
     if (anthropicApiKey) {
       try {
-        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag, vendor });
+        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag, vendor, onUsage: usage.onUsage });
       } catch (err) {
         console.error(
           `[repair ${jobId}] auto-fix crashed (falling back to brief-only):`,
@@ -586,6 +590,7 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
       changedFiles: changedFiles.length,
       ...(modeReason ? { modeReason } : {}),
       durationMs: Date.now() - start,
+      usage: usage.snapshot(),
     });
   } catch (err) {
     const message = redactSecret(err?.message ?? String(err), githubToken);
@@ -595,6 +600,7 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
       ok: false,
       error: message.slice(0, 500),
       durationMs: Date.now() - start,
+      usage: usage.snapshot(),
     });
   } finally {
     try {
@@ -655,7 +661,7 @@ async function quickSyntaxCheck(workDir, changedFiles) {
  * worker produced nothing applicable — callers reset the tree + fall back
  * to brief-only. Never leaves a dirty tree on the null path.
  */
-async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null }, vendor = {} }) {
+async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null }, vendor = {}, onUsage }) {
   const { openaiApiKey, openaiBaseUrl, preferFallback } = vendor;
   const jobId = payload.jobId;
   const deadline = Date.now() + AUTO_FIX_DEADLINE_MS;
@@ -708,6 +714,8 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
     ...(openaiApiKey ? { openaiApiKey } : {}),
     ...(openaiBaseUrl ? { openaiBaseUrl } : {}),
     ...(preferFallback ? { preferFallback: true } : {}),
+    // Train L — L-3: 호출마다 실응답 모델·토큰을 수집 → repair-done usage[].
+    ...(onUsage ? { onUsage } : {}),
   });
 
   for (let iteration = 0; iteration < AUTO_FIX_MAX_ITERATIONS; iteration++) {

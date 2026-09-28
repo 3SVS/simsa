@@ -16,6 +16,7 @@ import { vendorFallback } from "../workspace/vendor-routing.js";
 import { ALLOWED_ORIGINS, CORS_ALLOW_METHODS } from "./cors.js";
 import { generateIdeaToSpecDraft, toClientDraft, type IdeaToSpecDraftRequest } from "../workspace/generate.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
+import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { classifyTopics } from "../workspace/topic-tags.js";
 import { regionFromRequest } from "../workspace/envelope.js";
@@ -278,15 +279,24 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         : {}),
     };
 
+    // L-3 (Train L): 이 요청의 LLM 호출을 원장에 남긴다 — 응답 파싱이 실패해 503이어도(비용은 났다).
+    const usage = createUsageCollector();
+    const generateUserKey = typeof (body as Record<string, unknown>)["userKey"] === "string"
+      ? String((body as Record<string, unknown>)["userKey"])
+      : null;
     let result;
     try {
-      result = await generateIdeaToSpecDraft(input, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
+      result = await generateIdeaToSpecDraft(input, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), usage.sink);
     } catch (err) {
       console.error("[workspace] unexpected generate error:", err);
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), {
         status: 500,
         headers: { "content-type": "application/json", ...headers },
       });
+    } finally {
+      if (usage.events.length > 0) {
+        await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "generate", jobId: newLlmJobId("gen"), projectId: null, userKey: generateUserKey }));
+      }
     }
 
     // Increment rate-limit counter after successful generation (non-fatal)
@@ -538,6 +548,20 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       checkProjectOwned = Boolean(await getOwnedProject(c.env, req.projectId, checkUserKey).catch(() => null));
     }
 
+    // L-3 (Train L): 검수 1회 = 한 job_id. 검수 호출 + 검증 패널(2차 확인)·협의체 라운드가 모두 여기로 모인다.
+    // project_id는 **소유가 확인된 경우에만** 남긴다(남의 프로젝트 id를 대도 원장에 그 id가 찍히지 않게).
+    const checkUsage = createUsageCollector();
+    const checkJobId = newLlmJobId("chk");
+    const flushCheckUsage = (jobKind: "check" | "council") =>
+      checkUsage.events.length > 0
+        ? runAfterResponse(c, recordCollectedUsage(c.env, checkUsage.events, {
+            jobKind,
+            jobId: checkJobId,
+            projectId: req.projectId && checkProjectOwned ? req.projectId : null,
+            userKey: checkUserKey || null,
+          }))
+        : Promise.resolve();
+
     // RC-4: reviewMode — "panel"(기본, 전원) | "council"(유료 선택). 서버가
     // 자격을 집행한다 — UI 숨김만으로 게이팅하지 않는다.
     const rawMode = (body as Record<string, unknown>)["reviewMode"];
@@ -557,10 +581,12 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       const councilResult = await runCouncilCheck(
         { productSpec: normalizeProductSpec(req.productSpec), items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" },
         c.env,
+        { onUsage: checkUsage.sink },
       ).catch((err: unknown) => {
         console.error("[workspace/check-draft] council error:", err);
         return { ok: false as const, error: "council_unavailable" as const };
       });
+      await flushCheckUsage("council");
       if (councilResult.ok === false) {
         return new Response(JSON.stringify({
           ok: false,
@@ -589,25 +615,28 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       // direct Worker→Anthropic egress ~90% 403s, which surfaced as the
       // recurring "확인 중 오류가 발생했습니다". This was the ONE LLM route that
       // omitted the gateway URL.
-      result = await generateCheckDraft({ productSpec: req.productSpec, items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
+      result = await generateCheckDraft({ productSpec: req.productSpec, items: req.items, projectId: req.projectId, locale: req.locale ?? "ko" }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), checkUsage.sink);
     } catch (err) {
       console.error("[workspace/check-draft] error:", err);
+      await flushCheckUsage("check");
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
     }
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
     if (result.ok === false) {
+      await flushCheckUsage("check");
       return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
     }
 
     // RC-2 검증 패널 (A, 전원): failed 판정만 교차-벤더 2차 확인. 어떤 실패에도
     // 검수 자체를 깨지 않는다 — 패널 오류 시 원판정+single 표기로 진행.
     try {
-      result = await applyVerifyPanel(result, normalizeProductSpec(req.productSpec), c.env, { locale: req.locale === "en" ? "en" : "ko" });
+      result = await applyVerifyPanel(result, normalizeProductSpec(req.productSpec), c.env, { locale: req.locale === "en" ? "en" : "ko", onUsage: checkUsage.sink });
     } catch (err) {
       console.error("[workspace/check-draft] verify-panel error (kept single):", err);
     }
+    await flushCheckUsage("check");
 
     // ★재검수 비교 (2026-09-01) — **저장 전에** 직전 검수를 읽는다(순서가 뒤바뀌면
     //  방금 저장한 자기 자신과 비교하게 된다).

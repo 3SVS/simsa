@@ -149,6 +149,44 @@ export function buildBriefOnlyDiagnosis(diag, locale) {
 }
 
 /**
+ * Train L — L-3: 워커 LLM 호출의 사용량(ClaudeWorker onUsage 레코드)을 모아 repair-done 콜백의
+ * `usage[]` 계약(8필드)으로 내보낸다. 콜백 한 번에 최대 200개(Worker가 그 이상은 자른다 — 여기서도 자른다).
+ * costUsd·unpriced는 싣지 않는다 — 비용은 Worker가 자기 가격표로 계산한다(단일 출처).
+ * 싱크는 절대 던지지 않는다(계측이 수리를 깨면 안 된다).
+ */
+export const USAGE_CALLBACK_MAX = 200;
+
+export function createUsageCollector() {
+  const items = [];
+  const num = (n) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+  const str = (s, max) => (typeof s === "string" ? s.slice(0, max) : "");
+  return {
+    onUsage(u) {
+      try {
+        if (!u || typeof u !== "object" || items.length >= USAGE_CALLBACK_MAX) return;
+        const modelActual = str(u.modelActual, 120) || str(u.modelRequested, 120);
+        if (!modelActual) return;
+        items.push({
+          vendor: str(u.vendor, 40) || "unknown",
+          modelRequested: str(u.modelRequested, 120) || modelActual,
+          modelActual,
+          inputTokens: num(u.inputTokens),
+          cacheReadTokens: num(u.cacheReadTokens),
+          cacheWriteTokens: num(u.cacheWriteTokens),
+          outputTokens: num(u.outputTokens),
+          latencyMs: num(u.latencyMs),
+        });
+      } catch {
+        /* never throw from the sink */
+      }
+    },
+    snapshot() {
+      return items.map((i) => ({ ...i }));
+    },
+  };
+}
+
+/**
  * Stage 268 — strip a secret from a message before it travels anywhere
  * (callback body, logs). Pure; no-op when the secret is empty.
  */
