@@ -683,20 +683,34 @@ export const BUILD_UNVERIFIED_TRAILER = "Simsa-Build: unverified";
 /** GitHub label for the same PR (best effort in the container — never a gate). */
 export const BUILD_UNVERIFIED_LABEL = "build: unverified";
 
-/** Changed files outside the post-apply check, in the order given. */
+/**
+ * The repair's own evidence file, committed next to the fix at the repo root
+ * (container/coerce-result.mjs buildRepairPrContent().briefFileName — lock-stepped
+ * by test/train-w-build-verified.test.mjs). It is Simsa's note, not app code.
+ */
+export const REPAIR_BRIEF_FILE_NAME = "SIMSA-FIX-BRIEF.md";
+
+/** The app code a repair changed: the list minus Simsa's own brief file. */
+function appCodeFiles(changedFiles: readonly string[]): string[] {
+  return changedFiles.filter((f) => f !== REPAIR_BRIEF_FILE_NAME);
+}
+
+/** Changed app files outside the post-apply check, in the order given (the brief is never one). */
 export function buildUnverifiedFiles(changedFiles: readonly string[]): string[] {
-  return changedFiles.filter((f) => !SYNTAX_CHECKED_FILE_RE.test(f));
+  return appCodeFiles(changedFiles).filter((f) => !SYNTAX_CHECKED_FILE_RE.test(f));
 }
 
 /**
- * True when every changed file was covered by `node --check` (which must have
- * passed — the auto_fix path only exists after it does). An empty list is NOT
- * verified: nothing was checked. The caller passes autoFix.changedFiles only
- * (the git diff taken BEFORE SIMSA-FIX-BRIEF.md is written), so the brief never
- * counts either way.
+ * True when every changed APP file was covered by `node --check` (which must
+ * have passed — the auto_fix path only exists after it does). An empty list is
+ * NOT verified: nothing was checked. The brief is excluded here, explicitly
+ * (PR #561 review P2) — not by relying on the container taking its git diff
+ * before it writes the brief — so the policy holds whatever list arrives:
+ * [x.mjs, brief] → true, [brief] → false.
  */
 export function assessBuildVerified(changedFiles: readonly string[]): boolean {
-  return changedFiles.length > 0 && buildUnverifiedFiles(changedFiles).length === 0;
+  const code = appCodeFiles(changedFiles);
+  return code.length > 0 && buildUnverifiedFiles(code).length === 0;
 }
 
 // ─── Auto-fix PR content ──────────────────────────────────────────────────────

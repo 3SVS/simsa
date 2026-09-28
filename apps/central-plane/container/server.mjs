@@ -26,13 +26,18 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
+  GIT_CHANGED_FILES_ARGS,
+  GIT_LS_FILES_ARGS,
+  applyRepairPrLabels,
   buildBriefOnlyDiagnosis,
   buildRepairPrContent,
   classifyCloneError,
   coerceResult,
   extractHeaderEnv,
+  parseGitNameList,
   redactSecret,
   repairBuildVerified,
+  repairPrLabelPlan,
   validateRepairPayload,
   validateRunPayload,
 } from "./coerce-result.mjs";
@@ -440,7 +445,8 @@ async function runJob(payload) {
  * commit carries the `Simsa-Build: unverified` trailer, the PR body opens with
  * a notice (job locale), the PR gets the `build: unverified` label (best
  * effort) and the callback says buildVerified:false — all derived from the
- * canonical buildAutoFixPrContent (repair-brief.ts).
+ * canonical buildAutoFixPrContent (repair-brief.ts). A reused PR whose new push
+ * is verified (or brief-only) has that label taken off again (repairPrLabelPlan).
  *
  * HONEST FALLBACK (Stage 268 semantics preserved): no key, zero parsed
  * findings, worker declines/errors, rewrites all rejected by the sanitizer,
@@ -563,7 +569,8 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
     await execFileP("git", ["-C", workDir, "config", "user.email", "simsa-repair@trysimsa.com"]);
     await execFileP(
       "git",
-      ["-C", workDir, "add", briefContent.briefFileName, ...changedFiles],
+      // `--`: every name after it is a path, never an option (a file named "-x" stays a file).
+      ["-C", workDir, "add", "--", briefContent.briefFileName, ...changedFiles],
       { timeout: 10_000 },
     );
     await execFileP("git", ["-C", workDir, "commit", ...commitArgs], { timeout: 10_000 });
@@ -584,14 +591,20 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
     });
     console.log(`[repair ${jobId}] PR ready: #${pr.number} ${pr.html_url}`);
 
-    // 5b. Train W · W-3 — label the PR `build: unverified` when node --check did
-    //     not cover every changed file. Best effort: a label is not a gate (D-4),
-    //     so a missing permission never fails the repair (the trailer + the PR
-    //     body notice already say it).
-    if (buildVerified === false) {
-      const labels = Array.isArray(autoFix?.prContent?.labels) ? autoFix.prContent.labels : [];
-      await addRepairPrLabels({ repo, token: githubToken, number: pr.number, labels, jobId });
-    }
+    // 5b. Train W · W-3 — the `build: unverified` label follows this push:
+    //     added when node --check did not cover every changed file, and taken
+    //     OFF a reused PR whose earlier push carried it (PR #561 review P2 — the
+    //     body and job view are refreshed, so the label must be too). Best
+    //     effort: a label is not a gate (D-4), so a missing permission never
+    //     fails the repair (the trailer + the PR body notice already say it).
+    await applyRepairPrLabels({
+      fetchImpl: fetch,
+      repo,
+      token: githubToken,
+      number: pr.number,
+      plan: repairPrLabelPlan({ buildVerified, labels: autoFix?.prContent?.labels, reusedPr: pr.reused === true }),
+      jobId,
+    });
 
     // 6. Report done.
     await postCallback(callbackUrl, callbackToken, {
@@ -695,11 +708,12 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
   }
 
   // Repo inventory + ranked snapshot candidates.
-  const lsFiles = await execFileP("git", ["-C", workDir, "ls-files"], {
+  // Rule 6: names exactly as written (-z + core.quotePath=false) — see GIT_LS_FILES_ARGS.
+  const lsFiles = await execFileP("git", ["-C", workDir, ...GIT_LS_FILES_ARGS], {
     timeout: 30_000,
     maxBuffer: 16 * 1024 * 1024,
   });
-  const repoFiles = lsFiles.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+  const repoFiles = parseGitNameList(lsFiles.stdout);
   const ranked = brief.rankSnapshotCandidates(parsed, repoFiles);
   if (ranked.length === 0) {
     console.log(`[repair ${jobId}] auto-fix skipped: no snapshot candidates in repo`);
@@ -800,11 +814,12 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
     }
 
     // Real-change gate: the worker may return byte-identical content.
-    const diff = await execFileP("git", ["-C", workDir, "diff", "--name-only"], {
+    // Rule 6: names exactly as written (-z + core.quotePath=false) — see GIT_CHANGED_FILES_ARGS.
+    const diff = await execFileP("git", ["-C", workDir, ...GIT_CHANGED_FILES_ARGS], {
       timeout: 30_000,
       maxBuffer: 4 * 1024 * 1024,
     });
-    const changedFiles = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+    const changedFiles = parseGitNameList(diff.stdout);
     if (changedFiles.length === 0) {
       console.log(`[repair ${jobId}] rewrites were no-ops (iter ${iteration})`);
       diag.reason = "rewrites_were_noops";
@@ -948,11 +963,11 @@ async function attemptOversizeEditFix({ workDir, payload, brief, parsed, review,
   }
 
   // Same gates as the full-file path: real change + JS syntax check.
-  const diff = await execFileP("git", ["-C", workDir, "diff", "--name-only"], {
+  const diff = await execFileP("git", ["-C", workDir, ...GIT_CHANGED_FILES_ARGS], {
     timeout: 30_000,
     maxBuffer: 4 * 1024 * 1024,
   });
-  const changedFiles = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+  const changedFiles = parseGitNameList(diff.stdout);
   if (changedFiles.length === 0) {
     diag.reason = "edits_were_noops";
     return null;
@@ -1048,7 +1063,9 @@ async function createOrReuseRepairPr({ repo, token, head, base, title, body, dra
             }),
           }).catch(() => {});
         }
-        return existing;
+        // Train W · W-3: tell the caller this PR predates the push (it may carry
+        // a `build: unverified` label from an earlier attempt — repairPrLabelPlan).
+        return { ...existing, reused: true };
       }
     }
     if (/draft/i.test(detail)) {
@@ -1059,34 +1076,6 @@ async function createOrReuseRepairPr({ repo, token, head, base, title, body, dra
     throw new Error(`PR create failed: ${res.status} ${JSON.stringify(res.json.message ?? res.json).slice(0, 300)}`);
   }
   return res.json;
-}
-
-/**
- * Train W · W-3 — add labels to the repair PR (issues labels endpoint; GitHub
- * creates a missing label). Best effort by design (D-4 keep: a label, not a
- * gate): any failure — no permission, network — is logged and swallowed, and
- * the token is redacted from the log line.
- */
-async function addRepairPrLabels({ repo, token, number, labels, jobId }) {
-  if (!Array.isArray(labels) || labels.length === 0 || !Number.isInteger(number)) return;
-  try {
-    const r = await fetch(`https://api.github.com/repos/${repo}/issues/${number}/labels`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: "application/vnd.github+json",
-        "content-type": "application/json",
-        "x-github-api-version": "2022-11-28",
-        "user-agent": "simsa-repair",
-      },
-      body: JSON.stringify({ labels }),
-    });
-    if (!r.ok) {
-      console.warn(`[repair ${jobId}] label add returned ${r.status} (non-fatal)`);
-    }
-  } catch (err) {
-    console.warn(`[repair ${jobId}] label add failed (non-fatal):`, redactSecret(err?.message ?? String(err), token));
-  }
 }
 
 /**
