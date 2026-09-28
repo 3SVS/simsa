@@ -1,6 +1,7 @@
 /**
  * 로컬 체크아웃 페이지 · 설정 · 이벤트 추출 — 서버를 띄우지 않고 순수 함수로(네트워크 0).
- *  - 라이브 client-side token 거부(샌드박스 전용)
+ *  - client-side token 은 허용 목록(test_ + 영숫자 27자)만 — 라이브 토큰·서버 API 키·임의 값 거부
+ *  - 로컬 서버는 Host 가 127.0.0.1/localhost:<포트> 가 아니면 403(DNS rebinding 방어)
  *  - 한글 프로젝트명이 customData 로 그대로 실린다
  *  - $0 가격이 샌드박스에서 거부됐으면 그 변형은 열지 않는다
  *  - index.html 은 sandbox 환경을 고정하고 토큰을 하드코딩하지 않는다
@@ -8,14 +9,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { request } from "node:http";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertSandboxClientToken, buildCheckoutConfig, routeRequest } from "../serve.mjs";
+import { assertSandboxClientToken, buildCheckoutConfig, routeRequest, startServer } from "../serve.mjs";
 import { TEST_CARD } from "../run-checkout.mjs";
 import { extractCompletedTransactionId } from "../lib/checkout-events.mjs";
 import { SandboxOnlyError } from "../paddle-client.mjs";
 import { SPIKE_TAG } from "../lib/catalog.mjs";
-import { FAKE_CLIENT_TOKEN, FAKE_LIVE_CLIENT_TOKEN, KO_PROJECT_NAME, fakeId } from "./helpers/fakes.mjs";
+import { FAKE_CLIENT_TOKEN, FAKE_LIVE_CLIENT_TOKEN, FAKE_LIVE_KEY, FAKE_SANDBOX_KEY, FAKE_WEBHOOK_SECRET, KO_PROJECT_NAME, fakeId } from "./helpers/fakes.mjs";
 
 const SPIKE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const catalog = {
@@ -32,6 +34,58 @@ describe("client-side token", () => {
     assert.throws(() => assertSandboxClientToken(FAKE_LIVE_CLIENT_TOKEN), SandboxOnlyError);
     assert.throws(() => assertSandboxClientToken(""), TypeError);
     assert.equal(assertSandboxClientToken(FAKE_CLIENT_TOKEN), FAKE_CLIENT_TOKEN);
+  });
+});
+
+/**
+ * client-side token 은 허용 목록으로 받는다: test_ + 영숫자 27자(Paddle 문서의 형식 정규식
+ * ^(test|live)_[a-zA-Z0-9]{27}$ 중 샌드박스 쪽 — developer.paddle.com/paddle-js/about/client-side-tokens, 2026-09-28 접근).
+ * 이 값은 /config.json(인증 없음)으로 서빙되고 브라우저의 Paddle.Initialize 로 들어간다. 그래서 두 칸을 서로
+ * 바꿔 넣는 흔한 실수로 서버 API 키(pdl_…)가 들어오면, 체크아웃을 열기 전에 멈춰야 한다.
+ * 가짜 값은 런타임에 이어 붙인다(helpers/fakes.mjs 와 같은 규칙).
+ */
+describe("client-side token = 허용 목록(test_ + 영숫자 27자)만", () => {
+  const tok = (prefix, body) => [prefix, body].join("_");
+  const rejectsWithoutValue = (value, pattern) =>
+    assert.throws(
+      () => assertSandboxClientToken(value),
+      (e) => e instanceof TypeError && pattern.test(e.message) && !e.message.includes(value.trim()),
+      JSON.stringify(value.slice(0, 12)),
+    );
+
+  it("서버 비밀값(API 키·알림 시크릿, pdl_…)을 client-side token 칸에 넣으면 'API 키' 라고 거부하고, 값은 싣지 않는다", () => {
+    for (const secret of [FAKE_SANDBOX_KEY, FAKE_LIVE_KEY, FAKE_WEBHOOK_SECRET, `  ${FAKE_SANDBOX_KEY}\n`]) {
+      rejectsWithoutValue(secret, /API 키/);
+    }
+  });
+
+  it("test_ + 영숫자 27자가 아닌 값은 전부 거부(형식 안내, 값은 싣지 않는다)", () => {
+    for (const bad of [
+      "hello",
+      "FAKE" + "0".repeat(23), // 접두사 없음
+      tok("test", "FAKE" + "0".repeat(21) + "X"), // 26자
+      tok("test", "FAKE" + "0".repeat(23) + "X"), // 28자
+      tok("TEST", "FAKE" + "0".repeat(22) + "X"), // 대문자 접두사
+      tok("test", "FAKE" + "0".repeat(22) + "-"), // 영숫자 아님
+      tok("test", "FAKE" + "0".repeat(10) + " " + "0".repeat(11) + "X"), // 가운데 공백
+      tok("test", "가".repeat(27)), // 비ASCII(규칙 6)
+      tok("test", "FAKE" + "0".repeat(22) + "X") + "\n" + "extra", // 줄바꿈 뒤 덧붙임
+      tok("test", "FAKE" + "0".repeat(10)) + "</script><script>", // 페이지로 흘러가는 값
+    ]) {
+      rejectsWithoutValue(bad, /test_/);
+    }
+  });
+
+  it("buildCheckoutConfig 도 같은 가드 — API 키로는 /config.json 에 실릴 설정 자체가 만들어지지 않는다", () => {
+    assert.throws(
+      () => buildCheckoutConfig({ clientToken: FAKE_SANDBOX_KEY, catalog, variant: "trial19", projectName: KO_PROJECT_NAME }),
+      (e) => e instanceof TypeError && !e.message.includes(FAKE_SANDBOX_KEY),
+    );
+  });
+
+  it("(행동 보존) 앞뒤 공백은 벗기고 받는다 · 라이브 토큰은 여전히 SandboxOnlyError", () => {
+    assert.equal(assertSandboxClientToken(`  ${FAKE_CLIENT_TOKEN}\n`), FAKE_CLIENT_TOKEN);
+    assert.throws(() => assertSandboxClientToken(FAKE_LIVE_CLIENT_TOKEN), SandboxOnlyError);
   });
 });
 
@@ -118,6 +172,59 @@ describe("routeRequest", () => {
     assert.equal(JSON.parse(conf.body).customData.simsa_project_name, KO_PROJECT_NAME);
     assert.equal(routeRequest("/../../.env.local", { config: cfg, html }).status, 404);
     assert.equal(routeRequest("/evidence/pool.json", { config: cfg, html }).status, 404);
+  });
+});
+
+/**
+ * 로컬 서버는 127.0.0.1 에만 붙지만, DNS rebinding(공격 페이지가 자기 도메인을 127.0.0.1 로 다시 풀게 하는 것)이면
+ * 브라우저가 그 도메인 이름으로 이 서버를 부른다 — Host 헤더가 127.0.0.1/localhost:<포트> 가 아니면 403.
+ * 루프백 소켓만 쓴다(외부 네트워크 0). Host 는 node:http 로 직접 넣는다(fetch 는 Host 를 못 바꾼다).
+ */
+describe("serve: Host 검사(DNS rebinding 방어)", () => {
+  const cfg = buildCheckoutConfig({ clientToken: FAKE_CLIENT_TOKEN, catalog, variant: "trial19", projectName: KO_PROJECT_NAME });
+  /** @returns {Promise<{ status: number|undefined, body: string }>} */
+  const get = (port, path, host) =>
+    new Promise((resolvePromise, reject) => {
+      const req = request({ host: "127.0.0.1", port, path, method: "GET", headers: { host } }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => {
+          body += c;
+        });
+        res.on("end", () => resolvePromise({ status: res.statusCode, body }));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+  const withServer = async (fn) => {
+    const srv = await startServer({ config: cfg, html: "<html>page</html>", port: 0 });
+    try {
+      await fn(Number(new URL(srv.url).port));
+    } finally {
+      await srv.close();
+    }
+  };
+
+  it("(행동 보존) 127.0.0.1:<포트>·localhost:<포트> 는 그대로 200", async () => {
+    await withServer(async (port) => {
+      for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `LOCALHOST:${port}`]) {
+        const res = await get(port, "/config.json", host);
+        assert.equal(res.status, 200, host);
+        assert.equal(JSON.parse(res.body).customData.simsa_project_name, KO_PROJECT_NAME);
+      }
+    });
+  });
+
+  it("다른 이름·다른 포트로 들어온 요청은 403 이고 설정·페이지를 싣지 않는다", async () => {
+    await withServer(async (port) => {
+      for (const host of [`rebind.example:${port}`, `127.0.0.1.rebind.example:${port}`, `127.0.0.1:${port + 1}`, "127.0.0.1", `127.0.0.1:${port}@rebind.example`]) {
+        for (const path of ["/config.json", "/"]) {
+          const res = await get(port, path, host);
+          assert.equal(res.status, 403, `${host} ${path}`);
+          assert.ok(!res.body.includes(FAKE_CLIENT_TOKEN) && !res.body.includes("page"), `${host} ${path}`);
+        }
+      }
+    });
   });
 });
 

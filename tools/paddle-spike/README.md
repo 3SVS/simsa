@@ -11,7 +11,7 @@ Train $ 스테이지 **$-0**(`train $ start approved`, 2026-09-28 — 샌드박�
 ## Bae가 할 일 (3줄)
 
 1. 샌드박스 계정을 만듭니다: <https://sandbox-vendors.paddle.com/signup> (무료, 실결제 없음). 만든 뒤 **Checkout → Checkout settings → Default payment link**에 `https://localhost/`를 저장합니다(샌드박스는 localhost 허용, 이게 없으면 체크아웃이 열리지 않습니다).
-2. **Developer tools → Authentication**에서 API 키(권한: products·prices·subscriptions·transactions·adjustments 읽기/쓰기)와 **Client-side token**(`test_`로 시작)을 하나씩 발급합니다.
+2. **Developer tools → Authentication**에서 API 키(권한: products·prices·subscriptions·transactions·adjustments 읽기/쓰기)와 **Client-side token**(`test_`로 시작)을 하나씩 발급합니다. client-side token은 브라우저로 가는 값이라 도구가 `test_` + 영숫자 27자만 받습니다 — 두 값을 서로 바꿔 넣으면(API 키가 이 칸에 들어가면) 체크아웃 서버를 띄우기 전에 멈춥니다.
 3. `tools/paddle-spike/.env.example`을 `tools/paddle-spike/.env.local`로 복사해 두 값을 넣습니다. 이 파일은 `.gitignore` 대상이라 커밋되지 않습니다.
 
 ## 실행 순서 (에이전트가 실행)
@@ -75,7 +75,7 @@ cd tools/paddle-spike && node --test test/*.test.mjs
 |---|---|
 | `paddle-client.mjs` | fetch 기반 최소 클라이언트(샌드박스 허용 목록·라이브 키 거부·경로 탈출 금지) |
 | `setup.mjs` | 상품·가격 멱등 생성, $0 가격 허용 여부 기록 |
-| `checkout/index.html` · `serve.mjs` | 127.0.0.1 전용 Paddle.js(sandbox) 오버레이 체크아웃 페이지 |
+| `checkout/index.html` · `serve.mjs` | 127.0.0.1 전용 Paddle.js(sandbox) 오버레이 체크아웃 페이지(client-side token 허용 목록 `test_`+27자 · Host가 127.0.0.1/localhost:포트가 아니면 403) |
 | `run-checkout.mjs` | Playwright 체크아웃 완주 → trialing 구독 풀 |
 | `scenarios.mjs` | S-A~S-F · `verdict` |
 | `webhook-verify.mjs` | `Paddle-Signature` 검증 순수 함수($-2가 옮겨 쓸 참조 구현) |

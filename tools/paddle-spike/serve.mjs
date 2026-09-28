@@ -10,7 +10,9 @@
  * /config.json 으로 페이지에 넘기는 것: client-side token(공개 가능 토큰 — Paddle 문서 "safe to publish"),
  * 가격 id, 고객 미리 채움(가짜 이메일·국가·우편번호), customData(한글 프로젝트명).
  * 이메일은 예약 도메인(example.com·.net·.org)만 받는다 — 오버레이 화면에 보이고, 그 화면 스크린샷은 가려지지 않는다.
- * API 키는 이 서버에 절대 들어오지 않는다.
+ * API 키는 이 서버에 절대 들어오지 않는다 — 코드로 막는다: client-side token 은 허용 목록(test_ + 영숫자 27자)만 받고,
+ * API 키(pdl_…)를 이 칸에 넣으면 서버를 띄우기 전에 거부한다(assertSandboxClientToken).
+ * Host 헤더가 127.0.0.1/localhost:<포트> 가 아니면 403(DNS rebinding 방어, isSelfHost).
  */
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
@@ -24,11 +26,34 @@ import { readEvidence } from "./lib/evidence.mjs";
 export const DEFAULT_PROJECT_NAME = "(주)트루픽셀 — 우리 동네 빵집 예약 앱";
 export const DEFAULT_PORT = 4817;
 
+/**
+ * 샌드박스 client-side token 형식 — Paddle 문서의 정규식 ^(test|live)_[a-zA-Z0-9]{27}$ 중 샌드박스 쪽만
+ * (developer.paddle.com/paddle-js/about/client-side-tokens, 2026-09-28 접근 · 결과 문서 F13).
+ */
+const SANDBOX_CLIENT_TOKEN = /^test_[A-Za-z0-9]{27}$/;
+
+/**
+ * client-side token 은 **허용 목록**으로 받는다. 이 값은 /config.json 으로 서빙되고 브라우저의
+ * Paddle.Initialize 로 들어가므로, 거부 목록(live_ 만 막기)이면 두 칸을 바꿔 넣는 실수로 서버 API 키가
+ * 그대로 페이지에 실린다. 어떤 오류에도 값은 싣지 않는다.
+ */
 export function assertSandboxClientToken(token) {
   if (typeof token !== "string" || token.trim() === "") throw new TypeError("PADDLE_SANDBOX_CLIENT_TOKEN 이 비어 있습니다");
   const t = token.trim();
   if (/^live_/i.test(t)) {
     throw new SandboxOnlyError("라이브 client-side token(live_…)입니다 — 샌드박스 토큰(test_…)만 씁니다. 값은 출력하지 않았습니다");
+  }
+  if (/^pdl_/i.test(t)) {
+    throw new TypeError(
+      "PADDLE_SANDBOX_CLIENT_TOKEN 칸에 API 키(서버 비밀값, pdl_…)를 넣었습니다 — 이 값은 브라우저로 가므로 받지 않습니다. " +
+        "API 키는 PADDLE_SANDBOX_API_KEY 에, client-side token(test_…)은 이 칸에 넣으세요. 값은 출력하지 않았습니다",
+    );
+  }
+  if (!SANDBOX_CLIENT_TOKEN.test(t)) {
+    throw new TypeError(
+      "PADDLE_SANDBOX_CLIENT_TOKEN 이 샌드박스 client-side token 형식(test_ + 영숫자 27자)이 아닙니다 — " +
+        "샌드박스 대시보드 Developer tools → Authentication → Client-side tokens 에서 복사하세요. 값은 출력하지 않았습니다",
+    );
   }
   return t;
 }
@@ -112,11 +137,34 @@ export function loadCheckoutHtml() {
   return readFileSync(join(SPIKE_DIR, "checkout", "index.html"), "utf8");
 }
 
+/**
+ * Host 헤더가 이 서버 자신(127.0.0.1·localhost + 듣는 포트)인가.
+ * 서버는 127.0.0.1 에만 붙지만, DNS rebinding(공격 페이지가 자기 도메인을 127.0.0.1 로 다시 풀게 하는 것)이면
+ * 브라우저가 **그 도메인 이름**을 Host 로 싣고 이 서버를 부른다 → 이름이 다르면 거절한다.
+ * 포트 80 이면 브라우저가 포트를 생략하므로 포트 없는 형태도 받는다.
+ * @param {unknown} host @param {number} port
+ */
+export function isSelfHost(host, port) {
+  if (typeof host !== "string") return false;
+  const h = host.trim().toLowerCase();
+  const names = ["127.0.0.1", "localhost"];
+  return names.some((n) => h === `${n}:${port}` || (port === 80 && h === n));
+}
+
 /** @returns {Promise<{ url: string, close: () => Promise<void> }>} */
 export function startServer({ config, html, port = DEFAULT_PORT }) {
   const server = createServer((req, res) => {
-    const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    const out = req.method === "GET" ? routeRequest(pathname, { config, html }) : { status: 405, headers: { "content-type": "text/plain" }, body: "method not allowed" };
+    const addr = server.address();
+    const listening = addr !== null && typeof addr === "object" ? addr.port : port;
+    const plain = { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" };
+    let out;
+    if (!isSelfHost(req.headers.host, listening)) {
+      out = { status: 403, headers: plain, body: "forbidden host" };
+    } else if (req.method !== "GET") {
+      out = { status: 405, headers: plain, body: "method not allowed" };
+    } else {
+      out = routeRequest(new URL(req.url ?? "/", "http://127.0.0.1").pathname, { config, html });
+    }
     res.writeHead(out.status, out.headers);
     res.end(out.body);
   });
