@@ -2280,6 +2280,8 @@ export type Dictionary = {
     statusFailed: string;
     progressTitle: string;
     progressBody: string;
+    /** Train W — W-3 ①: queued-only body (waiting its turn + measured duration). */
+    progressBodyQueued: string;
     failedTitle: string;
     failedBody: string;
     runErrors: {
@@ -2288,6 +2290,12 @@ export type Dictionary = {
       projectNotFound: string;
       forbidden: string;
       invalidIntent: string;
+      /** Train W — W-2: 429 daily cap (general sentence, no time). */
+      dailyLimitReached: string;
+      /** Train W — W-2: 429 daily cap with the reader's reset time in "{when}". */
+      dailyLimitReachedAt: string;
+      /** Train W — W-2: 503 INSPECTION_ENABLED="off". */
+      inspectionDisabled: string;
       generic: string;
     };
     compare: {
@@ -2318,10 +2326,17 @@ export type Dictionary = {
       submitting: string;
       progressTitle: string;
       progressBody: string;
+      /** Train W — W-3 ①: queued-only body (no duration — no measured sample). */
+      progressBodyQueued: string;
       statusQueued: string;
       statusRunning: string;
       doneTitle: string;
       doneBody: string;
+      /** Train W — W-3 ③: done copy for a job that really changed code (mode auto_fix). */
+      doneTitleAutoFix: string;
+      doneBodyAutoFix: string;
+      /** Train W — W-3 ③ (contract 4): shown only when buildVerified === false. */
+      buildUnverified: string;
       openPr: string;
       branchLabel: string;
       noPrNote: string;
@@ -2342,6 +2357,11 @@ export type Dictionary = {
         alreadyActive: string;
         notFound: string;
         forbidden: string;
+        /** Train W — W-2: 429 daily repair cap (general / with "{when}"). */
+        dailyLimitReached: string;
+        dailyLimitReachedAt: string;
+        /** Train W — W-2: 503 REPAIR_ENABLED="off". */
+        repairDisabled: string;
         generic: string;
       };
     };

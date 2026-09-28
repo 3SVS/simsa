@@ -3,14 +3,28 @@
  * 실제 데이터 흐름을 정확히 기술한다 — 여기 적힌 것과 코드가 다르면 그건 버그다:
  * userKey 익명 키 / 이메일·GitHub 선택 / LLM 3벤더 전송 / episodic 90일 GC /
  * 삭제 미러 / 공유 스냅샷 / 클라이언트 오류(쿼리 제거).
+ * Train W — W-9: §1 운영 정보(비식별) 문단은 lib/privacy-ops-info.mjs에서 온다 — 그 항목과
+ * 0069 컬럼·봉투 필드의 대응은 test/privacy-ops-info.test.mjs가 고정한다. 시행일도 그 모듈의
+ * 상수 하나(PRIVACY_EFFECTIVE_DATE)다.
  */
+import {
+  PRIVACY_EFFECTIVE_DATE,
+  OPS_INFO_TITLE,
+  OPS_INFO_LEAD,
+  OPS_INFO_ITEMS,
+  OPS_INFO_PURPOSE,
+  OPS_INFO_BASIS,
+  OPS_INFO_RETENTION,
+  OPS_INFO_OPT_OUT,
+} from "@/lib/privacy-ops-info.mjs";
+
 export const metadata = { title: "개인정보처리방침 — Simsa" };
 
 export default function PrivacyPage() {
   return (
     <>
       <h1>Simsa 개인정보처리방침</h1>
-      <p className="text-xs text-gray-400">시행일: 2026-07-19 (베타) · The Korean text is authoritative.</p>
+      <p className="text-xs text-gray-400">시행일: {PRIVACY_EFFECTIVE_DATE} (베타) · The Korean text is authoritative.</p>
 
       <h2>1. 수집하는 정보</h2>
       <ul>
@@ -19,6 +33,23 @@ export default function PrivacyPage() {
         <li><strong>이메일 주소(선택)</strong> — 알림·복귀 안내를 위해 직접 등록한 경우에만. 로그에는 마스킹되어 기록됩니다.</li>
         <li><strong>GitHub 계정 정보(선택)</strong> — GitHub 연결 시 저장소 접근에 필요한 최소 정보.</li>
         <li><strong>오류·사용 기록</strong> — 서비스 개선을 위한 브라우저 오류(메시지·경로 — 주소의 검색어/토큰 부분은 저장 전에 제거)와 기능 사용 이벤트. 입력 폼의 내용은 오류 수집에 포함하지 않습니다.</li>
+        <li><strong>{OPS_INFO_TITLE}</strong> — 아래 문단에 따로 적었습니다.</li>
+      </ul>
+
+      <p className="mt-4 font-semibold text-gray-900">{OPS_INFO_TITLE}</p>
+      <p>{OPS_INFO_LEAD}</p>
+      <ul>
+        {OPS_INFO_ITEMS.map((item) => (
+          <li key={item.label}>
+            <strong>{item.label}</strong> — {item.detail}
+          </li>
+        ))}
+      </ul>
+      <ul>
+        <li><strong>목적</strong> — {OPS_INFO_PURPOSE}</li>
+        <li><strong>근거</strong> — {OPS_INFO_BASIS}</li>
+        <li><strong>보유 기간</strong> — {OPS_INFO_RETENTION}</li>
+        <li><strong>원하지 않으시면</strong> — {OPS_INFO_OPT_OUT}</li>
       </ul>
 
       <h2>2. AI 처리 위탁 (중요)</h2>
@@ -57,7 +88,7 @@ export default function PrivacyPage() {
 
       <h2>7. 개인정보 보호책임자</h2>
       <ul>
-        <li>개인정보 보호책임자: 배승훈 (대표이사, 오마이워크)</li>
+        <li>개인정보 보호책임자: 배승훈 (대표자, 오마이워크)</li>
         <li>문의: seunghunbae@3svs.com</li>
       </ul>
     </>

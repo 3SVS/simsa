@@ -27,6 +27,8 @@ import { InterviewChipRow, StackProfileRows } from "@/components/StackProfileRow
 import { parseSubmission } from "@/lib/submission.mjs";
 import { connectProjectSource } from "@/lib/workspace-sources-api";
 import { runVisualCheck } from "@/lib/workspace-visual-checks-api";
+import { isServiceGateKey, runErrorNotice } from "@/lib/visual-check-run-state.mjs";
+import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 import { Spinner } from "@/components/Spinner";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
@@ -411,7 +413,15 @@ function NewProjectInner() {
     // 실패는 삼킨다 — 검수는 프로젝트 화면에서 언제든 다시 걸 수 있고, 여기서
     // 막으면 사용자가 아무 데도 못 간다.
     if (parsed.type === "website" && connected?.ok) {
-      await runVisualCheck(id, { userKey, locale }).catch(() => null);
+      const first = await runVisualCheck(id, { userKey, locale }).catch(() => null);
+      // Train W — W-2: 단, 오늘 상한·일시 중지는 삼키지 않는다. 사용자는 검수가 시작된 줄
+      // 알고 기다리게 된다 — 공손한 실패가 가장 나쁜 침묵이다. 나머지 실패는 종전대로.
+      if (first && !first.ok) {
+        const notice = runErrorNotice(first);
+        if (isServiceGateKey(notice.errorKey)) {
+          toast.error(errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, locale));
+        }
+      }
     }
 
     router.push(`/projects/${id}`);

@@ -151,9 +151,22 @@ export type VisualCheckRunCheck = {
   sourceCheckId?: string | null;
 };
 
+/**
+ * Train W — W-2 (D-7 amend): the extra fields of a 429 `daily_limit_reached`
+ * answer. All optional — older servers never send them, and the values are a
+ * JSON cast here, so the UI reads them only through readDailyLimit()
+ * (lib/daily-limit.mjs), which validates each one. A 503 kill-switch answer
+ * (`inspection_disabled` / `repair_disabled`) carries no extra fields.
+ */
+export type DailyLimitErrorFields = {
+  kind?: "inspection" | "repair";
+  limit?: number;
+  resetAt?: string;
+};
+
 export type VisualCheckRunResponse =
   | { ok: true; check: VisualCheckRunCheck; dispatched: boolean; note?: string }
-  | { ok: false; error: string };
+  | ({ ok: false; error: string } & DailyLimitErrorFields);
 
 // Stage 269 — repair jobs (mirrors central-plane workspace-repair-jobs.ts).
 
@@ -173,18 +186,32 @@ export type RepairJob = {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Stage 270: how the repair concluded — "auto_fix" (real code changes) or
+   * "brief_only" (fix-brief draft PR). Null on legacy rows and while in
+   * flight; kept open (string) for forward compat. See repairDoneKind().
+   */
+  mode?: string | null;
+  /**
+   * Train W — W-3 ③ (contract 3): did the repair container's post-apply check
+   * cover every changed file? false = something outside `node --check` (.js /
+   * .mjs) changed → the card says "we couldn't confirm the fixed code builds".
+   * true = all .js/.mjs and passed; null = legacy / undecidable. Absent on old
+   * servers. Read only through showBuildUnverified().
+   */
+  buildVerified?: boolean | null;
 };
 
 export type RepairRequestResponse =
   | { ok: true; repair: RepairJob; dispatched: boolean; note?: string }
-  | {
+  | ({
       ok: false;
       error: string;
       /** Korean user-facing message on 400 codes (run_not_repairable, …). */
       message?: string;
       /** Present on 409 repair_already_active. */
       activeJobId?: string;
-    };
+    } & DailyLimitErrorFields);
 
 export type RepairGetResponse =
   | { ok: true; repair: RepairJob | null }
@@ -214,7 +241,9 @@ export async function listVisualChecks(
  * Queue (and, when the cloud runner is available, dispatch) a new inspection.
  * With no explicit sourceId/targetUrl the backend falls back to the project's
  * most recent website source. Known error codes: website_source_required,
- * run_already_active, project_not_found, forbidden, invalid_intent.
+ * run_already_active, project_not_found, forbidden, invalid_intent, and
+ * (Train W) daily_limit_reached (429, with kind/limit/resetAt) and
+ * inspection_disabled (503). Map the whole answer with runErrorNotice().
  */
 export async function runVisualCheck(
   projectId: string,
@@ -245,7 +274,9 @@ export async function runVisualCheck(
  * DRAFT PR carrying the fix brief — it does NOT auto-apply code changes.
  * Known error codes: run_not_repairable, github_repo_required,
  * github_token_required, repair_already_active (409, with activeJobId),
- * run_not_found, project_not_found, forbidden.
+ * run_not_found, project_not_found, forbidden, and (Train W)
+ * daily_limit_reached (429, with kind/limit/resetAt) and repair_disabled (503).
+ * Map the whole answer with repairErrorNotice().
  */
 export async function requestRepair(
   projectId: string,
