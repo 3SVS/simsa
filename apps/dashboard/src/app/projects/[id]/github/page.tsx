@@ -25,6 +25,8 @@ import {
   type CreditEnforcementResult,
 } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled } from "@/lib/repo-settle.mjs";
+import { listProjectSources } from "@/lib/workspace-sources-api";
+import { liveAppCheckHref, sourceFacts } from "@/lib/project-steps.mjs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusText } from "@/components/StatusText";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -75,6 +77,19 @@ export default function GitHubPage() {
   const [reviewErrorByPr, setReviewErrorByPr] = useState<Record<number, string>>({});
   // "✓ finished" flash for runs completed in THIS session (visible completion signal).
   const [justCompletedByPr, setJustCompletedByPr] = useState<Record<number, boolean>>({});
+  // ★2026-09-28 (D8): where "실제 앱 확인하기" goes from here — the real-app
+  // check when an address exists, else the overview's address box. Zero PRs is
+  // the normal state for chat builders; this screen must never end the journey.
+  const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (isExample) return;
+    let cancelled = false;
+    listProjectSources(id, getUserKey())
+      .then((res) => { if (!cancelled) setHasDeployUrl(sourceFacts(res).hasDeployUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id, isExample]);
+  const liveAppHref = liveAppCheckHref(id, hasDeployUrl);
 
   const ext = loadExtendedProjectData(id);
   const checkResultMap = new Map(
@@ -442,6 +457,19 @@ export default function GitHubPage() {
             </button>
           </div>
 
+          {/* ★2026-09-28 (D8): say what this screen is — a developer tool — and
+              where the default check lives, BEFORE anyone loads a PR list. Hidden
+              in the empty state below, which carries the same way out as its
+              primary (one screen, one "what now"). */}
+          {!(pullsPhase === "done" && pulls.length === 0) && (
+            <p className="text-xs leading-relaxed text-gray-500">
+              {t.github.devScreenNote}{" "}
+              <Link href={liveAppHref} className="font-medium text-brand-700 hover:underline">
+                {t.github.checkLiveApp} →
+              </Link>
+            </p>
+          )}
+
           {/* PR list */}
           {pullsPhase === "error" && (
             <div className="callout callout-error">
@@ -449,36 +477,45 @@ export default function GitHubPage() {
             </div>
           )}
 
-          {pullsPhase === "done" && (
+          {pullsPhase === "done" && pulls.length === 0 && (
+            // ★D8 — zero PRs was a dead end ("0 open" + "push, then refresh").
+            // For Lovable/Bolt/v0 users no PR is the NORMAL state: say so, and
+            // hand over the real next step as the one primary action.
+            <div className="card p-6 text-center">
+              <p className="mx-auto max-w-md text-sm leading-relaxed text-gray-700">{t.github.noPulls}</p>
+              <Link href={liveAppHref} className="btn btn-md btn-primary mt-4 inline-flex">
+                {t.github.checkLiveApp} →
+              </Link>
+              <p className="mt-3 text-xs text-gray-500">{t.github.noPullsDevNote}</p>
+            </div>
+          )}
+
+          {pullsPhase === "done" && pulls.length > 0 && (
             <div className="card overflow-hidden">
               <p className="border-b border-gray-100 px-5 py-4 text-sm font-semibold text-gray-700">
                 {pulls.length} {t.github.openPulls}
               </p>
-              {pulls.length === 0 ? (
-                <p className="px-5 py-6 text-center text-sm text-gray-500">{t.github.noPulls}</p>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {pulls.map((pull) => (
-                    <button
-                      key={pull.number}
-                      onClick={() => selectPR(pull)}
-                      className={`w-full px-5 py-4 text-left transition-colors hover:bg-gray-50 ${selectedPR?.number === pull.number ? "border-l-2 border-brand-500 bg-brand-50" : ""}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 flex-shrink-0 font-mono text-xs text-gray-500">#{pull.number}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-800">{pull.title}</p>
-                          <p className="mt-0.5 font-mono text-xs text-gray-500">
-                            {pull.headBranch} → {pull.baseBranch}
-                            {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}`}
-                          </p>
-                        </div>
-                        <span className="flex-shrink-0 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-600">{t.github.stateOpen}</span>
+              <div className="divide-y divide-gray-50">
+                {pulls.map((pull) => (
+                  <button
+                    key={pull.number}
+                    onClick={() => selectPR(pull)}
+                    className={`w-full px-5 py-4 text-left transition-colors hover:bg-gray-50 ${selectedPR?.number === pull.number ? "border-l-2 border-brand-500 bg-brand-50" : ""}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex-shrink-0 font-mono text-xs text-gray-500">#{pull.number}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-gray-800">{pull.title}</p>
+                        <p className="mt-0.5 font-mono text-xs text-gray-500">
+                          {pull.headBranch} → {pull.baseBranch}
+                          {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}`}
+                        </p>
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                      <span className="flex-shrink-0 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-600">{t.github.stateOpen}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

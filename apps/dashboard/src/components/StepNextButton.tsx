@@ -38,10 +38,14 @@ import { usePathname } from "next/navigation";
 import { useI18n } from "@/i18n/I18nProvider";
 import { nextStepFromHere } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
 
 export function StepNextButton() {
   const { t } = useI18n();
   const pathname = usePathname() ?? "";
+  // 2026-09-28 (D9): the PR screen is a developer tool — it joins the walk
+  // only in developer mode (the default walk goes to the real-app check).
+  const [developerMode] = useDeveloperMode();
   const seg = pathname.split("/").filter(Boolean);
   if (seg[0] !== "projects" || !seg[1] || seg[1] === "new") return null;
   const projectId = seg[1];
@@ -59,6 +63,7 @@ export function StepNextButton() {
     hasFixes: Object.keys(data?.fixSuggestions ?? {}).length > 0,
     // 화면 검수 결과는 `checkResults`에 없다 — 어느 쪽을 볼지는 순수 함수가 고른다.
     visual: data?.visualCheck ? { findingCount: data.visualCheck.findingCount } : null,
+    developerMode,
   });
   if (!next) return null;
 
@@ -67,11 +72,12 @@ export function StepNextButton() {
     spec: t.nav.spec,
     items: t.nav.items,
     settings: t.nav.settings,
-    github: t.nav.github,
+    github: t.nav.githubDev,
     export: t.nav.export,
     checks: t.nav.checks,
     fixes: t.nav.fixes,
-    "visual-checks": t.nav.visualChecks,
+    // Same name as the sidebar item for the same screen (D6).
+    "visual-checks": t.nav.checkApp,
   };
   const why: Record<string, string> = {
     seeProblems: t.stepsNav.whySeeProblems,

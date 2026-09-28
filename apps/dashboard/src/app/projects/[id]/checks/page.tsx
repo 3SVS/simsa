@@ -28,6 +28,8 @@ import {
 } from "@/lib/workspace-github-api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { checksPrimaryCta } from "@/lib/checks-cta.mjs";
+import { prReviewVisible } from "@/lib/project-steps.mjs";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { StatCard } from "@/components/StatCard";
 import type { ItemStatus } from "@/lib/labels";
 import {
@@ -105,11 +107,12 @@ export default function ChecksPage() {
   // cards collapse so the report doesn't become a wall of green.
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
 
-  // Flow-audit B-6 (2026-07-17): same gate as the sidebar's GitHub tab (#328)
-  // — an idea-branch project with no repo has no code to check, so the whole
-  // "코드 확인 (GitHub)" section (with its /github links) stays hidden. It
-  // appears once a repo is actually connected (a PR review implies one).
-  const entryPath = loadExtendedProjectData(id)?.entryPath ?? null;
+  // Flow-audit B-6 (2026-07-17): same gate as the sidebar's code-changes item
+  // (#328). ★2026-09-28: that gate is now "developer mode OR PR reviews already
+  // exist" (prReviewVisible) — not "any non-idea branch". For a code-branch
+  // project this screen made "go to the PR screen" its primary button, and a
+  // builder who never makes PRs hit the same 0-PR dead end as the overview.
+  const [developerMode] = useDeveloperMode();
 
   // ── PR code check state ───────────────────────────────────────────────────
   const [linkedPulls, setLinkedPulls] = useState<LinkedPull[]>([]);
@@ -244,7 +247,10 @@ export default function ChecksPage() {
   // checksPrimaryCta. The real code review outranks the draft spec pre-check.
   // Mirrors the section-render gate below (#328) — a hidden PR section's CTA
   // must never be picked as the screen primary (journey-audit v2 기준선).
-  const prSectionVisible = entryPath !== "idea" || latestPrReview != null || linkedPulls.length > 0;
+  const prSectionVisible = prReviewVisible({
+    developerMode,
+    hasPrReviewHistory: latestPrReview != null || linkedPulls.length > 0,
+  });
   const primaryCta = checksPrimaryCta({
     prSectionVisible,
     prReviewLoaded: prLoadPhase === "done",
@@ -511,9 +517,9 @@ export default function ChecksPage() {
       </section>
 
       {/* ─── Section 2: Pull request review ─── */}
-      {/* B-6: hidden on an idea-branch project until code actually exists —
-          mirrors the sidebar GitHub-tab gate (#328). */}
-      {(entryPath !== "idea" || latestPrReview != null || linkedPulls.length > 0) && (
+      {/* B-6: a developer tool — shown in developer mode or once PR reviews
+          exist; mirrors the sidebar's code-changes item (prReviewVisible). */}
+      {prSectionVisible && (
       <section>
         <div className="mb-3">
           <h2 className="text-lg font-semibold tracking-tight text-gray-900">{t.checks.prTitle}</h2>

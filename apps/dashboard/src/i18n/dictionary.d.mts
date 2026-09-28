@@ -36,6 +36,8 @@ export type Dictionary = {
     buildGuide: string;
     settings: string;
     github: string;
+    checkApp: string;
+    githubDev: string;
     benchmark: string;
     experiment: string;
     visualChecks: string;
@@ -281,6 +283,25 @@ export type Dictionary = {
     connectCode: string;
     addUrl: string;
     addUrlDesc: string;
+    addUrlLabel: string;
+    addUrlPlaceholder: string;
+    addUrlStart: string;
+    addUrlStarting: string;
+    addUrlHelpToggle: string;
+    addUrlHelpLovable: string;
+    addUrlHelpBoltV0: string;
+    addUrlHelpReplit: string;
+    addUrlHelpSelf: string;
+    addUrlHelpNotLive: string;
+    addUrlErrors: {
+      empty: string;
+      invalid: string;
+      limit: string;
+      notSaved: string;
+      forbidden: string;
+      busy: string;
+      generic: string;
+    };
     connectCodeDesc: string;
     getPack: string;
     getPackDesc: string;
@@ -294,6 +315,7 @@ export type Dictionary = {
   stepsNav: {
     prepare: string;
     review: string;
+    reviewApp: string;
     results: string;
     lockNeedItems: string;
     lockNeedCode: string;
@@ -1206,6 +1228,9 @@ export type Dictionary = {
     noRepoBuildHint: string;
     getPack: string;
     loadPulls: string;
+    devScreenNote: string;
+    checkLiveApp: string;
+    noPullsDevNote: string;
     pullsLoadError: string;
     openPulls: string;
     noPulls: string;

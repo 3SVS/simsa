@@ -10,9 +10,19 @@ import { FeedbackModal } from "@/components/FeedbackModal";
 import { StampMark } from "@/components/brand/StampMark";
 import { Tooltip } from "@/components/Tooltip";
 import { getAuthSession, signOutAuth } from "@/lib/auth-client.mjs";
-import { computeProjectSteps } from "@/lib/project-steps.mjs";
+import {
+  computeProjectSteps,
+  projectHasApp,
+  reviewStepLabelKey,
+  sidebarStepItems,
+  visualCheckFact,
+  reviewRunFact,
+  sourceFacts,
+} from "@/lib/project-steps.mjs";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
+import { listProjectSources } from "@/lib/workspace-sources-api";
+import { listVisualChecks } from "@/lib/workspace-visual-checks-api";
 import { SIMSA_REPO_URL } from "@/lib/simsa-share.mjs";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { sidebarDeveloperItems } from "@/lib/developer-mode.mjs";
@@ -51,6 +61,12 @@ export function AppSidebar() {
   // fails OPEN on null: it never locks on an unconfirmed fact.
   const [hasRepo, setHasRepo] = useState<boolean | null>(null);
   const [hasReviewRun, setHasReviewRun] = useState<boolean | null>(null);
+  // 2026-09-28 (D3·D6): whether the app already exists (a repo or address is
+  // known) decides the step-2 label and items, and a real-app check counts as
+  // "checked" — same facts, same rules (project-steps.mjs) as the overview.
+  const [hasRepoSource, setHasRepoSource] = useState<boolean | null>(null);
+  const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
+  const [hasVisualCheck, setHasVisualCheck] = useState<boolean | null>(null);
 
   // Fetch the session, reconcile local storage to that identity, then (re)load
   // the project list from the now-correct account bucket. Called on mount and
@@ -124,19 +140,38 @@ export function AppSidebar() {
     router.push("/projects");
   }, [router]);
 
-  // Observe repo-link + review-run facts for the progress map (best-effort;
-  // errors leave the fact unknown → fail-open, no false locks).
+  // Observe repo-link / sources / check-run facts for the progress map
+  // (best-effort; errors leave the fact unknown → fail-open, no false locks).
+  // Facts reset only when the PROJECT changes: re-fetching on every navigation
+  // is how a just-added address shows up, but blanking them each time made the
+  // step label and items flicker on every click.
+  useEffect(() => {
+    setHasRepo(null);
+    setHasReviewRun(null);
+    setHasRepoSource(null);
+    setHasDeployUrl(null);
+    setHasVisualCheck(null);
+  }, [projectId]);
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
-    setHasRepo(null);
-    setHasReviewRun(null);
     const uk = getUserKey();
     fetchProjectRepoSettled(fetchProjectRepo, projectId, uk)
       .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
       .catch(() => {});
     listProjectReviewHistory(projectId, uk, { limit: 1 })
-      .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
+      .then((res) => { if (!cancelled) setHasReviewRun(reviewRunFact(res)); })
+      .catch(() => {});
+    listProjectSources(projectId, uk)
+      .then((res) => {
+        if (cancelled) return;
+        const facts = sourceFacts(res);
+        setHasRepoSource(facts.hasRepoSource);
+        setHasDeployUrl(facts.hasDeployUrl);
+      })
+      .catch(() => {});
+    listVisualChecks(projectId, uk)
+      .then((res) => { if (!cancelled) setHasVisualCheck(visualCheckFact(res)); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [projectId, pathname]);
@@ -199,29 +234,51 @@ export function AppSidebar() {
   // The branch this project entered through — the map adapts (code branch:
   // prepare is optional, review never locks on items; skipping idea is normal).
   const entryPath = projectId ? (loadExtendedProjectData(projectId)?.entryPath ?? null) : null;
-  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun, entryPath });
+  const appFacts = { entryPath, hasRepo, hasRepoSource, hasDeployUrl };
+  const steps = computeProjectSteps({
+    hasItems,
+    hasRepo,
+    hasRepoSource,
+    hasReviewRun,
+    hasVisualCheck,
+    entryPath,
+    // The sidebar uses the address fact only to UNLOCK (a known address means
+    // results are reachable). It never passes a confirmed "no address": on the
+    // builder branch the results step also holds the brief-based pre-check,
+    // which works before any app exists, so the sidebar stays fail-open there.
+    hasDeployUrl: hasDeployUrl === true ? true : null,
+  });
+  // ★2026-09-28 (D6): 이미 만든 앱이 있는 사람에게 2단계는 "만들기"가 아니다.
+  // 종전엔 저장소가 연결되면 "코드 변경"(PR) 탭을 2단계 맨 앞에 두어, PR을 만들지
+  // 않는 빌더 사용자가 0개 PR 화면에서 멈췄다(Bae 라이브 신고). 이제 앱이 있으면
+  // 2단계 = 실제 앱 확인이고, PR 화면은 개발자용이라고 이름에 밝혀 개발자 모드이거나
+  // PR 검토 이력이 있을 때만 보인다. 앱이 없는 갈래는 종전 그대로(만들기 안내).
+  // Train N (§8-6): in the default view the builder pack is called "Build
+  // guide" — "builder pack" is our word, not the user's.
+  const hasApp = projectHasApp(appFacts);
+  const stepSlugs = sidebarStepItems({ hasApp, developerMode, hasPrReviewHistory: hasReviewRun });
+  const slugLabel: Record<string, string> = {
+    "visual-checks": t.nav.checkApp,
+    github: t.nav.githubDev,
+    export: developerMode ? t.nav.export : t.nav.buildGuide,
+    checks: t.nav.checks,
+  };
+  const labelled = (slugs: string[]) =>
+    slugs.map((slug) => [slug, slugLabel[slug] ?? slug] as const);
   const stepMeta: Record<string, { label: string; items: ReadonlyArray<readonly [string, string]> }> = {
     prepare: {
       label: t.stepsNav.prepare,
       items: [["idea", t.nav.idea], ["spec", t.nav.spec], ["items", t.nav.items], ["dev-spec", t.nav.devSpec]],
     },
     review: {
-      label: t.stepsNav.review,
-      // 검수·준비 단계: 빌더팩이 기본. "코드 변경"(GitHub) 탭은 코드 갈래이거나
-      // repo가 실제로 연결된 뒤에만 보인다 — 아이디어 갈래 유저에게 repo는 아직
-      // 존재하지도, 알 필요도 없는 개념이다 (배님 2026-07-10 라이브 워크스루).
-      // Train N (§8-6): in the default view the same screen is called "Build
-      // guide" — "builder pack" is our word, not the user's.
-      items:
-        entryPath === "code" || hasRepo === true
-          ? [["github", t.nav.github], ["export", developerMode ? t.nav.export : t.nav.buildGuide]]
-          : [["export", developerMode ? t.nav.export : t.nav.buildGuide]],
+      label: t.stepsNav[reviewStepLabelKey(appFacts)],
+      items: labelled(stepSlugs.review),
     },
     results: {
       label: t.stepsNav.results,
       // 결과·수정: 사전확인/검수 결과. 수정지시서(fixes)는 빌더팩에 포함되어 중복이라
       // 여기서 제거(설계 2026-07-06). /fixes 라우트 자체는 유지(직접 접근·이력용).
-      items: [["checks", t.nav.checks], ["visual-checks", t.nav.visualChecks]],
+      items: labelled(stepSlugs.results),
     },
   };
   const lockHint = (reason: "need_items" | "need_code" | "need_build" | null) =>
@@ -336,6 +393,7 @@ export function AppSidebar() {
                           <li key={slug}>
                             <Link
                               href={href}
+                              title={label}
                               className={`block truncate rounded-md py-1.5 pl-8 pr-2.5 text-[13px] transition-colors ${
                                 active
                                   ? "border border-gray-200 bg-white font-medium text-gray-900 shadow-sm"
