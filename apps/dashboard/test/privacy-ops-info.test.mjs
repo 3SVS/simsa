@@ -113,6 +113,57 @@ describe("W-9 고지 항목 ↔ 서버가 실제로 기록하는 것", () => {
   });
 });
 
+// PR #558 검증 P1 — 방침 문구가 "서버가 실제로 저장하는 것"과 어긋났다:
+//   ① 없는 'URL 추정'을 적었고(주소로 빌더를 알아내는 source-evidence.ts BUILDER_HOSTS는
+//     infer-intent 응답으로만 돌려주고 저장하지 않는다),
+//   ② 실제로 저장되는 '기타' 자유 입력·모델 메모(built-with.ts normalizeBuiltWith가 원문 보존)는 빠졌고,
+//   ③ LEAD가 "입력하신 내용이 아니라"고 예외 없이 단정했고,
+//   ④ '다시 확인 연결'이 사용자가 직접 한 경우만 말했다(verify-sweep 자동 재검수도 source_check_id를 찍는다).
+// 서버 사실은 소스에서 읽어 고정한다 — 서버가 바뀌면 여기서 먼저 실패한다.
+const CP = path.join(REPO, "apps/central-plane/src");
+const builtWithTs = readFileSync(path.join(CP, "workspace/built-with.ts"), "utf8");
+const workspaceRouteTs = readFileSync(path.join(CP, "routes/workspace.ts"), "utf8");
+const verifySweepTs = readFileSync(path.join(CP, "workspace/verify-sweep.ts"), "utf8");
+const builtWithItem = () => (ops.OPS_INFO_ITEMS ?? []).find((i) => (i.envelope ?? []).includes("builtWith"));
+
+describe("P1: '만든 도구' 설명 = 서버가 실제로 저장하는 것", () => {
+  it("[서버 사실] 프로젝트의 만든 도구는 클라이언트가 보낸 선택값 하나에서만 온다 (주소 추정값은 저장 경로가 없다)", () => {
+    // upsertProject(…) 호출은 routes/workspace.ts 하나이고, builtWith 인자는 요청 본문이다.
+    const writers = [...workspaceRouteTs.matchAll(/builtWith:\s*normalizeBuiltWith\(([^)]*)\)/g)].map((m) => m[1]);
+    assert.deepEqual(writers, ['b["builtWith"]']);
+    assert.match(envelopeTs, /const builtWith = project\?\.builtWith;/);
+  });
+
+  it("그래서 '추정'이라고 쓰지 않는다", () => {
+    const item = builtWithItem();
+    assert.ok(item, "builtWith item");
+    assert.ok(!/추정/.test(item.detail), item.detail);
+  });
+
+  it("[서버 사실] '기타' 자유 입력과 모델 메모는 적은 그대로 보존된다 → 방침이 그 사실을 적는다", () => {
+    assert.match(builtWithTs, /if \(other\) result\.other = other;/);
+    assert.match(builtWithTs, /if \(modelNote\) result\.modelNote = modelNote;/);
+    const item = builtWithItem();
+    assert.ok(item, "builtWith item");
+    assert.match(item.detail, /기타/, item.detail);
+    assert.match(item.detail, /직접 적으신/, item.detail);
+    assert.match(item.detail, /모델/, item.detail);
+  });
+
+  it("LEAD는 '입력하신 내용이 아니다'를 예외 없이 단정하지 않는다 — 기타 칸 예외를 적는다", () => {
+    const lead = ops.OPS_INFO_LEAD ?? "";
+    assert.match(lead, /기타 칸/, lead);
+    assert.ok(!/입력하신 내용 같은 식별 정보가 아니라/.test(lead), lead);
+  });
+
+  it("[서버 사실] 자동 재검수(verify-sweep)도 source_check_id를 찍는다 → '다시 확인 연결'은 자동 경우를 포함해 적는다", () => {
+    assert.match(verifySweepTs, /sourceCheckId:\s*origin\.id/);
+    const item = (ops.OPS_INFO_ITEMS ?? []).find((i) => (i.columns ?? []).includes("source_check_id"));
+    assert.ok(item, "source_check_id item");
+    assert.match(item.detail, /자동/, item.detail);
+  });
+});
+
 describe("W-9 방침 페이지 배선", () => {
   it("페이지가 고지 모듈을 가져와 항목을 모두 그린다", () => {
     assert.match(page, /from "@\/lib\/privacy-ops-info\.mjs"/);

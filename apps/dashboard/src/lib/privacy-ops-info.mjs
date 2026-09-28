@@ -17,7 +17,7 @@ export const PRIVACY_EFFECTIVE_DATE = "2026-09-28";
 export const OPS_INFO_TITLE = "운영 정보(비식별)";
 
 export const OPS_INFO_LEAD =
-  "프로젝트를 만들거나 확인·고치기를 이용하시면 아래 운영 정보가 그 기록과 함께 저장됩니다. 이름·이메일·입력하신 내용 같은 식별 정보가 아니라, 나라·도구·유형별로 세기 위한 짧은 값들입니다.";
+  "프로젝트를 만들거나 확인·고치기를 이용하시면 아래 운영 정보가 그 기록과 함께 저장됩니다. 이름·이메일 같은 식별 정보가 아니라, 나라·도구·유형별로 세기 위한 짧은 값들입니다. 다만 '만든 도구'의 기타 칸에 직접 적으신 내용은 적으신 그대로 저장됩니다.";
 
 /**
  * @type {ReadonlyArray<{ label: string, detail: string, columns?: readonly string[], envelope?: readonly string[] }>}
@@ -41,7 +41,10 @@ export const OPS_INFO_ITEMS = [
   },
   {
     label: "만든 도구",
-    detail: "앱을 만든 도구 — 직접 고르신 도구, 또는 앱 주소로 추정한 도구(예: Lovable·Bolt).",
+    // 서버가 저장하는 것은 클라이언트가 보낸 선택값뿐이다(routes/workspace.ts normalizeBuiltWith(b.builtWith)).
+    // 주소로 빌더를 알아내는 source-evidence.ts는 응답으로만 돌려주고 저장하지 않는다 → '추정'은 적지 않는다.
+    // 추정값을 실제로 저장하게 되면 그때 이 문장에 더한다.
+    detail: "앱을 만든 도구 — 직접 고르신 도구, 그리고 기타 칸에 직접 적으신 도구 이름·모델 메모(적으신 그대로).",
     envelope: ["builtWith"],
   },
   {
@@ -66,7 +69,8 @@ export const OPS_INFO_ITEMS = [
   },
   {
     label: "다시 확인 연결",
-    detail: "다시 확인하셨을 때, 어느 확인을 다시 한 것인지.",
+    // verify-sweep(고친 코드가 합쳐진 뒤의 자동 재검수)도 source_check_id를 찍는다.
+    detail: "다시 확인할 때(직접 다시 하셨거나, 고친 뒤 자동으로 다시 한 경우) 어느 확인을 다시 한 것인지.",
     columns: ["source_check_id"],
   },
   {
