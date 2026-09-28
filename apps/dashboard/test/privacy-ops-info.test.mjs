@@ -12,7 +12,15 @@
  * 서버에 컬럼·테이블·봉투 필드가 늘었는데 방침이 그대로면 여기서 실패한다(고지 누락 = 버그).
  * 그리고 없는 기능을 약속하지 않는다: '기록 끄기' 토글은 아직 없다.
  *
- * 각 검사는 고치기 전 코드에서 실패한다(고지 모듈이 없었고, §7 직함은 '대표이사'였다).
+ * ★머지 순서 (#558 검증 2차 P2-3) — 이 가드는 **대시보드 패키지 밖**(central-plane/migrations)을 읽는다.
+ *  0069 이상 마이그레이션을 추가하는 PR(서버 PR 포함)은 **같은 PR에서** 고지 항목(src/lib/privacy-ops-info.mjs
+ *  OPS_INFO_ITEMS의 columns)을 넣거나 아래 NOT_OPS_META에 이유와 함께 추가해야 한다. 두 PR이 각자 green이어도
+ *  pull_request CI는 base가 바뀌면 다시 돌지 않으므로, 형제 PR이 먼저 머지되면 **CI를 다시 돌린 뒤** 머지한다.
+ *
+ * 표시 규칙(회귀 증거를 부풀리지 않는다 — #558 검증 P2-12 · 2차 P2-7):
+ *   [서버 사실]  서버 소스를 읽어 방침 문장의 전제를 고정 — 옛 코드에서도 통과, 회귀 증거 아님.
+ *   [가드]       하네스 자체 검사·전체 스캔 — 옛 코드에서도 통과, 회귀 증거 아님.
+ *   표시 없음    고치기 전 코드에서 실패한다(고지 모듈이 없었고, §7 직함은 '대표이사'였다).
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -176,15 +184,21 @@ function undisclosed(sqlTexts, items) {
 }
 
 describe("P2-5: 0069 이후 모든 마이그레이션 + 0069 이전 P1 캡처 컬럼이 고지에 대응", () => {
-  it("0069 이상 마이그레이션의 ADD COLUMN·CREATE TABLE 전부가 고지되거나 '운영 메타 아님'에 이유와 함께 있다", () => {
+  it("[가드] 0069 이상 마이그레이션의 ADD COLUMN·CREATE TABLE 전부가 고지되거나 '운영 메타 아님'에 이유와 함께 있다", () => {
     const files = migrationFilesFrom(OPS_MIGRATIONS_FROM);
     assert.ok(files.includes("0069_moat_envelope.sql"), files.join(","));
     const texts = files.map((f) => readFileSync(path.join(MIGRATIONS_DIR, f), "utf8"));
     const missing = undisclosed(texts, ops.OPS_INFO_ITEMS ?? []);
-    assert.deepEqual(missing, [], `고지 누락(또는 NOT_OPS_META에 이유와 함께 추가): ${missing.join(", ")}`);
+    assert.deepEqual(
+      missing,
+      [],
+      `고지 누락: ${missing.join(", ")} — 이 마이그레이션을 추가한 PR에서 apps/dashboard/src/lib/privacy-ops-info.mjs ` +
+        `OPS_INFO_ITEMS(columns)에 고지 항목을 넣거나, apps/dashboard/test/privacy-ops-info.test.mjs NOT_OPS_META에 ` +
+        `이유와 함께 추가하세요 (파일 머리말 '머지 순서' 참고).`,
+    );
   });
 
-  it("가드가 실제로 잡는다 — 가상의 다음 마이그레이션이 운영 메타 컬럼·테이블을 더하면 누락으로 보고", () => {
+  it("[가드] 가드가 실제로 잡는다 — 가상의 다음 마이그레이션이 운영 메타 컬럼·테이블을 더하면 누락으로 보고", () => {
     const hypothetical = [
       "ALTER TABLE workspace_visual_checks ADD COLUMN referrer_host TEXT;",
       "CREATE TABLE IF NOT EXISTS ops_meta_daily (id TEXT PRIMARY KEY);",

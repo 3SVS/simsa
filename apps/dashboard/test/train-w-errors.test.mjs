@@ -19,7 +19,10 @@
  *   [행동 보존]         옛 코드에서도 통과 — 회귀 증거 아님.
  *   [행동 보존·새 API]  옛 코드에서는 "함수 없음(TypeError)"으로만 실패 — 종전 동작을 새 함수 이름으로
  *                       확인하는 것이라 역시 회귀 증거로 세지 않는다.
+ *   [가드]              옛 코드에서도 통과(하네스 자체 검사·전체 스캔·소스 대조) — 회귀 증거 아님.
  *   표시 없음           새 동작. 옛 코드에서 값이 달라서 또는 새 API가 없어서 실패(PR 코멘트 표에 둘을 나눠 적음).
+ *   (#558 검증 2차 P2-7: main UI는 빌드 미확인 줄을 한 번도 그린 적이 없으므로, "표기 없음"을 단언하는
+ *    음성 케이스는 종전 동작을 새 함수 이름으로 확인하는 것 → [행동 보존·새 API].)
  * 픽스처 id는 프로덕션 모양(수리 잡 wrj_ · 검수 wvc_ 접두어, P2-15).
  */
 import { describe, it } from "node:test";
@@ -191,18 +194,18 @@ describe("W-3 ③ 수리 결과: showBuildUnverified (계약 3 — false일 때�
     }
   });
 
-  it("true · null(레거시 판단 불가) · 필드 없음(옛 서버) → 표기 없음", () => {
+  it("[행동 보존·새 API] true · null(레거시 판단 불가) · 필드 없음(옛 서버) → 표기 없음", () => {
     assert.equal(repairState.showBuildUnverified({ ...done, buildVerified: true }), false);
     assert.equal(repairState.showBuildUnverified({ ...done, buildVerified: null }), false);
     assert.equal(repairState.showBuildUnverified({ ...done }), false);
   });
 
-  it("엄격 비교 — 0·'false'·undefined는 false가 아니다", () => {
+  it("[행동 보존·새 API] 엄격 비교 — 0·'false'·undefined는 false가 아니다", () => {
     assert.equal(repairState.showBuildUnverified({ ...done, buildVerified: 0 }), false);
     assert.equal(repairState.showBuildUnverified({ ...done, buildVerified: "false" }), false);
   });
 
-  it("끝나지 않은 잡·지시서만 올린 잡(brief_only — 코드 변경 없음)은 표기하지 않는다", () => {
+  it("[행동 보존·새 API] 끝나지 않은 잡·지시서만 올린 잡(brief_only — 코드 변경 없음)은 표기하지 않는다", () => {
     assert.equal(repairState.showBuildUnverified({ status: "running", buildVerified: false }), false);
     assert.equal(repairState.showBuildUnverified({ status: "failed", buildVerified: false }), false);
     assert.equal(repairState.showBuildUnverified({ status: "done", mode: "brief_only", buildVerified: false }), false);
