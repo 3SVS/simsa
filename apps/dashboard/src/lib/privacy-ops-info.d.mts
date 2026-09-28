@@ -17,4 +17,6 @@ export const OPS_INFO_ITEMS: ReadonlyArray<OpsInfoItem>;
 export const OPS_INFO_PURPOSE: string;
 export const OPS_INFO_BASIS: string;
 export const OPS_INFO_RETENTION: string;
+/** Opt-in training copies are not removed by project deletion (§1 retention + §3 share this sentence). */
+export const TRAINING_COPY_NOTE: string;
 export const OPS_INFO_OPT_OUT: string;

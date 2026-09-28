@@ -249,6 +249,37 @@ describe("P1: '만든 도구' 설명 = 서버가 실제로 저장하는 것", ()
   });
 });
 
+// PR #558 검증 P2-6 — 보유 문장이 "프로젝트 삭제 시 함께 삭제"를 조건 없이 단정했다. D1은 맞지만
+// (deleteProject의 PROJECT_SCOPED_TABLES), 학습 데이터 제공에 동의한 사용자의 R2 사본
+// (training-store events/{region}/… · journey-store journey/…)은 국가 코드·만든 도구를 담고,
+// deleteProject는 checks/·docs/ 두 접두어만 지운다. 설계 §4: "유저→R2 키 인덱스가 없어 삭제 불가".
+const dbTs = readFileSync(path.join(CP, "workspace/db.ts"), "utf8");
+const trainingStoreTs = readFileSync(path.join(CP, "workspace/training-store.ts"), "utf8");
+
+describe("P2-6: 보유 기간 — 학습 데이터 사본 예외를 적는다", () => {
+  it("[서버 사실] 프로젝트 삭제는 checks/·docs/ 접두어만 지우고, 학습 사본(events/{region}/…)은 그 밖에 있다", () => {
+    assert.match(dbTs, /for \(const prefix of \[`checks\/\$\{userKey\}\/\$\{id\}\/`, `docs\/\$\{userKey\}\/\$\{id\}\/`\]\)/);
+    assert.match(trainingStoreTs, /return `events\/\$\{safeRegion\}\//);
+  });
+
+  it("§1 보유 문장: 삭제 범위를 한정하고 학습 데이터 사본은 지워지지 않는다고 적는다", () => {
+    const s = ops.OPS_INFO_RETENTION ?? "";
+    assert.match(s, /서비스 운영 기간/, s);
+    assert.match(s, /학습 데이터 제공에 동의하신 경우/, s);
+    assert.match(s, /지워지지 않/, s);
+  });
+
+  it("§3 보관과 파기도 같은 예외를 적는다 (§1과 §3이 서로 다르게 말하지 않게)", () => {
+    const s3 = page.slice(page.indexOf("3. 보관과 파기"), page.indexOf("4. 저장 위치"));
+    assert.ok(s3.length > 0, "§3 found");
+    // 한 문장을 두 곳이 같이 쓴다 — 모듈 상수로 그리거나 같은 말을 직접 적는다.
+    const saysIt = s3.includes("{TRAINING_COPY_NOTE}") || /학습 데이터 제공에 동의하신 경우/.test(s3);
+    assert.ok(saysIt, s3);
+    assert.match(ops.TRAINING_COPY_NOTE ?? "", /학습 데이터 제공에 동의하신 경우/);
+    assert.match(ops.TRAINING_COPY_NOTE ?? "", /지워지지 않/);
+  });
+});
+
 describe("W-9 방침 페이지 배선", () => {
   it("페이지가 고지 모듈을 가져와 항목을 모두 그린다", () => {
     assert.match(page, /from "@\/lib\/privacy-ops-info\.mjs"/);

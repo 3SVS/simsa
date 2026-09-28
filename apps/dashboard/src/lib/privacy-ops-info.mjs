@@ -97,8 +97,17 @@ export const OPS_INFO_PURPOSE =
 
 export const OPS_INFO_BASIS = "정당한 이익(개인정보 보호법 제15조 제1항 제6호)";
 
-export const OPS_INFO_RETENTION =
-  "서비스 운영 기간 동안 보관합니다. 프로젝트를 삭제하시면 그 프로젝트의 확인 기록과 함께 삭제됩니다.";
+/**
+ * 학습 데이터 사본 예외 — §1 보유와 §3 보관·파기가 같은 문장을 쓴다.
+ * 동의(opt-in) 사용자의 R2 사본(training-store `events/{region}/…`, journey-store `journey/…`)은
+ * 국가 코드·만든 도구 같은 값을 담고, 프로젝트 삭제(db.ts deleteProject)는 `checks/`·`docs/`
+ * 접두어만 지운다. 유저→R2 키 인덱스가 없어 지금은 지울 수 없다(동의 계획 §4, K-3에서 해소 →
+ * 그때 이 문장을 "함께 삭제"로 바꾼다). 철회하면 새 캡처는 멈춘다(hasActiveTrainingConsent 게이트).
+ */
+export const TRAINING_COPY_NOTE =
+  "다만 학습 데이터 제공에 동의하신 경우 그때 따로 저장된 학습 데이터 사본은 프로젝트를 삭제해도 지워지지 않습니다. 동의를 철회하시면 그 뒤로는 새로 저장되지 않습니다.";
+
+export const OPS_INFO_RETENTION = `서비스 운영 기간 동안 보관합니다. 프로젝트를 삭제하시면 서버 데이터베이스에 있는 그 프로젝트의 확인 기록과 함께 삭제됩니다. ${TRAINING_COPY_NOTE}`;
 
 export const OPS_INFO_OPT_OUT =
   "기록을 원하지 않으시면 아래 문의 이메일로 요청해 주세요. 설정 화면의 끄기 기능은 준비 중입니다.";
