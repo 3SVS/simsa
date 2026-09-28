@@ -324,8 +324,12 @@ function ComparisonSection({
 // merge + deploy) and a one-click re-check that dispatches a new Stage 264
 // run and navigates to its detail page (which polls and auto-shows the
 // Stage 266 comparison once done).
-// Train W — W-2: resetAt rides along so a capped re-check can say when (null otherwise).
-type RecheckNotice = { kind: "queuedOnly" } | { kind: "error"; errorKey: RunErrorKey; resetAt: string | null };
+// Train W — W-2: resetAt rides along so a capped re-check can say when (null otherwise);
+// receivedAt = when the answer arrived (#558 검증 2차 P2-1 — "now" only after a reset
+// that happened while the notice was on screen).
+type RecheckNotice =
+  | { kind: "queuedOnly" }
+  | { kind: "error"; errorKey: RunErrorKey; resetAt: string | null; receivedAt: number };
 
 // Stage 272 — same POST run dispatch as the Stage 264 list page. On a
 // dispatched run we navigate straight to its detail page; a queued-only
@@ -363,7 +367,7 @@ function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string
       setNotice({ kind: "queuedOnly" });
     } else {
       // The whole answer, not just its code — a 429 carries resetAt (W-2).
-      setNotice({ kind: "error", ...runErrorNotice(res) });
+      setNotice({ kind: "error", ...runErrorNotice(res), receivedAt: Date.now() });
     }
     setSubmitting(false);
   }
@@ -379,7 +383,7 @@ function RecheckNoticeView({ notice, t }: { notice: RecheckNotice | null; t: Dic
   const soft = runErrorTone(notice.errorKey) === "info";
   return (
     <div className={`callout mt-2 ${soft ? "callout-info" : "callout-error"}`}>
-      {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen)}
+      {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
     </div>
   );
 }
@@ -457,8 +461,9 @@ function RepairSection({
   // null = no repair job yet (show the button); otherwise render the job state.
   const [repair, setRepair] = useState<RepairJob | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "submitting">("loading");
-  // Train W — W-2: the request error plus the daily cap's resetAt (null otherwise).
-  const [errorNotice, setErrorNotice] = useState<{ errorKey: RepairErrorKey; resetAt: string | null } | null>(null);
+  // Train W — W-2: the request error plus the daily cap's resetAt (null otherwise)
+  // and when the answer arrived (#558 검증 2차 P2-1).
+  const [errorNotice, setErrorNotice] = useState<{ errorKey: RepairErrorKey; resetAt: string | null; receivedAt: number } | null>(null);
   // Stage 272 — post-repair re-check dispatch (shared hook, Train C — C0/C2a).
   const recheck = useRecheck(projectId, check, userKey, locale);
 
@@ -500,7 +505,7 @@ function RepairSection({
       setRepair(res.dispatched ? res.repair : { ...res.repair, error: res.repair.error ?? res.note ?? null });
     } else {
       // The whole answer, not just its code — a 429 carries resetAt (W-2).
-      const notice = repairErrorNotice(res);
+      const notice = { ...repairErrorNotice(res), receivedAt: Date.now() };
       if (notice.errorKey === "alreadyActive") {
         // 409 — another repair is already running: resume polling that job.
         const g = await getRepair(projectId, runId, userKey);
@@ -652,7 +657,7 @@ function RepairSection({
       )}
       {errorNotice !== null && errorNotice.errorKey !== "repoRequired" && errorNotice.errorKey !== "tokenRequired" && (
         <div className={`callout mt-4 ${repairErrorTone(errorNotice.errorKey) === "info" ? "callout-info" : "callout-error"}`}>
-          {errorNoticeText(s.errors, errorNotice.errorKey, errorNotice.resetAt, t.visualChecks.resetWhen)}
+          {errorNoticeText(s.errors, errorNotice.errorKey, errorNotice.resetAt, t.visualChecks.resetWhen, { receivedAt: errorNotice.receivedAt })}
         </div>
       )}
 

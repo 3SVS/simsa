@@ -72,9 +72,11 @@ function statusChipFor(t: Dictionary, status: string): { label: string; cls: str
 
 // Train W — W-2: resetAt travels with the error so the daily-cap sentence can
 // say when the reader can try again, in their own clock (null otherwise).
+// receivedAt (#558 검증 2차 P2-1): when the answer arrived (Date.now()), so
+// "you can check again now" appears only for a notice that outlived the reset.
 type RunNotice =
   | { kind: "queuedOnly" }
-  | { kind: "error"; errorKey: RunErrorKey; resetAt: string | null };
+  | { kind: "error"; errorKey: RunErrorKey; resetAt: string | null; receivedAt: number };
 
 export default function VisualChecksPage() {
   const { id } = useParams<{ id: string }>();
@@ -176,7 +178,7 @@ export default function VisualChecksPage() {
       applyListResult(await listVisualChecks(id, userKey));
     } else {
       // The whole answer, not just its code — a 429 carries resetAt (W-2).
-      setNotice({ kind: "error", ...runErrorNotice(res) });
+      setNotice({ kind: "error", ...runErrorNotice(res), receivedAt: Date.now() });
     }
   }
 
@@ -254,7 +256,7 @@ export default function VisualChecksPage() {
           <div
             className={`callout mt-3 ${runErrorTone(notice.errorKey) === "info" ? "callout-info" : "callout-error"}`}
           >
-            {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen)}
+            {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
           </div>
         )}
 

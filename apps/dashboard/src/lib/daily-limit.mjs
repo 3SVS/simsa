@@ -22,6 +22,13 @@
 // ★A notice outlives its resetAt (#558 검증 P2-1): the sentence is rebuilt on
 //  every render with the current clock, so a cap notice still on screen after
 //  the reset must say "you can check again now" — never "tomorrow".
+//
+// ★…but only a notice that arrived BEFORE the reset (#558 검증 2차 P2-1). resetAt
+//  is the server's clock, `now` is the reader's; a reader whose clock runs 90 s
+//  fast gets a fresh 429 at server 23:59:30Z that already looks "past" locally.
+//  The caller records when the answer arrived (receivedAt, reader's clock) and
+//  "cleared" needs receivedAt < resetAt <= now. No/odd receivedAt (e.g. a toast
+//  computed once on arrival) never says "cleared" — it keeps the cap sentence.
 
 const DAY_MS = 86_400_000;
 
@@ -135,16 +142,23 @@ function clockTime(hour, minute, words) {
 }
 
 /**
- * Has this (valid) reset time already passed? Invalid/missing values are not
- * "passed" — they stay on the general sentence.
+ * Did the reset happen while this notice was on screen? True only when the
+ * answer arrived before the reset and the reset has passed since:
+ * `receivedAt < resetAt <= now` (receivedAt and now on the reader's clock).
+ * A fresh answer whose resetAt already looks past (clock skew, server error),
+ * a missing/odd receivedAt, or an invalid resetAt → false (the cap sentence
+ * stays).
  *
- * @param {unknown} resetAt
+ * @param {unknown} resetAt ISO timestamp from the 429 body
+ * @param {unknown} receivedAt epoch ms when the answer arrived (Date.now())
  * @param {{ now?: Date }} [opts]
  * @returns {boolean}
  */
-export function resetAtPassed(resetAt, opts = {}) {
+export function resetPassedSinceReceipt(resetAt, receivedAt, opts = {}) {
   if (!isValidIso(resetAt)) return false;
-  return new Date(/** @type {string} */ (resetAt)).getTime() <= nowFrom(opts).getTime();
+  if (typeof receivedAt !== "number" || !Number.isFinite(receivedAt)) return false;
+  const reset = new Date(/** @type {string} */ (resetAt)).getTime();
+  return receivedAt < reset && reset <= nowFrom(opts).getTime();
 }
 
 /**
@@ -187,8 +201,10 @@ export function formatResetAt(resetAt, words, opts = {}) {
  * The sentence for an error notice. `errors` is a dictionary section
  * (t.visualChecks.runErrors or t.visualChecks.repair.errors); `words` is
  * t.visualChecks.resetWhen. For the daily cap:
- *   - resetAt already passed (the notice outlived it) → `dailyLimitCleared`
- *     ("you can check again now") — never "tomorrow" (#558 검증 P2-1)
+ *   - the notice arrived before resetAt and resetAt has passed since (it
+ *     outlived the reset) → `dailyLimitCleared` ("you can check again now") —
+ *     never "tomorrow" (#558 검증 P2-1), and never for a fresh refusal
+ *     (#558 검증 2차 P2-1 — needs opts.receivedAt, see resetPassedSinceReceipt)
  *   - a valid future resetAt → `dailyLimitReachedAt` with "{when}" filled
  *   - otherwise → the general `dailyLimitReached` sentence
  * Unknown keys fall back to `generic` — the UI never renders an empty callout.
@@ -197,12 +213,16 @@ export function formatResetAt(resetAt, words, opts = {}) {
  * @param {string} key
  * @param {string | null | undefined} resetAt
  * @param {unknown} words
- * @param {{ now?: Date, timeZone?: string }} [opts]
+ * @param {{ now?: Date, timeZone?: string, receivedAt?: number }} [opts] receivedAt = Date.now() when the answer arrived
  * @returns {string}
  */
 export function errorNoticeText(errors, key, resetAt, words, opts) {
   if (key === "dailyLimitReached") {
-    if (resetAtPassed(resetAt, opts) && typeof errors.dailyLimitCleared === "string" && errors.dailyLimitCleared) {
+    if (
+      resetPassedSinceReceipt(resetAt, opts?.receivedAt, opts) &&
+      typeof errors.dailyLimitCleared === "string" &&
+      errors.dailyLimitCleared
+    ) {
       return errors.dailyLimitCleared;
     }
     const when = formatResetAt(resetAt, words, opts);

@@ -13,6 +13,12 @@
  *        상한을 '내일'이라고 말함) → "지금 다시 할 수 있어요"(dailyLimitCleared).
  *  P2-11 단어('오늘/내일/오전/오후/이후', 'today/tomorrow/after/AM/PM', 월 이름)가 코드에 박혀
  *        사전만으로 문장을 고칠 수 없었다 → t.visualChecks.resetWhen으로 옮기고, lib는 숫자만.
+ * #558 검증 2차:
+ *  P2-1  '지금 다시'를 렌더 시점의 클라이언트 시계로만 판정 → 시계가 빠르면 방금 받은 429에도 떴다.
+ *        받은 시각(receivedAt)을 함께 두고 receivedAt < resetAt ≤ now 일 때만 (resetPassedSinceReceipt).
+ *  P2-2  resetAt 검증이 Date.parse의 관대한 해석에 기댔다 → 엄격한 ISO-8601(오프셋 포함) + 달력 왕복.
+ *
+ * 표시: [행동 보존] = 옛 코드에서도 통과(회귀 증거 아님). 표시 없음 = 옛 코드에서 실패.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -279,16 +285,18 @@ describe("daily-limit: errorNoticeText (사전 문구 + resetAt 치환)", () => 
 
 describe("P2-1: 알림이 resetAt을 넘겨 떠 있어도 '내일'이라고 하지 않는다", () => {
   // 같은 알림(같은 resetAt)을 경계 앞·뒤에서 다시 그린다 — 화면은 렌더마다 new Date()로 다시 계산한다.
+  // 알림은 경계 **앞에서** 받았다(receivedAt = before) — 2차 P2-1부터 받은 시각을 함께 넘긴다.
   const before = new Date("2026-09-28T23:55:00Z");
   const after = new Date("2026-09-29T00:05:00Z");
+  const receivedAt = before.getTime();
 
   it("KO(서울) 검수: 앞 '오늘 오전 9시 이후' → 뒤 '지금 다시 할 수 있어요'", () => {
     const e = getDictionary("ko").visualChecks.runErrors;
     assert.equal(
-      errorNoticeText(e, "dailyLimitReached", RESET, KO, { now: before, timeZone: "Asia/Seoul" }),
+      errorNoticeText(e, "dailyLimitReached", RESET, KO, { now: before, receivedAt, timeZone: "Asia/Seoul" }),
       "오늘 확인 횟수를 다 썼어요. 오늘 오전 9시 이후 다시 할 수 있어요.",
     );
-    const later = errorNoticeText(e, "dailyLimitReached", RESET, KO, { now: after, timeZone: "Asia/Seoul" });
+    const later = errorNoticeText(e, "dailyLimitReached", RESET, KO, { now: after, receivedAt, timeZone: "Asia/Seoul" });
     assert.ok(!/내일/.test(later), later);
     assert.equal(later, e.dailyLimitCleared);
     assert.match(later, /지금 다시 할 수 있어요/);
@@ -297,10 +305,10 @@ describe("P2-1: 알림이 resetAt을 넘겨 떠 있어도 '내일'이라고 하�
   it("EN(뉴욕) 검수: 'after 8 PM today' → 'now'", () => {
     const e = getDictionary("en").visualChecks.runErrors;
     assert.equal(
-      errorNoticeText(e, "dailyLimitReached", RESET, EN, { now: before, timeZone: "America/New_York" }),
+      errorNoticeText(e, "dailyLimitReached", RESET, EN, { now: before, receivedAt, timeZone: "America/New_York" }),
       "You've used all of today's checks. You can check again after 8 PM today.",
     );
-    const later = errorNoticeText(e, "dailyLimitReached", RESET, EN, { now: after, timeZone: "America/New_York" });
+    const later = errorNoticeText(e, "dailyLimitReached", RESET, EN, { now: after, receivedAt, timeZone: "America/New_York" });
     assert.ok(!/tomorrow/i.test(later), later);
     assert.equal(later, e.dailyLimitCleared);
   });
@@ -308,7 +316,7 @@ describe("P2-1: 알림이 resetAt을 넘겨 떠 있어도 '내일'이라고 하�
   it("수리도 같은 규칙 (KO/EN)", () => {
     for (const [loc, words] of [["ko", KO], ["en", EN]]) {
       const e = getDictionary(loc).visualChecks.repair.errors;
-      const later = errorNoticeText(e, "dailyLimitReached", RESET, words, { now: after, timeZone: "UTC" });
+      const later = errorNoticeText(e, "dailyLimitReached", RESET, words, { now: after, receivedAt, timeZone: "UTC" });
       assert.equal(later, e.dailyLimitCleared, loc);
       assert.ok(!/내일|tomorrow/i.test(later), later);
     }
@@ -316,14 +324,82 @@ describe("P2-1: 알림이 resetAt을 넘겨 떠 있어도 '내일'이라고 하�
 
   it("[행동 보존] 잘못된 resetAt은 '지났다'로 보지 않는다 — 일반 문구", () => {
     const e = getDictionary("ko").visualChecks.runErrors;
-    assert.equal(errorNoticeText(e, "dailyLimitReached", "garbage", KO, { now: after }), e.dailyLimitReached);
-    assert.equal(errorNoticeText(e, "dailyLimitReached", null, KO, { now: after }), e.dailyLimitReached);
+    assert.equal(errorNoticeText(e, "dailyLimitReached", "garbage", KO, { now: after, receivedAt }), e.dailyLimitReached);
+    assert.equal(errorNoticeText(e, "dailyLimitReached", null, KO, { now: after, receivedAt }), e.dailyLimitReached);
+  });
+});
+
+// #558 검증 2차 P2-1 — resetAtPassed()가 서버의 resetAt을 **렌더 시점의 클라이언트 시계**와만 비교해,
+// '알림이 resetAt을 넘겨 떠 있는 경우'와 '방금 거절된 경우'를 구분하지 못했다. 서버 23:59:30Z에 429
+// (resetAt 00:00Z)가 오고 클라이언트 시계가 90초 빠르면(00:01:00Z) 방금 받은 거절에 "지금 다시 할 수
+// 있어요"가 떴다 — 다시 누르면 또 429. UTC 자정 = KST 09:00(한국 사용자가 가장 많은 아침). 새 프로젝트
+// 토스트는 받는 순간 한 번 계산하므로 긍정 문장만 10초 보이고 첫 검수가 시작되지 않았다는 사실이 사라졌다.
+// → 받은 시각(receivedAt, 클라이언트 시계)을 함께 두고, receivedAt < resetAt ≤ now 일 때만 cleared.
+describe("P2-1(2차): '지금 다시'는 리셋 **전에** 받은 알림이 리셋을 넘겨 떠 있을 때만", () => {
+  const RESET_AT = "2026-09-29T00:00:00Z";
+  const skewedNow = new Date("2026-09-29T00:01:00Z"); // 서버 23:59:30Z, 클라이언트 시계 +90초
+
+  it("방금 받은 429 — 수신 시각이 이미 resetAt 뒤(시계 차이)면 'cleared'가 아니라 일반 문장 (KO/EN · 검수/수리)", () => {
+    for (const [loc, words] of [["ko", KO], ["en", EN]]) {
+      const d = getDictionary(loc).visualChecks;
+      for (const e of [d.runErrors, d.repair.errors]) {
+        const out = errorNoticeText(e, "dailyLimitReached", RESET_AT, words, {
+          now: skewedNow,
+          receivedAt: skewedNow.getTime(),
+          timeZone: "Asia/Seoul",
+        });
+        assert.equal(out, e.dailyLimitReached, `${loc}: ${out}`);
+        assert.notEqual(out, e.dailyLimitCleared);
+      }
+    }
   });
 
-  it("resetAtPassed: 유효한 과거만 true", () => {
-    assert.equal(dl.resetAtPassed(RESET, { now: after }), true);
-    assert.equal(dl.resetAtPassed(RESET, { now: before }), false);
-    assert.equal(dl.resetAtPassed("garbage", { now: after }), false);
-    assert.equal(dl.resetAtPassed(null, { now: after }), false);
+  it("수신 시각이 없으면(받는 순간 한 번 계산하는 새 프로젝트 토스트) 'cleared'를 내지 않는다", () => {
+    const e = getDictionary("ko").visualChecks.runErrors;
+    assert.equal(
+      errorNoticeText(e, "dailyLimitReached", RESET_AT, KO, { now: skewedNow, timeZone: "Asia/Seoul" }),
+      e.dailyLimitReached,
+    );
+  });
+
+  it("수신 시각이 이상하면(NaN·문자열·Infinity·Date 객체) 'cleared'를 내지 않는다", () => {
+    const e = getDictionary("ko").visualChecks.runErrors;
+    for (const receivedAt of [Number.NaN, "2026-09-28T23:00:00Z", Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, new Date("2026-09-28T23:00:00Z")]) {
+      assert.equal(
+        errorNoticeText(e, "dailyLimitReached", RESET_AT, KO, { now: skewedNow, receivedAt, timeZone: "Asia/Seoul" }),
+        e.dailyLimitReached,
+        String(receivedAt),
+      );
+    }
+  });
+
+  it("[행동 보존] 리셋 1분 전에 받은 알림이 리셋을 넘겨 떠 있으면 'cleared' (1차 P2-1 그대로)", () => {
+    const e = getDictionary("ko").visualChecks.runErrors;
+    assert.equal(
+      errorNoticeText(e, "dailyLimitReached", RESET_AT, KO, {
+        now: skewedNow,
+        receivedAt: Date.parse("2026-09-28T23:59:00Z"),
+        timeZone: "Asia/Seoul",
+      }),
+      e.dailyLimitCleared,
+    );
+  });
+
+  it("resetPassedSinceReceipt: receivedAt < resetAt ≤ now 일 때만 true", () => {
+    const f = dl.resetPassedSinceReceipt;
+    assert.equal(typeof f, "function");
+    const r = Date.parse(RESET_AT);
+    assert.equal(f(RESET_AT, r - 60_000, { now: new Date(r + 60_000) }), true);
+    assert.equal(f(RESET_AT, r - 60_000, { now: new Date(r) }), true); // 경계 = 지남
+    assert.equal(f(RESET_AT, r - 60_000, { now: new Date(r - 1) }), false); // 아직
+    assert.equal(f(RESET_AT, r, { now: new Date(r + 60_000) }), false); // 리셋 시각에 받은 거절
+    assert.equal(f(RESET_AT, r + 60_000, { now: new Date(r + 60_000) }), false); // 시계 차이
+    assert.equal(f(RESET_AT, undefined, { now: new Date(r + 60_000) }), false);
+    assert.equal(f("garbage", r - 60_000, { now: new Date(r + 60_000) }), false);
+    assert.equal(f(null, r - 60_000, { now: new Date(r + 60_000) }), false);
+  });
+
+  it("옛 이름 resetAtPassed는 없다 — 받은 시각 없이 '지났다'를 판정하는 길을 남기지 않는다", () => {
+    assert.equal("resetAtPassed" in dl, false);
   });
 });
