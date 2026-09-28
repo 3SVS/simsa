@@ -2280,6 +2280,8 @@ export type Dictionary = {
     statusFailed: string;
     progressTitle: string;
     progressBody: string;
+    /** Train W — W-3 ①: queued-only body (waiting its turn + measured duration). */
+    progressBodyQueued: string;
     failedTitle: string;
     failedBody: string;
     runErrors: {
@@ -2288,7 +2290,36 @@ export type Dictionary = {
       projectNotFound: string;
       forbidden: string;
       invalidIntent: string;
+      /** Train W — W-2: 429 daily cap (general sentence, no time). */
+      dailyLimitReached: string;
+      /** Train W — W-2: 429 daily cap with the reader's reset time in "{when}". */
+      dailyLimitReachedAt: string;
+      /** #558 검증 P2-1: the cap notice is still on screen after resetAt passed. */
+      dailyLimitCleared: string;
+      /** Train W — W-2: 503 INSPECTION_ENABLED="off". */
+      inspectionDisabled: string;
       generic: string;
+    };
+    /**
+     * Train W — W-2 "{when}" words for the daily cap (#558 검증 P2-11). Every
+     * word and the word order live here; lib/daily-limit.mjs fills numbers.
+     */
+    resetWhen: {
+      /** "{time}" placeholder. */
+      today: string;
+      tomorrow: string;
+      /** "{month}" (from months), "{day}", "{time}". */
+      onDate: string;
+      /** "{period}", "{hour}" — used when the minute is 0. */
+      time: string;
+      /** "{period}", "{hour}", "{minute}" (0–59) or "{mm}" (two digits). */
+      timeWithMinute: string;
+      am: string;
+      pm: string;
+      /** The hour number shown for 00:xx ("0" in ko, "12" in en). */
+      midnightHour: string;
+      /** 12 month names/numbers, January first. */
+      months: string[];
     };
     compare: {
       title: string;
@@ -2318,10 +2349,17 @@ export type Dictionary = {
       submitting: string;
       progressTitle: string;
       progressBody: string;
+      /** Train W — W-3 ①: queued-only body (no duration — no measured sample). */
+      progressBodyQueued: string;
       statusQueued: string;
       statusRunning: string;
       doneTitle: string;
       doneBody: string;
+      /** Train W — W-3 ③: done copy for a job that really changed code (mode auto_fix). */
+      doneTitleAutoFix: string;
+      doneBodyAutoFix: string;
+      /** Train W — W-3 ③ (contract 4): shown only when buildVerified === false. */
+      buildUnverified: string;
       openPr: string;
       branchLabel: string;
       noPrNote: string;
@@ -2342,6 +2380,13 @@ export type Dictionary = {
         alreadyActive: string;
         notFound: string;
         forbidden: string;
+        /** Train W — W-2: 429 daily repair cap (general / with "{when}"). */
+        dailyLimitReached: string;
+        dailyLimitReachedAt: string;
+        /** #558 검증 P2-1: the cap notice is still on screen after resetAt passed. */
+        dailyLimitCleared: string;
+        /** Train W — W-2: 503 REPAIR_ENABLED="off". */
+        repairDisabled: string;
         generic: string;
       };
     };
