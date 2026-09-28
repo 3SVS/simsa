@@ -6,6 +6,8 @@
 // from these helpers; all user-facing copy stays in the dictionary
 // (t.visualChecks.repair.*). Mirrors visual-check-run-state.mjs conventions.
 
+import { readDailyLimit } from "./daily-limit.mjs";
+
 /** Poll cadence while a repair job is still queued or running. */
 export const REPAIR_POLL_INTERVAL_MS = 5000;
 
@@ -115,10 +117,17 @@ export function repairErrorKey(codeOrStatus) {
     if (code === 409) return "alreadyActive";
     if (code === 404) return "notFound";
     if (code === 403) return "forbidden";
-    // A bare 400/500 without a JSON error code carries no more detail.
+    // A bare 400/500 without a JSON error code carries no more detail. A bare
+    // 429/503 is infrastructure — never claim "today's cap" or "paused" (W-2).
     return "generic";
   }
   switch (code) {
+    // Train W — W-2 (D-7 amend): per-user repair cap (429, 5/day) and the
+    // REPAIR_ENABLED kill switch (503). Old servers never send these.
+    case "daily_limit_reached":
+      return "dailyLimitReached";
+    case "repair_disabled":
+      return "repairDisabled";
     case "run_not_repairable":
       return "notRepairable";
     case "github_repo_required":
@@ -135,4 +144,72 @@ export function repairErrorKey(codeOrStatus) {
     default:
       return "generic";
   }
+}
+
+/**
+ * Train W — W-2: map a whole repair-request answer (the parsed body) so the
+ * daily cap's resetAt reaches the card. Same contract as runErrorNotice in
+ * visual-check-run-state.mjs; the repair surface has its own copy (kind별).
+ *
+ * @param {unknown} res
+ * @returns {{ errorKey: string, resetAt: string | null }} errorKey is a RepairErrorKey (see .d.mts)
+ */
+export function repairErrorNotice(res) {
+  const code = res && typeof res === "object" ? /** @type {{ error?: unknown }} */ (res).error : res;
+  const errorKey = repairErrorKey(code);
+  const resetAt = errorKey === "dailyLimitReached" ? (readDailyLimit(res)?.resetAt ?? null) : null;
+  return { errorKey, resetAt };
+}
+
+/**
+ * Callout tone for a repair request error: today's cap and a paused service
+ * are information, not the reader's mistake.
+ *
+ * @param {string} key
+ * @returns {"info" | "error"}
+ */
+export function repairErrorTone(key) {
+  return key === "dailyLimitReached" || key === "repairDisabled" ? "info" : "error";
+}
+
+/**
+ * Train W — W-3 ③ (재정렬 §1 #7, D-4 keep: a label, not a gate). The repair
+ * container's only post-apply check is `node --check` on .js/.mjs; the server
+ * reports `buildVerified:false` when the change touched anything else (ts,
+ * tsx, css, json, html …). Show the one-line "we couldn't confirm the fixed
+ * code builds" ONLY on an explicit false from a job that really changed code:
+ *   - true  → verified by that check → nothing to say
+ *   - null  → legacy / undecidable  → nothing to say (no guess)
+ *   - absent (old server)           → nothing to say
+ *
+ * Contract (server ↔ dashboard, #558 검증 P2-2·P2-13): buildVerified is about
+ * the code the repair changed — computed over `autoFix.changedFiles` only
+ * (SIMSA-FIX-BRIEF.md, committed alongside, is excluded); a `brief_only` job
+ * changed no code → `buildVerified: null`. The dashboard uses the SAME test as
+ * repairDoneKind (`mode === "auto_fix"`), so the build line never appears on a
+ * card whose done copy says "code was not changed" (mode null/unknown included).
+ *
+ * @param {{ status?: unknown, mode?: unknown, buildVerified?: unknown } | null | undefined} repair
+ * @returns {boolean}
+ */
+export function showBuildUnverified(repair) {
+  if (!repair || typeof repair !== "object") return false;
+  if (repair.status !== "done") return false;
+  if (repairDoneKind(repair) !== "autoFix") return false;
+  return repair.buildVerified === false;
+}
+
+/**
+ * Which "done" copy the repair card shows. Since Stage 270 a repair either
+ * applied real code changes (`mode: "auto_fix"`, non-draft PR) or fell back to
+ * the Stage 268 fix-brief draft PR (`brief_only`). The card used to say "code
+ * changes are not applied automatically yet" for both — false for auto_fix,
+ * and it would contradict the build line. Legacy rows (null) and unknown
+ * values predate auto_fix → the brief copy.
+ *
+ * @param {{ mode?: unknown } | null | undefined} repair
+ * @returns {"autoFix" | "briefOnly"}
+ */
+export function repairDoneKind(repair) {
+  return repair && typeof repair === "object" && repair.mode === "auto_fix" ? "autoFix" : "briefOnly";
 }

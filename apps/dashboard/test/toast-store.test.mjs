@@ -27,6 +27,15 @@ describe("toast-store", () => {
     assert.equal(normalizeToast({ message: "x", variant: "weird" }).variant, "success");
   });
 
+  // #558 검증 P2-4·P2-14 — "사용자 잘못이 아닌" 안내(오늘 상한·일시 중지)는 빨간 error(role=alert)가
+  // 아니라 info 톤이어야 한다. 종전 store는 info를 success로 바꿔 버렸다.
+  it("honours an info variant (information, not a red error)", () => {
+    assert.equal(normalizeToast({ message: "x", variant: "info" }).variant, "info");
+    const s = toastReducer(initialToastState(), { type: "push", toast: { message: "Paused", variant: "info", duration: 10000 } });
+    assert.equal(s.toasts[0].variant, "info");
+    assert.equal(s.toasts[0].duration, 10000);
+  });
+
   it("drops toasts without a message", () => {
     assert.equal(normalizeToast({ message: "" }), null);
     assert.equal(normalizeToast({}), null);

@@ -25,12 +25,17 @@ function escapeRe(s) {
 /**
  * Whole-token match for short/ambiguous terms (PR, v0, repo, diff) so "PRD",
  * "v0.13", "report" or "difference" do not fire; substring match otherwise.
+ *
+ * A Hangul letter AFTER the term is a boundary: Korean particles attach
+ * directly to a Latin word ("PR이", "PR로", "repo를"), and treating them as
+ * part of the word made every KO sentence with a particle slip past the check
+ * (PR #558 검증 P2-9). Hangul BEFORE the term still counts as inside a word.
  */
 function termRegex(term) {
   const e = escapeRe(term);
   const needsBoundary = /^[A-Za-z0-9/]+$/.test(term) && term.length <= 5;
   // `(?!\.\d)` keeps "v0.13.2" (a version string) from firing for "v0".
-  return needsBoundary ? new RegExp(`(^|[^A-Za-z0-9가-힣])(${e})(?=$|[^A-Za-z0-9가-힣])(?!\\.\\d)`, "g") : new RegExp(`(${e})`, "gi");
+  return needsBoundary ? new RegExp(`(^|[^A-Za-z0-9가-힣])(${e})(?=$|[^A-Za-z0-9])(?!\\.\\d)`, "g") : new RegExp(`(${e})`, "gi");
 }
 
 /**
