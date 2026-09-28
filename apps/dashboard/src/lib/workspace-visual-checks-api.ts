@@ -6,7 +6,8 @@
  * dashboard lists them and renders the Korean non-dev report. Stage 264 adds
  * the one-click run dispatch (POST …/visual-checks/run, Stage 263 backend).
  * Stage 269 adds the repair loop client (POST/GET …/:runId/repair, Stage 268
- * backend): "[고치기]" turns a failed check into a repair branch + draft PR.
+ * backend): "[고치기]" turns a failed check into a repair branch + PR (code
+ * changes since Stage 270, or a fix-brief draft PR as the fallback).
  */
 
 export const CENTRAL_PLANE_URL =
@@ -273,7 +274,9 @@ export async function runVisualCheck(
 /**
  * Queue (and, when the sandbox is available, dispatch) a repair job for a
  * finished-but-not-working check. The backend creates a repair branch and a
- * DRAFT PR carrying the fix brief — it does NOT auto-apply code changes.
+ * PR: auto_fix (Stage 270) → a non-draft PR with real code changes;
+ * fallback brief_only → a DRAFT PR carrying only the fix brief. Which one is
+ * known only when the job is done (RepairJob.mode).
  * Known error codes: run_not_repairable, github_repo_required,
  * github_token_required, repair_already_active (409, with activeJobId),
  * run_not_found, project_not_found, forbidden, and (Train W)

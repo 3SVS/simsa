@@ -2499,15 +2499,17 @@ const EN = {
       latestOnly: "Only in this inspection",
       noPairs: "No matching screenshots to compare side by side.",
     },
-    // Stage 269 — "[고치기]" repair button: dispatches a Stage 268 repair job
-    // that opens a DRAFT PR carrying the fix brief (no auto-applied code).
+    // Stage 269 — "[고치기]" repair button: dispatches a repair job. Since Stage
+    // 270 it either changes the code (auto_fix) or, when it can't, falls back to
+    // the fix brief (brief_only). Before start / in flight the mode is unknown,
+    // so desc and progressBody promise neither (#558 검증 P2-10).
     repair: {
       title: "Start a repair",
-      desc: "Simsa creates a repair branch on your connected GitHub repository and opens a draft pull request containing the fix brief (SIMSA-FIX-BRIEF.md). Code changes are not applied automatically yet — the PR is the starting point for your coding agent or developer to pick up.",
+      desc: "Simsa tries to fix this problem directly in your connected project and puts the change up for you to look over. When it can't fix it directly, it adds a fix brief (SIMSA-FIX-BRIEF.md) instead, for your coding agent or developer to pick up.",
       button: "Fix it",
       submitting: "Requesting…",
       progressTitle: "Repair in progress",
-      progressBody: "Simsa is preparing the repair branch and the draft PR. This section updates automatically when it is ready.",
+      progressBody: "Simsa is preparing the fix. This section updates automatically when it is ready.",
       // Train W — W-3 ①: no duration here — there is no measured sample for repairs yet.
       progressBodyQueued: "Waiting its turn. It starts as soon as a slot is free. This section updates automatically.",
       statusQueued: "Waiting its turn",
@@ -2516,8 +2518,9 @@ const EN = {
       doneBody: "A draft PR with the fix brief (SIMSA-FIX-BRIEF.md) was opened. Code changes are not applied automatically yet — hand this PR to your coding agent or developer to continue.",
       // Train W — W-3 ③: a job that really changed code (mode auto_fix, Stage 270)
       // gets its own done copy — the brief-only copy above says code was NOT changed.
-      doneTitleAutoFix: "The fix is ready as a PR",
-      doneBodyAutoFix: "Simsa changed the code to fix this problem and opened a PR with the change. Look it over before you merge it.",
+      // #558 검증 P2-3·P2-9: no developer terms (was "…as a PR … before you merge it").
+      doneTitleAutoFix: "The fix is ready",
+      doneBodyAutoFix: "Simsa changed the code to fix this problem. Look it over before it goes into your live app.",
       // Contract 4 — only when the server says buildVerified === false.
       buildUnverified: "We couldn't confirm that the fixed code actually builds.",
       openPr: "Open the repair PR on GitHub",
@@ -5252,15 +5255,16 @@ const KO = {
       latestOnly: "이번 검수에만 있어요",
       noPairs: "나란히 비교할 수 있는 같은 이름의 스크린샷이 없어요.",
     },
-    // Stage 269 — "[고치기]" 버튼: Stage 268 수리 작업을 시작해 고침 지시서를
-    // 담은 초안(Draft) PR을 열어요 (코드 자동 수정은 아직 아님).
+    // Stage 269 — "[고치기]" 버튼: 수리 작업을 시작해요. Stage 270부터는 코드를 실제로
+    // 고치거나(auto_fix), 어려우면 고침 지시서로 대신해요(brief_only). 시작 전·진행 중에는
+    // 어느 쪽이 될지 모르므로 desc·progressBody는 둘 중 하나를 약속하지 않아요(#558 검증 P2-10).
     repair: {
       title: "고치기 시작",
-      desc: "Simsa가 연결된 GitHub 저장소에 수리 브랜치를 만들고, 고침 지시서(SIMSA-FIX-BRIEF.md)를 담은 초안(Draft) PR을 열어요. 코드가 자동으로 수정되는 건 아직 아니에요 — 이 PR은 코딩 에이전트나 개발자가 이어받는 수리 시작점이에요.",
+      desc: "Simsa가 연결된 프로젝트에서 이 문제를 직접 고쳐 보고, 고친 내용을 살펴보실 수 있게 올려 둬요. 바로 고치기 어려우면 무엇을 어떻게 고칠지 적은 고침 지시서(SIMSA-FIX-BRIEF.md)를 대신 올려요 — 코딩 에이전트나 개발자가 이어받을 수 있어요.",
       button: "고치기",
       submitting: "요청하는 중이에요…",
       progressTitle: "고치는 중이에요",
-      progressBody: "수리 브랜치와 초안 PR을 준비하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
+      progressBody: "고칠 내용을 준비하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
       // Train W — W-3 ①: 수리는 실측 표본이 없어 시간을 말하지 않는다.
       progressBodyQueued: "순서를 기다리는 중이에요. 차례가 오면 바로 시작해요. 준비되면 이 영역이 자동으로 갱신돼요.",
       statusQueued: "순서 기다리는 중",
@@ -5269,8 +5273,9 @@ const KO = {
       doneBody: "고침 지시서(SIMSA-FIX-BRIEF.md)를 담은 초안 PR이 열렸어요. 코드가 자동으로 수정된 건 아직 아니에요 — 이 PR을 코딩 에이전트나 개발자에게 넘겨 이어서 진행하세요.",
       // Train W — W-3 ③: 실제로 코드를 고친 잡(mode auto_fix, Stage 270)의 완료 문구 —
       // 위 문구는 "코드는 안 바뀌었다"는 지시서 전용이다.
-      doneTitleAutoFix: "고친 코드가 담긴 PR이 준비됐어요",
-      doneBodyAutoFix: "Simsa가 이 문제를 고치도록 코드를 바꾸고, 그 변경을 PR로 올렸어요. 합치기 전에 한번 살펴봐 주세요.",
+      // #558 검증 P2-3·P2-9: 개발자 용어 없이("PR이 준비됐어요 … PR로 올렸어요" 교체).
+      doneTitleAutoFix: "고친 내용이 준비됐어요",
+      doneBodyAutoFix: "Simsa가 이 문제를 고치도록 코드를 바꿔 두었어요. 실제 앱에 반영하기 전에 한번 살펴봐 주세요.",
       // 계약 4 — 서버가 buildVerified === false라고 할 때만.
       buildUnverified: "고친 코드가 실제로 빌드되는지는 확인하지 못했어요.",
       openPr: "GitHub에서 수리 PR 열기",

@@ -10,9 +10,9 @@
 // section: verdict transition, findings resolved/remaining/new, and
 // side-by-side screenshot pairs (previous vs latest).
 // Stage 269 — on a done-but-not-working run, renders the "[고치기]" repair
-// section: dispatches a Stage 268 repair job (draft PR carrying the fix
-// brief — code is NOT auto-applied), polls it every 5s, then links the
-// resulting GitHub PR ("수리 시작점 PR").
+// section: dispatches a repair job (Stage 270 auto_fix → PR with real code
+// changes; fallback brief_only → fix-brief draft PR), polls it every 5s, then
+// links the resulting GitHub PR.
 // Stage 272 — the repair-done card explains that the live site only changes
 // after merge + deploy, and offers a one-click re-check (new Stage 264 run →
 // navigate to its detail, which auto-shows the Stage 266 comparison).
@@ -433,9 +433,10 @@ function BuilderPasteSection({
 }
 
 // Stage 269 — "[고치기]": dispatch a repair job for a done-but-not-working
-// run, poll it every 5s, and surface the resulting draft PR. Honest copy:
-// the PR carries the fix brief (SIMSA-FIX-BRIEF.md) — code changes are NOT
-// auto-applied yet; the PR is the handoff point for an agent/developer.
+// run, poll it every 5s, and surface the resulting PR. Honest copy: before
+// and during the job the mode is unknown, so the copy promises neither; when
+// done, repairDoneKind picks auto_fix (code changed) or brief_only (the PR
+// carries only SIMSA-FIX-BRIEF.md — the handoff point for an agent/developer).
 function RepairSection({
   projectId,
   runId,

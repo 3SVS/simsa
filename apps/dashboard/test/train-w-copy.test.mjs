@@ -43,6 +43,12 @@ function trainWStrings(d) {
     "repair.statusQueued": vc.repair.statusQueued,
     "repair.progressBodyQueued": vc.repair.progressBodyQueued,
     "repair.buildUnverified": vc.repair.buildUnverified,
+    // PR #558 검증 P2-3·P2-9 — auto_fix 완료 문구가 가드에서 빠져 'PR'이 통과했다.
+    "repair.doneTitleAutoFix": vc.repair.doneTitleAutoFix,
+    "repair.doneBodyAutoFix": vc.repair.doneBodyAutoFix,
+    // P2-10 — 진행 중·시작 전 문구를 방식 무관하게 다시 썼다(초안 PR·지시서만 약속 제거).
+    "repair.progressBody": vc.repair.progressBody,
+    "repair.desc": vc.repair.desc,
   };
 }
 
@@ -86,6 +92,36 @@ describe("D-17: Train W 새 문구에 초보자 금칙어 0 (KO/EN)", () => {
       }
     });
   }
+});
+
+// PR #558 검증 P2-3·P2-9 — 금칙어 탐지기의 한글 조사 사각지대: 'PR이'·'PR로'는 라틴 토큰 뒤에
+// 한글 조사가 붙어 termRegex의 뒤 경계(한글도 '단어 안'으로 봄)에 걸려 놓쳤다. KO 가드가 조용히
+// 통과하던 이유. 뒤에 오는 한글은 경계로 본다(앞쪽은 그대로 — 'PRD'·'report'·'v0.13' 오탐 없음).
+describe("D-17 탐지기: 라틴 금칙어 뒤 한글 조사도 잡는다", () => {
+  it("'PR이'·'PR로'·'repo를' → 잡힌다", () => {
+    assert.deepEqual(devTermHits("고친 코드가 담긴 PR이 준비됐어요").map((h) => h.term), ["PR"]);
+    assert.deepEqual(devTermHits("그 변경을 PR로 올렸어요").map((h) => h.term), ["PR"]);
+    assert.deepEqual(devTermHits("repo를 연결하세요").map((h) => h.term), ["repo"]);
+  });
+
+  it("[행동 보존] 비슷한 말은 여전히 안 잡는다 (PRD를 · report · v0.13 · difference)", () => {
+    assert.deepEqual(devTermHits("PRD를 붙여넣으세요. v0.13.2 버전. See the report for the difference."), []);
+  });
+});
+
+describe("P2-10: 수리 진행·시작 전 문구는 방식과 무관하게 말한다", () => {
+  it("진행 중 문구가 '초안 PR'을 약속하지 않는다 (auto_fix는 초안이 아닌 PR을 연다)", () => {
+    for (const d of [ko, en]) {
+      assert.ok(!/초안|draft/i.test(d.visualChecks.repair.progressBody), d.visualChecks.repair.progressBody);
+    }
+  });
+
+  it("시작 전 설명이 '코드 자동 수정은 아직'이라고 하지 않는다 — 고쳐 보고, 어려우면 지시서", () => {
+    assert.ok(!/아직 아니에요|not applied automatically/i.test(ko.visualChecks.repair.desc), ko.visualChecks.repair.desc);
+    assert.ok(!/아직 아니에요|not applied automatically/i.test(en.visualChecks.repair.desc), en.visualChecks.repair.desc);
+    assert.match(ko.visualChecks.repair.desc, /지시서/);
+    assert.match(en.visualChecks.repair.desc, /fix brief/i);
+  });
 });
 
 describe("W-3 ① queued 카피 정직화", () => {

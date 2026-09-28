@@ -22,6 +22,14 @@ describe("beginner-terms: developer vocabulary in the default flow (Train N6)", 
     assert.deepEqual(devTermHits("Open the PR · v0 · repo").map((h) => h.term), ["repo", "PR", "v0"].sort((a, b) => DEV_TERMS.indexOf(a) - DEV_TERMS.indexOf(b)));
   });
 
+  it("catches a Latin term followed by a Korean particle (PR이 · PR로 · repo를) — #558 검증 P2-9", () => {
+    assert.deepEqual(devTermHits("고친 코드가 담긴 PR이 준비됐어요").map((h) => h.term), ["PR"]);
+    assert.deepEqual(devTermHits("그 변경을 PR로 올렸어요").map((h) => h.term), ["PR"]);
+    assert.deepEqual(devTermHits("repo를 연결하세요 · diff가 커요").map((h) => h.term), ["repo", "diff"]);
+    // Still no look-alikes: PRD with a particle, a Hangul-prefixed token.
+    assert.deepEqual(devTermHits("PRD를 붙여넣으세요 · 새PR"), []);
+  });
+
   it("caps the list and never returns bare counts", () => {
     const body = DEV_TERMS.join(" · ");
     const hits = devTermHits(body, { max: 3 });
