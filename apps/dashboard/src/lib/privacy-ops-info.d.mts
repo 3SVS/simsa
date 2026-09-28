@@ -9,8 +9,10 @@ export type OpsInfoItem = {
   envelope?: readonly string[];
 };
 
-/** Privacy policy effective date (YYYY-MM-DD) — change only this on deploy. */
+/** Privacy policy effective date (YYYY-MM-DD) — set to the deploy date right before deploying. */
 export const PRIVACY_EFFECTIVE_DATE: string;
+/** Change history, ascending; append a line per policy change (never rewrite old lines). */
+export const PRIVACY_CHANGE_LOG: ReadonlyArray<{ date: string; summary: string }>;
 export const OPS_INFO_TITLE: string;
 export const OPS_INFO_LEAD: string;
 export const OPS_INFO_ITEMS: ReadonlyArray<OpsInfoItem>;

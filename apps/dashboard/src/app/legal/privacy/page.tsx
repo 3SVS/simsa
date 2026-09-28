@@ -17,6 +17,7 @@ import {
   OPS_INFO_RETENTION,
   OPS_INFO_OPT_OUT,
   TRAINING_COPY_NOTE,
+  PRIVACY_CHANGE_LOG,
 } from "@/lib/privacy-ops-info.mjs";
 
 export const metadata = { title: "개인정보처리방침 — Simsa" };
@@ -91,6 +92,15 @@ export default function PrivacyPage() {
       <ul>
         <li>개인정보 보호책임자: 배승훈 (대표자, 오마이워크)</li>
         <li>문의: seunghunbae@3svs.com</li>
+      </ul>
+
+      <h2>변경 이력</h2>
+      <ul>
+        {PRIVACY_CHANGE_LOG.map((entry) => (
+          <li key={`${entry.date}-${entry.summary}`}>
+            <strong>{entry.date}</strong> — {entry.summary}
+          </li>
+        ))}
       </ul>
     </>
   );

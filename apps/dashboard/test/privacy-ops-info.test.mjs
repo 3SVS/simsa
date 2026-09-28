@@ -313,6 +313,35 @@ describe("P2-7: '원하지 않으시면' — 요청이 실제로 하는 일만 �
   });
 });
 
+// PR #558 검증 P2-8 — 시행일을 그 자리에서 바꾸면서 이전 시행일(2026-07-19)과 무엇이 바뀌었는지가
+// 사라졌다. 설계 §4 처리방침 변경 목록: "시행일 갱신 + 변경 이력". 방침 변경 시 변경 내용·시행 시기를
+// 계속 공개한다.
+describe("P2-8: 변경 이력 — 이전 시행일과 바뀐 것을 남긴다", () => {
+  it("변경 이력은 날짜 오름차순이고, 첫 줄은 최초 시행(2026-07-19), 마지막 줄 날짜 = 현재 시행일", () => {
+    const log = ops.PRIVACY_CHANGE_LOG ?? [];
+    assert.ok(Array.isArray(log) && log.length >= 2, "PRIVACY_CHANGE_LOG");
+    for (const e of log) {
+      assert.match(e.date, /^\d{4}-\d{2}-\d{2}$/);
+      assert.ok(typeof e.summary === "string" && e.summary.trim().length > 0, e.date);
+    }
+    const dates = log.map((e) => e.date);
+    assert.deepEqual([...dates].sort(), dates, "ascending");
+    assert.equal(log[0].date, "2026-07-19");
+    assert.equal(log[log.length - 1].date, ops.PRIVACY_EFFECTIVE_DATE);
+  });
+
+  it("이번 변경 줄은 무엇이 바뀌었는지 말한다 (§1 운영 정보 · §7 직함)", () => {
+    const last = (ops.PRIVACY_CHANGE_LOG ?? []).at(-1)?.summary ?? "";
+    assert.match(last, /운영 정보/);
+    assert.match(last, /대표자/);
+  });
+
+  it("페이지가 변경 이력을 그린다", () => {
+    assert.match(page, /변경 이력/);
+    assert.match(page, /PRIVACY_CHANGE_LOG\.map\(/);
+  });
+});
+
 describe("W-9 방침 페이지 배선", () => {
   it("페이지가 고지 모듈을 가져와 항목을 모두 그린다", () => {
     assert.match(page, /from "@\/lib\/privacy-ops-info\.mjs"/);
