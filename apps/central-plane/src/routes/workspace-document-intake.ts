@@ -33,7 +33,7 @@ import {
   extractDocumentText,
   buildDocumentDraftPrompt,
 } from "../workspace/document-intake.js";
-import { generateIdeaToSpecDraft } from "../workspace/generate.js";
+import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 
@@ -208,7 +208,8 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
 
     // DRAFT ONLY — never persist productSpec/items here; the dashboard confirm
     // flow saves via the existing POST /workspace/projects endpoint.
-    const { ok: _ok, ...draft } = result;
+    // #311 경계: llmUsage(토큰·지연·벤더 라우팅)는 운영 관측 데이터 — toClientDraft가 유일한 제거 지점이다.
+    const { ok: _ok, ...draft } = toClientDraft(result);
     return c.json({
       ok: true,
       draft,
