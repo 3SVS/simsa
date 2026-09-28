@@ -10,9 +10,9 @@
 // section: verdict transition, findings resolved/remaining/new, and
 // side-by-side screenshot pairs (previous vs latest).
 // Stage 269 — on a done-but-not-working run, renders the "[고치기]" repair
-// section: dispatches a Stage 268 repair job (draft PR carrying the fix
-// brief — code is NOT auto-applied), polls it every 5s, then links the
-// resulting GitHub PR ("수리 시작점 PR").
+// section: dispatches a repair job (Stage 270 auto_fix → PR with real code
+// changes; fallback brief_only → fix-brief draft PR), polls it every 5s, then
+// links the resulting GitHub PR.
 // Stage 272 — the repair-done card explains that the live site only changes
 // after merge + deploy, and offers a one-click re-check (new Stage 264 run →
 // navigate to its detail, which auto-shows the Stage 266 comparison).
@@ -57,8 +57,9 @@ import {
 import type { VerdictTone, SeverityTone } from "@/lib/visual-check-view.mjs";
 import { compareVisualChecks, pickPreviousDoneCheck } from "@/lib/visual-check-compare.mjs";
 import type { VisualCheckComparison, ComparedFinding } from "@/lib/visual-check-compare.mjs";
-import { isActiveStatus, mapRunError, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
+import { isActiveStatus, runErrorNotice, runErrorTone, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
+import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { buildRecheckBody } from "@/lib/visual-check-recheck.mjs";
 import {
   canRepair,
@@ -66,7 +67,10 @@ import {
   isRepairActive,
   repairFailureKind,
   isEnvCause,
-  repairErrorKey,
+  repairErrorNotice,
+  repairErrorTone,
+  showBuildUnverified,
+  repairDoneKind,
   REPAIR_POLL_INTERVAL_MS,
 } from "@/lib/repair-state.mjs";
 import type { RepairErrorKey } from "@/lib/repair-state.mjs";
@@ -321,7 +325,12 @@ function ComparisonSection({
 // merge + deploy) and a one-click re-check that dispatches a new Stage 264
 // run and navigates to its detail page (which polls and auto-shows the
 // Stage 266 comparison once done).
-type RecheckNotice = { kind: "queuedOnly" } | { kind: "error"; errorKey: RunErrorKey };
+// Train W — W-2: resetAt rides along so a capped re-check can say when (null otherwise);
+// receivedAt = when the answer arrived (#558 검증 2차 P2-1 — "now" only after a reset
+// that happened while the notice was on screen).
+type RecheckNotice =
+  | { kind: "queuedOnly" }
+  | { kind: "error"; errorKey: RunErrorKey; resetAt: string | null; receivedAt: number };
 
 // 화면 검수 결과를 프로젝트 상태에 남긴다 — 하단 "다음 한 걸음" 바가 여기서 무엇을
 // 가리킬지 정하려면 이 사실이 필요하고, 화면 검수는 `checkResults`에 아무것도 쓰지
@@ -373,7 +382,8 @@ function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string
     if (res.ok) {
       setNotice({ kind: "queuedOnly" });
     } else {
-      setNotice({ kind: "error", errorKey: mapRunError(res.error) });
+      // The whole answer, not just its code — a 429 carries resetAt (W-2).
+      setNotice({ kind: "error", ...runErrorNotice(res), receivedAt: Date.now() });
     }
     setSubmitting(false);
   }
@@ -386,10 +396,10 @@ function RecheckNoticeView({ notice, t }: { notice: RecheckNotice | null; t: Dic
   if (notice.kind === "queuedOnly") {
     return <div className="callout callout-info mt-2">{t.visualChecks.runQueuedOnly}</div>;
   }
-  const soft = notice.errorKey === "runAlreadyActive" || notice.errorKey === "websiteSourceRequired";
+  const soft = runErrorTone(notice.errorKey) === "info";
   return (
     <div className={`callout mt-2 ${soft ? "callout-info" : "callout-error"}`}>
-      {t.visualChecks.runErrors[notice.errorKey]}
+      {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
     </div>
   );
 }
@@ -446,9 +456,10 @@ function BuilderPasteSection({
 }
 
 // Stage 269 — "[고치기]": dispatch a repair job for a done-but-not-working
-// run, poll it every 5s, and surface the resulting draft PR. Honest copy:
-// the PR carries the fix brief (SIMSA-FIX-BRIEF.md) — code changes are NOT
-// auto-applied yet; the PR is the handoff point for an agent/developer.
+// run, poll it every 5s, and surface the resulting PR. Honest copy: before
+// and during the job the mode is unknown, so the copy promises neither; when
+// done, repairDoneKind picks auto_fix (code changed) or brief_only (the PR
+// carries only SIMSA-FIX-BRIEF.md — the handoff point for an agent/developer).
 function RepairSection({
   projectId,
   runId,
@@ -469,7 +480,9 @@ function RepairSection({
   // null = no repair job yet (show the button); otherwise render the job state.
   const [repair, setRepair] = useState<RepairJob | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "submitting">("loading");
-  const [errorKey, setErrorKey] = useState<RepairErrorKey | null>(null);
+  // Train W — W-2: the request error plus the daily cap's resetAt (null otherwise)
+  // and when the answer arrived (#558 검증 2차 P2-1).
+  const [errorNotice, setErrorNotice] = useState<{ errorKey: RepairErrorKey; resetAt: string | null; receivedAt: number } | null>(null);
   // Stage 272 — post-repair re-check dispatch (shared hook, Train C — C0/C2a).
   const recheck = useRecheck(projectId, check, userKey, locale);
 
@@ -503,15 +516,16 @@ function RepairSection({
   async function handleRepair() {
     if (phase !== "ready") return;
     setPhase("submitting");
-    setErrorKey(null);
+    setErrorNotice(null);
     const res = await requestRepair(projectId, runId, userKey, locale);
     if (res.ok) {
       // Undispatched jobs come back already failed (dispatched:false) with
       // the reason in `note` — surface it through the failed card.
       setRepair(res.dispatched ? res.repair : { ...res.repair, error: res.repair.error ?? res.note ?? null });
     } else {
-      const key = repairErrorKey(res.error);
-      if (key === "alreadyActive") {
+      // The whole answer, not just its code — a 429 carries resetAt (W-2).
+      const notice = { ...repairErrorNotice(res), receivedAt: Date.now() };
+      if (notice.errorKey === "alreadyActive") {
         // 409 — another repair is already running: resume polling that job.
         const g = await getRepair(projectId, runId, userKey);
         if (g.ok && g.repair) {
@@ -520,7 +534,7 @@ function RepairSection({
           return;
         }
       }
-      setErrorKey(key);
+      setErrorNotice(notice);
     }
     setPhase("ready");
   }
@@ -553,16 +567,29 @@ function RepairSection({
                 {repair.status === "queued" ? s.statusQueued : s.statusRunning}
               </span>
             </p>
-            <p className="mt-1 text-sm leading-relaxed text-gray-500">{s.progressBody}</p>
+            {/* Train W — W-3 ①: a queued job says it is waiting its turn. */}
+            <p className="mt-1 text-sm leading-relaxed text-gray-500">
+              {repair.status === "queued" ? s.progressBodyQueued : s.progressBody}
+            </p>
           </div>
         </div>
       )}
 
-      {/* Done — the repair starting-point PR is ready */}
+      {/* Done — the repair PR is ready. Train W — W-3 ③: a job that really
+          changed code (auto_fix) says so; a brief-only job keeps the "code was
+          not changed" copy. The build line appears only on an auto_fix job with
+          buildVerified === false (same test as the done copy — never both). */}
       {isDone && repair && (
         <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-          <p className="text-sm font-medium text-green-800">{s.doneTitle}</p>
-          <p className="mt-1 text-sm leading-relaxed text-green-700">{s.doneBody}</p>
+          <p className="text-sm font-medium text-green-800">
+            {repairDoneKind(repair) === "autoFix" ? s.doneTitleAutoFix : s.doneTitle}
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-green-700">
+            {repairDoneKind(repair) === "autoFix" ? s.doneBodyAutoFix : s.doneBody}
+          </p>
+          {showBuildUnverified(repair) && (
+            <p className="mt-2 text-sm leading-relaxed text-amber-700">{s.buildUnverified}</p>
+          )}
           {isEnvCause(repair) && (
             <div className="callout mt-3 border-amber-200 bg-amber-50 text-amber-700">
               {s.envCauseWarning}
@@ -631,7 +658,7 @@ function RepairSection({
       )}
 
       {/* Request errors that never created a job */}
-      {errorKey === "repoRequired" && (
+      {errorNotice?.errorKey === "repoRequired" && (
         <div className="callout callout-info mt-4">
           <p>{s.errors.repoRequired}</p>
           <Link href={`/projects/${projectId}/github`} className="btn btn-secondary btn-sm mt-2">
@@ -639,7 +666,7 @@ function RepairSection({
           </Link>
         </div>
       )}
-      {errorKey === "tokenRequired" && (
+      {errorNotice?.errorKey === "tokenRequired" && (
         <div className="callout callout-info mt-4">
           <p>{s.errors.tokenRequired}</p>
           <Link href={`/projects/${projectId}/settings`} className="btn btn-secondary btn-sm mt-2">
@@ -647,8 +674,10 @@ function RepairSection({
           </Link>
         </div>
       )}
-      {errorKey !== null && errorKey !== "repoRequired" && errorKey !== "tokenRequired" && (
-        <div className="callout callout-error mt-4">{s.errors[errorKey]}</div>
+      {errorNotice !== null && errorNotice.errorKey !== "repoRequired" && errorNotice.errorKey !== "tokenRequired" && (
+        <div className={`callout mt-4 ${repairErrorTone(errorNotice.errorKey) === "info" ? "callout-info" : "callout-error"}`}>
+          {errorNoticeText(s.errors, errorNotice.errorKey, errorNotice.resetAt, t.visualChecks.resetWhen, { receivedAt: errorNotice.receivedAt })}
+        </div>
       )}
 
       {showButton && (
@@ -964,8 +993,10 @@ export default function VisualCheckDetailPage() {
           />
           <div>
             <h2 className="text-base font-semibold text-gray-800">{t.visualChecks.progressTitle}</h2>
+            {/* Train W — W-3 ①: queued says "waiting its turn" + the measured
+                request→report time; running keeps the walking-the-flow copy. */}
             <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-gray-500">
-              {t.visualChecks.progressBody}
+              {check.status === "queued" ? t.visualChecks.progressBodyQueued : t.visualChecks.progressBody}
             </p>
           </div>
           <p className="break-all font-mono text-[11px] text-gray-500">{check.targetUrl}</p>

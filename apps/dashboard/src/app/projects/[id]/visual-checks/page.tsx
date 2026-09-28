@@ -29,11 +29,13 @@ import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import { latestDoneTransition } from "@/lib/visual-check-compare.mjs";
 import {
   isActiveStatus,
-  mapRunError,
+  runErrorNotice,
+  runErrorTone,
   runButtonState,
   RUN_POLL_INTERVAL_MS,
 } from "@/lib/visual-check-run-state.mjs";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
+import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -71,9 +73,13 @@ function statusChipFor(t: Dictionary, status: string): { label: string; cls: str
   return null;
 }
 
+// Train W — W-2: resetAt travels with the error so the daily-cap sentence can
+// say when the reader can try again, in their own clock (null otherwise).
+// receivedAt (#558 검증 2차 P2-1): when the answer arrived (Date.now()), so
+// "you can check again now" appears only for a notice that outlived the reset.
 type RunNotice =
   | { kind: "queuedOnly" }
-  | { kind: "error"; errorKey: RunErrorKey };
+  | { kind: "error"; errorKey: RunErrorKey; resetAt: string | null; receivedAt: number };
 
 export default function VisualChecksPage() {
   const { id } = useParams<{ id: string }>();
@@ -193,14 +199,14 @@ export default function VisualChecksPage() {
       setIntent("");
       applyListResult(await listVisualChecks(id, userKey));
     } else {
-      const errorKey = mapRunError(res.error);
       // The server says no address is connected (the lookup had failed) — that
-      // is a confirmed answer: show the address box instead of an error.
-      if (errorKey === "websiteSourceRequired") {
+      // is a confirmed answer: show the address box instead of an error (#559).
+      if (runErrorNotice(res).errorKey === "websiteSourceRequired") {
         setWebsiteFact(false);
         return;
       }
-      setNotice({ kind: "error", errorKey });
+      // The whole answer, not just its code — a 429 carries resetAt (W-2).
+      setNotice({ kind: "error", ...runErrorNotice(res), receivedAt: Date.now() });
     }
   }
 
@@ -285,13 +291,9 @@ export default function VisualChecksPage() {
 
         {notice?.kind === "error" && (
           <div
-            className={`callout mt-3 ${
-              notice.errorKey === "runAlreadyActive" || notice.errorKey === "websiteSourceRequired"
-                ? "callout-info"
-                : "callout-error"
-            }`}
+            className={`callout mt-3 ${runErrorTone(notice.errorKey) === "info" ? "callout-info" : "callout-error"}`}
           >
-            {t.visualChecks.runErrors[notice.errorKey]}
+            {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
           </div>
         )}
       </section>

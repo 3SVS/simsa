@@ -3,7 +3,7 @@
  *
  * The shared <Toast/> system keeps its queue in a reducer so the add/dismiss
  * logic is testable without React. A toast has an id, variant ("success" |
- * "error"), a message, and an optional action (e.g. Undo — the action's
+ * "error" | "info"), a message, and an optional action (e.g. Undo — the action's
  * callback lives in the React layer, only its label is stored here).
  */
 
@@ -44,7 +44,9 @@ export function normalizeToast(raw) {
   if (!raw || typeof raw !== "object") return null;
   const message = typeof raw.message === "string" ? raw.message : "";
   if (!message) return null;
-  const variant = raw.variant === "error" ? "error" : "success";
+  // "info" (#558 검증 P2-4): information that is not the reader's mistake —
+  // today's cap, a paused service. Neutral tone, role=status (not alert).
+  const variant = raw.variant === "error" ? "error" : raw.variant === "info" ? "info" : "success";
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : makeToastId(),
     variant,
