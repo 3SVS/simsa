@@ -280,6 +280,39 @@ describe("P2-6: 보유 기간 — 학습 데이터 사본 예외를 적는다", 
   });
 });
 
+// PR #558 검증 P2-7 — "기록을 원하지 않으시면 문의 이메일로 요청"은 요청하면 기록이 멈추는 것처럼
+// 읽혔다. 실제로는 regionFromRequest가 생성·검수·수리 요청마다 조건 없이 불리고 사용자별 제외
+// 플래그가 없다(K-1 ops_meta_opt_out + 0071에서 생김). 그리고 익명 사용자는 화면에서 자기 키를 볼 수
+// 없어 이메일에 무엇을 적어야 할지 모른다 → 요청이 **실제로 하는 일**과 **무엇을 적을지**를 말한다.
+const repairRouteTs = readFileSync(path.join(CP, "routes/workspace-repair-jobs.ts"), "utf8");
+const runRouteTs = readFileSync(path.join(CP, "routes/workspace-visual-check-runs.ts"), "utf8");
+
+describe("P2-7: '원하지 않으시면' — 요청이 실제로 하는 일만 약속한다", () => {
+  it("[서버 사실] 국가 코드는 요청마다 조건 없이 기록된다 (사용자별 제외 플래그 없음)", () => {
+    for (const src of [workspaceRouteTs, runRouteTs, repairRouteTs]) {
+      assert.match(src, /regionFromRequest\(c\.req\.raw\)/);
+    }
+    assert.ok(!/ops_meta_opt_out|opsMetaOptOut/.test(workspaceRouteTs + runRouteTs + repairRouteTs));
+  });
+
+  it("요청하면 지금까지 기록된 것을 지운다 — 앞으로의 기록을 멈춘다고 하지 않는다", () => {
+    const s = ops.OPS_INFO_OPT_OUT ?? "";
+    assert.match(s, /지금까지 기록된/, s);
+    assert.match(s, /지워/, s);
+    assert.ok(!/요청하시면[^.]*(멈추|멈춰|중단|기록하지 않)/.test(s), s);
+  });
+
+  it("앞으로의 기록을 끄는 설정은 '준비 중'이고, 그 전까지는 계속 기록된다고 말한다", () => {
+    const s = ops.OPS_INFO_OPT_OUT ?? "";
+    assert.match(s, /준비 중/, s);
+    assert.match(s, /그 전까지는[^.]*기록/, s);
+  });
+
+  it("익명 사용자도 자기 기록을 특정할 수 있게 무엇을 적을지 알려 준다 (프로젝트 화면 주소)", () => {
+    assert.match(ops.OPS_INFO_OPT_OUT ?? "", /프로젝트 화면의 주소/);
+  });
+});
+
 describe("W-9 방침 페이지 배선", () => {
   it("페이지가 고지 모듈을 가져와 항목을 모두 그린다", () => {
     assert.match(page, /from "@\/lib\/privacy-ops-info\.mjs"/);
