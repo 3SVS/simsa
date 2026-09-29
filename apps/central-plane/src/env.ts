@@ -45,9 +45,11 @@ export interface Env {
    *   - If set but wrong length / not valid base64: startup preflight
    *     fails fast with a clear message (see src/preflight.ts).
    *
-   * Also the root of the rate-limit IP subkey (workspace/rate-limit-key.ts:
-   * HMAC(KEK, "simsa/rate-limit-ip/v1")). Rotating the KEK restarts every
-   * IP-keyed request counter; unset → those buckets share one counter.
+   * Also the root of the rate-limit subkeys (workspace/rate-limit-key.ts:
+   * HMAC(KEK, "simsa/rate-limit-ip/v1") and HMAC(KEK, "simsa/rate-limit-user/v1")).
+   * Rotating the KEK restarts every IP- and userKey-keyed request counter;
+   * unset → IP buckets share one counter per bucket and userKey buckets use a
+   * per-isolate random key.
    */
   CONCLAVE_TOKEN_KEK?: string;
   /**

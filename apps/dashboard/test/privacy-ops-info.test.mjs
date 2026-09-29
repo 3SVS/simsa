@@ -402,7 +402,7 @@ describe("요청 횟수 제한 — 방침 = 서버가 실제로 하는 일", () 
     assert.match(item.detail, /사용자 키/, item.detail);
     assert.match(item.detail, /되돌릴 수 없게/, item.detail);
     assert.match(item.detail, /비밀 키/, item.detail);
-    assert.match(item.detail, /IP 주소 자체는 저장하지 않/, item.detail);
+    assert.match(item.detail, /IP 주소와 사용자 키 자체는 저장하지 않/, item.detail);
     assert.match(item.detail, /48시간/, item.detail);
     // 키를 가진 쪽은 IPv4 전체를 다시 계산해 맞춰 볼 수 있다 — "알아낼 수 없다"에는 조건이 붙어야 사실이다.
     assert.match(item.detail, /그 키 없이는/, item.detail);
@@ -444,5 +444,68 @@ describe("요청 횟수 제한 — 방침 = 서버가 실제로 하는 일", () 
     const dates = [...body.matchAll(/date:\s*("(\d{4}-\d{2}-\d{2})"|PRIVACY_EFFECTIVE_DATE)/g)].map((m) => m[1]);
     assert.deepEqual(dates.slice(0, -1), ['"2026-07-19"', '"2026-09-29"'], `published lines are literal: ${dates.join(", ")}`);
     assert.equal(dates.at(-1), "PRIVACY_EFFECTIVE_DATE", "only the newest (unpublished) line follows the constant");
+  });
+});
+
+// PR #566 리뷰 후속 (2026-09-29) — 방침 문장이 서버 사실보다 앞서 있었다.
+//   P1/P2: 창 규칙만으로는 배포 직전 48시간 안의 옛 비키 해시 행이 배포 뒤 최대 약 54시간 남는다 → "IP는 비밀 키로만"이
+//          그동안 거짓. 서버는 이제 새 키에 "v1:" 표시를 붙이고 표시 없는 행을 첫 청소에서 모두 지운다.
+//   P2: 사용자 키 쪽 "되돌릴 수 없게"는 비밀 키 없는 sha256이라 거짓이었다(userKey는 무작위가 아니고 같은 DB에 평문).
+//       서버는 사용자 키 버킷도 비밀 키 HMAC으로 바꿨고, AI 사용량(llm_usage, 여전히 비밀 키 없는 sha256)은 문장을 고친다.
+//   P2: 저장 칸 중 처음·마지막 요청 시각과, 프로젝트 전·데모 요청도 기록된다는 범위가 빠져 있었다.
+const rateLimitTs = (() => {
+  try { return readFileSync(path.join(CP, "workspace/rate-limit.ts"), "utf8"); } catch { return ""; }
+})();
+const llmUsageTs = readFileSync(path.join(CP, "workspace/llm-usage.ts"), "utf8");
+const aiUsageItem = () => (ops.OPS_INFO_ITEMS ?? []).find((i) => /AI 사용량/.test(i.label));
+
+describe("요청 횟수 제한 — PR #566 리뷰 후속: 문장이 서버보다 앞서지 않는다", () => {
+  it("저장 칸을 빠짐없이: 요청 횟수와 처음·마지막 요청 시각 (0026·0011 스키마의 first_at·last_at)", () => {
+    for (const file of ["0026_workspace_rate_limit.sql", "0011_demo_rate_limit.sql"]) {
+      const sql = readFileSync(path.join(MIGRATIONS_DIR, file), "utf8");
+      assert.match(sql, /first_at\s+TEXT/, file);
+      assert.match(sql, /last_at\s+TEXT/, file);
+    }
+    const detail = rateLimitItem()?.detail ?? "";
+    assert.match(detail, /요청 횟수/, detail);
+    assert.match(detail, /처음·마지막 요청 시각/, detail);
+  });
+
+  it("기록 범위: 프로젝트를 만들기 전 요청과 체험(데모) 요청에도 기록된다 (머리말 범위를 넘는다는 것을 항목이 밝힌다)", () => {
+    const detail = rateLimitItem()?.detail ?? "";
+    assert.match(detail, /프로젝트를 만들기 전/, detail);
+    assert.match(detail, /체험\(데모\)/, detail);
+  });
+
+  it("사용자 키도 비밀 키로 — 문장과 서버(rate-limit.ts 사용자 버킷 = userRateLimitKey, 라벨 simsa/rate-limit-user/v1)", () => {
+    const detail = rateLimitItem()?.detail ?? "";
+    assert.match(detail, /둘 다 서버만 가진 비밀 키로 변환/, detail);
+    assert.match(detail, /그 키 없이는 저장된 값으로 IP를 알아내거나 이용자의 다른 기록과 연결할 수 없습니다/, detail);
+    assert.match(rateLimitKeyTs, /export async function userRateLimitKey/, "server helper for user buckets");
+    assert.match(rateLimitKeyTs, /"simsa\/rate-limit-user\/v1"/);
+    assert.ok(!/sha256Hex\(`\$\{bucket\}::\$\{userKey\}`\)/.test(rateLimitTs), "rate-limit.ts still hashes userKey without a secret");
+    assert.equal((rateLimitTs.match(/userRateLimitKey\(env, bucket, userKey\)/g) ?? []).length, 2, "hourly + daily user limiters");
+  });
+
+  it("옛 형식 행은 첫 청소에서 모두 지운다 — '비밀 키로만'이 배포 뒤 약 54시간 거짓이 되지 않게 (서버: v1: 표시 + 레거시 청소)", () => {
+    assert.match(rateLimitKeyTs, /export const RATE_LIMIT_KEY_PREFIX = "v1:";/);
+    assert.match(retentionTs, /WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL/);
+    assert.match(retentionTs, /DEMO_RATE_LIMIT_LEGACY_PURGE_SQL/);
+    assert.match(retentionTs, /substr\(ip_hash, 1, \?\) <> \?/);
+  });
+
+  it("AI 사용량: 비밀 키 없는 sha256(userKey)인 동안은 '되돌릴 수 없게'라고 쓰지 않고, 서비스가 연결할 수 있다고 적는다", () => {
+    // 서버 사실: llm-usage.ts는 user_key_hash = sha256Hex(userKey) — 같은 D1의 평문 user_key로 다시 계산된다.
+    assert.match(llmUsageTs, /await sha256Hex\(userKey\)/, "llm_usage still uses an unkeyed hash — update the sentence if this changes");
+    const detail = aiUsageItem()?.detail ?? "";
+    assert.ok(detail, "AI 사용량 item");
+    assert.ok(!/되돌릴 수 없/.test(detail), detail);
+    assert.match(detail, /연결할 수 있습니다/, detail);
+  });
+
+  it("변경 이력 새 줄이 사용자 키와 AI 사용량 정정을 말한다", () => {
+    const last = (ops.PRIVACY_CHANGE_LOG ?? []).at(-1)?.summary ?? "";
+    assert.match(last, /사용자 키/, last);
+    assert.match(last, /AI 사용량/, last);
   });
 });

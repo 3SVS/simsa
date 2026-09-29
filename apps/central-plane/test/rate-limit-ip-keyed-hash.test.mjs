@@ -17,6 +17,14 @@
  *      지금 쓰이는 창은 절대 지우지 않는다(node:sqlite로 실제 SQL을 0011·0026 스키마에서 실행 — node:sqlite가
  *      없는 Node 20에서는 그 셋이 skip되고, 가짜 D1의 SQL 문자열·바인드 검사가 모든 Node에서 돈다). fail-open.
  *
+ * PR #566 리뷰 후속 (2026-09-29):
+ *   ⑤ 레거시 행: 창 규칙만으로는 배포 직전 48시간 안에 옛 코드가 쓴 비키 해시 행이 배포 뒤 최대 약 54시간
+ *      남는다(방침 "비밀 키로만"이 그동안 거짓). → 새 코드가 쓰는 모든 키는 "v1:"로 시작하고, 청소가 그 표시가
+ *      없는 행을 창과 상관없이 지운다 — 배포 뒤 첫 6시간 틱에 레거시 행이 모두 사라진다.
+ *   ⑥ 사용자 키 버킷: userKey는 무작위 UUID가 아니라 `uk_${Date.now().toString(36)}…`이고 같은 D1의 20여 테이블에
+ *      평문으로 있다 → sha256(bucket::userKey)는 DB를 읽는 쪽이 곧바로 사용자에 연결한다. 사용자 키도 비밀 키
+ *      HMAC(라벨 "simsa/rate-limit-user/v1")으로. KEK가 없으면 격리 수명의 임시 무작위 키.
+ *
  * 표시 규칙: [가드] = 옛 코드에서도 통과하는 행동 보존 가드(회귀 증거 아님). 표시 없음 = 옛 코드에서 실패.
  * 네트워크 없음: 라우트 테스트는 429에서 멈추고, 혹시 모를 호출은 fetch 스텁이 막는다.
  */
@@ -37,12 +45,22 @@ const { dailyCapsFor, clientNetworkKey } = await import("../dist/workspace/beta-
 const KEK = randomBytes(32).toString("base64");
 const KEK_ROTATED = randomBytes(32).toString("base64");
 const LABEL = "simsa/rate-limit-ip/v1";
+const USER_LABEL = "simsa/rate-limit-user/v1";
+/** Format marker of every key the new code writes (rows without it are legacy → purged). */
+const V1 = "v1:";
 
 const sha256 = (s) => createHash("sha256").update(s, "utf8").digest("hex");
+function hmacUnder(kek, label, message) {
+  const subkey = createHmac("sha256", Buffer.from(kek, "utf8")).update(label, "utf8").digest();
+  return createHmac("sha256", subkey).update(message, "utf8").digest("hex");
+}
 /** 테스트 쪽 독립 구현(node:crypto) — 서버 구현(WebCrypto)과 같은 값이어야 한다. */
 function keyed(kek, bucket, ip) {
-  const subkey = createHmac("sha256", Buffer.from(kek, "utf8")).update(LABEL, "utf8").digest();
-  return createHmac("sha256", subkey).update(`${bucket}::${ip}`, "utf8").digest("hex");
+  return V1 + hmacUnder(kek, LABEL, `${bucket}::${ip}`);
+}
+/** userKey 버킷: 같은 방식, 다른 라벨의 하위 키. */
+function userKeyed(kek, bucket, userKey) {
+  return V1 + hmacUnder(kek, USER_LABEL, `${bucket}::${userKey}`);
 }
 
 /** The helper module is new — load lazily so each test fails on its own on old code. */
@@ -67,13 +85,13 @@ const IP_V6 = "2001:db8::1";
 
 // ─── ① 키 모양 ─────────────────────────────────────────────────────────────────
 
-test("① 같은 IP·같은 버킷·같은 KEK → 같은 저장값 = HMAC(subkey, bucket::ip) · 64자 hex", async () => {
+test("① 같은 IP·같은 버킷·같은 KEK → 같은 저장값 = \"v1:\" + HMAC(subkey, bucket::ip) · 64자 hex", async () => {
   const { ipRateLimitKey } = await loadKeyModule();
   const env = { CONCLAVE_TOKEN_KEK: KEK };
   const a1 = await ipRateLimitKey(env, "workspace", IP_A);
   const a2 = await ipRateLimitKey(env, "workspace", IP_A);
   assert.equal(a1, a2, "deterministic — the counter must find its own row again");
-  assert.match(a1, /^[0-9a-f]{64}$/);
+  assert.match(a1, /^v1:[0-9a-f]{64}$/);
   assert.equal(a1, keyed(KEK, "workspace", IP_A), "subkey = HMAC(KEK, label); stored = HMAC(subkey, bucket::ip)");
   assert.equal(await ipRateLimitKey(env, "workspace", IP_V6), keyed(KEK, "workspace", IP_V6), "IPv6 too");
 });
@@ -122,7 +140,7 @@ test("② KEK 없음(미설정·빈 문자열·null) → IP 대신 버킷 공용
       const a = await ipRateLimitKey(env, "workspace", IP_A);
       const b = await ipRateLimitKey(env, "workspace", IP_B);
       assert.equal(a, b, "every caller shares one counter — nothing IP-derived is stored");
-      assert.equal(a, sha256("workspace::no-key"));
+      assert.equal(a, V1 + sha256("workspace::no-key"));
       assert.notEqual(a, sha256(`workspace::${IP_A}`));
     }
     assert.notEqual(
@@ -403,22 +421,27 @@ test("③ 네트워크 일일 상한: 검수·수리의 네트워크 버킷 = HM
   }
 });
 
-test("[가드] ③ 네트워크 일일 상한: 사용자·서비스 버킷 저장값은 그대로 sha256 (무작위 사용자 키·고정 키 — 되돌릴 원문이 IP가 아니다)", async () => {
+test("⑥ 일일 상한: 사용자 버킷 = HMAC(사용자 하위 키, bucket::userKey) — 평문 user_key로 계산되는 sha256가 아니다 · 서비스 버킷 = \"v1:\" + sha256(고정 키)", async () => {
+  // userKey는 `uk_${Date.now().toString(36)}` + Math.random 5자이고 같은 D1의 user_key 칸들에 평문으로 있다 →
+  // sha256("inspection-daily::" + user_key)를 저장하면 DB를 읽는 쪽이 요청 한도 행을 곧바로 사용자에 연결한다.
   const db = slotDb();
   const caps = dailyCapsFor("inspection", {}, "uk_사용자_1", clientNetworkKey(reqFrom(IP_A)));
   await consumeDailyCaps({ DB: db, CONCLAVE_TOKEN_KEK: KEK }, caps, NOW);
-  assert.equal(db.consumes[0], sha256("inspection-daily::uk_사용자_1"));
-  assert.equal(db.consumes[2], sha256("inspection-daily-global::all"));
+  assert.equal(db.consumes[0], userKeyed(KEK, "inspection-daily", "uk_사용자_1"));
+  assert.notEqual(db.consumes[0], sha256("inspection-daily::uk_사용자_1"), "linkable to the plain user_key columns");
+  assert.notEqual(db.consumes[0], keyed(KEK, "inspection-daily", "uk_사용자_1"), "user and IP subkeys are separate");
+  assert.ok(!db.consumes[0].includes("uk_사용자_1"));
+  assert.equal(db.consumes[2], V1 + sha256("inspection-daily-global::all"), "service key is not personal — marked sha256");
 });
 
 test("③ 네트워크 일일 상한: 뒤 버킷이 가득 차 환급할 때도 같은 HMAC 행으로 돌려준다", async () => {
-  const service = sha256("inspection-daily-global::all");
+  const service = V1 + sha256("inspection-daily-global::all");
   const db = slotDb(new Set([service]));
   const caps = dailyCapsFor("inspection", {}, "uk_사용자_2", clientNetworkKey(reqFrom(IP_B)));
   const r = await consumeDailyCaps({ DB: db, CONCLAVE_TOKEN_KEK: KEK }, caps, NOW);
   assert.equal(r.limited, true);
   assert.equal(r.scope, "service");
-  assert.deepEqual(db.refunds, [sha256("inspection-daily::uk_사용자_2"), keyed(KEK, "inspection-daily-ip", IP_B)]);
+  assert.deepEqual(db.refunds, [userKeyed(KEK, "inspection-daily", "uk_사용자_2"), keyed(KEK, "inspection-daily-ip", IP_B)]);
 });
 
 test("③ 네트워크 일일 상한: KEK 없음 → 네트워크 버킷은 공용 키(IP 무관)", async () => {
@@ -426,7 +449,7 @@ test("③ 네트워크 일일 상한: KEK 없음 → 네트워크 버킷은 공�
   const b = slotDb();
   await consumeDailyCaps({ DB: a }, dailyCapsFor("repair", {}, "uk_1", clientNetworkKey(reqFrom(IP_A))), NOW);
   await consumeDailyCaps({ DB: b }, dailyCapsFor("repair", {}, "uk_2", clientNetworkKey(reqFrom(IP_B))), NOW);
-  assert.equal(a.consumes[1], sha256("repair-daily-ip::no-key"));
+  assert.equal(a.consumes[1], V1 + sha256("repair-daily-ip::no-key"));
   assert.equal(a.consumes[1], b.consumes[1]);
 });
 
@@ -450,6 +473,12 @@ test("③ 전수: src에서 요청 IP를 비밀 키 없는 sha256Hex로 해시�
     if (/"conclave-demo"/.test(src)) offenders.push(`${path.relative(ROOT, f)}: public demo salt`);
   }
   assert.deepEqual(offenders, []);
+});
+
+test("⑥ 전수: rate-limit.ts는 사용자 키를 비밀 키 없는 sha256으로 해시하지 않는다", () => {
+  const src = readFileSync(path.join(ROOT, "src/workspace/rate-limit.ts"), "utf8");
+  assert.ok(!/sha256Hex\(`\$\{bucket\}::\$\{userKey\}`\)/.test(src), "user buckets: plain sha256(bucket::userKey)");
+  assert.ok(!/sha256Hex\(`\$\{cap\.bucket\}::\$\{cap\.key\}`\)/.test(src), "daily caps: plain sha256 for a personal scope");
 });
 
 // ─── ④ 48시간 청소 ─────────────────────────────────────────────────────────────
@@ -490,6 +519,7 @@ async function sqliteWithRateTables(t) {
   return db;
 }
 
+/** Rows the new code writes carry the "v1:" marker; pass a bare hash to model a legacy (pre-#566) row. */
 const insWs = (db, hash, win) =>
   db.prepare("INSERT INTO workspace_rate_limit (ip_hash, hour_utc, count, first_at, last_at) VALUES (?, ?, 1, 't', 't')").run(hash, win);
 const insDemo = (db, hash, day) =>
@@ -513,9 +543,9 @@ test("④ 실제 SQLite(0011·0026): 시작한 지 48시간 지난 시간 창·�
     "2026-09-29", //    today (active daily caps) → keep
     "2026-W39", //      a format this code never writes → leave alone
   ]) {
-    insWs(db, `h_${w}`, w);
+    insWs(db, `${V1}h_${w}`, w);
   }
-  for (const d of ["2026-01-01", "2026-09-27", "2026-09-28", "2026-09-29"]) insDemo(db, `d_${d}`, d);
+  for (const d of ["2026-01-01", "2026-09-27", "2026-09-28", "2026-09-29"]) insDemo(db, `${V1}d_${d}`, d);
 
   const r = await purgeExpiredRateLimitRows({ DB: d1FromSqlite(db) }, NOW);
   assert.deepEqual(left(db, "workspace_rate_limit", "hour_utc"), ["2026-09-27T16", "2026-09-28", "2026-09-29", "2026-09-29T15", "2026-W39"]);
@@ -538,14 +568,14 @@ test("④ 어느 시각에 돌아도 지금 쓰이는 창(이번 시간·오늘)
     for (let h = 0; h < 48; h++) {
       const at = new Date(now.getTime() - h * 3600_000);
       const hour = at.toISOString().slice(0, 13);
-      if (!kept.includes(hour)) { insWs(db, "h", hour); kept.push(hour); }
+      if (!kept.includes(hour)) { insWs(db, `${V1}h`, hour); kept.push(hour); }
     }
     const today = now.toISOString().slice(0, 10);
     const yesterday = new Date(now.getTime() - 86_400_000).toISOString().slice(0, 10);
-    insWs(db, "d", today);
-    insWs(db, "d", yesterday);
-    insDemo(db, "d", today);
-    insDemo(db, "d", yesterday);
+    insWs(db, `${V1}d`, today);
+    insWs(db, `${V1}d`, yesterday);
+    insDemo(db, `${V1}d`, today);
+    insDemo(db, `${V1}d`, yesterday);
     await purgeExpiredRateLimitRows(d1, now);
     const ws = new Set(left(db, "workspace_rate_limit", "hour_utc"));
     // Every hour window that started less than 48h ago (the last 48 hour keys) and both day windows.
@@ -560,9 +590,9 @@ test("④ 오래 쌓인 행(12,345개)도 한 번에 다 지운다 — 나눠 �
   if (!db) return;
   const ins = db.prepare("INSERT INTO workspace_rate_limit (ip_hash, hour_utc, count, first_at, last_at) VALUES (?, ?, 1, 't', 't')");
   db.exec("BEGIN");
-  for (let i = 0; i < 12_345; i++) ins.run(`legacy_${i}`, "2026-07-01T10");
+  for (let i = 0; i < 12_345; i++) ins.run(`${V1}old_${i}`, "2026-07-01T10");
   db.exec("COMMIT");
-  insWs(db, "fresh", "2026-09-29T15");
+  insWs(db, `${V1}fresh`, "2026-09-29T15");
   const r = await purgeExpiredRateLimitRows({ DB: d1FromSqlite(db) }, NOW);
   assert.equal(r.workspace.deleted, 12_345);
   assert.ok(r.workspace.batches >= 2, `batched (${r.workspace.batches})`);
@@ -588,8 +618,8 @@ test("④ (가짜 D1 · 모든 Node) 청소 SQL은 두 형식을 각자의 기�
   };
   const r = await purgeExpiredRateLimitRows({ DB: db }, NOW); // now 2026-09-29T15:30Z → cutoff 2026-09-27T15:30Z
   assert.equal(r.cutoff, "2026-09-27T15:30:00.000Z");
-  const ws = seen.find((s) => s.sql.includes("DELETE FROM workspace_rate_limit"));
-  const demo = seen.find((s) => s.sql.includes("DELETE FROM demo_rate_limit"));
+  const ws = seen.find((s) => s.sql === WORKSPACE_RATE_LIMIT_PURGE_SQL);
+  const demo = seen.find((s) => s.sql === DEMO_RATE_LIMIT_PURGE_SQL);
   assert.ok(ws && demo, "both tables are purged");
   assert.equal(ws.sql, WORKSPACE_RATE_LIMIT_PURGE_SQL);
   assert.equal(demo.sql, DEMO_RATE_LIMIT_PURGE_SQL);
@@ -635,4 +665,165 @@ test("④ 배선: 6시간 크론(0 */6 * * *)이 청소를 부르고, 실패는 
   assert.match(branch, /catch \(err\)/);
   const wrangler = readFileSync(path.join(ROOT, "wrangler.toml"), "utf8");
   assert.match(wrangler, /crons = \[[^\]]*"0 \*\/6 \* \* \*"/, "the cron is actually scheduled");
+});
+
+// ─── ⑤ 레거시 행 — 배포 뒤 첫 청소가 옛 형식 행을 창과 상관없이 모두 지운다 (PR #566 리뷰 P1) ───────────
+
+test("⑤ 실제 SQLite: 배포 직전 48시간 안에 옛 코드가 쓴 행(\"v1:\" 표시 없음)도 첫 청소에서 모두 지운다 — 같은 창의 새 형식 행은 남는다", async (t) => {
+  const { purgeExpiredRateLimitRows } = await loadRetentionModule();
+  const db = await sqliteWithRateTables(t);
+  if (!db) return;
+  // 리뷰가 재현한 시각: now = 2026-09-29T00:30Z → 창 규칙의 기준 = 2026-09-27T00:30Z.
+  // 옛 코드가 배포 직전에 쓴 행은 창이 모두 그 뒤라, 창 규칙만으로는 하나도 지워지지 않는다(최대 약 54시간 생존).
+  const now = new Date("2026-09-29T00:30:00.000Z");
+  const legacyHourIp = sha256(`workspace::${IP_A}`); //           옛 시간 창 IP 해시 (IPv4 전수 대입으로 역산됨)
+  const legacyNet = sha256(`inspection-daily-ip::${IP_A}`); //    옛 네트워크 일일 창
+  const legacyUser = sha256("inspection-daily::uk_mg4h7t2kq8z3x"); // 옛 사용자 일일 창 (평문 user_key로 계산됨)
+  const legacyService = sha256("inspection-daily-global::all"); // 옛 서비스 창 (새 코드는 "v1:" 키로 새로 센다)
+  insWs(db, legacyHourIp, "2026-09-27T01");
+  insWs(db, legacyHourIp, "2026-09-28T23");
+  insWs(db, legacyNet, "2026-09-28");
+  insWs(db, legacyUser, "2026-09-28");
+  insWs(db, legacyService, "2026-09-28");
+  const many = db.prepare("INSERT INTO workspace_rate_limit (ip_hash, hour_utc, count, first_at, last_at) VALUES (?, ?, 1, 't', 't')");
+  db.exec("BEGIN");
+  for (let i = 0; i < 6_000; i++) many.run(sha256(`workspace-check::198.51.100.${i % 250}::${i}`), "2026-09-28T22");
+  db.exec("COMMIT");
+  insDemo(db, sha256(`conclave-demo::${IP_A}`), "2026-09-28");
+  insDemo(db, sha256(`rotation-2026-09::${IP_B}`), "2026-09-29");
+
+  // 새 코드가 같은 창에 쓴 행 — 지금 쓰이는 카운터라 남아야 한다.
+  const freshIp = keyed(KEK, "workspace", IP_A);
+  const freshUser = userKeyed(KEK, "inspection-daily", "uk_mg4h7t2kq8z3x");
+  const freshDemo = keyed(KEK, "demo", IP_A);
+  insWs(db, freshIp, "2026-09-29T00");
+  insWs(db, freshUser, "2026-09-29");
+  insDemo(db, freshDemo, "2026-09-29");
+
+  const r = await purgeExpiredRateLimitRows({ DB: d1FromSqlite(db) }, now);
+  const wsKeys = db.prepare("SELECT ip_hash AS h FROM workspace_rate_limit ORDER BY ip_hash").all().map((x) => x.h);
+  const demoKeys = db.prepare("SELECT ip_hash AS h FROM demo_rate_limit ORDER BY ip_hash").all().map((x) => x.h);
+  assert.deepEqual(wsKeys, [freshIp, freshUser].sort(), "every unmarked (legacy) row is gone, whatever its window");
+  assert.deepEqual(demoKeys, [freshDemo]);
+  assert.equal(r.legacy.workspace.deleted, 5 + 6_000);
+  assert.ok(r.legacy.workspace.batches >= 2, "batched past the 5,000 limit");
+  assert.equal(r.legacy.workspace.more, false);
+  assert.equal(r.legacy.demo.deleted, 2);
+  assert.equal(r.workspace.deleted, 0, "the fresh rows are inside their windows");
+  assert.doesNotThrow(() => JSON.stringify(r));
+});
+
+test("⑤ (가짜 D1 · 모든 Node) 레거시 청소 SQL: 키가 \"v1:\"로 시작하지 않는 행 — substr 비교(대소문자 구분), 두 테이블, 배치", async () => {
+  const mod = await loadRetentionModule();
+  assert.equal(typeof mod.WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL, "string", "legacy purge SQL export");
+  assert.equal(typeof mod.DEMO_RATE_LIMIT_LEGACY_PURGE_SQL, "string");
+  const seen = [];
+  const db = {
+    prepare(sql) {
+      return { bind: (...args) => ({ async run() { seen.push({ sql, args }); return { meta: { changes: 0 } }; } }) };
+    },
+  };
+  const r = await mod.purgeExpiredRateLimitRows({ DB: db }, NOW);
+  const where = (sql) => sql.replace(/\s+/g, " ");
+  const ws = seen.find((s) => s.sql === mod.WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL);
+  const demo = seen.find((s) => s.sql === mod.DEMO_RATE_LIMIT_LEGACY_PURGE_SQL);
+  assert.ok(ws && demo, "both tables get the legacy pass");
+  assert.match(where(ws.sql), /DELETE FROM workspace_rate_limit WHERE rowid IN \( SELECT rowid FROM workspace_rate_limit WHERE substr\(ip_hash, 1, \?\) <> \? LIMIT \?\)/);
+  assert.match(where(demo.sql), /DELETE FROM demo_rate_limit WHERE rowid IN \( SELECT rowid FROM demo_rate_limit WHERE substr\(ip_hash, 1, \?\) <> \? LIMIT \?\)/);
+  assert.deepEqual(ws.args.slice(0, 2), [3, V1]);
+  assert.deepEqual(demo.args.slice(0, 2), [3, V1]);
+  assert.ok(Number.isInteger(ws.args[2]) && ws.args[2] > 0);
+  assert.deepEqual(r.legacy, {
+    workspace: { deleted: 0, batches: 1, more: false },
+    demo: { deleted: 0, batches: 1, more: false },
+  });
+});
+
+test("⑤ fail-open: 레거시 청소가 실패해도 던지지 않고, 창 청소는 따로 돈다", async () => {
+  const { purgeExpiredRateLimitRows, WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL } = await loadRetentionModule();
+  assert.equal(typeof WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL, "string");
+  const ran = [];
+  const db = {
+    prepare(sql) {
+      if (sql === WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL) throw new Error("D1_ERROR: too many SQL variables");
+      return { bind: () => ({ run: async () => { ran.push(sql); return { meta: { changes: 0 } }; } }) };
+    },
+  };
+  const r = await purgeExpiredRateLimitRows({ DB: db }, NOW);
+  assert.match(r.legacy.workspace.error, /too many SQL variables/);
+  assert.equal(r.workspace.error, undefined);
+  assert.ok(ran.some((s) => s.includes("length(hour_utc) = 13")), "the window purge still ran");
+});
+
+test("⑤ 새 코드가 쓰는 키는 전부 \"v1:\"로 시작한다 — IP·사용자·서비스·KEK 없음 폴백 (청소가 새 행을 레거시로 오인하지 않게)", async () => {
+  const { ipRateLimitKey } = await loadKeyModule();
+  const withKek = { CONCLAVE_TOKEN_KEK: KEK };
+  const values = [
+    await ipRateLimitKey(withKek, "workspace", IP_A),
+    await ipRateLimitKey({}, "workspace", IP_A),
+  ];
+  for (const env of [withKek, {}]) {
+    const db = slotDb();
+    await consumeDailyCaps({ DB: db, ...env }, dailyCapsFor("repair", {}, "uk_mg4h7t2kq8z3x", clientNetworkKey(reqFrom(IP_B))), NOW);
+    assert.equal(db.consumes.length, 3);
+    values.push(...db.consumes);
+  }
+  for (const v of values) assert.ok(v.startsWith(V1), `unmarked key would be purged as legacy every tick: ${v}`);
+});
+
+// ─── ⑥ 사용자 키 버킷도 비밀 키 HMAC (PR #566 리뷰 P2) ─────────────────────────────────────────────
+
+const REAL_USER = "uk_mg4h7t2kq8z3x"; // dashboard getUserKey 모양: uk_ + Date.now() 36진 + Math.random 5자
+
+test("⑥ 사용자 시간·일 한도(consumeUserHourlyLimit·consumeUserDailyLimit) = HMAC(사용자 하위 키, bucket::userKey) — 평문 user_key로 계산되는 sha256 아님", async () => {
+  const { consumeUserHourlyLimit, consumeUserDailyLimit } = await import("../dist/workspace/rate-limit.js");
+  for (const userKey of [REAL_USER, "uk_사용자_1"]) {
+    const db = captureDb({ count: 0 });
+    const env = { DB: db, CONCLAVE_TOKEN_KEK: KEK };
+    assert.equal((await consumeUserHourlyLimit(env, "workspace-pr-review", userKey, 30)).limited, false);
+    assert.equal((await consumeUserDailyLimit(env, "beta-review-daily", userKey, 100)).limited, false);
+    const binds = new Set(db.rate.map((x) => x.args[0]));
+    assert.deepEqual(binds, new Set([userKeyed(KEK, "workspace-pr-review", userKey), userKeyed(KEK, "beta-review-daily", userKey)]));
+    for (const b of binds) {
+      assert.ok(!String(b).includes(userKey));
+      assert.notEqual(b, sha256(`workspace-pr-review::${userKey}`));
+      assert.notEqual(b, sha256(`beta-review-daily::${userKey}`));
+    }
+  }
+});
+
+test("⑥ userRateLimitKey: 같은 KEK·버킷·사용자 → 같은 값, KEK가 바뀌면 다른 값, IP 하위 키와 분리", async () => {
+  const mod = await loadKeyModule();
+  assert.equal(typeof mod.userRateLimitKey, "function", "userRateLimitKey export");
+  const a = await mod.userRateLimitKey({ CONCLAVE_TOKEN_KEK: KEK }, "inspection-daily", REAL_USER);
+  assert.equal(a, userKeyed(KEK, "inspection-daily", REAL_USER));
+  assert.equal(await mod.userRateLimitKey({ CONCLAVE_TOKEN_KEK: KEK }, "inspection-daily", REAL_USER), a);
+  assert.notEqual(await mod.userRateLimitKey({ CONCLAVE_TOKEN_KEK: KEK_ROTATED }, "inspection-daily", REAL_USER), a);
+  assert.notEqual(await mod.ipRateLimitKey({ CONCLAVE_TOKEN_KEK: KEK }, "inspection-daily", REAL_USER), a);
+});
+
+test("⑥ KEK 없음 → 사용자 버킷은 격리 수명의 임시 무작위 키: 같은 사용자는 같은 행(사용자별 한도 유지), 다른 사용자는 다른 행, 평문 user_key로 다시 계산할 수 없다", async () => {
+  const mod = await loadKeyModule();
+  assert.equal(typeof mod.userRateLimitKey, "function", "userRateLimitKey export");
+  const warn = console.warn;
+  const warned = [];
+  console.warn = (...args) => warned.push(args.join(" "));
+  try {
+    const a1 = await mod.userRateLimitKey({}, "beta-project-create-daily", REAL_USER);
+    const a2 = await mod.userRateLimitKey({ CONCLAVE_TOKEN_KEK: "" }, "beta-project-create-daily", REAL_USER);
+    const b = await mod.userRateLimitKey({}, "beta-project-create-daily", "uk_사용자_2");
+    assert.equal(a1, a2, "same user, same row within the isolate");
+    assert.notEqual(a1, b, "users keep separate counters");
+    assert.match(a1, /^v1:[0-9a-f]{64}$/);
+    assert.ok(!a1.includes(REAL_USER));
+    assert.notEqual(a1, sha256(`beta-project-create-daily::${REAL_USER}`));
+    assert.notEqual(a1, V1 + sha256(`beta-project-create-daily::${REAL_USER}`));
+    assert.notEqual(a1, V1 + sha256("beta-project-create-daily::no-key"), "not the IP fallback — per-user caps survive");
+  } finally {
+    console.warn = warn;
+  }
+  for (const line of warned) {
+    assert.doesNotThrow(() => JSON.parse(line), "one-line JSON");
+    assert.ok(!line.includes(REAL_USER) && !line.includes("uk_사용자_2"), "the warning never carries the user key");
+  }
 });

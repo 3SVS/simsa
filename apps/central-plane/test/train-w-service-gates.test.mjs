@@ -893,7 +893,8 @@ test("⑩ 네트워크 버킷에 저장되는 값은 비밀 키 HMAC — sha256(
   const ip = "198.51.100.77";
   assert.equal((await req(env, "POST", runPath(PROJECT), { userKey: USER }, ipHeader(ip))).status, 202);
   const subkey = createHmac("sha256", Buffer.from(KEK, "utf8")).update("simsa/rate-limit-ip/v1", "utf8").digest();
-  const keyed = createHmac("sha256", subkey).update(`inspection-daily-ip::${ip}`, "utf8").digest("hex");
+  // "v1:" = the format marker of every key the new code writes (rate-limit-key.ts).
+  const keyed = "v1:" + createHmac("sha256", subkey).update(`inspection-daily-ip::${ip}`, "utf8").digest("hex");
   const unkeyed = createHash("sha256").update(`inspection-daily-ip::${ip}`, "utf8").digest("hex");
   const stored = [...db.state.rate.keys()].map((k) => k.split("::")[0]);
   assert.ok(stored.includes(keyed), "the network slot is stored under the keyed HMAC");

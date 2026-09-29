@@ -65,7 +65,7 @@ export default {
   //   - every 5 min  → SaaS jobs stuck-cleanup (v0.16.4)
   //   - every day 03:00 UTC → external design references refresh (v0.16.8)
   //   - every 6 hours      → retry pending user_feedback classification (v0.16.9)
-  //                          + purge request-limit rows older than 48h (rate-limit-retention.ts)
+  //                          + purge request-limit rows older than 48h and pre-"v1:" legacy rows (rate-limit-retention.ts)
   //
   // Each branch logs a structured outcome so `wrangler tail` is the
   // audit trail (the scheduled trigger has no caller to return data to).
@@ -133,7 +133,9 @@ export default {
     }
     if (event.cron === "0 */6 * * *") {
       // Request-limit rows (workspace_rate_limit · demo_rate_limit) whose window
-      // started ≥ 48h ago — the privacy policy promises 48 hours. Every 6h keeps
+      // started ≥ 48h ago — the privacy policy promises 48 hours — and every row
+      // written before the keyed scheme (no "v1:" marker; the first tick after
+      // the deploy clears them all, rate-limit-retention.ts). Every 6h keeps
       // the overshoot ≤ 6h (a daily tick would allow up to 72h; the weekly one a
       // week). Runs first: it is a few bounded D1 statements, and the feedback
       // retry below makes LLM calls — a slow retry must not starve the promise.

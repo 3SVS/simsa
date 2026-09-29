@@ -3,23 +3,19 @@
  *
  * Generalizes the per-IP hourly limiter (workspace.ts / workspace-document-
  * intake.ts) into a keyed hourly limiter that also supports per-userKey
- * buckets. Reuses the existing `workspace_rate_limit` D1 table: the `ip_hash`
- * column stores sha256(`${bucket}::${key}`) for userKey / service buckets and a
- * keyed HMAC for IP buckets (rate-limit-key.ts — an unkeyed hash of an IPv4
- * address is reversible by brute force), so no migration is required. Rows
- * older than 48h are purged by the 6-hourly cron (rate-limit-retention.ts).
+ * buckets. Reuses the existing `workspace_rate_limit` D1 table, so no migration
+ * is required. The `ip_hash` column stores (rate-limit-key.ts, all "v1:"-marked):
+ *   IP buckets      → keyed HMAC (an unkeyed hash of an IPv4 address is reversible by brute force)
+ *   userKey buckets → keyed HMAC (a plain hash links back to the user_key the DB keeps in plain text)
+ *   service buckets → sha256 of a fixed, non-personal key
+ * Rows older than 48h — and rows without the "v1:" marker — are purged by the
+ * 6-hourly cron (rate-limit-retention.ts).
  *
  * All D1 failures are non-fatal: a read failure counts as 0 (never blocks a
  * legitimate request on infrastructure trouble) and a write failure only logs.
  */
 import type { Env } from "../env.js";
-import { ipRateLimitKey } from "./rate-limit-key.js";
-
-/** SHA-256 hex of `input` using the Web Crypto API available in Workers. */
-async function sha256Hex(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+import { ipRateLimitKey, serviceRateLimitKey, userRateLimitKey } from "./rate-limit-key.js";
 
 /** UTC hour bucket, e.g. "2026-07-03T15" — resets every full UTC hour. */
 function currentHourUtc(): string {
@@ -100,7 +96,7 @@ export async function consumeUserHourlyLimit(
   userKey: string,
   limitPerHour: number,
 ): Promise<HourlyLimitResult> {
-  const hash = await sha256Hex(`${bucket}::${userKey}`);
+  const hash = await userRateLimitKey(env, bucket, userKey);
   const hourUtc = currentHourUtc();
   const count = await getCount(env.DB, hash, hourUtc);
   if (count >= limitPerHour) {
@@ -122,7 +118,7 @@ export async function consumeUserDailyLimit(
   userKey: string,
   limitPerDay: number,
 ): Promise<HourlyLimitResult> {
-  const hash = await sha256Hex(`${bucket}::${userKey}`);
+  const hash = await userRateLimitKey(env, bucket, userKey);
   const dayUtc = currentDayUtc();
   const count = await getCount(env.DB, hash, dayUtc);
   if (count >= limitPerDay) {
@@ -148,7 +144,7 @@ export async function consumeUserDailyLimit(
 // anonymous id, so a per-userKey cap is a guard against mistakes, not a cost
 // ceiling — a loop that mints a fresh key per call walks right past it. The
 // same consume therefore also takes a slot from a per-network bucket
-// (cf-connecting-ip, stored as a keyed HMAC) and a service-wide bucket;
+// (cf-connecting-ip, stored as a keyed HMAC like the userKey) and a service-wide bucket;
 // whichever is full first answers.
 
 /**
@@ -170,23 +166,28 @@ export type DailyCap = {
   /** Bucket name — also the hash salt (`${bucket}::${key}`). */
   bucket: string;
   /**
-   * userKey · client IP · a fixed service key. Never stored as-is: the
-   * "network" scope's key is an IP → keyed HMAC (dailyCapStoredKey); the others
-   * → sha256.
+   * userKey · client IP · a fixed service key. Never stored as-is
+   * (dailyCapStoredKey): the user and network scopes → keyed HMAC; the service
+   * scope → sha256 of its fixed key.
    */
   key: string;
   limit: number;
 };
 
 /**
- * What a daily cap's row is stored under. The network scope carries the client
- * IP, so it gets the keyed HMAC (rate-limit-key.ts); userKey and the fixed
- * service key keep sha256 — neither is an IP nor has a small input space.
+ * What a daily cap's row is stored under (rate-limit-key.ts). The network scope
+ * carries the client IP and the user scope a userKey the DB also keeps in plain
+ * text — both get the keyed HMAC. The service key ("all") is not personal.
  */
 async function dailyCapStoredKey(env: Pick<Env, "CONCLAVE_TOKEN_KEK">, cap: DailyCap): Promise<string> {
-  return cap.scope === "network"
-    ? ipRateLimitKey(env, cap.bucket, cap.key)
-    : sha256Hex(`${cap.bucket}::${cap.key}`);
+  switch (cap.scope) {
+    case "network":
+      return ipRateLimitKey(env, cap.bucket, cap.key);
+    case "user":
+      return userRateLimitKey(env, cap.bucket, cap.key);
+    case "service":
+      return serviceRateLimitKey(cap.bucket, cap.key);
+  }
 }
 
 export type DailyCapsResult =

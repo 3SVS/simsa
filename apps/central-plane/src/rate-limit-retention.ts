@@ -21,12 +21,24 @@
  * its own cutoff so the rule never rests on that coincidence — and a value in
  * any other format is left alone rather than guessed at.
  *
- * Deletion is batched (rowid subquery + LIMIT) so the first run, which also
- * clears every legacy row (including the old unkeyed IP hashes), stays small
- * per statement. Fail-open: an error is reported in the result, never thrown —
- * a cleanup problem must not break the cron tick that carries it.
+ * Legacy rows (PR #566 review P1): the window rule alone would keep a row
+ * written by the OLD code in the 48h before the deploy — the unkeyed
+ * sha256(`workspace::${ip}`)-style IP hashes and the plain-sha256 userKey rows —
+ * for up to 48h + 6h after the deploy, and in that time the policy sentence
+ * "IP is stored only under a secret key" would be false. So every key the new
+ * code writes starts with "v1:" (rate-limit-key.ts RATE_LIMIT_KEY_PREFIX) and a
+ * second pass deletes every row WITHOUT that marker, whatever its window. Those
+ * rows are dead: the new code computes different keys and never reads them.
+ * The first tick after the deploy therefore clears every legacy row (more than
+ * 100k per table → `more: true`, the next tick continues); after that the pass
+ * finds nothing unless something wrote an unmarked key again.
+ *
+ * Deletion is batched (rowid subquery + LIMIT) so each statement stays small.
+ * Fail-open: an error is reported in the result, never thrown — a cleanup
+ * problem must not break the cron tick that carries it.
  */
 import type { Env } from "./env.js";
+import { RATE_LIMIT_KEY_PREFIX } from "./workspace/rate-limit-key.js";
 
 /** Rows are deleted once their window started this many hours ago. Policy text says "48시간". */
 export const RATE_LIMIT_RETENTION_HOURS = 48;
@@ -50,6 +62,24 @@ export const DEMO_RATE_LIMIT_PURGE_SQL = `DELETE FROM demo_rate_limit
     WHERE length(day_utc) = 10 AND day_utc <= ?
     LIMIT ?)`;
 
+/**
+ * Rows whose key lacks the "v1:" marker (written before the keyed scheme).
+ * Binds: (prefixLength, prefix, batchLimit). substr + <> is exact and
+ * case-sensitive (LIKE would not be).
+ */
+export const WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL = `DELETE FROM workspace_rate_limit
+ WHERE rowid IN (
+   SELECT rowid FROM workspace_rate_limit
+    WHERE substr(ip_hash, 1, ?) <> ?
+    LIMIT ?)`;
+
+/** Binds: (prefixLength, prefix, batchLimit). */
+export const DEMO_RATE_LIMIT_LEGACY_PURGE_SQL = `DELETE FROM demo_rate_limit
+ WHERE rowid IN (
+   SELECT rowid FROM demo_rate_limit
+    WHERE substr(ip_hash, 1, ?) <> ?
+    LIMIT ?)`;
+
 export type TablePurgeResult = {
   deleted: number;
   batches: number;
@@ -61,8 +91,11 @@ export type TablePurgeResult = {
 export type RateLimitPurgeResult = {
   /** ISO instant: windows that started at or before this are gone. */
   cutoff: string;
+  /** Expired windows (≥ 48h since the window started). */
   workspace: TablePurgeResult;
   demo: TablePurgeResult;
+  /** Rows without the "v1:" key marker — every row written before the keyed scheme. */
+  legacy: { workspace: TablePurgeResult; demo: TablePurgeResult };
 };
 
 /**
@@ -103,15 +136,22 @@ async function purgeTable(
 }
 
 /**
- * Delete every request-limit row whose window started ≥ 48h before `now`.
- * Never throws; each table is attempted independently.
+ * Delete every request-limit row whose window started ≥ 48h before `now`, and
+ * every row written before the keyed scheme (no "v1:" marker) whatever its
+ * window. Never throws; each statement is attempted independently.
  */
 export async function purgeExpiredRateLimitRows(
   env: Pick<Env, "DB">,
   now: Date = new Date(),
 ): Promise<RateLimitPurgeResult> {
   const { cutoffIso, hourKey, dayKey } = rateLimitPurgeCutoff(now);
+  const marker = [RATE_LIMIT_KEY_PREFIX.length, RATE_LIMIT_KEY_PREFIX] as const;
+  // Legacy first: those are the rows the policy sentence depends on.
+  const legacy = {
+    workspace: await purgeTable(env.DB, WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL, marker),
+    demo: await purgeTable(env.DB, DEMO_RATE_LIMIT_LEGACY_PURGE_SQL, marker),
+  };
   const workspace = await purgeTable(env.DB, WORKSPACE_RATE_LIMIT_PURGE_SQL, [hourKey, dayKey]);
   const demo = await purgeTable(env.DB, DEMO_RATE_LIMIT_PURGE_SQL, [dayKey]);
-  return { cutoff: cutoffIso, workspace, demo };
+  return { cutoff: cutoffIso, workspace, demo, legacy };
 }
