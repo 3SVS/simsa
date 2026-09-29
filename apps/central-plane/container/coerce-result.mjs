@@ -203,6 +203,111 @@ export function createUsageCollector() {
 }
 
 /**
+ * Train W · W-3 (contract 3) — the `buildVerified` value the repair-done
+ * callback carries. Only an auto_fix job changed code, so only it can be
+ * verified or not; the boolean comes from buildAutoFixPrContent (canonical
+ * repair-brief.ts). brief_only, or an in-image brief module that predates the
+ * field → null ("undecidable" — the Worker then records nothing).
+ *
+ * Pure. mode: "auto_fix" | "brief_only"; prContent: the autoFix.prContent object.
+ */
+export function repairBuildVerified(mode, prContent) {
+  if (mode !== "auto_fix") return null;
+  const v = prContent && typeof prContent === "object" ? prContent.buildVerified : undefined;
+  return typeof v === "boolean" ? v : null;
+}
+
+/**
+ * Train W · W-3 — the repair PR label (lock-stepped with repair-brief.ts
+ * BUILD_UNVERIFIED_LABEL by test/train-w-build-verified.test.mjs).
+ */
+export const BUILD_UNVERIFIED_LABEL = "build: unverified";
+
+/**
+ * Which labels to add / remove on the repair PR after this push (pure).
+ *
+ *   buildVerified === false            → add `build: unverified`
+ *   otherwise, and the PR was REUSED   → remove it (PR #561 review P2: a second
+ *                                        repair of the same run reuses the open
+ *                                        PR — 422 already exists → PATCH title/body
+ *                                        — so a label from the first push would
+ *                                        contradict the refreshed body and the job
+ *                                        view; true = verified, null = brief-only,
+ *                                        i.e. no code claim at all)
+ *   otherwise (a fresh PR)             → nothing (it never carried the label)
+ *
+ * @param {{ buildVerified: boolean | null, labels?: unknown, reusedPr: boolean }} input
+ * @returns {{ add: string[], remove: string[] }}
+ */
+export function repairPrLabelPlan({ buildVerified, labels, reusedPr }) {
+  if (buildVerified === false) {
+    const given = Array.isArray(labels) ? labels.filter((l) => typeof l === "string" && l) : [];
+    return { add: [...new Set([...given, BUILD_UNVERIFIED_LABEL])], remove: [] };
+  }
+  return { add: [], remove: reusedPr === true ? [BUILD_UNVERIFIED_LABEL] : [] };
+}
+
+/**
+ * Apply a repairPrLabelPlan to PR `number` (issues labels API; GitHub creates a
+ * missing label on add). Best effort by design — D-4 keep: a label, not a gate.
+ * Every failure (404 = the label was not there, 403 = no permission, network)
+ * is logged and swallowed, and the token is redacted from the log line.
+ * `fetchImpl` is injected so tests drive it without the network.
+ *
+ * @param {{ fetchImpl: typeof fetch, repo: string, token: string, number: number,
+ *           plan: { add: string[], remove: string[] }, jobId: string,
+ *           log?: (...args: unknown[]) => void }} input
+ */
+export async function applyRepairPrLabels({ fetchImpl, repo, token, number, plan, jobId, log = console.warn }) {
+  if (!Number.isInteger(number) || !plan) return;
+  const headers = {
+    authorization: `Bearer ${token}`,
+    accept: "application/vnd.github+json",
+    "content-type": "application/json",
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "simsa-repair",
+  };
+  const base = `https://api.github.com/repos/${repo}/issues/${number}/labels`;
+  const attempt = async (what, url, init) => {
+    try {
+      const r = await fetchImpl(url, { ...init, headers });
+      // 404 on a removal = the label was not on the PR — already the wanted state.
+      if (!r.ok && !(init.method === "DELETE" && r.status === 404)) {
+        log(`[repair ${jobId}] label ${what} returned ${r.status} (non-fatal)`);
+      }
+    } catch (err) {
+      log(`[repair ${jobId}] label ${what} failed (non-fatal): ${redactSecret(String(err?.message ?? err), token)}`);
+    }
+  };
+  const add = Array.isArray(plan.add) ? plan.add : [];
+  const remove = Array.isArray(plan.remove) ? plan.remove : [];
+  if (add.length > 0) await attempt("add", base, { method: "POST", body: JSON.stringify({ labels: add }) });
+  for (const name of remove) await attempt("remove", `${base}/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+/**
+ * Train W · Rule 6 (PR #561 review P2) — how the container lists the files a
+ * repair changed: NUL-separated (-z) with core.quotePath=false, so a name like
+ * `src/한글.js` or `서울 로고.html` arrives exactly as written instead of
+ * "\"src/\355\225\234…\"" (default quoting hid the .js from node --check,
+ * printed octal in the PR notice and broke the following `git add`).
+ * Use as: git -C <workDir> ...GIT_CHANGED_FILES_ARGS
+ */
+export const GIT_CHANGED_FILES_ARGS = Object.freeze(["-c", "core.quotePath=false", "diff", "--name-only", "-z"]);
+
+/**
+ * Same rule for the repo inventory (`git ls-files`): it feeds the snapshot
+ * ranking AND sanitizeRewrites' allow-list, so a quoted `src/한글.js` could
+ * never be shown to — or rewritten by — the worker.
+ */
+export const GIT_LS_FILES_ARGS = Object.freeze(["-c", "core.quotePath=false", "ls-files", "-z"]);
+
+/** Split `git … -z` output into names (NUL-separated; empty pieces dropped). Pure. */
+export function parseGitNameList(stdout) {
+  return String(stdout ?? "").split("\0").filter((s) => s.length > 0);
+}
+
+/**
  * Stage 268 — strip a secret from a message before it travels anywhere
  * (callback body, logs). Pure; no-op when the secret is empty.
  */
