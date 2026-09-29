@@ -33,6 +33,18 @@
  *     배포되기 때문) + 복사 계측 이벤트.
  *   - C4a (D-8 amend, 0069): region·envelope_json은 insert 시, finding_codes_json은 콜백 시.
  *
+ * Train W · W-2 (재정렬 D-7 amend [PILOT], 2026-09-28):
+ *   - 킬스위치 INSPECTION_ENABLED — 판정은 dispatchInspection **안**(service-switches.ts 단일
+ *     헬퍼)이라 라우트·verify-sweep·향후 자동 검수가 같은 게이트를 지난다. 라우트는 같은 헬퍼로
+ *     행을 만들기 전에 묻고 503 `inspection_disabled`.
+ *   - 일일 상한 검수 10/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
+ *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"inspection",
+ *     limit, resetAt }. 시스템 재검수(verify-sweep)는 이 라우트를 거치지 않아 차감되지 않는다.
+ *   - PR #561 검증 후속: userKey는 익명이라 같은 차감에 네트워크(30/일)·서비스 전체(300/일)
+ *     버킷을 더했다(네트워크 초과 429 scope=network, 서비스 초과 503 reason=daily_capacity).
+ *     차감은 버킷마다 문장 하나(원자적), 진행 중 1개 가드는 삽입 뒤 rowid 순으로 한 번 더 —
+ *     동시에 들어온 요청이 상한·409를 함께 넘지 못한다.
+ *
  * Graceful degradation: when the INSPECTOR DO binding / callback token is
  * absent or the container refuses the job (e.g. still provisioning), the row is
  * created, immediately marked failed (fail-fast — nothing consumes queued rows
@@ -50,10 +62,15 @@ import { getProjectSourceById, listProjectSources } from "../workspace/project-s
 import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { resolveRepairJobsByVerifyCheck } from "../workspace/repair-job-db.js";
+import { INSPECTION_DISABLED, inspectionEnabled } from "../workspace/service-switches.js";
+import { consumeDailyCaps } from "../workspace/rate-limit.js";
+import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
 import { buildBuilderFixPrompt } from "../nondev-report.js";
 import {
   USER_VERDICTS,
+  discardQueuedVisualCheck,
   findActiveVisualCheckForProject,
+  firstActiveVisualCheckIdForProject,
   getVisualCheckById,
   insertQueuedVisualCheck,
   markVisualCheckDone,
@@ -135,6 +152,12 @@ function requireInternalToken(c: {
  * Dispatch the queued run into the SimsaInspector container DO. Mirrors
  * spawnSandbox in saas.ts: fire-and-forget from the caller's perspective —
  * the container acks 202 and reports back via /internal/visual-check-*.
+ *
+ * Train W · W-2: the INSPECTION_ENABLED kill switch is enforced HERE (not in a
+ * route), so every caller — the run route, the verify-sweep cron, any future
+ * automatic inspection after a build — passes the same gate. `disabled: true`
+ * tells a caller the service is switched off (as opposed to the container
+ * being unavailable); callers that create rows ask inspectionEnabled() first.
  */
 export async function dispatchInspection(
   env: Env,
@@ -151,7 +174,10 @@ export async function dispatchInspection(
     /** SI 티어 A5: 지시서의 수용 기준 시나리오(없으면 종전 — 핵심 흐름 하나). */
     acceptancePlan?: AcceptanceScenario[];
   },
-): Promise<{ dispatched: boolean; note?: string }> {
+): Promise<{ dispatched: boolean; note?: string; disabled?: boolean }> {
+  if (!inspectionEnabled(env)) {
+    return { dispatched: false, note: INSPECTION_DISABLED, disabled: true };
+  }
   if (!env.INSPECTOR) {
     return { dispatched: false, note: "inspector_unavailable" };
   }
@@ -355,6 +381,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     if (!project) return c.json({ ok: false, error: "project_not_found" }, 404);
     if (project.userKey !== userKey) return c.json({ ok: false, error: "forbidden" }, 403);
 
+    // Train W · W-2 — kill switch, asked BEFORE any row exists (same helper
+    // dispatchInspection enforces). After ownership: a stranger still gets 403.
+    if (!inspectionEnabled(c.env)) {
+      return c.json({ ok: false, error: INSPECTION_DISABLED }, 503);
+    }
+
     // Report language. Same shape as every other workspace route
     // (workspace-document-intake, workspace-github): unknown → "ko".
     const locale: "ko" | "en" = body.locale === "en" ? "en" : "ko";
@@ -438,6 +470,24 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: false, error: "run_already_active", activeRunId: active.id }, 409);
     }
 
+    // Train W · W-2 — daily caps (D-7 amend [PILOT]): this user 10 · this network
+    // 30 · the whole service 300 (beta-limits.ts — userKey is anonymous, so the
+    // user cap alone is not a cost ceiling; PR #561 review P1). Charged only
+    // here, after ownership + validation + the one-active-run guard (a 409 never
+    // costs a slot), one atomic statement per bucket (no read-then-increment
+    // window), and handed back below when the job never starts (row not saved /
+    // lost a concurrent start / container refused).
+    const caps = await consumeDailyCaps(
+      c.env,
+      dailyCapsFor("inspection", c.env, userKey, clientNetworkKey(c.req.raw)),
+    );
+    if (caps.limited) {
+      const rejection = dailyCapRejection("inspection", caps);
+      c.header("Retry-After", String(rejection.retryAfterSeconds));
+      return c.json(rejection.body, rejection.status);
+    }
+    const refundSlot = caps.refund;
+
     // C4a (0069): the envelope is stamped at insert — that is when the edge
     // country and the project snapshot are in hand. Nothing here is invented:
     // absent values are null.
@@ -459,7 +509,27 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       });
     } catch (err) {
       console.error("[visual-check-runs POST run] insert failed:", err);
+      await refundSlot();
       return c.json({ ok: false, error: "save_failed" }, 500);
+    }
+
+    // One active run per project, under concurrency (PR #561 review P2). The
+    // 409 check above is read-then-insert: requests that arrive together all
+    // pass it. Now that our row exists, the in-flight row inserted FIRST wins;
+    // any later one (ours included) backs out — row removed, slots returned,
+    // the same 409 as the check above. A D1 error here keeps going (fail-open,
+    // exactly like the read before it).
+    const firstActiveId = await firstActiveVisualCheckIdForProject(c.env, projectId).catch(() => null);
+    if (firstActiveId !== null && firstActiveId !== run.id) {
+      const runId = run.id;
+      await discardQueuedVisualCheck(c.env, runId).catch(async (err) => {
+        // Never leave a queued row nothing will pick up (it would wedge this
+        // guard until the stuck sweep) — fall back to a final state.
+        console.error("[visual-check-runs POST run] discard after lost start failed:", err);
+        await markVisualCheckFailed(c.env, runId, "superseded_by_concurrent_run").catch(() => undefined);
+      });
+      await refundSlot();
+      return c.json({ ok: false, error: "run_already_active", activeRunId: firstActiveId }, 409);
     }
 
     const publicBaseUrl = c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
@@ -487,6 +557,8 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // honest and lets the user retry immediately (live finding, Stage 263.1).
     let status = run.status;
     if (!dispatch.dispatched) {
+      // W-2: nothing ran — the user's slot goes back.
+      await refundSlot();
       try {
         await markVisualCheckFailed(c.env, run.id, dispatch.note ?? "dispatch_failed");
         status = "failed";

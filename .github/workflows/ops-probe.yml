@@ -3,6 +3,17 @@
 # 왜: LLM_PROBE_TOKEN은 repo secret에만 있고 노트북엔 없다(2026-09-24). 라이브 증거
 # (빌더 컨테이너 selfcheck, LLM 벤더 프로브)를 사람이 토큰을 복사하지 않고 얻기 위한 유일한 경로.
 # 토큰은 헤더로만 쓰이고 로그엔 마스킹된다. 쓰기 동작 없음(읽기·관측 전용 엔드포인트만).
+#
+# Train W · W-V-0 (2026-09-28): target `d1-readonly` — D1에 **이름 붙은 읽기 전용 질의**만 던져
+# 결과를 job summary에 남긴다(라이브 기준선: region·envelope_json·finding_codes_json 채움).
+# 자유 SQL 입력은 없다 — 질의 이름은 choice이고, 스크립트(apps/central-plane/scripts/
+# d1-readonly-queries.mjs)가 이름을 다시 검사한다. 유저 식별·내용 컬럼은 출력하지 않는다.
+#
+# ★이 저장소는 PUBLIC이다 — job summary·로그는 로그인한 누구나 읽는다(PR #561 검증). 그래서
+# 질의는 개수·채움 여부·날짜만 낸다(id·초 단위 시각·국가·판정 값 없음). wrangler는 락파일이
+# 고정한 버전(pnpm install --frozen-lockfile)을 쓴다 — 레지스트리 최신본(npx wrangler@4)에
+# 토큰을 넘기지 않는다. 토큰은 D1 읽기 전용 secret(CLOUDFLARE_D1_READ_TOKEN)이 있으면 그것을,
+# 없으면 배포 토큰으로 폴백하고 요약에 그 사실을 적는다(Bae 액션: D1 Read 전용 토큰 발급).
 name: ops-probe
 
 on:
@@ -13,14 +24,21 @@ on:
         required: true
         default: 'builder-selfcheck'
         type: choice
-        options: [builder-selfcheck, llm-probe, probe-mail]
+        options: [builder-selfcheck, llm-probe, probe-mail, d1-readonly]
       run_id:
         description: 'probe-mail 전용: 확인할 runId (probe-<runId>@PROBE_MAIL_DOMAIN)'
         required: false
         default: ''
+      query:
+        description: 'd1-readonly 전용: 이름 붙은 읽기 전용 질의 (자유 SQL 없음)'
+        required: false
+        default: 'envelope-fill-rate'
+        type: choice
+        options: [latest-visual-check-fill, envelope-fill-rate, repair-fill-rate]
 
 jobs:
   probe:
+    if: inputs.target != 'd1-readonly'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -40,3 +58,35 @@ jobs:
           echo "HTTP $code"
           jq . /tmp/out.json || cat /tmp/out.json
           case "$code" in 200*) exit 0 ;; *) echo "::warning::probe returned $code"; exit 1 ;; esac
+
+  d1-readonly:
+    if: inputs.target == 'd1-readonly'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      # The wrangler the lockfile pinned (central-plane devDependency) — the script
+      # runs node_modules/wrangler/bin/wrangler.js with node; nothing is fetched at run time.
+      - run: pnpm install --frozen-lockfile --filter @simsa/central-plane
+      - name: Named read-only D1 query
+        working-directory: apps/central-plane
+        env:
+          # Prefer a D1-read-only token; fall back to the deploy token until one exists.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          READ_ONLY_TOKEN: ${{ secrets.CLOUDFLARE_D1_READ_TOKEN != '' }}
+          # The query NAME reaches the script through env — never interpolated into a shell line.
+          QUERY: ${{ inputs.query }}
+        run: |
+          set -euo pipefail
+          if [ "$READ_ONLY_TOKEN" != "true" ]; then
+            echo "> token: deploy token fallback (CLOUDFLARE_D1_READ_TOKEN not set) — the script only runs named SELECTs" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          node scripts/d1-readonly-queries.mjs "$QUERY" | tee -a "$GITHUB_STEP_SUMMARY"

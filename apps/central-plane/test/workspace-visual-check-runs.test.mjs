@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 
 const { createApp } = await import("../dist/router.js");
 const { cleanupStuckVisualChecks } = await import("../dist/stuck-cleanup.js");
+const { dailyCapsRun } = await import("./_daily-caps-fake.mjs");
 
 const USER = "uk_owner";
 const OTHER = "uk_intruder";
@@ -27,12 +28,15 @@ const TOKEN = "tok_internal_secret";
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 function makeDb({ projects = new Map(), sources = [], checks = [] } = {}) {
+  const rate = new Map(); // daily caps (Train W) — modeled, see _daily-caps-fake.mjs
   return {
     _checks: checks,
     prepare(sql) {
       function handler(args) {
         return {
           async run() {
+            const capped = dailyCapsRun(rate, sql, args);
+            if (capped) return capped;
             if (sql.includes("INSERT INTO workspace_visual_checks") && sql.includes("'queued', 'container'")) {
               // Bind order = visual-check-db.ts insertQueuedVisualCheck (0065 locale · 0069 region/envelope/source).
               const [id, project_id, user_key, target_url, intent, locale, region, envelope_json, source_check_id, created_at, updated_at] = args;
