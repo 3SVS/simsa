@@ -6,7 +6,9 @@
  * 테이블별 배열/Map을 들고, 라우트·DB 헬퍼가 발행하는 SQL 문자열 패턴으로 분기한다.
  * 위치 기반 destructuring은 **현재 src의 bind 순서**와 일치시킨다(0069 컬럼 포함).
  * 모든 쓰기는 `writes`에 `{ sql, bound }`로도 남겨 컬럼 존재를 직접 확인할 수 있다.
+ * 일일 상한(Train W, workspace_rate_limit)은 _daily-caps-fake.mjs가 실제처럼 센다.
  */
+import { dailyCapsRun } from "./_daily-caps-fake.mjs";
 
 export function makeFakeD1({
   projects = new Map(),
@@ -18,12 +20,15 @@ export function makeFakeD1({
   events = [],
 } = {}) {
   const writes = [];
-  const state = { projects, sources, checks, jobs, repos, connections, events, writes };
+  const rate = new Map();
+  const state = { projects, sources, checks, jobs, repos, connections, events, writes, rate };
 
   function handler(sql, args) {
     return {
       async run() {
         writes.push({ sql, bound: args });
+        const capped = dailyCapsRun(rate, sql, args);
+        if (capped) return capped;
 
         // ── workspace_projects (upsertProject) ───────────────────────────────
         if (sql.includes("INSERT INTO workspace_projects")) {

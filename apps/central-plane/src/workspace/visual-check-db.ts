@@ -347,6 +347,38 @@ export async function findActiveVisualCheckForProject(
   return row ?? null;
 }
 
+/**
+ * Train W (PR #561 review P2) — the in-flight run of a project that was INSERTED
+ * first (SQLite rowid = insertion order). The route's read-then-insert 409 guard
+ * lets requests that arrive together all pass; after its own insert each one
+ * asks this, and only the first-inserted keeps going — every later one sees an
+ * earlier row and backs out. Null when nothing is in flight (or on a D1 error —
+ * the caller treats that as "mine", fail-open like the guard before it).
+ */
+export async function firstActiveVisualCheckIdForProject(
+  env: Env,
+  projectId: string,
+): Promise<string | null> {
+  const row = (await env.DB.prepare(
+    `SELECT id FROM workspace_visual_checks
+      WHERE project_id = ? AND status IN ('queued', 'running')
+      ORDER BY rowid ASC
+      LIMIT 1`,
+  )
+    .bind(projectId)
+    .first()) as { id?: unknown } | null;
+  return row && typeof row.id === "string" ? row.id : null;
+}
+
+/**
+ * Remove a run this request just inserted and never dispatched (it lost a
+ * concurrent start). Only a still-queued row is touched — nothing else points
+ * at it yet (no container, no evidence, no repair job).
+ */
+export async function discardQueuedVisualCheck(env: Env, id: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM workspace_visual_checks WHERE id = ? AND status = 'queued'`).bind(id).run();
+}
+
 /** Stage 263 — queued → running (only from an in-flight state; done/failed are final). */
 export async function markVisualCheckRunning(env: Env, id: string): Promise<boolean> {
   const res = await env.DB.prepare(

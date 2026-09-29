@@ -23,8 +23,8 @@ import type {
   WorkspaceCheckDraftResponse,
 } from "./check.js";
 import { buildCheckPrompt } from "./check.js";
-import { anthropicEndpoint } from "./anthropic-fetch.js";
-import { logLlmUsage } from "./verify-panel.js";
+import { anthropicEndpoint, type LlmUsageSink } from "./anthropic-fetch.js";
+import { emitVendorUsage, logLlmUsage } from "./verify-panel.js";
 
 export type CouncilEnv = {
   ANTHROPIC_API_KEY?: string;
@@ -41,6 +41,8 @@ export type CouncilOpts = {
   openaiModel?: string;
   geminiModel?: string;
   fetchImpl?: typeof fetch;
+  /** L-3: 벤더 호출마다 사용량 싱크(callSite council-round1/2). */
+  onUsage?: LlmUsageSink;
 };
 
 type VendorId = "anthropic" | "openai" | "gemini";
@@ -93,9 +95,10 @@ async function callVendor(
   vendor: VendorId,
   env: CouncilEnv,
   prompt: string,
-  opts: Required<Omit<CouncilOpts, "fetchImpl">>,
+  opts: Required<Omit<CouncilOpts, "fetchImpl" | "onUsage">>,
   fetchImpl: typeof fetch,
   callSite: string,
+  onUsage?: LlmUsageSink,
 ): Promise<string | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), opts.timeoutMs);
@@ -114,6 +117,7 @@ async function callVendor(
         usage?: { input_tokens?: number; output_tokens?: number };
       };
       logLlmUsage("anthropic", callSite, opts.anthropicModel, { input: j.usage?.input_tokens, output: j.usage?.output_tokens }, Date.now() - started);
+      emitVendorUsage(onUsage, "anthropic", callSite, opts.anthropicModel, j, Date.now() - started);
       return (j.content ?? []).find((b) => b.type === "text")?.text ?? null;
     }
     if (vendor === "openai" && env.OPENAI_API_KEY) {
@@ -131,6 +135,7 @@ async function callVendor(
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       logLlmUsage("openai", callSite, opts.openaiModel, { input: j.usage?.prompt_tokens, output: j.usage?.completion_tokens }, Date.now() - started);
+      emitVendorUsage(onUsage, "openai", callSite, opts.openaiModel, j, Date.now() - started);
       return j.choices?.[0]?.message?.content ?? null;
     }
     if (vendor === "gemini" && env.GEMINI_API_KEY) {
@@ -150,6 +155,7 @@ async function callVendor(
         usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
       };
       logLlmUsage("gemini", callSite, opts.geminiModel, { input: j.usageMetadata?.promptTokenCount, output: j.usageMetadata?.candidatesTokenCount }, Date.now() - started);
+      emitVendorUsage(onUsage, "gemini", callSite, opts.geminiModel, j, Date.now() - started);
       return j.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? null;
     }
     return null;
@@ -270,7 +276,7 @@ export async function runCouncilCheck(
   const prompt = buildCheckPrompt(req);
   const round1 = await Promise.all(
     vendors.map(async (v) => {
-      const text = await callVendor(v, env, prompt, resolved, fetchImpl, "council-round1");
+      const text = await callVendor(v, env, prompt, resolved, fetchImpl, "council-round1", opts.onUsage);
       return { vendor: v, verdicts: text ? parseVerdicts(text) : null };
     }),
   );
@@ -290,7 +296,7 @@ export async function runCouncilCheck(
     const rPrompt = rebuttalPrompt(req, disagreedIds, opinions);
     const round2 = await Promise.all(
       [...opinions.keys()].map(async (v) => {
-        const text = await callVendor(v, env, rPrompt, resolved, fetchImpl, "council-round2");
+        const text = await callVendor(v, env, rPrompt, resolved, fetchImpl, "council-round2", opts.onUsage);
         return { vendor: v, verdicts: text ? parseVerdicts(text) : null };
       }),
     );

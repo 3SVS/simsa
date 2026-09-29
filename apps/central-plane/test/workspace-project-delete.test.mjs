@@ -133,6 +133,18 @@ describe("deleteProject — cascade boundary", () => {
     assert.match(joined, /DELETE FROM workspace_projects WHERE id = \?/, "should delete the project row");
   });
 
+  it("unlinks the AI usage ledger in the same batch — cost rows stay, project/user link is cleared (0070, privacy §1)", async () => {
+    const { env, batched } = makeEnv();
+    await deleteProject(env, PROJECT, USER);
+    const joined = batched.join("\n");
+    assert.match(
+      joined,
+      /UPDATE llm_usage SET project_id = NULL, user_key_hash = NULL, job_id = NULL WHERE project_id = \?/,
+      "llm_usage rows of this project must lose their project/user/job link inside the delete batch",
+    );
+    assert.doesNotMatch(joined, /DELETE FROM llm_usage\b/, "cost ledger rows are kept (unlinked), not deleted");
+  });
+
   it("deletes experiment candidates via the experiment_id subquery", async () => {
     const { env, batched } = makeEnv();
     await deleteProject(env, PROJECT, USER);

@@ -3,7 +3,7 @@
  * idea-to-spec draft. Falls back to inline mock data on any failure
  * so the user-facing flow never breaks.
  */
-import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type LlmUsageSink, type VendorFallback } from "./anthropic-fetch.js";
 import { verifySpecAgainstUserWords, type SpecVerification } from "./verify-spec.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -86,7 +86,12 @@ export type IdeaToSpecDraftResponse = {
 };
 
 export type LlmCallUsage = {
+  /** L-2 (Train L): **실제로 응답한 모델**(폴백이면 gpt-5.4…). Langfuse 라벨·원가가 이 값을 쓴다. */
   model: string;
+  /** L-2: 코드가 요청한 모델(예 claude-haiku-4-5-20251001). model과 다르면 폴백이 답한 것이다. */
+  modelRequested: string;
+  /** L-2: 실제로 응답한 벤더. */
+  vendor: string;
   inputTokens: number;
   outputTokens: number;
   cacheCreationInputTokens: number;
@@ -549,6 +554,7 @@ async function callAnthropic(
   baseUrl: string | undefined,
   timeoutMs = 120000, // document-scale prompts (up to 80k chars) need generous time
   fallback?: VendorFallback,
+  onUsage?: LlmUsageSink,
 ): Promise<{ text: string; usage: LlmCallUsage }> {
   const startedAt = Date.now();
   const data = (await anthropicMessages(
@@ -573,17 +579,8 @@ async function callAnthropic(
     undefined,
     anthropicEndpoint(baseUrl),
     "generate",
-    { fallback },
-  )) as {
-    content?: Array<{ type: string; text?: string }>;
-    stop_reason?: string;
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-      cache_creation_input_tokens?: number;
-      cache_read_input_tokens?: number;
-    };
-  };
+    { fallback, onUsage },
+  ));
   const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
   // Operational diagnostics (no user content): production fell back with
   // "non-JSON" and this is the only way to see WHY from a tail.
@@ -594,7 +591,10 @@ async function callAnthropic(
   return {
     text: "{" + text,
     usage: {
-      model: GENERATE_MODEL,
+      // L-2: 요청 모델이 아니라 실제로 응답한 모델(ANTHROPIC_ENABLED=off면 gpt-5.4…).
+      model: data.modelActual ?? GENERATE_MODEL,
+      modelRequested: GENERATE_MODEL,
+      vendor: data.vendor ?? "anthropic",
       inputTokens: data.usage?.input_tokens ?? 0,
       outputTokens: data.usage?.output_tokens ?? 0,
       cacheCreationInputTokens: data.usage?.cache_creation_input_tokens ?? 0,
@@ -1025,6 +1025,8 @@ export async function generateIdeaToSpecDraft(
   anthropicBaseUrl?: string,
   /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
   fallback?: VendorFallback,
+  /** L-3: 성공한 LLM 호출의 사용량 싱크(라우트가 원장에 기록). 응답 파싱 실패여도 불린다 — 비용은 났다. */
+  onUsage?: LlmUsageSink,
 ): Promise<IdeaToSpecDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.idea?.trim()) {
     return { ...buildMockFallback(req), warnings: ["아이디어를 입력해주세요."] };
@@ -1038,7 +1040,7 @@ export async function generateIdeaToSpecDraft(
   let rawText = "";
   let llmUsage: LlmCallUsage | undefined;
   try {
-    const call = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback);
+    const call = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback, onUsage);
     rawText = call.text;
     llmUsage = call.usage;
   } catch (err) {

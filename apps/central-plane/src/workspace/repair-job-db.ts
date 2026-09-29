@@ -6,6 +6,15 @@
  * running → done|failed, updated_at as the staleness clock for the stuck
  * sweep). The repo/branch/PR fields are filled in by the container's
  * /internal/repair-done callback.
+ *
+ * Train W · W-3 — `buildVerified` has no column of its own (no migration: the
+ * next numbers are reserved for L-3/K-1). It rides the DONE row's `error`
+ * column as a machine marker, exactly like the brief_only `modeReason`
+ * diagnostic already does (2026-07-20 precedent: the dashboard renders `error`
+ * only on FAILED rows). The two never collide: modeReason is stored only for
+ * brief_only, the build marker only for auto_fix. fromRow turns the marker back
+ * into `buildVerified` and clears `error`, so the API never shows it as an
+ * error message.
  */
 import type { Env } from "../env.js";
 
@@ -15,6 +24,17 @@ export type RepairJobStatus = (typeof REPAIR_JOB_STATUSES)[number];
 /** Stage 270 — how the container concluded a done repair. */
 export const REPAIR_JOB_MODES = ["auto_fix", "brief_only"] as const;
 export type RepairJobMode = (typeof REPAIR_JOB_MODES)[number];
+
+/** Train W · W-3 — machine markers stored in `error` on DONE auto_fix rows. */
+export const BUILD_CHECK_VERIFIED_MARKER = "build_check:verified";
+export const BUILD_CHECK_UNVERIFIED_MARKER = "build_check:unverified";
+
+/** Marker → buildVerified; anything else (null, a diagnostic, garbage) → null. */
+export function parseBuildCheckMarker(raw: string | null | undefined): boolean | null {
+  if (raw === BUILD_CHECK_VERIFIED_MARKER) return true;
+  if (raw === BUILD_CHECK_UNVERIFIED_MARKER) return false;
+  return null;
+}
 
 export type DbRepairJob = {
   id: string;
@@ -31,6 +51,12 @@ export type DbRepairJob = {
   mode?: RepairJobMode;
   /** Stage 270 — number of code files the worker actually changed (auto_fix). */
   changedFiles?: number;
+  /**
+   * Train W · W-3 — did the container's post-apply check (node --check on
+   * .js/.mjs/.cjs) cover every changed file? Only DONE auto_fix rows carry a
+   * boolean; brief_only / legacy / in-flight / undecidable → null.
+   */
+  buildVerified: boolean | null;
   error?: string;
   /** 0069 (C4a): ISO-3166 국가 코드(수리 요청 시점). null = 미기록. */
   region: string | null;
@@ -75,6 +101,9 @@ function randId(): string {
 }
 
 function fromRow(row: RawRow): DbRepairJob {
+  // W-3: only a DONE auto_fix row can carry the build marker (in `error`).
+  const buildVerified =
+    row.status === "done" && row.mode === "auto_fix" ? parseBuildCheckMarker(row.error) : null;
   return {
     id: row.id,
     projectId: row.project_id,
@@ -88,7 +117,9 @@ function fromRow(row: RawRow): DbRepairJob {
     envCause: row.env_cause === 1,
     mode: row.mode === "auto_fix" || row.mode === "brief_only" ? row.mode : undefined,
     changedFiles: typeof row.changed_files === "number" ? row.changed_files : undefined,
-    error: row.error ?? undefined,
+    buildVerified,
+    // The build marker is a flag, not an error message — never surfaced as one.
+    error: buildVerified !== null ? undefined : row.error ?? undefined,
     region: typeof row.region === "string" && row.region ? row.region : null,
     verifyCheckId: typeof row.verify_check_id === "string" && row.verify_check_id ? row.verify_check_id : null,
     resolved: row.resolved === 1 ? true : row.resolved === 0 ? false : null,
@@ -141,6 +172,7 @@ export async function insertQueuedRepairJob(
     status: "queued",
     branchName: input.branchName,
     envCause: input.envCause,
+    buildVerified: null,
     region: input.region ?? null,
     verifyCheckId: null,
     resolved: null,
@@ -208,6 +240,32 @@ export async function findActiveRepairJobForRun(
   return row ?? null;
 }
 
+/**
+ * Train W (PR #561 review P2) — the in-flight repair of a run that was INSERTED
+ * first (rowid = insertion order). Same role as firstActiveVisualCheckIdForProject:
+ * after its own insert a request keeps going only if its row is this one, so two
+ * containers never force-push the same fix/simsa-<runId> branch at once.
+ */
+export async function firstActiveRepairJobIdForRun(
+  env: Env,
+  visualCheckId: string,
+): Promise<string | null> {
+  const row = (await env.DB.prepare(
+    `SELECT id FROM workspace_repair_jobs
+      WHERE visual_check_id = ? AND status IN ('queued', 'running')
+      ORDER BY rowid ASC
+      LIMIT 1`,
+  )
+    .bind(visualCheckId)
+    .first()) as { id?: unknown } | null;
+  return row && typeof row.id === "string" ? row.id : null;
+}
+
+/** Remove a repair job this request just inserted and never dispatched (lost a concurrent start). */
+export async function discardQueuedRepairJob(env: Env, id: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM workspace_repair_jobs WHERE id = ? AND status = 'queued'`).bind(id).run();
+}
+
 /** Latest repair job for a run (dashboard polling). */
 export async function getLatestRepairJobForRun(
   env: Env,
@@ -256,8 +314,23 @@ export async function markRepairJobDone(
      * only place the fallback reason survives.
      */
     modeReason?: string;
+    /**
+     * Train W · W-3 — auto_fix only: whether node --check covered every
+     * changed file. Stored as a marker in the same `error` slot (see header);
+     * modeReason wins if both were ever passed (they are mutually exclusive by
+     * mode at the only call site, /internal/repair-done).
+     */
+    buildVerified?: boolean;
   },
 ): Promise<void> {
+  const diagnostic =
+    typeof input.modeReason === "string" && input.modeReason
+      ? input.modeReason.slice(0, 300)
+      : input.buildVerified === true
+        ? BUILD_CHECK_VERIFIED_MARKER
+        : input.buildVerified === false
+          ? BUILD_CHECK_UNVERIFIED_MARKER
+          : null;
   await env.DB.prepare(
     `UPDATE workspace_repair_jobs
         SET status = 'done',
@@ -280,7 +353,7 @@ export async function markRepairJobDone(
       typeof input.changedFiles === "number" && Number.isInteger(input.changedFiles) && input.changedFiles >= 0
         ? input.changedFiles
         : null,
-      typeof input.modeReason === "string" && input.modeReason ? input.modeReason.slice(0, 300) : null,
+      diagnostic,
       new Date().toISOString(),
       id,
     )

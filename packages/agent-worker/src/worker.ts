@@ -17,7 +17,7 @@ import {
 } from "./prompts.js";
 import { parseRewriteToolUse, parseEditToolUse } from "./patch-parser.js";
 import { withOpenAiFallback, type FallbackOptions } from "./openai-fallback.js";
-import { actualCost, estimateCallCost } from "./pricing.js";
+import { estimateCallCost, usageRecordFromResponse, type LlmUsageRecord } from "./pricing.js";
 import type { WorkerContext, WorkerOutcome, EditWorkerContext, EditWorkerOutcome } from "./types.js";
 
 export interface ClaudeWorkerOptions {
@@ -49,6 +49,12 @@ export interface ClaudeWorkerOptions {
   openaiBaseUrl?: string;
   /** 킬스위치 — Anthropic을 아예 건너뛴다(중앙 플레인 ANTHROPIC_ENABLED="off"와 같은 뜻). */
   preferFallback?: boolean;
+  /**
+   * L-3 (Train L): LLM 호출마다 사용량 레코드(요청·실제 모델·벤더·토큰·지연·비용)를 흘려보낸다.
+   * 수리 컨테이너가 모아서 /internal/repair-done 콜백의 `usage[]`로 싣는다. **응답 파싱 전에** 부른다
+   * — 파싱이 실패해도 토큰 비용은 이미 발생했다. 싱크가 던져도 호출은 깨지지 않는다.
+   */
+  onUsage?: (u: LlmUsageRecord) => void;
 }
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
@@ -93,6 +99,7 @@ export class ClaudeWorker {
   private readonly baseURL: string | undefined;
   private clientPromise: Promise<AnthropicLike> | null;
   private readonly fallback: FallbackOptions | undefined;
+  private readonly onUsage: ((u: LlmUsageRecord) => void) | undefined;
 
   constructor(opts: ClaudeWorkerOptions = {}) {
     const key = opts.apiKey ?? process.env["ANTHROPIC_API_KEY"] ?? "";
@@ -117,6 +124,21 @@ export class ClaudeWorker {
         }
       : undefined;
     this.clientPromise = opts.client ? Promise.resolve(opts.client) : null;
+    this.onUsage = opts.onUsage;
+  }
+
+  /**
+   * L-2: 응답의 **실제 모델**로 과금한 사용량 레코드를 만들고 싱크로 흘려보낸다.
+   * 종전엔 요청 모델(claude-sonnet-4-6)로 과금했지만 프로덕션 응답은 폴백 gpt-5.4였다.
+   */
+  private meter(requestedModel: string, response: AnthropicResponse, latencyMs: number): LlmUsageRecord {
+    const record = usageRecordFromResponse(requestedModel, response, latencyMs);
+    try {
+      this.onUsage?.(record);
+    } catch {
+      /* 계측 싱크가 수리를 깨면 안 된다 */
+    }
+    return record;
   }
 
   private async getClient(): Promise<AnthropicLike> {
@@ -168,20 +190,16 @@ export class ClaudeWorker {
         };
         const response: AnthropicResponse = await client.messages.create(params);
         const latencyMs = Date.now() - started;
+        // 파싱 전에 계측 — 파싱이 던져도 토큰 비용은 이미 나갔다.
+        const usage = this.meter(model, response, latencyMs);
 
         const parsed = parseRewriteToolUse(response);
-        const cost = actualCost(model, {
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
-          cacheCreationTokens: response.usage.cache_creation_input_tokens,
-          cacheReadTokens: response.usage.cache_read_input_tokens,
-        });
 
         return {
           result: parsed,
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
-          costUsd: cost,
+          costUsd: usage.costUsd,
           latencyMs,
         };
       },
@@ -234,20 +252,15 @@ export class ClaudeWorker {
         };
         const response: AnthropicResponse = await client.messages.create(params);
         const latencyMs = Date.now() - started;
+        const usage = this.meter(model, response, latencyMs);
 
         const parsed = parseEditToolUse(response);
-        const cost = actualCost(model, {
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
-          cacheCreationTokens: response.usage.cache_creation_input_tokens,
-          cacheReadTokens: response.usage.cache_read_input_tokens,
-        });
 
         return {
           result: parsed,
           inputTokens: response.usage.input_tokens,
           outputTokens: response.usage.output_tokens,
-          costUsd: cost,
+          costUsd: usage.costUsd,
           latencyMs,
         };
       },

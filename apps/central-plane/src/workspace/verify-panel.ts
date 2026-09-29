@@ -13,7 +13,45 @@
  * 우선(OpenAI), 불가 시 Anthropic 상위 모델 폴백. 상한/모델은 파라미터(RC-2).
  */
 import type { CheckResultItem, ProductSpecForCheck, WorkspaceCheckDraftResponse } from "./check.js";
-import { anthropicEndpoint } from "./anthropic-fetch.js";
+import {
+  anthropicEndpoint,
+  emitLlmUsage,
+  openAiUsageToAnthropic,
+  usageEventFrom,
+  type AnthropicMessagesData,
+  type LlmUsageSink,
+} from "./anthropic-fetch.js";
+
+/**
+ * L-2/L-3 (Train L): 직접 fetch하는 벤더 호출(verify-panel·council)의 사용량을 싱크로 흘린다.
+ * 실응답 모델 = 응답 JSON의 model(없으면 요청 모델). OpenAI usage는 Anthropic 의미로 맞춘다(cached → cache_read).
+ */
+export function emitVendorUsage(
+  sink: LlmUsageSink | undefined,
+  vendor: "anthropic" | "openai" | "gemini",
+  callSite: string,
+  modelRequested: string,
+  json: unknown,
+  latencyMs: number,
+): void {
+  if (!sink) return;
+  const j = (typeof json === "object" && json !== null ? json : {}) as {
+    model?: unknown;
+    modelVersion?: unknown;
+    usage?: unknown;
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number };
+  };
+  const reported = vendor === "gemini" ? j.modelVersion : j.model;
+  const modelActual = typeof reported === "string" && reported.trim() ? reported.trim() : modelRequested;
+  let usage: AnthropicMessagesData["usage"];
+  if (vendor === "openai") usage = openAiUsageToAnthropic(j.usage);
+  else if (vendor === "gemini") {
+    const prompt = j.usageMetadata?.promptTokenCount ?? 0;
+    const cached = Math.min(j.usageMetadata?.cachedContentTokenCount ?? 0, prompt);
+    usage = { input_tokens: prompt - cached, output_tokens: j.usageMetadata?.candidatesTokenCount ?? 0, cache_read_input_tokens: cached };
+  } else usage = j.usage as AnthropicMessagesData["usage"];
+  emitLlmUsage(sink, usageEventFrom(vendor === "gemini" ? "google" : vendor, modelRequested, modelActual, usage, latencyMs, callSite));
+}
 
 export type VerificationTag = "dual_confirmed" | "downgraded" | "single";
 
@@ -68,6 +106,8 @@ export type VerifyPanelOpts = {
   fetchImpl?: typeof fetch;
   /** G14-b: 2차 소견·강등 사유가 따르는 사용자 언어 (기본 ko). */
   locale?: "ko" | "en";
+  /** L-3: 2차 확인 호출마다 사용량 싱크(callSite "verify-panel"). */
+  onUsage?: LlmUsageSink;
 };
 
 type SecondOpinion = { supported: boolean; note: string };
@@ -141,6 +181,7 @@ async function askOpenAi(
   timeoutMs: number,
   fetchImpl: typeof fetch,
   baseUrl?: string,
+  onUsage?: LlmUsageSink,
 ): Promise<SecondOpinion | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -162,6 +203,7 @@ async function askOpenAi(
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     logLlmUsage("openai", "verify-panel", model, { input: j.usage?.prompt_tokens, output: j.usage?.completion_tokens }, Date.now() - started);
+    emitVendorUsage(onUsage, "openai", "verify-panel", model, j, Date.now() - started);
     return parseOpinion(j.choices?.[0]?.message?.content ?? "");
   } catch {
     return null;
@@ -177,6 +219,7 @@ async function askAnthropic(
   timeoutMs: number,
   fetchImpl: typeof fetch,
   baseUrl?: string,
+  onUsage?: LlmUsageSink,
 ): Promise<SecondOpinion | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -198,6 +241,7 @@ async function askAnthropic(
       usage?: { input_tokens?: number; output_tokens?: number };
     };
     logLlmUsage("anthropic", "verify-panel", model, { input: j.usage?.input_tokens, output: j.usage?.output_tokens }, Date.now() - started);
+    emitVendorUsage(onUsage, "anthropic", "verify-panel", model, j, Date.now() - started);
     return parseOpinion((j.content ?? []).find((b) => b.type === "text")?.text ?? "");
   } catch {
     return null;
@@ -212,13 +256,14 @@ async function secondOpinion(
   prompt: string,
   opts: Required<Pick<VerifyPanelOpts, "timeoutMs" | "openaiModel" | "anthropicModel">>,
   fetchImpl: typeof fetch,
+  onUsage?: LlmUsageSink,
 ): Promise<SecondOpinion | null> {
   if (env.OPENAI_API_KEY) {
-    const o = await askOpenAi(env.OPENAI_API_KEY, prompt, opts.openaiModel, opts.timeoutMs, fetchImpl, env.CF_AI_GATEWAY_OPENAI_URL);
+    const o = await askOpenAi(env.OPENAI_API_KEY, prompt, opts.openaiModel, opts.timeoutMs, fetchImpl, env.CF_AI_GATEWAY_OPENAI_URL, onUsage);
     if (o) return o;
   }
   if (env.ANTHROPIC_API_KEY) {
-    return askAnthropic(env.ANTHROPIC_API_KEY, prompt, opts.anthropicModel, opts.timeoutMs, fetchImpl, env.CF_AI_GATEWAY_ANTHROPIC_URL);
+    return askAnthropic(env.ANTHROPIC_API_KEY, prompt, opts.anthropicModel, opts.timeoutMs, fetchImpl, env.CF_AI_GATEWAY_ANTHROPIC_URL, onUsage);
   }
   return null;
 }
@@ -276,6 +321,7 @@ export async function applyVerifyPanelWithContext<
         opinionPrompt(ctx, item, locale),
         { timeoutMs, openaiModel, anthropicModel },
         fetchImpl,
+        opts.onUsage,
       );
       if (opinion === null) {
         results[i] = { ...item, verification: "single" };

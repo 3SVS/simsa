@@ -32,6 +32,16 @@
  * immediately marked failed with dispatched:false + note — nothing consumes
  * queued rows later, and a wedged queued row would block the 409 guard for
  * 30 min until the stuck sweep.
+ *
+ * Train W (재정렬 D-7 amend [PILOT] · D-4 keep, 2026-09-28):
+ *   - W-2 킬스위치 REPAIR_ENABLED — 판정은 dispatchRepairJob **안**(service-switches.ts). 라우트는
+ *     같은 헬퍼로 행·토큰 조회 전에 묻고 503 `repair_disabled`.
+ *   - W-2 일일 상한 수리 5/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
+ *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"repair", limit, resetAt }.
+ *     PR #561 검증 후속: 네트워크 15/일·서비스 전체 50/일 버킷을 같은 차감에(원자적), 진행 중
+ *     1개 가드는 삽입 뒤 rowid 순으로 한 번 더(같은 수리 브랜치를 두 컨테이너가 동시에 밀지 않게).
+ *   - W-3 잡 뷰 `buildVerified` — 컨테이너의 사후 검증(node --check)이 바뀐 파일을 전부 덮었는가.
+ *     auto_fix만 boolean, brief_only·레거시·판단 불가 = null (repair-job-db.ts, 새 컬럼 없음).
  */
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
@@ -43,9 +53,14 @@ import { getProjectRepo } from "../workspace/github-db.js";
 import { listProjectSources } from "../workspace/project-sources-db.js";
 import { getAppInstallationToken, resolveRepoAccessToken } from "../workspace/github-app-access.js";
 import { regionFromRequest } from "../workspace/envelope.js";
+import { REPAIR_DISABLED, repairEnabled } from "../workspace/service-switches.js";
+import { consumeDailyCaps } from "../workspace/rate-limit.js";
+import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
 import type { FetchLike } from "../github.js";
 import {
+  discardQueuedRepairJob,
   findActiveRepairJobForRun,
+  firstActiveRepairJobIdForRun,
   getLatestRepairJobForRun,
   getRepairJobById,
   insertQueuedRepairJob,
@@ -54,6 +69,7 @@ import {
   markRepairJobRunning,
   type DbRepairJob,
 } from "../workspace/repair-job-db.js";
+import { recordCallbackUsage, recordLlmUsage } from "../workspace/llm-usage.js";
 
 const MAX_ERROR_CHARS = 500;
 
@@ -96,6 +112,42 @@ function requireInternalToken(c: {
   return { ok: true };
 }
 
+/**
+ * L-3 (Train L): 수리 완료 콜백의 usage[](워커 LLM 호출)와 컨테이너 실행 시간을 원장에 쓴다.
+ * 컨테이너 행은 vendor "cloudflare" · model_actual "container" · 비용 0 + unpriced=1(단가 미정 —
+ * 0달러를 확정 원가처럼 보이지 않게). 절대 던지지 않는다.
+ *
+ * ★멱등(#562 결함 1): 상태 전이보다 먼저, 전이 결과와 상관없이 부른다. 컨테이너는 성공 콜백이 non-2xx·
+ * 네트워크 오류면 **같은 usage.snapshot()**으로 실패 콜백을 다시 보내므로, 행 id를 결정론적으로 만들어
+ * (usage 항목 = callId/내용 키, 컨테이너 행 = "container") 같은 호출·같은 실행이 두 번 쌓이지 않게 한다.
+ */
+async function recordRepairUsage(env: Env, job: DbRepairJob, rawUsage: unknown, rawDurationMs: unknown): Promise<void> {
+  try {
+    const ctx = { jobKind: "repair" as const, jobId: job.id, projectId: job.projectId, userKey: job.userKey };
+    await recordCallbackUsage(env, rawUsage, ctx);
+    if (typeof rawDurationMs === "number" && Number.isFinite(rawDurationMs) && rawDurationMs > 0 && rawDurationMs <= 86_400_000) {
+      await recordLlmUsage(env, {
+        ...ctx,
+        vendor: "cloudflare",
+        modelRequested: "container",
+        modelActual: "container",
+        inputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 0,
+        latencyMs: Math.floor(rawDurationMs),
+        callSite: "repair-container",
+        containerSeconds: rawDurationMs / 1000,
+        costOverride: { costUsd: 0, unpriced: true },
+        // 잡당 컨테이너 실행은 한 번 — 성공 콜백 실패 뒤 실패 콜백이 다시 와도 한 행(먼저 온 값이 남는다).
+        rowKey: "container",
+      });
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ event: "llm_usage_record_failed", job_kind: "repair", job_id: job.id, reason: String((err as Error)?.message ?? err).slice(0, 200) }));
+  }
+}
+
 function repairJobView(job: DbRepairJob) {
   return {
     id: job.id,
@@ -111,6 +163,12 @@ function repairJobView(job: DbRepairJob) {
     // fallback). Null on legacy rows and while in flight.
     mode: job.mode ?? null,
     changedFiles: job.changedFiles ?? null,
+    // Train W · W-3 (contract 3, #558 showBuildUnverified): did the container's
+    // post-apply check (node --check) cover every file the repair changed?
+    // false → the dashboard's one line "we couldn't confirm the fixed code
+    // builds". Only an auto_fix job carries a boolean; brief_only / legacy /
+    // in-flight / undecidable → null (never a guess).
+    buildVerified: job.buildVerified,
     error: job.error ?? null,
     // Train C · C2a (0069): the re-inspection verify-sweep dispatched after the
     // PR merged, and its outcome (true/false; null = not verified yet/at all).
@@ -145,6 +203,10 @@ const REPAIR_ENTRY_MESSAGES = {
  * — the container acks 202 and reports back via /internal/repair-*.
  * The GitHub token travels only in the job payload (memory → container env),
  * never in a D1 row or response body.
+ *
+ * Train W · W-2: the REPAIR_ENABLED kill switch is enforced HERE, so every
+ * caller passes the same gate (`disabled: true` = switched off, as opposed to
+ * the sandbox being unavailable).
  */
 export async function dispatchRepairJob(
   env: Env,
@@ -166,7 +228,10 @@ export async function dispatchRepairJob(
     locale: "ko" | "en";
     publicBaseUrl: string;
   },
-): Promise<{ dispatched: boolean; note?: string }> {
+): Promise<{ dispatched: boolean; note?: string; disabled?: boolean }> {
+  if (!repairEnabled(env)) {
+    return { dispatched: false, note: REPAIR_DISABLED, disabled: true };
+  }
   if (!env.SANDBOX) {
     return { dispatched: false, note: "sandbox_unavailable" };
   }
@@ -263,6 +328,13 @@ export function createWorkspaceRepairJobRoutes(
       return c.json({ ok: false, error: "run_not_found" }, 404);
     }
 
+    // Train W · W-2 — kill switch, asked BEFORE any row exists and before any
+    // token is resolved (same helper dispatchRepairJob enforces). After the
+    // ownership chain: a stranger still gets 403/404, never a hint.
+    if (!repairEnabled(c.env)) {
+      return c.json({ ok: false, error: REPAIR_DISABLED }, 503);
+    }
+
     // Repairable gate: only a finished check that did NOT verify as working
     // and that carries the deterministic fix prompt can be repaired.
     const agentPrompt = run.agentPrompt ?? "";
@@ -351,6 +423,19 @@ export function createWorkspaceRepairJobRoutes(
       return c.json({ ok: false, error: "repair_already_active", activeJobId: active.id }, 409);
     }
 
+    // Train W · W-2 — daily caps (D-7 amend [PILOT]): this user 5 · this network
+    // 15 · the whole service 50 (beta-limits.ts). Same placement as the
+    // inspection route: after ownership + validation + the one-active-repair
+    // guard, one atomic statement per bucket, refunded below if the job never
+    // starts.
+    const caps = await consumeDailyCaps(c.env, dailyCapsFor("repair", c.env, userKey, clientNetworkKey(c.req.raw)));
+    if (caps.limited) {
+      const rejection = dailyCapRejection("repair", caps);
+      c.header("Retry-After", String(rejection.retryAfterSeconds));
+      return c.json(rejection.body, rejection.status);
+    }
+    const refundSlot = caps.refund;
+
     // Honest boundary: env-cause evidence still dispatches (fallback-style
     // code fixes are legitimate) but flags the row so the UI can warn.
     const envCause = detectEnvCause(agentPrompt, run.reportJson ?? "");
@@ -370,7 +455,24 @@ export function createWorkspaceRepairJobRoutes(
       });
     } catch (err) {
       console.error("[repair-jobs POST] insert failed:", err);
+      await refundSlot();
       return c.json({ ok: false, error: "save_failed" }, 500);
+    }
+
+    // One active repair per run, under concurrency (PR #561 review P2): the
+    // 409 check above is read-then-insert, so requests that arrive together all
+    // pass it — and two containers would force-push the same fix branch. The
+    // in-flight job inserted FIRST wins; a later one backs out (row removed,
+    // slots returned, the same 409). A D1 error here keeps going (fail-open).
+    const firstActiveId = await firstActiveRepairJobIdForRun(c.env, runId).catch(() => null);
+    if (firstActiveId !== null && firstActiveId !== job.id) {
+      const jobId = job.id;
+      await discardQueuedRepairJob(c.env, jobId).catch(async (err) => {
+        console.error("[repair-jobs POST] discard after lost start failed:", err);
+        await markRepairJobFailed(c.env, jobId, "superseded_by_concurrent_repair").catch(() => undefined);
+      });
+      await refundSlot();
+      return c.json({ ok: false, error: "repair_already_active", activeJobId: firstActiveId }, 409);
     }
 
     const publicBaseUrl = c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin;
@@ -395,6 +497,8 @@ export function createWorkspaceRepairJobRoutes(
     // nothing will ever pick up would wedge the 409 guard until the sweep.
     let status = job.status;
     if (!dispatch.dispatched) {
+      // W-2: nothing ran — the user's slot goes back.
+      await refundSlot();
       try {
         await markRepairJobFailed(c.env, job.id, dispatch.note ?? "dispatch_failed");
         status = "failed";
@@ -469,7 +573,13 @@ export function createWorkspaceRepairJobRoutes(
           mode?: string;
           changedFiles?: number;
           modeReason?: string;
+          /** Train W · W-3: true/false from the container; anything else = not recorded. */
+          buildVerified?: unknown;
           error?: string;
+          /** L-3: 워커 LLM 호출별 사용량(선택). 잘못된 값은 무시하고 본 처리 진행. */
+          usage?: unknown;
+          /** 컨테이너 실행 시간(ms). 원장에 컨테이너 초 행으로 남긴다. */
+          durationMs?: unknown;
         }
       | null;
     if (!body || typeof body.jobId !== "string" || !body.jobId || typeof body.ok !== "boolean") {
@@ -478,6 +588,9 @@ export function createWorkspaceRepairJobRoutes(
 
     const job = await getRepairJobById(c.env, body.jobId);
     if (!job) return c.json({ error: "not_found" }, 404);
+
+    // L-3 (Train L): 원장 기록 — project·user는 잡 행에서(콜백 본문 아님). fail-open.
+    await recordRepairUsage(c.env, job, body.usage, body.durationMs);
 
     if (!body.ok) {
       const error = typeof body.error === "string" && body.error ? body.error : "repair failed";
@@ -505,6 +618,11 @@ export function createWorkspaceRepairJobRoutes(
         body.mode === "brief_only" && typeof body.modeReason === "string" && body.modeReason
           ? body.modeReason
           : undefined,
+      // Train W · W-3 (contract 3): only an auto_fix job changed code, so only
+      // it can be "verified" or not. brief_only / old containers / non-boolean
+      // values leave it unrecorded (the view says null — no guess).
+      buildVerified:
+        body.mode === "auto_fix" && typeof body.buildVerified === "boolean" ? body.buildVerified : undefined,
     });
     return c.json({ ok: true, status: "done" });
   });

@@ -18,6 +18,17 @@ ENVIRONMENT = "production"
 # 설치 기록·파운더 알림·수동 /saas/review·Simsa repair는 영향 없음.
 # 재가동 = 이 줄을 지우고(또는 "on") deploy-central-plane 1회.
 LEGACY_AUTO_REVIEW = "off"
+# Train W · W-2 (재정렬 D-7 amend, 2026-09-28) — 검수·수리 킬스위치. 정확히 "off"일 때만 꺼진다
+# (미설정·"on"·다른 값 = 켜짐 — 이 줄이 빠진 배포가 서비스를 끄지 않는다). 판정은
+# src/workspace/service-switches.ts 단일 출처, dispatchInspection·dispatchRepairJob 내부에서 막아
+# 라우트·verify-sweep 크론·향후 자동 검수가 같은 게이트를 지난다. 꺼지면 라우트 503
+# (inspection_disabled / repair_disabled, 대시보드 "잠시 멈췄어요" 카피), 행은 만들지 않는다.
+# 끄기 = 값을 "off"로 + deploy-central-plane 1회. 다시 켜기 = "on" + 배포.
+INSPECTION_ENABLED = "on"
+REPAIR_ENABLED = "on"
+# 일일 상한 [PILOT] (코드 기본값, 설정 줄 없음 = 기본값): 검수 유저 10 · 네트워크 30 · 서비스 전체 300,
+# 수리 유저 5 · 네트워크 15 · 서비스 전체 50. 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL]
+# 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
 # Stage 271 — public sign-up OPEN (Bae approved 2026-07-02: "env 변경도 저건 승인할게").
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.
@@ -52,7 +63,9 @@ GITHUB_CLIENT_ID = "Ov23ctqhuNRdhunT36Y9"
 
 # Stage 18 — Admin usage stats key. Must be a hard-to-guess secret.
 # Set via: wrangler secret put ADMIN_USAGE_STATS_KEY
-# Without it, GET /admin/usage-stats returns 503 disabled.
+# Without it, GET /admin/usage-stats (x-admin-key requests) returns 503 disabled.
+# Train L — L-5: the same path without x-admin-key serves the llm_usage ledger stats
+# (Bearer INTERNAL_CALLBACK_TOKEN; see src/routes/admin-usage-stats.ts).
 
 # Stage 9 — Workspace GitHub OAuth (Web Application Flow).
 # Register a NEW OAuth App at https://github.com/settings/developers

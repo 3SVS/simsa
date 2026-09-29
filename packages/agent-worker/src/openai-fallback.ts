@@ -128,11 +128,24 @@ type OpenAiChoice = {
   finish_reason?: string;
 };
 
+function tokenCount(n: unknown): number {
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/**
+ * L-2 (Train L): 응답 변환이 **실제 모델·벤더·캐시 토큰**을 싣는다.
+ *  - model: OpenAI 응답의 `model`(예 "gpt-5.4-2026-03-05"). 없으면 요청한 폴백 모델.
+ *    종전엔 요청 모델을 그대로 적어 과금·라벨이 추측이었다.
+ *  - usage: OpenAI의 prompt_tokens는 캐시 적중분을 **포함**한다. Anthropic 의미(input = 캐시 제외분)로
+ *    맞추어 input_tokens = prompt − cached, cache_read_input_tokens = cached. 종전엔 cached를 버려
+ *    캐시 할인($0.25 vs $2.50)이 원가에 반영되지 않았다.
+ */
 function toAnthropicResponse(json: unknown, model: string): AnthropicResponse {
   const j = json as {
     id?: string;
+    model?: unknown;
     choices?: OpenAiChoice[];
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
+    usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
   };
   const choice = j.choices?.[0];
   const content: AnthropicResponse["content"][number][] = [];
@@ -152,14 +165,19 @@ function toAnthropicResponse(json: unknown, model: string): AnthropicResponse {
   const text = choice?.message?.content;
   if (typeof text === "string" && text.trim()) content.push({ type: "text", text });
 
+  const prompt = tokenCount(j.usage?.prompt_tokens);
+  const cached = Math.min(tokenCount(j.usage?.prompt_tokens_details?.cached_tokens), prompt);
+  const actualModel = typeof j.model === "string" && j.model.trim() ? j.model.trim() : model;
   return {
     id: j.id ?? "openai_fallback",
-    model,
+    model: actualModel,
+    vendor: "openai",
     content,
     ...(choice?.finish_reason === "length" ? { stop_reason: "max_tokens" } : {}),
     usage: {
-      input_tokens: j.usage?.prompt_tokens ?? 0,
-      output_tokens: j.usage?.completion_tokens ?? 0,
+      input_tokens: prompt - cached,
+      output_tokens: tokenCount(j.usage?.completion_tokens),
+      ...(cached > 0 ? { cache_read_input_tokens: cached } : {}),
     },
   };
 }
@@ -204,8 +222,9 @@ export function withOpenAiFallback(primary: AnthropicLike | null, opts: Fallback
         if (primary && !opts.preferFallback) {
           try {
             const res = await primary.messages.create(params);
-            log("worker_llm_ok", { vendor: "anthropic" });
-            return res;
+            log("worker_llm_ok", { vendor: "anthropic", model: res.model });
+            // L-2: 누가 답했는지 응답에 표시한다 — 과금·원장이 추측하지 않게.
+            return { ...res, vendor: res.vendor ?? "anthropic" };
           } catch (err) {
             log("worker_llm_fallback", {
               from: "anthropic",
@@ -215,7 +234,7 @@ export function withOpenAiFallback(primary: AnthropicLike | null, opts: Fallback
             try {
               const res = await callOpenAiAsAnthropic(params, opts);
               // 폴백으로 답했다는 사실을 반드시 남긴다 — 조용한 벤더 교체 금지.
-              log("worker_llm_ok", { vendor: "openai" });
+              log("worker_llm_ok", { vendor: "openai", model: res.model });
               return res;
             } catch (fbErr) {
               log("worker_llm_fallback_failed", { reason: String(fbErr).slice(0, 160) });
@@ -226,7 +245,7 @@ export function withOpenAiFallback(primary: AnthropicLike | null, opts: Fallback
         }
         if (primary && opts.preferFallback) log("worker_llm_primary_skipped", { reason: "anthropic_disabled" });
         const res = await callOpenAiAsAnthropic(params, opts);
-        log("worker_llm_ok", { vendor: "openai" });
+        log("worker_llm_ok", { vendor: "openai", model: res.model });
         return res;
       },
     },

@@ -5,7 +5,7 @@
  * This is NOT a code review — it checks the spec document only.
  * LLM failure → deterministic mock fallback via heuristics.
  */
-import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type LlmUsageSink, type VendorFallback } from "./anthropic-fetch.js";
 
 export type CheckableItem = {
   id: string;
@@ -202,16 +202,16 @@ ${itemsText}
 
 // ─── Anthropic call ───────────────────────────────────────────────────────────
 
-async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | undefined, timeoutMs = 20000, fallback?: VendorFallback): Promise<string> {
-  const data = (await anthropicMessages(
+async function callAnthropic(apiKey: string, prompt: string, baseUrl: string | undefined, timeoutMs = 20000, fallback?: VendorFallback, onUsage?: LlmUsageSink): Promise<string> {
+  const data = await anthropicMessages(
     apiKey,
     { model: "claude-haiku-4-5-20251001", max_tokens: 4000, messages: [{ role: "user", content: prompt }] },
     timeoutMs,
     undefined,
     anthropicEndpoint(baseUrl),
     "check",
-    { fallback },
-  )) as { content?: Array<{ type: string; text?: string }> };
+    { fallback, onUsage },
+  );
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
 
@@ -405,6 +405,8 @@ export async function generateCheckDraft(
   anthropicBaseUrl?: string,
   /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
   fallback?: VendorFallback,
+  /** L-3: 성공한 LLM 호출의 사용량 싱크(라우트가 원장에 기록). */
+  onUsage?: LlmUsageSink,
 ): Promise<WorkspaceCheckDraftResponse | { ok: false; error: "llm_unavailable" }> {
   if (!req.items?.length) {
     return {
@@ -424,7 +426,7 @@ export async function generateCheckDraft(
   const prompt = buildCheckPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback);
+    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback, onUsage);
   } catch (err) {
     console.error("[workspace/check] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };
