@@ -186,3 +186,38 @@ export async function runVerifySweep(
   }
   return summary;
 }
+
+/**
+ * PR #561 review P1 — is this merged `fix/simsa-<runId>` PR really the repair
+ * Simsa made for that run? The webhook asks before it records a signal.
+ *
+ * The run id is public (it IS the repair branch name on public repos), so the
+ * branch name alone proves nothing: anyone could merge a same-named branch in
+ * a repo of their own App installation and get a re-inspection started in the
+ * victim's project — on our bill, outside every daily cap — and overwrite the
+ * victim's repair-job verify link (the basis of `resolved`, the S2 billing
+ * condition). A signal counts only when ALL hold:
+ *   - the job is this run's job, of the same project and user as the run
+ *   - the PR's base repository is the job's repository (case-insensitive — GitHub names are)
+ *   - the head branch lives in that same repository (the container pushes
+ *     there; a fork's head.repo differs, a deleted fork's is unknown → no)
+ *   - the head branch is exactly the job's branch
+ * Pure; the webhook passes the parsed payload fields.
+ */
+export function repairMergeSignalMatches(input: {
+  runId: string;
+  run: { id: string; projectId: string; userKey: string };
+  job: { visualCheckId: string; projectId: string; userKey: string; repoFullName: string; branchName?: string | null };
+  headRef: string;
+  baseRepoFullName: string;
+  headRepoFullName: string;
+}): boolean {
+  const { runId, run, job } = input;
+  const same = (a: string, b: string) => a.length > 0 && a.toLowerCase() === b.toLowerCase();
+  if (run.id !== runId || job.visualCheckId !== runId) return false;
+  if (job.projectId !== run.projectId || job.userKey !== run.userKey) return false;
+  if (!same(input.baseRepoFullName, job.repoFullName)) return false;
+  if (!same(input.headRepoFullName, input.baseRepoFullName)) return false;
+  const expectedBranch = job.branchName && job.branchName.length > 0 ? job.branchName : `fix/simsa-${runId}`;
+  return input.headRef === expectedBranch;
+}
