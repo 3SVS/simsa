@@ -668,6 +668,51 @@ export function applyExactEdits(
   return { contents, applied, rejected };
 }
 
+// ─── Train W · W-3: build verification (재정렬 §1 #7 · D-4 keep — a label, not a gate) ──
+
+/**
+ * The files the repair container's ONLY post-apply check covers:
+ * `node --check` on plain JavaScript (server.mjs quickSyntaxCheck — lock-stepped
+ * by test/train-w-build-verified.test.mjs). A fresh clone has no node_modules,
+ * so nothing else (tsc, bundlers, CSS, JSON, HTML) is ever built or run.
+ */
+export const SYNTAX_CHECKED_FILE_RE = /\.(js|mjs|cjs)$/i;
+
+/** Commit trailer on an auto_fix commit whose changes the check did not fully cover. */
+export const BUILD_UNVERIFIED_TRAILER = "Simsa-Build: unverified";
+/** GitHub label for the same PR (best effort in the container — never a gate). */
+export const BUILD_UNVERIFIED_LABEL = "build: unverified";
+
+/**
+ * The repair's own evidence file, committed next to the fix at the repo root
+ * (container/coerce-result.mjs buildRepairPrContent().briefFileName — lock-stepped
+ * by test/train-w-build-verified.test.mjs). It is Simsa's note, not app code.
+ */
+export const REPAIR_BRIEF_FILE_NAME = "SIMSA-FIX-BRIEF.md";
+
+/** The app code a repair changed: the list minus Simsa's own brief file. */
+function appCodeFiles(changedFiles: readonly string[]): string[] {
+  return changedFiles.filter((f) => f !== REPAIR_BRIEF_FILE_NAME);
+}
+
+/** Changed app files outside the post-apply check, in the order given (the brief is never one). */
+export function buildUnverifiedFiles(changedFiles: readonly string[]): string[] {
+  return appCodeFiles(changedFiles).filter((f) => !SYNTAX_CHECKED_FILE_RE.test(f));
+}
+
+/**
+ * True when every changed APP file was covered by `node --check` (which must
+ * have passed — the auto_fix path only exists after it does). An empty list is
+ * NOT verified: nothing was checked. The brief is excluded here, explicitly
+ * (PR #561 review P2) — not by relying on the container taking its git diff
+ * before it writes the brief — so the policy holds whatever list arrives:
+ * [x.mjs, brief] → true, [brief] → false.
+ */
+export function assessBuildVerified(changedFiles: readonly string[]): boolean {
+  const code = appCodeFiles(changedFiles);
+  return code.length > 0 && buildUnverifiedFiles(code).length === 0;
+}
+
 // ─── Auto-fix PR content ──────────────────────────────────────────────────────
 
 const SEVERITY_LABEL: Record<"ko" | "en", Record<RepairSeverity, string>> = {
@@ -701,6 +746,9 @@ const PR_COPY = {
     cautionLine2: "> 수리 근거(검수 증거 + 지시서)는 이 브랜치의 `SIMSA-FIX-BRIEF.md`에 있습니다.",
     envCause1: "> **환경 원인 가능성:** 증거에 백엔드 주소가 응답하지 않는 패턴(DNS/연결 실패)이 포함되어 있습니다.",
     envCause2: "> 코드 수정만으로 완전히 해결되지 않을 수 있어요 — 환경 변수(백엔드 주소 등) 설정도 함께 확인하세요.",
+    buildUnverified1: "> **build: unverified — 빌드 확인 안 됨.** Simsa가 이 수정에서 확인한 것은 JavaScript 파일(.js·.mjs·.cjs)의 문법 검사(`node --check`)뿐이에요. 아래 파일은 그 검사 밖이라, 고친 코드가 실제로 빌드되는지는 확인하지 못했어요.",
+    buildUnverified2: "> 확인하지 못한 파일: ",
+    buildUnverified3: "> 머지하기 전에 빌드와 실제 동작을 꼭 확인해 주세요.",
   },
   en: {
     titlePrefix: "Simsa auto-repair: ",
@@ -724,6 +772,9 @@ const PR_COPY = {
     cautionLine2: "> The evidence and instructions live in `SIMSA-FIX-BRIEF.md` on this branch.",
     envCause1: "> **Possible environment cause:** the evidence includes a backend address that never responded (DNS/connection failure).",
     envCause2: "> A code fix alone may not fully resolve this — also check your environment variables (backend URL, etc.).",
+    buildUnverified1: "> **build: unverified.** The only check Simsa ran on this fix is a JavaScript syntax check (`node --check` on .js/.mjs/.cjs files). The files below are outside that check, so we could not confirm the fixed code builds.",
+    buildUnverified2: "> Not verified: ",
+    buildUnverified3: "> Please build and verify the app before merging.",
   },
 } as const;
 
@@ -732,6 +783,13 @@ const PR_COPY = {
  * titles; the worker's own commit summary is quoted in the body). The PR is
  * NON-draft — real code changed — with an honest review-before-merge note.
  * Never receives tokens/keys; derived only from the parsed brief + git facts.
+ *
+ * Train W · W-3: `buildVerified` = assessBuildVerified(changedFiles). When it is
+ * false the commit gets the `Simsa-Build: unverified` trailer (its own last
+ * paragraph, so git parses it), the PR body OPENS with a notice naming the files
+ * outside the check (job locale), and `labels` carries `build: unverified` for
+ * the container to apply. The container reports `buildVerified` back to the
+ * Worker (/internal/repair-done → job view).
  */
 export function buildAutoFixPrContent(input: {
   runId: string;
@@ -751,24 +809,44 @@ export function buildAutoFixPrContent(input: {
   editedOversizeFiles?: readonly string[];
   /** Reader's locale for the PR prose (Train E). Omitted = ko (기존 동작). */
   locale?: RepairPrLocale;
-}): { title: string; commitMessage: string; commitBody: string; body: string } {
+}): {
+  title: string;
+  commitMessage: string;
+  commitBody: string;
+  body: string;
+  buildVerified: boolean;
+  labels: string[];
+} {
   const loc: RepairPrLocale = input.locale === "en" ? "en" : "ko";
   const C = PR_COPY[loc];
   const intent = (input.intent ?? "").trim() || C.defaultIntent;
   const shortIntent = intent.length > 60 ? `${intent.slice(0, 57)}...` : intent;
   const title = `${C.titlePrefix}${shortIntent}`;
   const commitMessage = `fix(simsa): apply repair for ${input.runId}`;
-  const commitBody = [
+  const buildVerified = assessBuildVerified(input.changedFiles);
+  const unverified = buildUnverifiedFiles(input.changedFiles);
+  const commitBodyLines = [
     C.commitBody1,
     C.commitBody2,
     ...(input.workerCommitMessage ? [`${C.workerSummaryPrefix}${input.workerCommitMessage}`] : []),
   ].join("\n");
+  // W-3: the trailer is its own final paragraph — that is where git looks.
+  const commitBody = buildVerified ? commitBodyLines : `${commitBodyLines}\n\n${BUILD_UNVERIFIED_TRAILER}`;
 
   const changedLabel =
     loc === "en"
       ? `- ${input.changedFiles.length} file(s) changed:`
       : `- 변경 파일 ${input.changedFiles.length}개:`;
   const lines: string[] = [
+    // W-3: the build notice OPENS the body — a reviewer sees it before anything else.
+    ...(buildVerified
+      ? []
+      : [
+          C.buildUnverified1,
+          `${C.buildUnverified2}${unverified.map((f) => `\`${f}\``).join(", ")}`,
+          C.buildUnverified3,
+          "",
+        ]),
     C.heading,
     "",
     C.lead,
@@ -818,5 +896,12 @@ export function buildAutoFixPrContent(input: {
     lines.push(C.envCause1, C.envCause2, "");
   }
 
-  return { title, commitMessage, commitBody, body: lines.join("\n") };
+  return {
+    title,
+    commitMessage,
+    commitBody,
+    body: lines.join("\n"),
+    buildVerified,
+    labels: buildVerified ? [] : [BUILD_UNVERIFIED_LABEL],
+  };
 }
