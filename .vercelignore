@@ -1,0 +1,22 @@
+# Vercel CLI deploys run from the repo root (dashboard; landing via env override).
+# The CLI does NOT read .gitignore — it only skips its fixed default list
+# (node_modules, .git, .env.local, .env.*.local, .vercel, .next, …).
+# These entries are ADDED on top of that list. (2026-09-29: a deploy took ~10 min
+# because .claude/worktrees held 4.7 GB of agent workspaces.)
+
+# Agent workspaces, checkpoints and local tool state
+.claude/
+
+# Local previews and generated scratch output (not part of any build)
+.preview/
+conclave-builder-pack/out/
+tools/**/journey-audit-shots/
+tools/**/evidence/
+
+# Secrets — never upload, even if one is created locally by mistake
+**/.env
+**/.env.*
+!**/.env.example
+**/.dev.vars
+**/.dev.vars.*
+*.pem
