@@ -26,7 +26,18 @@ export {
   looksLikeUnifiedDiff,
   WorkerParseError,
 } from "./patch-parser.js";
-export { actualCost, estimateCallCost, PRICING } from "./pricing.js";
+export {
+  actualCost,
+  estimateCallCost,
+  PRICING,
+  CONSERVATIVE_PRICING,
+  priceUsage,
+  resolvePricing,
+  normalizeModelId,
+  inferVendor,
+  usageRecordFromResponse,
+} from "./pricing.js";
+export type { PricedUsage, LlmUsageRecord } from "./pricing.js";
 export {
   withOpenAiFallback,
   callOpenAiAsAnthropic,

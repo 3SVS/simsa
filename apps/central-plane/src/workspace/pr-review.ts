@@ -107,8 +107,8 @@ async function callAnthropic(
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
   baseUrl?: string,
   fallback?: VendorFallback,
-): Promise<{ text: string; tokens: number | null }> {
-  const data = (await anthropicMessages(
+): Promise<{ text: string; tokens: number | null; modelActual: string }> {
+  const data = await anthropicMessages(
     apiKey,
     { model: REVIEW_MODEL, max_tokens: 6000, messages: [{ role: "user", content: prompt }] },
     timeoutMs,
@@ -116,14 +116,12 @@ async function callAnthropic(
     anthropicEndpoint(baseUrl),
     "pr-review",
     { fallback },
-  )) as {
-    content?: Array<{ type: string; text?: string }>;
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
+  );
   const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
   const tokens =
     (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0) || null;
-  return { text, tokens };
+  // L-2 회귀 전수 검색: cost_meta.model_used는 요청 모델이 아니라 실제로 응답한 모델.
+  return { text, tokens, modelActual: data.modelActual ?? REVIEW_MODEL };
 }
 
 // ─── Mock fallback heuristics ─────────────────────────────────────────────────
@@ -317,10 +315,12 @@ export async function reviewPRAgainstItems(
   const prompt = buildReviewPrompt(req);
   let rawText = "";
   let tokensConsumed: number | null = null;
+  let modelUsed: string = REVIEW_MODEL;
   try {
     const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl, anthropicBaseUrl, fallback);
     rawText = out.text;
     tokensConsumed = out.tokens;
+    modelUsed = out.modelActual;
   } catch (err) {
     // Honest failure (2026-07-05 census #1): heuristic verdicts could emit
     // "passed" for code no model ever reviewed — and even reach a GitHub
@@ -367,6 +367,6 @@ export async function reviewPRAgainstItems(
     source: "llm",
     summary,
     results,
-    usage: { tokens_consumed: tokensConsumed, model_used: REVIEW_MODEL },
+    usage: { tokens_consumed: tokensConsumed, model_used: modelUsed },
   };
 }

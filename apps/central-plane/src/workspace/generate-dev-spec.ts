@@ -33,7 +33,7 @@ import {
   type DevSpec,
   type IntegrityViolation,
 } from "./dev-spec.js";
-import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type LlmUsageSink, type VendorFallback } from "./anthropic-fetch.js";
 import type { LlmCallUsage } from "./generate.js";
 
 // ─── 입출력 타입 ─────────────────────────────────────────────────────────────
@@ -113,6 +113,8 @@ export function makeDevSpecLlmCaller(
   baseUrl: string | undefined,
   fallback: VendorFallback | undefined,
   model: string = DEFAULT_DEV_SPEC_MODEL,
+  /** L-3: 패스마다 사용량 싱크(라우트가 원장에 dev_spec으로 기록). */
+  onUsage?: LlmUsageSink,
 ): LlmCaller {
   return async (prompt, maxTokens) => {
     const startedAt = Date.now();
@@ -130,13 +132,16 @@ export function makeDevSpecLlmCaller(
       undefined,
       anthropicEndpoint(baseUrl),
       "dev-spec",
-      { fallback },
+      { fallback, onUsage },
     );
     const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
     return {
       text: "{" + text,
       usage: {
-        model,
+        // L-2: 실응답 모델(킬스위치 off면 gpt-5.4…). 요청 모델(claude-opus-5)은 modelRequested로.
+        model: data.modelActual ?? model,
+        modelRequested: model,
+        vendor: data.vendor ?? "anthropic",
         inputTokens: data.usage?.input_tokens ?? 0,
         outputTokens: data.usage?.output_tokens ?? 0,
         cacheCreationInputTokens: data.usage?.cache_creation_input_tokens ?? 0,

@@ -149,6 +149,60 @@ export function buildBriefOnlyDiagnosis(diag, locale) {
 }
 
 /**
+ * Train L — L-3: 워커 LLM 호출의 사용량(ClaudeWorker onUsage 레코드)을 모아 repair-done 콜백의
+ * `usage[]` 계약(8필드 + callId)으로 내보낸다. 콜백 한 번에 최대 200개(Worker가 그 이상은 자른다 — 여기서도 자른다).
+ * costUsd·unpriced는 싣지 않는다 — 비용은 Worker가 자기 가격표로 계산한다(단일 출처).
+ * 싱크는 절대 던지지 않는다(계측이 수리를 깨면 안 된다).
+ *
+ * callId(#562 결함 1·2): `<실행 nonce>:<순번>` — 이 실행(수집기) 안에서 호출마다 유일하고, snapshot을 몇 번
+ * 떠도 같은 값이다. 성공 콜백이 실패해 catch가 같은 snapshot으로 실패 콜백을 다시 보내도 Worker 원장은 같은
+ * 행 id로 한 번만 쓴다. nonce는 같은 jobId가 다시 실행돼도 앞 실행의 호출과 겹치지 않게 한다.
+ */
+export const USAGE_CALLBACK_MAX = 200;
+
+function runNonce() {
+  try {
+    const uuid = globalThis.crypto?.randomUUID?.();
+    if (typeof uuid === "string" && uuid) return uuid.replace(/-/g, "").slice(0, 12);
+  } catch {
+    /* fall through */
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createUsageCollector() {
+  const items = [];
+  const nonce = runNonce();
+  const num = (n) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+  const str = (s, max) => (typeof s === "string" ? s.slice(0, max) : "");
+  return {
+    onUsage(u) {
+      try {
+        if (!u || typeof u !== "object" || items.length >= USAGE_CALLBACK_MAX) return;
+        const modelActual = str(u.modelActual, 120) || str(u.modelRequested, 120);
+        if (!modelActual) return;
+        items.push({
+          vendor: str(u.vendor, 40) || "unknown",
+          modelRequested: str(u.modelRequested, 120) || modelActual,
+          modelActual,
+          inputTokens: num(u.inputTokens),
+          cacheReadTokens: num(u.cacheReadTokens),
+          cacheWriteTokens: num(u.cacheWriteTokens),
+          outputTokens: num(u.outputTokens),
+          latencyMs: num(u.latencyMs),
+          callId: `${nonce}:${items.length}`,
+        });
+      } catch {
+        /* never throw from the sink */
+      }
+    },
+    snapshot() {
+      return items.map((i) => ({ ...i }));
+    },
+  };
+}
+
+/**
  * Train W · W-3 (contract 3) — the `buildVerified` value the repair-done
  * callback carries. Only an auto_fix job changed code, so only it can be
  * verified or not; the boolean comes from buildAutoFixPrContent (canonical

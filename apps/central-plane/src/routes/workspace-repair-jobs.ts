@@ -69,6 +69,7 @@ import {
   markRepairJobRunning,
   type DbRepairJob,
 } from "../workspace/repair-job-db.js";
+import { recordCallbackUsage, recordLlmUsage } from "../workspace/llm-usage.js";
 
 const MAX_ERROR_CHARS = 500;
 
@@ -109,6 +110,42 @@ function requireInternalToken(c: {
   const m = /^Bearer\s+(.+)$/i.exec(auth);
   if (!m || m[1] !== expected) return { ok: false, status: 401, error: "unauthorized" };
   return { ok: true };
+}
+
+/**
+ * L-3 (Train L): 수리 완료 콜백의 usage[](워커 LLM 호출)와 컨테이너 실행 시간을 원장에 쓴다.
+ * 컨테이너 행은 vendor "cloudflare" · model_actual "container" · 비용 0 + unpriced=1(단가 미정 —
+ * 0달러를 확정 원가처럼 보이지 않게). 절대 던지지 않는다.
+ *
+ * ★멱등(#562 결함 1): 상태 전이보다 먼저, 전이 결과와 상관없이 부른다. 컨테이너는 성공 콜백이 non-2xx·
+ * 네트워크 오류면 **같은 usage.snapshot()**으로 실패 콜백을 다시 보내므로, 행 id를 결정론적으로 만들어
+ * (usage 항목 = callId/내용 키, 컨테이너 행 = "container") 같은 호출·같은 실행이 두 번 쌓이지 않게 한다.
+ */
+async function recordRepairUsage(env: Env, job: DbRepairJob, rawUsage: unknown, rawDurationMs: unknown): Promise<void> {
+  try {
+    const ctx = { jobKind: "repair" as const, jobId: job.id, projectId: job.projectId, userKey: job.userKey };
+    await recordCallbackUsage(env, rawUsage, ctx);
+    if (typeof rawDurationMs === "number" && Number.isFinite(rawDurationMs) && rawDurationMs > 0 && rawDurationMs <= 86_400_000) {
+      await recordLlmUsage(env, {
+        ...ctx,
+        vendor: "cloudflare",
+        modelRequested: "container",
+        modelActual: "container",
+        inputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 0,
+        latencyMs: Math.floor(rawDurationMs),
+        callSite: "repair-container",
+        containerSeconds: rawDurationMs / 1000,
+        costOverride: { costUsd: 0, unpriced: true },
+        // 잡당 컨테이너 실행은 한 번 — 성공 콜백 실패 뒤 실패 콜백이 다시 와도 한 행(먼저 온 값이 남는다).
+        rowKey: "container",
+      });
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ event: "llm_usage_record_failed", job_kind: "repair", job_id: job.id, reason: String((err as Error)?.message ?? err).slice(0, 200) }));
+  }
 }
 
 function repairJobView(job: DbRepairJob) {
@@ -539,6 +576,10 @@ export function createWorkspaceRepairJobRoutes(
           /** Train W · W-3: true/false from the container; anything else = not recorded. */
           buildVerified?: unknown;
           error?: string;
+          /** L-3: 워커 LLM 호출별 사용량(선택). 잘못된 값은 무시하고 본 처리 진행. */
+          usage?: unknown;
+          /** 컨테이너 실행 시간(ms). 원장에 컨테이너 초 행으로 남긴다. */
+          durationMs?: unknown;
         }
       | null;
     if (!body || typeof body.jobId !== "string" || !body.jobId || typeof body.ok !== "boolean") {
@@ -547,6 +588,9 @@ export function createWorkspaceRepairJobRoutes(
 
     const job = await getRepairJobById(c.env, body.jobId);
     if (!job) return c.json({ error: "not_found" }, 404);
+
+    // L-3 (Train L): 원장 기록 — project·user는 잡 행에서(콜백 본문 아님). fail-open.
+    await recordRepairUsage(c.env, job, body.usage, body.durationMs);
 
     if (!body.ok) {
       const error = typeof body.error === "string" && body.error ? body.error : "repair failed";

@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { getBillingRule, estimateCredits } from "../workspace/billing-rules.js";
+import { handleLlmUsageStats } from "./admin-usage-stats.js";
 import type { BillingStatus, CreditType } from "../workspace/billing-rules.js";
 
 // ─── Range helpers ────────────────────────────────────────────────────────────
@@ -336,6 +337,11 @@ export function createWorkspaceAdminStatsRoutes(): Hono<{ Bindings: Env }> {
    * 401 on key mismatch.
    */
   app.get("/admin/usage-stats", async (c) => {
+    // Train L — L-5 (2026-09-28): 같은 경로의 LLM 사용량 원장 집계(Bearer INTERNAL_CALLBACK_TOKEN).
+    // 이 Stage 18 이벤트 분석의 호출자는 **항상 x-admin-key를 보낸다** — 그 헤더가 없는 요청만 원장
+    // 핸들러로 넘긴다(x-admin-key 요청의 동작·응답은 그대로). 인증 없는 요청은 어느 쪽이든 401.
+    if (!c.req.header("x-admin-key")) return handleLlmUsageStats(c);
+
     if (!c.env.ADMIN_USAGE_STATS_KEY) {
       return c.json({ ok: false, error: "disabled", message: "ADMIN_USAGE_STATS_KEY가 설정되지 않았습니다." }, 503);
     }

@@ -33,7 +33,8 @@ import {
   extractDocumentText,
   buildDocumentDraftPrompt,
 } from "../workspace/document-intake.js";
-import { generateIdeaToSpecDraft } from "../workspace/generate.js";
+import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js";
+import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 
 const DEFAULT_LIMIT_PER_HOUR = 20;
@@ -176,12 +177,18 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
       idea: typeof project.idea === "string" ? project.idea : "",
     });
 
+    // L-3 (Train L): 원장 기록(job_kind generate). 소유 확인된 projectId·userKey만.
+    const usage = createUsageCollector();
     let result;
     try {
-      result = await generateIdeaToSpecDraft({ idea: input, locale }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
+      result = await generateIdeaToSpecDraft({ idea: input, locale }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), usage.sink);
     } catch (err) {
       console.error("[workspace/document-intake] unexpected generate error:", err);
       return c.json({ ok: false, error: "internal_error" }, 500);
+    } finally {
+      if (usage.events.length > 0) {
+        await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "generate", jobId: newLlmJobId("doc"), projectId, userKey }));
+      }
     }
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
@@ -201,7 +208,8 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
 
     // DRAFT ONLY — never persist productSpec/items here; the dashboard confirm
     // flow saves via the existing POST /workspace/projects endpoint.
-    const { ok: _ok, ...draft } = result;
+    // #311 경계: llmUsage(토큰·지연·벤더 라우팅)는 운영 관측 데이터 — toClientDraft가 유일한 제거 지점이다.
+    const { ok: _ok, ...draft } = toClientDraft(result);
     return c.json({
       ok: true,
       draft,

@@ -26,7 +26,8 @@ import {
   evidenceFromWebsite,
   type SourceEvidence,
 } from "../workspace/source-evidence.js";
-import { generateIdeaToSpecDraft } from "../workspace/generate.js";
+import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js";
+import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 import {
   insertProjectSource,
   listProjectSources,
@@ -220,19 +221,26 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       });
     }
 
+    // L-3 (Train L): 원장 기록(job_kind generate). 소유 확인된 projectId·userKey만.
+    const usage = createUsageCollector();
     const draft = await generateIdeaToSpecDraft(
       { idea, locale },
       c.env.ANTHROPIC_API_KEY,
       c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
       vendorFallback(c.env),
+      usage.sink,
     );
+    if (usage.events.length > 0) {
+      await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "generate", jobId: newLlmJobId("inf"), projectId, userKey }));
+    }
     if ("ok" in draft && draft.ok === false) {
       return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack });
     }
 
+    // #311 경계: llmUsage(토큰·지연·벤더 라우팅)는 운영 관측 데이터 — 사용자 응답에 싣지 않는다.
     return c.json({
       ok: true,
-      inferred: draft,
+      inferred: toClientDraft(draft),
       readSources: evidence.readSources,
       stack: evidence.stack,
       ...(evidence.title ? { detectedName: evidence.title } : {}),

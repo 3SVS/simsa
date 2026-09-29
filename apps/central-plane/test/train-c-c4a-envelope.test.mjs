@@ -65,7 +65,8 @@ test("0069: exact column set per table (visual_checks 6 · repair_jobs 3 · proj
   assert.deepEqual(files, [true, true]);
   const numbered = readdirSync(join(here, "..", "migrations")).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort();
   assert.equal(numbered.filter((f) => f.startsWith("0069_")).length, 1, "exactly one 0069 migration");
-  assert.equal(numbered.at(-1), "0069_moat_envelope.sql", "0069 is the newest migration on this branch");
+  // Train L (2026-09-28): 0070_llm_usage.sql이 뒤에 붙었다 — 0069는 더 이상 최신이 아니다. 순서만 고정한다.
+  assert.ok(numbered.indexOf("0069_moat_envelope.sql") < numbered.indexOf("0070_llm_usage.sql"), "0069 precedes 0070");
 });
 
 // ─── ⑦' finding codes ───────────────────────────────────────────────────────────

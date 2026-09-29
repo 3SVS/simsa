@@ -329,6 +329,13 @@ export async function deleteProject(env: Env, id: string, userKey: string): Prom
        WHERE experiment_id IN (SELECT id FROM workspace_agent_experiments WHERE project_id = ?)`,
     ).bind(id),
     ...PROJECT_SCOPED_TABLES.map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE project_id = ?`).bind(id)),
+    // 0070 AI usage ledger: kept for cost accounting, but UNLINKED from the
+    // project and the person in the same batch — the privacy policy §1 promise
+    // is that deleting a project removes its records' link to you. Rows keep
+    // only vendor/model/tokens/cost/time (no content ever lived here).
+    env.DB.prepare(
+      `UPDATE llm_usage SET project_id = NULL, user_key_hash = NULL, job_id = NULL WHERE project_id = ?`,
+    ).bind(id),
     env.DB.prepare(`DELETE FROM workspace_projects WHERE id = ?`).bind(id),
   ];
   await env.DB.batch(stmts);

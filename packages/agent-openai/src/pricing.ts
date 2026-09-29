@@ -33,7 +33,8 @@ export interface UsageBreakdown {
 }
 
 export function actualCost(model: string, usage: UsageBreakdown): number {
-  const p = PRICING[model];
+  // Own keys only — `PRICING[model]` is truthy for inherited keys ("constructor", "__proto__", …) → NaN cost.
+  const p = Object.hasOwn(PRICING, model) ? PRICING[model] : undefined;
   if (!p) throw new Error(`pricing: unknown OpenAI model "${model}"`);
   const baseInput = usage.inputTokens - (usage.cachedInputTokens ?? 0);
   return (
@@ -45,7 +46,8 @@ export function actualCost(model: string, usage: UsageBreakdown): number {
 }
 
 export function estimateCallCost(model: string, estimatedInputTokens: number, maxOutputTokens: number): number {
-  const p = PRICING[model];
+  // Own keys only — `PRICING[model]` is truthy for inherited keys ("constructor", "__proto__", …) → NaN cost.
+  const p = Object.hasOwn(PRICING, model) ? PRICING[model] : undefined;
   if (!p) throw new Error(`pricing: unknown OpenAI model "${model}"`);
   return (estimatedInputTokens * p.inputPerMTok + maxOutputTokens * p.outputPerMTok) / 1_000_000;
 }

@@ -36,7 +36,10 @@ export interface AnthropicCreateParams {
 
 export interface AnthropicResponse {
   id: string;
+  /** 실제로 응답한 모델(Anthropic 응답의 model, 폴백이면 OpenAI 응답의 model). 과금은 이 값으로(L-2). */
   model: string;
+  /** L-2: 실제로 응답한 벤더. withOpenAiFallback이 채운다. 없으면 모델 id로 추정. */
+  vendor?: "anthropic" | "openai";
   content: ReadonlyArray<
     | { type: "text"; text: string }
     | { type: "tool_use"; id: string; name: string; input: unknown }
