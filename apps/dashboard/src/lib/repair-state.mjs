@@ -20,7 +20,37 @@ export const REPAIR_POLL_INTERVAL_MS = 5000;
  */
 export function canRepair(check) {
   if (!check || typeof check !== "object") return false;
-  return check.status === "done" && check.works !== true;
+  return check.status === "done" && check.works !== true && hasSomethingToFix(check);
+}
+
+/**
+ * Is there anything to fix in this finished check? (2026-09-29 live finding.)
+ *
+ * The same rule as the server's report next-steps (central-plane
+ * nondev-report.ts `somethingToFix`, #560): a non-informational finding, OR the
+ * app does not work, OR the verdict is an open one other than "no problem
+ * found" (Conditionally Ready). Informational items (severity "info" — e.g.
+ * third-party script noise) are never something to fix.
+ *
+ * Before this, a "no problem found" result with only a noise item still showed
+ * the "[고치기]" card and the copy-a-fix-prompt card above a next step that
+ * said "nothing needs fixing right now" — the page contradicted itself.
+ * Legacy rows (no decision, no report, works null) keep the old behavior.
+ *
+ * @param {unknown} check
+ * @returns {boolean}
+ */
+export function hasSomethingToFix(check) {
+  if (!check || typeof check !== "object") return false;
+  const c = /** @type {{ works?: unknown, decision?: unknown, report?: { findings?: unknown } | null }} */ (check);
+  if (c.works === true) return false;
+  if (c.works === false) return true;
+  const findings = Array.isArray(c.report?.findings) ? c.report.findings : [];
+  const actionable = findings.some(
+    (f) => f && typeof f === "object" && /** @type {{ severity?: unknown }} */ (f).severity !== "info",
+  );
+  if (actionable) return true;
+  return c.decision !== "Conditionally Ready";
 }
 
 /**
