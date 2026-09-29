@@ -56,12 +56,30 @@ import {
   verifyWebhookSignature,
 } from "../gh-app.js";
 import { notifyFounderOnNewInstall } from "../notify-founder.js";
+import { z } from "zod";
 import { getVisualCheckById } from "../workspace/visual-check-db.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
-import { REPAIR_MERGED_EVENT } from "../workspace/verify-sweep.js";
+import { getLatestRepairJobForRun } from "../workspace/repair-job-db.js";
+import { REPAIR_MERGED_EVENT, repairMergeSignalMatches } from "../workspace/verify-sweep.js";
 import { spawnSandbox } from "./saas.js";
 
 const APP_SETUP_ACTIONS = new Set(["install", "update", "request"]);
+
+/**
+ * The fields of a merged `pull_request` webhook the repair-merge signal reads
+ * (Zod at the wire). `head.repo` is null when the fork was deleted — then the
+ * branch cannot be shown to be in the base repository, so it is not our repair.
+ */
+const RepairMergePayloadSchema = z.object({
+  pull_request: z.object({
+    number: z.number().int().optional(),
+    head: z.object({
+      ref: z.string(),
+      repo: z.object({ full_name: z.string() }).nullable().optional(),
+    }),
+  }),
+  repository: z.object({ full_name: z.string() }),
+});
 
 /**
  * App 설치 직후 도착지 URL. 대시보드 주소는 env(WORKSPACE_GH_DASHBOARD_URL, 없으면 app.trysimsa.com)만 쓰고
@@ -308,17 +326,36 @@ export function createSaasAuthRoutes(): Hono<{ Bindings: Env }> {
         const headRef = String(head0["ref"] ?? "");
         if (action === "closed" && pr0["merged"] === true && headRef.startsWith("fix/simsa-")) {
           const runId = headRef.slice("fix/simsa-".length);
+          // PR #561 review P1: the branch name is public (it is the run id), so
+          // it proves nothing on its own. Record a signal only when this merge
+          // is the repair Simsa made for that run — same repository, same-repo
+          // branch, the job's own branch (verify-sweep.ts repairMergeSignalMatches).
+          const merge = RepairMergePayloadSchema.safeParse(p);
+          const baseRepoFullName = merge.success ? merge.data.repository.full_name : "";
+          const headRepoFullName = merge.success ? (merge.data.pull_request.head.repo?.full_name ?? "") : "";
+          const prNumber = merge.success ? (merge.data.pull_request.number ?? null) : null;
           const run = runId ? await getVisualCheckById(env, runId).catch(() => null) : null;
-          if (run) {
+          const job = run ? await getLatestRepairJobForRun(env, runId).catch(() => null) : null;
+          if (
+            run &&
+            job &&
+            repairMergeSignalMatches({ runId, run, job, headRef, baseRepoFullName, headRepoFullName })
+          ) {
             await insertUsageEvent(env, {
               userKey: run.userKey,
               projectId: run.projectId,
               eventType: REPAIR_MERGED_EVENT,
-              metadata: { runId, prNumber: Number(pr0["number"]) || null },
+              // `repo`: which repair this signal matched (audit trail; lets the
+              // sweep cross-check later without trusting the branch name).
+              metadata: { runId, prNumber, repo: job.repoFullName },
             }).catch(() => undefined);
             console.log(`[webhook] repair PR merged → verify signal recorded (run=${runId})`);
+            return c.json({ ok: true, event, action, delivery, noted: "repair_merged" });
           }
-          return c.json({ ok: true, event, action, delivery, noted: "repair_merged" });
+          // Not ours (another repo, a fork, no Simsa repair for that run, or an
+          // unknown run). Acknowledge so GitHub does not retry; record nothing.
+          console.warn(`[webhook] fix/simsa-* merge ignored — not this run's Simsa repair (run=${runId.slice(0, 64)})`);
+          return c.json({ ok: true, event, action, delivery, ignored: "repair_signal_unmatched" });
         }
       }
       // 2026-07-21 (Bae): 레거시 자동 리뷰 킬스위치 — Simsa 집중 기간 동안
