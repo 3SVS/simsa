@@ -35,6 +35,10 @@ const EN = {
     buildGuide: "Build guide",
     settings: "Prep & connections",
     github: "Code changes",
+    // 2026-09-28 (D6): for a project whose app already exists, the real-app
+    // check is the step itself; the PR screen is labelled as the developer tool it is.
+    checkApp: "Check the app",
+    githubDev: "Code changes (PR) — for developers",
     benchmark: "Benchmark",
     experiment: "Experiment",
     visualChecks: "Visual checks",
@@ -356,25 +360,63 @@ const EN = {
     createItemsDesc: "Decide what to check — then reviews have something to judge against.",
     connectCode: "Connect your code",
     addUrl: "Add your app's address",
-    addUrlDesc: "We have your repository. Add the address where the app runs and we can check the live screens.",
+    // 2026-09-28 (D4): the overview asks for the address right there — one box,
+    // one button — and starts the real-app check. No "go to another screen".
+    addUrlDesc: "Paste the address your app opens at. We'll open it, click through it, and tell you in plain words what works and what doesn't.",
+    addUrlLabel: "Your app's address",
+    addUrlPlaceholder: "https://my-app.lovable.app",
+    addUrlStart: "Start checking",
+    addUrlStarting: "Starting…",
+    addUrlHelpToggle: "Where do I find the address?",
+    // #559 여정 렌즈 결함 1: the buttons as the tools' own docs name them (2026-09-28) —
+    // all four say "Publish"; none has a "Deploy" button or tab. Bolt and v0 put it in
+    // different places, so they get a line each; the address ending lets the user
+    // tell whether the link they found is the right one.
+    addUrlHelpLovable: "Lovable: press Publish (top right) — the address usually ends in lovable.app.",
+    addUrlHelpBolt: "Bolt: press Publish (top right) — the address usually ends in bolt.host.",
+    addUrlHelpV0: "v0: press Publish above the chat — the address usually ends in vercel.app.",
+    addUrlHelpReplit: "Replit: press Publish at the top — the address usually ends in replit.app.",
+    addUrlHelpSelf: "Put it online yourself: the address of the place you published it.",
+    addUrlHelpNotLive: "If it isn't online yet, publish it from your tool first — we can only click through an app that is live.",
+    addUrlErrors: {
+      empty: "Paste your app's address.",
+      invalid: "That doesn't look like an app address. Paste the link you open your app with (it starts with https://).",
+      limit: "This project already has as many addresses as it can hold. Remove one you don't use under Sources, then try again.",
+      notSaved: "This project isn't saved on our side yet, so we couldn't start. Wait a moment and press the button again.",
+      forbidden: "This project belongs to another sign-in. Open it from the device or account you created it with.",
+      busy: "Too many requests just now. Wait a minute and press the button again.",
+      generic: "We couldn't start the check just now. Press the button again in a moment — your address is still here.",
+    },
     connectCodeDesc: "Link the GitHub repository your app lives in — one step from your first review.",
     getPack: "Get your builder pack",
+    // #559 여정 렌즈 결함 10: the default view calls this screen "Build guide" (sidebar, Train N §8-6).
+    getGuide: "Get the build guide",
     getPackDesc: "Your product brief and acceptance items are ready. Get the build guide, make the app with the AI tool you already use, then connect the app's address and Simsa will check it.",
     alreadyBuilt: "Already built your app?",
-    connectUrl: "Connect its URL",
-    runReview: "Run your first review",
-    runReviewDesc: "Your code is connected. Run a review to see what passes and what needs work.",
+    // #559 여정 렌즈 결함 8: opens the same address box, right here (not the Sources screen).
+    addUrlFoldLink: "Add its address here",
+    // 2026-09-28 (D1): the default check opens the real app — not a code review.
+    runReview: "Check the live app",
+    runReviewDesc: "Your app's address is connected. We'll open it, click through it, and tell you in plain words what works and what doesn't.",
     viewResults: "View review results",
     viewResultsDesc: "Your latest review is in — see what passed and fix what remains.",
+    // #559 검증 결함 2: a check that is still running is not a result yet.
+    viewProgress: "See how it's going",
+    viewProgressDesc: "We're opening your app and clicking through it. This can take a few minutes.",
   },
   stepsNav: {
     prepare: "Prepare",
     // Flow-audit B-4 (2026-07-17): this stage holds the builder pack (making)
     // as well as running checks — "Review" alone mislabeled it.
     review: "Build & review",
+    // 2026-09-28 (D6): when the app already exists there is nothing to build —
+    // the step is checking that app.
+    reviewApp: "Check your app",
     results: "Results & fixes",
     lockNeedItems: "Create your checklist first.",
-    lockNeedCode: "Connect your code first.",
+    // #559 검증 결함 6: the code branch's results need the app's address (the
+    // overview asks for the same thing) — linking code is optional (D-17 amend).
+    lockNeedUrl: "Add your app's address first.",
     lockNeedBuild: "Get your builder pack and connect your app's URL first.",
     next: "Next",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
@@ -382,6 +424,8 @@ const EN = {
     whyAfterFix: "Once you apply a fix, run the review again — that is the only way to know it actually worked.",
     whyAllClear: "Nothing needs attention here. You can keep going when you want.",
     whyContinue: "Pick up where you left off.",
+    // #559 여정 렌즈 결함 4: from the code-changes (PR) screen, the one way on.
+    whyCheckLiveApp: "Whether your app works is checked by opening the real app.",
     optionalTag: "optional",
   },
   branch: {
@@ -436,11 +480,15 @@ const EN = {
     mustHaves: "Must-have items",
     gettingStartedTitle: "Get started",
     gettingStartedIntro: "Three steps to your first code review:",
-    gsStep1: "Check the product brief — make sure Simsa understood what you want to build.",
-    gsStep2: "Connect your app — paste the address of the app you made. (Code repositories are under Developer mode.)",
-    gsStep3: "Run a review — pick the code changes and check them against your acceptance items.",
+    // 2026-09-28 (D1·D7): the "your app already exists" list — the default check
+    // opens the real app, so the steps are address → check → fix and re-check.
+    gsStep1: "Add the address — tell us where your app opens.",
+    gsStep2: "Check it for real — Simsa opens your app, clicks through it, and tells you in plain words what works and what doesn't.",
+    gsStep3: "Fix and check again — paste the fix into the tool you built with, then check again to see it really works.",
     gsIdeaStep1: "Check the product brief — make sure Simsa understood what you want to build.",
     gsIdeaStep2: "Get the builder pack — paste it into your dev AI and it builds the app for you.",
+    // #559 여정 렌즈 결함 10: the same step in the default view's name (sidebar: "Build guide").
+    gsIdeaStep2Guide: "Get the build guide — paste it into your dev AI and it builds the app for you.",
     gsIdeaStep3: "When it's live, paste the address here — Simsa checks it works, in plain words.",
     sampleBanner: "This is a hands-on sample. Try everything — re-run the check, open fix ideas, export the build pack.",
     sampleCta: "Start with my own idea",
@@ -615,6 +663,8 @@ const EN = {
     generateError: "Could not create the fix note.",
     title: "Fix instructions",
     reviewFirst: "Review your items in the Review results tab first.",
+    // #559 여정 렌즈 결함 2: a live app check's findings live on its own result page.
+    liveResultNote: "What the live app check found — and how to fix it — is on that result's page.",
     allPassed: "All items passed.",
     analyzing: "Analyzing…",
     getDecisionHelp: "Get decision help",
@@ -637,7 +687,12 @@ const EN = {
     itemDetails: "Item-by-item details",
     pageSubtitle: "The results of checking your product against its checking items.",
     draftTitle: "Draft review",
-    draftDesc: "Checks your product brief and acceptance items before connecting code.",
+    // #559 여정 렌즈 결함 3: "before connecting code" contradicted projects whose code is
+    // connected — say only what is true for every project.
+    draftDesc: "A quick check of your product brief and acceptance items only — it doesn't open your app.",
+    liveTitle: "Live app check",
+    liveDesc: "The latest result of opening your app and clicking through it. What we found and how to fix it are there.",
+    liveCta: "See the result and how to fix it",
     prTitle: "Code review (GitHub)",
     prDesc: "Checks the code changes submitted on GitHub (a \"pull request\") against your acceptance items.",
     reRun: "Check again",
@@ -885,7 +940,7 @@ const EN = {
       repoDesc: "Link the repository your AI pushed to, then review the pull request against your items.",
       repoCta: "Go to Code changes",
       siteTitle: "Connect the deployed website",
-      siteDesc: "Add your live app URL to run a visual check of the finished screens.",
+      siteDesc: "Add your live app's address so Simsa can open the finished screens and check them.",
       siteCta: "Connect app URL",
     },
     emailCapture: {
@@ -1325,9 +1380,19 @@ const EN = {
     noRepoBuildHint: "Haven't built the app yet? Get the builder pack first and make it with your AI, then come back to connect it.",
     getPack: "Get the builder pack",
     loadPulls: "Load code changes (PRs)",
+    // 2026-09-28 (D8): this screen is a developer tool; the default check is the real app.
+    devScreenNote: "This screen reviews code changes (PRs) — a developer feature. To see whether your app actually works, check the live app.",
+    checkLiveApp: "Check the live app",
+    noPullsDevNote: "Reviewing PRs is a developer feature.",
     pullsLoadError: "We could not load the code changes.",
     openPulls: "open code changes (PRs)",
-    noPulls: "No open code changes found. A pull request (PR) is how new code is proposed for review — look for a \"Create PR\" or \"Push to GitHub\" option in your AI tool, then refresh here.",
+    // 2026-09-28 (D8): zero PRs is the NORMAL state for chat builders — say so,
+    // and hand the user the real next step instead of "go push, then refresh".
+    // #559 여정 렌즈 결함 6: v0 is not one of them — it opens a PR and merges it when you
+    // publish (v0.app/docs/github). Lovable and Bolt save straight to the branch (their docs).
+    noPulls: "There are no open code changes (PRs). Tools like Lovable and Bolt save changes directly, so having no PRs is normal.",
+    // #559 검증 결함 8: none open, but earlier ones are linked below — no second primary, no "normal" claim.
+    noPullsLinked: "No code changes are open right now. The ones you linked before are below.",
     selectItemsForPr: "Choose the acceptance items related to this PR.",
     noItemsYet: "No checking items yet — reviews check the code change against your items.",
     noItemsHint: "Tell us in one line what your app should do, and we'll draft the checking items right here.",
@@ -1356,7 +1421,10 @@ const EN = {
     firstTimeIntro: "GitHub is where your project's code is stored so Simsa can read it. Two quick paths:",
     firstTimeNoAccount: "No GitHub account yet? Create a free one, then come back and press Connect GitHub.",
     firstTimeNoAccountLink: "Create a GitHub account",
-    firstTimePlatform: "If your app was built in a web builder (e.g. Lovable, Replit, v0, Bolt), use that tool's \"Export to GitHub\" or \"Connect GitHub\" feature to publish the code to a public repository, then connect it here. When your AI tool proposes changes, they arrive as pull requests (PRs) — that's what Simsa reviews.",
+    // #559 여정 렌즈 결함 6 (회귀 전수 검색): "changes arrive as PRs — that's what Simsa reviews"
+    // was false for Lovable/Bolt (they save straight to the branch) and contradicted the default
+    // check (the real app, D1). "public" was an unneeded limit (private repos connect via the App).
+    firstTimePlatform: "If your app was built in a web builder (e.g. Lovable, Replit, v0, Bolt), use that tool's \"Export to GitHub\" or \"Connect GitHub\" feature to put the code in a repository, then connect it here.",
     stateOpen: "Open",
     stateClosed: "Closed",
     statePublic: "public",
@@ -2346,11 +2414,14 @@ const EN = {
     acceptanceExpected: "Expected",
     title: "Visual checks",
     subtitle: "Real-browser inspections of your live app, explained in plain language.",
-    loading: "Loading visual checks…",
-    loadError: "Could not load visual checks. Please try again.",
-    emptyTitle: "No visual checks yet",
+    // #559 여정 렌즈 결함 5: the screen's title is now the sidebar's name for it
+    // ("Check the app" once an app exists) — the body no longer introduces a third
+    // name ("visual checks") under it.
+    loading: "Loading results…",
+    loadError: "Could not load the results. Please try again.",
+    emptyTitle: "No checks yet",
     emptyBody:
-      "A visual check opens your deployed app in a real browser, walks the core flow, and writes a plain-language report with screenshots. Runs appear here after an inspection finishes.",
+      "Simsa opens your deployed app in a real browser, walks the core flow, and writes a plain-language report with screenshots. Results appear here when a check finishes.",
     worksYes: "Works",
     worksNo: "Not working",
     worksNoProblems: "No problems found",
@@ -2364,8 +2435,9 @@ const EN = {
     executorLocal: "Local run",
     executorContainer: "Cloud run",
     open: "Open report",
-    backToList: "All visual checks",
-    notFound: "This visual check was not found.",
+    // #559 여정 렌즈 결함 5: the list is now titled like the sidebar item — no third name.
+    backToList: "All checks",
+    notFound: "This check was not found.",
     // Train N4 (§8-8): plain labels for the report header.
     metaTarget: "Address we checked",
     metaCheckedAt: "Checked at",
@@ -2450,8 +2522,9 @@ const EN = {
     runQueuedOnly:
       "We couldn't start this check just now — the part that runs checks isn't ready yet. Please try again in a moment.",
     runActiveNotice: "An inspection is already in progress. A new one can start once it finishes.",
-    runNeedWebsite: "Connect your website address first so Simsa knows what to inspect.",
-    goToSources: "Connect a website",
+    // #559 여정 렌즈 결함 5: the same words as the address box ("your app's address"),
+    // which now sits right under this line — no trip to the Sources screen.
+    runNeedWebsite: "Add your app's address first so Simsa knows what to check.",
     // #558 검증 2차 P2-4: "queued" is the short gap between hand-off and the
     // runner's "running" ack — there is no queue or slot (dispatch is
     // fire-once; over the instance cap a check does not wait, it fails to start).
@@ -2473,7 +2546,7 @@ const EN = {
     failedTitle: "This inspection could not be completed",
     failedBody: "Something went wrong while inspecting the app. Please run a new inspection.",
     runErrors: {
-      websiteSourceRequired: "Connect a website address first.",
+      websiteSourceRequired: "Add your app's address first.",
       runAlreadyActive: "An inspection is already in progress.",
       projectNotFound: "Project not found. It may only exist in another browser.",
       forbidden: "You do not have access to this project.",
@@ -2653,7 +2726,7 @@ const EN = {
   connectReentry: {
     title: "Connect your live app",
     subtitle:
-      "Paste the address where your app is deployed. Simsa connects it and opens a visual check of the live app.",
+      "Paste the address where your app is deployed. Simsa connects it and starts checking the live app.",
     projectLabel: "Project",
     urlLabel: "Deployed app URL",
     urlPlaceholder: "https://your-app.example.com",
@@ -2663,7 +2736,7 @@ const EN = {
     errInvalidUrl: "Enter a valid web address starting with http:// or https://.",
     errConnectFailed: "We couldn't connect that address. Please try again.",
     retry: "Try again",
-    success: "Connected. Opening the visual check…",
+    success: "Connected. Opening the app check…",
     deviceNoteTitle: "This link is device-scoped",
     deviceNoteBody:
       "This project was created in another browser or device, so its details aren't stored here. You can still connect your deployed URL below. Sign in to sync your projects across devices.",
@@ -2836,6 +2909,10 @@ const KO = {
     buildGuide: "만들기 안내",
     settings: "준비·설정",
     github: "코드 변경",
+    // 2026-09-28 (D6): 앱이 이미 있는 프로젝트에선 실제 앱 확인이 곧 이 단계이고,
+    // PR 화면은 개발자 도구라는 걸 이름에서 밝힌다.
+    checkApp: "앱 확인하기",
+    githubDev: "코드 변경(PR) — 개발자용",
     benchmark: "벤치마크",
     experiment: "실험",
     visualChecks: "시각 검수",
@@ -3152,25 +3229,60 @@ const KO = {
     createItemsDesc: "무엇을 확인할지 정하면 — 검수가 판단할 기준이 생겨요.",
     connectCode: "코드 연결하기",
     addUrl: "앱 주소 추가하기",
-    addUrlDesc: "저장소는 받았어요. 앱이 실제로 돌아가는 주소를 알려주시면 화면을 확인해 드릴게요.",
+    // 2026-09-28 (D4): 다른 화면으로 보내지 않고 그 자리에서 칸 하나·버튼 하나로 받는다.
+    addUrlDesc: "앱이 실제로 열리는 주소를 넣으면, 바로 열어서 눌러 보고 되는 것과 안 되는 것을 쉬운 말로 알려드려요.",
+    addUrlLabel: "앱이 열리는 주소",
+    addUrlPlaceholder: "https://내앱.lovable.app",
+    addUrlStart: "확인 시작",
+    addUrlStarting: "시작하는 중…",
+    addUrlHelpToggle: "주소를 어디서 찾나요?",
+    // #559 여정 렌즈 결함 1: 각 도구 공식 문서의 버튼 이름 그대로(2026-09-28 확인) — 넷 다
+    // "Publish"이고 'Deploy' 버튼·탭은 없다. Bolt와 v0는 버튼 위치가 달라 한 줄씩. 주소 끝
+    // 모양을 같이 보여 주면 찾은 주소가 맞는지 스스로 확인할 수 있다.
+    addUrlHelpLovable: "Lovable: 오른쪽 위 Publish를 누르면 나오는 주소 (보통 …lovable.app)",
+    addUrlHelpBolt: "Bolt: 오른쪽 위 Publish를 누르면 나오는 주소 (보통 …bolt.host)",
+    addUrlHelpV0: "v0: 채팅 위쪽 Publish를 누르면 나오는 주소 (보통 …vercel.app)",
+    addUrlHelpReplit: "Replit: 위쪽 Publish(게시)를 누르면 나오는 주소 (보통 …replit.app)",
+    addUrlHelpSelf: "직접 올린 경우: 배포한 곳의 주소",
+    addUrlHelpNotLive: "아직 인터넷에 올리지 않았다면, 먼저 쓰시는 도구에서 게시(Publish)해야 실제로 눌러 볼 수 있어요.",
+    addUrlErrors: {
+      empty: "앱 주소를 붙여넣어 주세요.",
+      invalid: "앱 주소로 보이지 않아요. 앱을 열 때 쓰는 링크(https://로 시작)를 붙여넣어 주세요.",
+      limit: "이 프로젝트에 넣을 수 있는 주소 개수를 넘었어요. '연결' 화면에서 안 쓰는 주소를 지운 뒤 다시 눌러 주세요.",
+      notSaved: "이 프로젝트가 아직 서버에 저장되지 않아 시작하지 못했어요. 잠시 후 다시 눌러 주세요.",
+      forbidden: "다른 계정의 프로젝트예요. 이 프로젝트를 만든 기기나 계정으로 들어와 주세요.",
+      busy: "잠깐 사이에 요청이 몰렸어요. 1분쯤 뒤에 다시 눌러 주세요.",
+      generic: "지금은 확인을 시작하지 못했어요. 잠시 후 다시 눌러 주세요 — 넣으신 주소는 그대로 있어요.",
+    },
     connectCodeDesc: "앱이 있는 GitHub 저장소를 연결하세요 — 첫 검수까지 한 단계 남았어요.",
     getPack: "빌더 팩 받기",
+    // #559 여정 렌즈 결함 10: 기본 보기에서 이 화면의 이름은 "만들기 안내"(사이드바, Train N §8-6).
+    getGuide: "만들기 안내 받기",
     getPackDesc: "제품 설명서와 확인 항목이 준비됐어요. 만들기 안내를 받아 쓰시는 AI 도구로 앱을 만들고, 앱 주소를 연결하면 Simsa가 확인해드려요.",
     alreadyBuilt: "앱을 이미 만드셨나요?",
-    connectUrl: "URL 연결하기",
-    runReview: "첫 검수 실행하기",
-    runReviewDesc: "코드가 연결됐어요. 검수를 실행하면 뭐가 통과하고 뭐가 부족한지 알 수 있어요.",
+    // #559 여정 렌즈 결함 8: '연결' 화면으로 보내지 않고 같은 주소 칸을 그 자리에서 연다.
+    addUrlFoldLink: "여기에 주소 넣기",
+    // 2026-09-28 (D1): 기본 확인은 코드 리뷰가 아니라 실제 앱을 여는 확인이다.
+    runReview: "실제 앱 확인하기",
+    runReviewDesc: "앱 주소가 연결됐어요. 실제로 열어서 눌러 보고, 되는 것과 안 되는 것을 쉬운 말로 알려드려요.",
     viewResults: "검수 결과 보기",
     viewResultsDesc: "최근 검수 결과가 있어요 — 통과한 것과 남은 문제를 확인하세요.",
+    // #559 검증 결함 2: 아직 도는 확인은 결과가 아니다.
+    viewProgress: "진행 상황 보기",
+    viewProgressDesc: "앱을 열어 눌러 보는 중이에요. 몇 분 걸릴 수 있어요.",
   },
   stepsNav: {
     prepare: "준비",
     // Flow-audit B-4 (2026-07-17): 이 스테이지엔 빌더 팩(만들기)이 들어있다 —
     // "검수" 단독 라벨은 내용과 어긋났음.
     review: "만들기·검수",
+    // 2026-09-28 (D6): 앱이 이미 있으면 만들 것이 없다 — 이 단계는 그 앱을 확인하는 일이다.
+    reviewApp: "앱 확인",
     results: "결과·수정",
     lockNeedItems: "확인 항목을 먼저 만드세요.",
-    lockNeedCode: "코드를 먼저 연결하세요.",
+    // #559 검증 결함 6: 코드 갈래의 결과는 앱 주소가 있어야 나온다(개요도 같은 것을 요구) —
+    // 코드 연결은 선택이다(D-17 amend).
+    lockNeedUrl: "앱 주소를 먼저 넣으세요.",
     lockNeedBuild: "빌더 팩을 받아 앱을 만들고, 앱 URL을 먼저 연결하세요.",
     next: "다음",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
@@ -3178,6 +3290,8 @@ const KO = {
     whyAfterFix: "고친 뒤에는 다시 검수해야 해요 — 정말 고쳐졌는지는 돌려봐야 알 수 있습니다.",
     whyAllClear: "여기서 더 손볼 것은 없어요. 원하실 때 이어서 가시면 됩니다.",
     whyContinue: "하시던 곳에서 이어서 가요.",
+    // #559 여정 렌즈 결함 4: 코드 변경(PR) 화면에서 이어 가는 유일한 길.
+    whyCheckLiveApp: "앱이 제대로 작동하는지는 실제 앱을 열어 확인해요.",
     optionalTag: "선택",
   },
   branch: {
@@ -3232,11 +3346,15 @@ const KO = {
     mustHaves: "꼭 들어가야 할 것",
     gettingStartedTitle: "시작하기",
     gettingStartedIntro: "첫 코드 확인까지 세 단계:",
-    gsStep1: "제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요.",
-    gsStep2: "앱 연결 — 만든 앱의 주소를 붙여넣어 주세요. (코드 저장소 연결은 개발자 모드에 있어요.)",
-    gsStep3: "확인 실행 — 코드 변경을 골라 검수 항목 기준으로 확인하세요.",
+    // 2026-09-28 (D1·D7): "앱이 이미 있어요" 안내 — 기본 확인은 실제 앱을 여는 것이라
+    // 순서가 주소 → 확인 → 고치고 다시 확인이다.
+    gsStep1: "주소 넣기 — 앱이 실제로 열리는 주소를 알려주세요.",
+    gsStep2: "실제로 확인 — Simsa가 앱을 열어 눌러 보고, 되는 것과 안 되는 것을 쉬운 말로 알려드려요.",
+    gsStep3: "고치고 다시 확인 — 고칠 내용을 쓰시는 도구에 붙여넣고, 다시 확인해서 정말 고쳐졌는지 봐요.",
     gsIdeaStep1: "제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요.",
     gsIdeaStep2: "빌더 팩 받기 — 쓰시는 개발 AI에 붙여넣으면 앱을 만들어 드려요.",
+    // #559 여정 렌즈 결함 10: 기본 보기의 이름으로 같은 단계(사이드바: "만들기 안내").
+    gsIdeaStep2Guide: "만들기 안내 받기 — 쓰시는 개발 AI에 붙여넣으면 앱을 만들어 드려요.",
     gsIdeaStep3: "완성되면 주소를 여기 넣기 — 실제로 작동하는지 쉬운 말로 확인해 드려요.",
     sampleBanner: "체험용 예시예요. 다시 확인, 고쳐보기, 만들기 패키지까지 자유롭게 눌러보세요.",
     sampleCta: "내 아이디어로 시작하기",
@@ -3411,6 +3529,8 @@ const KO = {
     generateError: "수정 안내를 만들지 못했어요.",
     title: "수정 지시서",
     reviewFirst: "먼저 확인 결과 탭에서 항목을 검토해주세요.",
+    // #559 여정 렌즈 결함 2: 실제 앱 확인의 발견은 그 결과 화면에 있다.
+    liveResultNote: "실제 앱 확인에서 찾은 것과 고치는 방법은 그 결과 화면에 있어요.",
     allPassed: "모든 항목이 통과됐습니다.",
     analyzing: "분석 중…",
     getDecisionHelp: "결정 도움받기",
@@ -3433,7 +3553,12 @@ const KO = {
     itemDetails: "항목별 자세히",
     pageSubtitle: "확인 항목을 기준으로 제품을 확인한 결과예요.",
     draftTitle: "제품 설명서 기준 사전 확인",
-    draftDesc: "코드를 연결하기 전에 제품 설명서와 검수 항목을 확인합니다.",
+    // #559 여정 렌즈 결함 3: "코드를 연결하기 전에"는 저장소가 연결된 프로젝트와 모순됐다 —
+    // 어느 프로젝트에서나 참인 말만 한다.
+    draftDesc: "제품 설명서와 확인 항목만 보고 미리 확인해요 — 앱을 직접 열어 보지는 않아요.",
+    liveTitle: "실제 앱 확인",
+    liveDesc: "앱을 실제로 열어 눌러 본 가장 최근 결과예요. 찾은 것과 고치는 방법이 거기 있어요.",
+    liveCta: "결과와 고칠 방법 보기",
     prTitle: "코드 확인 (GitHub)",
     prDesc: "GitHub에 올라온 코드 변경(PR)을 검수 항목 기준으로 확인합니다.",
     reRun: "다시 확인",
@@ -3681,7 +3806,7 @@ const KO = {
       repoDesc: "AI가 올린 저장소를 연결한 뒤, 항목 기준으로 PR을 확인합니다.",
       repoCta: "코드 변경으로 가기",
       siteTitle: "배포된 웹사이트 연결",
-      siteDesc: "배포된 앱 주소를 넣어 완성된 화면을 시각 검수합니다.",
+      siteDesc: "배포된 앱 주소를 넣으면 완성된 화면을 실제로 열어 확인해요.",
       siteCta: "앱 주소 연결하기",
     },
     emailCapture: {
@@ -4121,9 +4246,19 @@ const KO = {
     noRepoBuildHint: "아직 앱을 안 만드셨나요? 먼저 빌더팩을 받아 개발 AI로 만든 뒤, 돌아와서 연결하세요.",
     getPack: "빌더팩 받기",
     loadPulls: "코드 변경(PR) 목록 불러오기",
+    // 2026-09-28 (D8): 이 화면은 개발자 도구다 — 기본 확인은 실제 앱이다.
+    devScreenNote: "이 화면은 코드 변경(PR)을 검토하는 개발자용 화면이에요. 앱이 제대로 작동하는지는 실제 앱 확인에서 볼 수 있어요.",
+    checkLiveApp: "실제 앱 확인하기",
+    noPullsDevNote: "PR 검토는 개발자용 기능이에요.",
     pullsLoadError: "코드 변경 목록을 불러오지 못했습니다.",
     openPulls: "개 열려 있는 코드 변경(PR)",
-    noPulls: "확인할 코드 변경(PR)이 없어요. PR(pull request)은 새 코드를 검토용으로 제안하는 방식이에요 — 사용 중인 AI 도구에서 \"PR 만들기\" 또는 \"GitHub에 푸시\" 기능을 실행한 뒤 여기서 새로고침해주세요.",
+    // 2026-09-28 (D8): PR 0개는 채팅형 빌더에겐 **정상 상태**다 — 그렇다고 말하고,
+    // "푸시한 뒤 새로고침" 대신 진짜 다음 걸음(실제 앱 확인)을 건넨다.
+    // #559 여정 렌즈 결함 6: v0는 여기 들지 않는다 — 게시할 때 PR을 열고 합친다(v0.app/docs/github).
+    // Lovable·Bolt는 브랜치에 바로 저장한다(각 공식 문서).
+    noPulls: "열린 코드 변경(PR)이 없어요. Lovable·Bolt 같은 도구는 변경을 바로 저장하기 때문에 PR이 없는 게 보통이에요.",
+    // #559 검증 결함 8: 열린 건 없지만 전에 연결한 것이 아래에 있다 — primary를 또 두지 않고, "보통"이라 말하지 않는다.
+    noPullsLinked: "지금 열려 있는 코드 변경은 없어요. 전에 연결해 둔 것은 아래에 있어요.",
     selectItemsForPr: "이 PR과 관련된 항목을 선택하세요.",
     noItemsYet: "확인 항목이 아직 없어요 — 검수는 확인 항목을 기준으로 진행돼요.",
     noItemsHint: "앱이 무엇을 해야 하는지 한 줄로 알려주시면, 여기서 바로 확인 항목을 만들어 드려요.",
@@ -4152,7 +4287,10 @@ const KO = {
     firstTimeIntro: "GitHub은 Simsa가 읽을 수 있도록 프로젝트 코드를 보관하는 곳이에요. 두 가지 빠른 방법:",
     firstTimeNoAccount: "GitHub 계정이 없다면 무료 계정을 만든 뒤 돌아와서 GitHub 연결을 누르세요.",
     firstTimeNoAccountLink: "GitHub 계정 만들기",
-    firstTimePlatform: "웹 빌더(예: Lovable, Replit, v0, Bolt 등)로 앱을 만들었다면, 그 도구의 \"Export to GitHub\" 또는 \"Connect GitHub\" 기능으로 코드를 공개 저장소에 올린 뒤 여기서 연결하세요. AI 도구가 제안하는 변경은 PR(pull request)로 도착하고, Simsa가 확인하는 대상이 바로 그것입니다.",
+    // #559 여정 렌즈 결함 6 (회귀 전수 검색): "변경은 PR로 도착하고 Simsa가 확인하는 대상이 그것"은
+    // Lovable·Bolt(브랜치에 바로 저장)에 틀렸고 기본 확인(실제 앱, D1)과도 어긋났다. "공개"는
+    // 불필요한 제한이었다(비공개 저장소도 App으로 연결).
+    firstTimePlatform: "웹 빌더(예: Lovable, Replit, v0, Bolt 등)로 앱을 만들었다면, 그 도구의 \"Export to GitHub\" 또는 \"Connect GitHub\" 기능으로 코드를 저장소에 올린 뒤 여기서 연결하세요.",
     stateOpen: "열림",
     stateClosed: "닫힘",
     statePublic: "공개",
@@ -5135,11 +5273,13 @@ const KO = {
     acceptanceExpected: "기대한 결과",
     title: "시각 검수",
     subtitle: "실제 브라우저로 라이브 앱을 열어 확인하고, 쉬운 말로 정리한 리포트예요.",
-    loading: "시각 검수를 불러오는 중이에요…",
-    loadError: "시각 검수를 불러오지 못했어요. 다시 시도해주세요.",
-    emptyTitle: "아직 시각 검수가 없어요",
+    // #559 여정 렌즈 결함 5: 화면 제목이 사이드바 이름(앱이 있으면 "앱 확인하기")을 따르므로,
+    // 본문이 그 아래에서 세 번째 이름("시각 검수")을 꺼내지 않는다.
+    loading: "확인 결과를 불러오는 중이에요…",
+    loadError: "확인 결과를 불러오지 못했어요. 다시 시도해주세요.",
+    emptyTitle: "아직 확인한 적이 없어요",
     emptyBody:
-      "시각 검수는 배포된 앱을 실제 브라우저로 열어 핵심 흐름을 따라가 보고, 스크린샷과 함께 쉬운 말로 리포트를 만들어요. 검수가 끝나면 결과가 여기에 표시돼요.",
+      "배포된 앱을 실제 브라우저로 열어 핵심 흐름을 따라가 보고, 스크린샷과 함께 쉬운 말로 리포트를 만들어요. 확인이 끝나면 결과가 여기에 표시돼요.",
     worksYes: "작동해요",
     worksNo: "작동 안 해요",
     worksNoProblems: "문제 없음",
@@ -5153,8 +5293,9 @@ const KO = {
     executorLocal: "로컬 실행",
     executorContainer: "클라우드 실행",
     open: "리포트 열기",
-    backToList: "시각 검수 전체",
-    notFound: "해당 시각 검수를 찾을 수 없어요.",
+    // #559 여정 렌즈 결함 5: 목록 제목이 사이드바 이름을 따르므로 세 번째 이름을 꺼내지 않는다.
+    backToList: "확인 기록 전체",
+    notFound: "해당 확인 결과를 찾을 수 없어요.",
     // Train N4 (§8-8): 리포트 머리의 쉬운 라벨.
     metaTarget: "확인한 주소",
     metaCheckedAt: "확인한 시각",
@@ -5234,8 +5375,9 @@ const KO = {
     // 집어 가는 곳이 없다). "대기열에서 순서대로 진행"이라고 약속하면 안 된다.
     runQueuedOnly: "지금은 확인을 시작하지 못했어요. 확인을 돌리는 쪽이 아직 준비되지 않았어요 — 잠시 뒤 다시 눌러 주세요.",
     runActiveNotice: "이미 검수가 진행 중이에요. 끝나면 새 검수를 시작할 수 있어요.",
-    runNeedWebsite: "먼저 웹사이트 주소를 연결하세요. 그래야 Simsa가 무엇을 검수할지 알 수 있어요.",
-    goToSources: "웹사이트 연결하기",
+    // #559 여정 렌즈 결함 5: 주소 칸과 같은 말("앱이 열리는 주소") — 이 줄 바로 아래에 그 칸이
+    // 있다('연결' 화면으로 보내지 않는다).
+    runNeedWebsite: "먼저 앱이 열리는 주소를 넣어 주세요. 그래야 Simsa가 무엇을 확인할지 알 수 있어요.",
     // #558 검증 2차 P2-4: queued = 실행기에 넘긴 뒤 실행기가 "시작했다"를 알리기까지의 짧은
     // 구간이다. 대기열·차례는 없다(디스패치는 한 번, 인스턴스 상한을 넘으면 기다리지 않고 시작 실패).
     statusQueued: "시작하는 중",
@@ -5252,7 +5394,7 @@ const KO = {
     failedTitle: "검수를 마치지 못했어요",
     failedBody: "앱을 검수하는 중에 문제가 생겼어요. 새 검수를 다시 실행해주세요.",
     runErrors: {
-      websiteSourceRequired: "먼저 웹사이트 주소를 연결하세요.",
+      websiteSourceRequired: "먼저 앱 주소를 넣어 주세요.",
       runAlreadyActive: "이미 검수가 진행 중이에요.",
       projectNotFound: "프로젝트를 찾을 수 없어요. 다른 브라우저에만 있는 프로젝트일 수 있어요.",
       forbidden: "이 프로젝트에 접근할 수 없어요.",
@@ -5428,7 +5570,7 @@ const KO = {
   connectReentry: {
     title: "라이브 앱 연결하기",
     subtitle:
-      "앱이 배포된 주소를 붙여넣으세요. Simsa가 연결한 뒤 라이브 앱의 시각 검수를 바로 열어드려요.",
+      "앱이 배포된 주소를 붙여넣으세요. Simsa가 연결한 뒤 라이브 앱 확인을 바로 시작해요.",
     projectLabel: "프로젝트",
     urlLabel: "배포된 앱 주소",
     urlPlaceholder: "https://내앱.example.com",
@@ -5438,7 +5580,7 @@ const KO = {
     errInvalidUrl: "http:// 또는 https:// 로 시작하는 올바른 주소를 입력해주세요.",
     errConnectFailed: "주소를 연결하지 못했어요. 다시 시도해주세요.",
     retry: "다시 시도",
-    success: "연결됐어요. 시각 검수를 여는 중…",
+    success: "연결됐어요. 앱 확인을 여는 중…",
     deviceNoteTitle: "이 링크는 기기 전용이에요",
     deviceNoteBody:
       "이 프로젝트는 다른 브라우저나 기기에서 만들어져 여기에는 세부 정보가 저장돼 있지 않아요. 그래도 아래에서 배포된 주소를 연결할 수 있어요. 로그인하면 기기 간에 프로젝트가 동기화돼요.",

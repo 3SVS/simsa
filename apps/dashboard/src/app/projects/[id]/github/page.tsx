@@ -25,6 +25,9 @@ import {
   type CreditEnforcementResult,
 } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled } from "@/lib/repo-settle.mjs";
+import { listProjectSources } from "@/lib/workspace-sources-api";
+import { githubPullsView, liveAppCheckHref, screenAppView, sourceFacts } from "@/lib/project-steps.mjs";
+import { useAppPresence } from "@/lib/use-app-presence";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusText } from "@/components/StatusText";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -75,8 +78,28 @@ export default function GitHubPage() {
   const [reviewErrorByPr, setReviewErrorByPr] = useState<Record<number, string>>({});
   // "✓ finished" flash for runs completed in THIS session (visible completion signal).
   const [justCompletedByPr, setJustCompletedByPr] = useState<Record<number, boolean>>({});
+  // ★2026-09-28 (D8): where "실제 앱 확인하기" goes from here — the real-app
+  // check when an address exists, else the overview's address box. Zero PRs is
+  // the normal state for chat builders; this screen must never end the journey.
+  const [hasDeployUrl, setHasDeployUrl] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (isExample) return;
+    let cancelled = false;
+    listProjectSources(id, getUserKey())
+      .then((res) => { if (!cancelled) setHasDeployUrl(sourceFacts(res).hasDeployUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id, isExample]);
+  const liveAppHref = liveAppCheckHref(id, hasDeployUrl);
+  const pullsView = githubPullsView({ pullsPhase, openCount: pulls.length, linkedCount: linkedPulls.length });
+  // #559 여정 렌즈 결함 7: does the app already exist? (the sidebar's settled
+  // answer + this screen's address fact). "Get the builder pack" and "why
+  // connect a code repo here?" are for a project with no app yet — shown only
+  // once that is CONFIRMED, never to someone whose app is live.
+  const presence = useAppPresence(id);
 
   const ext = loadExtendedProjectData(id);
+  const appView = screenAppView({ entryPath: ext?.entryPath ?? null, presence, hasDeployUrl });
   const checkResultMap = new Map(
     (ext?.checkResults?.results ?? []).map((r) => [r.itemId, r.status as ItemStatus]),
   );
@@ -360,8 +383,10 @@ export default function GitHubPage() {
           while a repo isn't linked yet — once connected it's just noise. The
           CODE branch skips it entirely: someone who said "이미 만든 앱이
           있어요" starts here on purpose, so re-explaining why code needs
-          connecting is pure noise (Bae, 2026-07-10). */}
-      {!isExample && loadPhase !== "ready" && ext?.entryPath !== "code" && (
+          connecting is pure noise (Bae, 2026-07-10). #559 여정 렌즈 결함 7: the
+          same holds for any project whose app already exists (a restored idea
+          project with its address) — only a CONFIRMED no-app project gets it. */}
+      {!isExample && loadPhase !== "ready" && appView.known && !appView.hasApp && (
         <div className="rounded-lg border border-brand-100 bg-brand-50 p-4">
           <p className="text-sm font-semibold text-brand-800">{t.github.bridgeTitle}</p>
           <p className="mt-1 text-sm leading-relaxed text-brand-700">{t.github.bridgeBody}</p>
@@ -394,15 +419,26 @@ export default function GitHubPage() {
               {t.github.goConnectRepo}
             </Link>
           </div>
-          {/* Forward exit so a user who hasn't built yet isn't trapped bouncing
-              between this card, settings, and the PR screens (Bae's loop). Their
-              real next action is to get the pack and build. */}
-          <p className="mx-auto mt-5 max-w-md border-t border-gray-100 pt-4 text-xs text-gray-500">
-            {t.github.noRepoBuildHint}{" "}
-            <Link href={`/projects/${id}/export`} className="font-medium text-brand-600 hover:text-brand-700">
-              {t.github.getPack} →
+          {/* #559 여정 렌즈 결함 7: say what this screen is and where the default
+              check lives here too (D8 had it only once a repo was linked). */}
+          <p className="mx-auto mt-5 max-w-md border-t border-gray-100 pt-4 text-xs leading-relaxed text-gray-500">
+            {t.github.devScreenNote}{" "}
+            <Link href={liveAppHref} className="font-medium text-brand-700 hover:underline">
+              {t.github.checkLiveApp} →
             </Link>
           </p>
+          {/* Forward exit so a user who hasn't built yet isn't trapped bouncing
+              between this card, settings, and the PR screens (Bae's loop). Their
+              real next action is to get the pack and build — only when the app
+              is CONFIRMED not to exist yet (결함 7). */}
+          {appView.known && !appView.hasApp && (
+            <p className="mx-auto mt-3 max-w-md text-xs text-gray-500">
+              {t.github.noRepoBuildHint}{" "}
+              <Link href={`/projects/${id}/export`} className="font-medium text-brand-600 hover:text-brand-700">
+                {t.github.getPack} →
+              </Link>
+            </p>
+          )}
         </div>
       )}
 
@@ -417,6 +453,12 @@ export default function GitHubPage() {
           <button onClick={() => void loadInitial()} className="btn btn-md btn-primary">
             {t.common.retry}
           </button>
+          <p className="mx-auto mt-5 max-w-md border-t border-gray-100 pt-4 text-xs leading-relaxed text-gray-500">
+            {t.github.devScreenNote}{" "}
+            <Link href={liveAppHref} className="font-medium text-brand-700 hover:underline">
+              {t.github.checkLiveApp} →
+            </Link>
+          </p>
         </div>
       )}
 
@@ -442,6 +484,20 @@ export default function GitHubPage() {
             </button>
           </div>
 
+          {/* ★2026-09-28 (D8): say what this screen is — a developer tool — and
+              where the default check lives, BEFORE anyone loads a PR list. Hidden
+              next to the "action" empty state, which carries the same way out as
+              its primary (one screen, one "what now"). What shows when is decided
+              in one pure place (githubPullsView, #559 검증 결함 8·12). */}
+          {pullsView.devNote && (
+            <p className="text-xs leading-relaxed text-gray-500">
+              {t.github.devScreenNote}{" "}
+              <Link href={liveAppHref} className="font-medium text-brand-700 hover:underline">
+                {t.github.checkLiveApp} →
+              </Link>
+            </p>
+          )}
+
           {/* PR list */}
           {pullsPhase === "error" && (
             <div className="callout callout-error">
@@ -449,36 +505,52 @@ export default function GitHubPage() {
             </div>
           )}
 
-          {pullsPhase === "done" && (
+          {pullsView.empty === "action" && (
+            // ★D8 — zero PRs was a dead end ("0 open" + "push, then refresh").
+            // For Lovable/Bolt/v0 users no PR is the NORMAL state: say so, and
+            // hand over the real next step as the one primary action.
+            <div className="card p-6 text-center">
+              <p className="mx-auto max-w-md text-sm leading-relaxed text-gray-700">{t.github.noPulls}</p>
+              <Link href={liveAppHref} className="btn btn-md btn-primary mt-4 inline-flex">
+                {t.github.checkLiveApp} →
+              </Link>
+              <p className="mt-3 text-xs text-gray-500">{t.github.noPullsDevNote}</p>
+            </div>
+          )}
+
+          {pullsView.empty === "quiet" && (
+            // Zero open PRs, but earlier PRs are linked below (merged/closed
+            // since): a plain sentence only — those cards carry their own buttons,
+            // and "having no PR is normal" next to a list of PRs would contradict it.
+            <p className="text-sm text-gray-600">{t.github.noPullsLinked}</p>
+          )}
+
+          {pullsView.list && (
             <div className="card overflow-hidden">
               <p className="border-b border-gray-100 px-5 py-4 text-sm font-semibold text-gray-700">
                 {pulls.length} {t.github.openPulls}
               </p>
-              {pulls.length === 0 ? (
-                <p className="px-5 py-6 text-center text-sm text-gray-500">{t.github.noPulls}</p>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {pulls.map((pull) => (
-                    <button
-                      key={pull.number}
-                      onClick={() => selectPR(pull)}
-                      className={`w-full px-5 py-4 text-left transition-colors hover:bg-gray-50 ${selectedPR?.number === pull.number ? "border-l-2 border-brand-500 bg-brand-50" : ""}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 flex-shrink-0 font-mono text-xs text-gray-500">#{pull.number}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-800">{pull.title}</p>
-                          <p className="mt-0.5 font-mono text-xs text-gray-500">
-                            {pull.headBranch} → {pull.baseBranch}
-                            {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}`}
-                          </p>
-                        </div>
-                        <span className="flex-shrink-0 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-600">{t.github.stateOpen}</span>
+              <div className="divide-y divide-gray-50">
+                {pulls.map((pull) => (
+                  <button
+                    key={pull.number}
+                    onClick={() => selectPR(pull)}
+                    className={`w-full px-5 py-4 text-left transition-colors hover:bg-gray-50 ${selectedPR?.number === pull.number ? "border-l-2 border-brand-500 bg-brand-50" : ""}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex-shrink-0 font-mono text-xs text-gray-500">#{pull.number}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-gray-800">{pull.title}</p>
+                        <p className="mt-0.5 font-mono text-xs text-gray-500">
+                          {pull.headBranch} → {pull.baseBranch}
+                          {pull.updatedAt && ` · ${new Date(pull.updatedAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US")}`}
+                        </p>
                       </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                      <span className="flex-shrink-0 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs text-green-600">{t.github.stateOpen}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

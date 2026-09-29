@@ -41,10 +41,13 @@ test("builder path: deploy URL + a visual-check run → review done, results cur
   assert.equal(s.results.status, "current");
 });
 
-test("CODE branch keeps the GitHub gate: no repo → results locked need_code", () => {
+test("CODE branch: nothing known (no repo, no address) → results locked need_url", () => {
+  // ★의도된 변경 (#559 검증 결함 6): 잠금 사유가 "코드를 먼저 연결하세요"(need_code)에서
+  //  "앱 주소를 먼저 넣으세요"(need_url)로 — 개요가 같은 순간 요구하는 것(add_url)과 같은 말.
+  //  코드 연결은 코드 갈래에서도 선택이다(D-17 amend).
   const s = byKey(computeProjectSteps({ hasItems: true, hasRepo: false, hasReviewRun: false, hasDeployUrl: false, entryPath: "code" }));
   assert.equal(s.results.status, "locked");
-  assert.equal(s.results.lockReason, "need_code");
+  assert.equal(s.results.lockReason, "need_url");
 });
 
 test("items + repo, no run yet: step3 unlocked (todo), step2 still current", () => {
@@ -82,9 +85,10 @@ test("CODE branch: no items is NORMAL — review never locks, prepare is optiona
   assert.equal(s.review.status, "current"); // the code branch starts here
   assert.equal(s.prepare.optional, true); // "이 갈래는 원래 그럼" — optional, not incomplete
   assert.equal(s.prepare.status, "todo"); // neutral, never a red/current demand
-  // results still locks on no code — that gate is branch-independent
+  // results still locks when nothing is known — on the code branch the
+  // prerequisite is the app's address (#559 검증 결함 6: need_code → need_url)
   assert.equal(s.results.status, "locked");
-  assert.equal(s.results.lockReason, "need_code");
+  assert.equal(s.results.lockReason, "need_url");
 });
 
 test("CODE branch: repo connected + run → review done, results current (full path w/o idea step)", () => {
@@ -123,33 +127,40 @@ test("activation path (builder): deploy URL connected, no run → run_review via
   );
 });
 
-test("activation path (code branch): items ready + no repo → connect_code (GitHub stays for devs)", async () => {
+// ★의도된 변경 (2026-09-28, 기존 앱 여정 막다른 길 — D1·D2): 아래 세 테스트는 종전엔
+//  connect_code(settings)·run_review(github)를 정답으로 고정했다. 기본 확인은 이제
+//  실제 앱 확인이고, 앱이 있는데 주소가 확정적으로 없으면 저장소와 무관하게 add_url이다.
+//  (코드 연결은 기존 앱 문에서 선택 단계 — D-17 amend.)
+
+test("activation path (code branch): items ready + nothing connected → add_url (코드 연결은 선택)", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
   assert.deepEqual(
-    // AF-1 이후 코드 갈래는 앱 주소로도 시작하므로, "연결된 것이 없다"는
-    // 저장소와 주소 **둘 다 없음**이 확인돼야 성립한다.
     nextProjectAction({ hasItems: true, hasRepo: false, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
-    { action: "connect_code", slug: "settings" },
+    { action: "add_url", slug: "sources" },
   );
 });
 
 test("activation path: CODE branch with no items skips create_items entirely", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
-  // Missing items must NOT interpose on the code branch — connect → run is the whole path.
+  // Missing items must NOT interpose on the code branch — address → check is the whole path.
   assert.deepEqual(
     nextProjectAction({ hasItems: false, hasRepo: false, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
-    { action: "connect_code", slug: "settings" },
+    { action: "add_url", slug: "sources" },
   );
 });
 
-test("activation path: repo connected, no run → run_review; after run → view_results", async () => {
+test("activation path: repo linked → the address decides (no address → add_url; address → real-app check)", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
   assert.deepEqual(
-    nextProjectAction({ hasItems: true, hasRepo: true, hasReviewRun: false }),
-    { action: "run_review", slug: "github" },
+    nextProjectAction({ hasItems: true, hasRepo: true, hasDeployUrl: false, hasReviewRun: false }),
+    { action: "add_url", slug: "sources" },
   );
   assert.deepEqual(
-    nextProjectAction({ hasItems: true, hasRepo: true, hasReviewRun: true }),
+    nextProjectAction({ hasItems: true, hasRepo: true, hasDeployUrl: true, hasReviewRun: false }),
+    { action: "run_review", slug: "visual-checks" },
+  );
+  assert.deepEqual(
+    nextProjectAction({ hasItems: true, hasRepo: true, hasDeployUrl: true, hasReviewRun: true }),
     { action: "view_results", slug: "checks" },
   );
 });
@@ -181,11 +192,18 @@ test("nextScreenSlug: idea/spec entries walk to the builder pack and STOP (no co
   assert.equal(nextScreenSlug("benchmark"), null); // advanced screens stay out of the walk
 });
 
-test("nextScreenSlug: the CODE branch walks repo-connect FIRST (이미 만든 앱 직행)", () => {
-  // Someone who said "이미 만든 앱이 있어요" connects code before curating
+test("nextScreenSlug: the CODE branch walks prep → real-app check FIRST (이미 만든 앱 직행)", () => {
+  // Someone who said "이미 만든 앱이 있어요" checks the app before curating
   // items — marching them through 준비 first read as an abrupt jump (Bae).
-  assert.equal(nextScreenSlug("settings", "code"), "github");
-  assert.equal(nextScreenSlug("github", "code"), "items");
+  // ★의도된 변경 (2026-09-28, D9): 두 번째 칸은 PR 화면(github)이 아니라 실제 앱 확인.
+  //  github는 개발자 모드에서만 순서에 들어간다(existing-app-journey.test.mjs ⑧).
+  assert.equal(nextScreenSlug("settings", "code"), "visual-checks");
+  assert.equal(nextScreenSlug("visual-checks", "code"), "items");
+  // ★의도된 변경 (#559 검증 결함 4 → 여정 렌즈 결함 4): 기본 순서 밖의 PR 화면에서 바는 그
+  //  화면의 "실제 앱 확인하기"와 같은 곳으로 — 주소가 있으면 실제 앱 확인, 모르면 없음(화면의
+  //  버튼이 유일한 길). 1차 정정의 "확인 항목"은 그 버튼과 다른 두 번째 답이었다.
+  assert.equal(nextScreenSlug("github", "code"), null);
+  assert.equal(nextScreenSlug("github", "code", { hasDeployUrl: true }), "visual-checks");
   assert.equal(nextScreenSlug("items", "code"), "checks");
   assert.equal(nextScreenSlug("checks", "code"), "fixes");
   assert.equal(nextScreenSlug("fixes", "code"), null);
@@ -264,11 +282,12 @@ test("★AF-1: 코드 갈래에 앱 주소만 있어도 연결된 것으로 본�
   );
 });
 
-test("저장소가 있으면 코드 갈래는 여전히 코드 리뷰를 가리킨다 (무회귀)", async () => {
+test("★의도된 변경 (D1): 저장소가 있어도 코드 갈래의 기본 확인은 실제 앱 확인이다", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  // 종전 정답은 run_review/github(PR 리뷰)였다 — PR을 만들지 않는 빌더는 거기서 멈췄다.
   assert.deepEqual(
     nextProjectAction({ hasItems: true, hasRepo: true, hasDeployUrl: true, hasReviewRun: false, entryPath: "code" }),
-    { action: "run_review", slug: "github" },
+    { action: "run_review", slug: "visual-checks" },
   );
 });
 
@@ -300,19 +319,21 @@ test("소스 저장소 + 주소가 둘 다 있으면 화면 검수로", async ()
   );
 });
 
-test("GitHub 링크가 있으면 코드 리뷰를 가리킨다 (소스보다 우선)", async () => {
+test("★의도된 변경 (D2): GitHub 링크가 있어도 주소가 없으면 주소 추가가 먼저다 (Bae 신고 케이스)", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  // 종전 정답은 run_review/github — 0개 PR 화면에서 여정이 멈춘 바로 그 경로였다.
   assert.deepEqual(
     nextProjectAction({ hasItems: false, hasRepo: true, hasRepoSource: true, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
-    { action: "run_review", slug: "github" },
+    { action: "add_url", slug: "sources" },
   );
 });
 
-test("아무것도 없으면 종전대로 연결을 요구한다 (무회귀)", async () => {
+test("★의도된 변경 (D2): 코드 갈래에 아무것도 없으면 코드 연결이 아니라 주소를 묻는다", async () => {
   const { nextProjectAction } = await import("../src/lib/project-steps.mjs");
+  // 종전 정답은 connect_code/settings. 코드 연결은 기존 앱 문에서 선택 단계다(D-17 amend).
   assert.deepEqual(
     nextProjectAction({ hasItems: false, hasRepo: false, hasRepoSource: false, hasDeployUrl: false, hasReviewRun: false, entryPath: "code" }),
-    { action: "connect_code", slug: "settings" },
+    { action: "add_url", slug: "sources" },
   );
 });
 
@@ -387,14 +408,20 @@ test("ctx를 안 줘도 터지지 않는다(상태 로딩 실패 시 fail-open)"
 //  하나만 봐서, 정작 순환의 중심 화면(visual-checks)에서 바가 통째로 비었다.
 //  아래 두 테스트는 그 시절 코드에서 실패한다(null이 돌아왔다).
 
-test("화면 검수에서 문제가 나오면 코드 리뷰 결과가 없어도 고칠 것을 가리킨다", () => {
+// ★의도된 변경 (#559 여정 렌즈 결함 2, 2026-09-28): 화면 검수에서 문제가 나왔을 때 이
+//  테스트는 "고칠 것(/fixes)"을 정답으로 고정했다. 그런데 /fixes는 코드 리뷰의 `checkResults`만
+//  읽어서, 실제 앱 확인만 한 사용자는 "확인 결과로 이동" → /checks(실제 앱 결과 없음)로 도는
+//  빈 순환에 빠졌다 — 그것도 결과 화면의 "고치기"와 나란한 두 번째 primary로. 발견과 고칠
+//  방법은 그 결과 화면에 있으므로 바는 말하지 않는다. (코드 리뷰 쪽 seeProblems는 그대로 —
+//  existing-app-journey-copy.test.mjs 결함2 행동 보존 가드.)
+test("화면 검수에서 문제가 나오면 결과 없는 '고칠 것'으로 보내지 않는다 (고칠 방법은 그 결과 화면에)", () => {
   const next = nextStepFromHere("visual-checks", {
     entryPath: "code",
     hasCheckRun: false, // 코드 리뷰는 돌린 적 없다 — 앱 주소만 낸 사용자
     summary: null,
     visual: { findingCount: 3 },
   });
-  assert.deepEqual(next, { slug: "fixes", reason: "seeProblems" });
+  assert.equal(next, null);
 });
 
 test("화면 검수에서 문제가 없으면 고칠 것으로 밀지 않는다", () => {

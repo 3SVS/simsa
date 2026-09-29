@@ -19,6 +19,7 @@ import {
 } from "@/lib/workspace-check-api";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
+import { fixesEntryView } from "@/lib/project-steps.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 
@@ -35,10 +36,18 @@ export default function FixesPage() {
 
   const [checkItems, setCheckItems] = useState<CheckResultItem[] | null>(null);
   const [fixStates, setFixStates] = useState<Record<string, FixState>>({});
+  // #559 여정 렌즈 결함 2: the latest real-app check result this browser saw — its
+  // findings and fixes live on that run's page, not here.
+  const [liveResult, setLiveResult] = useState<{ findingCount: number; runId?: string } | null>(null);
+  // Local storage is read after mount — until then say nothing rather than
+  // "review first" to someone whose results are about to appear.
+  const [entryLoaded, setEntryLoaded] = useState(false);
 
   useEffect(() => {
     const ext = loadExtendedProjectData(id);
     if (ext?.checkResults) setCheckItems(ext.checkResults.results);
+    setLiveResult(ext?.visualCheck ?? null);
+    setEntryLoaded(true);
     if (ext?.fixSuggestions) {
       const initial: Record<string, FixState> = {};
       for (const [itemId, res] of Object.entries(ext.fixSuggestions)) {
@@ -100,16 +109,27 @@ export default function FixesPage() {
 
   if (!project) return <ProjectNotFound />;
 
-  if (!checkItems) {
+  // #559 여정 렌즈 결함 2: with only a real-app check result, "go to review
+  // results" sent the user round a loop (/checks has no real-app results);
+  // point at that result's page instead.
+  const entry = fixesEntryView({ projectId: id, hasCheckResults: checkItems !== null, visualCheck: liveResult });
+  if (!checkItems || entry.kind !== "items") {
     return (
       <div className="max-w-3xl">
         <h1 className="page-title mb-8">{t.fixesScreen.title}</h1>
-        <div className="card p-8 text-center">
-          <p className="mb-4 text-sm text-gray-500">{t.fixesScreen.reviewFirst}</p>
-          <Link href={`/projects/${id}/checks`} className="btn btn-md btn-primary">
-            {t.fixesScreen.goToChecks}
-          </Link>
-        </div>
+        {entryLoaded && (
+          <div className="card p-8 text-center">
+            <p className="mb-4 text-sm text-gray-500">
+              {entry.kind === "live" ? t.fixesScreen.liveResultNote : t.fixesScreen.reviewFirst}
+            </p>
+            <Link
+              href={entry.kind === "live" ? entry.href : `/projects/${id}/checks`}
+              className="btn btn-md btn-primary"
+            >
+              {entry.kind === "live" ? `${t.checks.liveCta} →` : t.fixesScreen.goToChecks}
+            </Link>
+          </div>
+        )}
       </div>
     );
   }

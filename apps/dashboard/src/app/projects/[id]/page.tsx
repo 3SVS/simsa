@@ -37,12 +37,26 @@ import {
   listVisualChecks,
   type VisualCheckListItem,
 } from "@/lib/workspace-visual-checks-api";
-import { inspectionDepth, inspectionEmptyStateDoor, overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
+import { inspectionDepth, overviewNextAction, relativeTimeLabel, verdictLabel } from "@/lib/visual-check-view.mjs";
 import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
-import { nextProjectAction, computeProjectSteps } from "@/lib/project-steps.mjs";
+import {
+  nextProjectAction,
+  stepMapView,
+  explainerKind,
+  howItWorksVisible,
+  resultsSummaryVisible,
+  packCopyKeys,
+  visualCheckFact,
+  visualCheckActiveFact,
+  reviewRunFact,
+  sourceFacts,
+  APP_ADDRESS_ANCHOR,
+} from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { StuckHelper } from "@/components/StuckHelper";
+import { AppAddressStart } from "@/components/AppAddressStart";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
@@ -78,25 +92,72 @@ export default function ProjectOverviewPage() {
   // AF-1: 제출한 저장소는 project_sources에 저장된다. hasRepo(=GitHub 링크)와는
   // 다른 사실이라 따로 센다 — 안 그러면 방금 준 저장소를 못 본 척하게 된다.
   const [hasRepoSource, setHasRepoSource] = useState<boolean | null>(null);
+  // ★2026-09-28 (D3): "확인했음"은 실제 앱 확인 런도 센다. 종전엔 PR 리뷰 이력만 봐서,
+  // 실제 앱 확인을 끝낸 사람에게도 개요가 계속 "첫 검수"를 권했다. 목록은 여기서
+  // 한 번만 받아 시각 검수 카드와 나눠 쓴다(둘이 다른 답을 할 수 없게).
+  const [hasVisualCheck, setHasVisualCheck] = useState<boolean | null>(null);
+  // #559 검증 결함 2: a queued/running run is not a result — the command center
+  // says "in progress" instead of "your latest review is in".
+  const [visualCheckActive, setVisualCheckActive] = useState<boolean | null>(null);
+  const [visualChecks, setVisualChecks] = useState<VisualCheckListItem[] | null>(null);
+  // Whether the repo / sources requests have FINISHED (with any result). The
+  // "how it works" list depends on whether an app exists; it waits for both
+  // answers so it never swaps under the reader — and still appears (as before)
+  // when a request failed and the fact stays unknown.
+  const [repoSettled, setRepoSettled] = useState(false);
+  const [sourcesSettled, setSourcesSettled] = useState(false);
+  // #559 여정 렌즈 결함 9: the how-it-works list also waits for the two "has this
+  // been checked?" requests, so it never appears and then vanishes.
+  const [reviewSettled, setReviewSettled] = useState(false);
+  const [visualSettled, setVisualSettled] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const uk = getUserKey();
-    fetchProjectRepoSettled(fetchProjectRepo, id, uk)
+    // #559 여정 렌즈 결함 12: settle on the FIRST repo answer — "no repo" is the
+    // usual answer for an idea-branch project, and waiting out the
+    // read-after-write retries (700ms × 3) left the next step and the step-2
+    // label blank for 3–4.5 s on every visit. The retries still run; a repo
+    // linked a moment ago replaces the provisional answer when they find it.
+    fetchProjectRepoSettled(fetchProjectRepo, id, uk, {
+      onFirst: (first) => {
+        if (cancelled) return;
+        setHasRepo(repoConnectedFact(first));
+        setRepoSettled(true);
+      },
+    })
       .then((res) => { if (!cancelled) setHasRepo(repoConnectedFact(res)); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setRepoSettled(true); });
     listProjectReviewHistory(id, uk, { limit: 1 })
-      .then((res) => { if (!cancelled) setHasReviewRun(res.ok ? res.runs.length > 0 : null); })
-      .catch(() => {});
+      .then((res) => { if (!cancelled) setHasReviewRun(reviewRunFact(res)); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setReviewSettled(true); });
     listProjectSources(id, uk)
       .then((res) => {
         if (cancelled) return;
-        setHasDeployUrl(res.ok ? res.sources.some((s) => s.type === "website") : null);
-        setHasRepoSource(res.ok ? res.sources.some((s) => s.type === "github_repo") : null);
+        const facts = sourceFacts(res);
+        setHasDeployUrl(facts.hasDeployUrl);
+        setHasRepoSource(facts.hasRepoSource);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSourcesSettled(true); });
+    listVisualChecks(id, uk)
+      .then((res) => {
+        if (cancelled) return;
+        setHasVisualCheck(visualCheckFact(res));
+        setVisualCheckActive(visualCheckActiveFact(res));
+        // A project that only exists in this browser has no server-side runs.
+        // Any other failure keeps the card hidden (best-effort, never blocks).
+        setVisualChecks(res.ok ? res.checks : res.error === "project_not_found" ? [] : null);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setVisualSettled(true); });
     return () => { cancelled = true; };
   }, [id]);
-  const entryPath = loadExtendedProjectData(id)?.entryPath ?? null;
+  // #559 여정 렌즈 결함 10: the builder-pack door is named like the sidebar item.
+  const [developerMode] = useDeveloperMode();
+  const ext = loadExtendedProjectData(id);
+  const entryPath = ext?.entryPath ?? null;
   // Locally-created projects live in localStorage (client-only); mock demos are
   // bundled. Read on the client so real projects resolve.
   const project = getLocalProject(id) ?? getProject(id);
@@ -135,13 +196,22 @@ export default function ProjectOverviewPage() {
       <CommandCenterCard
         projectId={id}
         t={t}
+        locale={locale}
         hasItems={project.requirements.length > 0}
-        showExplainer={!hasReviewActivity}
+        // #559 여정 렌즈 결함 9: a finished real-app check or a PR review also means
+        // "already checked" (D3) — the first-use list stops pushing the result down.
+        showExplainer={howItWorksVisible({ hasReviewActivity, hasVisualCheck, hasReviewRun })}
+        checksSettled={reviewSettled && visualSettled}
+        developerMode={developerMode}
         hasRepo={hasRepo}
         hasRepoSource={hasRepoSource}
         hasReviewRun={hasReviewRun}
+        hasVisualCheck={hasVisualCheck}
+        visualCheckActive={visualCheckActive}
+        activeRunId={activeRunId(visualChecks)}
         hasDeployUrl={hasDeployUrl}
         entryPath={entryPath}
+        factsSettled={repoSettled && sourcesSettled}
       />
 
       {/* ★AF-4 (설계 D-3) — "이 앱은 ~로 보입니다. 맞나요?"
@@ -156,7 +226,7 @@ export default function ProjectOverviewPage() {
         projectId={id}
         t={t}
         locale={locale}
-        entryPath={entryPath}
+        checks={visualChecks}
         hasRepo={hasRepo}
         hasRepoSource={hasRepoSource}
         hasDeployUrl={hasDeployUrl}
@@ -171,20 +241,26 @@ export default function ProjectOverviewPage() {
         />
       </div>
 
-      <section className="mb-8">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="section-title">{t.overview.resultsSummary}</h2>
-          <Link href={`/projects/${id}/checks`} className="text-xs text-brand-700 hover:underline">
-            {t.common.viewAll} →
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label={statusLabel(t, "passed")} value={stats.passed} colorClass="text-green-600" />
-          <StatCard label={statusLabel(t, "failed")} value={stats.failed} colorClass="text-red-600" />
-          <StatCard label={statusLabel(t, "inconclusive")} value={stats.inconclusive} colorClass="text-amber-600" />
-          <StatCard label={statusLabel(t, "needs_decision")} value={stats.needsDecision} colorClass="text-slate-600" />
-        </div>
-      </section>
+      {/* #559 여정 렌즈 결함 3: these counts come from PR reviews and the brief
+          pre-check — never from a real-app check. Shown as 0/0/0/0 right next
+          to a "not working" real-app result they contradicted it, so they
+          appear only when one of their own sources exists. */}
+      {resultsSummaryVisible({ hasReviewActivity, hasPrecheck: Boolean(ext?.checkResults), hasReviewRun }) && (
+        <section className="mb-8">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="section-title">{t.overview.resultsSummary}</h2>
+            <Link href={`/projects/${id}/checks`} className="text-xs text-brand-700 hover:underline">
+              {t.common.viewAll} →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label={statusLabel(t, "passed")} value={stats.passed} colorClass="text-green-600" />
+            <StatCard label={statusLabel(t, "failed")} value={stats.failed} colorClass="text-red-600" />
+            <StatCard label={statusLabel(t, "inconclusive")} value={stats.inconclusive} colorClass="text-amber-600" />
+            <StatCard label={statusLabel(t, "needs_decision")} value={stats.needsDecision} colorClass="text-slate-600" />
+          </div>
+        </section>
+      )}
 
       {/* ★한 화면에 8블록이었다 (2026-09-01 실측). "지금 할 일"을 하나 만들어 놓고
           그 옆에 똑같이 눌러도 되는 것을 7개 더 두면, 하나를 고른 효과가 사라진다.
@@ -280,59 +356,111 @@ export default function ProjectOverviewPage() {
   );
 }
 
-// Stage 272 — the "시각 검수" overview card: latest run's verdict chip +
-// relative date + the single next action (run first / view progress / open
-// the report). Best-effort: the card stays hidden while loading, without a
-// userKey, or when the run list cannot be fetched.
+/** The real-app check still running, if any — the command center's "see how it's going" goes there. */
+function activeRunId(checks: VisualCheckListItem[] | null): string | null {
+  if (!checks) return null;
+  const a = overviewNextAction(checks);
+  return a.kind === "inProgress" ? a.runId : null;
+}
+
 /**
  * STEP 4 — the overview's command center. Computes the SINGLE next action from
  * confirmed facts (nextProjectAction) and renders one primary CTA. While facts
  * are unknown it renders the explainer only — no CTA beats one that flips
  * after a fetch resolves. No gamification: a quiet card, not a celebration.
+ *
+ * ★2026-09-28 — the add_url action is not a link to another screen: the address
+ * box and the "start checking" button are right here (D4, AppAddressStart), and
+ * the default check is the real app, never the PR screen (D1).
  */
 function CommandCenterCard({
   projectId,
   t,
+  locale,
   hasItems,
   showExplainer,
+  checksSettled,
+  developerMode,
   hasRepo,
   hasRepoSource,
   hasReviewRun,
+  hasVisualCheck,
+  visualCheckActive,
+  activeRunId,
   hasDeployUrl,
   entryPath,
+  factsSettled,
 }: {
   projectId: string;
   t: Dictionary;
+  locale: Locale;
   hasItems: boolean;
   showExplainer: boolean;
+  // The PR-review and real-app-check list requests have both finished.
+  checksSettled: boolean;
+  developerMode: boolean;
   hasRepo: boolean | null;
   hasRepoSource: boolean | null;
   hasReviewRun: boolean | null;
+  // At least one FINISHED real-app check exists — counts as "checked" together with PR reviews.
+  hasVisualCheck: boolean | null;
+  // A real-app check is queued or running (no result yet).
+  visualCheckActive: boolean | null;
+  // That running check's id, when known — "see how it's going" opens it directly.
+  activeRunId: string | null;
   // A connected deploy/website URL — the builder path's alternative to a repo,
   // so an idea-only project reaches its results without connecting GitHub.
   hasDeployUrl: boolean | null;
   entryPath: "idea" | "code" | "spec" | null;
+  // The repo and sources requests have both finished (whatever the result).
+  factsSettled: boolean;
 }) {
-  const next = nextProjectAction({ hasItems, hasRepo, hasRepoSource, hasReviewRun, hasDeployUrl, entryPath });
+  // #559 여정 렌즈 결함 8: the builder-pack card's "already built?" opens the same
+  // address box right here. Arriving from "실제 앱 확인하기" elsewhere
+  // (…#app-address) opens it — the box then puts the cursor in itself.
+  const [foldOpen, setFoldOpen] = useState(false);
+  useEffect(() => {
+    if (window.location.hash === `#${APP_ADDRESS_ANCHOR}`) setFoldOpen(true);
+  }, []);
+
+  const facts = { hasItems, hasRepo, hasRepoSource, hasReviewRun, hasVisualCheck, visualCheckActive, hasDeployUrl, entryPath };
+  const next = nextProjectAction(facts);
+  // #559 여정 렌즈 결함 10: "만들기 안내" in the default view, like the sidebar.
+  const pack = packCopyKeys(developerMode);
 
   const copy: Record<string, { label: string; desc: string }> = {
     create_items: { label: t.commandCenter.createItems, desc: t.commandCenter.createItemsDesc },
     connect_code: { label: t.commandCenter.connectCode, desc: t.commandCenter.connectCodeDesc },
     add_url: { label: t.commandCenter.addUrl, desc: t.commandCenter.addUrlDesc },
-    get_pack: { label: t.commandCenter.getPack, desc: t.commandCenter.getPackDesc },
+    get_pack: { label: t.commandCenter[pack.label], desc: t.commandCenter.getPackDesc },
     run_review: { label: t.commandCenter.runReview, desc: t.commandCenter.runReviewDesc },
+    view_progress: { label: t.commandCenter.viewProgress, desc: t.commandCenter.viewProgressDesc },
     view_results: { label: t.commandCenter.viewResults, desc: t.commandCenter.viewResultsDesc },
   };
   const c = next ? copy[next.action] : null;
+  // The running check opens directly (the inspection card below links the same run).
+  const nextHref =
+    next?.action === "view_progress" && activeRunId
+      ? `/projects/${projectId}/visual-checks/${activeRunId}`
+      : `/projects/${projectId}/${next?.slug ?? ""}`;
 
   if (!c && !showExplainer) return null;
 
-  const steps = computeProjectSteps({ hasItems, hasRepo, hasReviewRun, hasDeployUrl, entryPath });
-  const stepLabel: Record<string, string> = {
+  // D6 · #559 검증 결함 3: the progress row, the step-2 label ("앱 확인" when the
+  // app exists) and the how-it-works list (D7) all depend on whether an app
+  // exists — for a non-code project known only once the repo/address requests
+  // finish. One hold rule (stepMapView) keeps all three from swapping under the reader.
+  const view = stepMapView(facts, factsSettled);
+  const steps = view.steps;
+  const stepLabel: Record<string, string | null> = {
     prepare: t.stepsNav.prepare,
-    review: t.stepsNav.review,
+    review: view.reviewLabelKey ? t.stepsNav[view.reviewLabelKey] : null,
     results: t.stepsNav.results,
   };
+  // …and, for whether it shows at all, on whether the project was already
+  // checked (결함 9) — so it waits for those requests too.
+  const explainerReady = view.known && checksSettled;
+  const explainer = explainerKind(facts);
 
   return (
     <div className="card mb-8 p-5">
@@ -357,7 +485,10 @@ function CommandCenterCard({
                 {done ? "✓" : i + 1}
               </span>
               <span className={`text-xs ${current ? "font-semibold text-gray-900" : done ? "text-gray-600" : "text-gray-400"}`}>
-                {stepLabel[step.key]}
+                {stepLabel[step.key] ?? (
+                  // App presence not known yet — hold the label (결함 3).
+                  <span aria-hidden className="inline-block h-3 w-14 animate-pulse rounded bg-gray-100 align-middle" />
+                )}
               </span>
               {i < steps.length - 1 && <span aria-hidden className="mx-0.5 h-px w-4 bg-gray-200" />}
             </li>
@@ -365,38 +496,62 @@ function CommandCenterCard({
         })}
       </ol>
 
-      {c && next && (
+      {c && next && next.action === "add_url" && (
+        <div className="mt-2">
+          <p className="text-sm text-gray-700">{c.desc}</p>
+          <AppAddressStart projectId={projectId} t={t} locale={locale} />
+        </div>
+      )}
+      {c && next && next.action !== "add_url" && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-700">{c.desc}</p>
-          <Link href={`/projects/${projectId}/${next.slug}`} className="btn btn-md btn-primary">
+          <Link href={nextHref} className="btn btn-md btn-primary">
             {c.label} →
           </Link>
         </div>
       )}
       {/* Builder building-state: the app may already exist elsewhere — keep the
-          "connect your deploy URL" door open at all times (no GitHub required). */}
+          "add your app's address" door open at all times (no GitHub required).
+          #559 여정 렌즈 결함 8: it used to link to the Sources screen (two
+          "connect" buttons, an "owner/repo" field, and no way forward after
+          connecting) while the list below promised "paste the address here".
+          Now it is the same address box as the app branch, folded, with a
+          secondary button — the card's primary stays "get the build guide". */}
       {next?.action === "get_pack" && (
-        <p className="mt-2 text-xs text-gray-500">
-          {t.commandCenter.alreadyBuilt}{" "}
-          <Link href={`/projects/${projectId}/sources`} className="font-medium text-brand-700 hover:underline">
-            {t.commandCenter.connectUrl} →
-          </Link>
-        </p>
+        <details
+          open={foldOpen}
+          onToggle={(e) => setFoldOpen((e.currentTarget as HTMLDetailsElement).open)}
+          className="mt-3"
+        >
+          <summary className="cursor-pointer list-none text-xs text-gray-500">
+            {t.commandCenter.alreadyBuilt}{" "}
+            <span className="font-medium text-brand-700 hover:underline">{t.commandCenter.addUrlFoldLink} →</span>
+          </summary>
+          {foldOpen && <AppAddressStart projectId={projectId} t={t} locale={locale} emphasis="secondary" />}
+        </details>
       )}
-      {/* Flow-audit B-1 (2026-07-17): the explainer must match the BRANCH — an
-          idea project's path is builder pack → build with a dev AI → paste the
-          live URL, never "connect a GitHub repo". */}
-      {showExplainer && (
+      {/* Flow-audit B-1 (2026-07-17): the explainer must match the situation —
+          before an app exists the path is builder pack → build with a dev AI →
+          paste the live URL. ★2026-09-28 (D7): once an app exists (a repo or an
+          address is known — also for a restored project that defaulted to the
+          idea branch) the builder-pack list contradicted "your code is
+          connected", so the app list shows instead. */}
+      {showExplainer && explainerReady && (
         <ol className="mt-3 space-y-1.5 border-t border-gray-100 pt-3 text-xs text-gray-500">
-          {entryPath === "idea" ? (
+          {explainer === "idea" ? (
             <>
               <li>1. {t.overview.gsIdeaStep1}</li>
-              <li>2. {t.overview.gsIdeaStep2}</li>
+              <li>2. {t.overview[pack.step2]}</li>
               <li>3. {t.overview.gsIdeaStep3}</li>
             </>
           ) : (
             <>
-              <li>1. {t.overview.gsStep1}</li>
+              {/* #559 여정 렌즈 결함 9: an address already connected is shown as
+                  done — "1. add the address" under "your address is connected"
+                  read as an instruction to do it again. */}
+              <li className={hasDeployUrl === true ? "text-gray-400" : undefined}>
+                {hasDeployUrl === true ? "✓" : "1."} {t.overview.gsStep1}
+              </li>
               <li>2. {t.overview.gsStep2}</li>
               <li>3. {t.overview.gsStep3}</li>
             </>
@@ -407,11 +562,21 @@ function CommandCenterCard({
   );
 }
 
+// Stage 272 — the "시각 검수" overview card: latest run's verdict chip +
+// relative date + a link to that run. Best-effort: the card stays hidden while
+// loading or when the run list cannot be fetched.
+//
+// ★2026-09-28 (D5): the card no longer has its own "run your first check"
+// door when there are no runs. That button ("첫 검수 실행하기") sat next to the
+// command center's primary with the SAME label and a DIFFERENT destination
+// (/visual-checks vs /github) — one screen, two answers to "what now". The
+// command center is the single "what to do now"; this card only reports runs
+// that exist.
 function VisualChecksOverviewCard({
   projectId,
   t,
   locale,
-  entryPath,
+  checks,
   hasRepo,
   hasRepoSource,
   hasDeployUrl,
@@ -419,55 +584,25 @@ function VisualChecksOverviewCard({
   projectId: string;
   t: Dictionary;
   locale: Locale;
-  entryPath: "idea" | "code" | "spec" | null;
+  // Fetched once at the page level (null = loading or failed → hidden).
+  checks: VisualCheckListItem[] | null;
   hasRepo: boolean | null;
   hasRepoSource: boolean | null;
   hasDeployUrl: boolean | null;
 }) {
-  const [checks, setChecks] = useState<VisualCheckListItem[] | null>(null);
-  const [userKey, setUserKey] = useState<string>("");
-
-  useEffect(() => {
-    setUserKey(getUserKey());
-  }, []);
-
-  useEffect(() => {
-    if (!userKey) return;
-    let cancelled = false;
-    listVisualChecks(projectId, userKey).then((res) => {
-      if (cancelled) return;
-      if (res.ok) {
-        setChecks(res.checks);
-      } else if (res.error === "project_not_found") {
-        // A project that only exists in this browser has no server-side runs
-        // yet — show the "run your first inspection" state.
-        setChecks([]);
-      }
-      // Any other failure keeps the card hidden (best-effort, never blocks).
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, userKey]);
-
   if (checks === null) return null;
 
   const action = overviewNextAction(checks);
   const run =
     action.kind === "runFirst" ? null : (checks.find((c) => c.id === action.runId) ?? null);
-
-  // Journey-audit v2 기준선 (2026-07-21): on the code branch the empty-state
-  // door depends on the repo fact — rendering the default door while it's
-  // unknown made the CTA flip "run"→"connect" ~2s after paint (실측). Hold the
-  // whole card until the door is decidable; a moment without the card beats a
-  // CTA that changes under the user's cursor.
-  const door = run === null ? inspectionEmptyStateDoor({ entryPath, hasRepo, hasRepoSource, hasDeployUrl }) : null;
-  if (door === "wait") return null;
+  if (run === null) return null;
 
   return (
     <section className="mb-8">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="section-title">{t.visualChecks.title}</h2>
+        {/* #559 여정 렌즈 결함 5: a run exists, so the app does — the same name the
+            sidebar gives that screen ("앱 확인하기"), not a third one. */}
+        <h2 className="section-title">{t.nav.checkApp}</h2>
         <Link
           href={`/projects/${projectId}/visual-checks`}
           className="text-xs text-brand-700 hover:underline"
@@ -476,104 +611,52 @@ function VisualChecksOverviewCard({
         </Link>
       </div>
       <div className="card p-5">
-        {run === null ? (
-          // Journey-audit P2 (2026-07-20): on the CODE branch with nothing
-          // connected (repo confirmed absent, no deploy URL), "run your first
-          // inspection" pointed at the URL-based door the user can't use yet.
-          // Branch-fit: walk them to connect first. ("wait" is handled above —
-          // the card holds until the door is decidable, never flips.)
-          door === "connect" ? (
-            <>
-              <p className="text-sm leading-relaxed text-gray-600">
-                {t.visualChecks.overview.emptyLeadCodeNoSource}
+        {/* ★AF-5 (설계 D-4) — 이 결과가 **어느 깊이**이고 **무엇을 못 봤는지**.
+            장식이 아니라 정직성 요건이다: 검수 러너에는 로그인 기능이 없어
+            로그인 뒤 화면은 보지 못한다. 표기가 없으면 사용자는 이 결과를
+            전체 검수로 오해한다. */}
+        {(() => {
+          const d = inspectionDepth({ hasRepo, hasRepoSource, hasDeployUrl });
+          const dc = t.visualChecks.overview.depth;
+          return (
+            <div className="mb-3 rounded-md border border-gray-100 bg-gray-50/70 px-3 py-2">
+              <p className="text-[11px] font-medium text-gray-600">
+                {d.level === 2 ? dc.label2 : dc.label1}
               </p>
-              <Link
-                href={`/projects/${projectId}/settings`}
-                className="btn btn-secondary btn-sm mt-3"
-              >
-                {t.visualChecks.overview.connectFirst}
-              </Link>
-            </>
-          ) : door === "need_url" ? (
-            // AF-1: 저장소만 연결된 상태. 종전엔 "첫 검수 돌려보기"로 보냈다가
-            // **비활성 버튼**을 만나게 했다(화면 검수는 앱 주소가 있어야 한다).
-            // 무엇이 더 필요한지 정확히 말하고 그곳으로 보낸다.
-            <>
-              <p className="text-sm leading-relaxed text-gray-600">
-                {t.visualChecks.overview.emptyLeadCodeNeedUrl}
+              <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                {d.level === 2 ? dc.note2 : dc.note1}
               </p>
-              <Link
-                href={`/projects/${projectId}/sources`}
-                className="btn btn-secondary btn-sm mt-3"
-              >
-                {t.visualChecks.overview.needUrlCta}
-              </Link>
-            </>
-          ) : (
-            <>
-              <p className="text-sm leading-relaxed text-gray-600">
-                {t.visualChecks.overview.emptyLead}
-              </p>
-              <Link
-                href={`/projects/${projectId}/visual-checks`}
-                className="btn btn-secondary btn-sm mt-3"
-              >
-                {t.visualChecks.overview.runFirst}
-              </Link>
-            </>
-          )
-        ) : (
-          <>
-            {/* ★AF-5 (설계 D-4) — 이 결과가 **어느 깊이**이고 **무엇을 못 봤는지**.
-                장식이 아니라 정직성 요건이다: 검수 러너에는 로그인 기능이 없어
-                로그인 뒤 화면은 보지 못한다. 표기가 없으면 사용자는 이 결과를
-                전체 검수로 오해한다. */}
-            {(() => {
-              const d = inspectionDepth({ hasRepo, hasRepoSource, hasDeployUrl });
-              const dc = t.visualChecks.overview.depth;
-              return (
-                <div className="mb-3 rounded-md border border-gray-100 bg-gray-50/70 px-3 py-2">
-                  <p className="text-[11px] font-medium text-gray-600">
-                    {d.level === 2 ? dc.label2 : dc.label1}
-                  </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
-                    {d.level === 2 ? dc.note2 : dc.note1}
-                  </p>
-                  {d.nextStep && (
-                    <Link
-                      href={`/projects/${projectId}/sources`}
-                      className="mt-1 inline-block text-xs text-brand-700 hover:underline"
-                    >
-                      {d.nextStep === "add_url" ? dc.addUrl : dc.addRepo} →
-                    </Link>
-                  )}
-                </div>
-              );
-            })()}
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-              {t.visualChecks.overview.latestLabel}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                <OverviewRunChip run={run} t={t} />
-                <span className="truncate text-sm text-gray-700">{run.targetUrl}</span>
-                <span className="flex-shrink-0 text-xs text-gray-500">
-                  {relativeTimeLabel(run.createdAt, locale)}
-                </span>
-              </div>
-              <Link
-                href={`/projects/${projectId}/visual-checks/${run.id}`}
-                className={`flex-shrink-0 ${
-                  action.kind === "viewReport" ? "btn btn-secondary btn-sm" : "btn btn-secondary btn-sm"
-                }`}
-              >
-                {action.kind === "inProgress"
-                  ? t.visualChecks.overview.inProgress
-                  : t.visualChecks.overview.viewReport}
-              </Link>
+              {d.nextStep && (
+                <Link
+                  href={`/projects/${projectId}/sources`}
+                  className="mt-1 inline-block text-xs text-brand-700 hover:underline"
+                >
+                  {d.nextStep === "add_url" ? dc.addUrl : dc.addRepo} →
+                </Link>
+              )}
             </div>
-          </>
-        )}
+          );
+        })()}
+        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          {t.visualChecks.overview.latestLabel}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            <OverviewRunChip run={run} t={t} />
+            <span className="truncate text-sm text-gray-700">{run.targetUrl}</span>
+            <span className="flex-shrink-0 text-xs text-gray-500">
+              {relativeTimeLabel(run.createdAt, locale)}
+            </span>
+          </div>
+          <Link
+            href={`/projects/${projectId}/visual-checks/${run.id}`}
+            className="btn btn-secondary btn-sm flex-shrink-0"
+          >
+            {action.kind === "inProgress"
+              ? t.visualChecks.overview.inProgress
+              : t.visualChecks.overview.viewReport}
+          </Link>
+        </div>
       </div>
     </section>
   );

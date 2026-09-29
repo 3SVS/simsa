@@ -35,65 +35,115 @@
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
-import { nextStepFromHere } from "@/lib/project-steps.mjs";
+import { navLabelKey, nextBarEmphasis, nextStepFromHere, projectHasApp } from "@/lib/project-steps.mjs";
 import { loadExtendedProjectData } from "@/lib/workflow-store";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
+import { useAppAddress, useAppPresence } from "@/lib/use-app-presence";
+
+function projectIdFrom(pathname: string): string | null {
+  const seg = pathname.split("/").filter(Boolean);
+  if (seg[0] !== "projects" || !seg[1] || seg[1] === "new") return null;
+  return seg[1];
+}
+
+/**
+ * Does the screen this bar sits under already carry a filled (primary) button?
+ * (#559 여정 렌즈 결함 2) The bar is mounted once in the project layout, right
+ * after the screen, so "the screen" is the bar's parent minus the bar itself.
+ * Screens draw asynchronously (fetches, polling), so it is re-read on every DOM
+ * change. null until the bar is on screen — the caller treats that as "don't
+ * know" and never draws a second primary meanwhile.
+ */
+function useScreenHasPrimary(bar: HTMLElement | null): boolean | null {
+  const [has, setHas] = useState<boolean | null>(null);
+  useEffect(() => {
+    const container = bar?.parentElement;
+    if (!bar || !container) {
+      setHas(null);
+      return;
+    }
+    const check = () =>
+      setHas(Array.from(container.querySelectorAll(".btn-primary")).some((el) => !bar.contains(el)));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [bar]);
+  return has;
+}
 
 export function StepNextButton() {
   const { t } = useI18n();
   const pathname = usePathname() ?? "";
-  const seg = pathname.split("/").filter(Boolean);
-  if (seg[0] !== "projects" || !seg[1] || seg[1] === "new") return null;
-  const projectId = seg[1];
-  const slug = seg[2] ?? "";
+  // 2026-09-28 (D9): the PR screen is a developer tool — it joins the walk
+  // only in developer mode (the default walk goes to the real-app check).
+  const [developerMode] = useDeveloperMode();
+  const projectId = projectIdFrom(pathname);
+  // #559 검증 결함 5: "does the app already exist?" as the sidebar settled it
+  // (same fetch, same rule) — null until then.
+  const presence = useAppPresence(projectId);
+  // #559 여정 렌즈 결함 4: whether the app's address is connected (sidebar-settled)
+  // — the PR screen's bar goes where that screen's own "실제 앱 확인하기" goes.
+  const hasDeployUrl = useAppAddress(projectId);
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  const screenHasPrimary = useScreenHasPrimary(bar);
+  if (!projectId) return null;
+  const slug = pathname.split("/").filter(Boolean)[2] ?? "";
 
   // 검수 결과 상세(`visual-checks/<runId>`)도 검수 화면으로 취급한다 — 결과를
   // 방금 본 사람에게 다음을 말해주는 자리가 정확히 여기다.
   const here = slug === "visual-checks" ? "visual-checks" : slug;
 
   const data = loadExtendedProjectData(projectId);
+  const entryPath = data?.entryPath ?? null;
+  // A restored project defaults to the idea branch even when its repo or
+  // address is known. Until the sidebar has settled whether the app exists,
+  // the walk (idea route → builder pack vs. app route → real-app check) is
+  // unknown — show nothing rather than a "다음" that changes under the reader.
+  if (entryPath !== "code" && presence === null) return null;
+  const hasApp = projectHasApp({ entryPath }) || presence === true;
   const next = nextStepFromHere(here, {
-    entryPath: data?.entryPath ?? null,
+    entryPath,
     summary: data?.checkResults?.summary ?? null,
     hasCheckRun: Boolean(data?.checkResults),
     hasFixes: Object.keys(data?.fixSuggestions ?? {}).length > 0,
     // 화면 검수 결과는 `checkResults`에 없다 — 어느 쪽을 볼지는 순수 함수가 고른다.
     visual: data?.visualCheck ? { findingCount: data.visualCheck.findingCount } : null,
+    developerMode,
+    hasApp,
+    hasDeployUrl,
   });
   if (!next) return null;
 
-  const labels: Record<string, string> = {
-    idea: t.nav.idea,
-    spec: t.nav.spec,
-    items: t.nav.items,
-    settings: t.nav.settings,
-    github: t.nav.github,
-    export: t.nav.export,
-    checks: t.nav.checks,
-    fixes: t.nav.fixes,
-    "visual-checks": t.nav.visualChecks,
-  };
+  // Same name as the sidebar item for the same screen (D6 · 결함 13).
+  const labelKey = navLabelKey(next.slug, { hasApp, developerMode });
+  const nextLabel = labelKey ? t.nav[labelKey] : next.slug;
   const why: Record<string, string> = {
     seeProblems: t.stepsNav.whySeeProblems,
     afterFix: t.stepsNav.whyAfterFix,
     allClear: t.stepsNav.whyAllClear,
     continue: t.stepsNav.whyContinue,
+    checkLiveApp: t.stepsNav.whyCheckLiveApp,
   };
 
   // 고칠 것이 기다리거나 재검수가 필요한 순간에만 채운 버튼(primary)을 쓴다 —
   // 그때는 이게 화면에서 가장 중요한 행동이 맞다. 그 외에는 화면 자체의 주
-  // 행동과 경쟁하지 않도록 물러선다(UIUX #5).
-  const urgent = next.reason === "seeProblems" || next.reason === "afterFix";
+  // 행동과 경쟁하지 않도록 물러선다(UIUX #5). ★급해도 화면에 이미 primary가
+  // 있으면 물러선다 — 한 화면에 채운 버튼은 하나(#559 여정 렌즈 결함 2: 결과 화면의
+  // "고치기"와 "다음: 남은 문제 →"가 나란히 채워져 있었다).
+  const emphasis = nextBarEmphasis({ reason: next.reason, screenHasPrimary });
 
   return (
-    <div className="mt-10 border-t border-gray-100 pt-4">
+    <div ref={setBar} className="mt-10 border-t border-gray-100 pt-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-gray-600">{why[next.reason]}</p>
         <Link
           href={`/projects/${projectId}/${next.slug}`}
-          className={`btn btn-md flex-shrink-0 ${urgent ? "btn-primary" : "btn-secondary"}`}
+          className={`btn btn-md flex-shrink-0 ${emphasis === "primary" ? "btn-primary" : "btn-secondary"}`}
         >
-          {t.stepsNav.next}: {labels[next.slug] ?? next.slug} →
+          {t.stepsNav.next}: {nextLabel} →
         </Link>
       </div>
     </div>

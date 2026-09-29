@@ -14,7 +14,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, getUserKey } from "@/lib/workflow-store";
+import { getLocalProject, getUserKey, loadExtendedProjectData } from "@/lib/workflow-store";
+import { AppAddressStart } from "@/components/AppAddressStart";
+import { navLabelKey, screenAppView, sourceFacts } from "@/lib/project-steps.mjs";
+import { useAppPresence } from "@/lib/use-app-presence";
 import {
   listVisualChecks,
   runVisualCheck,
@@ -86,9 +89,22 @@ export default function VisualChecksPage() {
 
   const [phase, setPhase] = useState<"loading" | "done" | "error">("loading");
   const [checks, setChecks] = useState<VisualCheckListItem[]>([]);
-  // Optimistic true: when the sources lookup fails we keep the button enabled
-  // and let the backend's website_source_required answer drive the callout.
-  const [hasWebsiteSource, setHasWebsiteSource] = useState(true);
+  // The address fact: true = connected · false = confirmed none · null = not
+  // known yet (loading or the lookup failed). The run button stays enabled on
+  // null and lets the backend's website_source_required answer decide — that
+  // answer also confirms "none" (#559 여정 렌즈 결함 5).
+  const [websiteFact, setWebsiteFact] = useState<boolean | null>(null);
+  const hasWebsiteSource = websiteFact !== false;
+  // #559 여정 렌즈 결함 5: the screen is called what the sidebar calls it —
+  // "앱 확인하기" once the app exists, the former "시각 검수" otherwise; held
+  // while that is unknown so the title never swaps under the reader.
+  const presence = useAppPresence(id);
+  const appView = screenAppView({
+    entryPath: loadExtendedProjectData(id)?.entryPath ?? null,
+    presence,
+    hasDeployUrl: websiteFact,
+  });
+  const titleKey = appView.known ? navLabelKey("visual-checks", { hasApp: appView.hasApp }) : null;
   const [intent, setIntent] = useState("");
   // ★로그인 뒤 검수 — **기본은 꺼짐.** 남의 앱에 계정을 만드는 일이라 사용자가
   //  명시적으로 켜야 한다(서버도 같은 기본을 강제한다).
@@ -126,13 +142,15 @@ export default function VisualChecksPage() {
     return () => { cancelled = true; };
   }, [id, userKey, applyListResult]);
 
-  // Best-effort website-source lookup so the run button can point at
-  // /sources proactively instead of only after a 400 from the backend.
+  // Best-effort address lookup so a project without one gets the address box
+  // up front instead of only after a 400 from the backend.
   useEffect(() => {
     let cancelled = false;
     listProjectSources(id, userKey).then((res) => {
-      if (cancelled || !res.ok) return;
-      setHasWebsiteSource(res.sources.some((s) => s.type === "website"));
+      if (cancelled) return;
+      // Same mapping as the overview and the sidebar (a project not saved on
+      // the server has no address — confirmed; transient failures stay unknown).
+      setWebsiteFact(sourceFacts(res).hasDeployUrl);
     });
     return () => { cancelled = true; };
   }, [id, userKey]);
@@ -157,8 +175,12 @@ export default function VisualChecksPage() {
   // Stage 266 — verdict transition between the two most recent done runs
   // (null when there are fewer than two done runs or the verdict is unchanged).
   const transition = latestDoneTransition(checks);
-  const showSourcesLink =
-    !hasWebsiteSource || (notice?.kind === "error" && notice.errorKey === "websiteSourceRequired");
+  // #559 여정 렌즈 결함 5: no address → the address box right here (the same one
+  // as the overview: address → start → the run's page). It used to be a
+  // disabled "run" button plus "connect a website" → the Sources screen (two
+  // "connect" buttons, an "owner/repo" field) — a different place and different
+  // words from the /github screen's way out for the very same situation.
+  const needsAddress = websiteFact === false && !hasActiveRun;
 
   async function handleRun() {
     if (submitting || buttonState.disabled) return;
@@ -177,6 +199,12 @@ export default function VisualChecksPage() {
       setIntent("");
       applyListResult(await listVisualChecks(id, userKey));
     } else {
+      // The server says no address is connected (the lookup had failed) — that
+      // is a confirmed answer: show the address box instead of an error (#559).
+      if (runErrorNotice(res).errorKey === "websiteSourceRequired") {
+        setWebsiteFact(false);
+        return;
+      }
       // The whole answer, not just its code — a 429 carries resetAt (W-2).
       setNotice({ kind: "error", ...runErrorNotice(res), receivedAt: Date.now() });
     }
@@ -185,11 +213,24 @@ export default function VisualChecksPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="page-title">{t.visualChecks.title}</h2>
+        <h2 className="page-title">
+          {titleKey ? (
+            t.nav[titleKey]
+          ) : (
+            // App presence not known yet — hold the name (same rule as the sidebar).
+            <span aria-hidden className="inline-block h-6 w-32 animate-pulse rounded bg-gray-100 align-middle" />
+          )}
+        </h2>
         <p className="page-subtitle">{t.visualChecks.subtitle}</p>
       </div>
 
-      {/* Stage 264 — one-click inspection run */}
+      {needsAddress ? (
+        <section className="card p-5">
+          <p className="text-sm leading-relaxed text-gray-700">{t.visualChecks.runNeedWebsite}</p>
+          <AppAddressStart projectId={id} t={t} locale={locale} />
+        </section>
+      ) : (
+      /* Stage 264 — one-click inspection run */
       <section className="card p-5">
         <h3 className="section-title">{t.visualChecks.runTitle}</h3>
         <p className="section-desc leading-relaxed">{t.visualChecks.runHint}</p>
@@ -244,10 +285,6 @@ export default function VisualChecksPage() {
           <div className="callout callout-info mt-3">{t.visualChecks.runActiveNotice}</div>
         )}
 
-        {!hasWebsiteSource && !hasActiveRun && (
-          <div className="callout callout-info mt-3">{t.visualChecks.runNeedWebsite}</div>
-        )}
-
         {notice?.kind === "queuedOnly" && (
           <div className="callout callout-info mt-3">{t.visualChecks.runQueuedOnly}</div>
         )}
@@ -259,13 +296,8 @@ export default function VisualChecksPage() {
             {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
           </div>
         )}
-
-        {showSourcesLink && (
-          <Link href={`/projects/${id}/sources`} className="btn btn-secondary btn-sm mt-3">
-            {t.visualChecks.goToSources}
-          </Link>
-        )}
       </section>
+      )}
 
       {phase === "loading" && (
         <div className="flex items-center gap-2 text-sm text-gray-500">

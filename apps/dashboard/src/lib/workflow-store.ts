@@ -251,7 +251,9 @@ export type ExtendedProjectData = {
    * 검수 화면에서 무엇을 가리킬지 정하려면 이 사실이 필요하다.
    * 리포트 전체가 아니라 **판단에 필요한 최소만** 둔다.
    */
-  visualCheck?: { decision: string; findingCount: number; at: string };
+  // runId (#559 여정 렌즈 결함 2): which run that was — "고칠 것" points at that
+  // run's page, where its findings and fixes live. Older saves have none.
+  visualCheck?: { decision: string; findingCount: number; at: string; runId?: string };
   fixSuggestions?: Record<string, FixSuggestionResponse>;
   /** Which branch this project entered through — the progress map adapts to it
    *  (code branch: prepare step is optional, review never locks on items). */
