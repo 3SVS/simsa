@@ -17,6 +17,7 @@ import {
   OPS_INFO_RETENTION,
   OPS_INFO_OPT_OUT,
   TRAINING_COPY_NOTE,
+  RATE_LIMIT_RETENTION_NOTE,
   PRIVACY_CHANGE_LOG,
 } from "@/lib/privacy-ops-info.mjs";
 
@@ -66,6 +67,7 @@ export default function PrivacyPage() {
       <ul>
         <li>프로젝트 데이터는 삭제하실 때까지 보관됩니다. 프로젝트 삭제 시 서버 데이터(기록·스크린샷 저장소 포함)도 함께 삭제됩니다. {TRAINING_COPY_NOTE}</li>
         <li>임시 작업 기록(에피소드 로그)은 90일 후 자동 삭제됩니다.</li>
+        <li>{RATE_LIMIT_RETENTION_NOTE}</li>
         <li>공유 링크의 스냅샷은 회수하실 때까지 보관되며, 회수 시 열람이 차단됩니다.</li>
       </ul>
 

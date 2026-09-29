@@ -11,8 +11,10 @@
  * which is the moat we want landing visitors to feel.
  *
  * Rate limit: D1 table demo_rate_limit (one row per ip_hash × day_utc).
- * IP is sha256-hashed with a per-deploy salt before storage so we
- * never persist raw addresses.
+ * The IP is stored only as a keyed HMAC (workspace/rate-limit-key.ts —
+ * secret derived from CONCLAVE_TOKEN_KEK; DEMO_RATE_SALT, if set, is mixed
+ * into the bucket name). Rows older than 48h are purged by the 6-hourly cron
+ * (rate-limit-retention.ts).
  *
  * Diff source priority:
  *   1. body.diff (if pasted directly — supports private/closed PRs)
@@ -28,7 +30,7 @@
  */
 import { Hono } from "hono";
 import type { Env } from "../env.js";
-import { sha256Hex } from "../util.js";
+import { ipRateLimitKey } from "../workspace/rate-limit-key.js";
 
 const DEMO_DAILY_CAP = 3;
 const DEMO_PROMPT_TIMEOUT_MS = 90_000;
@@ -84,7 +86,12 @@ export function createDemoRoutes(): Hono<{ Bindings: Env }> {
       ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim()
       ?? "unknown";
     const today = new Date().toISOString().slice(0, 10);
-    const ipHash = await sha256Hex(`${c.env.DEMO_RATE_SALT ?? "conclave-demo"}::${rawIp}`);
+    // Keyed HMAC of the IP (rate-limit-key.ts). The old default salt was a public
+    // string in this file, so sha256(salt::ip) was reversible by brute force.
+    // DEMO_RATE_SALT, when set, still goes into the bucket name: rotating it
+    // keeps its documented effect (every demo counter starts fresh).
+    const demoBucket = c.env.DEMO_RATE_SALT ? `demo:${c.env.DEMO_RATE_SALT}` : "demo";
+    const ipHash = await ipRateLimitKey(c.env, demoBucket, rawIp);
 
     const rateRow = await c.env.DB.prepare(
       `SELECT count FROM demo_rate_limit WHERE ip_hash = ? AND day_utc = ?`,

@@ -3,7 +3,8 @@
  *
  * POST /workspace/idea-to-spec-draft
  *   Free beta — no auth required.
- *   Rate-limited: WORKSPACE_GENERATION_LIMIT_PER_HOUR (default 20) req/hour per IP.
+ *   Rate-limited: WORKSPACE_GENERATION_LIMIT_PER_HOUR (default 20) req/hour per IP
+ *   (stored as a keyed HMAC of the IP — workspace/rate-limit-key.ts; purged after 48h).
  *   Calls Anthropic to generate a structured Korean product spec.
  *   Falls back to mock data on LLM failure so the client never breaks.
  *   Rate-limit hit returns HTTP 429 — NO mock fallback in that case.
@@ -63,6 +64,7 @@ import {
 } from "../workspace/outcomes.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { consumeUserDailyLimit } from "../workspace/rate-limit.js";
+import { ipRateLimitKey } from "../workspace/rate-limit-key.js";
 import {
   betaProjectCreateDailyLimit,
   BETA_PROJECT_CREATE_DAILY_BUCKET,
@@ -105,12 +107,6 @@ function corsHeaders(origin: string | null): Record<string, string> {
     "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key, X-Simsa-User-Key",
     "Access-Control-Max-Age": "86400",
   };
-}
-
-/** SHA-256 hex of `input` using the Web Crypto API available in Workers. */
-async function sha256Hex(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -223,7 +219,8 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       c.req.header("cf-connecting-ip") ??
       (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ??
       "unknown";
-    const ipHash = await sha256Hex(`workspace::${rawIp}`);
+    // Keyed HMAC, never the unkeyed sha256 of the IP (brute-forceable) — rate-limit-key.ts.
+    const ipHash = await ipRateLimitKey(c.env, "workspace", rawIp);
     const hourUtc = currentHourUtc();
 
     const currentCount = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
@@ -517,7 +514,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     const limitPerHour = parseInt(c.env.WORKSPACE_GENERATION_LIMIT_PER_HOUR ?? "", 10) || DEFAULT_LIMIT_PER_HOUR;
     const rawIp = c.req.header("cf-connecting-ip") ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ?? "unknown";
-    const ipHash = await sha256Hex(`workspace-check::${rawIp}`);
+    const ipHash = await ipRateLimitKey(c.env, "workspace-check", rawIp);
     const hourUtc = currentHourUtc();
     const count = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
     if (count >= limitPerHour) {
@@ -691,7 +688,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     const limitPerHour = parseInt(c.env.WORKSPACE_GENERATION_LIMIT_PER_HOUR ?? "", 10) || DEFAULT_LIMIT_PER_HOUR;
     const rawIp = c.req.header("cf-connecting-ip") ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ?? "unknown";
-    const ipHash = await sha256Hex(`workspace-recommend::${rawIp}`);
+    const ipHash = await ipRateLimitKey(c.env, "workspace-recommend", rawIp);
     const hourUtc = currentHourUtc();
     const count = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
     if (count >= limitPerHour) {
@@ -755,7 +752,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     const limitPerHour = parseInt(c.env.WORKSPACE_GENERATION_LIMIT_PER_HOUR ?? "", 10) || DEFAULT_LIMIT_PER_HOUR;
     const rawIp = c.req.header("cf-connecting-ip") ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ?? "unknown";
-    const ipHash = await sha256Hex(`workspace-unstick::${rawIp}`);
+    const ipHash = await ipRateLimitKey(c.env, "workspace-unstick", rawIp);
     const hourUtc = currentHourUtc();
     const count = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
     if (count >= limitPerHour) {
@@ -817,7 +814,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     const limitPerHour = parseInt(c.env.WORKSPACE_GENERATION_LIMIT_PER_HOUR ?? "", 10) || DEFAULT_LIMIT_PER_HOUR;
     const rawIp = c.req.header("cf-connecting-ip") ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ?? "unknown";
-    const ipHash = await sha256Hex(`workspace-fix::${rawIp}`);
+    const ipHash = await ipRateLimitKey(c.env, "workspace-fix", rawIp);
     const hourUtc = currentHourUtc();
     const count = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
     if (count >= limitPerHour * 2) { // fix suggestions get 2x limit

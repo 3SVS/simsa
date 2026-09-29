@@ -44,6 +44,10 @@ export interface Env {
    *     token-persistence step gates on this secret.
    *   - If set but wrong length / not valid base64: startup preflight
    *     fails fast with a clear message (see src/preflight.ts).
+   *
+   * Also the root of the rate-limit IP subkey (workspace/rate-limit-key.ts:
+   * HMAC(KEK, "simsa/rate-limit-ip/v1")). Rotating the KEK restarts every
+   * IP-keyed request counter; unset → those buckets share one counter.
    */
   CONCLAVE_TOKEN_KEK?: string;
   /**
@@ -190,10 +194,10 @@ export interface Env {
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
   /**
-   * Tasks #51 — per-deploy salt mixed into the IP hash for the
-   * /saas/demo/review rate-limit table. Rotate to invalidate all
-   * demo rate-limit rows. Optional — defaults to a fixed string when
-   * unset (still hashed, just predictable).
+   * Tasks #51 — optional value mixed into the /saas/demo/review
+   * rate-limit bucket name. Rotate to start every demo counter fresh.
+   * NOT the secret: the IP is stored as a keyed HMAC whose key derives
+   * from CONCLAVE_TOKEN_KEK (workspace/rate-limit-key.ts), set or not.
    */
   DEMO_RATE_SALT?: string;
   /**
@@ -320,7 +324,7 @@ export interface Env {
   BETA_REPAIR_DAILY_LIMIT?: string;
   /**
    * PR #561 review P1 — userKey is anonymous, so the per-user cap is not a cost
-   * ceiling. Per-network (hashed cf-connecting-ip; default 검수 30 · 수리 15) and
+   * ceiling. Per-network (cf-connecting-ip as a keyed HMAC; default 검수 30 · 수리 15) and
    * service-wide (default 검수 300 · 수리 50) daily caps on the same consume.
    * Same override rule ([PILOT], positive integers only).
    */

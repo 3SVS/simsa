@@ -4,12 +4,16 @@
  * Generalizes the per-IP hourly limiter (workspace.ts / workspace-document-
  * intake.ts) into a keyed hourly limiter that also supports per-userKey
  * buckets. Reuses the existing `workspace_rate_limit` D1 table: the `ip_hash`
- * column stores sha256(`${bucket}::${key}`), so no migration is required.
+ * column stores sha256(`${bucket}::${key}`) for userKey / service buckets and a
+ * keyed HMAC for IP buckets (rate-limit-key.ts — an unkeyed hash of an IPv4
+ * address is reversible by brute force), so no migration is required. Rows
+ * older than 48h are purged by the 6-hourly cron (rate-limit-retention.ts).
  *
  * All D1 failures are non-fatal: a read failure counts as 0 (never blocks a
  * legitimate request on infrastructure trouble) and a write failure only logs.
  */
 import type { Env } from "../env.js";
+import { ipRateLimitKey } from "./rate-limit-key.js";
 
 /** SHA-256 hex of `input` using the Web Crypto API available in Workers. */
 async function sha256Hex(input: string): Promise<string> {
@@ -143,8 +147,9 @@ export async function consumeUserDailyLimit(
 // And one bucket is not enough (PR #561 review P1): userKey is a client-made
 // anonymous id, so a per-userKey cap is a guard against mistakes, not a cost
 // ceiling — a loop that mints a fresh key per call walks right past it. The
-// same consume therefore also takes a slot from a per-network bucket (hashed
-// cf-connecting-ip) and a service-wide bucket; whichever is full first answers.
+// same consume therefore also takes a slot from a per-network bucket
+// (cf-connecting-ip, stored as a keyed HMAC) and a service-wide bucket;
+// whichever is full first answers.
 
 /**
  * The single-statement consume. Binds: (hash, dayKey, nowIso, nowIso, limit).
@@ -164,10 +169,25 @@ export type DailyCap = {
   scope: DailyCapScope;
   /** Bucket name — also the hash salt (`${bucket}::${key}`). */
   bucket: string;
-  /** userKey · client IP · a fixed service key. Hashed before it is stored. */
+  /**
+   * userKey · client IP · a fixed service key. Never stored as-is: the
+   * "network" scope's key is an IP → keyed HMAC (dailyCapStoredKey); the others
+   * → sha256.
+   */
   key: string;
   limit: number;
 };
+
+/**
+ * What a daily cap's row is stored under. The network scope carries the client
+ * IP, so it gets the keyed HMAC (rate-limit-key.ts); userKey and the fixed
+ * service key keep sha256 — neither is an IP nor has a small input space.
+ */
+async function dailyCapStoredKey(env: Pick<Env, "CONCLAVE_TOKEN_KEK">, cap: DailyCap): Promise<string> {
+  return cap.scope === "network"
+    ? ipRateLimitKey(env, cap.bucket, cap.key)
+    : sha256Hex(`${cap.bucket}::${cap.key}`);
+}
 
 export type DailyCapsResult =
   | {
@@ -249,7 +269,7 @@ export async function consumeDailyCaps(
     for (const hash of hashes) await returnDailySlot(env.DB, hash, dayUtc);
   };
   for (const cap of caps) {
-    const hash = await sha256Hex(`${cap.bucket}::${cap.key}`);
+    const hash = await dailyCapStoredKey(env, cap);
     if (!(await takeDailySlot(env.DB, hash, dayUtc, cap.limit))) {
       await giveBack();
       return {
