@@ -44,7 +44,8 @@ node journey-audit.mjs --local http://localhost:3187 --ko-only
 - `.invalid`로 구우면 가로채기를 놓친 요청도 라이브에 닿지 못한다(DNS 실패). `--local`은 localhost만 받는다.
 - 시나리오: `not_implemented`(지금 실제 서버의 정직한 실패 — `builder_stage_not_implemented:build`) ·
   `done`(서버 상태 순서대로 끝까지 → 내 앱 카드). 가짜 옵션(#578 검증 결함 반영): `open:false`(서버가 만들기를 열지
-  않음 — 지금 프로덕션: `BUILD_OPEN` 없음) · `retryConflict:true`(central 수정 **전** 서버 — 같은 프로젝트의 두 번째
+  않음 — 지금 프로덕션: `BUILD_ENABLED = "off"`, POST /build와 같은 스위치 하나 → `reason: "build_disabled"`) ·
+  `retryConflict:true`(central 수정 **전** 서버 — 같은 프로젝트의 두 번째
   POST /build가 D1 이름 충돌로 `502 hosting_d1_failed`).
 - 여정 5개: KO 멈춤(수정 전 서버의 다시 시도) · KO 끝 · KO 닫힘 · EN 멈춤(수정 뒤 서버 — 다시 시도 = 새 잡) · EN 닫힘.
 - J6 기대값(어긋나면 P0): **개요 '지금 할 일'**이 만들기 전 [앱 만들기] · 만드는 중 [진행 상황 보기] · 만든 뒤

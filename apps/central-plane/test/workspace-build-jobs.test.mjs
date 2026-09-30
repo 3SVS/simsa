@@ -352,34 +352,64 @@ test("★결함 3: 지난 시도가 D1만 만들고 잡 행을 못 남겼어도(
   assert.equal(builder.payloads[0].hosting.d1Id, "d1-orphan");
 });
 
-test("★결함 2: GET /workspace/build-availability — BUILD_OPEN이 정확히 \"on\"이고 설정이 다 있을 때만 buildEnabled", async () => {
-  const app = createApp();
-  const get = async (env) => {
-    const res = await app.fetch(new Request("https://cp.example/workspace/build-availability", { headers: { origin: "https://app.trysimsa.com" } }), env);
-    return { status: res.status, body: await res.json(), acao: res.headers.get("access-control-allow-origin") };
-  };
+/** GET /workspace/build-availability (대시보드처럼 교차 출처로). */
+async function getAvailability(env) {
+  const res = await createApp().fetch(new Request("https://cp.example/workspace/build-availability", { headers: { origin: "https://app.trysimsa.com" } }), env);
+  return { status: res.status, body: await res.json(), acao: res.headers.get("access-control-allow-origin") };
+}
+
+/** BUILD_ENABLED 값(undefined = 줄 없음) × 설정 누락 조합의 env. */
+function envWithSwitch(v, opts) {
+  const e = envFor(opts);
+  return v === undefined ? e : { ...e, BUILD_ENABLED: v };
+}
+
+/** 설정 누락 조합 — POST /build가 503으로 막는 순서와 같은 이름. */
+const CONFIG_CASES = [
+  { name: "all", opts: {}, reason: "open" },
+  { name: "callback token missing", opts: { token: "" }, reason: "callback_token_missing" },
+  { name: "builder missing", opts: { builder: null }, reason: "builder_unavailable" },
+  { name: "hosting missing", opts: { hosting: false }, reason: "hosting_not_configured" },
+  { name: "llm missing", opts: { llm: false }, reason: "llm_not_configured" },
+];
+
+test("★스위치 단일화: GET /workspace/build-availability는 POST /build와 같은 BUILD_ENABLED를 본다 — off면 닫힘(build_disabled), 미설정·on이면 설정이 다 있을 때만 열림", async () => {
   const db = makeDb();
-  // 설정은 다 있지만 스위치가 없다 — 지금 프로덕션(실행체가 kind=build를 끝까지 못 함). 닫힘.
-  const closed = await get(envFor({ db }));
-  assert.equal(closed.status, 200);
-  assert.deepEqual(closed.body, { ok: true, buildEnabled: false, reason: "not_open" });
-  assert.equal(closed.acao, "https://app.trysimsa.com", "대시보드가 교차 출처로 읽을 수 있어야 한다");
-  // fail-closed: "on"만 연다(오타·대문자·빈 값은 닫힘).
-  for (const v of ["ON", "true", "1", "", "yes", "off"]) {
-    assert.equal((await get({ ...envFor({ db }), BUILD_OPEN: v })).body.buildEnabled, false, JSON.stringify(v));
+  // 지금 프로덕션: [vars] BUILD_ENABLED = "off" → 설정이 다 있어도 닫힘. reason은 POST 오류 코드와 같은 말.
+  const off = await getAvailability(envWithSwitch("off", { db }));
+  assert.equal(off.status, 200);
+  assert.deepEqual(off.body, { ok: true, buildEnabled: false, reason: "build_disabled" });
+  assert.equal(off.acao, "https://app.trysimsa.com", "대시보드가 교차 출처로 읽을 수 있어야 한다");
+  // off는 설정 누락보다 먼저 답한다(POST도 스위치가 첫 줄).
+  for (const c of CONFIG_CASES) {
+    assert.deepEqual((await getAvailability(envWithSwitch("off", { db, ...c.opts }))).body, { ok: true, buildEnabled: false, reason: "build_disabled" }, c.name);
   }
-  assert.deepEqual((await get({ ...envFor({ db }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: true, reason: "open" });
-  // 스위치가 켜져도 POST /build가 503으로 막을 설정이 빠지면 닫힘 — 누르면 막힐 버튼을 내밀지 않는다.
-  assert.deepEqual((await get({ ...envFor({ db, hosting: false }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "hosting_not_configured" });
-  assert.deepEqual((await get({ ...envFor({ db, llm: false }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "llm_not_configured" });
-  assert.deepEqual((await get({ ...envFor({ db, token: "" }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "callback_token_missing" });
-  assert.deepEqual((await get({ ...envFor({ db, builder: null }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "builder_unavailable" });
+  // 정확히 "off"가 아니면(미설정·"on"·"OFF"·"") 켜짐 — 설정이 다 있으면 열림, 하나라도 빠지면 그 이유로 닫힘.
+  for (const v of [undefined, "on", "OFF", ""]) {
+    for (const c of CONFIG_CASES) {
+      const r = await getAvailability(envWithSwitch(v, { db, ...c.opts }));
+      assert.deepEqual(r.body, { ok: true, buildEnabled: c.reason === "open", reason: c.reason }, `BUILD_ENABLED=${JSON.stringify(v)} · ${c.name}`);
+    }
+  }
 });
 
-test("결함 2 [행동 보존 가드]: POST /build 자체는 스위치를 보지 않는다(B-5b 실행체 검증이 스위치 없이 잡을 돌릴 수 있게)", async () => {
-  const db = makeDb({ projects: new Map([[PROJECT, projectRow()]]) });
-  const r = await withFetch(makeFetch().f, () => post(createApp(), envFor({ db }), `/workspace/projects/${PROJECT}/build`, { userKey: USER }));
-  assert.equal(r.status, 202, JSON.stringify(r.body));
+test("★스위치 단일화: 화면(가용성)과 라우트(POST /build)는 어떤 조합에서도 어긋나지 않는다 — 열림이면 202, 닫힘이면 503 + 같은 이유", async () => {
+  for (const v of [undefined, "on", "off", "OFF"]) {
+    for (const c of CONFIG_CASES) {
+      const label = `BUILD_ENABLED=${JSON.stringify(v)} · ${c.name}`;
+      const a = (await getAvailability(envWithSwitch(v, { db: makeDb(), ...c.opts }))).body;
+      const db = makeDb({ projects: new Map([[PROJECT, projectRow()]]) });
+      const builder = c.opts.builder === null ? null : makeBuilder();
+      const r = await withFetch(makeFetch().f, () => post(createApp(), envWithSwitch(v, { db, ...c.opts, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER }));
+      if (a.buildEnabled) {
+        assert.equal(r.status, 202, `${label}: 화면이 열렸는데 라우트가 막음 — ${JSON.stringify(r.body)}`);
+      } else {
+        assert.equal(r.status, 503, `${label}: 화면이 닫혔는데 라우트가 돎 — ${JSON.stringify(r.body)}`);
+        assert.equal(r.body.error, a.reason, label);
+        assert.equal(db._jobs.length, 0, `${label}: 막힌 시작은 잡 행을 남기지 않는다`);
+      }
+    }
+  }
 });
 
 test("★결함 5: done을 주장했지만 빌드가 green이 아니라 거절하면, 주장된 주소를 이벤트 meta(claimedUrl)에 남긴다", async () => {

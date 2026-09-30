@@ -101,11 +101,19 @@ describe("fake-central (journey-audit --local, B-8 J6)", () => {
     assert.match(route, /d1Reused/, "the real route reuses the prior job's D1 — the fake's default mirrors that");
   });
 
-  it("★#578 결함 2: GET /workspace/build-availability — 실서버와 같은 모양(open 기본 true, false면 not_open)", () => {
+  it("★#578 결함 2 + 스위치 단일화: GET /workspace/build-availability — 실서버와 같은 모양(open 기본 true, false면 지금 프로덕션의 build_disabled)", () => {
     assert.deepEqual(createFakeCentral({ projectId: P, scenario: "done" }).handle("GET", `${FAKE_CENTRAL_ORIGIN}/workspace/build-availability`).json, { ok: true, buildEnabled: true, reason: "open" });
-    assert.deepEqual(createFakeCentral({ projectId: P, scenario: "done", open: false }).handle("GET", `${FAKE_CENTRAL_ORIGIN}/workspace/build-availability`).json, { ok: true, buildEnabled: false, reason: "not_open" });
+    const closed = createFakeCentral({ projectId: P, scenario: "done", open: false }).handle("GET", `${FAKE_CENTRAL_ORIGIN}/workspace/build-availability`).json;
+    assert.deepEqual(closed, { ok: true, buildEnabled: false, reason: "build_disabled" });
     const route = readFileSync(path.join(REPO, "apps/central-plane/src/routes/workspace-build-jobs.ts"), "utf8");
     assert.match(route, /app\.get\("\/workspace\/build-availability"/);
+    // 가짜의 닫힘 이유는 실서버가 실제로 낼 수 있는 이유여야 한다 — 실서버는 스위치(buildEnabled)가 꺼지면 BUILD_DISABLED로 닫는다.
+    assert.match(route, /if \(!buildEnabled\(env\)\) return closed\(BUILD_DISABLED\);/);
+    const switches = readFileSync(path.join(REPO, "apps/central-plane/src/workspace/service-switches.ts"), "utf8");
+    assert.match(switches, new RegExp(`export const BUILD_DISABLED = "${closed.reason}" as const;`));
+    // 지금 프로덕션 설정이 그 닫힘이다.
+    const toml = readFileSync(path.join(REPO, "apps/central-plane/wrangler.toml"), "utf8");
+    assert.match(toml, /^BUILD_ENABLED = "off"$/m);
   });
 
   it("★#578 결함 4: POST /workspace/export-builder-pack — 팩 파일 묶음(dev-spec/ + 개발 도구 프롬프트·비밀 파일 섞임)", () => {

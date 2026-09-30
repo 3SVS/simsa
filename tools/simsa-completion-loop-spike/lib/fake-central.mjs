@@ -12,7 +12,8 @@
 // 시나리오의 실패 문장은 실제 서버가 내는 문장 그대로다(builder-run.mjs builder_stage_not_implemented).
 //
 // #578 검증 결함 반영:
-//  - 2: GET /workspace/build-availability — `open`(기본 true). false면 실서버의 닫힘(BUILD_OPEN 없음)과 같은 답.
+//  - 2: GET /workspace/build-availability — `open`(기본 true). false면 실서버의 닫힘과 같은 답 — 지금 프로덕션:
+//       BUILD_ENABLED = "off"(POST /build와 같은 스위치 하나) → `reason: "build_disabled"`.
 //  - 3: `retryConflict: true` = **이 PR의 서버 수정 전** 실서버: 같은 프로젝트의 두 번째 POST /build는 D1 이름 충돌로
 //       502 hosting_d1_failed(createProjectD1이 "이미 있음"을 성공으로 치지 않았다). 기본(false)은 수정 뒤 서버 —
 //       전 잡의 D1을 다시 써서 202. 예전 가짜는 늘 202라 [다시 시도] 막다른 길을 구조적으로 못 봤다.
@@ -187,7 +188,7 @@ export function createFakeCentral(opts) {
     calls.push(`${method} ${u.pathname}`);
     if (method === "OPTIONS") return { status: 204, json: null };
     if (method === "GET" && u.pathname === "/workspace/build-availability") {
-      return { status: 200, json: { ok: true, buildEnabled: open, reason: open ? "open" : "not_open" } };
+      return { status: 200, json: { ok: true, buildEnabled: open, reason: open ? "open" : "build_disabled" } };
     }
     if (method === "POST" && u.pathname === "/workspace/export-builder-pack") {
       const files = builderPackFixture(opts.locale);

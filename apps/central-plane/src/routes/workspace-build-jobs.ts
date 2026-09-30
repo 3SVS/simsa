@@ -1,7 +1,7 @@
 /**
  * routes/workspace-build-jobs.ts — SI 티어 Train B — B5: T1 빌드 잡 (D-4 · D-5 · D-6 · D-7 · D-12).
  *
- *   GET  /workspace/build-availability                 — [만들기]를 내밀어도 되는가(B-8 #578 결함 2: BUILD_OPEN + 설정)
+ *   GET  /workspace/build-availability                 — [만들기]를 내밀어도 되는가(B-8 #578 결함 2: POST와 같은 BUILD_ENABLED + 설정)
  *   POST /workspace/projects/:id/build                 — 지시서가 있는 프로젝트의 빌드 잡 시작(S 모드, 계정 0)
  *   GET  /workspace/projects/:id/build-jobs            — 최근 잡 목록
  *   GET  /workspace/projects/:id/build-jobs/:jobId     — 잡 + 타임라인
@@ -116,14 +116,19 @@ export async function dispatchBuild(env: Env, payload: BuildDispatchPayload): Pr
  * kind=build를 끝까지 못 하는 동안(builder_stage_not_implemented) 버튼을 내밀면, 누르기 전 안내(길면 45분 ·
  * Simsa 주소에 올라가요)가 없는 기능을 약속하고 모든 사용자가 "준비 중인 단계에서 멈췄어요"로 끝난다.
  *
- * 열림 = BUILD_OPEN이 **정확히 "on"**(fail-closed) **그리고** POST /build가 503으로 막을 설정이 하나도 없음
- * (콜백 토큰 · BUILDER · 호스팅 · LLM — POST와 같은 순서). reason은 운영 확인용(비밀 없음 — POST 오류 코드와 같은 말).
+ * 열림 = POST /build가 503으로 막을 것이 **하나도 없음** — POST와 **같은 판정을 같은 순서로**:
+ *   1) 빌드 킬스위치 `buildEnabled(env)`(service-switches.ts 단일 출처, BUILD_ENABLED가 정확히 "off"면 꺼짐)
+ *   2) 콜백 토큰 · BUILDER · 호스팅 · LLM 설정
+ * 스위치는 이것 하나다(#578 스위치 단일화). 예전의 별도 공개 스위치는 없앴다 — 둘이면 하나만 켠 배포에서 화면과
+ * 라우트가 어긋난다. 프로덕션 [vars]는 BUILD_ENABLED = "off"라 화면도 닫혀 보인다. 켜는 것은 실행체 묶음(PR #569)
+ * 배포 + B-5b 라이브 확인 뒤 한 줄("on") + deploy — 그때 라우트와 [만들기]가 함께 열린다.
+ * reason은 운영 확인용(비밀 없음 — POST 오류 코드와 같은 말).
  */
-export type BuildAvailabilityReason = "open" | "not_open" | "callback_token_missing" | "builder_unavailable" | "hosting_not_configured" | "llm_not_configured";
+export type BuildAvailabilityReason = "open" | typeof BUILD_DISABLED | "callback_token_missing" | "builder_unavailable" | "hosting_not_configured" | "llm_not_configured";
 
 export function buildAvailabilityFor(env: Env): { buildEnabled: boolean; reason: BuildAvailabilityReason } {
   const closed = (reason: BuildAvailabilityReason) => ({ buildEnabled: false, reason });
-  if (env.BUILD_OPEN !== "on") return closed("not_open");
+  if (!buildEnabled(env)) return closed(BUILD_DISABLED);
   if (!env.INTERNAL_CALLBACK_TOKEN) return closed("callback_token_missing");
   if (!env.BUILDER) return closed("builder_unavailable");
   if (!env.HOSTING_CF_API_TOKEN || !env.HOSTING_CF_ACCOUNT_ID || !(env.HOSTING_ROOT_DOMAIN ?? "").trim()) return closed("hosting_not_configured");
