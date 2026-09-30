@@ -68,11 +68,16 @@ export function hostingRulesUrl(rootDomain: string): string {
   return `https://${REPORT_HOST_LABEL}.${normalizeRootDomain(rootDomain)}${RULES_PATH}`;
 }
 
-/** 정지 목록 KV 키. 값은 JSON `{v, reason, source, at, logId}` — 값이 있기만 하면 정지다. */
+/**
+ * 정지 목록 KV 키. 값은 JSON `{v, reason, source, at, logId}` — 값이 있기만 하면 정지다.
+ * 정지는 **사람(관리자)만** 한다 — 트래픽 양만으로 자동 정지하지 않는다(PR #575 검증 P1: 제3자가 요청을
+ * 몰아넣기만 해도 남의 앱이 무기한 410이 됐다). 요청 상한 초과가 이어지면 central-plane이 운영자에게 알리고
+ * 기록(source=auto_flag)만 남긴다.
+ */
 export const SUSPENDED_KEY_PREFIX = "suspended:";
-/** 요청 상한 초과 기록(분 단위) — central-plane 크론이 모아 자동 정지를 판단한다. */
+/** 요청 상한 초과 기록(분 단위) — central-plane 크론이 모아 운영자 알림(플래그)을 판단한다. 정지는 하지 않는다. */
 export const STRIKE_KEY_PREFIX = "strike:";
-/** strike 키 수명. 자동 정지 판단 창(60분)보다 넉넉하게. */
+/** strike 키 수명. 플래그 판단 창(60분)보다 넉넉하게. */
 export const STRIKE_TTL_SECONDS = 7200;
 
 export function suspendedKey(slug: string): string {
@@ -88,29 +93,46 @@ export function strikeKey(slug: string, now: Date): string {
   return `${STRIKE_KEY_PREFIX}${slug}:${minuteKey(now)}`;
 }
 
-export type SuspensionSource = "admin" | "auto";
-
 /**
- * KV 값 → 정지 여부. null이면 정지 아님. 값이 있는데 JSON이 깨졌으면 **정지로 본다**(관리자 정지로 취급) —
- * 목록에 올라간 slug를 형식 문제로 풀어 주지 않는다.
+ * KV 값 → 정지 여부. 값이 있기만 하면 정지다 — JSON이 깨졌어도 **정지로 본다**(목록에 올라간 slug를 형식
+ * 문제로 풀어 주지 않는다). 값의 내용(사유·메모)은 안내 페이지에 싣지 않으므로 읽지 않는다.
  */
-export function parseSuspension(raw: string | null): { source: SuspensionSource } | null {
-  if (raw === null) return null;
-  try {
-    const v: unknown = JSON.parse(raw);
-    if (typeof v === "object" && v !== null && (v as Record<string, unknown>)["source"] === "auto") return { source: "auto" };
-  } catch {
-    /* 깨진 값도 정지 */
-  }
-  return { source: "admin" };
+export function isSuspendedValue(raw: string | null): boolean {
+  return raw !== null;
 }
 
 /**
- * [PILOT] slug당 요청 상한. **wrangler.toml [[ratelimits]] HOSTING_RATE_LIMITER의 simple.limit·period와
- * 같아야 한다**(Workers Rate Limiting 바인딩은 수치를 설정 파일에서만 받는다 — 테스트가 두 곳을 대조).
- * period는 바인딩 제약상 10 또는 60초만 가능.
+ * [PILOT] slug당 요청 상한 — 두 겹(PR #575 검증 P1: 한 겹 600/60s는 페이지 한 번에 요청 20~50개인 정상 앱이
+ * 분당 12~30명만 와도 429였다).
+ *
+ *  - `page`: **문서 요청**(주소창·링크로 페이지를 여는 것 — isDocumentRequest)만 센다. 600/분 = 한 앱에 초당
+ *    10번 페이지가 열리는 수준으로, 파일럿 규모 앱의 정상 방문으로는 닿지 않는다. 방문자 수에 가까운 값을 센다.
+ *  - `request`: 이미지·스크립트·API 호출까지 **모든 요청**. 문서 요청만 세면 Accept 헤더를 빼는 것만으로 상한을
+ *    피할 수 있어(우회) 백스톱으로 둔다. 6000/분 = 페이지당 요청 50개 × 분당 120번 페이지 열림.
+ *
+ * **wrangler.toml [[ratelimits]]의 simple.limit·period와 같아야 한다**(Workers Rate Limiting 바인딩은 수치를
+ * 설정 파일에서만 받는다 — 테스트가 두 곳을 대조). period는 바인딩 제약상 10 또는 60초만 가능.
+ * 상한을 넘으면 429만 낸다 — **정지로 이어지지 않는다**(운영자 알림만).
  */
-export const HOSTING_RATE_LIMIT = { limit: 600, periodSeconds: 60 } as const;
+export const HOSTING_RATE_LIMITS = {
+  page: { binding: "HOSTING_PAGE_RATE_LIMITER", limit: 600, periodSeconds: 60 },
+  request: { binding: "HOSTING_REQUEST_RATE_LIMITER", limit: 6000, periodSeconds: 60 },
+} as const;
+
+/**
+ * 문서(페이지) 요청인가 — 요청 상한 `page`가 세는 것.
+ *  - 브라우저는 Fetch Metadata를 보낸다: `Sec-Fetch-Mode: navigate` 또는 `Sec-Fetch-Dest: document|iframe|frame`이면 문서.
+ *    Fetch Metadata가 있는데 그게 아니면(이미지·스크립트·fetch) 문서 아님.
+ *  - Fetch Metadata가 없는 클라이언트(오래된 브라우저·봇)는 `Accept`에 text/html이 있으면 문서.
+ * 헤더는 클라이언트가 정하는 값이라 우회할 수 있다 — 그래서 `request` 상한(모든 요청)이 따로 있다.
+ */
+export function isDocumentRequest(headers: Headers): boolean {
+  const mode = headers.get("sec-fetch-mode")?.trim().toLowerCase() ?? "";
+  const dest = headers.get("sec-fetch-dest")?.trim().toLowerCase() ?? "";
+  if (mode === "navigate" || dest === "document" || dest === "iframe" || dest === "frame") return true;
+  if (mode || dest) return false;
+  return /(^|[\s,;])text\/html\b/i.test(headers.get("accept") ?? "");
+}
 
 export type RouteDecision =
   | { kind: "dispatch"; slug: string }

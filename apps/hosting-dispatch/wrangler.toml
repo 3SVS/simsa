@@ -18,20 +18,31 @@ compatibility_date = "2026-09-01"
 HOSTING_ROOT_DOMAIN = "simsa.page"
 # B-7: report.simsa.page 신고 폼이 보내는 central-plane(https만). 비우면 신고 페이지가 503 "지금은 받을 수 없어요".
 SIMSA_API_BASE = "https://conclave-ai.seunghunbae.workers.dev"
+# B-7: 신고 접수 스위치 — 정확히 "on"일 때만 신고 폼을 보인다. 개인정보처리방침에 '앱 신고' 수집 항목(연락처·
+# 설명·신고자 키·보유 180일)을 고지한 **뒤에** central-plane의 같은 변수와 함께 "on"으로 바꾼다(PR·배포).
+HOSTING_REPORTS_ENABLED = "off"
 
 [[dispatch_namespaces]]
 binding = "DISPATCHER"
 namespace = "simsa-hosted"
 
-# B-7 [PILOT] slug당 요청 상한 — Workers Rate Limiting 바인딩(외부 리소스 생성 없음, namespace_id는 계정 안에서
-# 고른 고유 정수). 수치는 src/route.ts HOSTING_RATE_LIMIT와 같아야 한다(테스트가 대조). period는 10 또는 60만.
-# 카운터는 Cloudflare 지역(데이터센터)별·근사치다 — 전 세계 정확 합계가 아니다.
+# B-7 [PILOT] slug당 요청 상한 — Workers Rate Limiting 바인딩 두 겹(외부 리소스 생성 없음, namespace_id는 계정 안에서
+# 고른 고유 정수). 수치는 src/route.ts HOSTING_RATE_LIMITS와 같아야 한다(테스트가 대조). period는 10 또는 60만.
+# 카운터는 Cloudflare 지역(데이터센터)별·근사치다 — 전 세계 정확 합계가 아니다. 넘으면 429만 — 정지로 이어지지 않는다.
+# 문서(페이지) 요청: 방문자 수에 가까운 값.
 [[ratelimits]]
-name = "HOSTING_RATE_LIMITER"
+name = "HOSTING_PAGE_RATE_LIMITER"
 namespace_id = "7301"
 simple = { limit = 600, period = 60 }
 
-# B-7 정지 목록(Workers KV) — **central-plane wrangler.toml과 같은 id**를 적어야 한다(한쪽이 쓰고 한쪽이 읽는다).
+# 모든 요청(이미지·스크립트·API 포함): 문서 판정을 헤더로 피하는 우회를 막는 백스톱.
+[[ratelimits]]
+name = "HOSTING_REQUEST_RATE_LIMITER"
+namespace_id = "7302"
+simple = { limit = 6000, period = 60 }
+
+# B-7 정지 목록(Workers KV) — **central-plane wrangler.toml과 같은 id**를 적어야 한다(central-plane이 suspended:를
+# 쓰고 이 라우터가 읽는다 · 이 라우터가 strike:를 쓰고 central-plane 크론이 읽어 운영자에게 알린다).
 # 아직 네임스페이스가 없어 주석으로 둔다(가짜 id를 넣으면 배포가 실패한다). 없으면 라우터는 정지 확인 없이
 # 서빙하고(fail-open, 근거는 src/index.ts 헤더) 헬스에 suspensionList "unbound"로 드러난다.
 # 켜는 법(Bae 액션): Cloudflare 대시보드 → Storage & Databases → KV → Create → 이름 `simsa-hosting-suspended`
