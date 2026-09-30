@@ -15,6 +15,8 @@ export interface LandingDict {
     betaNote: string;
     ctaStart: string;
     ctaDemo: string;
+    /** C-N7 — the three first doors, one line each (same order as DOOR_PATHS in page.tsx). */
+    doors: { lead: string; items: string[] };
   };
   startAnything: { title: string; body: string; chips: string[] };
   creates: { title: string; body: string; outputs: string[] };

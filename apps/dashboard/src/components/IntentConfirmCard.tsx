@@ -29,6 +29,8 @@ import {
 } from "@/lib/workflow-store";
 import { CENTRAL_PLANE_URL } from "@/lib/workspace-sources-api";
 import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
+import { intentCardCopyKeys } from "@/lib/entry-doors.mjs";
+import type { EntryDoor } from "@/lib/entry-doors.mjs";
 
 type InferredItem = { id: string; title: string; criteria?: string[] };
 type InferResponse = {
@@ -55,6 +57,10 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState<string>("");
   const [raw, setRaw] = useState<InferResponse | null>(null);
+  // C-N7: door (c) "만들었는데 생각과 달라요" — the same card and the same save, but
+  // it asks for what the user MEANT: confirming what the app currently IS would
+  // lock in the wrong yardstick for exactly these users.
+  const [entryDoor, setEntryDoor] = useState<EntryDoor | null>(null);
 
   const infer = useCallback(async () => {
     setPhase("loading");
@@ -92,6 +98,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   useEffect(() => {
     // 이미 확정된 프로젝트에는 나타나지 않는다 — 확인은 한 번이면 된다.
     const ext = loadExtendedProjectData(projectId);
+    setEntryDoor(ext?.entryDoor ?? null);
     if (ext?.productSpec?.oneLine || ext?.intentConfirmedAt) {
       setPhase("done");
       return;
@@ -146,6 +153,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   if (phase === "done") return null;
 
   const c = t.intentConfirm;
+  const k = intentCardCopyKeys(entryDoor);
 
   return (
     // 버튼은 **보조**다 (2026-09-01). 화면당 주 버튼은 하나여야 하고
@@ -168,7 +176,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
 
         {phase === "empty" && (
           <>
-            <h2 className="section-title">{c.emptyTitle}</h2>
+            <h2 className="section-title">{c[k.emptyTitle]}</h2>
             {/* 왜 비었는지 그대로 말한다 — 지어낸 초안보다 정직한 빈칸이 낫다. */}
             <p className="section-desc">
               {reason === "no_source"
@@ -180,7 +188,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
                     : c.emptyNoEvidence}
             </p>
             <div className="mt-3">
-              <label className="mb-1 block text-xs font-semibold text-gray-600">{c.oneLineLabel}</label>
+              <label className="mb-1 block text-xs font-semibold text-gray-600">{c[k.oneLineLabel]}</label>
               <input
                 type="text"
                 value={oneLine}
@@ -201,8 +209,8 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
 
         {phase === "ready" && (
           <>
-            <h2 className="section-title">{c.title}</h2>
-            <p className="section-desc">{c.subtitle}</p>
+            <h2 className="section-title">{c[k.title]}</h2>
+            <p className="section-desc">{c[k.subtitle]}</p>
 
             <div className="mt-3 space-y-3">
               <div>
@@ -210,7 +218,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
                 <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="input" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-gray-600">{c.oneLineLabel}</label>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">{c[k.oneLineLabel]}</label>
                 <textarea
                   value={oneLine}
                   onChange={(e) => setOneLine(e.target.value)}
@@ -261,7 +269,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
 
             <div className="mt-4 flex items-center gap-2">
               <button onClick={confirm} className="btn btn-secondary btn-sm">
-                {c.confirm}
+                {c[k.confirm]}
               </button>
               <button onClick={() => setPhase("done")} className="text-xs text-gray-500 underline hover:text-gray-700">
                 {c.later}

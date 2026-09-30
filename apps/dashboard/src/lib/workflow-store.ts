@@ -258,6 +258,11 @@ export type ExtendedProjectData = {
   /** Which branch this project entered through — the progress map adapts to it
    *  (code branch: prepare step is optional, review never locks on items). */
   entryPath?: "idea" | "code" | "spec";
+  /** C-N7 (D-17 amend): which of the three first doors the user came through.
+   *  (b) "broken" and (c) "differs" share the code branch; (c) turns the intent
+   *  confirm card into "what did you mean it to do?". Older projects have none
+   *  (= the plain card). Rides the ext blob — no D1 column/migration. */
+  entryDoor?: "idea" | "broken" | "differs";
   /** G10: 원클릭 체험용 예시 프로젝트 표시 — 개요에 안내 배너를 띄운다. */
   isSample?: boolean;
   /** Which AI tool(s) the user said they build with (canonical built-with ids,

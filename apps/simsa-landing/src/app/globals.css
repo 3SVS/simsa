@@ -212,6 +212,49 @@ body::after {
   word-break: keep-all;
 }
 
+/* C-N7 — the three first doors (secondary links; existing tokens only). */
+.doors {
+  margin: 0 auto 1.6rem;
+  max-width: 40rem;
+}
+
+.doors-lead {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--faint);
+}
+
+.doors-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.door {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
+  color: var(--fg);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  word-break: keep-all;
+  transition: transform 130ms ease, box-shadow 130ms ease;
+}
+
+.door:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-float);
+}
+
 .beta-note {
   display: inline-block;
   font-size: 0.88rem;

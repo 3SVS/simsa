@@ -36,6 +36,8 @@ import { useToast } from "@/components/Toast";
 import { BranchGlyph } from "@/components/brand/BranchGlyph";
 import { buildStepper, rotatingWaitLine } from "@/lib/wizard-steps.mjs";
 import { composeCodeIntent } from "@/lib/code-intent.mjs";
+import { ENTRY_DOORS, doorBranch, doorFromSearch, doorHref } from "@/lib/entry-doors.mjs";
+import type { EntryDoor } from "@/lib/entry-doors.mjs";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -106,6 +108,10 @@ function NewProjectInner() {
   // (plain /projects/new → chooser), and the visible back button below. Typed
   // input is intentionally kept when returning — only the screen changes.
   const [entryPath, setEntryPath] = useState<"idea" | "code" | "spec" | null>(null);
+  // C-N7 — which of the three first doors (D-17 amend). (b) and (c) share the
+  // code branch; (c) arrives with ?door=differs and is remembered on the project
+  // so the intent confirm card asks for what the user MEANT.
+  const [entryDoor, setEntryDoor] = useState<EntryDoor | null>(null);
   // Code branch: skip the idea step entirely (that's the branch's normal path).
   const [appName, setAppName] = useState("");
   const [codeDesc, setCodeDesc] = useState("");
@@ -139,9 +145,9 @@ function NewProjectInner() {
   // chooser; ?path=idea|code|spec shows that branch. This makes browser-back
   // and a re-click on the sidebar "new project" link both land on the chooser.
   useEffect(() => {
-    const raw = searchParams.get("path");
-    const fromUrl = raw === "idea" || raw === "code" || raw === "spec" ? raw : null;
-    setEntryPath(fromUrl);
+    const fromUrl = doorFromSearch({ path: searchParams.get("path"), door: searchParams.get("door") });
+    setEntryPath(fromUrl?.branch ?? null);
+    setEntryDoor(fromUrl?.door ?? null);
     if (fromUrl === null) setStep(1);
     // ?fresh=<nonce> (sidebar "new project" while already here) = full reset:
     // the user asked for a NEW project, so typed state is cleared too.
@@ -211,6 +217,14 @@ function NewProjectInner() {
     setEntryPath(id); // immediate — the effect above re-confirms from the URL
     setStep(1);
     router.push(`/projects/new?path=${id}`);
+  }
+
+  /** C-N7 — a door lands on its existing branch; the URL carries the door. */
+  function chooseDoor(door: EntryDoor) {
+    setEntryPath(doorBranch(door)); // immediate — the effect above re-confirms from the URL
+    setEntryDoor(door);
+    setStep(1);
+    router.push(doorHref(door));
   }
 
   function backToChooser() {
@@ -370,6 +384,8 @@ function NewProjectInner() {
     });
     saveExtendedProjectData(id, {
       entryPath: "code",
+      // C-N7: 문 (c)로 왔으면 의도 확인 카드가 "원래 만들려던 것"을 묻는다.
+      entryDoor: entryDoor === "differs" ? "differs" : "broken",
       ...(builtWithTools.length ? { builtWithTools } : {}),
     });
 
@@ -462,6 +478,8 @@ function NewProjectInner() {
       productSpec: spec.productSpec,
       itemCriteria: Object.fromEntries(spec.items.map((i) => [i.id, i.criteria ?? []])),
       entryPath: entryPath ?? "idea",
+      // C-N7: idea and plan-paste are both door (a).
+      entryDoor: "idea",
       ...(builtWithTools.length ? { builtWithTools } : {}),
       ...(platform || githubLevel || aiToolLevel
         ? {
@@ -519,9 +537,13 @@ function NewProjectInner() {
 
       <main className="flex flex-1 justify-center px-4 py-12">
         <div className="w-full max-w-2xl">
-          {/* Step 0: single entry → "what do you have?" branch chooser.
-              Asks the user's situation, not a "type" — no jargon. The choice
-              sets entry_path (idea/code/spec) which persists to the P1 envelope. */}
+          {/* Step 0: single entry → "what do you have?" chooser.
+              Asks the user's situation, not a "type" — no jargon.
+              C-N7 (D-17 amend 2026-09-27): three equal doors — 아이디어가 있어요 /
+              만든 앱이 안 돼요 / 만들었는데 생각과 달라요. They sit on the existing
+              branches (entry_path stays idea/code/spec for the P1 envelope):
+              (a) → idea, (b)(c) → code, (c) carrying ?door=differs. Pasting a
+              plan is a variant of door (a), kept as a quiet link below. */}
           {entryPath === null && (
             <div className="mx-auto flex min-h-[60vh] max-w-[34rem] flex-col justify-center">
               <Link href="/projects" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
@@ -530,29 +552,40 @@ function NewProjectInner() {
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.title}</h1>
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.subtitle}</p>
               <div className="space-y-3">
-                {([
-                  ["idea", t.branch.ideaTitle, t.branch.ideaDesc],
-                  ["code", t.branch.codeTitle, t.branch.codeDesc],
-                  ["spec", t.branch.specTitle, t.branch.specDesc],
-                ] as const).map(([id, title, desc]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => chooseBranch(id)}
-                    className="card card-select w-full p-5 text-left"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span aria-hidden className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
-                        <BranchGlyph branch={id} />
-                      </span>
-                      <div className="min-w-0">
-                        <span className="block text-sm font-semibold text-gray-900">{title}</span>
-                        <span className="mt-1 block text-xs text-gray-500">{desc}</span>
+                {ENTRY_DOORS.map((door) => {
+                  const [title, desc] =
+                    door === "idea"
+                      ? [t.branch.ideaTitle, t.branch.ideaDesc]
+                      : door === "broken"
+                        ? [t.branch.codeTitle, t.branch.codeDesc]
+                        : [t.branch.differsTitle, t.branch.differsDesc];
+                  return (
+                    <button
+                      key={door}
+                      type="button"
+                      onClick={() => chooseDoor(door)}
+                      className="card card-select w-full p-5 text-left"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span aria-hidden className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
+                          <BranchGlyph branch={door} />
+                        </span>
+                        <div className="min-w-0">
+                          <span className="block text-sm font-semibold text-gray-900">{title}</span>
+                          <span className="mt-1 block text-xs text-gray-500">{desc}</span>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
+              <button
+                type="button"
+                onClick={() => chooseBranch("spec")}
+                className="mt-5 inline-flex items-center gap-1 self-start text-sm text-gray-500 hover:text-gray-800"
+              >
+                {t.branch.specLink} <span aria-hidden>→</span>
+              </button>
             </div>
           )}
 
@@ -569,7 +602,9 @@ function NewProjectInner() {
             <div className="mx-auto max-w-[34rem]">
               <BackToChooserButton />
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.codeStepTitle}</h1>
-              <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.codeStepSub}</p>
+              <p className="mb-8 mt-2 text-sm text-gray-500">
+                {entryDoor === "differs" ? t.branch.codeStepSubDiffers : t.branch.codeStepSub}
+              </p>
 
               <label htmlFor="submission" className="mb-1 block text-xs font-semibold text-gray-600">
                 {t.branch.submitLabel}
