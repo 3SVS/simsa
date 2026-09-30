@@ -115,6 +115,16 @@ ACTUAL_DEBIT_ALLOWED_USER_KEYS = ""
 binding = "EVIDENCE"
 bucket_name = "simsa-evidence"
 
+# SI 티어 Train B — B-7 호스팅 사업자 의무(D-6): 정지 목록 Workers KV. apps/hosting-dispatch/wrangler.toml과
+# **같은 id**여야 한다(이 Worker가 suspended:<slug>를 쓰고 라우터가 읽는다 · 라우터가 strike:를 쓰고 10분 크론이 읽는다).
+# 네임스페이스가 아직 없어 주석으로 둔다 — 가짜 id를 넣으면 **모든 central-plane 배포가 실패**한다.
+# 없으면: 관리자 정지 503 suspension_store_not_configured(정지된 척하지 않음) · 자동 정지 스윕 건너뜀 · 신고 접수는 정상.
+# 켜는 법(Bae 액션): Cloudflare 대시보드 → Storage & Databases → KV → Create → `simsa-hosting-suspended`
+#   → ID를 여기와 hosting-dispatch 양쪽에 적고 주석 해제 → PR·머지 → deploy central-plane · deploy hosting-dispatch.
+# [[kv_namespaces]]
+# binding = "HOSTING_SUSPENDED"
+# id = "<simsa-hosting-suspended KV ID>"
+
 # Observability. Logs retained 3 days on free tier, sufficient for v0.4-alpha.
 [observability]
 enabled = true

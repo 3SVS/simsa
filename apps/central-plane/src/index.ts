@@ -20,6 +20,7 @@ import { runMcpRegistryMiner } from "./mcp-registry-miner.js";
 import { runShadcnBlockMiner } from "./shadcn-block-miner.js";
 import { runAwesomeListMiner } from "./awesome-list-miner.js";
 import { purgeExpiredRateLimitRows } from "./rate-limit-retention.js";
+import { sweepHostingRateStrikes } from "./workspace/hosting-duties.js";
 
 const app = createApp();
 
@@ -325,6 +326,14 @@ export default {
       console.log(JSON.stringify({ cron: "verify-sweep", cronExpression: event.cron, ...verify }));
     } catch (err) {
       console.error("[verify-sweep] crashed:", err);
+    }
+    // B-7 (D-6) — 요청 상한 초과가 이어진 호스팅 앱 자동 정지. 관리자 정지와 같은 함수·같은 로그
+    // (workspace/hosting-duties.ts). 정지 목록 KV가 없으면 건너뜀을 보고한다.
+    try {
+      const strikes = await sweepHostingRateStrikes(env);
+      console.log(JSON.stringify({ cron: "hosting-strike-sweep", cronExpression: event.cron, ...strikes }));
+    } catch (err) {
+      console.error("[hosting-strike-sweep] crashed:", err);
     }
   },
 };
