@@ -62,7 +62,7 @@ import {
 export { CHILD_ENV_KEYS, childEnv };
 
 /** 이미지 롤아웃 확인용 마커(인스펙터 RUNNER_REV와 같은 용도 — 옛 이미지가 서빙 중인지 판별). */
-export const RUNNER_REV = "b5bS2-builder-7";
+export const RUNNER_REV = "b5bS2-builder-8";
 
 /**
  * D-4 잡 상태 머신 — **D1 build_jobs.status와 같은 목록·같은 순서**(build-job-db.ts BUILD_JOB_STATUSES).
@@ -218,7 +218,8 @@ export async function checkWorkRoot(workRoot, fsImpl = fs) {
 /**
  * 자가점검. 각 도구를 한 번씩 실행해 버전과 소요 시간을 돌려준다.
  * ok = 모든 필수 도구가 있고 + 금지 CLI가 없고 + 작업 디렉터리가 쓰기 가능 + agent-worker import 가능 + 템플릿 있음
- *      + 샌드박스(B-5b-2): 설정돼 있으면 실제로 쓸 수 있어야 한다(root · 사용자 집 폴더 소유). 설정이 없으면(개발 PC) enabled:false.
+ *      + 샌드박스(B-5b-2): 실제로 쓸 수 있어야 한다(root · 사용자 집 폴더 소유). 설정이 없으면 ok:false(not_configured) —
+ *        runBuild와 같은 판정(PR #569 S2 검증 결함 2). 개발 PC는 SIMSA_ALLOW_UNSANDBOXED=1(root 아님)일 때만 enabled:false로 통과.
  */
 export async function selfCheck({
   exec = defaultExec,
@@ -385,6 +386,33 @@ export function validateBuildPayload(payload) {
       wbs: wbsRaw.map((w) => ({ id: w.id, title: w.title, order: w.order, acceptanceIds: [...w.acceptanceIds], dependsOn: [...w.dependsOn], must: w.must !== false })),
     },
   };
+}
+
+// ─── POST /run 입장 판정 (server.mjs가 쓴다) ────────────────────────────────────────────────────
+
+/**
+ * POST /run 하나를 받을지. 반환 { status, body } — server.mjs가 그대로 응답하고, status가 202일 때만 잡을 inFlight에 넣는다.
+ *   400  공통 필드 누락 · kind=build 페이로드 불합격(202 전에 — Worker dispatchBuild가 즉시 failed(queued)를 기록한다)
+ *   409  builder_busy — 인스턴스 하나 = 빌드 잡 하나(DO 이름 `build-<jobId>`):
+ *          · 같은 jobId가 진행 중이면 **종류와 무관하게**(종전에는 kind=build만 봤다 — kind=selfcheck로 같은 jobId를 넣으면 진행 중인
+ *            빌드의 inFlight 항목을 덮어써 SIGTERM 드레인 목록에서 빠지게 하고, 끝나며 지워 뒤이은 같은 jobId 빌드가 작업 폴더를 지울 수 있었다)
+ *          · 빌드가 진행 중이면 다른 POST /run 무엇이든(Worker는 자가점검을 GET /selfcheck로만 부른다)
+ *        생성 코드(같은 컨테이너의 샌드박스 사용자)가 localhost:8080으로 진행 중인 잡을 덮지 못하게 한다.
+ *   202  받음
+ * inFlight: jobId → { payload } (server.mjs inFlightJobs). 순수 함수 — test/train-b-b5b2-gate.test.mjs가 행동으로 확인한다
+ * (PR #569 S2 검증 결함 4 — 종전 테스트는 소스 문자열만 봤다).
+ */
+export function admitRun(payload, inFlight) {
+  const validation = validateJobPayload(payload);
+  if (!validation.ok) return { status: 400, body: { error: `missing fields: ${validation.missing.join(", ")}` } };
+  if (payload.kind === "build") {
+    const vb = validateBuildPayload(payload);
+    if (!vb.ok) return { status: 400, body: { error: `invalid build payload: ${vb.errors.join(", ")}` } };
+  }
+  const running = inFlight instanceof Map ? [...inFlight.values()] : [];
+  const buildRunning = running.some((e) => e?.payload?.kind === "build");
+  if ((inFlight instanceof Map && inFlight.has(payload.jobId)) || buildRunning) return { status: 409, body: { error: "builder_busy" } };
+  return { status: 202, body: { jobId: payload.jobId, status: "accepted", runnerRev: RUNNER_REV } };
 }
 
 // ─── B-5b S1: LLM은 Worker 프록시로만 ────────────────────────────────────────────────────────────
@@ -662,29 +690,55 @@ async function installDeps({ appDir, exec, env, signal, sandbox }) {
 }
 
 /**
+ * [PILOT] 신호를 끊은 뒤(WBS·수리 시간 상한 또는 잡 마감) fn이 스스로 끝나기를 기다리는 유예. 넘으면 결과를 기다리지 않고
+ * limit_time으로 넘어간다 — 신호를 무시하는 구현이 잡을 45분 마감까지 붙잡지 않게(PR #569 S2 검증 결함 6). 뒤에 남은 루프는
+ * 실행기(createWorkspaceExecutor)가 신호가 끊긴 뒤의 쓰기·명령을 거부하고, 실행 중이던 명령은 sandboxExec가 그룹째 죽인다.
+ */
+export const WBS_ABORT_GRACE_MS = 30_000;
+
+/**
  * fn(signal)을 ms 안에서. 부모 신호(잡 마감·SIGTERM)도 잇는다. 던지면 llm_error 모양 결과로.
  * 반환 { outcome, timedOut } — 시간이 넘었으면 결과가 무엇이든 limit_time으로 분류한다(호출자).
+ * **강제 상한**: 신호를 끊은 뒤 graceMs 안에 fn이 끝나지 않으면 fn을 기다리지 않고 { status: "limit_time" }로 돌아온다
+ * (종전에는 협조적 abort에만 기대어, 신호를 무시하는 fn이면 영원히 기다렸다). 유예 타이머는 abort와 **따로** 건다 —
+ * abort가 빠지는 회귀가 있어도 여기서 멈추지 않는다.
  */
-async function runTimed(ms, parentSignal, fn) {
+async function runTimed(ms, parentSignal, fn, graceMs = WBS_ABORT_GRACE_MS) {
   const ac = new AbortController();
-  const onParent = () => ac.abort(parentSignal.reason);
-  if (parentSignal?.aborted) ac.abort(parentSignal.reason);
+  let graceTimer = null;
+  let giveUp = () => {};
+  const gaveUp = new Promise((resolve) => {
+    giveUp = resolve;
+  });
+  const startGrace = () => {
+    if (graceTimer) return;
+    graceTimer = setTimeout(() => giveUp({ status: "limit_time", summary: `did not stop within ${graceMs}ms after its signal was aborted` }), Math.max(1, graceMs));
+  };
+  const onParent = () => {
+    ac.abort(parentSignal.reason);
+    startGrace();
+  };
+  if (parentSignal?.aborted) onParent();
   else parentSignal?.addEventListener?.("abort", onParent, { once: true });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
     ac.abort(new Error("wbs_time_limit"));
+    startGrace();
   }, Math.max(1, ms));
   try {
-    let outcome;
-    try {
-      outcome = await fn(ac.signal);
-    } catch (err) {
-      outcome = { status: "llm_error", summary: String(err?.message ?? err).slice(0, 300), error: err };
-    }
+    const work = (async () => {
+      try {
+        return await fn(ac.signal);
+      } catch (err) {
+        return { status: "llm_error", summary: String(err?.message ?? err).slice(0, 300), error: err };
+      }
+    })();
+    const outcome = await Promise.race([work, gaveUp]);
     return { outcome, timedOut };
   } finally {
     clearTimeout(timer);
+    if (graceTimer) clearTimeout(graceTimer);
     parentSignal?.removeEventListener?.("abort", onParent);
   }
 }
@@ -799,7 +853,8 @@ async function runGate({ appDir, exec, env, offlineEnv, sandbox, signal, fsImpl,
  * 마감·중단(`deps.signal`, startJob이 넘긴다): 끊기면 다음 진행 콜백을 보내지 않고 다음 exec를 시작하지 않는다(실행 중인
  * exec는 defaultExec가 그룹째 죽인다). 그때의 반환 본문은 쓰이지 않는다 — 최종 본문은 startJob이 정한다(결함 6).
  * 자식 프로세스: env = workEnv(deps.baseEnv ?? process.env) — 허용 키 + HOME·NO_COLOR, jobToken 없음. uid = 샌드박스 사용자
- * (deps.sandbox, 없으면 SIMSA_SANDBOX_* 환경 — 설정됐는데 쓸 수 없으면 failed(scaffolding, sandbox_unavailable:…)).
+ * (deps.sandbox, 없으면 SIMSA_SANDBOX_* 환경 — 설정이 없거나 쓸 수 없으면 failed(scaffolding, sandbox_unavailable:…)).
+ * WBS·수리의 시간 상한 뒤 유예(WBS_ABORT_GRACE_MS, deps.wbsAbortGraceMs)가 지나면 구현이 끝나지 않아도 limit_time으로 간다.
  */
 export async function runBuild(payload, deps = {}) {
   const v = validateBuildPayload(payload);
@@ -821,8 +876,10 @@ export async function runBuild(payload, deps = {}) {
   const aborted = () => signal?.aborted === true;
   const gateLimits = { ...GATE_LIMITS, ...(deps.gateLimits ?? {}) };
   const wbsTimeLimitMs = Number.isFinite(deps.wbsTimeLimitMs) && deps.wbsTimeLimitMs > 0 ? deps.wbsTimeLimitMs : WBS_TIME_LIMIT_MS;
+  const abortGraceMs = Number.isFinite(deps.wbsAbortGraceMs) && deps.wbsAbortGraceMs > 0 ? deps.wbsAbortGraceMs : WBS_ABORT_GRACE_MS;
 
-  // 샌드박스 사용자 — 테스트는 deps.sandbox(null 또는 {uid,gid,home,storeDir})로 정한다.
+  // 샌드박스 사용자 — 테스트는 deps.sandbox(null 또는 {uid,gid,home,storeDir})로 **명시**한다. 그 밖(server.mjs)은 환경에서 —
+  // 설정이 없으면 fail closed(sandbox_unavailable:not_configured, PR #569 S2 검증 결함 2).
   const sandboxCheck = deps.sandbox !== undefined ? { ok: true, sandbox: deps.sandbox, reason: null } : sandboxFromEnv(deps.sandboxEnv ?? process.env);
   const sandbox = sandboxCheck.ok ? sandboxCheck.sandbox : null;
   const exec = sandbox ? (cmd, args, opts = {}) => baseExec(cmd, args, { ...opts, uid: sandbox.uid, gid: sandbox.gid }) : baseExec;
@@ -853,7 +910,7 @@ export async function runBuild(payload, deps = {}) {
     onStage("scaffolding");
     const stop1 = await progress("scaffolding", "scaffold_started", { template: TEMPLATE_NAME });
     if (stop1) return fail("scaffolding", stop1);
-    // 샌드박스가 설정돼 있는데 쓸 수 없으면 생성 코드를 root로 돌리지 않는다(fail closed).
+    // 샌드박스가 없거나(설정 누락 — not_configured) 쓸 수 없으면 생성 코드를 root로 돌리지 않는다(fail closed). 명령은 하나도 안 돈다.
     if (!sandboxCheck.ok) return fail("scaffolding", `sandbox_unavailable:${sandboxCheck.reason}`);
     let scaffold;
     let baseCommit;
@@ -925,7 +982,7 @@ export async function runBuild(payload, deps = {}) {
       }
       const stopW = await progress("implementing", "wbs_started", { wbsId: item.id });
       if (stopW) return fail("implementing", stopW);
-      const run = await runTimed(wbsTimeLimitMs, signal, (wbsSignal) => implementWbs({ item, job, appDir, llm, exec, signal: wbsSignal, env: offlineEnv, plan: plan() }));
+      const run = await runTimed(wbsTimeLimitMs, signal, (wbsSignal) => implementWbs({ item, job, appDir, llm, exec, signal: wbsSignal, env: offlineEnv, plan: plan() }), abortGraceMs);
       const outcome = run.outcome;
       if (isBudgetExhausted(outcome) || isBudgetExhausted(outcome?.error)) return budgetStop(item.id, "implementing");
       if (aborted()) return fail("implementing", "job_aborted");
@@ -967,6 +1024,7 @@ export async function runBuild(payload, deps = {}) {
       const item = { id: label, title: `Fix the failing ${stage === "testing" ? "tests" : "build"} (${command})`, order: 0, acceptanceIds: [], dependsOn: [], must: true };
       const run = await runTimed(gateLimits.repairTimeMs, signal, (sig) =>
         implementWbs({ item, job, appDir, llm, exec, signal: sig, env: offlineEnv, plan: plan(), repair: { stage, round, maxRounds, command, exitLabel: exit, logTail } }),
+        abortGraceMs,
       );
       if (isBudgetExhausted(run.outcome) || isBudgetExhausted(run.outcome?.error)) {
         const b = await budgetStop(label, stage);

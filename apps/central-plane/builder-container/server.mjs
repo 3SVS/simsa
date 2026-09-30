@@ -26,14 +26,7 @@
  * 돈다(builder-work.mjs) — 이 프로세스의 메모리·환경을 읽을 수 없다. 빌드 잡은 인스턴스당 하나(두 번째는 409 builder_busy).
  */
 import { createServer } from "node:http";
-import {
-  RUNNER_REV,
-  postCallback,
-  selfCheck,
-  startJob,
-  validateBuildPayload,
-  validateJobPayload,
-} from "./builder-run.mjs";
+import { RUNNER_REV, admitRun, postCallback, selfCheck, startJob } from "./builder-run.mjs";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const WORK_ROOT = process.env.WORK_ROOT ?? "/var/lib/simsa-build";
@@ -75,27 +68,12 @@ const server = createServer(async (req, res) => {
     json(res, 400, { error: "invalid JSON body", detail: err.message });
     return;
   }
-  const validation = validateJobPayload(payload);
-  if (!validation.ok) {
-    json(res, 400, { error: `missing fields: ${validation.missing.join(", ")}` });
-    return;
-  }
-  // kind=build는 202 전에 전부 검사한다 — 거절이 동기로 돌아가야 Worker의 dispatchBuild가 즉시 failed(queued)를 기록한다.
-  if (payload.kind === "build") {
-    const vb = validateBuildPayload(payload);
-    if (!vb.ok) {
-      json(res, 400, { error: `invalid build payload: ${vb.errors.join(", ")}` });
-      return;
-    }
-    // B-5b-2: 인스턴스 하나 = 빌드 잡 하나(DO 이름 `build-<jobId>`). 두 번째 빌드는 정당한 경로가 없다 — 생성 코드(같은 컨테이너,
-    // 샌드박스 사용자)가 localhost:8080으로 같은 jobId를 다시 넣어 작업 폴더를 지우거나 드레인 목록을 덮어쓰지 못하게 409.
-    if (inFlightJobs.has(payload.jobId) || [...inFlightJobs.values()].some((e) => e.payload.kind === "build")) {
-      json(res, 409, { error: "builder_busy" });
-      return;
-    }
-  }
-
-  json(res, 202, { jobId: payload.jobId, status: "accepted", runnerRev: RUNNER_REV });
+  // 입장 판정은 builder-run.mjs admitRun 하나(행동 테스트가 있다): 400(필드·빌드 페이로드 — 202 전에, Worker dispatchBuild가
+  // 즉시 failed(queued)를 기록) · 409 builder_busy(같은 jobId 진행 중이면 종류 무관 · 빌드 진행 중이면 무엇이든 — 생성 코드가
+  // localhost:8080으로 진행 중인 잡을 덮지 못하게) · 202. 판정과 등록 사이에 await가 없다(동시 요청이 둘 다 통과하지 않는다).
+  const admission = admitRun(payload, inFlightJobs);
+  json(res, admission.status, admission.body);
+  if (admission.status !== 202) return;
 
   const entry = { payload, job: null, reported: false };
   inFlightJobs.set(payload.jobId, entry);

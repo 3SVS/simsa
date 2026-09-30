@@ -189,9 +189,11 @@ describe("B-5b-0 · 이미지 안의 agent-worker", () => {
     const exec = async (cmd) => (["vercel", "netlify"].includes(cmd)
       ? { ok: false, code: 127, stdout: "", stderr: "", error: "ENOENT" }
       : { ok: true, code: 0, stdout: "1.0.0", stderr: "", error: null });
-    const healthy = await run.selfCheck({ exec, workRoot: await tmpDir("sc0"), loadAgentWorker: async () => import(pathToFileURL(REPO_AGENT_WORKER_DIST).href), templateDir: REPO_TEMPLATE });
-    assert.equal(healthy.ok, true, JSON.stringify({ aw: healthy.agentWorker, t: healthy.template, w: healthy.workRoot }));
-    const r = await run.selfCheck({ exec, workRoot: await tmpDir("sc1"), loadAgentWorker, templateDir: REPO_TEMPLATE });
+    // 샌드박스는 개발 PC opt-out(root 아님)으로 — 여기서 보는 것은 agent-worker 항목뿐이다(샌드박스 판정은 b5b2-gate 테스트).
+    const devSandbox = { sandboxEnv: { SIMSA_ALLOW_UNSANDBOXED: "1" }, getuid: () => 1000 };
+    const healthy = await run.selfCheck({ exec, workRoot: await tmpDir("sc0"), loadAgentWorker: async () => import(pathToFileURL(REPO_AGENT_WORKER_DIST).href), templateDir: REPO_TEMPLATE, ...devSandbox });
+    assert.equal(healthy.ok, true, JSON.stringify({ aw: healthy.agentWorker, t: healthy.template, w: healthy.workRoot, s: healthy.sandbox }));
+    const r = await run.selfCheck({ exec, workRoot: await tmpDir("sc1"), loadAgentWorker, templateDir: REPO_TEMPLATE, ...devSandbox });
     assert.equal(r.agentWorker.ok, false);
     assert.ok(r.agentWorker.missing.includes("runBuildLoop"), JSON.stringify(r.agentWorker));
     assert.equal(r.template.ok, true);
@@ -407,7 +409,7 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
     const stages = [];
     // [의도된 변경 · B-5b-2] implementWbs 기본값 = 이미지 안 agent-worker runBuildLoop. 이미지 밖(이 테스트)에서는 그 import가
     // 실패하므로 implementing에서 `agent_worker_unavailable`로 정직하게 멈춘다(종전: builder_stage_not_implemented:implementing).
-    const r = await run.runBuildJob(buildPayload(), { workRoot, templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, onStage: (s) => stages.push(s), loadAgentWorker: async () => { throw new Error("Cannot find module '/builder/ws/packages/agent-worker/dist/index.js'"); } });
+    const r = await run.runBuildJob(buildPayload(), { workRoot, templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, onStage: (s) => stages.push(s), sandbox: null, loadAgentWorker: async () => { throw new Error("Cannot find module '/builder/ws/packages/agent-worker/dist/index.js'"); } });
 
     assert.deepEqual(poster.calls.map((c) => [c.url, c.body.status, c.body.message]), [
       ["https://cp.example/internal/build-progress", "scaffolding", "scaffold_started"],
@@ -448,7 +450,7 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
 
   it("템플릿이 없으면 failed(scaffolding) — scaffold_started만 기록, implementing으로 가지 않는다", async () => {
     const poster = recordingPoster();
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr2"), templateDir: path.join(os.tmpdir(), "no-such-template-b5b"), exec: gitExec().exec, postCallback: poster.post });
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr2"), templateDir: path.join(os.tmpdir(), "no-such-template-b5b"), exec: gitExec().exec, postCallback: poster.post, sandbox: null });
     assert.equal(r.ok, false);
     assert.equal(r.failedStage, "scaffolding");
     assert.match(r.error, /^scaffold_failed:/);
@@ -456,7 +458,7 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
   });
 
   it("git 커밋이 실패하면 failed(scaffolding) + 어느 단계인지", async () => {
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr3"), templateDir: REPO_TEMPLATE, exec: gitExec({ failOn: "commit" }).exec, postCallback: recordingPoster().post });
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr3"), templateDir: REPO_TEMPLATE, exec: gitExec({ failOn: "commit" }).exec, postCallback: recordingPoster().post, sandbox: null });
     assert.equal(r.failedStage, "scaffolding");
     assert.match(r.error, /^scaffold_failed:git_commit_failed/);
   });
@@ -464,7 +466,7 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
   it("Worker가 잡을 활성으로 보지 않으면(transitioned:false) 즉시 멈춘다 — 스캐폴드·git 없음(좀비 빌드 비용 방어)", async () => {
     const git = gitExec();
     const poster = recordingPoster([{ ok: true, status: 200, json: { ok: true, transitioned: false } }]);
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr4"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post });
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr4"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, sandbox: null });
     assert.equal(r.failedStage, "scaffolding");
     assert.equal(r.error, "job_not_active");
     assert.equal(git.calls.length, 0);
@@ -473,12 +475,12 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
 
   it("진행 콜백이 4xx(계약 파손·토큰 불일치)면 멈추고, 5xx·네트워크면 계속 간다", async () => {
     const p401 = recordingPoster([{ ok: false, status: 401, json: { ok: false, error: "unauthorized" } }]);
-    const r1 = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr5"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: p401.post });
+    const r1 = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr5"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: p401.post, sandbox: null });
     assert.equal(r1.error, "progress_rejected:401");
     assert.equal(r1.failedStage, "scaffolding");
 
     const p503 = recordingPoster([{ ok: false, status: 503, json: null }, { ok: false, status: 0, json: null, error: "fetch failed" }]);
-    const r2 = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr6"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: p503.post });
+    const r2 = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr6"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: p503.post, sandbox: null });
     assert.equal(r2.failedStage, "implementing", "기록이 한 번 실패했다고 잡을 버리지 않는다");
     assert.equal(p503.calls.length, 2);
   });
@@ -560,9 +562,12 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
   });
 
   it("server.mjs: kind=build 페이로드는 202 전에 validateBuildPayload로 거른다(디스패치가 즉시 failed(queued)를 기록하도록)", () => {
-    const i202 = serverMjs.indexOf("json(res, 202,");
-    const iVal = serverMjs.indexOf("validateBuildPayload(");
-    assert.ok(iVal > 0 && iVal < i202, "validateBuildPayload must run before the 202 ack");
+    // [정정 2026-10-01 PR #569 S2 결함 4] 판정은 builder-run.mjs admitRun 하나로 옮겼다 — 소스 순서 대신 행동으로 본다.
+    const bad = run.admitRun({ ...buildPayload(), slug: "동네 빵집" }, new Map());
+    assert.equal(bad.status, 400, "an invalid build payload is refused before any ack");
+    assert.match(bad.body.error, /^invalid build payload: .*slug/);
+    assert.equal(run.admitRun(buildPayload(), new Map()).status, 202);
+    assert.ok(serverMjs.indexOf("admitRun(payload, inFlightJobs)") > 0 && serverMjs.indexOf("admitRun(payload, inFlightJobs)") < serverMjs.indexOf("inFlightJobs.set("), "server.mjs decides with admitRun before registering the job");
     // 현재 단계 추적(드레인·마감 본문의 failedStage)은 startJob이 onStage로 한다 — '결함 6' 블록이 행동으로 확인.
     assert.match(serverMjs, /startJob\(/, "server runs each job through startJob (stage tracking · deadline · abort)");
   });
@@ -676,7 +681,7 @@ describe("결함 2 · postCallback 재시도·중단 분기(fetch seam) + '기�
 
   it("runBuild: 2xx여도 Worker 응답({ok:true})이 아니면 '기록됨'이 아니다 — transitioned 없음을 '잡 끝남'으로 읽지 않고 계속 간다", async () => {
     const poster = recordingPoster([{ ok: true, status: 200, json: null }, { ok: true, status: 200, json: { transitioned: false } }]);
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrH"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, log: () => {}, loadAgentWorker: async () => { throw new Error("no agent-worker outside the image"); } });
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrH"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, sandbox: null, log: () => {}, loadAgentWorker: async () => { throw new Error("no agent-worker outside the image"); } });
     assert.deepEqual(poster.calls.map((c) => c.body.message), ["scaffold_started", "scaffold_ready"], "a non-Worker 2xx is not a reason to stop (like 5xx: continue)");
     assert.equal(r.failedStage, "implementing");
     // [B-5b-2] implementing까지 갔다는 것이 요점(종전 문구 builder_stage_not_implemented:implementing → 이미지 밖의 정직한 실패).
@@ -835,7 +840,7 @@ describe("결함 6 · 45분 마감·SIGTERM — 러너를 멈추고 최종 본�
     const job = run.startJob(buildPayload(), {
       timeoutMs: 200,
       timeoutMessage: "build job timed out after 45 min",
-      deps: { workRoot: await tmpDir("wrT"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, log: () => {} },
+      deps: { workRoot: await tmpDir("wrT"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, sandbox: null, log: () => {} },
     });
     const body = await job.done;
     assert.deepEqual(body, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "scaffolding", error: "build job timed out after 45 min" });
@@ -856,7 +861,7 @@ describe("결함 6 · 45분 마감·SIGTERM — 러너를 멈추고 최종 본�
       return { ok: true, code: 0, stdout: "", stderr: "", error: null };
     };
     const poster = recordingPoster();
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrS"), templateDir: REPO_TEMPLATE, exec, postCallback: poster.post, signal: ac.signal, log: () => {} });
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrS"), templateDir: REPO_TEMPLATE, exec, postCallback: poster.post, signal: ac.signal, sandbox: null, log: () => {} });
     assert.deepEqual(poster.calls.map((c) => c.body.message), ["scaffold_started"]);
     assert.equal(r.ok, false);
     assert.equal(r.failedStage, "scaffolding");
@@ -867,7 +872,7 @@ describe("결함 6 · 45분 마감·SIGTERM — 러너를 멈추고 최종 본�
   it("SIGTERM 드레인(abort): 그 단계의 본문 하나 — done도 같은 본문(최종 콜백이 두 번 가지 않게)", async () => {
     const git = gatedGit();
     const poster = recordingPoster([{ ok: false, status: 503, json: null }]);
-    const job = run.startJob(buildPayload(), { timeoutMs: 0, deps: { workRoot: await tmpDir("wrK"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, log: () => {} } });
+    const job = run.startJob(buildPayload(), { timeoutMs: 0, deps: { workRoot: await tmpDir("wrK"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, sandbox: null, log: () => {} } });
     for (let i = 0; i < 400 && poster.calls.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     const body = job.abort(new Error("builder container was killed by SIGTERM mid-job (deploy rollout or sleepAfter)"));
     assert.equal(body.failedStage, "scaffolding");

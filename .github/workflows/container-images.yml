@@ -22,6 +22,9 @@
 # 그리고 고의로 깨진 코드 → 수리 2회 → failed(building)(테스트·push·배포 단계 미도달). 모델의 run_command가 샌드박스 사용자
 # (uid 10001)로 돌며 서버의 /proc/<pid>/environ·mem을 못 읽고 /builder에 못 쓰는지 탐침으로 확인한다.
 # 가짜 토큰·가짜 D1 id만 쓰고 Cloudflare·GitHub·LLM에는 닿지 않는다(템플릿 의존성은 이미지 빌드 때 npm 레지스트리에서 받는다).
+# PR #569 S2 검증 결함: ① 탐침이 샌드박스 자식의 그룹도 본다(groups=10001만 · /proc/self/status 보조 그룹에 root 그룹 없음 — Node가
+# setgroups(0)로 비운다는 것의 실측) ② 샌드박스 ENV가 빠진 컨테이너는 자가점검 빨간불 + 빌드를 받지 않는다(fail closed)
+# ④ 빌드가 도는 동안 실제 서버에 두 번째 POST /run(같은 jobId·다른 jobId·같은 jobId의 selfcheck)을 넣으면 전부 409 builder_busy.
 name: container-images
 
 on:
@@ -102,7 +105,8 @@ jobs:
             'for (const d of readdirSync("/proc")) { if (!/^\\d+$/.test(d)) continue; try { if (readFileSync("/proc/" + d + "/cmdline", "utf8").includes("/builder/server.mjs")) { pid = d; break; } } catch {} }',
             'const r = (p) => { try { readFileSync(p); return "readable"; } catch (e) { return e.code; } };',
             'const w = (p) => { try { writeFileSync(p, "x"); return "writable"; } catch (e) { return e.code; } };',
-            'console.log("uid=" + process.getuid() + " serverPid=" + pid + " environ=" + r("/proc/" + pid + "/environ") + " mem=" + r("/proc/" + pid + "/mem") + " builderWrite=" + w("/builder/sandbox-probe.txt") + " jobTokenInEnv=" + JSON.stringify(process.env).includes("bjt1."));',
+            'const supp = ((readFileSync("/proc/self/status", "utf8").match(/^Groups:(.*)$/m) || [])[1] || "?").trim().split(/\\s+/).filter(Boolean).join(",");',
+            'console.log("uid=" + process.getuid() + " serverPid=" + pid + " environ=" + r("/proc/" + pid + "/environ") + " mem=" + r("/proc/" + pid + "/mem") + " builderWrite=" + w("/builder/sandbox-probe.txt") + " jobTokenInEnv=" + JSON.stringify(process.env).includes("bjt1.") + " groups=" + process.getgroups().join(",") + " suppGroups=[" + supp + "] end");',
           ].join("\n");
           const APP = 'export function App() {\n  return (\n    <main>\n      <h1>동네 빵집 소금빵 예약 (주)빵굽는집</h1>\n      <button type="button">예약하기</button>\n    </main>\n  );\n}\n';
           const BROKEN = 'import { Hono } from "hono";\nconst app = new Hono();\nconst 예약수: number = "여러 개";\napp.get("/api/health", (c) => c.json({ ok: true, n: 예약수 }));\nexport default app;\n';
@@ -157,8 +161,9 @@ jobs:
           docker run --rm --entrypoint sh simsa-builder:pr -c 'test -f /builder/templates/simsa-hosted-app/.gitignore && test -f /builder/templates/simsa-hosted-app/wrangler.toml && test -f /builder/templates/simsa-hosted-app/test/smoke.test.mjs' \
             || { echo "::error::tracked template files are missing from the image"; exit 1; }
 
+          nosb=""
           cid=$(docker run -d -p 18080:8080 --add-host=host.docker.internal:host-gateway simsa-builder:pr)
-          trap 'docker logs "$cid" | tail -60 || true; docker rm -f "$cid" >/dev/null 2>&1 || true; kill "$recv" 2>/dev/null || true' EXIT
+          trap 'docker logs "$cid" | tail -60 || true; docker rm -f "$cid" >/dev/null 2>&1 || true; if [ -n "$nosb" ]; then docker rm -f "$nosb" >/dev/null 2>&1 || true; fi; kill "$recv" 2>/dev/null || true' EXIT
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:18080/health && break || sleep 1; done
           echo
           curl -sf http://127.0.0.1:18080/health | jq .
@@ -189,7 +194,7 @@ jobs:
 
           # ── kind=build 두 건(B-5b-2·3) · 비밀 없는 페이로드(B-5b S1) ──
           # Rule 6: 제품명·WBS 제목은 한글·공백·특수문자. jobToken·D1 id는 명백한 가짜(모양만 bjt1.<jobId>.<64hex>).
-          run_job() { # $1=jobId $2=token → /tmp/cb-done-$1.jsonl 이 생길 때까지(최대 300초)
+          write_payload() { # $1=jobId $2=token → /tmp/payload-$1.json
             cat > "/tmp/payload-$1.json" <<EOF
           {"jobId":"$1","kind":"build","slug":"ci-smoke-app","locale":"ko",
            "baseUrl":"http://host.docker.internal:18099",
@@ -200,20 +205,42 @@ jobs:
            "hosting":{"d1Id":"00000000-0000-4000-8000-000000000001"},
            "llm":{"model":"claude-sonnet-4-6","openaiModel":"gpt-5.4","preferFallback":false}}
           EOF
-            code=$(curl -s -o "/tmp/run-$1.json" -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @"/tmp/payload-$1.json" http://127.0.0.1:18080/run)
+          }
+          start_job() { # $1=jobId $2=token [$3=호스트 포트, 기본 18080] → 202
+            write_payload "$1" "$2"
+            code=$(curl -s -o "/tmp/run-$1.json" -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @"/tmp/payload-$1.json" "http://127.0.0.1:${3:-18080}/run")
             cat "/tmp/run-$1.json"; echo
             [ "$code" = "202" ] || { echo "::error::POST /run for $1 returned $code"; exit 1; }
+          }
+          wait_job() { # $1=jobId → /tmp/cb-done-$1.jsonl 이 생길 때까지(최대 300초)
             for i in $(seq 1 300); do [ -s "/tmp/cb-done-$1.jsonl" ] && break || sleep 1; done
             [ -s "/tmp/cb-done-$1.jsonl" ] || { echo "::error::no build-done callback for $1 within 300s"; exit 1; }
             echo "progress ($1):"; jq -c '{status, message, meta: (.meta | del(.runnerRev))}' "/tmp/cb-progress-$1.jsonl"
             echo "done ($1):"; jq -c . "/tmp/cb-done-$1.jsonl"
           }
+          run_job() { start_job "$1" "$2"; wait_job "$1"; }
+          expect_busy() { # $1=설명 $2=본문 파일 — 빌드가 도는 동안의 두 번째 POST /run은 409 builder_busy
+            code=$(curl -s -o /tmp/busy.json -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @"$2" http://127.0.0.1:18080/run)
+            echo "busy check ($1): $code $(cat /tmp/busy.json)"
+            if [ "$code" != "409" ] || ! jq -e '.error == "builder_busy"' /tmp/busy.json >/dev/null; then echo "::error::$1 while a build runs must be 409 builder_busy (got $code)"; exit 1; fi
+          }
 
           GREEN_TOKEN="bjt1.bj_ci_green01.$(printf 'a1%.0s' $(seq 1 32))"
           BROKEN_TOKEN="bjt1.bj_ci_broken1.$(printf 'b2%.0s' $(seq 1 32))"
+          OTHER_TOKEN="bjt1.bj_ci_other01.$(printf 'c3%.0s' $(seq 1 32))"
 
           # (1) 초록불: WBS 1개 → 설치(오프라인)·빌드·테스트 통과 → push·배포는 Worker 몫이라 정직하게 failed(pushed)
-          run_job bj_ci_green01 "$GREEN_TOKEN"
+          start_job bj_ci_green01 "$GREEN_TOKEN"
+          # ── S2-4: 그 빌드가 도는 동안 실제 서버에 두 번째 POST /run — 같은 jobId(빌드) · 다른 jobId(빌드) · 같은 jobId(selfcheck) 전부 409 ──
+          # (생성 코드가 localhost:8080으로 진행 중인 잡을 덮거나 드레인 목록에서 빼지 못한다.)
+          write_payload bj_ci_other01 "$OTHER_TOKEN"
+          printf '%s' '{"jobId":"bj_ci_green01","kind":"selfcheck","baseUrl":"http://host.docker.internal:18099","callbackUrl":"http://host.docker.internal:18099/internal/build-done","jobToken":"not-a-real-token"}' > /tmp/payload-sc-same.json
+          expect_busy "same jobId build" /tmp/payload-bj_ci_green01.json
+          expect_busy "another jobId build" /tmp/payload-bj_ci_other01.json
+          expect_busy "same jobId selfcheck" /tmp/payload-sc-same.json
+          wait_job bj_ci_green01
+          [ ! -e /tmp/cb-done-bj_ci_other01.jsonl ] && [ ! -e /tmp/cb-progress-bj_ci_other01.jsonl ] || { echo "::error::a refused build must not run"; exit 1; }
+          [ "$(wc -l < /tmp/cb-done-bj_ci_green01.jsonl)" = "1" ] || { echo "::error::the green job must report exactly one final body (the selfcheck must not have replaced it)"; exit 1; }
           P=/tmp/cb-progress-bj_ci_green01.jsonl
           jq -s -e 'map(.message) == ["scaffold_started","scaffold_ready","wbs_started","wbs_done","gate_started","test_started","gate_passed"]' "$P" >/dev/null || { echo "::error::green job progress is not scaffold → WBS → gate_passed"; exit 1; }
           jq -s -e '.[1].meta.installMode == "offline" and .[1].meta.sandbox.uid == 10001 and .[1].meta.files >= 10' "$P" >/dev/null || { echo "::error::scaffold_ready must show an offline install as the sandbox user"; exit 1; }
@@ -226,6 +253,9 @@ jobs:
           grep -q 'mem=EACCES' /tmp/llm-toolresults.txt || { echo "::error::sandboxed code could open the server's /proc/<pid>/mem"; exit 1; }
           grep -q 'builderWrite=EACCES' /tmp/llm-toolresults.txt || { echo "::error::sandboxed code could write under /builder"; exit 1; }
           grep -q 'jobTokenInEnv=false' /tmp/llm-toolresults.txt || { echo "::error::the job token leaked into the child env"; exit 1; }
+          # S2-1: 보조 그룹 — Node(libuv)가 uid/gid 전환 전에 setgroups(0)로 비운다. 자식에 root의 gid 0 등이 남지 않는다.
+          grep -q 'groups=10001 ' /tmp/llm-toolresults.txt || { echo "::error::the sandboxed child must be in group 10001 only (process.getgroups)"; exit 1; }
+          grep -qE 'suppGroups=\[(10001)?\]' /tmp/llm-toolresults.txt || { echo "::error::the sandboxed child kept supplementary groups (/proc/self/status Groups)"; exit 1; }
 
           # (2) ★D-4: 고의로 깨진 코드 → 수리 2회(가짜 LLM은 포기) → failed(building) · 테스트·push·배포 단계에 닿지 않는다
           run_job bj_ci_broken1 "$BROKEN_TOKEN"
@@ -236,6 +266,23 @@ jobs:
           grep -c '"job":"bj_ci_broken1","task":"REPAIR-' /tmp/llm-calls.jsonl | grep -qx 2 || { echo "::error::expected exactly 2 repair rounds"; exit 1; }
           grep -q 'TS2322' /tmp/llm-repair-prompts.txt || { echo "::error::the repair prompt must carry the failing log tail"; exit 1; }
 
+          # (3) ★S2-2: 샌드박스 ENV가 빠진 이미지(리팩터 사고 흉내 — `-e SIMSA_SANDBOX_UID= `)는 자가점검이 빨간불이고, 빌드를 받아도
+          #     명령 하나 돌리지 않고 failed(scaffolding, sandbox_unavailable:not_configured) — LLM이 만든 코드를 root로 돌리지 않는다.
+          nosb=$(docker run -d -p 18081:8080 -e SIMSA_SANDBOX_UID= --add-host=host.docker.internal:host-gateway simsa-builder:pr)
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:18081/health >/dev/null && break || sleep 1; done
+          sc=$(curl -s -o /tmp/selfcheck-nosb.json -w '%{http_code}' http://127.0.0.1:18081/selfcheck)
+          jq -c '{ok, sandbox}' /tmp/selfcheck-nosb.json
+          if [ "$sc" != "503" ] || ! jq -e '.ok == false and .sandbox.ok == false and .sandbox.reason == "not_configured"' /tmp/selfcheck-nosb.json >/dev/null; then echo "::error::an image without the sandbox ENV must fail its selfcheck (got $sc)"; exit 1; fi
+          NOSB_TOKEN="bjt1.bj_ci_nosbx01.$(printf 'd4%.0s' $(seq 1 32))"
+          start_job bj_ci_nosbx01 "$NOSB_TOKEN" 18081
+          wait_job bj_ci_nosbx01
+          jq -e '.ok == false and .failedStage == "scaffolding" and .error == "sandbox_unavailable:not_configured" and .wbsDone == 0' /tmp/cb-done-bj_ci_nosbx01.jsonl >/dev/null || { echo "::error::without the sandbox ENV a build must fail closed (sandbox_unavailable:not_configured)"; exit 1; }
+          jq -s -e 'map(.message) == ["scaffold_started"]' /tmp/cb-progress-bj_ci_nosbx01.jsonl >/dev/null || { echo "::error::nothing may run after scaffold_started without a sandbox"; exit 1; }
+          if grep -q '"job":"bj_ci_nosbx01"' /tmp/llm-calls.jsonl; then echo "::error::no LLM call may happen without a sandbox"; exit 1; fi
+          if docker logs "$nosb" 2>&1 | grep -q "$NOSB_TOKEN"; then echo "::error::a job token leaked into container logs"; exit 1; fi
+          docker rm -f "$nosb" >/dev/null 2>&1 || true
+          nosb=""
+
           # ── 모든 LLM 호출은 프록시 경로로, 그 잡의 jobToken(x-api-key)으로 · 콜백 Bearer도 jobToken ──
           jq -s -e --arg g "$GREEN_TOKEN" --arg b "$BROKEN_TOKEN" 'all(.[]; (.job == "bj_ci_green01" and .key == $g) or (.job == "bj_ci_broken1" and .key == $b)) and all(.[]; .version == "2023-06-01" and .model == "claude-sonnet-4-6")' /tmp/llm-calls.jsonl >/dev/null || { echo "::error::LLM calls must use the job's own token against the proxy"; exit 1; }
           [ "$(sort -u /tmp/cb-auth-bj_ci_green01.txt)" = "Bearer ${GREEN_TOKEN}" ] || { echo "::error::green callbacks must authenticate with its job token"; exit 1; }
@@ -245,4 +292,4 @@ jobs:
             if grep -q "$t" /tmp/cb-progress-*.jsonl /tmp/cb-done-*.jsonl /tmp/llm-toolresults.txt /tmp/llm-repair-prompts.txt; then echo "::error::a job token leaked into a callback body or an LLM prompt"; exit 1; fi
             if docker logs "$cid" 2>&1 | grep -q "$t"; then echo "::error::a job token leaked into container logs"; exit 1; fi
           done
-          echo "✅ builder image: agent-worker · template · sandbox(uid 10001, offline store) · secret-bearing payload refused · WBS via the LLM proxy → gate green → honest stop before push · broken code → failed(building) after 2 repairs"
+          echo "✅ builder image: agent-worker · template · sandbox(uid 10001, groups 10001 only, offline store) · secret-bearing payload refused · WBS via the LLM proxy → gate green → honest stop before push · second POST /run while building → 409 · broken code → failed(building) after 2 repairs · no sandbox ENV → selfcheck red + build refused"

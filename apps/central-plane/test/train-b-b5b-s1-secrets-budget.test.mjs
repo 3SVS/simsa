@@ -761,7 +761,7 @@ describe("⑤ 컨테이너 — 비밀 없는 페이로드 · jobToken · 프록�
       return agentWorker.runBuildLoop({ specMarkdown: j.specMarkdown, wbsId: item.id, wbsTitle: item.title, acceptanceIds: item.acceptanceIds, locale: j.locale, fileList: [] }, { client, executor: nullExecutor, model: llm.model });
     };
     const git = gitExec();
-    const body = await run.runBuildJob(payloadFor(job.id, tok, { budgetUsd: 0.005 }), { workRoot: await tmpDir("wr402"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: post, implementWbs, log: () => {} });
+    const body = await run.runBuildJob(payloadFor(job.id, tok, { budgetUsd: 0.005 }), { workRoot: await tmpDir("wr402"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: post, implementWbs, sandbox: null, log: () => {} });
 
     assert.deepEqual(body, { jobId: job.id, ok: false, stage: "failed", failedStage: "implementing", error: "budget_exhausted", wbsDone: 1 });
     assert.equal(upstream.calls.length, 1, "only the first WBS reached the vendor");
@@ -800,7 +800,7 @@ describe("⑤ 컨테이너 — 비밀 없는 페이로드 · jobToken · 프록�
     // AGENT_WORKER_ENTRY import가 실패하므로 WBS 진행 콜백 없이 agent_worker_unavailable.
     const posted = [];
     const post = async (url, token, body) => { posted.push({ token, body }); return { ok: true, status: 200, json: { ok: true, transitioned: true } }; };
-    const r = await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrdef"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: post, loadAgentWorker: async () => { throw new Error("Cannot find module"); } });
+    const r = await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrdef"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: post, sandbox: null, loadAgentWorker: async () => { throw new Error("Cannot find module"); } });
     assert.equal(r.failedStage, "implementing");
     assert.match(r.error, /^agent_worker_unavailable:Cannot find module/);
     assert.equal(r.wbsDone, 0);
@@ -854,7 +854,7 @@ describe("⑤ 컨테이너 — 비밀 없는 페이로드 · jobToken · 프록�
     assert.deepEqual(posted.slice(6).map((b) => [b.status, b.message]), [["building", "gate_started"], ["testing", "test_started"], ["testing", "gate_passed"]]);
     const commits = git.calls.filter((c) => c.args.includes("commit")).map((c) => c.args[c.args.indexOf("-m") + 1]);
     assert.deepEqual(commits.slice(1), ["feat: 예약 저장 (D1 테이블)", "feat: 예약 화면 — 한글 버튼 '예약하기'"]);
-    const failing = await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrseam2"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: post, implementWbs: async () => ({ status: "limit_turns" }), log: () => {} });
+    const failing = await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrseam2"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: post, implementWbs: async () => ({ status: "limit_turns" }), sandbox: null, log: () => {} });
     assert.equal(failing.error, "wbs_failed:WBS-001:limit_turns");
   });
 

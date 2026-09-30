@@ -103,7 +103,8 @@ test("D-6: the builder image never installs user-deploy CLIs (vercel · netlify)
 });
 
 test("server.mjs keeps the inspector-style rails: 202 ack, SIGTERM drain, no secret logging", () => {
-  assert.match(serverMjs, /json\(res, 202,/, "POST /run must ack with 202 before running");
+  // PR #569 S2 결함 4: 입장 판정(400·409·202)은 builder-run.mjs admitRun 하나 — 행동은 train-b-b5b2-gate 테스트가 본다.
+  assert.match(serverMjs, /json\(res, admission\.status, admission\.body\);\n\s+if \(admission\.status !== 202\) return;/, "POST /run must ack (admitRun → 202) before running");
   assert.match(serverMjs, /for \(const sig of \["SIGTERM", "SIGINT"\]\)/, "must drain on SIGTERM/SIGINT");
   assert.doesNotMatch(serverMjs, /console\.(log|error)\([^)]*(callbackToken|jobToken|userKey)/, "never log the job token (or the old callbackToken/userKey)");
 });

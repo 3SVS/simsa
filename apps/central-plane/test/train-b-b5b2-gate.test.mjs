@@ -186,16 +186,45 @@ describe("① WBS 구현 루프 (B-5b-2)", () => {
     assert.equal(r.error, "wbs_blocked:WBS-003:WBS-002");
   });
 
-  it("WBS 시간 상한: 그 WBS의 신호가 끊기고 limit_time으로 분류된다(must → 멈춤)", async () => {
+  // PR #569 S2 검증 결함 6: abort가 빠지는 회귀에서 이 테스트가 **멈추지 않고 실패**해야 한다 — 구현 쪽 보조 타이머(2초 뒤 done)와
+  // 테스트 시간 상한(timeout)을 둘 다 둔다. 패키지 스크립트 `node --test`에는 전역 시간 상한이 없다.
+  it("WBS 시간 상한: 그 WBS의 신호가 끊기고 limit_time으로 분류된다(must → 멈춤)", { timeout: 10_000 }, async () => {
     let sawAbort = false;
     const implementWbs = ({ signal }) => new Promise((resolve) => {
-      signal.addEventListener("abort", () => { sawAbort = true; resolve({ status: "llm_error", summary: "llm_error: aborted" }); }, { once: true });
+      const fallback = setTimeout(() => resolve({ status: "done" }), 2_000); // abort가 오지 않으면 스스로 끝난다(멈춤 대신 실패)
+      signal.addEventListener("abort", () => { clearTimeout(fallback); sawAbort = true; resolve({ status: "llm_error", summary: "llm_error: aborted" }); }, { once: true });
     });
     const t0 = Date.now();
     const r = await build(oneWbs(), { exec: fakeExec().exec, postCallback: recorder().post, implementWbs, wbsTimeLimitMs: 40 });
     assert.ok(sawAbort, "the WBS signal was aborted at the time limit");
-    assert.ok(Date.now() - t0 < 5_000);
+    assert.ok(Date.now() - t0 < 1_900, `stopped at the limit, not by the fallback (${Date.now() - t0}ms)`);
     assert.equal(r.error, "wbs_failed:WBS-001:limit_time");
+  });
+
+  it("★WBS 시간 상한은 강제다: 신호를 무시하고 끝나지 않는 구현이어도 유예 뒤 limit_time으로 넘어간다(잡을 45분 마감까지 붙잡지 않는다)", { timeout: 10_000 }, async () => {
+    let started = 0;
+    const implementWbs = ({ item }) => {
+      started += 1;
+      return item.id === "WBS-001" ? new Promise(() => {}) : Promise.resolve({ status: "done" }); // 영원히 안 끝남 · 신호 무시
+    };
+    const poster = recorder();
+    const t0 = Date.now();
+    const r = await build(oneWbs(), { exec: fakeExec().exec, postCallback: poster.post, implementWbs, wbsTimeLimitMs: 40, wbsAbortGraceMs: 120 });
+    assert.ok(Date.now() - t0 < 5_000, `bounded by limit + grace (${Date.now() - t0}ms)`);
+    assert.deepEqual([r.failedStage, r.error], ["implementing", "wbs_failed:WBS-001:limit_time"]);
+    assert.equal(started, 1);
+    assert.equal(poster.calls.find((c) => c.body.message === "wbs_failed").body.meta.status, "limit_time");
+    assert.ok(Number.isInteger(run.WBS_ABORT_GRACE_MS) && run.WBS_ABORT_GRACE_MS >= 5_000 && run.WBS_ABORT_GRACE_MS <= 120_000, "the grace is a named constant");
+  });
+
+  it("수리 라운드도 같은 강제 상한: 끝나지 않는 수리 → 유예 뒤 다음 게이트 라운드로(빌드 빨간불이면 failed(building))", { timeout: 10_000 }, async () => {
+    const x = fakeExec({ build: () => ({ ok: false, code: 2, stderr: "error TS2322" }) });
+    const r = await build(oneWbs(), {
+      exec: x.exec, postCallback: recorder().post,
+      implementWbs: (ctx) => (ctx.repair ? new Promise(() => {}) : Promise.resolve({ status: "done" })),
+      gateLimits: { repairTimeMs: 40, repairRounds: 1 }, wbsAbortGraceMs: 120,
+    });
+    assert.deepEqual([r.failedStage, r.error], ["building", "build_failed:exit_2"]);
   });
 
   it("llm_error는 선택 WBS여도 멈춘다(LLM 경로가 막혔다 — 뒤 WBS도 똑같이 실패하며 시간만 쓴다)", async () => {
@@ -432,7 +461,7 @@ function fakeProxy(script) {
       const toolCalls = r.content.filter((b) => b.type === "tool_use").map((b) => ({ id: b.id, type: "function", function: { name: b.name, arguments: JSON.stringify(b.input) } }));
       return new Response(JSON.stringify({ id: `chatcmpl_${calls.length}`, model: "gpt-5.4-2026-03-05", choices: [{ message: { content: null, tool_calls: toolCalls }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 900, completion_tokens: 120 } }), { status: 200, headers: { "content-type": "application/json" } });
     }
-    return new Response(JSON.stringify({ id: `msg_${calls.length}`, type: "message", role: "assistant", model: "claude-sonnet-4-6", content: r.content.map((b) => (b.type === "tool_use" ? { ...b, caller: { type: "direct" } } : b)), stop_reason: "tool_use", usage: { input_tokens: 1200, output_tokens: 300 } }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ id: `msg_${calls.length}`, type: "message", role: "assistant", model: "claude-sonnet-4-6", content: r.content.map((b) => (b.type === "tool_use" ? { ...b, caller: { type: "direct" } } : b)), stop_reason: "tool_use", usage: r.usage ?? { input_tokens: 1200, output_tokens: 300 } }), { status: 200, headers: { "content-type": "application/json" } });
   };
   return { fetchImpl, calls };
 }
@@ -499,6 +528,25 @@ describe("③ 기본 implementWbs — 실제 agent-worker runBuildLoop · 프록
     assert.equal(r.failedStage, "pushed", JSON.stringify(r));
     assert.equal(seenApp[0], GOOD_APP);
     assert.ok(commitsOf(x.calls).includes("feat: 예약 화면"));
+  });
+
+  // PR #569 S2 검증 결함 5: 컨테이너가 runBuildLoop에 잡 예산(budgetUsd)을 넘기는 배선. 빠지면 core 기본 로컬 상한 $0.50이
+  // 긴 WBS를 llm_error(BudgetExceededError)로 끊는다 — llm_error는 must 여부와 상관없이 잡을 멈춘다. 가짜 프록시가 턴마다 무거운
+  // usage(입력 100k·출력 5k 토큰 ≈ $0.375, sonnet 단가)를 주고 4턴을 돈다(≈ $1.50 > $0.50, < 잡 예산 $10).
+  it("★잡 예산 배선: 무거운 WBS(4턴 ≈ $1.50)도 잡 예산 $10 안이면 done → 게이트 → failed(pushed) — core 기본 $0.50에서 끊기지 않는다", async () => {
+    const heavy = { input_tokens: 100_000, output_tokens: 5_000 };
+    const proxy = fakeProxy(({ turn }) => {
+      if (turn < 3) return { usage: heavy, content: [tu("create_file", { path: `src/client/화면-${turn + 1}.tsx`, content: `export const 제목${turn} = "예약하기 ${turn + 1}";\n` })] };
+      return { usage: heavy, content: [tu("finish", { status: "done", summary: "예약 화면 3개(무거운 맥락)", commitMessage: "feat: 예약 화면 3개" })] };
+    });
+    const x = fakeExec();
+    const poster = recorder();
+    const r = await build(oneWbs(), { exec: x.exec, postCallback: poster.post, loadAgentWorker, fetchImpl: proxy.fetchImpl, llmRetryOptions: quick });
+    const wf = poster.calls.find((c) => c.body.message === "wbs_failed");
+    assert.equal(wf, undefined, `the WBS must not fail on a local cap: ${JSON.stringify(wf?.body.meta)}`);
+    assert.deepEqual([r.failedStage, r.error, r.wbsDone], ["pushed", "builder_stage_not_implemented:pushed", 1]);
+    assert.equal(proxy.calls.length, 4, "all four heavy turns reached the proxy");
+    assert.ok(commitsOf(x.calls).includes("feat: 예약 화면 3개"));
   });
 
   it("프록시 402 budget_exhausted(첫 호출) → failed(implementing, budget_exhausted) · 재시도·다음 WBS 없음", async () => {
@@ -599,9 +647,41 @@ describe("④ 생성 코드 실행 안전", () => {
     assert.equal(x.calls.length, 0, "nothing ran");
   });
 
+  // PR #569 S2 검증 결함 2: 설정 누락 = fail closed. 종전에는 SIMSA_SANDBOX_UID가 없으면 ok:true(샌드박스 없이 = 서버와 같은 root로)
+  // 생성 코드를 돌렸고 자가점검도 초록불이었다.
+  it("★샌드박스 ENV가 없으면(이미지 리팩터로 ENV 하나 누락) 빌드는 명령 하나 돌리지 않고 failed(scaffolding, sandbox_unavailable:not_configured)", async () => {
+    const x = fakeExec();
+    const poster = recorder();
+    let implCalls = 0;
+    const r = await run.runBuildJob(oneWbs(), { workRoot: await tmpDir("wrnosb"), templateDir: REPO_TEMPLATE, exec: x.exec, postCallback: poster.post, sandboxEnv: { PATH: "/usr/bin", HOME: "/root" }, implementWbs: async () => { implCalls += 1; return { status: "done" }; }, log: () => {} });
+    assert.deepEqual([r.failedStage, r.error], ["scaffolding", "sandbox_unavailable:not_configured"]);
+    assert.equal(x.calls.length, 0, "no git/pnpm/model command ran");
+    assert.equal(implCalls, 0);
+    assert.deepEqual(msgs(poster), [["scaffolding", "scaffold_started"]]);
+    // root에서의 opt-out도 받지 않는다 — 생성 코드를 root로 돌리는 길은 없다
+    const f = need("sandboxFromEnv");
+    assert.deepEqual(f({ SIMSA_ALLOW_UNSANDBOXED: "1" }, () => 0), { ok: false, sandbox: null, reason: "opt_out_refused_as_root" });
+    assert.deepEqual(f({ SIMSA_ALLOW_UNSANDBOXED: "true" }, () => 1000), { ok: false, sandbox: null, reason: "not_configured" }, "only the exact value 1 opts out");
+    assert.equal(need("SANDBOX_OPT_OUT_ENV"), "SIMSA_ALLOW_UNSANDBOXED");
+  });
+
+  it("★자가점검도 같은 판정: 샌드박스 설정이 없으면 ok:false(not_configured) — 초록불인데 빌드는 root로 도는 일이 없다", async () => {
+    const exec = async (cmd) => (["vercel", "netlify"].includes(cmd) ? { ok: false, code: 127, stdout: "", stderr: "", error: "ENOENT" } : { ok: true, code: 0, stdout: "1.2.3", stderr: "", error: null });
+    const common = { exec, workRoot: "/tmp/w", fsImpl: { mkdtemp: async (p) => `${p}x`, writeFile: async () => {}, rm: async () => {} }, loadAgentWorker: async () => agentWorker, templateDir: REPO_TEMPLATE };
+    const missing = await run.selfCheck({ ...common, sandboxEnv: {}, getuid: () => 0 });
+    assert.deepEqual(missing.sandbox, { ok: false, enabled: false, uid: null, storeReady: false, reason: "not_configured" });
+    assert.equal(missing.ok, false, "an image without the sandbox ENV is unhealthy");
+    assert.equal(summarizeSelfCheck(missing, 3).ok, false);
+    const dev = await run.selfCheck({ ...common, sandboxEnv: { SIMSA_ALLOW_UNSANDBOXED: "1" }, getuid: () => 1000 });
+    assert.equal(dev.ok, true, "a developer PC opts out explicitly (not root)");
+    assert.deepEqual(dev.sandbox, { ok: true, enabled: false, uid: null, storeReady: false, reason: "opted_out" });
+  });
+
   it("sandboxFromEnv · checkSandbox 표", async () => {
     const f = need("sandboxFromEnv");
-    assert.deepEqual(f({}, () => 0), { ok: true, sandbox: null, reason: "not_configured" });
+    assert.deepEqual(f({}, () => 0), { ok: false, sandbox: null, reason: "not_configured" });
+    assert.deepEqual(f({ SIMSA_SANDBOX_UID: "" }, () => 0), { ok: false, sandbox: null, reason: "not_configured" }, "an empty value (docker -e X=) is missing too");
+    assert.deepEqual(f({ SIMSA_ALLOW_UNSANDBOXED: "1" }, () => 1000), { ok: true, sandbox: null, reason: "opted_out" });
     assert.deepEqual(f({ SIMSA_SANDBOX_UID: "10001", SIMSA_SANDBOX_HOME: "/home/simsa-run" }, () => 1000), { ok: false, sandbox: null, reason: "not_root" });
     assert.equal(f({ SIMSA_SANDBOX_UID: "0", SIMSA_SANDBOX_HOME: "/h" }, () => 0).reason, "invalid_sandbox_ids", "uid 0 is not a sandbox");
     assert.equal(f({ SIMSA_SANDBOX_UID: "10001" }, () => 0).reason, "sandbox_home_missing");
@@ -610,7 +690,8 @@ describe("④ 생성 코드 실행 안전", () => {
     const statFs = (uid) => ({ stat: async () => ({ uid, isDirectory: () => true }) });
     assert.deepEqual(await work.checkSandbox({ env, getuid: () => 0, fsImpl: statFs(10001) }), { ok: true, enabled: true, uid: 10001, storeReady: true, reason: null });
     assert.equal((await work.checkSandbox({ env, getuid: () => 0, fsImpl: statFs(0) })).reason, "sandbox_home_owner_mismatch");
-    assert.deepEqual(await work.checkSandbox({ env: {}, getuid: () => 1000 }), { ok: true, enabled: false, uid: null, storeReady: false, reason: "not_configured" });
+    assert.deepEqual(await work.checkSandbox({ env: {}, getuid: () => 1000 }), { ok: false, enabled: false, uid: null, storeReady: false, reason: "not_configured" });
+    assert.deepEqual(await work.checkSandbox({ env: { SIMSA_ALLOW_UNSANDBOXED: "1" }, getuid: () => 1000 }), { ok: true, enabled: false, uid: null, storeReady: false, reason: "opted_out" });
     // 자가점검에 실리고 ok를 좌우한다
     const sc = await run.selfCheck({ exec: async (cmd) => (["vercel", "netlify"].includes(cmd) ? { ok: false, code: 127, stdout: "", stderr: "", error: "ENOENT" } : { ok: true, code: 0, stdout: "1.2.3", stderr: "", error: null }), workRoot: "/tmp/w", fsImpl: { mkdtemp: async (p) => `${p}x`, writeFile: async () => {}, rm: async () => {} }, loadAgentWorker: async () => agentWorker, templateDir: REPO_TEMPLATE, sandboxEnv: env, getuid: () => 1000 });
     assert.equal(sc.sandbox.reason, "not_root");
@@ -668,6 +749,72 @@ describe("④ 생성 코드 실행 안전", () => {
     assert.equal((await fs.lstat(path.join(appDir, "test"))).isSymbolicLink(), false, "the link was cut and replaced by a real folder");
     assert.equal(readFileSync(path.join(appDir, "test", "smoke.test.mjs"), "utf8"), "// 플랫폼 스모크 원본");
     assert.deepEqual(await work.restoreProtected(appDir, snap), [], "idempotent");
+  });
+
+  // PR #569 S2 검증 결함 3: 보호 파일은 샌드박스 사용자 소유 — 게이트 중 생성 코드가 수 GB로 부풀리면 종전 복원(readFile)이
+  // root 서버 메모리로 통째로 읽었다. 이제 스냅샷 크기까지만 읽는다.
+  it("★보호 파일 복원은 부풀린 파일을 통째로 읽지 않는다(스냅샷 크기까지만) · 같은 크기 변조는 읽어서 되돌린다 · 같으면 그대로", async () => {
+    const base = await tmpDir("rbig");
+    const appDir = path.join(base, "app");
+    await fs.mkdir(path.join(appDir, "test"), { recursive: true });
+    const pkg = '{"name":"동네 빵집 소금빵 예약","scripts":{"test":"node --test test/*.test.mjs"}}';
+    const smoke = "// 플랫폼 스모크 원본";
+    await fs.writeFile(path.join(appDir, "package.json"), pkg);
+    await fs.writeFile(path.join(appDir, "test", "smoke.test.mjs"), smoke);
+    const snap = await work.snapshotProtected(appDir);
+    const snapBytes = [...snap.values()].reduce((a, b) => a + b.length, 0);
+    // 생성 코드(샌드박스 사용자)가 package.json을 8 MiB로 부풀리고, smoke 테스트는 같은 바이트 길이로 바꿔치기한다
+    const bloated = Buffer.alloc(8 * 1024 * 1024, 0x20);
+    bloated.write(pkg, 0);
+    await fs.writeFile(path.join(appDir, "package.json"), bloated);
+    const tampered = "// 플랫폼 스모크 변조";
+    assert.equal(Buffer.byteLength(tampered), Buffer.byteLength(smoke));
+    await fs.writeFile(path.join(appDir, "test", "smoke.test.mjs"), tampered);
+    let fhBytes = 0;
+    const fullReads = [];
+    const spyFs = {
+      ...fs,
+      readFile: async (p, ...a) => { const b = await fs.readFile(p, ...a); fullReads.push([String(p), b.length]); return b; },
+      open: async (...a) => {
+        const fh = await fs.open(...a);
+        const read = fh.read.bind(fh);
+        fh.read = async (...ra) => { const r = await read(...ra); fhBytes += r.bytesRead; return r; };
+        return fh;
+      },
+    };
+    const restored = await work.restoreProtected(appDir, snap, { fsImpl: spyFs });
+    assert.deepEqual([...restored].sort(), ["package.json", "test/smoke.test.mjs"]);
+    const biggest = Math.max(0, ...fullReads.map(([, n]) => n));
+    assert.ok(biggest < 64 * 1024, `no whole-file read of the bloated file (largest readFile: ${biggest} bytes)`);
+    assert.ok(fhBytes <= snapBytes + snap.size, `bounded reads (${fhBytes} bytes ≤ snapshot ${snapBytes} + ${snap.size})`);
+    assert.equal(readFileSync(path.join(appDir, "package.json"), "utf8"), pkg);
+    assert.equal(readFileSync(path.join(appDir, "test", "smoke.test.mjs"), "utf8"), smoke);
+    assert.deepEqual(await work.restoreProtected(appDir, snap, { fsImpl: spyFs }), [], "unchanged files are left alone");
+    // 경계 읽기 도우미 자체: 상한+1바이트만 읽고 truncated 표시
+    const rb = await need("readBoundedFile")(path.join(base, "app", "package.json"), 10);
+    assert.deepEqual([rb.isFile, rb.buf.length, rb.truncated], [true, 10, true]);
+    // 모델 read_file도 1 MiB 상한(끝에 표시)
+    await fs.mkdir(path.join(appDir, "src"), { recursive: true });
+    await fs.writeFile(path.join(appDir, "src", "큰 파일.txt"), Buffer.alloc(1536 * 1024, 0x61));
+    const ex = work.createWorkspaceExecutor({ appDir, env: {}, exec: async () => ({ ok: true, code: 0, stdout: "", stderr: "" }) });
+    const txt = await ex.readFile("src/큰 파일.txt");
+    assert.ok(txt.endsWith(`…[file truncated at ${1024 * 1024} bytes]`) && txt.length < 1024 * 1024 + 100);
+    await assert.rejects(ex.readFile("src"), /REFUSED \(not_a_file\)/, "a folder is not read as a file");
+  });
+
+  it("★실행기는 신호가 끊긴 뒤의 쓰기·명령을 거부한다(시간 상한 유예 뒤 남은 루프가 작업 폴더를 바꾸거나 명령을 띄우지 못한다)", async () => {
+    const appDir = await tmpDir("stop");
+    const ac = new AbortController();
+    let execs = 0;
+    const ex = work.createWorkspaceExecutor({ appDir, env: {}, signal: ac.signal, exec: async () => { execs += 1; return { ok: true, code: 0, stdout: "", stderr: "" }; } });
+    await ex.createFile("src/예약.ts", "export const 예약 = 1;");
+    await ex.runCommand("pnpm", ["test"]);
+    ac.abort(new Error("wbs_time_limit"));
+    await assert.rejects(ex.createFile("src/늦은 쓰기.ts", "x"), /REFUSED \(stopped\)/);
+    await assert.rejects(ex.runCommand("pnpm", ["test"]), /REFUSED \(stopped\)/);
+    assert.equal(execs, 1);
+    assert.equal(existsSync(path.join(appDir, "src", "늦은 쓰기.ts")), false);
+    assert.equal(await ex.readFile("src/예약.ts"), "export const 예약 = 1;", "reads still work");
   });
 
   it("decideWorkspaceCommand 표 — 허용 / 거부(사유)", () => {
@@ -754,11 +901,46 @@ describe("④ 생성 코드 실행 안전", () => {
     assert.equal(work.tailText("가나다라마", 3), "…[2 chars omitted]\n다라마");
   });
 
-  it("server.mjs: 인스턴스당 빌드 하나 — 같은 jobId·두 번째 빌드는 202 전에 409 builder_busy(생성 코드가 localhost:8080으로 잡을 덮지 못하게)", () => {
+  // PR #569 S2 검증 결함 4: 종전에는 server.mjs 소스 문자열만 봤다(조건을 `false &&`로 죽여도 통과). 이제 입장 판정 함수를 행동으로 본다.
+  it("★POST /run 입장(admitRun): 빌드가 진행 중이면 같은 jobId(종류 무관)·다른 jobId 모두 409 builder_busy · 잘못된 페이로드는 400 먼저 · 끝나면 다시 받는다", () => {
+    const admitRun = run.admitRun;
+    assert.equal(typeof admitRun, "function", "builder-run.mjs admitRun");
+    const busy = { status: 409, body: { error: "builder_busy" } };
+    const inFlight = new Map();
+    assert.deepEqual(admitRun(payload(), inFlight), { status: 202, body: { jobId: JOB_ID, status: "accepted", runnerRev: run.RUNNER_REV } });
+    inFlight.set(JOB_ID, { payload: payload(), job: null, reported: false });
+    // 같은 jobId로 빌드를 다시 — 작업 폴더를 지우고 처음부터(생성 코드가 localhost:8080으로)
+    assert.deepEqual(admitRun(payload(), inFlight), busy);
+    // 다른 jobId의 두 번째 빌드(토큰 모양은 맞게 — 컨테이너는 HMAC을 검증할 수 없다)
+    const otherId = "bj_5b2other1";
+    const other = payload({ jobId: otherId, jobToken: `bjt1.${otherId}.${"7c".repeat(32)}` });
+    assert.equal(run.validateBuildPayload(other).ok, true);
+    assert.deepEqual(admitRun(other, inFlight), busy);
+    // 같은 jobId의 kind=selfcheck — 종전에는 202였다(빌드의 inFlight 항목을 덮어써 드레인에서 빠지고, 끝나며 지워졌다)
+    const sc = { jobId: JOB_ID, kind: "selfcheck", baseUrl: ORIGIN, callbackUrl: `${ORIGIN}/internal/build-done`, jobToken: "가짜-토큰-한글 값" };
+    assert.deepEqual(admitRun(sc, inFlight), busy);
+    assert.deepEqual(admitRun({ ...sc, jobId: "sc_other_01" }, inFlight), busy, "a build is running: nothing else is admitted");
+    // 잘못된 페이로드는 400(바쁨보다 먼저 — 값을 되풀이하지 않는다)
+    const bad = admitRun({ jobId: JOB_ID, kind: "build" }, inFlight);
+    assert.equal(bad.status, 400);
+    assert.ok(!JSON.stringify(bad).includes(JOB_TOKEN));
+    // 빌드가 끝나면 다시 받는다 · 자가점검만 진행 중이면 다른 jobId 빌드는 받는다
+    inFlight.clear();
+    assert.equal(admitRun(other, inFlight).status, 202);
+    inFlight.set("sc_other_01", { payload: { ...sc, jobId: "sc_other_01" } });
+    assert.equal(admitRun(payload(), inFlight).status, 202);
+    assert.deepEqual(admitRun({ ...sc, jobId: "sc_other_01" }, inFlight), busy, "the same jobId is never admitted twice");
+  });
+
+  it("server.mjs는 admitRun 하나로 판정하고 202일 때만 등록한다(판정과 등록 사이 await 없음)", () => {
     const server = readFileSync(path.join(ROOT, "builder-container/server.mjs"), "utf8");
-    const iBusy = server.indexOf('"builder_busy"');
-    assert.ok(iBusy > 0 && iBusy < server.indexOf("json(res, 202,"), "busy check before the 202 ack");
-    assert.match(server, /inFlightJobs\.has\(payload\.jobId\)/);
+    const iAdmit = server.indexOf("const admission = admitRun(payload, inFlightJobs);");
+    assert.ok(iAdmit > 0, "server.mjs calls admitRun");
+    const iGuard = server.indexOf("if (admission.status !== 202) return;");
+    const iSet = server.indexOf("inFlightJobs.set(payload.jobId, entry);");
+    assert.ok(iAdmit < iGuard && iGuard < iSet, "respond → return unless 202 → register");
+    assert.doesNotMatch(server.slice(iAdmit, iSet), /\bawait\b/, "no await between the decision and the registration");
+    assert.doesNotMatch(server, /inFlightJobs\.has\(/, "no second, inline busy rule");
   });
 });
 
@@ -862,10 +1044,25 @@ describe("⑥ 이미지 · 템플릿 · CI 계약", () => {
     assert.match(yml, /uid=10001/, "a model command proves it ran as the sandbox user");
     assert.match(yml, /environ/, "…and could not read the server's environment");
     assert.match(yml, /installMode == "offline"/, "the image store makes the install offline");
+    // PR #569 S2 검증 1·2·4 — 실제 이미지에서의 증거
+    assert.match(yml, /groups=10001 /, "S2-1: the sandboxed child has only the sandbox group (setgroups cleared root's supplementary groups)");
+    assert.match(yml, /suppGroups=\\\[\(10001\)\?\\\]/, "S2-1: /proc/self/status Groups carries no root group");
+    assert.match(yml, /SIMSA_SANDBOX_UID= /, "S2-2: a container without the sandbox ENV");
+    assert.match(yml, /sandbox_unavailable:not_configured/, "S2-2: …refuses builds (fail closed)");
+    assert.match(yml, /\.sandbox\.reason == "not_configured"/, "S2-2: …and its selfcheck is red");
+    assert.match(yml, /builder_busy/, "S2-4: a second POST /run while a build runs is refused on the real server");
+  });
+
+  it("샌드박스 opt-out 이름은 운영 설정(Dockerfile·wrangler.toml·SimsaBuilder envVars) 어디에도 없다", () => {
+    const optOut = need("SANDBOX_OPT_OUT_ENV");
+    for (const f of ["builder-container/Dockerfile", "wrangler.toml", "src/builder-container.ts"]) {
+      assert.ok(!readFileSync(path.join(ROOT, f), "utf8").includes(optOut), `${f} must not opt out of the sandbox`);
+    }
   });
 
   it("RUNNER_REV가 올라갔다(이미지 교체 판별)", () => {
     assert.notEqual(run.RUNNER_REV, "b5bS1-builder-6");
+    assert.notEqual(run.RUNNER_REV, "b5bS2-builder-7", "S2 fixes (sandbox fail-closed · bounded restore · admission) change the image");
     assert.match(run.RUNNER_REV, /^b5bS2-builder-\d+$/);
   });
 });

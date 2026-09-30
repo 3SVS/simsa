@@ -66,18 +66,32 @@ export function workEnv(base = process.env, { sandbox = null, offline = false } 
 /** Dockerfile이 ENV로 싣는 이름. 값은 비밀이 아니다(uid·경로). */
 export const SANDBOX_ENV = Object.freeze({ uid: "SIMSA_SANDBOX_UID", gid: "SIMSA_SANDBOX_GID", home: "SIMSA_SANDBOX_HOME", store: "SIMSA_PNPM_STORE_DIR" });
 
+/**
+ * 개발 PC에서 샌드박스 없이 돌리겠다는 **명시** opt-out(값 "1"). 운영 이미지·Worker 컨테이너 설정은 이 이름을 싣지 않는다
+ * (test/train-b-b5b2-gate.test.mjs가 Dockerfile·wrangler.toml·builder-container.ts를 확인). root에서는 받지 않는다 —
+ * 생성 코드를 root로 돌리는 길은 설정 누락으로도, opt-out으로도 없다(PR #569 S2 검증 결함 2).
+ */
+export const SANDBOX_OPT_OUT_ENV = "SIMSA_ALLOW_UNSANDBOXED";
+
 function currentUid() {
   return typeof process.getuid === "function" ? process.getuid() : null;
 }
 
 /**
- * 샌드박스 설정. { ok, sandbox: {uid,gid,home,storeDir}|null, reason }.
- *  - 설정 없음(개발 PC·테스트) → ok, sandbox null ("not_configured")
- *  - 설정이 있는데 쓸 수 없음(root가 아님·값 이상) → **ok:false** — 운영 이미지에서 조용히 샌드박스 없이 돌지 않는다(fail closed).
+ * 샌드박스 설정. { ok, sandbox: {uid,gid,home,storeDir}|null, reason }. **기본은 샌드박스 필수(fail closed)**:
+ *  - 설정 없음 → **ok:false** ("not_configured") — ENV 하나가 빠진 이미지가 LLM이 만든 코드를 root로 돌리지 않는다.
+ *    [정정 2026-10-01 S2 결함 2] 종전에는 ok:true였다(설정 누락 = 조용히 샌드박스 없이 실행).
+ *  - 설정 없음 + SANDBOX_OPT_OUT_ENV=1 + root 아님(개발 PC) → ok, sandbox null ("opted_out"). root면 "opt_out_refused_as_root".
+ *  - 설정이 있는데 쓸 수 없음(root가 아님·값 이상) → ok:false.
+ * 테스트는 runBuild에 deps.sandbox(null 또는 {uid,…})를 **명시로** 넘긴다 — 이 함수를 거치지 않는다.
  */
 export function sandboxFromEnv(env = process.env, getuid = currentUid) {
   const rawUid = env?.[SANDBOX_ENV.uid];
-  if (rawUid === undefined || rawUid === "") return { ok: true, sandbox: null, reason: "not_configured" };
+  if (rawUid === undefined || rawUid === "") {
+    if (env?.[SANDBOX_OPT_OUT_ENV] !== "1") return { ok: false, sandbox: null, reason: "not_configured" };
+    if (getuid() === 0) return { ok: false, sandbox: null, reason: "opt_out_refused_as_root" };
+    return { ok: true, sandbox: null, reason: "opted_out" };
+  }
   const uid = Number(rawUid);
   const gid = Number(env?.[SANDBOX_ENV.gid] ?? rawUid);
   if (!Number.isInteger(uid) || uid <= 0 || !Number.isInteger(gid) || gid <= 0) return { ok: false, sandbox: null, reason: "invalid_sandbox_ids" };
@@ -88,11 +102,14 @@ export function sandboxFromEnv(env = process.env, getuid = currentUid) {
   return { ok: true, sandbox: { uid, gid, home, storeDir: typeof store === "string" && store.startsWith("/") ? store : null }, reason: null };
 }
 
-/** 자가점검 항목 — 샌드박스 사용자가 실제로 있고(집 폴더 소유자 = uid) 저장소가 미리 받아져 있나. 던지지 않는다. */
+/**
+ * 자가점검 항목 — 샌드박스 사용자가 실제로 있고(집 폴더 소유자 = uid) 저장소가 미리 받아져 있나. 던지지 않는다.
+ * 설정이 없으면 ok:false(not_configured) — runBuild와 **같은 판정**(sandboxFromEnv)이라 자가점검 초록불 = 빌드가 샌드박스로 돈다.
+ */
 export async function checkSandbox({ env = process.env, getuid = currentUid, fsImpl = fs } = {}) {
   const s = sandboxFromEnv(env, getuid);
   if (!s.ok) return { ok: false, enabled: false, uid: null, storeReady: false, reason: s.reason };
-  if (!s.sandbox) return { ok: true, enabled: false, uid: null, storeReady: false, reason: s.reason };
+  if (!s.sandbox) return { ok: true, enabled: false, uid: null, storeReady: false, reason: s.reason }; // opted_out(개발 PC)만
   try {
     const st = await fsImpl.stat(s.sandbox.home);
     if (st.uid !== s.sandbox.uid) return { ok: false, enabled: true, uid: s.sandbox.uid, storeReady: false, reason: "sandbox_home_owner_mismatch" };
@@ -192,6 +209,9 @@ export const EXEC_DEFAULT_MAX_OUTPUT_CHARS = 256 * 1024;
  *  - uid/gid: 샌드박스 사용자(root 서버만 바꿀 수 있다).
  *  - 리눅스에서는 새 프로세스 그룹(detached)으로 띄우고, 시간 초과·중단 때 **그룹 전체**를 죽인다(vite·esbuild 손자까지).
  *  - 출력은 maxOutputBytes(문자) 안에서 앞·끝만 남긴다 — 넘쳐도 자식을 죽이지 않는다(execFile maxBuffer와 다름).
+ *  - 보조 그룹: uid/gid를 주면 Node(libuv uv__process_child_init)가 자식에서 `setgroups(0, NULL)` → setgid → setuid 순서로
+ *    부른다(uid/gid가 있으면 posix_spawn 빠른 길은 쓰지 않는다 — ENOSYS 폴백). 즉 root 서버의 보조 그룹(gid 0 등)은 자식에
+ *    남지 않는다. container-images CI 탐침이 실제 이미지에서 `groups=10001`·보조 그룹 비어 있음을 확인한다(PR #569 S2 검증 1).
  */
 export function sandboxExec(cmd, args, { cwd, env, timeoutMs = 15_000, signal = null, uid, gid, maxOutputBytes = EXEC_DEFAULT_MAX_OUTPUT_CHARS } = {}) {
   return new Promise((resolve) => {
@@ -432,9 +452,40 @@ export async function listWorkspaceFiles(appDir, { dir = "", max = 500, fsImpl =
 const READ_MAX_BYTES = 1024 * 1024;
 
 /**
+ * 신뢰 프로세스(root 서버)가 **샌드박스 사용자가 쓸 수 있는 파일**을 읽는 길 — 모델 read_file과 보호 파일 복원이 쓴다.
+ *  - 크기 상한: 최대 max+1바이트만 읽는다(truncated로 표시). lstat 크기를 본 뒤 파일이 커져도(검사-사용 경합 — 생성 코드가
+ *    남긴 백그라운드 프로세스) 서버 메모리는 max를 넘지 않는다(PR #569 S2 검증 결함 3).
+ *  - 마지막 구성 요소가 링크면 열지 않는다(O_NOFOLLOW) · FIFO에서 멈추지 않는다(O_NONBLOCK으로 열고, fstat가 일반 파일이
+ *    아니면 읽지 않는다 — 종전 lstat→readFile 사이에 FIFO로 바뀌면 root 서버가 영원히 막혔다).
+ * 반환 { isFile, buf, truncated }. 열기 실패는 던진다(ENOENT·ELOOP 등 — 호출자가 판단).
+ */
+export async function readBoundedFile(abs, max, fsImpl = fs) {
+  const limit = Math.max(0, Math.floor(max));
+  const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0);
+  const fh = await fsImpl.open(abs, flags);
+  try {
+    const st = await fh.stat();
+    if (!st.isFile()) return { isFile: false, buf: Buffer.alloc(0), truncated: false };
+    const buf = Buffer.alloc(limit + 1);
+    let n = 0;
+    while (n < buf.length) {
+      const { bytesRead } = await fh.read(buf, n, buf.length - n, n);
+      if (bytesRead === 0) break;
+      n += bytesRead;
+    }
+    return { isFile: true, buf: buf.subarray(0, Math.min(n, limit)), truncated: n > limit };
+  } finally {
+    await fh.close();
+  }
+}
+
+/**
  * runBuildLoop의 BuildToolExecutor. 경로는 decidePath가 정규화한 저장소 상대 경로로 온다.
  *  - 쓰기: 보호 파일 거부 · 링크 거부 · 마지막 구성 요소는 O_NOFOLLOW로 연다 · 샌드박스 사용자 소유로.
  *  - 명령: decideWorkspaceCommand → 샌드박스 exec(cwd = 작업 폴더, env = 비밀 없는 env, 시간·출력 상한) → ANSI 제거 + 비밀 가리기.
+ *  - 읽기: readBoundedFile(상한·O_NOFOLLOW·FIFO 안전).
+ *  - 신호(WBS 시간 상한·잡 마감)가 끊긴 뒤의 쓰기·명령은 거부한다 — 시간 상한 뒤 유예가 지나 잡이 다음으로 넘어가도(runTimed)
+ *    뒤에 남은 루프가 작업 폴더를 바꾸거나 명령을 띄우지 못한다(PR #569 S2 검증 결함 6).
  * 거부는 던진다 — runBuildLoop가 모델에게 `tool error: REFUSED (...)`로 돌려준다.
  */
 export function createWorkspaceExecutor({
@@ -443,6 +494,9 @@ export function createWorkspaceExecutor({
 }) {
   const root = path.resolve(appDir);
   const clean = (s) => redactSecrets(stripAnsi(s), redactLiterals);
+  const refuseIfStopped = () => {
+    if (signal?.aborted) throw refusal("stopped", "the work item's time limit or the job deadline has passed");
+  };
   return {
     async readFile(rel) {
       let abs;
@@ -452,24 +506,24 @@ export function createWorkspaceExecutor({
         if (err?.code === "ENOENT") return null;
         throw err;
       }
-      const st = await fsImpl.lstat(abs);
-      if (!st.isFile()) throw refusal("not_a_file", rel);
-      if (st.size > READ_MAX_BYTES) {
-        const fh = await fsImpl.open(abs, "r");
-        try {
-          const buf = Buffer.alloc(READ_MAX_BYTES);
-          const { bytesRead } = await fh.read(buf, 0, READ_MAX_BYTES, 0);
-          return `${buf.subarray(0, bytesRead).toString("utf8")}\n…[file truncated at ${READ_MAX_BYTES} bytes]`;
-        } finally {
-          await fh.close();
-        }
+      let got;
+      try {
+        got = await readBoundedFile(abs, READ_MAX_BYTES, fsImpl);
+      } catch (err) {
+        if (err?.code === "ENOENT") return null;
+        if (err?.code === "ELOOP") throw refusal("symlink", rel);
+        if (err?.code === "EISDIR") throw refusal("not_a_file", rel);
+        throw err;
       }
-      return fsImpl.readFile(abs, "utf8");
+      if (!got.isFile) throw refusal("not_a_file", rel);
+      const text = got.buf.toString("utf8");
+      return got.truncated ? `${text}\n…[file truncated at ${READ_MAX_BYTES} bytes]` : text;
     },
     async listFiles(rel) {
       return listWorkspaceFiles(root, { dir: rel ?? "", fsImpl });
     },
     async createFile(rel, content) {
+      refuseIfStopped();
       if (isProtectedAppFile(rel)) throw refusal("protected_file", `${normRel(rel)} is managed by the build platform (restored before the build gate)`);
       const abs = await resolveInside(root, rel, { forWrite: true, fsImpl });
       const parent = path.dirname(abs);
@@ -494,6 +548,7 @@ export function createWorkspaceExecutor({
       }
     },
     async runCommand(cmd, args, opts = {}) {
+      refuseIfStopped();
       const d = decideWorkspaceCommand(cmd, args);
       if (!d.allowed) throw refusal(d.reason, d.detail);
       const requested = Number(opts.timeoutMs);
@@ -537,6 +592,12 @@ async function unlinkLinksOnPath(appDir, rel, fsImpl) {
 /**
  * 보호 파일을 스냅샷 내용으로 되돌린다. 바뀐(또는 없어진·링크로 바뀐) 파일 목록을 돌려준다.
  * 링크로 바뀌었으면(파일 자체든 상위 폴더든) 링크를 지우고 파일로 쓴다(따라가 쓰지 않는다).
+ *
+ * 비교 읽기는 **스냅샷 크기까지만**(PR #569 S2 검증 결함 3): 보호 파일은 샌드박스 사용자 소유라 게이트의 build·test 중에
+ * 생성 코드가 수 GB로 부풀릴 수 있다 — 종전 readFile은 그것을 root 서버 메모리로 통째로 읽었다(OOM → 서버 자멸).
+ * 이제 lstat 크기가 스냅샷과 다르면 읽지 않고 곧장 되돌리고, 같아도 readBoundedFile(want.length)로만 읽는다(경합으로 커져도
+ * 상한). 읽기가 실패하면 "다르다"로 보고 되돌린다 — rm은 비교 밖에서 하므로 읽기 오류가 링크를 따라 쓰는 길을 열지 않는다.
+ * 쓰기는 O_CREAT|O_EXCL|O_NOFOLLOW(방금 지운 자리에 링크·파일이 다시 생겼으면 쓰지 않고 던진다 → 게이트 restore_failed).
  */
 export async function restoreProtected(appDir, snapshot, { sandbox = null, fsImpl = fs } = {}) {
   const restored = [];
@@ -553,17 +614,23 @@ export async function restoreProtected(appDir, snapshot, { sandbox = null, fsImp
     let same = false;
     try {
       const st = await fsImpl.lstat(abs);
-      if (st.isFile()) {
-        const have = await fsImpl.readFile(abs);
-        same = Buffer.compare(Buffer.from(have), want) === 0;
+      if (st.isFile() && st.size === want.length) {
+        const got = await readBoundedFile(abs, want.length, fsImpl);
+        same = got.isFile && !got.truncated && got.buf.length === want.length && Buffer.compare(got.buf, want) === 0;
       }
-      if (!same) await fsImpl.rm(abs, { recursive: true, force: true });
     } catch {
       same = false;
     }
     if (same && !linked) continue;
+    await fsImpl.rm(abs, { recursive: true, force: true });
     await fsImpl.mkdir(path.dirname(abs), { recursive: true });
-    await fsImpl.writeFile(abs, want);
+    const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0);
+    const fh = await fsImpl.open(abs, flags, 0o644);
+    try {
+      await fh.writeFile(want);
+    } finally {
+      await fh.close();
+    }
     if (sandbox) await (fsImpl.lchown ?? fs.lchown)(abs, sandbox.uid, sandbox.gid);
     restored.push(rel);
   }

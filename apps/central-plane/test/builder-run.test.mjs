@@ -21,6 +21,9 @@ const REPO_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 const imageDeps = () => ({
   loadAgentWorker: async () => Object.fromEntries(REQUIRED_AGENT_WORKER_EXPORTS.map((n) => [n, () => {}])),
   templateDir: REPO_TEMPLATE,
+  // PR #569 S2 결함 2: 샌드박스 설정이 없으면 자가점검은 빨간불이다 — 이 파일은 툴체인 항목을 보므로 개발 PC opt-out(root 아님)으로.
+  sandboxEnv: { SIMSA_ALLOW_UNSANDBOXED: "1" },
+  getuid: () => 1000,
 });
 
 const okExec = (versions = {}) => async (cmd) => {
