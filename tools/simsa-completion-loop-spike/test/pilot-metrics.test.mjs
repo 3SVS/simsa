@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   AXES,
@@ -31,7 +31,10 @@ import {
   renderMarkdown,
   redact,
   assertNoSecret,
-  maskId,
+  secretPaths,
+  runLabels,
+  minuteUtc,
+  sideRelation,
   median,
   USER_VERDICT_LABEL_KO,
   DECISION_LABEL_KO,
@@ -276,6 +279,8 @@ describe("정답지 선기록 확인", () => {
     const r = checkPreRegistration({ commits: [{ sha: "b".repeat(40), committedAt: "2026-10-06T11:00:00+09:00" }], firstRunCreatedAt: firstRun, currentText: ANSWER_KEY_FILLED, textAt: () => null });
     assert.equal(r.status, "late");
     assert.equal(r.beforeFirstRun, false);
+    // main은 스쿼시 머지라 main 이력의 커밋 시각 = 머지 시각 — 브랜치에서 다시 확인하라고 알린다(PR #570 검증 P2)
+    assert.match(r.note, /스쿼시 머지/);
   });
 
   it("런 뒤에 기대 판정을 고쳤으면 바뀐 필드를 이름으로 낸다", () => {
@@ -325,11 +330,32 @@ describe("6축 채움 (RUNBOOK §4.2)", () => {
     assert.equal(axes.resolved.value, "1");
   });
 
-  it("수리 잡은 있는데 resolved 미기록이면 비어 있음(verify-sweep 신호 없음)", () => {
+  it("수리 잡은 있는데 자동 재검수가 아직 안 걸렸으면(verifyCheckId 없음) '머지 신호' 이유", () => {
     const repairs = { wvc_mg7aaa11: { id: "wrj_1", status: "done", mode: "auto_fix", resolved: null } };
     const { axes } = evaluateAxes(project, runsFor([RUN1, RUN2], repairs));
     assert.equal(axes.resolved.state, "missing");
-    assert.match(axes.resolved.reason, /verify-sweep/);
+    assert.match(axes.resolved.reason, /verify-sweep\)가 아직 없음/);
+  });
+
+  // PR #570 검증 P2: 재검수가 돌았는데도 "머지 신호 없음"이라고 하면 거짓 원인이다. 완료 콜백은
+  // works===null("문제를 찾지 못했어요")이면 resolved를 찍지 않는다(repair-job-db.ts).
+  it("자동 재검수가 '문제를 찾지 못했어요'(works=null)로 끝났으면 그게 이유 — 머지 신호 탓이 아니다", () => {
+    const verify = { ...RUN2, id: "wvc_mg7ccc33", createdAt: "2026-10-06T02:00:00.000Z", sourceCheckId: "wvc_mg7aaa11", userVerdict: null, userVerdictAt: null };
+    const repairs = { wvc_mg7aaa11: { id: "wrj_1", status: "done", mode: "auto_fix", resolved: null, verifyCheckId: "wvc_mg7ccc33" } };
+    const { axes } = evaluateAxes(project, runsFor([RUN1, verify], repairs));
+    assert.equal(axes.resolved.state, "missing");
+    assert.match(axes.resolved.reason, /works=null/);
+    assert.match(axes.resolved.reason, /Conditionally Ready/);
+    assert.doesNotMatch(axes.resolved.reason, /머지 신호/);
+  });
+
+  it("자동 재검수가 진행 중·실패면 그 상태가 이유", () => {
+    const base = { ...RUN2, id: "wvc_mg7ccc33", createdAt: "2026-10-06T02:00:00.000Z", sourceCheckId: "wvc_mg7aaa11", userVerdict: null, userVerdictAt: null };
+    const repairs = { wvc_mg7aaa11: { id: "wrj_1", status: "done", mode: "auto_fix", resolved: null, verifyCheckId: "wvc_mg7ccc33" } };
+    const running = evaluateAxes(project, runsFor([RUN1, { ...base, status: "running" }], repairs));
+    assert.match(running.axes.resolved.reason, /아직 끝나지 않음/);
+    const failed = evaluateAxes(project, runsFor([RUN1, { ...base, status: "failed" }], repairs));
+    assert.match(failed.axes.resolved.reason, /실패로 끝남/);
   });
 
   it("빈 분류(topic 값 없음)는 채움이 아니다, 도구 미선택은 비어 있음", () => {
@@ -399,6 +425,38 @@ describe("기계 판정 vs 사람 라벨", () => {
     assert.equal(r2.disagreement, null);
   });
 
+  // PR #570 검증 P2: 기계 보류(abstain)는 L2처럼 L1에서도 불일치가 아니다 — 고장 앱에서 UAR이
+  // 나왔다고 R2(불일치 ≥ 2)가 부풀면 안 된다. 보류 차이는 따로 센다.
+  it("첫 런이 '직접 눈으로 확인이 필요해요'(보류)면 L1 보류 차이 — 불일치로 세지 않는다", () => {
+    const uar = { ...RUN1, decision: "User Acceptance Required", works: null };
+    const only = evaluateAgreement(runsFor([uar]), "안 돼요");
+    assert.equal(only.l1.sideRelation, "abstain_mismatch");
+    assert.equal(only.l1.sideAgree, false);
+    assert.equal(only.l2[0].note, "기계 판정 보류");
+    assert.equal(only.disagreement, null); // 잴 수 있는 신호가 없다 → 판정 불가(불일치 아님)
+
+    const withFix = evaluateAgreement(runsFor([uar, { ...RUN2, decision: "Needs Fix", userVerdict: "still_broken" }]), "안 돼요");
+    assert.equal(withFix.disagreement, false); // 두 번째 런의 L2 일치가 신호
+
+    // 기대가 '사람 확인 필요'인데 기계가 판정을 냈어도 보류 차이
+    assert.equal(evaluateAgreement(runsFor([RUN1]), "사람 확인 필요").l1.sideRelation, "abstain_mismatch");
+    assert.equal(sideRelation("accept", "reject"), "opposite");
+    assert.equal(sideRelation("abstain", "abstain"), "same");
+    assert.equal(sideRelation(null, "accept"), null);
+  });
+
+  it("R2 측정값에 보류 차이를 따로 적고, 보류는 불일치 수에 넣지 않는다", () => {
+    const uar = { ...RUN1, decision: "User Acceptance Required", works: null };
+    const cases = [0, 1, 2].map(() => {
+      const r = evaluateAgreement(runsFor([uar]), "안 돼요");
+      return { door: "b", l1: r.l1, l2: r.l2, disagreement: r.disagreement, filledCount: 5, axes: {}, sheet: null };
+    });
+    const r2 = evaluateRules(cases).find((r) => r.id === "R2");
+    assert.match(r2.measured, /^불일치 0건/);
+    assert.match(r2.measured, /보류 차이 3건/);
+    assert.equal(summarize(cases).l1Side.abstainMismatch, 3);
+  });
+
   it("실패한 런은 L1의 '첫 런'이 아니다 — 첫 끝난 런과 비교", () => {
     const failed = { ...RUN1, id: "wvc_mg7fff00", createdAt: "2026-10-06T00:50:00.000Z", status: "failed", decision: "Not Verified", userVerdict: null };
     const r = evaluateAgreement(runsFor([failed, RUN1, RUN2]), "안 돼요");
@@ -427,6 +485,24 @@ describe("시간·재검수", () => {
     const t = evaluateTime(merged);
     assert.deepEqual(t.perRun.map((p) => p.durationSec), [51, 249]);
     assert.equal(t.perRunDurationsMeasured, true);
+  });
+
+  // PR #570 검증 P1: '고칠 것 없음' 결과엔 「다시 확인」이 없어 목록 화면 「지금 검수하기」로 다시
+  // 건다 — 그 런은 sourceCheckId가 없어 재검수로 안 세진다. 후속 런으로 따로 센다.
+  it("계보 없는 후속 런(4-b 경로)은 재검수가 아니라 후속 런으로 센다 — 첫 끝난 런 전 재시도는 어느 쪽도 아님", () => {
+    const retry = { ...RUN1, id: "wvc_mg7fff00", createdAt: "2026-10-06T00:50:00.000Z", status: "failed", decision: "Not Verified", userVerdict: null };
+    const cr = { ...RUN1, decision: "Conditionally Ready", works: null, userVerdict: "works_but_different" };
+    const listRun = { ...RUN2, sourceCheckId: null };
+    const t = evaluateTime(runsFor([retry, cr, listRun]));
+    assert.equal(t.recheckCount, 0);
+    assert.equal(t.hasRecheck, false);
+    assert.equal(t.followUpCount, 1);
+    assert.deepEqual(t.perRun.map((p) => p.followUp), [false, false, true]);
+    // 결과 화면 「다시 확인」(sourceCheckId 있음)은 재검수 — 후속 런 아님
+    const t2 = evaluateTime(runsFor([RUN1, RUN2]));
+    assert.equal(t2.recheckCount, 1);
+    assert.equal(t2.followUpCount, 0);
+    assert.equal(evaluateTime([]).followUpCount, 0);
   });
 
   it("진행 중 런은 완료 시각이 없다(updated_at을 완료로 오인하지 않음)", () => {
@@ -600,21 +676,82 @@ describe("userKey 비노출", () => {
     assert.equal(runs[0].verdictText, "작동 안 해요 — 고쳐야 해요");
     assert.deepEqual(runs[0].findingCodes, ["step_failed", "console_error"]);
     assert.match(markdown, /step_failed · '예약하기'를 눌러도 아무 일도 일어나지 않아요/);
-    // 마크다운은 id를 가린다
-    assert.equal(markdown.includes("wvc_mg7aaa11"), false);
-    assert.match(markdown, /wvc_…aa11/);
     // 예상 실패 지점 적중은 사람이 적은 값만(자동 판정 없음)
     assert.equal(result.cases[0].failurePoint.humanJudgment, "예측 적중");
+    // JSON(로컬 전용)에는 전체 id가 있다
+    assert.ok(json.includes("wvc_mg7aaa11"));
   });
 
-  it("redact·assertNoSecret — 남으면 쓰지 않고 멈춘다(메시지에 값 없음)", () => {
+  // PR #570 검증 P2: 끝 4자리 + ms 생성 시각이면 런 id 전체가 복원된다(id = wvc_ + ms base36 끝 6자 +
+  // 무작위 4자). 가림 판은 id 조각을 하나도 내지 않고, 시각은 분 단위, region 값은 내지 않는다.
+  it("가림 판 마크다운: 런 id 조각·초 단위 시각·국가 값이 없다 — 런은 건 안 순번", async () => {
+    const { markdown } = await runPilotMetrics(
+      { cases: [{ projectId: "proj_mg7kkot", answerKeyPath: "docs/pilot-2026-10/answer-key-01-꽃집 픽업 예약.md" }], base: "https://central.example", maskIds: true },
+      {
+        userKey: USER_KEY,
+        fetchImpl: fakeFetch(),
+        git: { log: () => [{ sha: "a".repeat(40), committedAt: "2026-10-05T21:34:56+09:00" }], show: () => ANSWER_KEY_FILLED, dirty: () => false },
+        readFile: () => ANSWER_KEY_FILLED,
+        now: () => new Date("2026-10-06T02:00:00.000Z"),
+        cwd: ROOT,
+      },
+    );
+    for (const id of [RUN1.id, RUN2.id]) {
+      assert.equal(markdown.includes(id), false, id);
+      assert.equal(markdown.includes(id.slice(-4)), false, `끝 4자리 ${id.slice(-4)}`);
+    }
+    assert.equal(markdown.includes("wvc_"), false);
+    assert.equal(/\d{2}:\d{2}:\d{2}/.test(markdown.replace(/^# 파일럿 지표 — .*$/m, "")), false, "초 단위 시각");
+    assert.match(markdown, /런2 ⟵ 런1/);
+    assert.match(markdown, /2026-10-06 01:00 UTC/);
+    assert.match(markdown, /2026-10-05 12:34 UTC/); // 커밋 시각도 분 단위(UTC)
+    assert.match(markdown, /✓ 기록됨/);
+    assert.equal(/\bKR\b/.test(markdown), false);
+    assert.match(markdown, /런1: 안 돼요 ↔ 아직 안 돼요 \(일치\)/);
+  });
+
+  it("--no-mask 판은 전체 id를 낸다(로컬 확인용)", async () => {
+    const { markdown } = await runPilotMetrics(
+      { cases: [{ projectId: "proj_mg7kkot", answerKeyPath: null }], base: "https://central.example", maskIds: false },
+      { userKey: USER_KEY, fetchImpl: fakeFetch(), git: noGit, now: () => new Date("2026-10-06T02:00:00.000Z"), cwd: ROOT },
+    );
+    assert.match(markdown, /wvc_mg7bbb22 ⟵ wvc_mg7aaa11/);
+    assert.match(markdown, /가리지 않은 판/);
+  });
+
+  // PR #570 검증 P2: 예전엔 redact가 먼저 돌아 assertNoSecret이 절대 발동하지 않았다 — 화이트리스트가
+  // 깨져도 [REDACTED]가 조용히 쓰였다. 이제 원문에 있으면 멈추고 새는 칸의 경로만 알린다.
+  it("화이트리스트를 통과한 칸에 userKey가 있으면 가리지 않고 멈춘다(fail-closed) — 오류에 값 없음, 경로 있음", async () => {
+    const leaky = { ...PROJECT, title: `꽃집 ${USER_KEY}` };
+    const leakyRun = { ...RUN1, report: report({ verdict: "작동 안 해요 — 고쳐야 해요", oneLine: `키 ${USER_KEY}`, findings: [{ severity: "high", what: `주소에 ${USER_KEY}`, code: "step_failed" }] }) };
+    await assert.rejects(
+      () =>
+        runPilotMetrics(
+          { cases: [{ projectId: "proj_mg7kkot", answerKeyPath: null }], base: "https://central.example", maskIds: true },
+          { userKey: USER_KEY, fetchImpl: fakeFetch({ project: leaky, runs: [leakyRun, RUN2] }), git: noGit, cwd: ROOT },
+        ),
+      (err) => {
+        assert.ok(err instanceof Error);
+        assert.equal(err.message.includes(USER_KEY), false);
+        assert.match(err.message, /파일을 쓰지 않고 멈춥니다/);
+        assert.match(err.message, /cases\[0\]\.(collected\.project\.)?title/);
+        return true;
+      },
+    );
+  });
+
+  it("redact·assertNoSecret·secretPaths — 원문 검사, 메시지·경로에 값 없음", () => {
     assert.equal(redact(`x ${USER_KEY} y ${encodeURIComponent(USER_KEY)}`, [USER_KEY]), "x [REDACTED] y [REDACTED]");
     assert.throws(
-      () => assertNoSecret(`{"k":"${USER_KEY}"}`, [USER_KEY]),
-      (err) => err instanceof Error && !err.message.includes(USER_KEY),
+      () => assertNoSecret(`{"k":"${USER_KEY}"}`, [USER_KEY], ["cases[0].title"]),
+      (err) => err instanceof Error && !err.message.includes(USER_KEY) && err.message.includes("cases[0].title"),
     );
     assert.doesNotThrow(() => assertNoSecret("clean", [USER_KEY]));
     assert.doesNotThrow(() => assertNoSecret("clean", []));
+    const paths = secretPaths({ a: [{ b: "ok" }, { c: `x${USER_KEY}` }], [`k${USER_KEY}`]: 1, d: "clean" }, [USER_KEY]);
+    assert.deepEqual(paths, ["a[1].c", "[키 가림]"]);
+    assert.equal(paths.join(" ").includes(USER_KEY), false);
+    assert.deepEqual(secretPaths({ a: "clean" }, [USER_KEY]), []);
   });
 });
 
@@ -712,6 +849,70 @@ describe("CLI 인자·seam", () => {
 
 // ─── 드리프트 가드 (라이브 대시보드 문구와 일치) ─────────────────────────────────────
 
+/**
+ * 런북의 「화면 문구」 → 그 문구를 화면에 그리는 dictionary.mjs **키 경로**(ko). 문자열 존재가 아니라
+ * 키로 단언한다 — 같은 문자열이 다른 키에도 있으면(「다시 확인」 5곳, 「복사됨」 9곳) 버튼 문구가
+ * 바뀌어도 존재 검사는 통과한다(PR #570 검증 P2). 런북에 문구를 추가하면 여기에 키를 대응한다.
+ * 키마다 쓰는 곳: 괄호 안(대시보드 src 기준).
+ */
+const RUNBOOK_LABEL_KEYS = Object.freeze({
+  "새 프로젝트": "nav.newProject", // components/AppSidebar.tsx
+  "무엇부터 시작할까요?": "branch.title",
+  "이미 만든 앱이 있어요": "branch.codeTitle",
+  "만드신 앱을 보여주세요": "branch.codeStepTitle",
+  "앱 주소 또는 GitHub 저장소": "branch.submitLabel",
+  "이 앱을 어떤 도구로 만들었나요? (선택 — 모르면 건너뛰세요)": "builtWith.optionalSummary",
+  "검수 시작하기": "branch.submitCta",
+  "실제 앱 확인하기": "commandCenter.runReview", // app/projects/[id]/page.tsx 다음 할 일 run_review
+  "앱 주소 추가하기": "commandCenter.addUrl", // 같은 파일 add_url
+  "확인 시작": "commandCenter.addUrlStart", // components/AppAddressStart.tsx
+  "주소를 어디서 찾나요?": "commandCenter.addUrlHelpToggle", // 같은 컴포넌트
+  "저희가 읽은 이 앱은 이렇습니다": "intentConfirm.title", // components/IntentConfirmCard.tsx
+  "이 앱이 하는 일": "intentConfirm.oneLineLabel",
+  "네, 맞아요": "intentConfirm.confirm",
+  "진행 상황 보기": "commandCenter.viewProgress",
+  "검수 결과 보기": "commandCenter.viewResults",
+  "앱 확인하기": "nav.checkApp",
+  "리포트 열기": "visualChecks.open",
+  "지금 검수하기": "visualChecks.runButton", // app/projects/[id]/visual-checks/page.tsx (4-b 경로)
+  "무엇을 확인할까요? (선택)": "visualChecks.intentLabel", // 같은 화면의 의도 칸
+  "발견한 내용": "visualChecks.findingsTitle",
+  "이번 결과, 어떠셨어요?": "visualChecks.userVerdict.title",
+  "바로 고치게 하기": "visualChecks.fixTitle", // visual-checks/[runId]/page.tsx 고침 지시 카드
+  "빌더 채팅에 붙여넣기": "visualChecks.fixPrompt.copyBuilder",
+  "복사됨": "visualChecks.copied",
+  "고침 지시 복사": "visualChecks.copyPrompt",
+  "고치기": "visualChecks.repair.button",
+  "고친 내용이 준비됐어요": "visualChecks.repair.doneTitleAutoFix",
+  "수리 시작점 PR이 준비됐어요": "visualChecks.repair.doneTitle",
+  "수리 확인 재검수": "visualChecks.repair.recheckButton",
+  "이 앱을 만든 도구로 고치기": "visualChecks.builderPaste.title",
+  "다시 확인": "visualChecks.builderPaste.recheckButton",
+  "생각대로 됐어요": "visualChecks.userVerdict.options.as_intended",
+  "되긴 하는데 달라요": "visualChecks.userVerdict.options.works_but_different",
+  "아직 안 돼요": "visualChecks.userVerdict.options.still_broken",
+  "모르겠어요": "visualChecks.userVerdict.options.unsure",
+});
+
+function runbookLabels(text) {
+  return [...new Set([...String(text).matchAll(/「([^」]+)」/g)].map((m) => m[1]))];
+}
+
+function atPath(obj, dotted) {
+  return dotted.split(".").reduce((o, k) => (o && typeof o === "object" ? o[k] : undefined), obj);
+}
+
+/** 대응 키가 없거나 키의 값이 문구와 다르면 [{label, key, actual}]. */
+function labelDrift(labels, ko) {
+  return labels
+    .map((label) => {
+      const key = RUNBOOK_LABEL_KEYS[label] ?? null;
+      const actual = key ? atPath(ko, key) ?? null : null;
+      return { label, key, actual };
+    })
+    .filter((d) => d.key === null || d.actual !== d.label);
+}
+
 describe("드리프트 가드", () => {
   const dictionary = read("apps/dashboard/src/i18n/dictionary.mjs");
 
@@ -727,17 +928,37 @@ describe("드리프트 가드", () => {
     }
   });
 
-  it("런북의 「화면 문구」는 전부 dictionary.mjs에 문자열 그대로 있다", () => {
-    const runbook = read("docs/pilot-2026-10/RUNBOOK.md");
-    const labels = [...new Set([...runbook.matchAll(/「([^」]+)」/g)].map((m) => m[1]))];
+  it("런북의 「화면 문구」는 전부 키 경로가 대응돼 있고, 그 키의 한국어 값이 문구 그대로다", async () => {
+    const { DICTIONARIES } = await import(pathToFileURL(path.join(ROOT, "apps/dashboard/src/i18n/dictionary.mjs")).href);
+    const labels = runbookLabels(read("docs/pilot-2026-10/RUNBOOK.md"));
     assert.ok(labels.length >= 15, `라벨 ${labels.length}개`);
-    const missingLabels = labels.filter((l) => !dictionary.includes(`"${l}"`));
-    assert.deepEqual(missingLabels, []);
+    assert.deepEqual(labelDrift(labels, DICTIONARIES.ko), []);
   });
 
-  it("maskId", () => {
-    assert.equal(maskId("wvc_mg7aaa11"), "wvc_…aa11");
-    assert.equal(maskId("proj_mg7kkot"), "proj_…kkot");
-    assert.equal(maskId(null), "—");
+  // PR #570 검증 P2: 예전 가드는 "그 문자열이 사전 어딘가에 있나"만 봤다 — 「다시 확인」은 키 5곳,
+  // 「복사됨」은 9곳에 있어 버튼 문구가 바뀌어도 통과했다. 가드 자체를 검증한다.
+  it("가드 자체: 같은 문자열이 다른 키에 남아 있어도 그 버튼의 키가 바뀌면 잡는다", async () => {
+    const { DICTIONARIES } = await import(pathToFileURL(path.join(ROOT, "apps/dashboard/src/i18n/dictionary.mjs")).href);
+    const changed = structuredClone(DICTIONARIES.ko);
+    changed.visualChecks.builderPaste.recheckButton = "다시 검수하기";
+    changed.visualChecks.copied = "복사했어요";
+    const labels = ["다시 확인", "복사됨"];
+    // 예전 방식(사전 원문에 문자열이 있나)은 이 변경을 못 잡는다 — 다른 키에 같은 문자열이 남아 있다.
+    const serialized = JSON.stringify(changed);
+    assert.ok(labels.every((l) => serialized.includes(`"${l}"`)));
+    // 새 가드는 잡는다.
+    assert.deepEqual(labelDrift(labels, changed).map((d) => d.label), ["다시 확인", "복사됨"]);
+    // 런북에 새 문구를 쓰고 키를 대응하지 않으면 그것도 잡는다.
+    assert.deepEqual(labelDrift(["없는 버튼"], DICTIONARIES.ko), [{ label: "없는 버튼", key: null, actual: null }]);
+  });
+
+  it("runLabels·minuteUtc", () => {
+    const labels = runLabels(runsFor([RUN2, RUN1]));
+    assert.equal(labels.get("wvc_mg7aaa11"), "런1");
+    assert.equal(labels.get("wvc_mg7bbb22"), "런2");
+    assert.equal(minuteUtc("2026-10-06T01:00:59.999Z"), "2026-10-06 01:00 UTC");
+    assert.equal(minuteUtc("2026-10-06T10:05:00+09:00"), "2026-10-06 01:05 UTC");
+    assert.equal(minuteUtc("nope"), null);
+    assert.equal(minuteUtc(null), null);
   });
 });

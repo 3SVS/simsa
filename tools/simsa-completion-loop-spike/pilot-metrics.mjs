@@ -22,7 +22,8 @@
  *
  * userKey: SIMSA_USER_KEY 환경변수 또는 --user-key-file <path>(권장) · --user-key <값>(셸 기록에 남음).
  * 출력·로그·오류 문구에 userKey 원문을 넣지 않는다 — 수집은 화이트리스트, 오류는 엔드포인트 이름·
- * 상태 코드·오류 코드만, 쓰기 직전 assertNoSecret이 한 번 더 막는다.
+ * 상태 코드·오류 코드만. 그래도 출력 원문(JSON·마크다운)에 userKey가 있으면 **가리지 않고 멈춘다**
+ * (fail-closed — 파일을 쓰지 않고 새는 칸의 경로만 알린다). 콘솔 오류 문구만 redact로 가린다.
  *
  * Usage (저장소 루트에서):
  *   SIMSA_USER_KEY=uk_... node tools/simsa-completion-loop-spike/pilot-metrics.mjs \
@@ -30,7 +31,8 @@
  *     --case proj_def456=docs/pilot-2026-10/answer-key-02-가계부.md \
  *     --sheet docs/pilot-2026-10/cost-sheet.md
  * 출력: tools/simsa-completion-loop-spike/pilot-metrics-out/pilot-metrics-<시각>.{json,md} (gitignore —
- *   JSON에는 전체 id·앱 주소가 있다. 마크다운은 id를 가린다: 공개 저장소에 붙일 때는 .md만.)
+ *   JSON에는 전체 id·앱 주소·초 단위 시각이 있다. 마크다운(기본 가림 판)은 런 id 대신 건 안 순번,
+ *   분 단위 시각, region은 '기록됨'만 — 공개 저장소에 붙일 때는 .md만, 조건은 RUNBOOK §7.)
  *
  * 테스트: test/pilot-metrics.test.mjs (node --test, 네트워크 없음 — fetch·git은 주입).
  */
@@ -53,6 +55,7 @@ import {
   renderMarkdown,
   redact,
   assertNoSecret,
+  secretPaths,
   AXES,
 } from "./lib/pilot-metrics.mjs";
 
@@ -332,12 +335,14 @@ export async function runPilotMetrics(opts, seams = {}) {
     opsFill,
     cases,
   };
+  // fail-closed (PR #570 검증 P2): 가리기 전의 **원문**을 검사해 userKey가 있으면 가리지 않고 멈춘다.
+  // 수집은 화이트리스트라 여기서 걸리면 화이트리스트 회귀다 — [REDACTED]로 조용히 쓰면 그 회귀가
+  // 드러나지 않는다. 멈출 때는 어느 칸인지(경로)만 알린다(값은 넣지 않는다).
   const secrets = userKey ? [userKey] : [];
-  const json = redact(JSON.stringify(result, null, 2), secrets);
-  const markdown = redact(renderMarkdown(result, { maskIds: opts.maskIds !== false }), secrets);
-  // redact 뒤에도 남아 있으면(인코딩 변형 등) 쓰지 않는다.
-  assertNoSecret(json, secrets);
-  assertNoSecret(markdown, secrets);
+  const json = JSON.stringify(result, null, 2);
+  const markdown = renderMarkdown(result, { maskIds: opts.maskIds !== false });
+  assertNoSecret(json, secrets, secretPaths(result, secrets));
+  assertNoSecret(markdown, secrets, ["마크다운"]);
   return { result, markdown, json };
 }
 

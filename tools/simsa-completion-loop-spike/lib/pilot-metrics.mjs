@@ -287,13 +287,38 @@ function byCreated(a, b) {
 }
 
 /**
+ * 수리 잡은 있는데 resolved가 비었을 때의 **실제** 이유. verify-sweep이 재검수를 걸면 수리 잡에
+ * verifyCheckId가 붙는다(verify-sweep.ts setRepairJobVerifyCheck) — 그게 있으면 "머지 신호 없음"이
+ * 아니다. 가장 최근 수리 잡을 기준으로 본다.
+ * @param {Array<any>} repairs @param {Array<any>} runs (생성 순)
+ */
+function resolvedMissingReason(repairs, runs) {
+  const withVerify = repairs.filter((j) => j.verifyCheckId);
+  if (withVerify.length === 0) {
+    return "수리 뒤 자동 재검수(verify-sweep)가 아직 없음 — 수리 PR 머지 신호(Simsa GitHub 앱이 설치된 저장소)가 있어야 돈다";
+  }
+  const verifyId = withVerify[withVerify.length - 1].verifyCheckId;
+  const v = runs.find((r) => r.id === verifyId) ?? null;
+  if (!v) return "자동 재검수 런을 이 건의 런 목록에서 찾지 못함";
+  if (v.status === "failed") return "자동 재검수가 실패로 끝남 — 실패 런은 resolved를 찍지 않는다";
+  if (v.status !== "done") return "자동 재검수가 아직 끝나지 않음";
+  return `자동 재검수는 끝났지만 판정이 ${v.decision ?? "—"}(works=null)이라 NULL — resolved는 Ready(1)·Needs Fix(0)에서만 찍힌다`;
+}
+
+/**
  * 건 하나의 6축. 각 축은 출처가 하나다(섞지 않는다):
  *   region       project.regionAtCreate (API)
  *   built_with   project.builtWith (API) — 도구가 하나라도 있어야 채움
  *   topic        project.topicTags (API) — 값이 하나라도 있어야 채움(빈 분류 = recorded_empty, 채움 아님)
  *   finding_code 끝난 런 **전부**의 코드 기록(D1 행이 있으면 D1 칸, 없으면 API 리포트에서 서버 규칙대로) — []도 채움
  *   user_verdict **마지막 끝난 런**의 사람 라벨
- *   resolved     이 건의 수리 잡 중 하나라도 resolved 기록 — 수리 잡이 없으면(붙여넣기 경로) 비움
+ *   resolved     이 건의 수리 잡 중 하나라도 resolved 기록 — 수리 잡이 없으면(붙여넣기 경로) 비움.
+ *                비는 이유는 셋으로 나눈다(PR #570 검증 P2): 자동 재검수가 아직 없음 / 재검수가 안
+ *                끝남·실패 / 재검수는 끝났지만 works=null. 완료 콜백은 works===null이면 resolved를
+ *                찍지 않는다(central-plane repair-job-db.ts resolveRepairJobsByVerifyCheck,
+ *                0069 "판정 불가 → NULL 유지") — works=true는 Ready(로그인 뒤 왕복 확인)뿐이고
+ *                (nondev-report.ts decisionToWorks · decideFromEvidence), 흔한 성공 결과인
+ *                "문제를 찾지 못했어요"(Conditionally Ready)는 NULL로 남는다.
  */
 export function evaluateAxes(project, runs) {
   const p = project ?? {};
@@ -357,7 +382,7 @@ export function evaluateAxes(project, runs) {
       "repair.resolved",
     );
   } else {
-    axes.resolved = missing("수리 뒤 자동 재검수(verify-sweep) 결과 없음 — 수리 PR 머지 신호가 있어야 찍힌다", "repair.resolved");
+    axes.resolved = missing(resolvedMissingReason(repairs, sorted), "repair.resolved");
   }
   const filledCount = AXES.filter((a) => axes[a]?.state === "filled").length;
   return { axes, filledCount, fillRate: filledCount / AXES.length };
@@ -366,20 +391,36 @@ export function evaluateAxes(project, runs) {
 // ─── 판정 vs 사람 라벨 (RUNBOOK §4.1·§4.3) ─────────────────────────────────────
 
 /**
+ * 두 쪽(accept/reject/abstain)의 관계. 한쪽만 보류(abstain)면 "abstain_mismatch" — 맞다·틀리다가
+ * 아니라 한쪽이 판단하지 않은 것이다(PR #570 검증 P2: L2와 같은 정의).
+ * @returns {"same"|"opposite"|"abstain_mismatch"|null}
+ */
+export function sideRelation(a, b) {
+  if (!a || !b) return null;
+  if (a === b) return "same";
+  if (a === "abstain" || b === "abstain") return "abstain_mismatch";
+  return "opposite";
+}
+
+/**
  * L1 = 정답지 '기대 판정'(선기록) ↔ 첫 끝난 런의 4칸. L2 = 런마다 기계 쪽 ↔ 그 런의 user_verdict.
- * 건 불일치 = L1 쪽 불일치 또는 L2 충돌이 하나라도 있음.
+ * 건 불일치 = L1이 **반대 쪽**(accept ↔ reject)이거나 L2 충돌이 하나라도 있음.
+ * 보류(abstain)는 L1·L2 모두 일치도 불일치도 아니다 — L1 '보류 차이'로 따로 센다(RUNBOOK §4.3).
+ * 잴 수 있는 신호(L1 같은/반대 쪽, L2 일치/충돌)가 하나도 없으면 판정 불가(null).
  */
 export function evaluateAgreement(runs, expectedJudgment) {
   const done = [...(runs ?? [])].sort(byCreated).filter((r) => r.status === "done");
   const first = done[0] ?? null;
   const actual = decisionBucket(first);
   const expected = typeof expectedJudgment === "string" ? expectedJudgment : null;
+  const relation = expected && actual ? sideRelation(bucketSide(expected), bucketSide(actual)) : null;
   const l1 = {
     expected,
     actual,
     firstRunId: first?.id ?? null,
     exact: expected && actual ? expected === actual : null,
-    sideAgree: expected && actual ? bucketSide(expected) === bucketSide(actual) : null,
+    sideAgree: relation === null ? null : relation === "same",
+    sideRelation: relation,
   };
   const l2 = done
     .filter((r) => r.userVerdict)
@@ -395,9 +436,10 @@ export function evaluateAgreement(runs, expectedJudgment) {
       return { runId: r.id, bucket, decision: r.decision, userVerdict: r.userVerdict, machine, human, agree, note };
     });
   const conflicts = l2.filter((p) => p.agree === false).length;
+  const l1Measured = relation === "same" || relation === "opposite";
   let disagreement;
-  if (l1.sideAgree === false || conflicts > 0) disagreement = true;
-  else if (l1.sideAgree === null && l2.every((p) => p.agree === null)) disagreement = null;
+  if (relation === "opposite" || conflicts > 0) disagreement = true;
+  else if (!l1Measured && l2.every((p) => p.agree === null)) disagreement = null;
   else disagreement = false;
   return { l1, l2, disagreement };
 }
@@ -411,12 +453,22 @@ export function secondsBetween(fromIso, toIso) {
   return Math.round((b - a) / 1000);
 }
 
+/**
+ * 재검수 = sourceCheckId가 있는 런(결과 화면의 「다시 확인」·「수리 확인 재검수」·verify-sweep).
+ * 후속 런 = 첫 끝난 런보다 뒤에 만든 런 중 sourceCheckId가 **없는** 런 — 결과 화면에 「다시 확인」이
+ * 없는 경로(RUNBOOK §2 4-b: '고칠 것 없음' 결과 → 목록 화면 「지금 검수하기」)는 계보가 남지 않아
+ * 재검수로 세지지 않는다(PR #570 검증 P1). 첫 끝난 런 **전**의 재시도(실패 런 뒤 다시 걸기)는 어느
+ * 쪽도 아니다.
+ */
 export function evaluateTime(runs) {
   const sorted = [...(runs ?? [])].sort(byCreated);
   const first = sorted[0] ?? null;
   const last = sorted[sorted.length - 1] ?? null;
   const done = sorted.filter((r) => r.status === "done");
+  const firstDone = done[0] ?? null;
   const finalDone = done[done.length - 1] ?? null;
+  const afterFirstDone = firstDone ? sorted.slice(sorted.indexOf(firstDone) + 1) : [];
+  const followUps = afterFirstDone.filter((r) => !r.sourceCheckId);
   const perRun = sorted.map((r) => ({
     runId: r.id,
     status: r.status,
@@ -424,6 +476,7 @@ export function evaluateTime(runs) {
     doneAt: r.doneAt,
     durationSec: secondsBetween(r.createdAt, r.doneAt),
     recheck: Boolean(r.sourceCheckId),
+    followUp: followUps.includes(r),
   }));
   return {
     runs: sorted.length,
@@ -432,6 +485,7 @@ export function evaluateTime(runs) {
     activeRuns: sorted.filter((r) => r.status === "queued" || r.status === "running" || r.status === "uploaded").length,
     recheckCount: sorted.filter((r) => r.sourceCheckId).length,
     hasRecheck: sorted.some((r) => r.sourceCheckId),
+    followUpCount: followUps.length,
     firstCreatedAt: first?.createdAt ?? null,
     toFinalRunSec: first && last && first !== last ? secondsBetween(first.createdAt, last.createdAt) : null,
     toVerdictSec: first && finalDone?.userVerdictAt ? secondsBetween(first.createdAt, finalDone.userVerdictAt) : null,
@@ -591,7 +645,11 @@ export function checkPreRegistration({ commits, dirty = null, firstRunCreatedAt,
     beforeFirstRun,
     commitsAfterRun: commits.filter((c) => Date.parse(c.committedAt) >= runMs).length,
     expectedChangedFields,
-    note: beforeFirstRun ? null : "정답지 첫 커밋이 첫 런보다 늦음 — 선기록 아님",
+    // main은 스쿼시 머지라 main 이력의 첫 커밋 시각 = 머지 시각이다(PR #570 검증 P2). 브랜치에만
+    // 선기록 커밋이 있으면 그 브랜치를 체크아웃해 다시 돌린다(RUNBOOK §1-2).
+    note: beforeFirstRun
+      ? null
+      : "정답지 첫 커밋이 첫 런보다 늦음 — 선기록 아님(main의 스쿼시 머지 시각일 수 있음: 정답지 브랜치를 체크아웃해 다시 확인)",
   };
 }
 
@@ -727,12 +785,14 @@ export function evaluateRules(cases) {
     status: bc.length === 0 ? "insufficient" : asIntended > 0 ? "clear" : bcUnlabeled > 0 ? "insufficient" : "triggered",
   });
 
-  // R2 — 기계 판정과 사람 라벨 불일치 ≥ 2건 → 판정 규칙 재검토.
+  // R2 — 기계 판정과 사람 라벨 불일치 ≥ 2건 → 판정 규칙 재검토. 기계 보류는 불일치가 아니다(§4.3) —
+  // 대신 첫 런 보류 건수를 원문과 함께 보이게 따로 적는다(회고 입력).
   const dis = list.filter((c) => c.disagreement === true).length;
   const undecided = list.filter((c) => c.disagreement === null).length;
+  const l1Abstain = list.filter((c) => c.l1?.sideRelation === "abstain_mismatch").length;
   rules.push({
     id: "R2",
-    measured: `불일치 ${dis}건 / 판정 불가 ${undecided}건 / 전체 ${list.length}건`,
+    measured: `불일치 ${dis}건 / 판정 불가 ${undecided}건 / 전체 ${list.length}건 (첫 런 보류 차이 ${l1Abstain}건 — 불일치로 세지 않음)`,
     threshold: "불일치 ≥ 2건",
     status: list.length === 0 ? "insufficient" : dis >= 2 ? "triggered" : dis + undecided >= 2 ? "insufficient" : "clear",
   });
@@ -787,7 +847,12 @@ export function summarize(cases) {
     perAxis,
     meanFill: list.length ? list.reduce((s, c) => s + (c.filledCount ?? 0), 0) / (AXES.length * list.length) : null,
     l1Exact: { agree: l1.filter((x) => x.exact).length, n: l1.length },
-    l1Side: { agree: l1.filter((x) => x.sideAgree).length, n: l1.length },
+    l1Side: {
+      agree: l1.filter((x) => x.sideRelation === "same").length,
+      opposite: l1.filter((x) => x.sideRelation === "opposite").length,
+      abstainMismatch: l1.filter((x) => x.sideRelation === "abstain_mismatch").length,
+      n: l1.length,
+    },
     l2: {
       agree: decided.filter((p) => p.agree).length,
       n: decided.length,
@@ -800,7 +865,46 @@ export function summarize(cases) {
 
 // ─── 비밀 값 보호 ────────────────────────────────────────────────────────────────
 
-/** 문자열 안의 비밀 값(원문·URL 인코딩)을 가린다. */
+function containsSecret(text, secrets) {
+  const t = String(text ?? "");
+  for (const s of secrets ?? []) {
+    if (typeof s !== "string" || s.length < 4) continue;
+    if (t.includes(s) || t.includes(encodeURIComponent(s))) return true;
+  }
+  return false;
+}
+
+/**
+ * 결과 객체에서 비밀 값이 들어 있는 위치(경로)를 찾는다 — 값은 돌려주지 않는다. 멈출 때 "어느 칸이
+ * 새는가"를 알려 화이트리스트 회귀를 고칠 수 있게 한다. 키 이름 자체에 값이 있으면 키를 가린다.
+ * @param {unknown} value @param {string[]} secrets @param {number} [limit]
+ * @returns {string[]}
+ */
+export function secretPaths(value, secrets, limit = 5) {
+  const out = [];
+  const walk = (v, p) => {
+    if (out.length >= limit) return;
+    if (typeof v === "string") {
+      if (containsSecret(v, secrets)) out.push(p || "(루트)");
+      return;
+    }
+    if (Array.isArray(v)) {
+      v.forEach((x, i) => walk(x, `${p}[${i}]`));
+      return;
+    }
+    if (v && typeof v === "object") {
+      for (const [k, x] of Object.entries(v)) {
+        const key = containsSecret(k, secrets) ? "[키 가림]" : k;
+        if (key !== k && out.length < limit) out.push(p ? `${p}.${key}` : key);
+        walk(x, p ? `${p}.${key}` : key);
+      }
+    }
+  };
+  walk(value, "");
+  return out;
+}
+
+/** 문자열 안의 비밀 값(원문·URL 인코딩)을 가린다. 출력 파일이 아니라 콘솔 오류 문구용이다. */
 export function redact(text, secrets) {
   let out = String(text ?? "");
   for (const s of secrets ?? []) {
@@ -810,26 +914,45 @@ export function redact(text, secrets) {
   return out;
 }
 
-/** 출력에 비밀 값이 있으면 throw — 쓰기 전에 마지막으로 한 번 더. 메시지에 값을 넣지 않는다. */
-export function assertNoSecret(text, secrets) {
-  const t = String(text ?? "");
-  for (const s of secrets ?? []) {
-    if (typeof s !== "string" || s.length < 4) continue;
-    if (t.includes(s) || t.includes(encodeURIComponent(s))) {
-      throw new Error("pilot-metrics: userKey가 출력에 들어갈 뻔했어요 — 파일을 쓰지 않고 멈춥니다");
-    }
-  }
+/**
+ * 출력 원문에 비밀 값이 있으면 throw — **가리기 전의 원문**에 대고 부른다(fail-closed). 가린 뒤에
+ * 검사하면 절대 발동하지 않아 화이트리스트가 깨져도 조용히 [REDACTED]가 쓰인다(PR #570 검증 P2).
+ * 메시지에 값을 넣지 않는다 — 위치(where)만.
+ * @param {string} text @param {string[]} secrets @param {string[]} [where]
+ */
+export function assertNoSecret(text, secrets, where = []) {
+  if (!containsSecret(text, secrets)) return;
+  const at = where.length ? ` (위치: ${where.join(", ")})` : "";
+  throw new Error(`pilot-metrics: userKey가 출력에 들어갈 뻔했어요${at} — 파일을 쓰지 않고 멈춥니다. 수집 화이트리스트를 고친 뒤 다시 돌리세요`);
 }
 
 // ─── 렌더 ────────────────────────────────────────────────────────────────────────
 
-/** 공개 저장소에 붙일 수 있게 id 끝만 남긴다(wvc_…a1b2). */
-export function maskId(id, keep = 4) {
-  if (typeof id !== "string" || !id) return "—";
-  const m = /^([a-z]+_)(.*)$/.exec(id);
-  const prefix = m ? m[1] : "";
-  const rest = m ? m[2] : id;
-  return rest.length <= keep ? id : `${prefix}…${rest.slice(-keep)}`;
+/**
+ * 가림 모드의 런 표시 — 건 안의 생성 순번(런1, 런2 …). id의 어떤 부분도 남기지 않는다.
+ * 런 id는 `wvc_` + ms 시각(base36 끝 6자) + 무작위 4자라(central-plane visual-check-db.ts randId),
+ * 끝 4자리를 남기고 생성 시각(ms)을 함께 내면 id 전체가 복원된다(PR #570 검증 P2 — 서버 randId 모양
+ * 2000개를 끝 4자리 + createdAt(±2ms 탐색)으로 2000/2000 복원, 2026-10-01 로컬 재현).
+ * @param {Array<{ id?: string|null, createdAt?: string|null }>} runs
+ * @returns {Map<string, string>}
+ */
+export function runLabels(runs) {
+  const map = new Map();
+  [...(runs ?? [])].sort(byCreated).forEach((r, i) => {
+    if (typeof r?.id === "string" && r.id) map.set(r.id, `런${i + 1}`);
+  });
+  return map;
+}
+
+/**
+ * 가림 모드의 시각 — 분 단위 UTC("2026-10-06 01:00 UTC"). 초·ms를 내지 않는다. 런 id 조각을 내지
+ * 않으므로 분 단위 시각만으로는 id를 복원할 수 없다(분 안의 ms 6만 가지 × 무작위 36⁴).
+ * @param {unknown} iso
+ */
+export function minuteUtc(iso) {
+  const ms = Date.parse(typeof iso === "string" ? iso : "");
+  if (!Number.isFinite(ms)) return null;
+  return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
 function cell(v) {
@@ -844,9 +967,9 @@ function fmtSec(s) {
   return m < 90 ? `${m}분 ${s % 60}초` : `${Math.floor(m / 60)}시간 ${m % 60}분`;
 }
 
-function axisCell(a) {
+function axisCell(a, { hideValue = false } = {}) {
   if (!a) return "—";
-  if (a.state === "filled") return `✓ ${a.value}`;
+  if (a.state === "filled") return hideValue ? "✓ 기록됨" : `✓ ${a.value}`;
   if (a.state === "recorded_empty") return `○ 빈 분류`;
   return `✗ ${a.reason ?? ""}`;
 }
@@ -858,11 +981,17 @@ function judgmentText(run) {
 }
 
 /**
- * 결과 → 마크다운. 기본은 id를 가린다(공개 저장소에 붙일 수 있게). 앱 주소·userKey는 넣지 않는다.
+ * 결과 → 마크다운. 앱 주소·userKey·프로젝트 id는 넣지 않는다.
+ * 가림 모드(기본, maskIds=true): 런 id → 건 안 순번(런1…), 시각 → 분 단위 UTC, region 값 → "기록됨".
+ * 판정·user_verdict·resolved 값은 파일럿 결과 그 자체라 남긴다(RUNBOOK §7 '공개 저장소 주의').
  * @param {any} result @param {{ maskIds?: boolean }} [opts]
  */
 export function renderMarkdown(result, { maskIds = true } = {}) {
-  const id = (v) => (maskIds ? maskId(v) : cell(v));
+  const idsFor = (c) => {
+    const labels = runLabels(c.collected?.runs ?? []);
+    return (v) => (v === null || v === undefined || v === "" ? "—" : maskIds ? labels.get(v) ?? "런?" : cell(v));
+  };
+  const when = (v) => (maskIds ? cell(minuteUtc(v)) : cell(v));
   const L = [];
   const cases = result.cases ?? [];
   const s = result.summary ?? summarize(cases);
@@ -870,6 +999,11 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
   L.push("");
   L.push(
     `> 도구: tools/simsa-completion-loop-spike/pilot-metrics.mjs · 정의: docs/pilot-2026-10/RUNBOOK.md §4 · 건 ${s.cases} ((a) ${s.byDoor.a} · (b) ${s.byDoor.b} · (c) ${s.byDoor.c} · 문 미상 ${s.byDoor.unknown})`,
+  );
+  L.push(
+    maskIds
+      ? "> 가림 판: 런 id 대신 건 안 순번(런1 = 그 건의 첫 런) · 시각은 분 단위 UTC · region 값은 '기록됨'으로만. 전체 id·시각은 같은 이름의 JSON(로컬 전용)에 있다."
+      : "> ★가리지 않은 판(--no-mask) — 런 id·초 단위 시각·국가 값이 있다. 공개 저장소에 붙이지 않는다.",
   );
   const src = result.sources ?? {};
   L.push(
@@ -890,7 +1024,7 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
   L.push("|---|---|---|---|---|---|---|---|---|");
   for (const c of cases) {
     L.push(
-      `| ${cell(c.caseNo)} | ${cell(c.door)} | ${AXES.map((a) => cell(axisCell(c.axes?.[a]))).join(" | ")} | ${c.filledCount}/6 |`,
+      `| ${cell(c.caseNo)} | ${cell(c.door)} | ${AXES.map((a) => cell(axisCell(c.axes?.[a], { hideValue: maskIds && a === "region" }))).join(" | ")} | ${c.filledCount}/6 |`,
     );
   }
   L.push("");
@@ -903,11 +1037,16 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
   L.push("");
   L.push("| 건 | 기대 판정(정답지) | 첫 런 판정(원문) | L1 정확·쪽 | 런별 기계 ↔ 사람 | 건 불일치 |");
   L.push("|---|---|---|---|---|---|");
+  const RELATION_KO = { same: "같은 쪽", opposite: "반대 쪽", abstain_mismatch: "보류 차이(불일치 아님)" };
   for (const c of cases) {
+    const id = idsFor(c);
     const runs = c.collected?.runs ?? [];
     const firstDone = runs.find((r) => r.id === c.l1?.firstRunId) ?? null;
     const l1 = c.l1 ?? {};
-    const l1Text = l1.exact === null || l1.exact === undefined ? "—" : `${l1.exact ? "일치" : "다름"} · ${l1.sideAgree ? "같은 쪽" : "다른 쪽"}`;
+    const l1Text =
+      l1.exact === null || l1.exact === undefined
+        ? "—"
+        : `${l1.exact ? "일치" : "다름"} · ${RELATION_KO[l1.sideRelation] ?? (l1.sideAgree ? "같은 쪽" : "다른 쪽")}`;
     const pairs = (c.l2 ?? [])
       .map((p) => `${id(p.runId)}: ${p.bucket ?? "—"} ↔ ${USER_VERDICT_LABEL_KO[p.userVerdict] ?? p.userVerdict} (${p.agree === null ? p.note : p.agree ? "일치" : "충돌"})`)
       .join("; ");
@@ -917,7 +1056,7 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
   }
   L.push("");
   L.push(
-    `L1 정확 일치 ${s.l1Exact.agree}/${s.l1Exact.n} · L1 같은 쪽 ${s.l1Side.agree}/${s.l1Side.n} · L2 일치 ${s.l2.agree}/${s.l2.n} (기계 보류 ${s.l2.machineAbstain} · 라벨 아님 ${s.l2.unlabeled}) · 불일치 건 ${s.disagreementCases}`,
+    `L1 정확 일치 ${s.l1Exact.agree}/${s.l1Exact.n} · L1 같은 쪽 ${s.l1Side.agree}/${s.l1Side.n} (반대 쪽 ${s.l1Side.opposite ?? "—"} · 보류 차이 ${s.l1Side.abstainMismatch ?? "—"}) · L2 일치 ${s.l2.agree}/${s.l2.n} (기계 보류 ${s.l2.machineAbstain} · 라벨 아님 ${s.l2.unlabeled}) · 불일치 건 ${s.disagreementCases}`,
   );
   L.push("");
 
@@ -926,6 +1065,7 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
   L.push("| 건 | 런 | 생성 | 상태 | 판정(원문) | 한 줄 | 발견 (코드 · what) | 사람 답 | 수리 |");
   L.push("|---|---|---|---|---|---|---|---|---|");
   for (const c of cases) {
+    const id = idsFor(c);
     for (const r of c.collected?.runs ?? []) {
       const findings = r.findings.length
         ? r.findings.map((f) => `${f.code ?? "코드 없음"} · ${f.what}`).join(" / ")
@@ -934,7 +1074,7 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
           : "[] 발견 0";
       const repair = r.repair ? `${r.repair.status ?? "—"}/${r.repair.mode ?? "—"} resolved=${r.repair.resolved ?? "—"}` : "—";
       L.push(
-        `| ${cell(c.caseNo)} | ${id(r.id)}${r.sourceCheckId ? ` ⟵ ${id(r.sourceCheckId)}` : ""} | ${cell(r.createdAt)} | ${cell(r.status)} | ${cell(judgmentText(r))} | ${cell(r.oneLine)} | ${cell(findings)} | ${cell(r.userVerdict ? `${r.userVerdict} (${USER_VERDICT_LABEL_KO[r.userVerdict]})` : null)} | ${cell(repair)} |`,
+        `| ${cell(c.caseNo)} | ${id(r.id)}${r.sourceCheckId ? ` ⟵ ${id(r.sourceCheckId)}` : ""} | ${when(r.createdAt)} | ${cell(r.status)} | ${cell(judgmentText(r))} | ${cell(r.oneLine)} | ${cell(findings)} | ${cell(r.userVerdict ? `${r.userVerdict} (${USER_VERDICT_LABEL_KO[r.userVerdict]})` : null)} | ${cell(repair)} |`,
       );
     }
   }
@@ -942,13 +1082,15 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
 
   L.push("## 5. 시간·재검수");
   L.push("");
-  L.push("| 건 | 런 수 (끝남·실패·진행 중) | 재검수 | 런별 생성→완료 | 첫 런→마지막 런 생성 | 첫 런→마지막 답 |");
-  L.push("|---|---|---|---|---|---|");
+  L.push("| 건 | 런 수 (끝남·실패·진행 중) | 재검수 (sourceCheckId) | 후속 런 (계보 없음) | 런별 생성→완료 | 첫 런→마지막 런 생성 | 첫 런→마지막 답 |");
+  L.push("|---|---|---|---|---|---|---|");
   for (const c of cases) {
+    const id = idsFor(c);
     const t = c.time ?? {};
     const per = (t.perRun ?? []).map((p) => `${id(p.runId)} ${fmtSec(p.durationSec)}`).join("; ");
+    const follow = typeof t.followUpCount === "number" ? (t.followUpCount > 0 ? `${t.followUpCount}회` : "없음") : "—";
     L.push(
-      `| ${cell(c.caseNo)} | ${t.runs ?? 0} (${t.doneRuns ?? 0}·${t.failedRuns ?? 0}·${t.activeRuns ?? 0}) | ${t.hasRecheck ? `예 ${t.recheckCount}회` : "아니오"} | ${cell(t.perRunDurationsMeasured ? per : "미측정 (API에 완료 시각 없음 — D1 행 입력 필요)")} | ${fmtSec(t.toFinalRunSec)} | ${fmtSec(t.toVerdictSec)} |`,
+      `| ${cell(c.caseNo)} | ${t.runs ?? 0} (${t.doneRuns ?? 0}·${t.failedRuns ?? 0}·${t.activeRuns ?? 0}) | ${t.hasRecheck ? `예 ${t.recheckCount}회` : "아니오"} | ${follow} | ${cell(t.perRunDurationsMeasured ? per : "미측정 (API에 완료 시각 없음 — D1 행 입력 필요)")} | ${fmtSec(t.toFinalRunSec)} | ${fmtSec(t.toVerdictSec)} |`,
     );
   }
   L.push("");
@@ -990,7 +1132,7 @@ export function renderMarkdown(result, { maskIds = true } = {}) {
       ? p.expectedChangedFields.length ? `바뀜: ${p.expectedChangedFields.join(", ")}` : "없음"
       : "—";
     L.push(
-      `| ${cell(c.caseNo)} | ${cell(c.answerKeyPath)} | ${cell(p.sha ? p.sha.slice(0, 7) : null)} | ${cell(p.committedAt)} | ${cell(p.firstRunCreatedAt)} | ${verdict}${p.dirty ? " · 작업 트리에 미커밋 변경" : ""} | ${cell(changed)} |`,
+      `| ${cell(c.caseNo)} | ${cell(c.answerKeyPath)} | ${cell(p.sha ? p.sha.slice(0, 7) : null)} | ${when(p.committedAt)} | ${when(p.firstRunCreatedAt)} | ${verdict}${p.dirty ? " · 작업 트리에 미커밋 변경" : ""} | ${cell(changed)} |`,
     );
   }
   L.push("");
@@ -1036,7 +1178,9 @@ export function computeCase({ caseNo = null, projectId, answerKeyPath = null, an
   if (runs.length === 0) warnings.push("런 없음");
   if (runs.some((r) => r.detailMissing)) warnings.push("상세를 못 읽은 런이 있어요 — 발견·판정 문구가 빠짐");
   if (preRegistration) {
-    if (preRegistration.status === "late") warnings.push("정답지 첫 커밋이 첫 런보다 늦어요 — 선기록 아님");
+    if (preRegistration.status === "late") {
+      warnings.push("정답지 첫 커밋이 첫 런보다 늦어요 — 선기록 아님 (main의 스쿼시 머지 시각이면 정답지 브랜치를 체크아웃해 다시 돌리세요 — RUNBOOK §1-2)");
+    }
     else if (preRegistration.status === "not_committed") warnings.push("정답지가 커밋되지 않았어요 — 선기록 증거 없음");
     else if (preRegistration.status === "unknown") warnings.push("정답지의 git 기록을 읽지 못했어요 — 선기록 확인 불가");
     if (Array.isArray(preRegistration.expectedChangedFields) && preRegistration.expectedChangedFields.length > 0) {
