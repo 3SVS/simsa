@@ -592,7 +592,8 @@ async function runMakeJourney(locale, scenario, { retryConflict = false } = {}) 
       const r3 = await facts(page, "J6-3 내 앱 카드 — 주소·프로덕션 아님·신고");
       const t3 = await mainText();
       j6Expect(r3, t3.includes(mk.hostedNote), "'Simsa 주소에서 운영 중 · 프로덕션 아님'이 보여야 함");
-      j6Expect(r3, (await page.locator('main a[href$="/.well-known/simsa-report"]').count()) === 1, "이 앱 신고하기 링크가 하나 있어야 함");
+      // 신고 링크는 B-7 신고 사이트 직행(report.<루트>/?app=<slug>) — 앱 origin 경로가 아니다(#578 스위치 단일화 커밋).
+      j6Expect(r3, (await page.locator('main a[href="https://report.simsa.page/?app=app-7x9k2m1q"]').count()) === 1, "이 앱 신고하기 링크가 하나 있어야 함");
       j6Expect(r3, (await page.locator('main a[href^="https://app-7x9k2m1q.simsa.page"]').count()) >= 1, "앱 주소 링크가 있어야 함");
       j6Expect(r3, r3.primaryCtaCount === 1 && r3.primaryCta.includes(mk.openApp), `주 버튼은 [${mk.openApp}] — 실제 ${JSON.stringify(r3.primaryCta)}`);
       // ④ 개요 — 만든 뒤: '내 앱 보기'. 종전: "만들기 안내 받아 AI 도구로 앱을 만드세요"(#578 결함 1).

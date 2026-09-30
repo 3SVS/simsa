@@ -565,20 +565,58 @@ export const BUILD_EXPECTED_MAX_MINUTES = 45;
 
 // ─── 내 앱 카드 (D-6: Simsa 주소에서 운영 중 · 프로덕션 아님) ──────────────────────
 
-/**
- * 호스팅된 앱의 신고 경로 — **B-7(호스팅 사업자 의무: 신고 링크)과 맞춰야 한다.**
- * B-7 헬퍼가 main에 들어오면 이 상수를 그 헬퍼로 바꾼다(한 곳에만 둔다).
- */
-export const HOSTED_REPORT_PATH = "/.well-known/simsa-report";
+// 신고 링크 — B-7(#575, 호스팅 사업자 의무)의 신고 사이트로 **직행**한다: `https://report.<루트>/?app=<slug>`.
+// B-7은 신고 폼을 유저 앱과 다른 origin(report.<루트>)에 두고, 앱 주소의 /.well-known/simsa-report는 그리로 302만
+// 한다(앱 origin에 폼을 두면 그 앱의 서비스 워커가 신고를 가로챌 수 있다). 카드가 앱 origin 경로를 거칠 이유가 없다.
+// 아래 세 값은 apps/hosting-dispatch/src/route.ts(SLUG_RE · RESERVED_SLUGS · REPORT_HOST_LABEL)의 거울이고,
+// 주소 모양은 B-7 hostingReportUrl(slug, rootDomain)과 같다 — test/build-report-link-paused.test.mjs가 대조한다.
+
+/** 신고·이용 규칙 사이트의 서브도메인 라벨(B-7 REPORT_HOST_LABEL). */
+export const HOSTED_REPORT_HOST_LABEL = "report";
+
+/** 호스팅 slug 규칙(hosting-dispatch SLUG_RE와 같은 식 — 소문자·숫자·하이픈 3~40자, `--`·끝 하이픈 금지). */
+export const HOSTED_SLUG_RE = /^[a-z0-9](?:[a-z0-9]|-(?!-)){1,38}[a-z0-9]$/;
+
+/** 유저 앱이 가질 수 없는 라벨(hosting-dispatch RESERVED_SLUGS와 같은 목록). */
+export const HOSTED_RESERVED_SLUGS = Object.freeze([
+  "www", "api", "app", "admin", "mail", "email", "smtp", "imap", "pop", "ftp",
+  "status", "docs", "help", "support", "billing", "pay", "payment", "login", "auth",
+  "account", "accounts", "dashboard", "static", "assets", "cdn", "simsa", "conclave",
+  "security", "abuse", "report", "root", "system", "internal", "dispatch",
+]);
+const RESERVED_SET = new Set(HOSTED_RESERVED_SLUGS);
+
+/** @param {unknown} root */
+function normalizeHostRoot(root) {
+  return String(root ?? "").trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+}
 
 /**
+ * B-7 hostingReportUrl(slug, rootDomain)과 같은 모양: 라우터가 받는 slug면 `?app=<slug>`, 아니면 앱 지정 없이.
+ * @param {string} slug
+ * @param {string} rootDomain
+ * @returns {string}
+ */
+export function hostingReportUrlFor(slug, rootDomain) {
+  const base = `https://${HOSTED_REPORT_HOST_LABEL}.${normalizeHostRoot(rootDomain)}/`;
+  return HOSTED_SLUG_RE.test(slug) && !RESERVED_SET.has(slug) ? `${base}?app=${slug}` : base;
+}
+
+/**
+ * 앱 주소(`https://<slug>.<루트>/…`)의 신고 링크. 첫 라벨 = slug, 나머지 = 호스팅 루트(최소 두 라벨).
+ * 한글 호스트는 URL이 xn--…로 바꾸므로 slug가 될 수 없어 앱 지정 없이 신고 사이트로 간다(깨진 app= 없음).
  * @param {unknown} appUrl 앱 주소(https)
- * @returns {string | null} `https://<slug>.<호스팅 루트>/.well-known/simsa-report`
+ * @returns {string | null} https가 아니거나 서브도메인이 없는 주소면 null(호스팅 주소가 아니다)
  */
 export function hostedReportUrl(appUrl) {
   const safe = safeHttpsUrl(appUrl);
   if (!safe) return null;
-  return `${new URL(safe).origin}${HOSTED_REPORT_PATH}`;
+  const host = normalizeHostRoot(new URL(safe).hostname);
+  const dot = host.indexOf(".");
+  if (dot <= 0) return null;
+  const root = host.slice(dot + 1);
+  if (!root.includes(".")) return null;
+  return hostingReportUrlFor(host.slice(0, dot), root);
 }
 
 /** visual-check 런 중 결과가 있는 것(project-steps.mjs FINISHED_RUN_STATUSES와 같은 규칙). */

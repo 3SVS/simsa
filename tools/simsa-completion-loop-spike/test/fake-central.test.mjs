@@ -116,6 +116,20 @@ describe("fake-central (journey-audit --local, B-8 J6)", () => {
     assert.match(toml, /^BUILD_ENABLED = "off"$/m);
   });
 
+  it("J6 내 앱 카드의 신고 링크 기대값 = 대시보드 헬퍼가 가짜 서버의 배포 주소로 만드는 링크(B-7 신고 사이트 직행)", async () => {
+    const { hostedReportUrl } = await import("../../../apps/dashboard/src/lib/build-job-view.mjs");
+    const f = createFakeCentral({ projectId: P, scenario: "done" });
+    const id = f.handle("POST", url("/build")).json.job.id;
+    let job = null;
+    for (let i = 0; i < SCENARIOS.done.length + 1; i++) job = f.handle("GET", url(`/build-jobs/${id}`)).json.job;
+    assert.equal(job.status, "done");
+    const expected = hostedReportUrl(job.deployedUrl);
+    assert.equal(expected, "https://report.simsa.page/?app=app-7x9k2m1q");
+    const audit = readFileSync(path.join(HERE, "../journey-audit.mjs"), "utf8");
+    assert.ok(audit.includes(`main a[href="${expected}"]`), "journey-audit J6-3가 이 링크를 찾아야 한다");
+    assert.ok(!audit.includes("/.well-known/simsa-report"), "옛 앱 origin 신고 경로를 찾지 않는다");
+  });
+
   it("★#578 결함 4: POST /workspace/export-builder-pack — 팩 파일 묶음(dev-spec/ + 개발 도구 프롬프트·비밀 파일 섞임)", () => {
     const r = createFakeCentral({ projectId: P, scenario: "done" }).handle("POST", `${FAKE_CENTRAL_ORIGIN}/workspace/export-builder-pack`);
     assert.equal(r.status, 200);

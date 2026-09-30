@@ -67,7 +67,9 @@ export const BUILD_POLL_INTERVAL_MS: number;
 export const BUILD_POLL_SLOW_MS: number;
 export const BUILD_POLL_SLOW_AFTER_MS: number;
 export const BUILD_EXPECTED_MAX_MINUTES: number;
-export const HOSTED_REPORT_PATH: string;
+export const HOSTED_REPORT_HOST_LABEL: string;
+export const HOSTED_SLUG_RE: RegExp;
+export const HOSTED_RESERVED_SLUGS: readonly string[];
 
 export function stageForStatus(status: unknown): BuildStageKey | null;
 export function isBuildActive(status: unknown): boolean;
@@ -142,6 +144,7 @@ export function makeIntroKeys(input: {
   developerMode: boolean;
   hasExcluded: boolean;
 }): Array<"what" | "excluded" | "eta" | "free" | "hosted" | "devPath">;
+export function hostingReportUrlFor(slug: string, rootDomain: string): string;
 export function hostedReportUrl(appUrl: unknown): string | null;
 export function latestCheckForApp(
   checks: ReadonlyArray<{ id?: string; targetUrl?: string; status?: string; createdAt?: string }> | null | undefined,

@@ -427,10 +427,11 @@ describe("B-8 시작 전 안내 줄", () => {
 describe("B-8 내 앱 카드", () => {
   const done = { status: "done", deployedUrl: "https://app-7x9k2m1q.simsa.page/" };
 
-  it("신고 경로는 상수 한 곳(B-7과 맞출 것) — https://<slug>.<루트>/.well-known/simsa-report", () => {
-    assert.equal(view.HOSTED_REPORT_PATH, "/.well-known/simsa-report");
-    assert.equal(view.hostedReportUrl("https://app-7x9k2m1q.simsa.page/"), "https://app-7x9k2m1q.simsa.page/.well-known/simsa-report");
-    assert.equal(view.hostedReportUrl("https://app-7x9k2m1q.simsa.page/some/page?x=1"), "https://app-7x9k2m1q.simsa.page/.well-known/simsa-report");
+  // ★의도된 변경(#578 스위치 단일화 커밋): 신고 링크는 앱 origin의 /.well-known/simsa-report(B-7이 302로 보내는 입구)가
+  // 아니라 B-7 신고 사이트 직행 — B-7 대조는 build-report-link-paused.test.mjs.
+  it("신고 링크 — https://report.<루트>/?app=<slug> (B-7 신고 사이트 직행)", () => {
+    assert.equal(view.hostedReportUrl("https://app-7x9k2m1q.simsa.page/"), "https://report.simsa.page/?app=app-7x9k2m1q");
+    assert.equal(view.hostedReportUrl("https://app-7x9k2m1q.simsa.page/some/page?x=1"), "https://report.simsa.page/?app=app-7x9k2m1q");
     assert.equal(view.hostedReportUrl("javascript:alert(1)"), null);
     assert.equal(view.hostedReportUrl(null), null);
   });
@@ -451,7 +452,7 @@ describe("B-8 내 앱 카드", () => {
   it("done일 때만 카드 — 주소·신고·(있으면) 확인 결과·(있으면) 받아가기", () => {
     assert.deepEqual(view.appCardView(done, []), {
       url: "https://app-7x9k2m1q.simsa.page/",
-      reportUrl: "https://app-7x9k2m1q.simsa.page/.well-known/simsa-report",
+      reportUrl: "https://report.simsa.page/?app=app-7x9k2m1q",
       checkRunId: null,
       downloadUrl: null,
     });

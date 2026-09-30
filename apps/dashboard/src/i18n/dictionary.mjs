@@ -747,7 +747,8 @@ const EN = {
       noWorkItems: "The development spec has no work to build. Rewrite the spec, then try again.",
       alreadyActive: "This app is already being built.",
       notReady: "Building isn't ready yet — a setup issue on our side. You weren't charged.",
-      paused: "Building is paused for now. We'll reopen it soon.",
+      // build_disabled (503): no date is set to reopen — don't promise one; the notice already offers the spec.
+      paused: "Building is paused for now. You can still take the spec and build it yourself.",
       dailyLimitReached: "You've used today's builds. You can build again tomorrow (after midnight UTC).",
       dailyLimitReachedAt: "You've used today's builds. You can build again {when}.",
       dailyLimitCleared: "Your daily builds have reset. You can build again now.",
@@ -3727,7 +3728,8 @@ const KO = {
       noWorkItems: "지시서에 만들 작업이 비어 있어요. 지시서를 다시 만든 뒤 시도해 주세요.",
       alreadyActive: "이미 이 앱을 만들고 있어요.",
       notReady: "만들기 준비가 아직 안 끝났어요 — 저희 쪽 설정 문제예요. 비용은 받지 않았어요.",
-      paused: "지금은 만들기를 잠시 멈췄어요. 곧 다시 열게요.",
+      // build_disabled(503): 다시 여는 때가 정해지지 않았다 — 약속하지 않고, 알림이 함께 주는 지시서를 말한다.
+      paused: "지금은 만들기를 잠시 멈췄어요. 지시서를 받아 직접 만들 수는 있어요.",
       dailyLimitReached: "오늘 만들 수 있는 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
       dailyLimitReachedAt: "오늘 만들 수 있는 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
       dailyLimitCleared: "만들기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
