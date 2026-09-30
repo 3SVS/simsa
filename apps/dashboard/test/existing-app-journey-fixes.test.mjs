@@ -192,8 +192,8 @@ test("결함5: 앱이 있으면(복원된 아이디어 갈래) 코드 갈래 걸
 test("결함5 [행동 보존 가드]: 앱이 없는 아이디어 갈래는 앱 걸음으로 가지 않는다", () => {
   for (const hasApp of [false, undefined]) {
     // ★의도된 변경 (B-8, D-17 — 아이디어 문의 만들기는 항상 S): 지시서 다음은 빌더 팩이 아니라
-    //  "내 앱"(build). 앱 걸음(visual-checks)으로는 여전히 가지 않는다 — 이 가드의 요지는 그대로.
-    assert.equal(steps.nextScreenSlug("dev-spec", "idea", { hasApp }), "build");
+    //  "내 앱"(my-app). 앱 걸음(visual-checks)으로는 여전히 가지 않는다 — 이 가드의 요지는 그대로.
+    assert.equal(steps.nextScreenSlug("dev-spec", "idea", { hasApp }), "my-app");
     assert.equal(steps.nextScreenSlug("fixes", "idea", { hasApp }), "export");
   }
 });

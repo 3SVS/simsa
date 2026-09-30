@@ -116,14 +116,14 @@ describe("B-8 사이드바 '내 앱' — project-steps.mjs 규칙", () => {
   it("앱이 없는 문(아이디어·기획서): 2단계 맨 앞에 내 앱, 그다음 만들기 안내 — 개발자 모드와 무관", () => {
     for (const developerMode of [false, true]) {
       const it = steps.sidebarStepItems({ hasApp: false, developerMode, hasPrReviewHistory: false });
-      assert.deepEqual(it.review, ["build", "export"]);
+      assert.deepEqual(it.review, ["my-app", "export"]);
     }
   });
 
   it("앱이 있으면 Simsa가 만든 앱이 있을 때만 내 앱(쓰는 것은 숨기지 않는다)", () => {
-    assert.deepEqual(steps.sidebarStepItems({ hasApp: true, hasHostedBuild: true }).review, ["build", "visual-checks"]);
+    assert.deepEqual(steps.sidebarStepItems({ hasApp: true, hasHostedBuild: true }).review, ["my-app", "visual-checks"]);
     for (const hasHostedBuild of [false, null, undefined]) {
-      assert.ok(!steps.sidebarStepItems({ hasApp: true, hasHostedBuild }).review.includes("build"), String(hasHostedBuild));
+      assert.ok(!steps.sidebarStepItems({ hasApp: true, hasHostedBuild }).review.includes("my-app"), String(hasHostedBuild));
     }
   });
 
@@ -141,16 +141,26 @@ describe("B-8 사이드바 '내 앱' — project-steps.mjs 규칙", () => {
   });
 
   it("라벨: 사이드바와 다음 버튼이 같은 이름 — '내 앱'", () => {
-    assert.equal(steps.navLabelKey("build", {}), "myApp");
+    assert.equal(steps.navLabelKey("my-app", {}), "myApp");
     assert.equal(DICTIONARIES.ko.nav.myApp, "내 앱");
     assert.equal(DICTIONARIES.en.nav.myApp, "My app");
   });
 
   it("다음 걸음: 지시서 → 내 앱(이유 '이어서') · 내 앱 다음은 없음 · 코드 갈래는 내 앱으로 걷지 않는다", () => {
-    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "idea" }), { slug: "build", reason: "continue" });
-    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "spec" }), { slug: "build", reason: "continue" });
-    assert.equal(steps.nextStepFromHere("build", { entryPath: "idea" }), null);
-    assert.notEqual(steps.nextScreenSlug("dev-spec", "code"), "build");
-    assert.notEqual(steps.nextScreenSlug("dev-spec", "idea", { hasApp: true }), "build");
+    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "idea" }), { slug: "my-app", reason: "continue" });
+    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "spec" }), { slug: "my-app", reason: "continue" });
+    assert.equal(steps.nextStepFromHere("my-app", { entryPath: "idea" }), null);
+    assert.notEqual(steps.nextScreenSlug("dev-spec", "code"), "my-app");
+    assert.notEqual(steps.nextScreenSlug("dev-spec", "idea", { hasApp: true }), "my-app");
+  });
+
+  it("[가드] 내 앱 라우트는 git이 무시하는 `build/` 폴더가 아니다(.gitignore의 build/ = 빌드 산출물)", async () => {
+    const { existsSync, readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    assert.ok(existsSync(path.resolve(here, "../src/app/projects/[id]/my-app/page.tsx")));
+    const gitignore = readFileSync(path.resolve(here, "../../../.gitignore"), "utf8");
+    for (const slug of ["my-app"]) assert.ok(!new RegExp(`^${slug}/?$`, "m").test(gitignore), slug);
   });
 });

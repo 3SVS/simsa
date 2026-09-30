@@ -185,10 +185,10 @@ test("nextScreenSlug: idea/spec entries walk to 내 앱 (build it on Simsa) and 
   assert.equal(nextScreenSlug("idea"), "spec");
   assert.equal(nextScreenSlug("spec"), "items");
   assert.equal(nextScreenSlug("items"), "dev-spec");
-  // ★의도된 변경 (B-8, D-17): 지시서 다음은 "내 앱"(build — S 만들기). 빌더 팩은 걸음에서 빠지고
+  // ★의도된 변경 (B-8, D-17): 지시서 다음은 "내 앱"(my-app — S 만들기). 빌더 팩은 걸음에서 빠지고
   //  사이드바·지시서 화면·멈춘 만들기의 "지시서 받아가기"에서 닿는다.
-  assert.equal(nextScreenSlug("dev-spec"), "build");
-  assert.equal(nextScreenSlug("build"), null); // the build screen carries its own actions
+  assert.equal(nextScreenSlug("dev-spec"), "my-app");
+  assert.equal(nextScreenSlug("my-app"), null); // the My app screen carries its own actions
   assert.equal(nextScreenSlug("export"), null); // go build — return path is explicit, not a forced walk
   assert.equal(nextScreenSlug("settings"), null); // repo screens are outside the pre-build walk
   assert.equal(nextScreenSlug("github"), null);
@@ -215,9 +215,9 @@ test("nextScreenSlug: the CODE branch walks prep → real-app check FIRST (이�
   // other entries walk to 내 앱 (pre-build — no repo screens; ★의도된 변경 B-8: formerly the pack)
   assert.equal(nextScreenSlug("items", "idea"), "dev-spec");
   assert.equal(nextScreenSlug("items", null), "dev-spec");
-  assert.equal(nextScreenSlug("dev-spec", "idea"), "build");
-  // the build screen is never on the code walk (the app already exists)
-  assert.equal(nextScreenSlug("build", "code"), null);
+  assert.equal(nextScreenSlug("dev-spec", "idea"), "my-app");
+  // the My app screen is never on the code walk (the app already exists)
+  assert.equal(nextScreenSlug("my-app", "code"), null);
 });
 
 // ── Fix-first routing (Bae 2026-07-17): 확인 결과 → 고쳐보기 → 빌더팩 ─────────

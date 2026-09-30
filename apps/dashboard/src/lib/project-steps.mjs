@@ -292,7 +292,7 @@ export function nextScreenSlug(slug, entryPath, opts) {
   // is reachable from the export screen and the sidebar, not a forced walk.
   const fullAppWalk = ["settings", "visual-checks", "github", "items", "checks", "fixes"];
   // ★B-8 (D-17 — 아이디어·기획서 문의 "만들기"는 항상 S): the pre-build walk now ends at "내 앱"
-  //  (build) — the spec screen's own primary is "만들기", and the bar under it used to say
+  //  (my-app) — the spec screen's own primary is "만들기", and the bar under it used to say
   //  "다음: 만들기 안내"(the pack), a second, different answer next to it. The pack stays reachable
   //  from the sidebar, the spec screen and a stopped build ("지시서 받아가기"), and the post-review
   //  loop below still ends at it.
@@ -300,7 +300,7 @@ export function nextScreenSlug(slug, entryPath, opts) {
     ? developerMode
       ? fullAppWalk
       : fullAppWalk.filter((s) => s !== "github")
-    : ["idea", "spec", "items", "dev-spec", "build"];
+    : ["idea", "spec", "items", "dev-spec", "my-app"];
   const i = order.indexOf(slug);
   if (i !== -1) return i === order.length - 1 ? null : (order[i + 1] ?? null);
   // The PR screen outside developer mode (the sidebar shows it to anyone with
@@ -402,8 +402,10 @@ export function stepMapView(facts, settled) {
  *
  * A screen never appears in two steps at once.
  *
- * ★B-8 (D-17 N3 "개요 / 만들 것 / 내 앱 / 확인 결과 / 설정"): "내 앱"(build) — the app Simsa
- * builds from the spec, its progress and its address.
+ * ★B-8 (D-17 N3 "개요 / 만들 것 / 내 앱 / 확인 결과 / 설정"): "내 앱"(my-app) — the app Simsa
+ * builds from the spec, its progress and its address. (The route is `my-app`, not `build`: the
+ * repo .gitignore ignores every `build/` folder as build output — a route there would be dropped
+ * from git and hidden from rg.)
  *  - No app yet: it LEADS step 2, before the build guide — making it on Simsa is the default
  *    path for the idea/plan doors (no account); the guide is the take-it-elsewhere path.
  *  - App exists: only when Simsa already built (or is building) one for this project
@@ -415,13 +417,13 @@ export function stepMapView(facts, settled) {
 export function sidebarStepItems(input) {
   const dev = input?.developerMode === true;
   if (input?.hasApp === true) {
-    const review = input?.hasHostedBuild === true ? ["build", "visual-checks"] : ["visual-checks"];
+    const review = input?.hasHostedBuild === true ? ["my-app", "visual-checks"] : ["visual-checks"];
     if (prReviewVisible(input)) review.push("github");
     if (dev) review.push("export");
     return { review, results: ["checks"] };
   }
   if (input?.hasApp === null) return { review: [], results: ["checks"] };
-  return { review: ["build", "export"], results: ["checks", "visual-checks"] };
+  return { review: ["my-app", "export"], results: ["checks", "visual-checks"] };
 }
 
 /**
@@ -449,7 +451,7 @@ export function navLabelKey(slug, opts) {
     case "dev-spec":
       return "devSpec";
     // B-8: the app Simsa builds from the spec (progress · address · report link).
-    case "build":
+    case "my-app":
       return "myApp";
     case "idea":
     case "spec":

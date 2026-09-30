@@ -24,6 +24,8 @@ import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-gith
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
 import { listVisualChecks } from "@/lib/workspace-visual-checks-api";
+import { listBuildJobs } from "@/lib/build-job-api";
+import { hostedBuildFact } from "@/lib/build-job-view.mjs";
 import { SIMSA_REPO_URL } from "@/lib/simsa-share.mjs";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { sidebarDeveloperItems } from "@/lib/developer-mode.mjs";
@@ -315,10 +317,24 @@ export function AppSidebar() {
   useEffect(() => {
     if (projectId && factsProjectId === projectId) publishAppAddress(projectId, hasDeployUrl);
   }, [projectId, factsProjectId, hasDeployUrl]);
+  // B-8 (D-17 N3 "내 앱"): once an app exists, "내 앱" stays only when Simsa built (or is
+  // building) one for this project — never hide something in use. Asked once per project and
+  // only when it matters (an app exists); the no-app sidebar always shows "내 앱".
+  const [hasHostedBuild, setHasHostedBuild] = useState<boolean | null>(null);
+  useEffect(() => {
+    setHasHostedBuild(null);
+    if (!projectId || !hasApp) return;
+    let cancelled = false;
+    listBuildJobs(projectId, getUserKey())
+      .then((res) => { if (!cancelled) setHasHostedBuild(hostedBuildFact(res)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId, hasApp]);
   const stepSlugs = sidebarStepItems({
     hasApp: view.known ? hasApp : null,
     developerMode,
     hasPrReviewHistory: hasReviewRun,
+    hasHostedBuild,
   });
   // Same name as the bottom bar for the same screen (결함 13): "앱 확인하기"
   // only once the app exists; before that the former "시각 검수".

@@ -7,28 +7,43 @@
 // (빌더 팩 zip에 dev-spec/ 폴더로 들어간다 — A3).
 //
 // 정직성: 서버는 무결성 통과본만 돌려준다. 실패하면 이유를 말하고 예시로 대체하지 않는다.
+//
+// B-8 (D-17 — 아이디어·기획서 문의 "만들기"는 항상 S): 지시서가 있으면 이 화면의 주 버튼은 "만들기"
+// (MakeAppPanel)다 — 계정 없이 Simsa가 만들고 Simsa 주소에 올린다. "팩으로 받기"는 보조로 내려간다
+// (한 화면에 주 버튼 하나). 이미 만든 앱이 있는 문·역추론 지시서·옛 서버(빌드 라우트 없음)에서는
+// 만들기를 내밀지 않고 종전 그대로 팩이 주 버튼이다(makePanelVisible).
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject, getUserKey, loadExtendedProjectData, markProjectSyncFailed } from "@/lib/workflow-store";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import { generateDevSpecApi, getDevSpecApi, type DevSpecApiError } from "@/lib/dev-spec-api";
 import { devSpecView, generateButtonState, generateErrorKey } from "@/lib/dev-spec-view.mjs";
+import { listBuildJobs, type BuildApiFailure, type BuildJobListOk } from "@/lib/build-job-api";
+import { buildAvailability, latestBuildJob, makePanelVisible } from "@/lib/build-job-view.mjs";
+import { useAppPresence } from "@/lib/use-app-presence";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
+import { MakeAppPanel } from "@/components/MakeAppPanel";
 
 type Phase = "idle" | "loading";
 
 export default function DevSpecPage() {
   const { id } = useParams<{ id: string }>();
   const { t, locale } = useI18n();
+  const router = useRouter();
   const project = getLocalProject(id) ?? getProject(id);
   const [devSpec, setDevSpec] = useState<unknown>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<DevSpecApiError | null>(null);
   const [showDev, setShowDev] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // B-8: 만들기를 여기서 쓸 수 있는가 + 최근 잡(진행 중·끝이면 다시 만들라고 하지 않는다).
+  const [buildList, setBuildList] = useState<BuildJobListOk | BuildApiFailure | null>(null);
+  const presence = useAppPresence(id);
+  const [developerMode] = useDeveloperMode();
 
   useEffect(() => {
     let alive = true;
@@ -43,6 +58,16 @@ export default function DevSpecPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let alive = true;
+    listBuildJobs(id, getUserKey()).then((r) => {
+      if (alive) setBuildList(r);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
   if (!project) return <ProjectNotFound />;
 
   const ext = loadExtendedProjectData(id);
@@ -52,6 +77,15 @@ export default function DevSpecPage() {
   const view = devSpecView(devSpec);
   const btn = generateButtonState({ hasSpec, hasItems, hasDevSpec: !!view, phase });
   const d = t.devSpec;
+  const showMake = view
+    ? makePanelVisible({
+        entryPath: ext?.entryPath ?? null,
+        presence,
+        specSource: view.source,
+        availability: buildAvailability(buildList),
+      })
+    : false;
+  const latestJob = buildList?.ok ? latestBuildJob(buildList.jobs) : null;
 
   async function handleGenerate() {
     setError(null);
@@ -110,7 +144,8 @@ export default function DevSpecPage() {
           )}
           {view.source === "inferred" && <p className="mt-2 text-xs text-gray-500">{d.inferredNote}</p>}
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Link href={`/projects/${id}/export`} className="btn btn-md btn-primary">{d.getPack}</Link>
+            {/* 만들기가 보이거나 아직 정해지지 않았으면(보류) 팩은 보조 — 주 버튼은 한 화면에 하나. */}
+            <Link href={`/projects/${id}/export`} className={`btn btn-md ${showMake === false ? "btn-primary" : "btn-secondary"}`}>{d.getPack}</Link>
             <button onClick={() => setShowDev((v) => !v)} className="btn btn-md btn-secondary">
               {showDev ? d.hideDev : d.showDev}
             </button>
@@ -137,6 +172,17 @@ export default function DevSpecPage() {
       )}
 
       {error && <p className="mt-3 text-sm text-red-600">{errorText(error)}</p>}
+
+      {/* ── 만들기 (B-8 · S 경로 · 계정 0) ─────────────────────────────────── */}
+      {view && showMake === true && (
+        <MakeAppPanel
+          projectId={id}
+          view={view}
+          latestJob={latestJob}
+          developerMode={developerMode}
+          onStarted={() => router.push(`/projects/${encodeURIComponent(id)}/my-app`)}
+        />
+      )}
 
       {/* ── 개발자용 보기 (접힘) ───────────────────────────────────────────── */}
       {view && showDev && <DeveloperView devSpec={devSpec as Record<string, unknown>} />}
