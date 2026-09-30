@@ -118,7 +118,8 @@ const MAX_FILE = 200 * 1024; // BUILD_LIMITS.maxFileBytes
 for (const [label, gen] of [
   ["('redis://x:')×n", `return "redis://x:".repeat(Math.ceil(${MAX_FILE} / 10)).slice(0, ${MAX_FILE});`],
   ["'redis://'+':'×n", `return ("redis://" + ":".repeat(${MAX_FILE})).slice(0, ${MAX_FILE});`],
-  ["('postgres://u:')×n + 끝에 '@'", `return ("postgres://u:".repeat(15000)).slice(0, ${MAX_FILE} - 1) + "@";`],
+  // [가드] 끝에 '@'가 있어 일치가 금방 나는 긴 입력 — 옛 코드도 빠르다. 새 코드가 긴 일치에서도 선형인지만 본다.
+  ["[가드] ('postgres://u:')×n + 끝에 '@'", `return ("postgres://u:".repeat(15000)).slice(0, ${MAX_FILE} - 1) + "@";`],
   ["재검사 공격 'R'+':REDIS://D'×n+'\\x00'+'::'×n+'\\tREDIS://:T@'", `const n = 8000; return "R" + ":REDIS://D".repeat(n) + "\\x00" + "::".repeat(n) + "\\tREDIS://:T@";`],
 ]) {
   test(`findSecretLike: ${label} — 파일 상한 200KB 한 번 호출 < 2초`, async () => {

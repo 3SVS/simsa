@@ -186,10 +186,10 @@ test("① detectSoloUse: '로그인'+공백 80K+'x'(아이디어 상한) 한 번
   });
 });
 
-test("① detectSoloUse: '로그인'+공백 40K+'은'+공백 40K+'x' < 2초", async () => {
+test("① detectSoloUse: 답 속 '로그인'+공백 100K+'은'+공백 100K+'x' < 2초 (선택 '은' 변형 — 옛 코드는 80K에서 0.9초)", async () => {
   await assertLinear({
     modUrl: dist("workspace/generate.js"),
-    gen: `return { idea: "로그인" + " ".repeat(40000) + "은" + " ".repeat(40000) + "x" };`,
+    gen: `return { idea: "가계부 앱", answers: [{ questionId: "q", answer: "로그인" + " ".repeat(100000) + "은" + " ".repeat(100000) + "x" }] };`,
     call: `return mod.detectSoloUse(input);`,
   });
 });
@@ -202,10 +202,11 @@ test("① detectSoloUse: 답 하나가 400K여도(함수 자체) < 2초", async 
   });
 });
 
-test("① generateIdeaToSpecDraft(키 없음 → 목업 경로): 200K 답 5개를 받아도 < 2초", async () => {
+test("① generateIdeaToSpecDraft(키 없음 → 목업 경로): 200K 답 5개를 받아도 < 2초 (답 상한이 먼저 자른다)", async () => {
+  // 아이디어에 다른 표지("혼자"·"팀")가 있으면 정규식이 앞에서 끝나 버려 느린 경로를 안 탄다 — 표지 없는 아이디어.
   const r = await assertLinear({
     modUrl: dist("workspace/generate.js"),
-    gen: `const a = "로그인" + " ".repeat(200000) + "x"; return { idea: "혼자 쓰는 가계부", answers: [1,2,3,4,5].map((i) => ({ questionId: "q" + i, answer: a })) };`,
+    gen: `const a = "로그인" + " ".repeat(200000) + "x"; return { idea: "가계부 앱", answers: [1,2,3,4,5].map((i) => ({ questionId: "q" + i, answer: a })) };`,
     call: `return mod.generateIdeaToSpecDraft(input, undefined).then((d) => ({ ok: d.ok !== false }));`,
   });
   assert.match(r.out, /"ok":true/);
@@ -356,20 +357,22 @@ test("[가드] ① textFromHtml: 시드 고정 무작위 30,000개에서 옛 정
   });
 });
 
+// [label, gen, size note]. 200K = evidenceFromWebsite가 자르는 운영 상한. 두 모양은 옛 코드가 200K에서
+// 1.4~1.8초라 2초 상한으로는 차이가 안 보여 400K(함수 자체의 차수 확인)로 잰다.
 const HTML_ATTACKS = [
-  ["'<a'×n", `return "<a".repeat(100000);`],
-  ["'<title>'×n", `return "<title>".repeat(28572).slice(0, 200000);`],
-  ["'<h1'×n", `return "<h1".repeat(66667).slice(0, 200000);`],
-  ["'<h1>'×n (닫는 짝 없음)", `return "<h1>".repeat(50000);`],
-  ["'<meta'+' name=\"description\"'×n", `return ("<meta" + ' name="description"'.repeat(10600)).slice(0, 200000);`],
-  ["'<meta name=\"description\"'×n", `return '<meta name="description"'.repeat(8334).slice(0, 200000);`],
-  ["'<meta name=\"description\" content='×n (값 없음)", `return '<meta name="description" content='.repeat(6000).slice(0, 200000);`],
-  ["'<script'×n", `return "<script".repeat(28572).slice(0, 200000);`],
-  ["'<style'×n", `return "<style".repeat(33334).slice(0, 200000);`],
+  ["'<a'×n", `return "<a".repeat(100000);`, "200K"],
+  ["'<title>'×n", `return "<title>".repeat(57143).slice(0, 400000);`, "400K — 옛 코드 200K에서 1.4초"],
+  ["'<h1'×n", `return "<h1".repeat(66667).slice(0, 200000);`, "200K"],
+  ["'<h1>'×n (닫는 짝 없음)", `return "<h1>".repeat(50000);`, "200K"],
+  ["'<meta'+' name=\"description\"'×n", `return ("<meta" + ' name="description"'.repeat(21200)).slice(0, 400000);`, "400K — 옛 코드 200K에서 1.5초"],
+  ["'<meta name=\"description\"'×n", `return '<meta name="description"'.repeat(8334).slice(0, 200000);`, "200K"],
+  ["'<meta name=\"description\" content='×n (값 없음)", `return '<meta name="description" content='.repeat(6000).slice(0, 200000);`, "200K"],
+  ["'<script'×n", `return "<script".repeat(28572).slice(0, 200000);`, "200K"],
+  ["'<style'×n", `return "<style".repeat(33334).slice(0, 200000);`, "200K"],
 ];
 
-for (const [label, gen] of HTML_ATTACKS) {
-  test(`① textFromHtml: ${label} — HTML 상한 200K 한 번 호출 < 2초`, async () => {
+for (const [label, gen, size] of HTML_ATTACKS) {
+  test(`① textFromHtml: ${label} — ${size} 한 번 호출 < 2초`, async () => {
     await assertLinear({ label, modUrl: dist("workspace/source-evidence.js"), gen, call: `return mod.textFromHtml(input).text.length;` });
   });
 }
