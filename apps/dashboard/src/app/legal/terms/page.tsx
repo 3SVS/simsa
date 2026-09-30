@@ -32,6 +32,7 @@ export default function TermsPage() {
         <li>타인의 권리를 침해하거나 법령에 위반되는 결과물의 검수를 요청하지 않습니다.</li>
         <li>서비스의 정상 운영을 방해하는 행위(자동화된 대량 요청, 취약점 악용 등)를 하지 않습니다.</li>
         <li>본인에게 권한이 없는 웹사이트·저장소를 검수 대상으로 연결하지 않습니다.</li>
+        <li>Simsa가 앱을 대신 올려 드리는 경우(simsa.page 주소) <a href="https://report.simsa.page/rules" className="text-brand-700 underline">호스팅 이용 규칙</a>이 함께 적용되며, 위반이 확인되면 그 주소를 정지할 수 있습니다.</li>
       </ul>
 
       <h2>5. 콘텐츠와 권리</h2>
