@@ -149,3 +149,49 @@ describe("buildRecheckBody — 서버 기본 문장은 '의도 없음'이다 (�
     assert.equal(body.intent, "로그인이 되어야 한다");
   });
 });
+
+// ── C-A7 검증 P2-5 — 인터뷰로 확정 의도를 바꾼 뒤의 '다시 확인' ─────────────────
+//
+// 재검수의 자는 두 조각이다: intent(클라이언트가 보낸다)와 acceptancePlan(서버가 **지금의** 지시서에서
+// 만든다). 인터뷰로 의도를 X → Y로 고치면 지시서(AC)는 Y 기준으로 다시 만들어지는데, 옛 규칙은 원 런의
+// intent X를 그대로 보냈다 — 재검수에서 intent(X)와 AC(Y)가 어긋났다. 이제 확정 의도가 원 런보다 **뒤에**
+// 바뀌었으면 확정 의도가 재검수 intent다. 원 런보다 앞선 확정은 종전대로 원 런 intent(C0 같은 자).
+// 이 describe의 표시 없는 케이스는 고치기 전 코드에서 실패한다.
+describe("buildRecheckBody — 확정 의도가 원 런 뒤에 바뀌었으면 확정 의도가 재검수 intent다 (지시서의 AC와 같은 자)", () => {
+  const RUN = { ...CHECK, intent: "미용실 예약 앱", createdAt: "2026-10-01T01:00:00.000Z" };
+  const Y = "손님이 원하는 날짜와 시간을 골라 미용실 예약을 잡는 것";
+
+  it("원 런 intent X, 그 뒤 인터뷰로 확정 Y → 재검수 body.intent === Y (sourceCheckId는 그대로)", () => {
+    const body = recheck.buildRecheckBody(RUN, "uk_트루픽셀_대표", "ko", { confirmedIntent: Y, confirmedIntentAt: "2026-10-01T02:30:00.000Z" });
+    assert.equal(body.intent, Y);
+    assert.equal(body.sourceCheckId, CHECK.id);
+  });
+
+  it("[가드 — 옛 코드에서도 통과] 확정이 원 런보다 앞서면(또는 같은 시각) 원 런 intent를 지킨다 — C0 같은 자", () => {
+    for (const at of ["2026-09-30T23:00:00.000Z", "2026-10-01T01:00:00.000Z"]) {
+      const body = recheck.buildRecheckBody(RUN, "uk_1", "ko", { confirmedIntent: Y, confirmedIntentAt: at });
+      assert.equal(body.intent, "미용실 예약 앱", at);
+    }
+  });
+
+  it("[가드 — 옛 코드에서도 통과] 시각을 모르면(없음·깨진 값·원 런 시각 없음) 종전 규칙 — 원 런 intent", () => {
+    for (const [run, at] of [[RUN, undefined], [RUN, "어제"], [{ ...RUN, createdAt: undefined }, "2026-10-01T02:30:00.000Z"], [{ ...RUN, createdAt: "?" }, "2026-10-01T02:30:00.000Z"]]) {
+      const body = recheck.buildRecheckBody(run, "uk_1", "ko", { confirmedIntent: Y, confirmedIntentAt: at });
+      assert.equal(body.intent, "미용실 예약 앱", `${run.createdAt} / ${at}`);
+    }
+  });
+
+  it("[가드 — 옛 코드에서도 통과] 확정 의도가 비어 있으면 시각이 뒤여도 원 런 intent(빈 의도로 덮지 않는다)", () => {
+    const body = recheck.buildRecheckBody(RUN, "uk_1", "ko", { confirmedIntent: "   ", confirmedIntentAt: "2026-10-01T02:30:00.000Z" });
+    assert.equal(body.intent, "미용실 예약 앱");
+  });
+
+  it("confirmedIntentAtOf: intentRevisedAt·intentConfirmedAt 중 늦은 것(깨진 값은 무시), 둘 다 없으면 null", () => {
+    assert.equal(typeof recheck.confirmedIntentAtOf, "function");
+    assert.equal(recheck.confirmedIntentAtOf({ intentConfirmedAt: "2026-09-20T02:00:00.000Z", intentRevisedAt: "2026-10-01T02:30:00.000Z" }), "2026-10-01T02:30:00.000Z");
+    assert.equal(recheck.confirmedIntentAtOf({ intentConfirmedAt: "2026-10-02T00:00:00.000Z", intentRevisedAt: "2026-10-01T02:30:00.000Z" }), "2026-10-02T00:00:00.000Z");
+    assert.equal(recheck.confirmedIntentAtOf({ intentConfirmedAt: "깨진 값", intentRevisedAt: "2026-10-01T02:30:00.000Z" }), "2026-10-01T02:30:00.000Z");
+    assert.equal(recheck.confirmedIntentAtOf({}), null);
+    assert.equal(recheck.confirmedIntentAtOf(null), null);
+  });
+});

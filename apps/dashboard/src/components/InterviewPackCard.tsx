@@ -91,6 +91,7 @@ export function InterviewPackCard({ projectId }: { projectId: string }) {
       return;
     }
     const ext = loadExtendedProjectData(projectId);
+    const prevOneLine = (ext?.productSpec?.oneLine ?? proj.description ?? "").trim();
     const applied = applyInterviewAnswer({
       answer: r.answer,
       current: {
@@ -125,6 +126,9 @@ export function InterviewPackCard({ projectId }: { projectId: string }) {
       },
       intentConfirmedItemIds: applied.confirmedItemIds,
       intentConfirmedAt: ext?.intentConfirmedAt ?? new Date().toISOString(),
+      // C-A7 검증 P2-5: 의도 문장이 바뀌었으면 그 시각을 남긴다 — 이보다 앞선 런의 '다시 확인'은
+      // 낡은 원 런 intent 대신 이 확정 의도를 쓴다(지시서의 AC도 이 의도로 다시 만들어진다).
+      ...(applied.oneLine.trim() && applied.oneLine.trim() !== prevOneLine ? { intentRevisedAt: new Date().toISOString() } : {}),
     } as Parameters<typeof saveExtendedProjectData>[1]);
     setRead(r.answer);
     setApplyState("done");

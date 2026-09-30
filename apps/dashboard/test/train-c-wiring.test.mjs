@@ -56,12 +56,14 @@ test("C0-a: IntentConfirmCard.confirm()이 로컬 저장 뒤 D1 미러를 부른
 });
 
 test("C0-b: 재검수가 buildRecheckBody(check, userKey, locale, { confirmedIntent })를 거친다 — {userKey, locale}만 보내지 않는다", () => {
-  assert.match(page, /import \{ buildRecheckBody \} from "@\/lib\/visual-check-recheck\.mjs"/);
+  assert.match(page, /import \{ buildRecheckBody, confirmedIntentAtOf \} from "@\/lib\/visual-check-recheck\.mjs"/);
   // PR #552 검증 결함 #2: 원 런 intent가 서버 기본 문장이면 로컬에 확정된 oneLine이 대신
   // 가야 한다 — 그러려면 재검수 훅이 프로젝트의 확정 의도를 buildRecheckBody에 넘겨야 한다.
+  // C-A7 검증 P2-5: 확정 의도가 원 런 뒤에 바뀌었는지 알 수 있게 그 시각(confirmedIntentAtOf)도 함께 넘긴다.
+  assert.match(page, /const ext = loadExtendedProjectData\(projectId\);/);
   assert.match(
     page,
-    /buildRecheckBody\(check, userKey, locale, \{\s*confirmedIntent: loadExtendedProjectData\(projectId\)\?\.productSpec\?\.oneLine \?\? null,?\s*\}\)/,
+    /buildRecheckBody\(check, userKey, locale, \{\s*confirmedIntent: ext\?\.productSpec\?\.oneLine \?\? null,\s*confirmedIntentAt: confirmedIntentAtOf\(ext\),?\s*\}\)/,
   );
   assert.doesNotMatch(page, /buildRecheckBody\(check, userKey, locale\)\)/);
   assert.doesNotMatch(page, /runVisualCheck\(projectId, \{ userKey, locale \}\)/);

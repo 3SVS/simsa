@@ -6,6 +6,7 @@
  *  I-2  못 읽은 칸은 건드리지 않는다(의도 없음 → oneLine 유지)
  *  I-3  카드는 기존 앱 문 개요에 인라인으로(모달·오버레이 없음), 회수 → 로컬 반영 → 미러·역추론 지시서 순서
  *  I-4  사전: interviewPack KO/EN 키 동일, 초보자 금칙어 0
+ *  I-5  (C-A7 검증 P2-5) 의도 문장이 바뀌면 intentRevisedAt — 그보다 앞선 런의 '다시 확인'이 확정 의도를 쓴다
  * 각 검사는 고치기 전 코드(카드·함수·사전 없음)에서 실패한다.
  */
 import { test } from "node:test";
@@ -96,6 +97,43 @@ test("I-3: 카드 배선 — 기존 앱 문 개요에 인라인, 모달 없음, 
   // 질문 묶음은 확인 id와 함께 요청한다(역추론 지시서가 아직 없을 때의 요약 재료).
   // 옛 저장은 레거시 폴백으로 읽는다 — train-c-a7-confirmed-items CI-3.
   assert.match(card, /fetchInterviewPack\(projectId, getUserKey\(\), loc, effectiveConfirmedItemIds\(ext\?\.intentConfirmedItemIds, reqIds\)\)/);
+});
+
+test("I-5 (C-A7 검증 P2-5): 인터뷰가 의도 문장을 바꿨을 때만 intentRevisedAt을 남긴다 — 그보다 앞선 런의 '다시 확인'이 확정 의도를 쓴다", () => {
+  const card = read("components/InterviewPackCard.tsx");
+  const body = card.slice(card.indexOf("async function handleApply()"));
+  // 바꾸기 전 의도를 반영 **전에** 읽어 둔다(반영 뒤에는 로컬이 이미 새 의도다)
+  const prev = body.indexOf("const prevOneLine = (ext?.productSpec?.oneLine ?? proj.description ?? \"\").trim();");
+  assert.ok(prev >= 0 && prev < body.indexOf("applyInterviewAnswer({"), "prevOneLine before apply");
+  assert.match(
+    body,
+    /\.\.\.\(applied\.oneLine\.trim\(\) && applied\.oneLine\.trim\(\) !== prevOneLine \? \{ intentRevisedAt: new Date\(\)\.toISOString\(\) \} : \{\}\)/,
+  );
+  // 첫 확정 시각(intentConfirmedAt)은 덮지 않는다 — "맞나요?" 카드가 다시 뜨지 않게 하는 표지다
+  assert.match(body, /intentConfirmedAt: ext\?\.intentConfirmedAt \?\? new Date\(\)\.toISOString\(\)/);
+  // 재검수 훅이 그 시각을 buildRecheckBody에 넘긴다(train-c-wiring C0-b와 같은 배선)
+  const page = read("app/projects/[id]/visual-checks/[runId]/page.tsx");
+  assert.match(page, /confirmedIntentAt: confirmedIntentAtOf\(ext\)/);
+  const store = read("lib/workflow-store.ts");
+  assert.match(store, /intentRevisedAt\?: string;/);
+});
+
+test("I-5′ (C-A7 검증 P2-5 관통 — 순수): 원 런 intent X → 인터뷰 Y → 재검수 body.intent === Y", async () => {
+  const { buildRecheckBody, confirmedIntentAtOf } = await import("../src/lib/visual-check-recheck.mjs");
+  const run = { id: "wvc_truepixel_1", intent: "미용실 예약 앱", createdAt: "2026-10-01T01:00:00.000Z" };
+  // 인터뷰 반영: 대시보드 함수로 새 의도를 만들고, 카드가 남기는 두 시각을 흉내 낸다
+  const applied = applyInterviewAnswer({
+    answer: { intent: "손님이 원하는 날짜와 시간을 골라 미용실 예약을 잡는 것", must: [], notNeeded: [], differentNow: [] },
+    current,
+    locale: "ko",
+  });
+  const ext = { productSpec: applied.productSpec, intentConfirmedAt: "2026-09-30T09:00:00.000Z", intentRevisedAt: "2026-10-01T02:30:00.000Z" };
+  const body = buildRecheckBody(run, "uk_트루픽셀_대표", "ko", {
+    confirmedIntent: ext.productSpec.oneLine,
+    confirmedIntentAt: confirmedIntentAtOf(ext),
+  });
+  assert.equal(body.intent, "손님이 원하는 날짜와 시간을 골라 미용실 예약을 잡는 것");
+  assert.equal(body.sourceCheckId, "wvc_truepixel_1");
 });
 
 function keyShape(o) {
