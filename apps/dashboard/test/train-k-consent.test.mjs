@@ -508,3 +508,160 @@ describe("[서버 K] 이 PR의 문구가 기대는 서버 사실 (계약 1~4)", 
     assert.ok(owners.length > 0, `no server file lists ${codes.join(",")} next to the ops-meta default`);
   });
 });
+
+// ─── 10. PR #573 검증 1 [P1] — '끔'이 실제로 멈추는 것만 말한다 ──────────────────
+// 서버(#574 privacy-prefs.ts 머리말 '끄지 않는 것'): locale(검수 0065·빌드 잡 0068)과 프로젝트 행의
+// built_with_json(0055)은 '끔'이어도 계속 저장된다 — 끄면 멈추는 것은 region·region_at_create·envelope_json·
+// finding_codes_json(와 학습 사본의 region)뿐. 옛 문구는 EU/UK/CH 기본 off 사용자에게 "화면 언어·만든 도구를
+// 기록하지 않고 있어요"라고 했다(거짓).
+const KEEP_WORDS = {
+  // KEEPS 칸 → 방침(KO)·설정 안내(KO/EN)에서 그 칸을 가리키는 말.
+  ko: {
+    locale: "화면 언어",
+    built_with_json: "만든 도구",
+    topic_tags_json: "앱 유형",
+    entry_path: "진입 경로",
+    acquisition_json: "유입 경로",
+    user_verdict: "결과 판정 선택",
+    user_verdict_at: "결과 판정 선택",
+    source_check_id: "다시 확인 연결",
+    resolved: "해결 여부",
+    verify_check_id: "해결 여부",
+    "table:llm_usage": "AI 사용량",
+    "table:workspace_rate_limit": "요청 횟수 제한",
+    "table:demo_rate_limit": "요청 횟수 제한",
+  },
+  en: {
+    locale: "screen language",
+    built_with_json: "build tool",
+    topic_tags_json: "app type",
+    entry_path: "entry",
+    acquisition_json: "source",
+    user_verdict: "answers about results",
+    user_verdict_at: "answers about results",
+    source_check_id: "re-check links",
+    resolved: "whether a fix worked",
+    verify_check_id: "whether a fix worked",
+    "table:llm_usage": "AI usage",
+    "table:workspace_rate_limit": "request-limit",
+    "table:demo_rate_limit": "request-limit",
+  },
+};
+// '기록하지 않는다'고 말하는 줄에 나오면 거짓이 되는 말(끄셔도 남는 값).
+const KEPT_NOUNS = {
+  ko: ["화면 언어", "만든 도구", "앱 유형", "진입 경로", "유입 경로", "AI 사용량", "요청 횟수"],
+  en: ["screen language", "built with", "build tool", "app type", "AI usage", "request-limit"],
+};
+
+describe("#573 검증 1 [P1] — 끄기 문구 = 서버가 실제로 멈추는 것", () => {
+  for (const loc of ["ko", "en"]) {
+    const p = DICTIONARIES[loc].privacyPrefs;
+    for (const key of ["lineOffDefault", "lineOffUser", "opsSavedOff"]) {
+      it(`[${loc}] ${key}: 끄셔도 남는 값(화면 언어·만든 도구 …)을 '기록하지 않는다'에 넣지 않고, 멈추는 것(국가 코드·실패 유형)을 이름으로 말한다`, () => {
+        const s = p[key] ?? "";
+        for (const w of KEPT_NOUNS[loc]) assert.ok(!s.includes(w), `${loc}.${key} says it stops "${w}": ${s}`);
+        if (loc === "ko") {
+          assert.match(s, /국가 코드/, s);
+          assert.match(s, /실패 유형/, s);
+        } else {
+          assert.match(s, /country code/, s);
+          assert.match(s, /failure types/, s);
+        }
+      });
+    }
+    it(`[${loc}] 줄·토글은 '통계용' 운영 정보로 범위를 한정한다 (서버 머리말: 토글 문구는 통계용 운영 정보로)`, () => {
+      const word = loc === "ko" ? /통계용/ : /for statistics/;
+      for (const key of ["lineOffDefault", "lineOffUser", "opsToggle"]) assert.match(p[key] ?? "", word, `${loc}.${key}`);
+    });
+  }
+
+  it("KEEPS에 locale(화면 언어 — 검수 0065·빌드 잡 0068)이 있고, 방침 '화면 언어' 항목이 그 칸을 가리킨다", () => {
+    assert.ok((ops.OPS_META_OFF_KEEPS ?? []).includes("locale"), JSON.stringify(ops.OPS_META_OFF_KEEPS));
+    assert.ok(!(ops.OPS_META_OFF_STOPS ?? []).includes("locale"));
+    const item = (ops.OPS_INFO_ITEMS ?? []).find((i) => i.label === "화면 언어");
+    assert.ok(item && (item.columns ?? []).includes("locale"), JSON.stringify(item));
+    // 기준선(서버 사실): 검수 런 행(0065 ADD COLUMN)과 빌드 잡 행(0068 CREATE TABLE)에 locale 칸이 있다.
+    assert.match(read(path.join(MIGRATIONS_DIR, "0065_visual_check_locale.sql")), /^ALTER TABLE workspace_visual_checks ADD COLUMN locale TEXT;/m);
+    assert.match(read(path.join(MIGRATIONS_DIR, "0068_build_jobs.sql")), /^\s+locale TEXT,/m);
+  });
+
+  it("KEEPS의 모든 칸이 방침 '끄셔도 계속 기록되는 것'(KO)과 설정 안내 opsKeepNote(KO/EN)에 나온다", () => {
+    const optOut = ops.OPS_INFO_OPT_OUT ?? "";
+    const keepSentence = optOut.slice(optOut.indexOf("끄셔도 계속 기록되는 것"));
+    assert.ok(keepSentence.length > 0, optOut);
+    assert.match(keepSentence, /확인 결과를 보여 줄 화면 언어/, keepSentence);
+    for (const c of ops.OPS_META_OFF_KEEPS ?? []) {
+      assert.ok(KEEP_WORDS.ko[c], `KEEP_WORDS.ko has no word for ${c} — add one`);
+      assert.ok(keepSentence.includes(KEEP_WORDS.ko[c]), `방침 keep 문장에 ${c}(${KEEP_WORDS.ko[c]}) 없음`);
+      for (const loc of ["ko", "en"]) {
+        const note = DICTIONARIES[loc].privacyPrefs.opsKeepNote ?? "";
+        assert.ok(note.includes(KEEP_WORDS[loc][c]), `${loc}.opsKeepNote에 ${c}(${KEEP_WORDS[loc][c]}) 없음: ${note}`);
+      }
+    }
+  });
+});
+
+// [서버 사실] 서버 privacy-prefs.ts 머리말의 '무엇을 끄는가'·'끄지 않는 것' 표 = 대시보드 STOPS·KEEPS.
+// 서버 파일이 이 트리에 없으면(서버 PR #574가 base에 없음) todo — 머지 순서는 아래 [서버 K 게이트]가 강제한다.
+const serverPrefsTs = read(path.join(CP, "workspace/privacy-prefs.ts"));
+const MIGRATION_TABLES = new Set(
+  readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql"))
+    .flatMap((f) => [...read(path.join(MIGRATIONS_DIR, f)).matchAll(/CREATE TABLE(?:\s+IF NOT EXISTS)?\s+(\w+)/gi)].map((m) => m[1])),
+);
+
+/** 머리말 한 덩어리에서 칸·테이블 이름을 대시보드 표기(table:이름)로. "(0070, …)" 같은 곁말은 뺀다. */
+function serverNames(block) {
+  const out = new Set();
+  const text = block.replace(/\(\d[^)]*\)/g, "");
+  for (const m of text.matchAll(/\b(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)*\.)?([a-z][a-z0-9]*(?:_[a-z0-9]+)+|locale|resolved|region)\b(\(\+at\))?/g)) {
+    const name = MIGRATION_TABLES.has(m[1]) ? `table:${m[1]}` : m[1];
+    if (/^table:workspace_(visual_checks|repair_jobs|projects)$/.test(name)) continue; // "테이블.칸"의 테이블 쪽
+    out.add(name);
+    if (m[2]) out.add(`${m[1]}_at`);
+  }
+  return out;
+}
+
+function serverOffTable(src) {
+  const head = src.slice(0, src.indexOf("*/"));
+  const stopsAt = head.indexOf("무엇을 끄는가");
+  const keepsAt = head.indexOf("끄지 않는 것");
+  const endAt = head.indexOf("기본값:");
+  if (stopsAt < 0 || keepsAt < stopsAt || endAt < keepsAt) return null;
+  return { stops: serverNames(head.slice(stopsAt, keepsAt)), keeps: serverNames(head.slice(keepsAt, endAt)) };
+}
+
+describe("[서버 사실] 끄기 표 — 서버 privacy-prefs.ts 머리말 = 대시보드 OPS_META_OFF_STOPS·KEEPS", () => {
+  const opt = serverPrefsTs ? {} : { todo: "서버 privacy-prefs.ts가 이 트리에 없음(서버 PR #574가 base에 들어오면 켜진다)" };
+  it("[서버 사실] '무엇을 끄는가' = STOPS, '끄지 않는 것' = KEEPS (양방향)", opt, () => {
+    const table = serverOffTable(serverPrefsTs);
+    assert.ok(table, "privacy-prefs.ts 머리말에서 '무엇을 끄는가'·'끄지 않는 것'·'기본값:'을 찾지 못함");
+    assert.ok(table.stops.size >= 4 && table.keeps.size >= 10, `parsed stops=${[...table.stops]} keeps=${[...table.keeps]}`);
+    assert.deepEqual([...table.stops].sort(), [...(ops.OPS_META_OFF_STOPS ?? [])].sort(), "STOPS");
+    assert.deepEqual([...table.keeps].sort(), [...(ops.OPS_META_OFF_KEEPS ?? [])].sort(), "KEEPS");
+  });
+
+  it("[가드] 파서가 서버 머리말 모양을 읽는다 (가상 머리말)", () => {
+    const fake = [
+      "/**",
+      " * 무엇을 끄는가: 0069 —",
+      " *   workspace_visual_checks.region · envelope_json · finding_codes_json",
+      " *   workspace_projects.region_at_create",
+      " * 끄지 않는 것:",
+      " *   - 기능 데이터: user_verdict(+at)·source_check_id·resolved·verify_check_id·locale.",
+      " *   - llm_usage(0070, user_key_hash·project_id) — 원장.",
+      " *   - workspace_rate_limit·demo_rate_limit — 제한.",
+      " *   - 0055·0056 프로젝트 행(built_with_json·entry_path·topic_tags_json·acquisition_json).",
+      " * 기본값: …",
+      " */",
+    ].join("\n");
+    const t = serverOffTable(fake);
+    assert.deepEqual([...t.stops].sort(), ["envelope_json", "finding_codes_json", "region", "region_at_create"]);
+    assert.deepEqual([...t.keeps].sort(), [
+      "acquisition_json", "built_with_json", "entry_path", "locale", "resolved", "source_check_id",
+      "table:demo_rate_limit", "table:llm_usage", "table:workspace_rate_limit", "topic_tags_json",
+      "user_verdict", "user_verdict_at", "verify_check_id",
+    ]);
+  });
+});
