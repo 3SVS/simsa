@@ -437,15 +437,74 @@ function j6Expect(row, ok, what) {
   if (!ok) audit.findings.push({ sev: "P0", journey: audit.journeys.at(-1).name, locale: row.locale, step: row.label, what: `J6 기대 불일치 — ${what}` });
 }
 
-async function runMakeJourney(locale, scenario) {
+/** 화면 main의 주 버튼 중 하나가 이 라벨로 시작하는가(개요 CTA는 "라벨 →"). */
+const primaryStartsWith = (row, label) => (row.primaryCta ?? []).some((s) => s.startsWith(label));
+
+/**
+ * 탭 숨김·복귀를 브라우저 안에서 흉내 낸다(#578 검증 결함 9 — 폴링 중단·재개를 **동작으로** 잰다).
+ * document.visibilityState를 덮고 visibilitychange를 쏜다(use-page-visible.ts가 듣는 그 이벤트).
+ */
+async function setTabVisibility(page, state) {
+  await page.evaluate((s) => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => s });
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => s === "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, state);
+}
+
+/**
+ * 개요(지휘 센터) — '지금 할 일'이 만들기 사실과 같은 답을 하는가(#578 검증 결함 1·8).
+ * forbidden: 이 상태에서 나오면 두 번째 답이 되는 라벨들(예: 만들기가 열렸는데 "만들기 안내 받기").
+ */
+async function j6Overview(page, label, expectLabel, forbidden) {
+  await page.goto(`${BASE}/projects/${J6_PROJECT.id}`, { waitUntil: "networkidle", timeout: 90000 });
+  await settleForNextAction(page, 15000);
+  const r = await facts(page, label);
+  j6Expect(r, primaryStartsWith(r, expectLabel), `개요 주 버튼이 [${expectLabel}]여야 함 — 실제 ${JSON.stringify(r.primaryCta)}`);
+  for (const other of forbidden) j6Expect(r, !primaryStartsWith(r, other), `개요가 다른 답([${other}])을 함`);
+  return r;
+}
+
+/** 멈춤 화면의 [지시서 받아가기] — 그 자리에서 지시서 문서가 받아지는가(#578 검증 결함 4). */
+async function j6TakeSpec(page, fake, mk, locale) {
+  const before = fake.calls.filter((c) => c === "POST /workspace/export-builder-pack").length;
+  const [dl] = await Promise.all([
+    page.waitForEvent("download", { timeout: 20000 }),
+    page.locator("main button", { hasText: mk.takeSpec }).first().click(),
+  ]);
+  await page.waitForFunction((s) => (document.querySelector("main")?.innerText || "").includes(s), mk.takeSpecDone, { timeout: 10000 }).catch(() => {});
+  const r = await facts(page, "J6-3b 막힘 → 지시서 받아가기 — 그 자리에서 문서 받기");
+  const name = dl.suggestedFilename();
+  r.download = name;
+  j6Expect(r, (locale === "en" ? /^dev-spec-.+\.md$/ : /^개발지시서-.+\.md$/).test(name), `지시서 문서(.md)를 받아야 함 — 실제 파일 이름 ${JSON.stringify(name)}`);
+  j6Expect(r, /\/my-app$/.test(page.url()), `같은 화면에 머물러야 함(개발 도구 고르는 화면으로 가지 않는다) — 실제 ${page.url()}`);
+  j6Expect(r, fake.calls.filter((c) => c === "POST /workspace/export-builder-pack").length === before + 1, "지시서는 서버 렌더러가 만든 것(빌더 팩 응답의 dev-spec/)이어야 함");
+  j6Expect(r, (await page.evaluate(() => (document.querySelector("main")?.innerText || ""))).includes(mk.takeSpecDone), "받은 뒤 한 줄 안내가 보여야 함");
+  const path = await dl.path().catch(() => null);
+  if (path) {
+    const { readFileSync } = await import("node:fs");
+    const body = readFileSync(path, "utf8");
+    r.downloadHead = body.slice(0, 120);
+    j6Expect(r, body.includes(locale === "en" ? "TruePixel booking app" : "(주)트루픽셀 예약 앱") && !body.includes("CLAUDE_CODE_PROMPT") && !body.includes("FAKE_ONLY"), "문서에는 지시서만(개발 도구 프롬프트·비밀 파일 없음)");
+  }
+  return r;
+}
+
+async function runMakeJourney(locale, scenario, { retryConflict = false } = {}) {
   const { DICTIONARIES } = await import("../../apps/dashboard/src/i18n/dictionary.mjs");
   const t = DICTIONARIES[locale];
   const mk = t.makeApp;
-  const fake = createFakeCentral({ projectId: J6_PROJECT.id, scenario, locale });
+  const cc = t.commandCenter;
+  const fake = createFakeCentral({ projectId: J6_PROJECT.id, scenario, locale, retryConflict });
   try {
-    journey(`J6 만들기(${scenario}): 아이디어 → 지시서 → 만들기 → 진행 화면`, locale);
+    journey(`J6 만들기(${scenario}${retryConflict ? "·수정 전 서버의 다시 시도" : ""}): 아이디어 → 지시서 → 만들기 → 진행 화면`, locale);
     const page = await j6Page(locale, fake);
     const mainText = () => page.evaluate(() => (document.querySelector("main")?.innerText || "").replace(/\s+/g, " "));
+    const detailCalls = () => fake.calls.filter((c) => /^GET \/workspace\/projects\/[^/]+\/build-jobs\/[^/]+$/.test(c)).length;
+
+    // ⓪ 개요 — 만들기 전: '지금 할 일'이 [앱 만들기](지시서 화면의 [만들기]와 같은 답). 종전: 만들기 안내(외부 AI 도구).
+    const packLabels = [cc.getGuide, cc.getPack];
+    await j6Overview(page, "J6-0 개요 — 만들기 전 지금 할 일", cc.makeApp, packLabels);
 
     // ① 아이디어 문의 끝 — 지시서 화면: 4줄 요약 + 만들기 안내 + 주 버튼 하나(만들기)
     await page.goto(`${BASE}/projects/${J6_PROJECT.id}/dev-spec`, { waitUntil: "networkidle", timeout: 90000 });
@@ -467,30 +526,117 @@ async function runMakeJourney(locale, scenario) {
     j6Expect(r2, steps2 === 1 && t2.includes(mk.nowTag), `지금 단계가 정확히 하나 강조돼야 함 — ${steps2}개`);
     j6Expect(r2, !/\d+\s*%/.test(t2), "진행률 %가 보이면 안 됨(D-4: 단계로)");
 
+    const failText = mk.failures.notImplemented.slice(0, 20);
+    const waitFor = (s, timeout) => page.waitForFunction((x) => (document.querySelector("main")?.innerText || "").includes(x), s, { timeout }).catch(() => {});
+
     if (scenario === "not_implemented") {
       // ③ 실행체가 아직 준비 중 — 화면이 정직하게 말하는가
-      await page.waitForFunction((s) => (document.querySelector("main")?.innerText || "").includes(s), mk.failures.notImplemented.slice(0, 20), { timeout: 45000 }).catch(() => {});
+      await waitFor(failText, 45000);
       const r3 = await facts(page, "J6-3 ★정직 실패 막힘 — 준비 중인 단계에서 멈춤");
       const t3 = await mainText();
       j6Expect(r3, t3.includes(mk.failures.notImplemented), "준비 중 단계 실패 문구가 보여야 함");
       j6Expect(r3, t3.includes(mk.noCharge), "'비용은 받지 않았어요(베타)'가 보여야 함");
       j6Expect(r3, r3.primaryCtaCount === 1 && r3.primaryCta.includes(mk.takeSpec), `주 버튼은 [${mk.takeSpec}] — 실제 ${JSON.stringify(r3.primaryCta)}`);
       j6Expect(r3, r3.buttons.includes(mk.retry), `[${mk.retry}]가 있어야 함`);
+      // ③-b [지시서 받아가기]를 **눌러 본다**(#578 결함 4 — 종전 J6는 있는지만 봤다).
+      await j6TakeSpec(page, fake, mk, locale);
       // ④ 새로고침·재방문 — 최근 잡 복원
       await page.reload({ waitUntil: "networkidle", timeout: 60000 });
-      await page.waitForFunction((s) => (document.querySelector("main")?.innerText || "").includes(s), mk.failures.notImplemented.slice(0, 20), { timeout: 20000 }).catch(() => {});
+      await waitFor(failText, 20000);
       const r4 = await facts(page, "J6-4 새로고침 후 막힘 화면 복원");
       j6Expect(r4, (await mainText()).includes(mk.failures.notImplemented), "새로고침 뒤에도 같은 잡(멈춤)이 복원돼야 함");
+      // ⑤ [다시 시도]를 **눌러 본다**(#578 결함 3 — 종전 J6는 있는지만 봤다).
+      const jobsBefore = fake.jobs.length;
+      await page.locator("main button", { hasText: mk.retry }).first().click();
+      if (retryConflict) {
+        // 수정 전 서버: 같은 프로젝트의 두 번째 시작은 D1 이름 충돌로 502. 화면은 "잠시 뒤 다시"를 약속하지 않고
+        // 그 자리에서 지시서를 준다(막다른 길 금지).
+        await waitFor(mk.startErrors.hostingFailed.slice(0, 16), 20000);
+        const r5 = await facts(page, "J6-5 다시 시도 → 호스팅 자리 실패 막힘 안내");
+        const t5 = await mainText();
+        j6Expect(r5, t5.includes(mk.startErrors.hostingFailed), "호스팅 자리 실패를 정직하게 말해야 함");
+        j6Expect(r5, !/잠시 뒤 다시 시도|try again in a bit/i.test(t5), "막다른 길에서 '잠시 뒤 다시 시도'를 약속하면 안 됨");
+        // 지시서 받기는 이 화면의 행동 줄에 이미 주 버튼으로 있다 — 알림 안에 되풀이하지 않는다(한 행동 한 번).
+        j6Expect(r5, (await page.locator("main button", { hasText: mk.takeSpec }).count()) === 1, `[${mk.takeSpec}]가 정확히 한 번 보여야 함`);
+        j6Expect(r5, primaryStartsWith(r5, mk.takeSpec), `막다른 길에서 주 버튼은 [${mk.takeSpec}] — 실제 ${JSON.stringify(r5.primaryCta)}`);
+        j6Expect(r5, fake.jobs.length === jobsBefore, "실패한 시작은 잡을 만들지 않는다");
+      } else {
+        // 수정 뒤 서버: 전 잡의 D1을 다시 써서 새 잡이 시작된다 — 그리고 (지금 실행체로는) 같은 자리에서 정직하게 멈춘다.
+        await waitFor(mk.nowTag, 15000);
+        await waitFor(failText, 45000);
+        const r5 = await facts(page, "J6-5 다시 시도 → 새 잡 → 같은 자리에서 멈춤 막힘");
+        j6Expect(r5, fake.jobs.length === jobsBefore + 1, `다시 시도가 새 잡을 시작해야 함 — 잡 ${fake.jobs.length}개`);
+        j6Expect(r5, (await mainText()).includes(mk.failures.notImplemented), "새 잡도 정직하게 멈춘 자리를 말해야 함");
+      }
+      // ⑥ 개요 — 멈춘 뒤: '멈춘 이유 보기'(내 앱). 종전: 만들기 안내.
+      await j6Overview(page, "J6-6 개요 — 멈춘 뒤 지금 할 일", cc.buildStopped, packLabels);
     } else {
+      // ②-b 탭 숨김·복귀(#578 결함 9): 숨기면 잡 조회가 멈추고, 돌아오면 기다리지 않고 바로 한 번.
+      await setTabVisibility(page, "hidden");
+      const c0 = detailCalls();
+      await page.waitForTimeout(11000);
+      const c1 = detailCalls();
+      await setTabVisibility(page, "visible");
+      const resumeDeadline = Date.now() + 3000;
+      while (detailCalls() === c1 && Date.now() < resumeDeadline) await page.waitForTimeout(100);
+      const c2 = detailCalls();
+      const rv = await facts(page, "J6-2b 만드는 중 — 탭 숨김 11초 동안 조회 0, 돌아오면 곧바로 1");
+      rv.pollCounts = { beforeHide: c0, afterHidden11s: c1, afterVisible: c2 };
+      j6Expect(rv, c1 === c0, `탭이 숨은 동안 잡 조회가 멈춰야 함 — ${c0} → ${c1}`);
+      j6Expect(rv, c2 > c1, `탭이 돌아오면 곧바로(3초 안) 다시 조회해야 함 — ${c1} → ${c2}`);
+      // ②-c 개요 — 만드는 중: '진행 상황 보기'(내 앱). 종전: 만들기 안내.
+      await j6Overview(page, "J6-2c 개요 — 만드는 중 지금 할 일", cc.viewBuild, packLabels);
+      await page.goto(`${BASE}/projects/${J6_PROJECT.id}/my-app`, { waitUntil: "networkidle", timeout: 90000 });
       // ③ 끝 — 내 앱 카드(D-6)
-      await page.waitForFunction((s) => (document.querySelector("main")?.innerText || "").includes(s), mk.appTitle, { timeout: 120000 }).catch(() => {});
+      await waitFor(mk.appTitle, 120000);
       const r3 = await facts(page, "J6-3 내 앱 카드 — 주소·프로덕션 아님·신고");
       const t3 = await mainText();
       j6Expect(r3, t3.includes(mk.hostedNote), "'Simsa 주소에서 운영 중 · 프로덕션 아님'이 보여야 함");
       j6Expect(r3, (await page.locator('main a[href$="/.well-known/simsa-report"]').count()) === 1, "이 앱 신고하기 링크가 하나 있어야 함");
       j6Expect(r3, (await page.locator('main a[href^="https://app-7x9k2m1q.simsa.page"]').count()) >= 1, "앱 주소 링크가 있어야 함");
       j6Expect(r3, r3.primaryCtaCount === 1 && r3.primaryCta.includes(mk.openApp), `주 버튼은 [${mk.openApp}] — 실제 ${JSON.stringify(r3.primaryCta)}`);
+      // ④ 개요 — 만든 뒤: '내 앱 보기'. 종전: "만들기 안내 받아 AI 도구로 앱을 만드세요"(#578 결함 1).
+      await j6Overview(page, "J6-4 개요 — 만든 뒤 지금 할 일", cc.viewApp, packLabels);
     }
+    await page.context().close();
+  } catch (err) {
+    audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
+  }
+  if (fake.unhandled.length) audit.fakeUnhandled.push({ journey: audit.journeys.at(-1)?.name, locale, paths: [...new Set(fake.unhandled)] });
+}
+
+/**
+ * J6 닫힘(#578 검증 결함 2) — 서버가 만들기를 열지 않았을 때(지금 프로덕션: BUILD_OPEN 없음). [만들기]·"45분·Simsa 주소"
+ * 안내가 **보이면 안 된다**(누르면 멈출 약속). 종전처럼 팩이 주 버튼, 사이드바에 '내 앱' 없음, 개요는 만들기 안내,
+ * 내 앱 주소로 직접 와도 정직한 안내 + 그 자리에서 지시서 받기.
+ */
+async function runMakeClosedJourney(locale) {
+  const { DICTIONARIES } = await import("../../apps/dashboard/src/i18n/dictionary.mjs");
+  const t = DICTIONARIES[locale];
+  const mk = t.makeApp;
+  const cc = t.commandCenter;
+  const fake = createFakeCentral({ projectId: J6_PROJECT.id, scenario: "not_implemented", locale, open: false });
+  try {
+    journey("J6 만들기(닫힘 — 서버가 열지 않음): 개요 → 지시서 → 내 앱 직접", locale);
+    const page = await j6Page(locale, fake);
+    const mainText = () => page.evaluate(() => (document.querySelector("main")?.innerText || "").replace(/\s+/g, " "));
+    await j6Overview(page, "J6c-1 개요 — 닫힘이면 종전 만들기 안내", cc.getGuide, [cc.makeApp, cc.makeSpec]);
+
+    await page.goto(`${BASE}/projects/${J6_PROJECT.id}/dev-spec`, { waitUntil: "networkidle", timeout: 90000 });
+    await settleForNextAction(page, 15000);
+    const r2 = await facts(page, "J6c-2 지시서 화면 — 닫힘이면 [만들기] 없음·팩이 주 버튼");
+    const t2 = await mainText();
+    j6Expect(r2, r2.primaryCtaCount === 1 && primaryStartsWith(r2, t.devSpec.getPack.replace(/\s*→$/, "")), `주 버튼은 [${t.devSpec.getPack}] — 실제 ${JSON.stringify(r2.primaryCta)}`);
+    j6Expect(r2, !t2.includes(mk.hosted) && !t2.includes(mk.free) && !r2.buttons.includes(mk.make), "닫혔는데 만들기 안내·버튼이 보임(없는 기능 약속)");
+    j6Expect(r2, fake.calls.every((c) => c !== "POST /workspace/projects/wsp_tp7x9k2m1q/build"), "닫혔는데 빌드 시작 요청이 나감");
+    const sidebarMyApp = await page.locator('aside a[href$="/my-app"], nav a[href$="/my-app"]').count();
+    j6Expect(r2, sidebarMyApp === 0, `닫혔으면 사이드바에 '${t.nav.myApp}'이 없어야 함 — ${sidebarMyApp}개`);
+
+    await page.goto(`${BASE}/projects/${J6_PROJECT.id}/my-app`, { waitUntil: "networkidle", timeout: 90000 });
+    await settleForNextAction(page, 15000);
+    const r3 = await facts(page, "J6c-3 내 앱 직접 방문 — 정직한 안내 + 지시서 받기");
+    j6Expect(r3, (await mainText()).includes(mk.startErrors.unavailable), "아직 열리지 않았다고 말해야 함");
+    j6Expect(r3, r3.primaryCtaCount === 1 && r3.primaryCta.includes(mk.takeSpec), `주 버튼은 [${mk.takeSpec}] — 실제 ${JSON.stringify(r3.primaryCta)}`);
     await page.context().close();
   } catch (err) {
     audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
@@ -502,9 +648,14 @@ async function runMakeJourney(locale, scenario) {
 
 if (LOCAL_BASE) {
   // 로컬 가짜 서버 모드: J6만(라이브 여정은 라이브 서버가 필요하다).
-  await runMakeJourney("ko", "not_implemented");
+  // KO 멈춤은 **수정 전 서버**의 다시 시도(502 hosting_d1_failed — 지금 프로덕션 central), EN 멈춤은 수정 뒤 서버(새 잡).
+  await runMakeJourney("ko", "not_implemented", { retryConflict: true });
   await runMakeJourney("ko", "done");
-  if (!KO_ONLY) await runMakeJourney("en", "not_implemented");
+  await runMakeClosedJourney("ko");
+  if (!KO_ONLY) {
+    await runMakeJourney("en", "not_implemented");
+    await runMakeClosedJourney("en");
+  }
 } else {
 // ── 라이브: KO 전체 + (기본) EN 축 — J6는 여기서 돌지 않는다(실제 빌드를 시작하므로) ──────
 

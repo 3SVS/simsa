@@ -4,7 +4,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createFakeCentral, devSpecFixture, SCENARIOS, LIVE_CENTRAL_ORIGIN, FAKE_CENTRAL_ORIGIN } from "../lib/fake-central.mjs";
+import * as fakeMod from "../lib/fake-central.mjs";
+
+const { createFakeCentral, devSpecFixture, SCENARIOS, LIVE_CENTRAL_ORIGIN, FAKE_CENTRAL_ORIGIN } = fakeMod;
+// 네임스페이스로 받는다 — 옛 모듈에 없는 export 때문에 파일이 통째로 죽지 않고 테스트마다 제 이유로 실패하게(#578 결함 7).
+const builderPackFixture = (...a) => {
+  assert.equal(typeof fakeMod.builderPackFixture, "function", "builderPackFixture");
+  return fakeMod.builderPackFixture(...a);
+};
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../../..");
@@ -68,6 +75,46 @@ describe("fake-central (journey-audit --local, B-8 J6)", () => {
     assert.equal(f.handle("GET", `${FAKE_CENTRAL_ORIGIN}/workspace/credits?userKey=x`).status, 404);
     assert.deepEqual(f.unhandled, ["GET /workspace/credits"]);
     assert.equal(f.handle("OPTIONS", url("/build")).status, 204);
+  });
+
+  it("★#578 결함 3: retryConflict(수정 전 실서버) — 멈춘 잡 뒤 두 번째 POST /build는 502 hosting_d1_failed, 잡을 만들지 않는다", () => {
+    const f = createFakeCentral({ projectId: P, scenario: "not_implemented", retryConflict: true });
+    const id = f.handle("POST", url("/build")).json.job.id;
+    for (let i = 0; i < 3; i++) f.handle("GET", url(`/build-jobs/${id}`));
+    const retry = f.handle("POST", url("/build"));
+    assert.equal(retry.status, 502);
+    assert.equal(retry.json.error, "hosting_d1_failed");
+    assert.equal(f.jobs.length, 1);
+    // 실서버 라우트가 실제로 이 코드를 502로 낸다(가짜가 지어낸 코드가 아니다).
+    const route = readFileSync(path.join(REPO, "apps/central-plane/src/routes/workspace-build-jobs.ts"), "utf8");
+    assert.match(route, /error: "hosting_d1_failed"[^\n]*502/);
+  });
+
+  it("★#578 결함 3: 기본(수정 뒤 서버) — 다시 시도는 202 새 잡(서버가 전 잡의 D1을 다시 쓴다)", () => {
+    const f = createFakeCentral({ projectId: P, scenario: "not_implemented" });
+    const id = f.handle("POST", url("/build")).json.job.id;
+    for (let i = 0; i < 3; i++) f.handle("GET", url(`/build-jobs/${id}`));
+    const retry = f.handle("POST", url("/build"));
+    assert.equal(retry.status, 202);
+    assert.notEqual(retry.json.job.id, id);
+    const route = readFileSync(path.join(REPO, "apps/central-plane/src/routes/workspace-build-jobs.ts"), "utf8");
+    assert.match(route, /d1Reused/, "the real route reuses the prior job's D1 — the fake's default mirrors that");
+  });
+
+  it("★#578 결함 2: GET /workspace/build-availability — 실서버와 같은 모양(open 기본 true, false면 not_open)", () => {
+    assert.deepEqual(createFakeCentral({ projectId: P, scenario: "done" }).handle("GET", `${FAKE_CENTRAL_ORIGIN}/workspace/build-availability`).json, { ok: true, buildEnabled: true, reason: "open" });
+    assert.deepEqual(createFakeCentral({ projectId: P, scenario: "done", open: false }).handle("GET", `${FAKE_CENTRAL_ORIGIN}/workspace/build-availability`).json, { ok: true, buildEnabled: false, reason: "not_open" });
+    const route = readFileSync(path.join(REPO, "apps/central-plane/src/routes/workspace-build-jobs.ts"), "utf8");
+    assert.match(route, /app\.get\("\/workspace\/build-availability"/);
+  });
+
+  it("★#578 결함 4: POST /workspace/export-builder-pack — 팩 파일 묶음(dev-spec/ + 개발 도구 프롬프트·비밀 파일 섞임)", () => {
+    const r = createFakeCentral({ projectId: P, scenario: "done" }).handle("POST", `${FAKE_CENTRAL_ORIGIN}/workspace/export-builder-pack`);
+    assert.equal(r.status, 200);
+    const paths = r.json.bundle.files.map((x) => x.path);
+    assert.ok(paths.includes("simsa-build-pack/dev-spec/README.md"));
+    assert.ok(paths.some((p) => !p.includes("/dev-spec/")));
+    assert.match(builderPackFixture("ko")[2].content, /\(주\)트루픽셀 예약 앱/);
   });
 
   it("Rule 6: 지시서 픽스처는 한국어 리얼 기획(초보자 4줄이 그려지는 모양)", () => {

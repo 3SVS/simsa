@@ -10,6 +10,14 @@
 //
 // 서버 계약은 apps/central-plane/src/routes/workspace-build-jobs.ts와 같은 모양(응답 필드·오류 코드).
 // 시나리오의 실패 문장은 실제 서버가 내는 문장 그대로다(builder-run.mjs builder_stage_not_implemented).
+//
+// #578 검증 결함 반영:
+//  - 2: GET /workspace/build-availability — `open`(기본 true). false면 실서버의 닫힘(BUILD_OPEN 없음)과 같은 답.
+//  - 3: `retryConflict: true` = **이 PR의 서버 수정 전** 실서버: 같은 프로젝트의 두 번째 POST /build는 D1 이름 충돌로
+//       502 hosting_d1_failed(createProjectD1이 "이미 있음"을 성공으로 치지 않았다). 기본(false)은 수정 뒤 서버 —
+//       전 잡의 D1을 다시 써서 202. 예전 가짜는 늘 202라 [다시 시도] 막다른 길을 구조적으로 못 봤다.
+//  - 4: POST /workspace/export-builder-pack — 실서버처럼 빌더 팩 파일 묶음(dev-spec/ 포함, 개발 도구 프롬프트·비밀 파일 섞임)을
+//       돌려준다. 화면은 그중 dev-spec/만 골라 한 문서로 받는다.
 
 export const LIVE_CENTRAL_ORIGIN = "https://conclave-ai.seunghunbae.workers.dev";
 /** `.invalid`는 절대 해석되지 않는 TLD — 로컬 빌드를 이 주소로 구우면 가로채기를 놓쳐도 라이브에 닿지 않는다. */
@@ -99,12 +107,31 @@ export function fakeCorsHeaders(origin) {
 }
 
 /**
- * @param {{ projectId: string, scenario: keyof typeof SCENARIOS, locale?: "ko" | "en", slug?: string }} opts
+ * 실서버 export-builder-pack(handoff)의 모양 — `simsa-build-pack/` 아래 팩 파일들 + `dev-spec/` 10개 중 일부.
+ * 개발 도구용 프롬프트와 비밀 파일을 일부러 섞는다(화면이 dev-spec/만 고르는지 보려고).
+ */
+export function builderPackFixture(locale = "ko") {
+  const d = devSpecFixture(locale);
+  const ko = locale !== "en";
+  const req = d.features.map((f) => `- ${f.id} ${f.title} — ${f.description}`).join("\n");
+  const scr = d.screens.map((s) => `- ${s.id} ${s.route} — ${s.purpose}`).join("\n");
+  return [
+    { path: "simsa-build-pack/CLAUDE_CODE_PROMPT.md", content: "# Claude Code prompt (developer tool)" },
+    { path: "simsa-build-pack/.env.local", content: "FAKE_ONLY=not-a-secret" },
+    { path: "simsa-build-pack/dev-spec/README.md", content: `# ${d.brief.productName} — ${ko ? "개발 지시서" : "Development spec"}\n\n${d.brief.oneLine}` },
+    { path: "simsa-build-pack/dev-spec/01-requirements.md", content: `# ${ko ? "요구사항" : "Requirements"}\n\n${req}` },
+    { path: "simsa-build-pack/dev-spec/02-screens.md", content: `# ${ko ? "화면" : "Screens"}\n\n${scr}` },
+  ];
+}
+
+/**
+ * @param {{ projectId: string, scenario: keyof typeof SCENARIOS, locale?: "ko" | "en", slug?: string, open?: boolean, retryConflict?: boolean }} opts
  */
 export function createFakeCentral(opts) {
   const steps = SCENARIOS[opts.scenario];
   if (!steps) throw new Error(`unknown scenario ${opts.scenario}`);
   const slug = opts.slug ?? "app-7x9k2m1q";
+  const open = opts.open !== false;
   /** @type {Array<{ id: string, step: number, createdAt: string, events: Array<{ id: string, at: string, stage: string, message: string, meta: object }> }>} */
   const jobs = [];
   const unhandled = [];
@@ -159,6 +186,13 @@ export function createFakeCentral(opts) {
     const u = new URL(rawUrl);
     calls.push(`${method} ${u.pathname}`);
     if (method === "OPTIONS") return { status: 204, json: null };
+    if (method === "GET" && u.pathname === "/workspace/build-availability") {
+      return { status: 200, json: { ok: true, buildEnabled: open, reason: open ? "open" : "not_open" } };
+    }
+    if (method === "POST" && u.pathname === "/workspace/export-builder-pack") {
+      const files = builderPackFixture(opts.locale);
+      return { status: 200, json: { ok: true, source: "deterministic", bundle: { files }, summary: { fileCount: files.length, totalItems: 3, selectedItems: 3, recommendedNextStep: "handoff" } } };
+    }
     const m = /^\/workspace\/projects\/([^/]+)(\/.*)?$/.exec(u.pathname);
     if (m && decodeURIComponent(m[1]) === opts.projectId) {
       const rest = m[2] ?? "";
@@ -178,6 +212,10 @@ export function createFakeCentral(opts) {
       if (method === "POST" && rest === "/build") {
         const active = jobs.find(isActive);
         if (active) return { status: 409, json: { ok: false, error: "build_already_active", activeJobId: active.id, status: jobView(active).status } };
+        // 수정 전 실서버: 같은 slug의 D1을 또 만들려다 이름 충돌 → 502(잡은 만들지 않는다).
+        if (opts.retryConflict === true && jobs.length > 0) {
+          return { status: 502, json: { ok: false, error: "hosting_d1_failed", detail: "cf_error", cf: [{ code: 7502, message: "A database with that name already exists" }] } };
+        }
         seq += 1;
         const j = { id: `bj_fake${String(seq).padStart(5, "0")}`, step: 0, createdAt: at(seq), events: [{ id: `bje_q${seq}`, at: at(seq), stage: "queued", message: "repo_skipped:fake", meta: {} }] };
         jobs.push(j);
