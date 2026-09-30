@@ -197,6 +197,29 @@ export async function stopActiveBuildJob(env: Env, id: string, reason: string, k
 const ACTIVE_SQL = `('queued','scaffolding','implementing','building','testing','pushed','deploying')`;
 
 /**
+ * B-5b-4 (S3): 산출물 **받기**(잡당 한 번, 원자). 조건: status = 'testing'(게이트를 지난 컨테이너만 산출물을 올린다) 이고
+ * build_exit_code가 아직 NULL. 받으면 build_exit_code = 0 — "게이트 초록불 뒤의 산출물을 Worker가 받았다"(build_exit_code는
+ * Worker 소유 칸, PR #569 S1 결함 1). markBuildJobDone은 이 0 없이는 done으로 못 간다(D-4). 스키마 변경 없음.
+ * 두 번째 업로드(재시도·중복)는 false — 같은 잡을 두 번 배포하지 않는다. 받았나를 돌려준다.
+ */
+export async function claimBuildArtifact(env: Env, id: string): Promise<boolean> {
+  const res = await env.DB.prepare(
+    `UPDATE build_jobs SET build_exit_code = 0, updated_at = ? WHERE id = ? AND status = 'testing' AND build_exit_code IS NULL`,
+  )
+    .bind(new Date().toISOString(), id)
+    .run();
+  return Number(res.meta?.changes ?? 0) > 0;
+}
+
+/** B-5b-5: Worker가 자기 push 뒤에 커밋을 적는다(활성 잡만). 배포가 뒤에서 실패해도 저장소에 올라간 커밋은 남는다. */
+export async function recordBuildJobCommit(env: Env, id: string, commitSha: string): Promise<boolean> {
+  const res = await env.DB.prepare(`UPDATE build_jobs SET commit_sha = ?, updated_at = ? WHERE id = ? AND status IN ${ACTIVE_SQL}`)
+    .bind(commitSha.slice(0, 64), new Date().toISOString(), id)
+    .run();
+  return Number(res.meta?.changes ?? 0) > 0;
+}
+
+/**
  * B-6 서버 권위 예산 — spent_usd의 **유일한 증가 경로**는 LLM 프록시의 예약·정산이다(컨테이너 본문의 spentUsd는 라우트가
  * 쓰지 않는다). updated_at도 올린다(LLM 호출 = 진행 중 — 스턱 스윕이 일하는 잡을 치우지 않게).
  *

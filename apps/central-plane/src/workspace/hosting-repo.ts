@@ -28,7 +28,11 @@ export type RepoResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: "not_configured" | "not_installed" | "gh_error" | "network"; status?: number; message?: string };
 
-export type ScaffoldFile = { path: string; content: string; executable?: boolean };
+/**
+ * content = UTF-8 텍스트. base64가 있으면 그것을 **그대로** blob 내용으로 쓴다(B-5b-5: 빌드 산출물의 소스 트리 — 이미지 등
+ * 바이너리가 UTF-8 왕복으로 깨지지 않게). 둘 다 있으면 base64가 이긴다.
+ */
+export type ScaffoldFile = { path: string; content: string; executable?: boolean; base64?: string };
 
 /** 저장소 이름 = `<slug>` (조직이 simsa-hosted이므로 `simsa-hosted/<slug>`). 슬러그 규칙은 hosting-provision과 동일. */
 export const REPO_NAME_RE = /^[a-z0-9](?:[a-z0-9]|-(?!-)){1,38}[a-z0-9]$/;
@@ -101,6 +105,85 @@ export async function getOrgInstallationToken(env: Env, fetchImpl: FetchLike = f
   }
 }
 
+/** B-5b-5: 저장소 범위 토큰이 가져도 되는 권한 — contents 쓰기 + (GitHub가 늘 붙이는) metadata 읽기. 그 밖은 거부. */
+export const REPO_SCOPED_TOKEN_PERMISSIONS = Object.freeze({ contents: "write" } as const);
+const REPO_SCOPED_ALLOWED = new Map<string, ReadonlySet<string>>([
+  ["contents", new Set(["write"])],
+  ["metadata", new Set(["read"])],
+]);
+
+/**
+ * B-5b-5: **저장소 하나로 좁힌** 설치 토큰(빌드 산출물 push 전용). 조직 설치 토큰(getOrgInstallationToken — 조직의 모든 저장소 ·
+ * Administration write)을 쓰지 않는다:
+ *   App JWT → GET /orgs/{org}/installation → POST /app/installations/{id}/access_tokens
+ *     { repositories: [<이름>], permissions: { contents: "write" } }
+ * GitHub가 돌려준 권한·저장소도 다시 확인한다 — 요청보다 넓으면(contents write·metadata read 밖의 권한, 다른 저장소) 그 토큰을
+ * 폐기(DELETE /installation/token)하고 `scope_not_narrowed`로 실패한다. 호출자는 쓰고 나서 revokeInstallationToken으로 폐기한다.
+ * 토큰은 로그·오류에 싣지 않는다.
+ */
+export async function getRepoScopedInstallationToken(
+  env: Env,
+  repoName: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<RepoResult<{ token: string; org: string; name: string; expiresAt: string | null }>> {
+  if (!REPO_NAME_RE.test(repoName)) return { ok: false, error: "gh_error", message: "invalid_repo_name" };
+  const appEnv = hostingAppEnv(env);
+  if (!appEnv) return { ok: false, error: "not_configured" };
+  const org = hostingOrg(env);
+  let jwt: string;
+  try {
+    jwt = await mintAppJwt(appEnv);
+  } catch (err) {
+    return { ok: false, error: "not_configured", message: String((err as Error)?.message ?? err).slice(0, 120) };
+  }
+  let res: Response;
+  try {
+    res = await fetchImpl(`${GITHUB_API}/orgs/${encodeURIComponent(org)}/installation`, { headers: headers(jwt) });
+  } catch (err) {
+    return { ok: false, error: "network", message: String((err as Error)?.message ?? err).slice(0, 200) };
+  }
+  const inst = await readJson(res);
+  if (res.status === 404) return { ok: false, error: "not_installed", status: 404, message: `GitHub App not installed on org ${org}` };
+  if (!res.ok) return ghErr(res, inst);
+  const installationId = typeof inst["id"] === "number" ? inst["id"] : NaN;
+  if (!Number.isFinite(installationId)) return { ok: false, error: "gh_error", status: res.status, message: "installation id missing" };
+  let tr: Response;
+  try {
+    tr = await fetchImpl(`${GITHUB_API}/app/installations/${installationId}/access_tokens`, {
+      method: "POST",
+      headers: headers(jwt, { "content-type": "application/json" }),
+      body: JSON.stringify({ repositories: [repoName], permissions: REPO_SCOPED_TOKEN_PERMISSIONS }),
+    });
+  } catch (err) {
+    return { ok: false, error: "network", message: String((err as Error)?.message ?? err).slice(0, 200) };
+  }
+  const tb = await readJson(tr);
+  if (!tr.ok) return ghErr(tr, tb);
+  const token = typeof tb["token"] === "string" ? tb["token"] : "";
+  if (!token) return { ok: false, error: "gh_error", status: tr.status, message: "token missing" };
+  const perms = typeof tb["permissions"] === "object" && tb["permissions"] !== null ? (tb["permissions"] as Record<string, unknown>) : {};
+  const permsOk = Object.entries(perms).every(([k, v]) => typeof v === "string" && (REPO_SCOPED_ALLOWED.get(k)?.has(v) ?? false)) && perms["contents"] === "write";
+  const repos = Array.isArray(tb["repositories"]) ? tb["repositories"] : null;
+  const reposOk =
+    repos === null ||
+    (repos.length === 1 && typeof repos[0] === "object" && repos[0] !== null && String((repos[0] as Record<string, unknown>)["name"] ?? "").toLowerCase() === repoName.toLowerCase());
+  if (!permsOk || !reposOk) {
+    await revokeInstallationToken(token, fetchImpl);
+    return { ok: false, error: "gh_error", status: tr.status, message: "scope_not_narrowed" };
+  }
+  return { ok: true, value: { token, org, name: repoName, expiresAt: typeof tb["expires_at"] === "string" ? tb["expires_at"] : null } };
+}
+
+/** 설치 토큰 폐기(DELETE /installation/token). 최선 노력 — 실패해도 60분 뒤 만료된다. 폐기됐나를 돌려준다. */
+export async function revokeInstallationToken(token: string, fetchImpl: FetchLike = fetch): Promise<boolean> {
+  try {
+    const r = await fetchImpl(`${GITHUB_API}/installation/token`, { method: "DELETE", headers: headers(token) });
+    return r.status === 204;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * private 저장소 생성(멱등: 이미 있으면 그대로 성공, `created:false`).
  * `auto_init:false` — 첫 커밋은 우리 스캐폴드여야 한다(GitHub 기본 README가 섞이지 않게).
@@ -166,7 +249,7 @@ export async function pushScaffold(
 
     const tree: Array<{ path: string; mode: "100644" | "100755"; type: "blob"; sha: string }> = [];
     for (const f of args.files) {
-      const blob = await post("/git/blobs", { content: toBase64Utf8(f.content), encoding: "base64" });
+      const blob = await post("/git/blobs", { content: typeof f.base64 === "string" ? f.base64 : toBase64Utf8(f.content), encoding: "base64" });
       if (blob.__status >= 300 || typeof blob["sha"] !== "string") return { ok: false, error: "gh_error", status: blob.__status, message: `blob ${f.path}: ${String(blob["message"] ?? "").slice(0, 120)}` };
       tree.push({ path: f.path, mode: f.executable ? "100755" : "100644", type: "blob", sha: blob["sha"] });
     }

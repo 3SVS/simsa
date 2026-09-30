@@ -45,8 +45,11 @@ export function childEnv(base = process.env) {
   return out;
 }
 
-/** 허용 목록 밖에서 **우리가** 넣는 키(값은 고정·비밀 아님). 테스트가 이 목록 밖의 키가 자식 env에 없는지 본다. */
-export const WORK_ENV_EXTRA_KEYS = Object.freeze(["NO_COLOR", "npm_config_offline"]);
+/**
+ * 허용 목록 밖에서 **우리가** 넣는 키(값은 고정·비밀 아님). 테스트가 이 목록 밖의 키가 자식 env에 없는지 본다.
+ * WRANGLER_SEND_METRICS(B-5b-4)는 산출물 번들(`wrangler deploy --dry-run`) 한 명령에만 — bundleEnv.
+ */
+export const WORK_ENV_EXTRA_KEYS = Object.freeze(["NO_COLOR", "npm_config_offline", "WRANGLER_SEND_METRICS"]);
 
 /**
  * 잡의 자식 프로세스 env. 샌드박스면 HOME은 샌드박스 사용자의 집(pnpm 저장소·git이 쓴다).
@@ -59,6 +62,14 @@ export function workEnv(base = process.env, { sandbox = null, offline = false } 
     NO_COLOR: "1",
     ...(offline ? { npm_config_offline: "true" } : {}),
   };
+}
+
+/**
+ * B-5b-4 산출물 번들(`wrangler deploy --dry-run --outdir …`)의 env = 오프라인 workEnv + 원격 측정 끔. 자격 증명은 **없다**
+ * (허용 목록에 CLOUDFLARE_* 없음) — dry-run은 토큰 없이 번들만 만든다(실측: wrangler 4.141.0, exit 0). 배포는 Worker가 한다.
+ */
+export function bundleEnv(base = process.env, { sandbox = null } = {}) {
+  return { ...workEnv(base, { sandbox, offline: true }), WRANGLER_SEND_METRICS: "false" };
 }
 
 // ─── 샌드박스 사용자 ────────────────────────────────────────────────────────────────────────────
@@ -839,6 +850,7 @@ export function buildTaskMarkdown(job, item, { plan = [], repair = null, redactL
     `- These files are managed by the platform and are restored before the build gate: ${PROTECTED_APP_FILES.join(", ")}.`,
     "- Keep `GET /api/health` returning `{ \"ok\": true }` and unknown `/api/*` routes returning 404 — the platform smoke test checks both.",
     "- The build gate runs `pnpm install --frozen-lockfile --offline` → `pnpm run build` → `pnpm test`. You may add tests as `test/*.test.mjs` (node:test).",
+    "- Database changes go in a new file `migrations/NNNN_name.sql` (4 digits, then ASCII letters, digits, `_` or `-` — e.g. `0002_add_reservations.sql`). Never edit an existing migration. The platform applies them in name order when it deploys.",
     "- Implement only the current work item. Other items are done separately.",
   ];
   if (plan.length > 0) {

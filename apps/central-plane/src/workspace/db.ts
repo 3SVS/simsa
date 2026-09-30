@@ -306,8 +306,18 @@ export async function deleteProject(env: Env, id: string, userKey: string): Prom
   // scoped — it cannot reach another user's or another project's objects — and
   // it also sweeps objects the manifest never knew about (a `put` that landed
   // while its D1 append failed, or a document stuck at reference='pending').
+  // B-5b S3: 빌드 산출물(유저 앱의 소스·번들) `builds/<jobId>/` — 키에 프로젝트가 없으니 이 프로젝트의 빌드 잡 id로 접두를 만든다.
+  const buildPrefixes: string[] = [];
+  if (env.EVIDENCE) {
+    try {
+      const jobs = await env.DB.prepare(`SELECT id FROM build_jobs WHERE project_id = ?`).bind(id).all<{ id: string }>();
+      for (const row of jobs.results ?? []) if (typeof row.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(row.id)) buildPrefixes.push(`builds/${row.id}/`);
+    } catch (err) {
+      console.error("[workspace/db deleteProject] build-job scan failed:", err);
+    }
+  }
   if (env.EVIDENCE && userKey) {
-    for (const prefix of [`checks/${userKey}/${id}/`, `docs/${userKey}/${id}/`]) {
+    for (const prefix of [`checks/${userKey}/${id}/`, `docs/${userKey}/${id}/`, ...buildPrefixes]) {
       try {
         for (const k of await listKeysByPrefix(env.EVIDENCE, prefix)) r2Keys.add(k);
       } catch (err) {

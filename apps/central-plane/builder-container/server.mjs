@@ -10,7 +10,8 @@
  *   GET  /selfcheck  — 툴체인·agent-worker·템플릿 자가점검을 **동기**로 돌려 JSON 반환.
  *                      Worker의 /internal/builder/selfcheck가 이걸 호출한다.
  *   POST /run        — 잡 페이로드(validateJobPayload, kind=build면 validateBuildPayload까지) → 202 →
- *                      runBuildJob(진행은 progressUrl로) → 최종 본문을 callbackUrl(/internal/build-done)로.
+ *                      runBuildJob(진행은 progressUrl로, 게이트 초록불이면 산출물을 <baseUrl>/internal/build-artifact로 —
+ *                      Worker가 push·배포·done) → 최종 본문(보고)을 callbackUrl(/internal/build-done)로.
  *
  * 잡 하나의 수명은 builder-run.mjs **startJob**이 쥔다: 45분 마감이면 러너를 멈추고(AbortSignal) 그 단계의
  * 실패 본문, SIGTERM 드레인은 job.abort()의 같은 모양 본문, 러너 예외도 단계를 싣는다

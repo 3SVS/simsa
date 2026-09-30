@@ -497,7 +497,7 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
 });
 
 describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => {
-  it("runBuildJob의 진행·최종 본문을 실제 라우트에 넣으면: scaffolding → implementing → building → testing(수리 1회) 전이가 하나도 버려지지 않고 → failed(pushed)", async () => {
+  it("runBuildJob의 진행·최종 본문을 실제 라우트에 넣으면: scaffolding → implementing → building → testing(수리 1회) 전이가 하나도 버려지지 않고 → 산출물 실패는 failed(deploying)로 정직하게", async () => {
     // [의도된 변경 · B-5b-2·3] 종전: scaffolding 이벤트 2개 → failed(implementing). 이제 WBS·게이트까지 가므로, 컨테이너가 보내는
     // 모든 진행 본문을 실제 라우트에 넣어 **역행 전이(transitioned:false → 컨테이너가 job_not_active로 멈춤)가 없는지**를 본다 —
     // 특히 testing에 들어간 뒤의 수리 라운드가 building으로 되돌아가지 않아야 한다(Worker STAGE_ORDER).
@@ -520,7 +520,10 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
       return { ok: true, code: 0, stdout: "", stderr: "", error: null };
     };
     const implementWbs = async ({ item }) => ({ status: "done", commitMessage: `feat(${item.id}): ${item.title}` });
-    const result = await run.runBuildJob(payload, { workRoot: await tmpDir("wr8"), templateDir: REPO_TEMPLATE, exec, postCallback: post, implementWbs, sandbox: null, log: () => {} });
+    // [의도된 변경 · B-5b S3] 게이트 뒤 산출물 단계가 생겼다. 여기서는 번들이 없는 환경(가짜 exec)을 seam으로 명시하고 그 실패가
+    // 정직하게 기록되는지만 본다 — 산출물 → Worker 배포 → done의 끝까지는 test/train-b-b5b-s3-deploy.test.mjs.
+    const produceArtifact = async () => ({ ok: false, error: "artifact_failed:test_no_bundle" });
+    const result = await run.runBuildJob(payload, { workRoot: await tmpDir("wr8"), templateDir: REPO_TEMPLATE, exec, postCallback: post, implementWbs, produceArtifact, sandbox: null, log: () => {} });
 
     assert.ok(replies.every((r) => r.status === 200 && r.json?.transitioned === true), `every progress transitioned: ${JSON.stringify(replies.map((r) => r.json))}`);
     assert.equal((await getBuildJobById(env, job.id)).status, "testing");
@@ -529,6 +532,7 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
       ["implementing", "wbs_started"], ["implementing", "wbs_done"], ["implementing", "wbs_started"], ["implementing", "wbs_done"],
       ["building", "gate_started"], ["testing", "test_started"], ["testing", "test_failed"],
       ["testing", "repair_started"], ["testing", "repair_done"], ["testing", "gate_passed"],
+      ["testing", "artifact_started"], ["testing", "artifact_failed"],
     ]);
     assert.equal((await getBuildJobById(env, job.id)).wbsDone, 2);
 
@@ -538,8 +542,8 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
     assert.equal(done.json.accepted, true);
     const final = await getBuildJobById(env, job.id);
     assert.equal(final.status, "failed");
-    assert.equal(final.failedStage, "pushed");
-    assert.equal(final.error, "builder_stage_not_implemented:pushed");
+    assert.equal(final.failedStage, "deploying");
+    assert.equal(final.error, "artifact_failed:test_no_bundle");
     assert.equal(final.deployedUrl, null, "조용한 성공 없음 — done은 Worker만(S3)");
   });
 

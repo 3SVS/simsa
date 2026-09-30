@@ -197,6 +197,11 @@ export interface Env {
   BETA_BUILD_DAILY_LIMIT_PER_IP?: string;
   BETA_BUILD_DAILY_LIMIT_GLOBAL?: string;
   /**
+   * Train B · B-5b S3 — service-wide daily cap on the automatic inspection a finished build starts (workspace/build-deploy.ts).
+   * System-started, so not charged to the user's inspection cap (verify-sweep rule). Positive integer; default 30 [PILOT].
+   */
+  BETA_BUILD_AUTO_CHECK_DAILY_LIMIT?: string;
+  /**
    * 2026-07-09 — Langfuse minimal wiring (Simsa flow observability).
    * All three must be set for traces to be sent; otherwise the workspace
    * routes silently skip Langfuse (fail-open — never blocks a user call).

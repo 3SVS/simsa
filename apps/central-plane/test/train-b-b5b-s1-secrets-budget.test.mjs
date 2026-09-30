@@ -827,8 +827,13 @@ describe("⑤ 컨테이너 — 비밀 없는 페이로드 · jobToken · 프록�
     const impl = async ({ env }) => { implEnvs.push(env); return { status: "done", commitMessage: "feat: 예약" }; };
     await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrenv"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: async () => ({ ok: true, status: 200, json: { ok: true, transitioned: true } }), implementWbs: impl, baseEnv: base, sandbox: null, log: () => {} });
     assert.ok(git.calls.length >= 5);
+    // [의도된 변경 · B-5b S3] 게이트 뒤 산출물: 번들(wrangler dry-run)은 오프라인 + WRANGLER_SEND_METRICS=false, 수집기는 오프라인.
     for (const c of git.calls) {
-      const want = c.args[0] === "run" || c.args[0] === "test" ? { ...e, NO_COLOR: "1", npm_config_offline: "true" } : { ...e, NO_COLOR: "1" };
+      const offline = { ...e, NO_COLOR: "1", npm_config_offline: "true" };
+      const want =
+        c.cmd === "wrangler" ? { ...offline, WRANGLER_SEND_METRICS: "false" }
+        : c.args[0] === run.ARTIFACT_COLLECTOR_ENTRY || c.args[0] === "run" || c.args[0] === "test" ? offline
+        : { ...e, NO_COLOR: "1" };
       assert.deepEqual(c.env, want, `${c.cmd ?? "git"} ${c.args.join(" ")} gets the filtered env`);
       assert.ok(!JSON.stringify(c).includes(TOKEN_A), "the job token is never an exec argument or env value");
     }
@@ -837,21 +842,28 @@ describe("⑤ 컨테이너 — 비밀 없는 페이로드 · jobToken · 프록�
     assert.doesNotMatch(src, /env:\s*process\.env\b/, "no exec gets the whole process.env");
   });
 
-  it("implementWbs seam: WBS마다 wbs_started → 구현 → 커밋 → wbs_done, 다 끝나면 빌드 게이트 → push는 Worker 몫이라 정직하게 멈춤", async () => {
+  it("implementWbs seam: WBS마다 wbs_started → 구현 → 커밋 → wbs_done, 다 끝나면 빌드 게이트 → 산출물 → Worker가 done이라 답할 때만 성공 보고", async () => {
     // [의도된 변경 · B-5b-3] 종전: WBS 뒤 failed(building, builder_stage_not_implemented:building). 이제 게이트(install·build·test)가
-    // 돌고(여기선 가짜 exec라 초록불), 그다음 push·배포는 Worker 몫(S3)이라 failed(pushed, builder_stage_not_implemented:pushed).
+    // 돈다(여기선 가짜 exec라 초록불). [의도된 변경 · B-5b S3] 종전: 그다음 failed(pushed, builder_stage_not_implemented:pushed).
+    // 이제 산출물을 Worker로 올리고(push·배포·done은 Worker), Worker가 done이라 답하면 성공 보고 — 산출물·업로드는 seam으로.
     const posted = [];
     const post = async (url, token, body) => { posted.push(body); return { ok: true, status: 200, json: { ok: true, transitioned: true } }; };
     const seen = [];
     const impl = async ({ item, llm, env }) => { seen.push({ id: item.id, title: item.title, apiKey: llm.apiKey, envHasToken: JSON.stringify(env).includes(TOKEN_A) }); return { status: "done", commitMessage: `feat: ${item.title}` }; };
     const git = gitExec();
-    const r = await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrseam"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: post, implementWbs: impl, sandbox: null, log: () => {} });
-    assert.deepEqual(r, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "pushed", error: "builder_stage_not_implemented:pushed", wbsDone: 2 });
+    const uploads = [];
+    const produceArtifact = async () => ({ ok: true, artifact: { worker: { mainModule: "worker.js", modules: [{ name: "worker.js", base64: "" }] }, assets: [], migrations: [], source: [], stats: null } });
+    const uploadArtifact = async (url, token, body) => { uploads.push({ url, token, body }); return { ok: true, status: 200, json: { ok: true, accepted: true, status: "done" } }; };
+    const r = await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrseam"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: post, implementWbs: impl, sandbox: null, log: () => {}, produceArtifact, uploadArtifact });
+    assert.deepEqual([r.jobId, r.ok, r.stage, r.wbsDone, "deployedUrl" in r], ["bj_0a1b2c3d4e", true, "done", 2, false]);
+    assert.equal(uploads.length, 1);
+    assert.equal(uploads[0].token, TOKEN_A, "the artifact upload authenticates with the job token");
+    assert.ok(!JSON.stringify(uploads[0].body).includes(TOKEN_A), "…and never carries it in the body");
     assert.deepEqual(seen.map((s) => s.id), ["WBS-001", "WBS-002"]);
     assert.equal(seen[1].title, "예약 화면 — 한글 버튼 '예약하기'");
     assert.ok(seen.every((s) => s.apiKey === TOKEN_A && !s.envHasToken), "token only in the LLM config, never in env");
     assert.deepEqual(posted.slice(2, 6).map((b) => [b.message, b.meta.wbsId, b.wbsDone]), [["wbs_started", "WBS-001", 0], ["wbs_done", "WBS-001", 1], ["wbs_started", "WBS-002", 1], ["wbs_done", "WBS-002", 2]]);
-    assert.deepEqual(posted.slice(6).map((b) => [b.status, b.message]), [["building", "gate_started"], ["testing", "test_started"], ["testing", "gate_passed"]]);
+    assert.deepEqual(posted.slice(6).map((b) => [b.status, b.message]), [["building", "gate_started"], ["testing", "test_started"], ["testing", "gate_passed"], ["testing", "artifact_started"], ["testing", "artifact_ready"]]);
     const commits = git.calls.filter((c) => c.args.includes("commit")).map((c) => c.args[c.args.indexOf("-m") + 1]);
     assert.deepEqual(commits.slice(1), ["feat: 예약 저장 (D1 테이블)", "feat: 예약 화면 — 한글 버튼 '예약하기'"]);
     const failing = await run.runBuildJob(payloadFor("bj_0a1b2c3d4e", TOKEN_A), { workRoot: await tmpDir("wrseam2"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: post, implementWbs: async () => ({ status: "limit_turns" }), sandbox: null, log: () => {} });

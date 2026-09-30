@@ -51,7 +51,23 @@ export type ProvisionEnv = {
 export type CfError = { code: number; message: string };
 export type ProvisionResult<T> = { ok: true; value: T } | { ok: false; error: "not_configured" | "cf_error" | "network"; status?: number; cfErrors?: CfError[]; message?: string };
 
-export type UserWorkerModule = { name: string; content: string; type?: "application/javascript+module" | "text/plain" | "application/json" };
+/** content: 문자열(JS·텍스트) 또는 바이트(wasm — B-5b-4 산출물의 추가 모듈). */
+export type UserWorkerModule = { name: string; content: string | Uint8Array; type?: "application/javascript+module" | "text/plain" | "application/json" | "application/wasm" };
+
+/**
+ * B-5b-4: 호스팅 앱의 배포 설정은 **Worker 상수**다 — 컨테이너(생성 코드가 돈 곳)가 보낸 값을 쓰지 않는다. 템플릿
+ * wrangler.toml(보호 파일)과 같은 값이어야 한다(test/train-b-b5b-s3-deploy.test.mjs가 두 쪽을 비교).
+ */
+export const HOSTED_COMPATIBILITY_DATE = "2026-09-01";
+/** 템플릿 wrangler.toml [assets]: SPA 폴백 + `/api/*`는 Worker 먼저. binding 이름은 ASSETS. */
+export const HOSTED_ASSETS_CONFIG = Object.freeze({ not_found_handling: "single-page-application", run_worker_first: Object.freeze(["/api/*"]) });
+export const HOSTED_ASSETS_BINDING = "ASSETS";
+/** wrangler 기본(d1 migrations apply)과 같은 기록 테이블 — 개발자가 `wrangler d1 migrations list`로 봐도 같은 이력. */
+export const D1_MIGRATIONS_TABLE = "d1_migrations";
+/** build-artifact.ts MIGRATION_NAME_RE와 같다(여기서 한 번 더 — 이름이 SQL 문자열에 들어간다). */
+const MIGRATION_NAME_RE = /^[0-9]{4}_[A-Za-z0-9_-]{1,80}\.sql$/;
+/** D1 uuid(templates/…/wrangler.toml·createProjectD1 결과). URL 경로에 들어간다. */
+const D1_ID_RE = /^[A-Za-z0-9-]{1,64}$/;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -115,18 +131,28 @@ export async function createProjectD1(env: ProvisionEnv, slug: string, fetchImpl
   });
 }
 
-/** 업로드 metadata — 순수(테스트로 모양 고정). */
-export function buildUploadMetadata(args: { mainModule: string; compatibilityDate: string; d1Id?: string; vars?: Record<string, string> }): Record<string, unknown> {
+/** 정적 자산을 붙일 때(B-5b-4): 업로드 세션의 완료 JWT + 라우팅 설정. wrangler createWorkerUploadForm과 같은 모양. */
+export type UserWorkerAssets = { jwt: string; config: Record<string, unknown> };
+
+/** 업로드 metadata — 순수(테스트로 모양 고정). assets가 있으면 `assets:{jwt,config}` + ASSETS 바인딩(wrangler와 같은 모양). */
+export function buildUploadMetadata(args: { mainModule: string; compatibilityDate: string; d1Id?: string; vars?: Record<string, string>; assets?: UserWorkerAssets }): Record<string, unknown> {
   const bindings: Array<Record<string, unknown>> = [];
   if (args.d1Id) bindings.push({ type: "d1", name: "DB", id: args.d1Id });
   for (const [name, text] of Object.entries(args.vars ?? {})) bindings.push({ type: "plain_text", name, text });
-  return { main_module: args.mainModule, compatibility_date: args.compatibilityDate, bindings, tags: ["simsa-hosted"] };
+  if (args.assets) bindings.push({ type: "assets", name: HOSTED_ASSETS_BINDING });
+  return {
+    main_module: args.mainModule,
+    compatibility_date: args.compatibilityDate,
+    bindings,
+    tags: ["simsa-hosted"],
+    ...(args.assets ? { assets: { jwt: args.assets.jwt, config: args.assets.config } } : {}),
+  };
 }
 
 /** 유저 Worker 업로드(PUT = 같은 slug 덮어쓰기). modules[0]이 main. */
 export async function uploadUserWorker(
   env: ProvisionEnv,
-  args: { slug: string; modules: UserWorkerModule[]; compatibilityDate: string; d1Id?: string; vars?: Record<string, string> },
+  args: { slug: string; modules: UserWorkerModule[]; compatibilityDate: string; d1Id?: string; vars?: Record<string, string>; assets?: UserWorkerAssets },
   fetchImpl: FetchLike = fetch,
 ): Promise<ProvisionResult<{ slug: string }>> {
   const c = creds(env);
@@ -135,7 +161,7 @@ export async function uploadUserWorker(
   const main = args.modules[0];
   if (!main) return { ok: false, error: "cf_error", message: "no_modules" };
   const form = new FormData();
-  const meta = buildUploadMetadata({ mainModule: main.name, compatibilityDate: args.compatibilityDate, d1Id: args.d1Id, vars: args.vars });
+  const meta = buildUploadMetadata({ mainModule: main.name, compatibilityDate: args.compatibilityDate, d1Id: args.d1Id, vars: args.vars, assets: args.assets });
   form.append("metadata", new Blob([JSON.stringify(meta)], { type: "application/json" }));
   for (const m of args.modules) {
     form.append(m.name, new Blob([m.content], { type: m.type ?? "application/javascript+module" }), m.name);
@@ -145,6 +171,169 @@ export async function uploadUserWorker(
     headers: { authorization: `Bearer ${c.token}` },
     body: form,
   }, () => ({ slug: args.slug }));
+}
+
+// ─── B-5b-4 (S3): 프로젝트 D1 마이그레이션 · 정적 자산 업로드 ───────────────────────────────────────
+
+/**
+ * D1 HTTP API `/query` 한 번. 성공 = 최상위 success:true + 문장 결과마다 success가 false가 아님.
+ * 문장 결과 배열을 돌려준다(SELECT의 행을 읽을 때).
+ */
+async function d1Query(c: { token: string; account: string }, d1Id: string, sql: string, fetchImpl: FetchLike): Promise<ProvisionResult<Array<Record<string, unknown>>>> {
+  const r = await call(fetchImpl, `${API}/accounts/${c.account}/d1/database/${d1Id}/query`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${c.token}`, "content-type": "application/json" },
+    body: JSON.stringify({ sql }),
+  }, (result) => (Array.isArray(result) ? result.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null) : []));
+  if (!r.ok) return r;
+  if (r.value.some((s) => s["success"] === false)) return { ok: false, error: "cf_error", message: "statement_failed" };
+  return r;
+}
+
+/**
+ * 프로젝트 D1에 마이그레이션 적용 — wrangler `d1 migrations apply --remote`와 같은 규약(실측: wrangler 4.141.0 소스):
+ *   1) `CREATE TABLE IF NOT EXISTS d1_migrations(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at …)`
+ *   2) 적용된 이름 읽기
+ *   3) 안 된 것만 이름순으로, 파일 하나당 `/query` 한 번: `<SQL>\nINSERT INTO d1_migrations (name) values ('<이름>');`
+ * 운영 자격은 Worker secret(HOSTING_CF_API_TOKEN)만 — 컨테이너는 이 호출에 닿지 않는다(D-6). d1Id는 **잡 행**의 값(Worker가
+ * 프로비저닝 때 저장) — 산출물에서 받지 않는다. 이름은 MIGRATION_NAME_RE(따옴표 불가)로 다시 확인한다.
+ * 실패하면 거기서 멈춘다(앞의 것은 적용된 채 — wrangler와 같다). 토큰은 오류에 싣지 않는다.
+ */
+export async function applyD1Migrations(
+  env: ProvisionEnv,
+  d1Id: string,
+  migrations: ReadonlyArray<{ name: string; sql: string }>,
+  fetchImpl: FetchLike = fetch,
+): Promise<ProvisionResult<{ applied: string[]; alreadyApplied: string[] }>> {
+  const c = creds(env);
+  if (!c) return { ok: false, error: "not_configured" };
+  if (!D1_ID_RE.test(d1Id)) return { ok: false, error: "cf_error", message: "invalid_d1_id" };
+  for (const m of migrations) if (!MIGRATION_NAME_RE.test(m.name)) return { ok: false, error: "cf_error", message: "invalid_migration_name" };
+  if (migrations.length === 0) return { ok: true, value: { applied: [], alreadyApplied: [] } };
+  const init = await d1Query(c, d1Id, `CREATE TABLE IF NOT EXISTS ${D1_MIGRATIONS_TABLE}(
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		name       TEXT UNIQUE,
+		applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);`, fetchImpl);
+  if (!init.ok) return init;
+  const listed = await d1Query(c, d1Id, `SELECT name FROM ${D1_MIGRATIONS_TABLE} ORDER BY id`, fetchImpl);
+  if (!listed.ok) return listed;
+  const done = new Set<string>();
+  for (const stmt of listed.value) {
+    const rows = Array.isArray(stmt["results"]) ? stmt["results"] : [];
+    for (const row of rows) {
+      const name = typeof row === "object" && row !== null ? (row as Record<string, unknown>)["name"] : undefined;
+      if (typeof name === "string") done.add(name);
+    }
+  }
+  const applied: string[] = [];
+  const alreadyApplied: string[] = [];
+  for (const m of [...migrations].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (done.has(m.name)) {
+      alreadyApplied.push(m.name);
+      continue;
+    }
+    const r = await d1Query(c, d1Id, `${m.sql}\nINSERT INTO ${D1_MIGRATIONS_TABLE} (name) values ('${m.name}');`, fetchImpl);
+    if (!r.ok) return { ...r, message: `${m.name}${r.message ? `:${r.message}` : ""}`.slice(0, 200) };
+    applied.push(m.name);
+  }
+  return { ok: true, value: { applied, alreadyApplied } };
+}
+
+/** 정적 자산 파일 하나(업로드용). base64 = 내용, contentType = 확장자로(없으면 null). */
+export type HostedAssetFile = { path: string; base64: string; bytes: number };
+
+const ASSET_CONTENT_TYPES: Readonly<Record<string, string>> = {
+  html: "text/html; charset=utf-8", htm: "text/html; charset=utf-8", js: "text/javascript; charset=utf-8", mjs: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8", json: "application/json; charset=utf-8", map: "application/json; charset=utf-8", txt: "text/plain; charset=utf-8",
+  xml: "application/xml; charset=utf-8", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", avif: "image/avif", ico: "image/x-icon", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf",
+  webmanifest: "application/manifest+json", wasm: "application/wasm", pdf: "application/pdf", mp4: "video/mp4", webm: "video/webm", mp3: "audio/mpeg",
+};
+
+function extOf(p: string): string {
+  const base = p.slice(p.lastIndexOf("/") + 1);
+  const i = base.lastIndexOf(".");
+  return i > 0 ? base.slice(i + 1).toLowerCase() : "";
+}
+
+export function assetContentType(p: string): string | null {
+  return ASSET_CONTENT_TYPES[extOf(p)] ?? null;
+}
+
+/**
+ * 자산 해시(manifest의 hash — 32 hex). **Worker가 내용으로 계산한다**: SHA-256(base64 내용 + 확장자)의 앞 32자.
+ * wrangler는 같은 입력을 BLAKE3로 해시한다(실측: wrangler 4.141.0 hashFile) — Workers에는 BLAKE3가 없어 SHA-256을 쓴다.
+ * 계정 공용 자산 저장소가 해시로 중복을 거르므로(이미 있는 해시는 buckets에 안 온다) 해시는 **내용 주소**여야 한다 —
+ * 그래서 컨테이너가 준 해시를 쓰지 않는다(다른 앱의 자산을 가로채는 길을 막는다).
+ */
+export async function assetHash(base64: string, p: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(base64 + extOf(p)));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
+/**
+ * 정적 자산 업로드(WfP 스크립트용) — wrangler syncAssets와 같은 흐름(실측: wrangler 4.141.0):
+ *   1) POST …/workers/dispatch/namespaces/<ns>/scripts/<slug>/assets-upload-session { manifest:{ "/path": {hash,size} } }
+ *      → { jwt, buckets: [[hash…]…] } (이미 있는 해시는 빠진다)
+ *   2) 버킷마다 POST …/workers/assets/upload?base64=true — Authorization: Bearer <세션 jwt>(운영 토큰이 아니다),
+ *      multipart 파트 이름 = 해시, 내용 = base64, 타입 = 콘텐츠 타입(없으면 "application/null" — wrangler와 같은 규약)
+ *   3) 마지막 응답의 jwt = 완료 토큰 → uploadUserWorker의 assets.jwt. 올릴 것이 없으면 세션 jwt가 곧 완료 토큰.
+ * 파일이 없으면 null(자산 없이 배포). 토큰은 오류에 싣지 않는다.
+ */
+export async function uploadUserWorkerAssets(
+  env: ProvisionEnv,
+  args: { slug: string; files: ReadonlyArray<HostedAssetFile> },
+  fetchImpl: FetchLike = fetch,
+): Promise<ProvisionResult<{ jwt: string; uploaded: number; total: number } | null>> {
+  const c = creds(env);
+  if (!c) return { ok: false, error: "not_configured" };
+  if (!SLUG_RE.test(args.slug)) return { ok: false, error: "cf_error", message: "invalid_slug" };
+  if (args.files.length === 0) return { ok: true, value: null };
+  const manifest: Record<string, { hash: string; size: number }> = {};
+  const byHash = new Map<string, HostedAssetFile>();
+  for (const f of args.files) {
+    const hash = await assetHash(f.base64, f.path);
+    manifest[f.path] = { hash, size: f.bytes };
+    byHash.set(hash, f);
+  }
+  const session = await call(fetchImpl, `${API}/accounts/${c.account}/workers/dispatch/namespaces/${HOSTING_NAMESPACE}/scripts/${args.slug}/assets-upload-session`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${c.token}`, "content-type": "application/json" },
+    body: JSON.stringify({ manifest }),
+  }, (result) => {
+    const r = (typeof result === "object" && result !== null ? result : {}) as Record<string, unknown>;
+    const buckets = Array.isArray(r["buckets"]) ? r["buckets"].map((b) => (Array.isArray(b) ? b.filter((h): h is string => typeof h === "string") : [])) : [];
+    return { jwt: typeof r["jwt"] === "string" ? r["jwt"] : "", buckets };
+  });
+  if (!session.ok) return session;
+  if (!session.value.jwt) return { ok: false, error: "cf_error", message: "assets_session_without_jwt" };
+  const total = args.files.length;
+  const pending = session.value.buckets.filter((b) => b.length > 0);
+  if (pending.length === 0) return { ok: true, value: { jwt: session.value.jwt, uploaded: 0, total } };
+  let completion = "";
+  let uploaded = 0;
+  for (const bucket of pending) {
+    const form = new FormData();
+    for (const hash of bucket) {
+      const f = byHash.get(hash);
+      if (!f) return { ok: false, error: "cf_error", message: "assets_unknown_hash" };
+      form.append(hash, new File([f.base64], hash, { type: assetContentType(f.path) ?? "application/null" }), hash);
+    }
+    const r = await call(fetchImpl, `${API}/accounts/${c.account}/workers/assets/upload?base64=true`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${session.value.jwt}` },
+      body: form,
+    }, (result) => {
+      const x = (typeof result === "object" && result !== null ? result : {}) as Record<string, unknown>;
+      return typeof x["jwt"] === "string" ? x["jwt"] : "";
+    });
+    if (!r.ok) return { ...r, message: "assets_upload_failed" };
+    if (r.value) completion = r.value;
+    uploaded += bucket.length;
+  }
+  if (!completion) return { ok: false, error: "cf_error", message: "assets_upload_incomplete" };
+  return { ok: true, value: { jwt: completion, uploaded, total } };
 }
 
 /** 유저 Worker 삭제(프로젝트 삭제·정지 해제 불가 시). 없으면 성공 취급(멱등). */

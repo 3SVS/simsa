@@ -3,8 +3,8 @@
 # T1 빌드 잡의 실행 환경. Worker(apps/central-plane/src/builder-container.ts)가
 # BUILDER Durable-Object 바인딩으로 잡 하나당 인스턴스 하나(`build-<jobId>`)를 띄운다.
 # 여기서 유저 기획의 코드를 **설치·구현·빌드·테스트**하고(D-4: green 아니면 "완성" 금지),
-# S 배포(Workers for Platforms)까지 간다 — 단계는 B-5b-1~5에서 하나씩 붙는다(지금은 빌드 게이트까지 —
-# push·배포는 Worker가 한다, S3).
+# S 배포(Workers for Platforms)까지 간다 — B-5b-1~5. 컨테이너는 빌드 게이트 뒤 **산출물**(번들·정적 자산·D1 마이그레이션·
+# 소스)을 Worker로 올리고, 저장소 push·배포·done은 Worker가 한다(S3 — 컨테이너에는 배포 자격이 없다).
 #
 # 베이스: 인스펙터와 같은 playwright 이미지. 빌드 게이트의 마지막 단계가 실브라우저
 # 테스트라서, 빌드 컨테이너가 브라우저를 갖는 것이 맞다. 태그는 inspector-container와
@@ -12,7 +12,8 @@
 # (test/builder-invariants.test.mjs가 고정).
 #
 # 툴체인: node(베이스 내장) · pnpm · git · gh · wrangler. [정정 2026-10-01 B-5b S1] 운영 토큰은 더 이상 잡 페이로드로
-# 오지 않는다 — S 배포·D1 마이그레이션은 Worker가 한다. wrangler는 자가점검 항목으로만 남아 있다.
+# 오지 않는다 — S 배포·D1 마이그레이션은 Worker가 한다. wrangler는 자가점검 항목 + 산출물 번들(`wrangler deploy --dry-run
+# --outdir` — 토큰 없이 번들만, B-5b-4)에 쓴다. 전역 설치(root 소유)라 생성 코드가 바꿀 수 없다.
 # D-6: vercel·netlify 같은 유저 배포 CLI는 **설치하지 않는다** — 워커 run_command
 # allowlist(B4)와 함께 이중 차단. test/builder-invariants.test.mjs가 확인.
 #
@@ -33,6 +34,7 @@
 #   /builder/server.mjs                     — HTTP 진입점(이 컨테이너의 유일한 API: /health · /selfcheck · POST /run)
 #   /builder/builder-run.mjs                — 잡 실행 모듈(자가점검 · kind=build 상태 머신)
 #   /builder/builder-work.mjs               — B-5b-2·3: WBS 구현(runBuildLoop·프록시 클라이언트·작업 폴더 실행기) · 빌드 게이트 부품
+#   /builder/artifact-collect.mjs           — B-5b-4: 산출물 수집기(샌드박스 사용자 — Worker 모듈·정적 자산·D1 마이그레이션·소스)
 #   /home/simsa-run/.pnpm-store             — 템플릿 의존성(이미지 빌드 때 pnpm fetch) — 잡 안의 설치는 오프라인
 #   /builder/ws/                            — 축소 pnpm 워크스페이스(core + agent-worker, lockfile 고정)
 #   /builder/ws/packages/agent-worker/dist/ — builder-run.mjs AGENT_WORKER_ENTRY가 import하는 곳
@@ -108,6 +110,8 @@ RUN rm -rf /tmp/simsa-prefetch && test -d /home/simsa-run/.pnpm-store && test "$
 COPY apps/central-plane/builder-container/server.mjs ./server.mjs
 COPY apps/central-plane/builder-container/builder-run.mjs ./builder-run.mjs
 COPY apps/central-plane/builder-container/builder-work.mjs ./builder-work.mjs
+# B-5b-4(S3): 산출물 수집기 — 샌드박스 사용자로 도는 별도 프로세스(root 서버가 생성 코드의 트리를 직접 읽지 않는다).
+COPY apps/central-plane/builder-container/artifact-collect.mjs ./artifact-collect.mjs
 
 # 잡별 작업 공간. 서버(root)가 잡 폴더를 만들고 샌드박스 사용자에게 넘긴다(chownTree) — 사용자는 뿌리를 지나갈 수만 있다(750).
 RUN mkdir -p /var/lib/simsa-build && chown root:simsa-run /var/lib/simsa-build && chmod 750 /var/lib/simsa-build

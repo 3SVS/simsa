@@ -20,12 +20,13 @@
  *            wbs_done, meta{wbsId}). 끝내 done이 아니면 WBS_FAILURE_POLICY: must면 멈춤, 아니면 기록·되돌리고 계속.
  *   B-5b-3   빌드 게이트(D-4) — 보호 파일 복원 → pnpm install --frozen-lockfile --offline → pnpm run build → pnpm test.
  *            빨간불 → 로그 끝부분으로 수리 라운드(최대 GATE_LIMITS.repairRounds) → 그래도 빨간불이면 failed(building|testing).
- *            초록불이어도 push·배포는 Worker 몫(S3)이라 `builder_stage_not_implemented:pushed`로 정직하게 멈춘다.
  *            생성 코드는 샌드박스 사용자(SIMSA_SANDBOX_UID)로 돈다 — 서버(root) 메모리의 jobToken에 닿지 않는다.
- *
- * 다음 스테이지(계획 §5.2 Train B):
- *   B-5b-4 deploy     — Worker가 Workers for Platforms 업로드 + 프로젝트 D1 마이그레이션 + deployedUrl
- *   B-5b-5 push/done  — Worker가 저장소 push · done · 자동 T2 검수
+ *   B-5b-4·5 (S3) 초록불 게이트 뒤 **산출물**을 만들어 Worker로 올린다(컨테이너에는 배포 자격이 없다 — D-6):
+ *            `wrangler deploy --dry-run --outdir`(토큰 없이 번들만, 샌드박스 사용자) → 수집기(artifact-collect.mjs, 샌드박스
+ *            사용자 — Worker 모듈·정적 자산·D1 마이그레이션·소스 트리) → POST <baseUrl>/internal/build-artifact(jobToken).
+ *            Worker가 그 산출물로 저장소 push(pushed) → D1 마이그레이션·WfP 업로드(deploying) → 내용 확인 → done → 자동 T2 검수를
+ *            하고 결과를 돌려준다. 컨테이너의 최종 본문(build-done)은 그 결과를 그대로 옮긴 **보고**다 — 배포 주소는 싣지 않는다
+ *            (Worker가 자기 배포 뒤에만 쓴다. 컨테이너가 보낸 URL은 신뢰하지 않는다).
  *
  * 규칙:
  *  - jobToken은 로그·진행 본문·exec 인자/환경·파일에 쓰지 않는다. validateBuildPayload가 돌려주는 정규화 잡에는 토큰이
@@ -36,12 +37,13 @@
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CHILD_ENV_KEYS,
   GATE_COMMANDS,
   GATE_LIMITS,
   WBS_TIME_LIMIT_MS,
+  bundleEnv,
   checkSandbox,
   childEnv,
   chownTree,
@@ -62,7 +64,7 @@ import {
 export { CHILD_ENV_KEYS, childEnv };
 
 /** 이미지 롤아웃 확인용 마커(인스펙터 RUNNER_REV와 같은 용도 — 옛 이미지가 서빙 중인지 판별). */
-export const RUNNER_REV = "b5bS2-builder-8";
+export const RUNNER_REV = "b5bS3-builder-9";
 
 /**
  * D-4 잡 상태 머신 — **D1 build_jobs.status와 같은 목록·같은 순서**(build-job-db.ts BUILD_JOB_STATUSES).
@@ -82,8 +84,8 @@ export const BUILD_STAGES = Object.freeze([
 ]);
 
 /**
- * 이 이미지가 **실제로** 수행하는 단계. 나머지(pushed·deploying — Worker 몫, S3)는 `builder_stage_not_implemented:<단계>`로
- * 실패한다. 빌드 게이트가 초록불이어도 done을 주장하지 않는다(done은 Worker만 — PR #569 S1 결함 2).
+ * 이 이미지가 **실제로** 진행 상태로 보고하는 단계. pushed·deploying·done은 Worker가 자기 push·배포 뒤에 쓴다(S3 — 컨테이너는
+ * 산출물을 올릴 뿐이다). 컨테이너는 done을 주장하지 않는다(done은 Worker만 — PR #569 S1 결함 2).
  */
 export const IMPLEMENTED_BUILD_STAGES = Object.freeze(["scaffolding", "implementing", "building", "testing"]);
 
@@ -824,11 +826,143 @@ async function runGate({ appDir, exec, env, offlineEnv, sandbox, signal, fsImpl,
   }
 }
 
+// ─── B-5b-4·5 (S3): 산출물 → Worker (push·배포·done·자동 확인은 Worker) ─────────────────────────────────
+
+/** Worker routes/workspace-build-jobs.ts BUILD_ARTIFACT_PATH와 같다(테스트가 두 쪽을 비교). */
+export const BUILD_ARTIFACT_PATH = "/internal/build-artifact";
+/**
+ * 산출물 수집기 — 샌드박스 사용자로 도는 **별도 프로세스**(artifact-collect.mjs 머리말: root 서버가 생성 코드가 쓸 수 있는 트리를
+ * 직접 읽지 않는다). 이미지: /builder/artifact-collect.mjs(Dockerfile COPY). 실행 파일은 서버와 같은 node(process.execPath —
+ * PATH를 타지 않는다).
+ */
+export const ARTIFACT_COLLECTOR_ENTRY = fileURLToPath(new URL("./artifact-collect.mjs", import.meta.url));
+/** [PILOT] 번들(wrangler dry-run) · 수집 · 업로드(Worker의 push·배포·내용 확인까지 기다린다) 시간 상한. */
+export const ARTIFACT_TIMEOUTS = Object.freeze({ bundleMs: 3 * 60 * 1000, collectMs: 2 * 60 * 1000, uploadMs: 10 * 60 * 1000 });
+/** 수집기 stdout 상한(문자) — base64 JSON(수집기 상한 합 ≈ 18.5 MiB × 4/3). 잘리면 artifact_too_large. */
+export const COLLECTOR_MAX_OUTPUT_CHARS = 40 * 1024 * 1024;
+
+/**
+ * 토큰 없이 번들만 — `wrangler deploy --dry-run --outdir <dir>`. 실측(템플릿 lockfile의 wrangler 4.141.0, 자격 증명 없음,
+ * 2026-10-01): exit 0 · outdir = README.md · worker.js · worker.js.map · "--dry-run: exiting now." — 계정·네트워크에 닿지 않는다.
+ * wrangler는 이미지 전역(root 소유 — 생성 코드가 바꿀 수 없다)을 쓴다.
+ */
+export function wranglerBundleArgs(outDir) {
+  return ["deploy", "--dry-run", "--outdir", outDir];
+}
+
+/** 수집기 stdout(마지막 비어 있지 않은 줄)의 JSON. 모양이 아니면 null. */
+export function parseCollectorOutput(stdout) {
+  const lines = String(stdout ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const last = lines[lines.length - 1];
+  if (!last) return null;
+  try {
+    const v = JSON.parse(last);
+    if (typeof v !== "object" || v === null || typeof v.ok !== "boolean") return null;
+    if (v.ok && (typeof v.artifact !== "object" || v.artifact === null)) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 산출물 만들기(샌드박스 사용자): 번들 → 수집. 반환 { ok:true, artifact } | { ok:false, error, log? }.
+ * 오류 코드: artifact_bundle_failed:<exit> · artifact_collect_failed:<exit> · artifact_too_large:<구역> ·
+ *           artifact_failed:<수집기 사유> · job_aborted.
+ */
+export async function produceArtifact({ appDir, workDir, exec, env, bundleEnvironment, signal = null, fsImpl = fs, collectorEntry = ARTIFACT_COLLECTOR_ENTRY, nodeBin = process.execPath, timeouts = ARTIFACT_TIMEOUTS }) {
+  const outRoot = path.join(workDir, "artifact");
+  const workerOut = path.join(outRoot, "worker");
+  await fsImpl.rm(outRoot, { recursive: true, force: true }).catch(() => {});
+  if (signal?.aborted) return { ok: false, error: "job_aborted" };
+  const b = await exec("wrangler", wranglerBundleArgs(workerOut), { cwd: appDir, env: bundleEnvironment ?? env, timeoutMs: timeouts.bundleMs, signal, maxOutputBytes: 256 * 1024 });
+  if (b?.aborted === true || signal?.aborted) return { ok: false, error: "job_aborted" };
+  if (!b?.ok) return { ok: false, error: `artifact_bundle_failed:${exitLabel(b)}`, log: `${b?.stdout ?? ""}\n${b?.stderr ?? ""}` };
+  const c = await exec(nodeBin, [collectorEntry, "--app", appDir, "--worker-out", workerOut], { cwd: appDir, env, timeoutMs: timeouts.collectMs, signal, maxOutputBytes: COLLECTOR_MAX_OUTPUT_CHARS });
+  if (c?.aborted === true || signal?.aborted) return { ok: false, error: "job_aborted" };
+  if (c?.truncated === true) return { ok: false, error: "artifact_too_large:collector_output" };
+  if (!c?.ok) return { ok: false, error: `artifact_collect_failed:${exitLabel(c)}`, log: String(c?.stderr ?? "") };
+  const parsed = parseCollectorOutput(c.stdout);
+  if (!parsed) return { ok: false, error: "artifact_failed:collector_output_invalid" };
+  if (!parsed.ok) {
+    const reason = String(parsed.error ?? "unknown").slice(0, 160);
+    return { ok: false, error: reason.startsWith("artifact_too_large") ? reason : `artifact_failed:${reason}` };
+  }
+  return { ok: true, artifact: parsed.artifact };
+}
+
+/** POST /internal/build-artifact 본문(Worker Zod 계약). stats는 싣지 않는다(Worker가 다시 센다). */
+export function artifactBody(job, artifact, summary) {
+  return {
+    jobId: job.jobId,
+    worker: { mainModule: artifact.worker.mainModule, modules: artifact.worker.modules },
+    assets: artifact.assets,
+    migrations: artifact.migrations,
+    source: artifact.source,
+    summary,
+  };
+}
+
+/**
+ * 산출물 업로드 — 재시도 없음(Worker는 잡당 산출물을 한 번만 받는다: 두 번째는 409 artifact_already_received). 잡 신호(마감·
+ * SIGTERM)와 시간 상한 중 먼저 오는 쪽에서 끊는다. 던지지 않는다 → { ok, status, json, error }.
+ */
+export async function postArtifact(url, token, body, { fetchImpl = globalThis.fetch, signal = null, timeoutMs = ARTIFACT_TIMEOUTS.uploadMs } = {}) {
+  try {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const res = await fetchImpl(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+    const text = await res.text().catch(() => "");
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    return { ok: res.ok, status: res.status, json, error: res.ok ? null : `http_${res.status}:${text.slice(0, 200)}` };
+  } catch (err) {
+    return { ok: false, status: 0, json: null, error: String(err?.message ?? err).slice(0, 200) };
+  }
+}
+
+/**
+ * Worker 응답 → 이 잡의 결말. Worker는 산출물을 받으면(`accepted:true`) push·배포·내용 확인까지 **끝낸 뒤** 답한다:
+ *   { ok:true, accepted:true, status:"done" }                          → done(Worker가 이미 기록)
+ *   { ok:true, accepted:true, status:"failed", failedStage, error }   → 그 실패(Worker가 이미 기록 — 우리 최종 콜백은 무해한 중복)
+ *   { ok:true, accepted:false, reason }                               → 받지 않음(킬스위치·끝난 잡) — failed(deploying, reason)
+ *   4xx(413 artifact_too_large · 400 artifact_invalid · 409 · 403)     → failed(deploying, artifact_rejected:<상태>:<오류>)
+ *   5xx · 네트워크 · Worker 모양이 아닌 2xx                           → failed(deploying, artifact_upload_failed:<상태|network>)
+ * 반환 { done:true } | { done:false, failedStage, error }.
+ */
+export function interpretArtifactReply(r) {
+  const j = r?.json;
+  if (r?.ok && j && j.ok === true && j.accepted === true) {
+    if (j.status === "done") return { done: true };
+    if (j.status === "failed") return { done: false, failedStage: String(j.failedStage ?? "deploying").slice(0, 40), error: String(j.error ?? "deploy_failed").slice(0, 300) };
+    return { done: false, failedStage: "deploying", error: "artifact_reply_unrecognized" };
+  }
+  if (r?.ok && j && j.ok === true && j.accepted === false) return { done: false, failedStage: "deploying", error: String(j.reason ?? "artifact_not_accepted").slice(0, 120) };
+  if (!r?.ok && r?.status >= 400 && r?.status < 500) return { done: false, failedStage: "deploying", error: `artifact_rejected:${r.status}:${String(j?.error ?? "").slice(0, 80)}` };
+  return { done: false, failedStage: "deploying", error: `artifact_upload_failed:${r?.status ? r.status : "network"}` };
+}
+
+/**
+ * 성공 보고(build-done, ok:true) — Worker가 산출물로 배포·내용 확인까지 끝내고 done을 기록한 **뒤에만** 만든다. 배포 주소는 싣지
+ * 않는다(Worker가 자기 배포 뒤에 쓴다). Worker는 끝난 잡의 이 본문을 기록하지 않는다(보고일 뿐 — 결함 7).
+ */
+export function successBody(jobId, { wbsDone, wbsFailed = [], commits = 0, gateRounds = 0, stats = null }) {
+  return { jobId, ok: true, stage: "done", wbsDone, wbs: { done: wbsDone, failed: [...wbsFailed] }, commits, gateRounds, artifact: { uploaded: true, stats } };
+}
+
 // ─── B-5b-1: kind "build" 실행 ─────────────────────────────────────────────────────────────────
 
 /**
  * 빌드 잡(kind "build"). 반환값은 server.mjs가 callbackUrl(/internal/build-done)로 보내는 본문.
- * 이 이미지에서는 **항상 ok:false** — 초록불 게이트까지 가도 push·배포는 Worker 몫(S3)이라 `builder_stage_not_implemented:pushed`.
+ * ok:true(successBody)는 **Worker가 산출물로 배포·내용 확인을 끝내고 done을 기록했다고 답한 경우에만** — 그 밖은 전부 ok:false.
  *
  * 진행 콜백 응답 처리(비용 방어):
  *   - 기록됨(2xx + Worker JSON `{ok:true}`)인데 transitioned:false → Worker가 이 잡을 활성으로 보지 않는다(스턱 스윕·
@@ -850,6 +984,12 @@ async function runGate({ appDir, exec, env, offlineEnv, sandbox, signal, fsImpl,
  * building·testing(B-5b-3): runGate — 초록불이 아니면 failed(building|testing). 수리 라운드는 같은 implementWbs에
  *   `repair`(단계·명령·종료 코드·로그 끝부분)를 실어 부른다.
  *
+ * 산출물(B-5b-4·5, S3): 게이트 초록불 뒤에만. progress(testing, artifact_started) → produceArtifact(deps.produceArtifact로 교체
+ *   가능 — 샌드박스 사용자의 wrangler dry-run·수집기) → progress(testing, artifact_ready, 개수·바이트) → POST build-artifact
+ *   (deps.uploadArtifact). 실패는 전부 failed(deploying, <사유>) — 게이트는 통과했고 배포 준비에서 멈췄다는 뜻.
+ *   Worker의 답(interpretArtifactReply)이 done이면 successBody, 아니면 그 실패. 업로드 중에는 onStage("deploying") —
+ *   마감·드레인 본문이 "배포 중 실패"로 남는다.
+ *
  * 마감·중단(`deps.signal`, startJob이 넘긴다): 끊기면 다음 진행 콜백을 보내지 않고 다음 exec를 시작하지 않는다(실행 중인
  * exec는 defaultExec가 그룹째 죽인다). 그때의 반환 본문은 쓰이지 않는다 — 최종 본문은 startJob이 정한다(결함 6).
  * 자식 프로세스: env = workEnv(deps.baseEnv ?? process.env) — 허용 키 + HOME·NO_COLOR, jobToken 없음. uid = 샌드박스 사용자
@@ -867,6 +1007,7 @@ export async function runBuild(payload, deps = {}) {
   const baseExec = deps.exec ?? defaultExec;
   const fsImpl = deps.fsImpl ?? fs;
   const post = deps.postCallback ?? ((url, token, body) => postCallback(url, token, body));
+  const uploadArtifact = deps.uploadArtifact ?? ((url, tok, body, opts) => postArtifact(url, tok, body, { ...opts, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) }));
   const onStage = deps.onStage ?? (() => {});
   const token = payload.jobToken;
   const literals = [token];
@@ -888,10 +1029,14 @@ export async function runBuild(payload, deps = {}) {
   const env = workEnv(baseEnv, { sandbox });
   /** 모델 명령·빌드·테스트 — pnpm이 레지스트리에 닿지 않는다. */
   const offlineEnv = workEnv(baseEnv, { sandbox, offline: true });
+  /** 산출물 번들(wrangler dry-run) — 오프라인 + 원격 측정 끔. 자격 증명 없음. */
+  const artifactBundleEnv = bundleEnv(baseEnv, { sandbox });
 
   const workDir = path.join(workRoot, job.jobId);
   const appDir = path.join(workDir, "app");
   let wbsDone = 0;
+  /** 이 잡이 작업 폴더에 남긴 로컬 커밋 수(스캐폴드 · WBS · 수리) — 최종 보고에 싣는다. */
+  let commits = 0;
 
   /** 진행 콜백 하나. 멈춰야 하면 사유 문자열, 계속이면 null. */
   const progress = async (status, message, meta = {}) => {
@@ -922,6 +1067,7 @@ export async function runBuild(payload, deps = {}) {
       if (sandbox) await chownTree(workDir, sandbox.uid, sandbox.gid, fsImpl);
       snapshot = await snapshotProtected(appDir, fsImpl);
       baseCommit = await commitScaffold({ appDir, exec, signal, env });
+      commits += 1;
     } catch (err) {
       return fail("scaffolding", `scaffold_failed:${String(err?.message ?? err).slice(0, 200)}`);
     }
@@ -994,6 +1140,7 @@ export async function runBuild(payload, deps = {}) {
         } catch (err) {
           return fail("implementing", `commit_failed:${item.id}:${String(err?.message ?? err).slice(0, 120)}`);
         }
+        commits += 1;
         state.set(item.id, "done");
         wbsDone += 1;
         const stopD = await progress("implementing", "wbs_done", { wbsId: item.id, commit: sha.slice(0, 12) });
@@ -1038,6 +1185,7 @@ export async function runBuild(payload, deps = {}) {
       } catch (err) {
         return { stop: `commit_failed:${label}:${String(err?.message ?? err).slice(0, 120)}` };
       }
+      commits += 1;
       const s2 = await progress(status, "repair_done", { round, status: repairStatus, commit: sha.slice(0, 12) });
       if (s2) return { stop: s2 };
       return {};
@@ -1050,8 +1198,30 @@ export async function runBuild(payload, deps = {}) {
       return fail(gate.failedStage, gate.error, extra);
     }
 
-    // ── pushed 이후(B-5b-4·5): 저장소 push·배포·done은 Worker가 한다(S3 — 컨테이너에는 자격이 없다). 정직하게 여기서 멈춘다. ──
-    return fail("pushed", "builder_stage_not_implemented:pushed");
+    // ── 산출물(B-5b-4) → Worker(B-5b-4·5: push·배포·done·자동 확인은 Worker — 컨테이너에는 자격이 없다) ──
+    const stopA = await progress("testing", "artifact_started", {});
+    if (stopA) return fail("testing", stopA);
+    const produce = typeof deps.produceArtifact === "function" ? deps.produceArtifact : produceArtifact;
+    const made = await produce({ job, appDir, workDir, exec, env: offlineEnv, bundleEnvironment: artifactBundleEnv, signal, fsImpl });
+    if (aborted() || made?.error === "job_aborted") return fail("deploying", "job_aborted");
+    if (!made?.ok) {
+      const error = String(made?.error ?? "artifact_failed:unknown").slice(0, 200);
+      await progress("testing", "artifact_failed", { error, ...(made?.log ? { logTail: tailText(redactSecrets(stripAnsi(made.log), literals), gateLimits.eventLogTailChars) } : {}) });
+      return fail("deploying", error);
+    }
+    const stats = made.artifact.stats ?? null;
+    const stopR = await progress("testing", "artifact_ready", { ...(stats ? { stats } : {}) });
+    if (stopR) return fail("testing", stopR);
+    onStage("deploying");
+    const summary = { commits, wbsDone, wbsFailed: [...wbsFailed], gateRounds: gate.rounds };
+    const reply = await uploadArtifact(`${job.baseUrl}${BUILD_ARTIFACT_PATH}`, token, artifactBody(job, made.artifact, summary), { signal });
+    if (aborted()) return fail("deploying", "job_aborted");
+    const outcome = interpretArtifactReply(reply);
+    if (!outcome.done) {
+      log(`artifact not deployed: ${outcome.failedStage}/${outcome.error}`);
+      return fail(outcome.failedStage, outcome.error);
+    }
+    return successBody(job.jobId, { wbsDone, wbsFailed, commits, gateRounds: gate.rounds, stats });
   } finally {
     // 작업 폴더에는 유저 지시서로 만든 코드가 있다 — 잡이 끝나면 인스턴스에 남기지 않는다.
     await fsImpl.rm(workDir, { recursive: true, force: true }).catch(() => {});
@@ -1061,7 +1231,7 @@ export async function runBuild(payload, deps = {}) {
 /**
  * 잡 실행 진입점.
  *   kind "selfcheck" → 자가점검 결과
- *   kind "build"     → runBuild (scaffolding → implementing → 빌드 게이트, push·배포 앞에서 정직한 실패)
+ *   kind "build"     → runBuild (scaffolding → implementing → 빌드 게이트 → 산출물 → Worker가 push·배포·done)
  *   그 밖            → builder_stage_not_implemented (던짐)
  * 반환값은 그대로 콜백 본문이 된다(jobId 포함).
  */

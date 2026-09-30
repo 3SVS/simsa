@@ -25,6 +25,11 @@
 # PR #569 S2 검증 결함: ① 탐침이 샌드박스 자식의 그룹도 본다(groups=10001만 · /proc/self/status 보조 그룹에 root 그룹 없음 — Node가
 # setgroups(0)로 비운다는 것의 실측) ② 샌드박스 ENV가 빠진 컨테이너는 자가점검 빨간불 + 빌드를 받지 않는다(fail closed)
 # ④ 빌드가 도는 동안 실제 서버에 두 번째 POST /run(같은 jobId·다른 jobId·같은 jobId의 selfcheck)을 넣으면 전부 409 builder_busy.
+# B-5b S3 [정정 2026-10-01 — 위 "push 앞에서 정직한 실패"는 대체됨]: 초록불 잡은 실제 이미지에서 **산출물**을 만든다 — 샌드박스 사용자의
+# `wrangler deploy --dry-run --outdir`(토큰 없이 번들만) + 수집기(artifact-collect.mjs) → 로컬 수신기가 흉내 내는 Worker
+# /internal/build-artifact로. 수신기는 본문을 저장하고 done이라고 답한다(실제 push·배포는 Worker 몫 — 여기서는 Cloudflare·GitHub에
+# 닿지 않는다). 산출물이 실제 wrangler 번들(worker.js에 /api/health)·vite 자산(index.html의 script src가 가리키는 파일)·
+# 마이그레이션(0001_init.sql)·소스(한글 App.tsx · node_modules·dist·dotfile 없음)인지, 본문에 jobToken이 없는지 확인한다.
 name: container-images
 
 on:
@@ -93,12 +98,13 @@ jobs:
 
           # 로컬 수신기 = Worker 대역: 진행·최종 콜백을 잡별로 적고(transitioned:true), **빌드 LLM 프록시**
           # (/internal/build-llm/anthropic/v1/messages)를 흉내 내 정해진 tool_use 응답을 돌려준다(실제 LLM 없음).
-          #   bj_ci_green01  WBS-001: 샌드박스 탐침 파일 → 실행 → 한글 App.tsx → finish(done)            ⇒ 게이트 초록불 → failed(pushed)
+          #   bj_ci_green01  WBS-001: 샌드박스 탐침 파일 → 실행 → 한글 App.tsx → finish(done)            ⇒ 게이트 초록불 → 산출물 → done 보고
+          # /internal/build-artifact(B-5b S3): 본문을 /tmp/artifact-body-<jobId>.json에 저장하고 { ok, accepted, status:"done" }로 답한다.
           #   bj_ci_broken1  WBS-001: 고의로 깨진 src/worker.ts(타입 오류) → finish(done), REPAIR-*: gave_up ⇒ failed(building)
           # 모델에게 돌아가는 도구 결과(tool_result)는 /tmp/llm-toolresults.txt에 — 샌드박스 탐침 출력의 증거.
           cat > /tmp/receiver.mjs <<'EOF'
           import { createServer } from "node:http";
-          import { appendFileSync } from "node:fs";
+          import { appendFileSync, writeFileSync } from "node:fs";
           const PROBE = [
             'import { readFileSync, readdirSync, writeFileSync } from "node:fs";',
             'let pid = "1";',
@@ -142,6 +148,13 @@ jobs:
                 if (last && Array.isArray(last.content)) for (const blk of last.content) if (blk.type === "tool_result") appendFileSync("/tmp/llm-toolresults.txt", `[${job} ${task}] ${String(blk.content).replace(/\n/g, " ")}\n`);
                 if (task.startsWith("REPAIR")) appendFileSync("/tmp/llm-repair-prompts.txt", `[${job} ${task}] ${first.replace(/\n/g, " ")}\n`);
                 return json(res, 200, { id: `msg_${Date.now()}`, type: "message", role: "assistant", model: "claude-sonnet-4-6", content: script(job, task, turn), stop_reason: "tool_use", usage: { input_tokens: 1000, output_tokens: 200 } });
+              }
+              if (url === "/internal/build-artifact") {
+                let jobId = "unknown";
+                try { jobId = JSON.parse(b).jobId ?? "unknown"; } catch {}
+                writeFileSync(`/tmp/artifact-body-${jobId}.json`, b);
+                appendFileSync(`/tmp/cb-auth-${jobId}.txt`, String(req.headers.authorization ?? "") + "\n");
+                return json(res, 200, { ok: true, accepted: true, status: "done" });
               }
               const name = url === "/internal/build-progress" ? "progress" : url === "/internal/build-done" ? "done" : "other";
               let jobId = "unknown";
@@ -229,7 +242,7 @@ jobs:
           BROKEN_TOKEN="bjt1.bj_ci_broken1.$(printf 'b2%.0s' $(seq 1 32))"
           OTHER_TOKEN="bjt1.bj_ci_other01.$(printf 'c3%.0s' $(seq 1 32))"
 
-          # (1) 초록불: WBS 1개 → 설치(오프라인)·빌드·테스트 통과 → push·배포는 Worker 몫이라 정직하게 failed(pushed)
+          # (1) 초록불: WBS 1개 → 설치(오프라인)·빌드·테스트 통과 → 산출물(실제 wrangler dry-run + 수집기, 샌드박스 사용자) → Worker 대역 done
           start_job bj_ci_green01 "$GREEN_TOKEN"
           # ── S2-4: 그 빌드가 도는 동안 실제 서버에 두 번째 POST /run — 같은 jobId(빌드) · 다른 jobId(빌드) · 같은 jobId(selfcheck) 전부 409 ──
           # (생성 코드가 localhost:8080으로 진행 중인 잡을 덮거나 드레인 목록에서 빼지 못한다.)
@@ -242,10 +255,28 @@ jobs:
           [ ! -e /tmp/cb-done-bj_ci_other01.jsonl ] && [ ! -e /tmp/cb-progress-bj_ci_other01.jsonl ] || { echo "::error::a refused build must not run"; exit 1; }
           [ "$(wc -l < /tmp/cb-done-bj_ci_green01.jsonl)" = "1" ] || { echo "::error::the green job must report exactly one final body (the selfcheck must not have replaced it)"; exit 1; }
           P=/tmp/cb-progress-bj_ci_green01.jsonl
-          jq -s -e 'map(.message) == ["scaffold_started","scaffold_ready","wbs_started","wbs_done","gate_started","test_started","gate_passed"]' "$P" >/dev/null || { echo "::error::green job progress is not scaffold → WBS → gate_passed"; exit 1; }
+          jq -s -e 'map(.message) == ["scaffold_started","scaffold_ready","wbs_started","wbs_done","gate_started","test_started","gate_passed","artifact_started","artifact_ready"]' "$P" >/dev/null || { echo "::error::green job progress is not scaffold → WBS → gate_passed → artifact"; exit 1; }
           jq -s -e '.[1].meta.installMode == "offline" and .[1].meta.sandbox.uid == 10001 and .[1].meta.files >= 10' "$P" >/dev/null || { echo "::error::scaffold_ready must show an offline install as the sandbox user"; exit 1; }
           jq -s -e 'all(.[]; .status != "pushed" and .status != "deploying")' "$P" >/dev/null || { echo "::error::the container must not claim push/deploy"; exit 1; }
-          jq -e '.ok == false and .failedStage == "pushed" and .error == "builder_stage_not_implemented:pushed" and .wbsDone == 1' /tmp/cb-done-bj_ci_green01.jsonl >/dev/null || { echo "::error::green job must end honestly before push (builder_stage_not_implemented:pushed)"; exit 1; }
+          # ── B-5b S3: 실제 이미지가 만든 산출물(샌드박스 사용자의 wrangler dry-run + 수집기) → Worker 대역 ──
+          A=/tmp/artifact-body-bj_ci_green01.json
+          [ -s "$A" ] || { echo "::error::the green job did not upload an artifact"; exit 1; }
+          jq -c '{mainModule: .worker.mainModule, modules: (.worker.modules|map(.name)), assets: (.assets|map(.path)), migrations: (.migrations|map(.name)), source: (.source|length), summary}' "$A"
+          jq -e '.worker.mainModule == "worker.js" and .worker.modules[0].name == "worker.js" and all(.worker.modules[]; (.name | endswith(".map") | not) and .name != "README.md")' "$A" >/dev/null || { echo "::error::the bundle must be wrangler's worker.js (no README/source map)"; exit 1; }
+          # 디코드는 파일로 먼저(파이프 + grep -q는 pipefail에서 SIGPIPE로 거짓 실패할 수 있다).
+          jq -r '.worker.modules[0].base64' "$A" | base64 -d > /tmp/art-worker.js
+          grep -q '/api/health' /tmp/art-worker.js || { echo "::error::worker.js must be the real bundle of src/worker.ts"; exit 1; }
+          jq -e '(.assets|map(.path)|index("/index.html")) != null' "$A" >/dev/null || { echo "::error::the vite client (dist/client/index.html) must be in the assets"; exit 1; }
+          jq -r '.assets[] | select(.path=="/index.html") | .base64' "$A" | base64 -d > /tmp/art-index.html
+          script=$(grep -oE 'src="/[^"]+"' /tmp/art-index.html | head -1 | sed -E 's/src="([^"]+)"/\1/' || true)
+          [ -n "$script" ] && jq -e --arg p "$script" '(.assets|map(.path)|index($p)) != null' "$A" >/dev/null || { echo "::error::index.html's script ($script) must be among the assets"; exit 1; }
+          jq -e '.migrations|map(.name) == ["0001_init.sql"]' "$A" >/dev/null || { echo "::error::migrations/0001_init.sql must be in the artifact"; exit 1; }
+          jq -e '(.source|map(.path)) as $s | ($s|index("src/worker.ts")) != null and ($s|index("src/client/App.tsx")) != null and ($s|index("package.json")) != null and ($s|index("migrations/0001_init.sql")) != null' "$A" >/dev/null || { echo "::error::the source tree is incomplete"; exit 1; }
+          jq -e 'all(.source[].path; (startswith("node_modules/") or startswith("dist/") or test("(^|/)\\.(env|dev\\.vars|npmrc|git/|wrangler/)")) | not)' "$A" >/dev/null || { echo "::error::the source tree must exclude node_modules/dist/dotfiles"; exit 1; }
+          jq -r '.source[] | select(.path=="src/client/App.tsx") | .base64' "$A" | base64 -d > /tmp/art-App.tsx
+          grep -q '예약하기' /tmp/art-App.tsx || { echo "::error::the source must carry the model's Korean App.tsx (Rule 6)"; exit 1; }
+          jq -e '.summary.wbsDone == 1 and .summary.commits >= 2 and .summary.gateRounds == 0' "$A" >/dev/null || { echo "::error::artifact summary must report the WBS and commits"; exit 1; }
+          jq -e '.ok == true and .stage == "done" and .wbsDone == 1 and .artifact.uploaded == true and (has("deployedUrl") | not)' /tmp/cb-done-bj_ci_green01.jsonl >/dev/null || { echo "::error::green job must report done only after the Worker accepted the artifact — and never carry a URL"; exit 1; }
           # 생성 코드(모델의 run_command)는 샌드박스 사용자로: 서버의 환경·메모리를 못 읽고 /builder에 못 쓰고 env에 토큰이 없다
           cat /tmp/llm-toolresults.txt
           grep -q 'uid=10001 ' /tmp/llm-toolresults.txt || { echo "::error::model commands must run as the sandbox user (uid=10001)"; exit 1; }
@@ -289,7 +320,7 @@ jobs:
           [ "$(sort -u /tmp/cb-auth-bj_ci_broken1.txt)" = "Bearer ${BROKEN_TOKEN}" ] || { echo "::error::broken callbacks must authenticate with its job token"; exit 1; }
           jq -s -e 'all(.[]; (has("usage") | not) and (has("spentUsd") | not))' /tmp/cb-progress-*.jsonl /tmp/cb-done-*.jsonl >/dev/null || { echo "::error::callbacks must not carry usage/spentUsd (the Worker LLM proxy meters spend)"; exit 1; }
           for t in "$GREEN_TOKEN" "$BROKEN_TOKEN"; do
-            if grep -q "$t" /tmp/cb-progress-*.jsonl /tmp/cb-done-*.jsonl /tmp/llm-toolresults.txt /tmp/llm-repair-prompts.txt; then echo "::error::a job token leaked into a callback body or an LLM prompt"; exit 1; fi
+            if grep -q "$t" /tmp/cb-progress-*.jsonl /tmp/cb-done-*.jsonl /tmp/llm-toolresults.txt /tmp/llm-repair-prompts.txt /tmp/artifact-body-*.json; then echo "::error::a job token leaked into a callback body, an LLM prompt or the artifact"; exit 1; fi
             if docker logs "$cid" 2>&1 | grep -q "$t"; then echo "::error::a job token leaked into container logs"; exit 1; fi
           done
-          echo "✅ builder image: agent-worker · template · sandbox(uid 10001, groups 10001 only, offline store) · secret-bearing payload refused · WBS via the LLM proxy → gate green → honest stop before push · second POST /run while building → 409 · broken code → failed(building) after 2 repairs · no sandbox ENV → selfcheck red + build refused"
+          echo "✅ builder image: agent-worker · template · sandbox(uid 10001, groups 10001 only, offline store) · secret-bearing payload refused · WBS via the LLM proxy → gate green → artifact (real wrangler dry-run bundle · vite assets · D1 migration · Korean source) → Worker stand-in done · second POST /run while building → 409 · broken code → failed(building) after 2 repairs · no sandbox ENV → selfcheck red + build refused"

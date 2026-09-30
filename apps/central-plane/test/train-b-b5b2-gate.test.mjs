@@ -71,6 +71,19 @@ after(async () => {
   await Promise.all(createdTmp.map((d) => fs.rm(d, { recursive: true, force: true })));
 });
 
+/**
+ * [의도된 변경 · B-5b S3] 게이트 초록불 뒤 컨테이너는 산출물을 만든다(wrangler dry-run → 수집기 — 둘 다 exec). 가짜 exec는
+ * wrangler를 성공으로, 수집기(ARTIFACT_COLLECTOR_ENTRY)를 아래 작은 산출물 JSON으로 답한다. 산출물 계약 자체는
+ * test/train-b-b5b-s3-deploy.test.mjs가 실제 수집기·실제 Worker 라우트로 본다.
+ */
+const FAKE_ARTIFACT = {
+  worker: { mainModule: "worker.js", modules: [{ name: "worker.js", base64: Buffer.from("export default { fetch() { return new Response('ok'); } };").toString("base64") }] },
+  assets: [{ path: "/index.html", base64: Buffer.from('<!doctype html><script type="module" src="/assets/i.js"></script>').toString("base64") }],
+  migrations: [], source: [{ path: "src/worker.ts", base64: Buffer.from("// 예약").toString("base64"), executable: false }],
+  stats: { modules: { count: 1, bytes: 59 }, assets: { count: 1, bytes: 66 }, migrations: { count: 0, bytes: 0 }, source: { count: 1, bytes: 9 } },
+};
+const FAKE_COLLECTOR_STDOUT = `${JSON.stringify({ ok: true, artifact: FAKE_ARTIFACT })}\n`;
+
 /** 가짜 exec — git은 성공(rev-parse는 sha), pnpm install·build·test는 주어진 함수가 결과를 정한다. 호출을 기록한다. */
 function fakeExec({ install = () => ({ ok: true, code: 0 }), build = () => ({ ok: true, code: 0 }), test = () => ({ ok: true, code: 0 }) } = {}) {
   const calls = [];
@@ -82,6 +95,7 @@ function fakeExec({ install = () => ({ ok: true, code: 0 }), build = () => ({ ok
     if (cmd === "pnpm" && args[0] === "install") return res(install(calls, opts));
     if (cmd === "pnpm" && args[0] === "run" && args[1] === "build") return res(build(calls, opts));
     if (cmd === "pnpm" && args[0] === "test") return res(test(calls, opts));
+    if (args[0] === run.ARTIFACT_COLLECTOR_ENTRY) return res({ ok: true, code: 0, stdout: FAKE_COLLECTOR_STDOUT });
     return res({ ok: true, code: 0 });
   };
   return { exec, calls };
@@ -96,11 +110,24 @@ function recorder() {
   return { calls, post };
 }
 
+/** Worker 대역: 산출물을 받아 push·배포·내용 확인을 끝냈다고 답한다(실제 라우트는 S3 테스트가 본다). */
+function workerSaysDone() {
+  const uploads = [];
+  const upload = async (url, token, body) => {
+    uploads.push({ url, token, body });
+    return { ok: true, status: 200, json: { ok: true, accepted: true, status: "done" } };
+  };
+  return { uploads, upload };
+}
+
+/** 초록불 → 산출물 → Worker done의 최종 보고(배포 주소 없음). */
+const doneShape = (r) => ({ jobId: r.jobId, ok: r.ok, stage: r.stage, wbsDone: r.wbsDone, uploaded: r.artifact?.uploaded, hasUrl: "deployedUrl" in r });
+
 const commitsOf = (calls) => calls.filter((c) => c.cmd === "git" && c.args.includes("commit")).map((c) => c.args[c.args.indexOf("-m") + 1]);
 const msgs = (poster) => poster.calls.map((c) => [c.body.status, c.body.message]);
 
 async function build(p, deps) {
-  return run.runBuildJob(p, { workRoot: await tmpDir("wr"), templateDir: REPO_TEMPLATE, sandbox: null, log: () => {}, ...deps });
+  return run.runBuildJob(p, { workRoot: await tmpDir("wr"), templateDir: REPO_TEMPLATE, sandbox: null, log: () => {}, uploadArtifact: workerSaysDone().upload, ...deps });
 }
 
 // ══ ① WBS 구현 루프 ═══════════════════════════════════════════════════════════════════════════════
@@ -115,7 +142,9 @@ describe("① WBS 구현 루프 (B-5b-2)", () => {
       return ctx.item.id === "WBS-001" ? { status: "done" } : { status: "done", commitMessage: `feat: ${ctx.item.title}` };
     };
     const r = await build(payload(), { exec: x.exec, postCallback: poster.post, implementWbs });
-    assert.deepEqual(r, { jobId: JOB_ID, ok: false, stage: "failed", failedStage: "pushed", error: "builder_stage_not_implemented:pushed", wbsDone: 3 });
+    // [의도된 변경 · B-5b S3] 종전: failed(pushed, builder_stage_not_implemented:pushed). 이제 산출물 → Worker가 done이라고 답한 보고.
+    assert.deepEqual(doneShape(r), { jobId: JOB_ID, ok: true, stage: "done", wbsDone: 3, uploaded: true, hasUrl: false });
+    assert.equal(r.commits, 4, "scaffold + 3 WBS commits");
     assert.deepEqual(commitsOf(x.calls), [
       "chore: scaffold simsa-hosted-app template",
       "feat(WBS-001): 예약 저장 API — 한글 버튼 '예약하기'",
@@ -164,8 +193,9 @@ describe("① WBS 구현 루프 (B-5b-2)", () => {
     const called = [];
     const implementWbs = async ({ item }) => { called.push(item.id); return item.id === "WBS-002" ? { status: "gave_up", summary: "후기 API가 지시서에 없음" } : { status: "done", commitMessage: `feat: ${item.title}` }; };
     const r = await build(payload(), { exec: x.exec, postCallback: poster.post, implementWbs });
-    assert.equal(r.failedStage, "pushed", JSON.stringify(r));
+    assert.equal(r.stage, "done", JSON.stringify(r));
     assert.equal(r.wbsDone, 1);
+    assert.deepEqual(r.wbs.failed, ["WBS-002", "WBS-003"], "the final report carries the WBS that did not get done");
     assert.deepEqual(called, ["WBS-001", "WBS-002"], "WBS-003 is skipped without an LLM call");
     const wf = poster.calls.find((c) => c.body.message === "wbs_failed").body.meta;
     assert.deepEqual({ wbsId: wf.wbsId, status: wf.status, must: wf.must, decision: wf.decision }, { wbsId: "WBS-002", status: "gave_up", must: false, decision: "continue" });
@@ -272,13 +302,19 @@ describe("① WBS 구현 루프 (B-5b-2)", () => {
 describe("② 빌드 게이트 (B-5b-3 · D-4 — 초록불이 아니면 다음 단계 금지)", () => {
   const done = async ({ item }) => ({ status: "done", commitMessage: `feat: ${item.title}` });
 
-  it("초록불: install(frozen·offline) → build → test → gate_passed → failed(pushed) — done을 주장하지 않는다", async () => {
+  it("초록불: install(frozen·offline) → build → test → gate_passed → 산출물 → (Worker가 done이라 답할 때만) 보고 — 진행 상태로 pushed·deploying을 주장하지 않는다", async () => {
+    // [의도된 변경 · B-5b S3] 종전: gate_passed → failed(pushed, builder_stage_not_implemented:pushed).
     const x = fakeExec();
     const poster = recorder();
     const stages = [];
-    const r = await build(oneWbs(), { exec: x.exec, postCallback: poster.post, implementWbs: done, onStage: (s) => stages.push(s) });
-    assert.deepEqual(r, { jobId: JOB_ID, ok: false, stage: "failed", failedStage: "pushed", error: "builder_stage_not_implemented:pushed", wbsDone: 1 });
-    assert.deepEqual(stages, ["scaffolding", "implementing", "building", "testing"]);
+    const w = workerSaysDone();
+    const r = await build(oneWbs(), { exec: x.exec, postCallback: poster.post, implementWbs: done, onStage: (s) => stages.push(s), uploadArtifact: w.upload });
+    assert.deepEqual(doneShape(r), { jobId: JOB_ID, ok: true, stage: "done", wbsDone: 1, uploaded: true, hasUrl: false });
+    assert.deepEqual(stages, ["scaffolding", "implementing", "building", "testing", "deploying"]);
+    assert.equal(w.uploads.length, 1);
+    assert.equal(w.uploads[0].url, `${ORIGIN}/internal/build-artifact`);
+    assert.equal(w.uploads[0].token, JOB_TOKEN);
+    assert.ok(!poster.calls.some((c) => ["pushed", "deploying", "done"].includes(c.body.status)), "push/deploy/done are the Worker's to record");
     const pn = x.calls.filter((c) => c.cmd === "pnpm").map((c) => [c.args.join(" "), c.env.npm_config_offline ?? null, c.timeoutMs]);
     const L = need("GATE_LIMITS");
     assert.deepEqual(pn, [
@@ -287,7 +323,7 @@ describe("② 빌드 게이트 (B-5b-3 · D-4 — 초록불이 아니면 다음 
       ["run build", "true", L.buildMs],
       ["test", "true", L.testMs],
     ]);
-    assert.deepEqual(msgs(poster).slice(-3), [["building", "gate_started"], ["testing", "test_started"], ["testing", "gate_passed"]]);
+    assert.deepEqual(msgs(poster).slice(-5), [["building", "gate_started"], ["testing", "test_started"], ["testing", "gate_passed"], ["testing", "artifact_started"], ["testing", "artifact_ready"]]);
     assert.deepEqual([...work.GATE_COMMANDS.install[1]], ["install", "--frozen-lockfile", "--offline"]);
     assert.equal(work.GATE_ALLOWS_DEPENDENCY_CHANGES, false);
     assert.equal(work.GATE_LIMITS.repairRounds, 2);
@@ -347,7 +383,8 @@ describe("② 빌드 게이트 (B-5b-3 · D-4 — 초록불이 아니면 다음 
     const x = fakeExec({ build: () => (++builds === 1 ? { ok: false, code: 2, stderr: "error TS2304: Cannot find name '예약'." } : { ok: true, code: 0 }) });
     const poster = recorder();
     const r = await build(oneWbs(), { exec: x.exec, postCallback: poster.post, implementWbs: async () => ({ status: "done" }) });
-    assert.equal(r.failedStage, "pushed");
+    assert.equal(r.stage, "done", JSON.stringify(r));
+    assert.equal(r.gateRounds, 1);
     assert.equal(poster.calls.find((c) => c.body.message === "gate_passed").body.meta.rounds, 1);
     assert.ok(commitsOf(x.calls).includes("fix(gate): repair building — round 1"));
   });
@@ -410,7 +447,7 @@ describe("② 빌드 게이트 (B-5b-3 · D-4 — 초록불이 아니면 다음 
       return { status: "done" };
     };
     const r = await build(oneWbs(), { exec: x.exec, postCallback: poster.post, implementWbs });
-    assert.equal(r.failedStage, "pushed");
+    assert.equal(r.stage, "done", JSON.stringify(r));
     const ev = poster.calls.find((c) => c.body.message === "protected_restored");
     assert.ok(ev, "restoration is recorded on the timeline");
     assert.deepEqual([...ev.body.meta.files].sort(), ["package.json", "pnpm-lock.yaml", "test/smoke.test.mjs"]);
@@ -519,13 +556,13 @@ describe("③ 기본 implementWbs — 실제 agent-worker runBuildLoop · 프록
     assert.ok(!poster.calls.some((c) => ["testing", "pushed", "deploying"].includes(c.body.status)));
   });
 
-  it("초록불 끝까지: 모델이 올바른 App.tsx를 쓴다 → 게이트 통과 → failed(pushed) · 파일은 작업 폴더 안에만", async () => {
+  it("초록불 끝까지: 모델이 올바른 App.tsx를 쓴다 → 게이트 통과 → 산출물 → Worker done · 파일은 작업 폴더 안에만", async () => {
     const proxy = fakeProxy(({ turn }) => ({ content: turn === 0 ? [tu("create_file", { path: "src/client/App.tsx", content: GOOD_APP })] : [tu("finish", { status: "done", summary: "예약 화면", commitMessage: "feat: 예약 화면" })] }));
     const seenApp = [];
     const x = fakeExec({ build: (_c, opts) => { seenApp.push(readFileSync(path.join(opts.cwd, "src/client/App.tsx"), "utf8")); return { ok: true, code: 0 }; } });
     const poster = recorder();
     const r = await build(oneWbs(), { exec: x.exec, postCallback: poster.post, loadAgentWorker, fetchImpl: proxy.fetchImpl, llmRetryOptions: quick });
-    assert.equal(r.failedStage, "pushed", JSON.stringify(r));
+    assert.equal(r.stage, "done", JSON.stringify(r));
     assert.equal(seenApp[0], GOOD_APP);
     assert.ok(commitsOf(x.calls).includes("feat: 예약 화면"));
   });
@@ -533,7 +570,7 @@ describe("③ 기본 implementWbs — 실제 agent-worker runBuildLoop · 프록
   // PR #569 S2 검증 결함 5: 컨테이너가 runBuildLoop에 잡 예산(budgetUsd)을 넘기는 배선. 빠지면 core 기본 로컬 상한 $0.50이
   // 긴 WBS를 llm_error(BudgetExceededError)로 끊는다 — llm_error는 must 여부와 상관없이 잡을 멈춘다. 가짜 프록시가 턴마다 무거운
   // usage(입력 100k·출력 5k 토큰 ≈ $0.375, sonnet 단가)를 주고 4턴을 돈다(≈ $1.50 > $0.50, < 잡 예산 $10).
-  it("★잡 예산 배선: 무거운 WBS(4턴 ≈ $1.50)도 잡 예산 $10 안이면 done → 게이트 → failed(pushed) — core 기본 $0.50에서 끊기지 않는다", async () => {
+  it("★잡 예산 배선: 무거운 WBS(4턴 ≈ $1.50)도 잡 예산 $10 안이면 done → 게이트 → 산출물 → done — core 기본 $0.50에서 끊기지 않는다", async () => {
     const heavy = { input_tokens: 100_000, output_tokens: 5_000 };
     const proxy = fakeProxy(({ turn }) => {
       if (turn < 3) return { usage: heavy, content: [tu("create_file", { path: `src/client/화면-${turn + 1}.tsx`, content: `export const 제목${turn} = "예약하기 ${turn + 1}";\n` })] };
@@ -544,7 +581,7 @@ describe("③ 기본 implementWbs — 실제 agent-worker runBuildLoop · 프록
     const r = await build(oneWbs(), { exec: x.exec, postCallback: poster.post, loadAgentWorker, fetchImpl: proxy.fetchImpl, llmRetryOptions: quick });
     const wf = poster.calls.find((c) => c.body.message === "wbs_failed");
     assert.equal(wf, undefined, `the WBS must not fail on a local cap: ${JSON.stringify(wf?.body.meta)}`);
-    assert.deepEqual([r.failedStage, r.error, r.wbsDone], ["pushed", "builder_stage_not_implemented:pushed", 1]);
+    assert.deepEqual([r.ok, r.stage, r.wbsDone], [true, "done", 1]);
     assert.equal(proxy.calls.length, 4, "all four heavy turns reached the proxy");
     assert.ok(commitsOf(x.calls).includes("feat: 예약 화면 3개"));
   });
@@ -565,7 +602,7 @@ describe("③ 기본 implementWbs — 실제 agent-worker runBuildLoop · 프록
   it("preferFallback(프로덕션 ANTHROPIC_ENABLED=off)면 OpenAI 경로만 — Authorization: Bearer <jobToken>", async () => {
     const proxy = fakeProxy(({ turn }) => ({ content: turn === 0 ? [tu("create_file", { path: "src/client/App.tsx", content: GOOD_APP })] : [tu("finish", { status: "done", summary: "예약 화면" })] }));
     const r = await build(oneWbs({ llm: { model: "claude-sonnet-4-6", openaiModel: "gpt-5.4", preferFallback: true } }), { exec: fakeExec().exec, postCallback: recorder().post, loadAgentWorker, fetchImpl: proxy.fetchImpl, llmRetryOptions: quick });
-    assert.equal(r.failedStage, "pushed", JSON.stringify(r));
+    assert.equal(r.stage, "done", JSON.stringify(r));
     assert.ok(proxy.calls.length >= 2);
     for (const c of proxy.calls) {
       assert.equal(c.url, `${ORIGIN}/internal/build-llm/openai/v1/chat/completions`);
@@ -596,7 +633,13 @@ describe("③ 기본 implementWbs — 실제 agent-worker runBuildLoop · 프록
     assert.match(replies[2], /REFUSED \(dir_switch\)/);
     assert.match(replies[3], /REFUSED \(protected_file\)/);
     assert.match(replies[4], /REFUSED \(path_escape\)/);
-    const modelCmds = x.calls.filter((c) => !(c.cmd === "git" && ["init", "add", "commit", "rev-parse", "reset", "clean"].some((v) => c.args.includes(v))) && !(c.cmd === "pnpm" && ["install", "run", "test"].includes(c.args[0])));
+    // 플랫폼 명령(git·pnpm 게이트, B-5b S3의 산출물 번들 `wrangler deploy --dry-run --outdir <작업 폴더>/artifact/worker`·수집기)은 뺀다.
+    const platform = (c) =>
+      (c.cmd === "git" && ["init", "add", "commit", "rev-parse", "reset", "clean"].some((v) => c.args.includes(v))) ||
+      (c.cmd === "pnpm" && ["install", "run", "test"].includes(c.args[0])) ||
+      (c.cmd === "wrangler" && c.args.length === 4 && c.args[0] === "deploy" && c.args[1] === "--dry-run" && c.args[2] === "--outdir" && c.args[3].endsWith(path.join("artifact", "worker"))) ||
+      c.args[0] === run.ARTIFACT_COLLECTOR_ENTRY;
+    const modelCmds = x.calls.filter((c) => !platform(c));
     assert.deepEqual(modelCmds, [], "none of the refused commands reached exec");
   });
 });
@@ -628,8 +671,10 @@ describe("④ 생성 코드 실행 안전", () => {
     const fsImpl = { ...fs, lchown: async (p, uid, gid) => { chowned.push([p, uid, gid]); } };
     const x = fakeExec();
     const r = await build(oneWbs(), { exec: x.exec, postCallback: recorder().post, implementWbs: async () => ({ status: "done" }), sandbox: sb, fsImpl });
-    assert.equal(r.failedStage, "pushed", JSON.stringify(r));
+    assert.equal(r.stage, "done", JSON.stringify(r));
     assert.ok(x.calls.length >= 8);
+    // B-5b S3: 산출물 번들(wrangler dry-run)·수집기도 샌드박스 사용자로 — root 서버가 생성 코드의 트리를 직접 읽지 않는다.
+    assert.ok(x.calls.some((c) => c.cmd === "wrangler") && x.calls.some((c) => c.args[0] === run.ARTIFACT_COLLECTOR_ENTRY));
     assert.ok(x.calls.every((c) => c.uid === 10001 && c.gid === 10002), "every child runs as the sandbox user");
     assert.ok(x.calls.every((c) => c.env.HOME === "/home/simsa-run"));
     assert.ok(chowned.length >= 10 && chowned.every(([, u, g]) => u === 10001 && g === 10002));
@@ -1033,11 +1078,13 @@ describe("⑥ 이미지 · 템플릿 · CI 계약", () => {
     }
   });
 
-  it("container-images CI: 가짜 LLM 프록시로 실제 이미지에서 WBS 1개 → 게이트 통과 · 고의 실패 → failed(building) · 샌드박스 증거", () => {
+  it("container-images CI: 가짜 LLM 프록시로 실제 이미지에서 WBS 1개 → 게이트 통과 → 산출물 업로드 · 고의 실패 → failed(building) · 샌드박스 증거", () => {
     const yml = readFileSync(path.join(REPO, ".github/workflows/container-images.yml"), "utf8");
     assert.match(yml, /\/internal\/build-llm\/anthropic\/v1\/messages/, "the receiver fakes the Worker LLM proxy");
     assert.match(yml, /gate_passed/);
-    assert.match(yml, /builder_stage_not_implemented:pushed/);
+    // [의도된 변경 · B-5b S3] 종전: 초록불 잡은 builder_stage_not_implemented:pushed로 끝났다. 이제 산출물을 Worker 대역에 올린다.
+    assert.match(yml, /\/internal\/build-artifact/, "the receiver fakes the Worker artifact route");
+    assert.match(yml, /artifact_ready/);
     assert.match(yml, /failedStage == "building"/);
     assert.match(yml, /build_failed:/);
     assert.match(yml, /\.sandbox\.enabled == true/);
@@ -1063,6 +1110,7 @@ describe("⑥ 이미지 · 템플릿 · CI 계약", () => {
   it("RUNNER_REV가 올라갔다(이미지 교체 판별)", () => {
     assert.notEqual(run.RUNNER_REV, "b5bS1-builder-6");
     assert.notEqual(run.RUNNER_REV, "b5bS2-builder-7", "S2 fixes (sandbox fail-closed · bounded restore · admission) change the image");
-    assert.match(run.RUNNER_REV, /^b5bS2-builder-\d+$/);
+    assert.notEqual(run.RUNNER_REV, "b5bS2-builder-8", "S3 (artifact bundle · collector · upload) changes the image");
+    assert.match(run.RUNNER_REV, /^b5bS3-builder-\d+$/);
   });
 });

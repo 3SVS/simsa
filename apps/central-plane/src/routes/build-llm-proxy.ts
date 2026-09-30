@@ -214,8 +214,8 @@ function issueFields(issues: readonly z.ZodIssue[]): string {
     .join(",");
 }
 
-/** content-length를 믿지 않고 스트림을 세며 읽는다. 넘치면 읽기를 멈춘다. */
-async function readCappedBody(req: Request, max: number): Promise<{ ok: true; text: string; bytes: number } | { ok: false; reason: "too_large" | "unreadable" }> {
+/** content-length를 믿지 않고 스트림을 세며 읽는다. 넘치면 읽기를 멈춘다. (B-5b S3: /internal/build-artifact도 쓴다.) */
+export async function readCappedBody(req: Request, max: number): Promise<{ ok: true; text: string; bytes: number } | { ok: false; reason: "too_large" | "unreadable" }> {
   const declared = Number(req.headers.get("content-length") ?? "");
   if (Number.isFinite(declared) && declared > max) return { ok: false, reason: "too_large" };
   if (!req.body) return { ok: true, text: "", bytes: 0 };
