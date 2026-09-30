@@ -8,6 +8,11 @@
  *                                                    생성(D-3) → 무결성 통과본만 저장·반환.
  *                                                    실패는 503 llm_unavailable / 422 dev_spec_invalid.
  *
+ *   POST /workspace/projects/:id/interview-pack   — C-A7: { userKey, locale?, confirmedItemIds? } → 유저가 자기
+ *                                                    AI 채팅에 붙여넣을 인터뷰 텍스트(역추론 지시서 요약 기반).
+ *   POST /workspace/projects/:id/interview-answer — C-A7: { userKey, answer } → 고정 양식 회수(Zod).
+ *                                                    저장하지 않는다 — 로컬 정본에 반영 후 미러(C0 경로).
+ *
  * 소유권 = 기존 owned-project 게이트(getOwnedProject). 응답은 "missing"과 "not owned"를
  * 구분하지 않는다(프로젝트 id 탐색 방지, workspace-ext와 동일 규율).
  */
@@ -19,6 +24,7 @@ import { getOwnedProject, type DbProject } from "../workspace/db.js";
 import { listProjectSources } from "../workspace/project-sources-db.js";
 import { evidenceFromRepo, evidenceFromWebsite, type FetchLike, type StackHint } from "../workspace/source-evidence.js";
 import { mergeStackHints, provenanceFrom, type BaseProvenance } from "../workspace/provenance.js";
+import { MAX_ANSWER_CHARS, buildInterviewPrompt, parseInterviewAnswer } from "../workspace/interview-pack.js";
 import { validateDevSpec, summarizeForBeginner, type DevSpecValidation } from "../workspace/dev-spec.js";
 import { generateDevSpec, makeDevSpecLlmCaller } from "../workspace/generate-dev-spec.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
@@ -92,6 +98,43 @@ export async function gatherInferredProvenance(
   }
   return provenanceFrom({ stack, entryPath: project.entryPath, declaredBuiltWith: project.builtWith });
 }
+
+/**
+ * C-A7 — 인터뷰 프롬프트의 재료: 역추론 지시서 요약(기능 + 확인 여부). 순수.
+ *
+ * 유효한 지시서가 있으면 그 기능 목록을 쓴다 — inferred면 must = 유저가 확인한 것(D-2 amend 무결성이
+ * 보장), 그 밖의 출처는 유저 자신의 기획이라 전부 확인된 것으로 본다. 지시서가 없거나 깨졌으면
+ * 프로젝트 항목 + 클라이언트가 보낸 확인 id로 대신한다.
+ */
+export function interviewFeaturesFor(
+  project: Pick<DbProject, "devSpec" | "items">,
+  confirmedItemIds: readonly string[],
+): { basis: "dev_spec" | "items" | "none"; features: Array<{ title: string; confirmed: boolean }> } {
+  const v = project.devSpec ? validateDevSpec(project.devSpec) : null;
+  if (v && v.ok) {
+    const inferred = v.spec.meta.source === "inferred";
+    return {
+      basis: "dev_spec",
+      features: v.spec.features.map((f) => ({ title: f.title, confirmed: inferred ? f.priority === "must" : true })),
+    };
+  }
+  const wanted = new Set(confirmedItemIds);
+  const items = Array.isArray(project.items) ? project.items : [];
+  const features: Array<{ title: string; confirmed: boolean }> = [];
+  for (const it of items) {
+    if (!it || typeof it !== "object") continue;
+    const r = it as Record<string, unknown>;
+    const title = typeof r["title"] === "string" ? r["title"].trim() : "";
+    if (!title) continue;
+    features.push({ title, confirmed: typeof r["id"] === "string" && wanted.has(r["id"]) });
+  }
+  return { basis: features.length ? "items" : "none", features };
+}
+
+const InterviewAnswerBodySchema = z.object({
+  userKey: z.string().trim().min(1).max(64),
+  answer: z.string().max(MAX_ANSWER_CHARS),
+});
 
 export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
@@ -217,6 +260,76 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
       .run();
 
     return json(headers, 200, { ok: true, devSpec: result.devSpec, summary: summarizeForBeginner(result.devSpec), repaired: result.repaired, updatedAt: now });
+  });
+
+  // ── C-A7: 인터뷰 프롬프트 팩 ──────────────────────────────────────────────
+  // 유저가 자기 AI 채팅에 붙여넣을 텍스트. LLM 호출 없음(비용 0) — 결정론 조립.
+  app.post("/workspace/projects/:id/interview-pack", async (c) => {
+    const headers = corsHeaders(c.req.header("origin") ?? null);
+    const projectId = c.req.param("id");
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return json(headers, 400, { ok: false, error: "invalid_json" });
+    }
+    const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+    const userKey = typeof b["userKey"] === "string" ? b["userKey"].trim().slice(0, 64) : "";
+    if (!userKey) return json(headers, 400, { ok: false, error: "userKey_required" });
+    const locale = b["locale"] === "en" ? "en" : "ko";
+    const confirmedParse = ConfirmedItemIdsSchema.safeParse(b["confirmedItemIds"] ?? undefined);
+    if (!confirmedParse.success) return json(headers, 400, { ok: false, error: "invalid_confirmed_items" });
+
+    const owned = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
+    if (!owned) return json(headers, 404, { ok: false, error: "not_found" });
+
+    const sources = await listProjectSources(c.env, projectId).catch(() => []);
+    const site = sources.find((s) => s.type === "website");
+    const { basis, features } = interviewFeaturesFor(owned, confirmedParse.data ?? []);
+    const prompt = buildInterviewPrompt({ locale, appName: owned.title, appUrl: site?.reference ?? null, features });
+    return json(headers, 200, {
+      ok: true,
+      prompt,
+      basis,
+      featureCount: features.length,
+      unconfirmedCount: features.filter((f) => !f.confirmed).length,
+    });
+  });
+
+  // ── C-A7: 인터뷰 답 회수 ──────────────────────────────────────────────────
+  // 저장하지 않는다: 대시보드는 로컬이 정본이라, 회수 결과를 로컬에 반영한 뒤 미러(C0 경로)한다.
+  // 서버에 곧장 쓰면 다음 자동 저장이 로컬 값으로 덮어써 조용히 사라진다.
+  app.post("/workspace/projects/:id/interview-answer", async (c) => {
+    const headers = corsHeaders(c.req.header("origin") ?? null);
+    const projectId = c.req.param("id");
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return json(headers, 400, { ok: false, error: "invalid_json" });
+    }
+    const parsedBody = InterviewAnswerBodySchema.safeParse(body);
+    if (!parsedBody.success) {
+      const tooLong = parsedBody.error.issues.some((i) => i.path[0] === "answer" && i.code === "too_big");
+      return json(headers, 400, { ok: false, error: tooLong ? "answer_too_long" : "invalid_body" });
+    }
+    const { userKey, answer } = parsedBody.data;
+
+    const owned = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
+    if (!owned) return json(headers, 404, { ok: false, error: "not_found" });
+
+    const r = parseInterviewAnswer(answer);
+    // 계측은 개수만 — 답의 내용(의도 원문)은 저장하지 않는다(D-21 ⓑ 내용 데이터는 opt-in).
+    await insertUsageEvent(c.env, {
+      userKey,
+      projectId,
+      eventType: "workspace_interview_answer_parsed",
+      metadata: r.ok
+        ? { ok: true, must: r.answer.must.length, differentNow: r.answer.differentNow.length, unread: r.answer.unread }
+        : { ok: false, reason: r.reason },
+    }).catch(() => undefined);
+    if (!r.ok) return json(headers, 422, { ok: false, error: "answer_unreadable", reason: r.reason });
+    return json(headers, 200, { ok: true, answer: r.answer });
   });
 
   app.get("/workspace/projects/:id/dev-spec", async (c) => {

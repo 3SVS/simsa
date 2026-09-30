@@ -2,6 +2,7 @@
 
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 import { IntentConfirmCard } from "@/components/IntentConfirmCard";
+import { InterviewPackCard } from "@/components/InterviewPackCard";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -220,6 +221,10 @@ export default function ProjectOverviewPage() {
           보여주고 그 다음에 묻는 순서다. 이미 확정된 프로젝트에는 나타나지 않는다.
           지도(Plan Map) 위에 둔다 — 기준이 정해져야 지도가 의미를 갖는다. */}
       {entryPath === "code" && <IntentConfirmCard projectId={id} />}
+
+      {/* C-A7 — 문 (c) "만들었는데 생각과 달라요": 유저의 AI 채팅이 원래 의도를 묻고, 고정 양식 답을
+          회수해 "맞나요?" 카드와 같은 경로로 반영한다. 접힌 인라인 카드(모달 없음). */}
+      {entryPath === "code" && <InterviewPackCard projectId={id} />}
 
       {/* Stage 272 — inspection status at a glance + the single next action */}
       <VisualChecksOverviewCard
