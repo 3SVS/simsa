@@ -1,0 +1,1187 @@
+{
+  "startedAt": "2026-09-30T18:15:33.573Z",
+  "version": 2,
+  "mode": "local-fake:http://localhost:3187",
+  "journeys": [
+    {
+      "name": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "J6-0 개요 — 만들기 전 지금 할 일",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "(주)트루픽셀 예약 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "앱 만들기 →",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "앱 만들기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 598,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 357,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO (주)트루픽셀 예약 앱 손님이 직접 촬영 예약을 잡는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 개발 지시서가 준비됐어요. [만들기]를 누르면 Simsa가 앱을 만들어 Simsa 주소에 올려 드려요 — 따로 가입할 곳은 없어요. 앱 만들기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 개발 지시서를 만들고 [만들기] 누르",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-1 지시서 화면 — 만들기 안내·주 버튼",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/dev-spec",
+          "h1": [
+            "개발 지시서"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "팩으로 받기 →",
+            "개발자용 보기",
+            "개발 지시서 다시 만들기",
+            "만들기",
+            "다음: 내 앱 →"
+          ],
+          "primaryCta": [
+            "만들기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 642,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 397,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 개발 지시서 개발자(또는 개발 AI)가 이대로 만들 수 있게 정리한 문서예요 — 화면, 저장하는 것, 그리고 되는지 확인하는 방법까지. 무엇을 만들지 (주)트루픽셀 사진관의 촬영 예약을 손님이 직접 잡는 웹앱 꼭 들어가는 것 빈 시간 보고 예약하기 · 예약 확인 화면 화면 3개 저장하는 것 1가지 이번엔 안 만드는 것 온라인 결제 · 앱 안 로그인 팩으로 받기 → 개발자용 보기 개발 ",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-2 만드는 중 진행 화면 — 지금 단계 강조",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO"
+          ],
+          "primaryCta": [],
+          "primaryCtaCount": 0,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 378,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 224,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 앱을 만들고 있어요 ● 준비 지금 ○ 뼈대 만들기 ○ 기능 만들기 ○ 빌드 확인 ○ 작동 확인 ○ 올리기 ○ 끝 만들 준비를 하고 있어요. 이번 만들기 한도 $10 · 지금까지 $0 · 비용은 받지 않아요(베타) 이 화면을 닫아도 계속 만들어요. 다시 들어오면 여기서 이어서 보여 드려요.",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-3 ★정직 실패 막힘 — 준비 중인 단계에서 멈춤",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "지시서 받아가기",
+            "다시 시도"
+          ],
+          "primaryCta": [
+            "지시서 받아가기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 425,
+          "errorish": 1,
+          "errorishHits": [
+            "기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요. 비용은 받지 않았어요(베타). 지시서 받아가기 다시 시도"
+          ],
+          "guidanceish": 0,
+          "koLeakChars": 258,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 만들기가 멈췄어요 ■ 준비 여기서 멈춤 ○ 뼈대 만들기 ○ 기능 만들기 ○ 빌드 확인 ○ 작동 확인 ○ 올리기 ○ 끝 이번 만들기 한도 $10 · 지금까지 $0 · 비용은 받지 않아요(베타) 아직 준비 중인 단계에서 멈췄어요. 앱을 처음부터 끝까지 만드는 기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요. 비용은 받지",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-3b 막힘 → 지시서 받아가기 — 그 자리에서 문서 받기",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "지시서 받아가기",
+            "다시 시도"
+          ],
+          "primaryCta": [
+            "지시서 받아가기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 465,
+          "errorish": 1,
+          "errorishHits": [
+            " 않았어요(베타). 지시서 받아가기 받았어요. 이 파일을 개발자나 앱을 만드는 업체에 그대로 넘기면 돼요. 다시 시도"
+          ],
+          "guidanceish": 0,
+          "koLeakChars": 286,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 만들기가 멈췄어요 ■ 준비 여기서 멈춤 ○ 뼈대 만들기 ○ 기능 만들기 ○ 빌드 확인 ○ 작동 확인 ○ 올리기 ○ 끝 이번 만들기 한도 $10 · 지금까지 $0 · 비용은 받지 않아요(베타) 아직 준비 중인 단계에서 멈췄어요. 앱을 처음부터 끝까지 만드는 기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요. 비용은 받지",
+          "devTerms": [],
+          "accountCtas": [],
+          "download": "개발지시서-주-트루픽셀-예약-앱.md",
+          "downloadHead": "<!-- dev-spec/README.md -->\n\n# (주)트루픽셀 예약 앱 — 개발 지시서\n\n(주)트루픽셀 사진관의 촬영 예약을 손님이 직접 잡는 웹앱\n\n---\n\n<!-- dev-spec/01-requiremen"
+        },
+        {
+          "label": "J6-4 새로고침 후 막힘 화면 복원",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "지시서 받아가기",
+            "다시 시도"
+          ],
+          "primaryCta": [
+            "지시서 받아가기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 425,
+          "errorish": 1,
+          "errorishHits": [
+            "기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요. 비용은 받지 않았어요(베타). 지시서 받아가기 다시 시도"
+          ],
+          "guidanceish": 0,
+          "koLeakChars": 258,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 만들기가 멈췄어요 ■ 준비 여기서 멈춤 ○ 뼈대 만들기 ○ 기능 만들기 ○ 빌드 확인 ○ 작동 확인 ○ 올리기 ○ 끝 이번 만들기 한도 $10 · 지금까지 $0 · 비용은 받지 않아요(베타) 아직 준비 중인 단계에서 멈췄어요. 앱을 처음부터 끝까지 만드는 기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요. 비용은 받지",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-5 다시 시도 → 호스팅 자리 실패 막힘 안내",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "지시서 받아가기",
+            "다시 시도"
+          ],
+          "primaryCta": [
+            "지시서 받아가기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 489,
+          "errorish": 1,
+          "errorishHits": [
+            "기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요. 비용은 받지 않았어요(베타). 지시서 받아가기 다시 시도 앱을 올릴 자리를 만들지 못했어요(저희 쪽 문제예요). 비용은 받지 않았어요. 지시서는 지금 받아 갈 수 "
+          ],
+          "guidanceish": 0,
+          "koLeakChars": 301,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 만들기가 멈췄어요 ■ 준비 여기서 멈춤 ○ 뼈대 만들기 ○ 기능 만들기 ○ 빌드 확인 ○ 작동 확인 ○ 올리기 ○ 끝 이번 만들기 한도 $10 · 지금까지 $0 · 비용은 받지 않아요(베타) 아직 준비 중인 단계에서 멈췄어요. 앱을 처음부터 끝까지 만드는 기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요. 비용은 받지",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-6 개요 — 멈춘 뒤 지금 할 일",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "(주)트루픽셀 예약 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "멈춘 이유 보기 →",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "멈춘 이유 보기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 571,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 347,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO (주)트루픽셀 예약 앱 손님이 직접 촬영 예약을 잡는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 만들기가 멈췄어요. 왜 멈췄는지, 다음에 무엇을 할 수 있는지 확인해 주세요. 멈춘 이유 보기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 개발 지시서를 만들고 [만들기] 누르기 — Simsa가 앱을 만들어 Simsa 주소에",
+          "devTerms": [],
+          "accountCtas": []
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J6 만들기(done): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "J6-0 개요 — 만들기 전 지금 할 일",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "(주)트루픽셀 예약 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "앱 만들기 →",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "앱 만들기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 598,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 357,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO (주)트루픽셀 예약 앱 손님이 직접 촬영 예약을 잡는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 개발 지시서가 준비됐어요. [만들기]를 누르면 Simsa가 앱을 만들어 Simsa 주소에 올려 드려요 — 따로 가입할 곳은 없어요. 앱 만들기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 개발 지시서를 만들고 [만들기] 누르",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-1 지시서 화면 — 만들기 안내·주 버튼",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/dev-spec",
+          "h1": [
+            "개발 지시서"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "팩으로 받기 →",
+            "개발자용 보기",
+            "개발 지시서 다시 만들기",
+            "만들기",
+            "다음: 내 앱 →"
+          ],
+          "primaryCta": [
+            "만들기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 642,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 397,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 개발 지시서 개발자(또는 개발 AI)가 이대로 만들 수 있게 정리한 문서예요 — 화면, 저장하는 것, 그리고 되는지 확인하는 방법까지. 무엇을 만들지 (주)트루픽셀 사진관의 촬영 예약을 손님이 직접 잡는 웹앱 꼭 들어가는 것 빈 시간 보고 예약하기 · 예약 확인 화면 화면 3개 저장하는 것 1가지 이번엔 안 만드는 것 온라인 결제 · 앱 안 로그인 팩으로 받기 → 개발자용 보기 개발 ",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-2 만드는 중 진행 화면 — 지금 단계 강조",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO"
+          ],
+          "primaryCta": [],
+          "primaryCtaCount": 0,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 380,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 225,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 앱을 만들고 있어요 ✓ 준비 ● 뼈대 만들기 지금 ○ 기능 만들기 ○ 빌드 확인 ○ 작동 확인 ○ 올리기 ○ 끝 앱의 기본 틀을 잡고 있어요. 이번 만들기 한도 $10 · 지금까지 $0 · 비용은 받지 않아요(베타) 이 화면을 닫아도 계속 만들어요. 다시 들어오면 여기서 이어서 보여 드려요.",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-2b 만드는 중 — 탭 숨김 11초 동안 조회 0, 돌아오면 곧바로 1",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO"
+          ],
+          "primaryCta": [],
+          "primaryCtaCount": 0,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 401,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 235,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 앱을 만들고 있어요 ✓ 준비 ✓ 뼈대 만들기 ● 기능 만들기 지금 ○ 빌드 확인 ○ 작동 확인 ○ 올리기 ○ 끝 지시서의 기능을 하나씩 만들고 있어요. 만든 기능 1 / 3개 이번 만들기 한도 $10 · 지금까지 $0.37 · 비용은 받지 않아요(베타) 이 화면을 닫아도 계속 만들어요. 다시 들어오면 여기서 이어서 보여 드려요",
+          "devTerms": [],
+          "accountCtas": [],
+          "pollCounts": {
+            "beforeHide": 1,
+            "afterHidden11s": 1,
+            "afterVisible": 2
+          }
+        },
+        {
+          "label": "J6-2c 개요 — 만드는 중 지금 할 일",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "(주)트루픽셀 예약 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "진행 상황 보기 →",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "진행 상황 보기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 561,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 339,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO (주)트루픽셀 예약 앱 손님이 직접 촬영 예약을 잡는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 지금 이 앱을 만들고 있어요. 어느 단계인지 볼 수 있어요. 진행 상황 보기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 개발 지시서를 만들고 [만들기] 누르기 — Simsa가 앱을 만들어 Simsa 주소에 올려요. 따로 가",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-3 내 앱 카드 — 주소·프로덕션 아님·신고",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "앱 열기 ↗"
+          ],
+          "primaryCta": [
+            "앱 열기 ↗"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 421,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 223,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 내 앱이 준비됐어요 주소 https://app-7x9k2m1q.simsa.page Simsa 주소에서 운영 중 · 정식 운영(프로덕션)용은 아니에요 앱 열기 ↗ 이 앱 신고하기 모든 단계를 마쳤어요. ✓ 준비 ✓ 뼈대 만들기 ✓ 기능 만들기 ✓ 빌드 확인 ✓ 작동 확인 ✓ 올리기 ✓ 끝 이번 만들기 한도 $10 · 지금까지 $",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-4 개요 — 만든 뒤 지금 할 일",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "(주)트루픽셀 예약 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "내 앱 보기 →",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "내 앱 보기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 554,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 331,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 내 앱 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO (주)트루픽셀 예약 앱 손님이 직접 촬영 예약을 잡는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 앱을 다 만들어 Simsa 주소에서 운영 중이에요. 내 앱 보기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 봐주세요. 2. 개발 지시서를 만들고 [만들기] 누르기 — Simsa가 앱을 만들어 Simsa 주소에 올려요. 따로 가입할 곳은 없",
+          "devTerms": [],
+          "accountCtas": []
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J6 만들기(닫힘 — 서버가 열지 않음): 개요 → 지시서 → 내 앱 직접",
+      "locale": "ko",
+      "steps": [
+        {
+          "label": "J6c-1 개요 — 닫힘이면 종전 만들기 안내",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "(주)트루픽셀 예약 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "만들기 안내 받기 →",
+            "도움받기"
+          ],
+          "primaryCta": [
+            "만들기 안내 받기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "도움받기"
+          ],
+          "bodyLen": 617,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 385,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO (주)트루픽셀 예약 앱 손님이 직접 촬영 예약을 잡는 웹앱 지금 할 일 ✓ 준비 2 만들기·검수 3 결과·수정 제품 설명서와 확인 항목이 준비됐어요. 만들기 안내를 받아 쓰시는 AI 도구로 앱을 만들고, 앱 주소를 연결하면 Simsa가 확인해드려요. 만들기 안내 받기 → 앱을 이미 만드셨나요? 여기에 주소 넣기 → 1. 제품 설명서 확인 — 만들고 싶은 제품을 Simsa가 제대로 이해했는지 ",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6c-2 지시서 화면 — 닫힘이면 [만들기] 없음·팩이 주 버튼",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/dev-spec",
+          "h1": [
+            "개발 지시서"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "팩으로 받기 →",
+            "개발자용 보기",
+            "개발 지시서 다시 만들기",
+            "다음: 만들기 안내 →"
+          ],
+          "primaryCta": [
+            "팩으로 받기 →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 435,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 271,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 개발 지시서 개발자(또는 개발 AI)가 이대로 만들 수 있게 정리한 문서예요 — 화면, 저장하는 것, 그리고 되는지 확인하는 방법까지. 무엇을 만들지 (주)트루픽셀 사진관의 촬영 예약을 손님이 직접 잡는 웹앱 꼭 들어가는 것 빈 시간 보고 예약하기 · 예약 확인 화면 화면 3개 저장하는 것 1가지 이번엔 안 만드는 것 온라인 결제 · 앱 안 로그인 팩으로 받기 → 개발자용 보기 개발 지시서 ",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6c-3 내 앱 직접 방문 — 정직한 안내 + 지시서 받기",
+          "note": "",
+          "locale": "ko",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "내 앱"
+          ],
+          "buttons": [
+            "«",
+            "도움말 · 피드백",
+            "J 내 계정 로그인 → ⌃",
+            "EN",
+            "KO",
+            "지시서 받아가기"
+          ],
+          "primaryCta": [
+            "지시서 받아가기"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 270,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 0,
+          "koLeakChars": 168,
+          "bodyHead": "Simsa « ＋ 새 프로젝트 ← 전체 프로젝트 (주)트루픽셀 예약 앱 개요 ✓ 준비 아이디어 제품 설명서 확인 항목 개발 지시서 2 만들기·검수 만들기 안내 3 결과·수정 확인 결과 시각 검수 언제든지 준비·설정 연결 도움말 · 피드백 요금 안내 이용약관 개인정보처리방침 환불 정책 J 내 계정 로그인 → ⌃ EN KO 내 앱 지시서대로 만든 앱과, 만드는 과정을 여기서 봐요. 앱 만들기는 아직 여기서 열리지 않았어요. 지금은 지시서를 받아 직접 만들 수 있어요. 지시서 받아가기",
+          "devTerms": [],
+          "accountCtas": []
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J6 만들기(not_implemented): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "en",
+      "steps": [
+        {
+          "label": "J6-0 개요 — 만들기 전 지금 할 일",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "TruePixel booking app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Build the app →",
+            "Get help"
+          ],
+          "primaryCta": [
+            "Build the app →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Get help"
+          ],
+          "bodyLen": 1068,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO TruePixel booking app Customers book their own photo sessions WHAT TO DO ",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-1 지시서 화면 — 만들기 안내·주 버튼",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/dev-spec",
+          "h1": [
+            "Development spec"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Download the pack →",
+            "Developer view",
+            "Rewrite the development spec",
+            "Build it",
+            "Next: My app →"
+          ],
+          "primaryCta": [
+            "Build it"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 1138,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO Development spec Everything a developer (or a coding AI) needs to build e",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-2 만드는 중 진행 화면 — 지금 단계 강조",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "My app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO"
+          ],
+          "primaryCta": [],
+          "primaryCtaCount": 0,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 718,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO My app The app built from your spec — and how the build is going. Buildin",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-3 ★정직 실패 막힘 — 준비 중인 단계에서 멈춤",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "My app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Take the spec with you",
+            "Try again"
+          ],
+          "primaryCta": [
+            "Take the spec with you"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 818,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO My app The app built from your spec — and how the build is going. The bui",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-3b 막힘 → 지시서 받아가기 — 그 자리에서 문서 받기",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "My app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Take the spec with you",
+            "Try again"
+          ],
+          "primaryCta": [
+            "Take the spec with you"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 894,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO My app The app built from your spec — and how the build is going. The bui",
+          "devTerms": [],
+          "accountCtas": [],
+          "download": "dev-spec-TruePixel-booking-app.md",
+          "downloadHead": "<!-- dev-spec/README.md -->\n\n# TruePixel booking app — Development spec\n\nA web app where TruePixel studio customers book"
+        },
+        {
+          "label": "J6-4 새로고침 후 막힘 화면 복원",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "My app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Take the spec with you",
+            "Try again"
+          ],
+          "primaryCta": [
+            "Take the spec with you"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 818,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO My app The app built from your spec — and how the build is going. The bui",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-5 다시 시도 → 새 잡 → 같은 자리에서 멈춤 막힘",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "My app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Take the spec with you",
+            "Try again"
+          ],
+          "primaryCta": [
+            "Take the spec with you"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 818,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO My app The app built from your spec — and how the build is going. The bui",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6-6 개요 — 멈춘 뒤 지금 할 일",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "TruePixel booking app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "See why it stopped →",
+            "Get help"
+          ],
+          "primaryCta": [
+            "See why it stopped →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Get help"
+          ],
+          "bodyLen": 1001,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review My app Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO TruePixel booking app Customers book their own photo sessions WHAT TO DO ",
+          "devTerms": [],
+          "accountCtas": []
+        }
+      ],
+      "failure": null
+    },
+    {
+      "name": "J6 만들기(닫힘 — 서버가 열지 않음): 개요 → 지시서 → 내 앱 직접",
+      "locale": "en",
+      "steps": [
+        {
+          "label": "J6c-1 개요 — 닫힘이면 종전 만들기 안내",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q",
+          "h1": [
+            "TruePixel booking app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Get the build guide →",
+            "Get help"
+          ],
+          "primaryCta": [
+            "Get the build guide →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 1,
+          "disabledLabels": [
+            "Get help"
+          ],
+          "bodyLen": 1156,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 2,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO TruePixel booking app Customers book their own photo sessions WHAT TO DO NOW ✓ P",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6c-2 지시서 화면 — 닫힘이면 [만들기] 없음·팩이 주 버튼",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/dev-spec",
+          "h1": [
+            "Development spec"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Download the pack →",
+            "Developer view",
+            "Rewrite the development spec",
+            "Next: Build guide →"
+          ],
+          "primaryCta": [
+            "Download the pack →"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 787,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO Development spec Everything a developer (or a coding AI) needs to build exactly ",
+          "devTerms": [],
+          "accountCtas": []
+        },
+        {
+          "label": "J6c-3 내 앱 직접 방문 — 정직한 안내 + 지시서 받기",
+          "note": "",
+          "locale": "en",
+          "url": "http://localhost:3187/projects/wsp_tp7x9k2m1q/my-app",
+          "h1": [
+            "My app"
+          ],
+          "buttons": [
+            "«",
+            "Help & feedback",
+            "J Account Sign in → ⌃",
+            "EN",
+            "KO",
+            "Take the spec with you"
+          ],
+          "primaryCta": [
+            "Take the spec with you"
+          ],
+          "primaryCtaCount": 1,
+          "hasExit": true,
+          "deadEnd": false,
+          "disabledCount": 0,
+          "disabledLabels": [],
+          "bodyLen": 497,
+          "errorish": 0,
+          "errorishHits": [],
+          "guidanceish": 1,
+          "koLeakChars": 0,
+          "bodyHead": "Simsa « ＋ New project ← All projects TruePixel booking app Overview ✓ Prepare Idea Product brief Acceptance items Development spec 2 Build & review Build guide 3 Results & fixes Review results Visual checks ANYTIME Prep & connections Sources Help & feedback See pricing Terms Privacy Refunds J Account Sign in → ⌃ EN KO My app The app built from your spec — and how the build is going. Building apps ",
+          "devTerms": [],
+          "accountCtas": []
+        }
+      ],
+      "failure": null
+    }
+  ],
+  "findings": [
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-0 개요 — 만들기 전 지금 할 일",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-3 ★정직 실패 막힘 — 준비 중인 단계에서 멈춤",
+      "what": "막힘 스텝인데 안내 카피 신호 0"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-3b 막힘 → 지시서 받아가기 — 그 자리에서 문서 받기",
+      "what": "막힘 스텝인데 안내 카피 신호 0"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-4 새로고침 후 막힘 화면 복원",
+      "what": "막힘 스텝인데 안내 카피 신호 0"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-5 다시 시도 → 호스팅 자리 실패 막힘 안내",
+      "what": "막힘 스텝인데 안내 카피 신호 0"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-6 개요 — 멈춘 뒤 지금 할 일",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(done): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-0 개요 — 만들기 전 지금 할 일",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(done): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-2c 개요 — 만드는 중 지금 할 일",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(done): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "step": "J6-4 개요 — 만든 뒤 지금 할 일",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(닫힘 — 서버가 열지 않음): 개요 → 지시서 → 내 앱 직접",
+      "locale": "ko",
+      "step": "J6c-1 개요 — 닫힘이면 종전 만들기 안내",
+      "what": "비활성 버튼 1개(도움받기) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "en",
+      "step": "J6-0 개요 — 만들기 전 지금 할 일",
+      "what": "비활성 버튼 1개(Get help) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(not_implemented): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "en",
+      "step": "J6-6 개요 — 멈춘 뒤 지금 할 일",
+      "what": "비활성 버튼 1개(Get help) — 이유 표시 스크린샷 확인"
+    },
+    {
+      "sev": "P2",
+      "journey": "J6 만들기(닫힘 — 서버가 열지 않음): 개요 → 지시서 → 내 앱 직접",
+      "locale": "en",
+      "step": "J6c-1 개요 — 닫힘이면 종전 만들기 안내",
+      "what": "비활성 버튼 1개(Get help) — 이유 표시 스크린샷 확인"
+    }
+  ],
+  "fakeUnhandled": [
+    {
+      "journey": "J6 만들기(not_implemented·수정 전 서버의 다시 시도): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "paths": [
+        "GET /workspace/training-consent"
+      ]
+    },
+    {
+      "journey": "J6 만들기(done): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "ko",
+      "paths": [
+        "GET /workspace/training-consent"
+      ]
+    },
+    {
+      "journey": "J6 만들기(닫힘 — 서버가 열지 않음): 개요 → 지시서 → 내 앱 직접",
+      "locale": "ko",
+      "paths": [
+        "GET /workspace/training-consent"
+      ]
+    },
+    {
+      "journey": "J6 만들기(not_implemented): 아이디어 → 지시서 → 만들기 → 진행 화면",
+      "locale": "en",
+      "paths": [
+        "GET /workspace/training-consent"
+      ]
+    },
+    {
+      "journey": "J6 만들기(닫힘 — 서버가 열지 않음): 개요 → 지시서 → 내 앱 직접",
+      "locale": "en",
+      "paths": [
+        "GET /workspace/training-consent"
+      ]
+    }
+  ]
+}

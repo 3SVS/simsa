@@ -34,3 +34,19 @@ export function inspectionEnabled(env: Pick<Env, "INSPECTION_ENABLED">): boolean
 export function repairEnabled(env: Pick<Env, "REPAIR_ENABLED">): boolean {
   return switchIsOn(env.REPAIR_ENABLED);
 }
+
+/** 503 error code for the build route (Train B hotfix 2026-10-01). */
+export const BUILD_DISABLED = "build_disabled" as const;
+
+/**
+ * Builds (door (a) — POST /workspace/projects/:id/build) may start.
+ *
+ * Same "exactly off" rule as the other switches, but production ships with
+ * BUILD_ENABLED = "off" in wrangler.toml [vars] until the build executor bundle
+ * (PR #569 — job-scoped tokens, daily caps, budget stop) is live: the route
+ * provisions a per-project D1 database and a hosting-org repository for any
+ * caller with a dev spec, and no dashboard screen uses it yet.
+ */
+export function buildEnabled(env: Pick<Env, "BUILD_ENABLED">): boolean {
+  return switchIsOn(env.BUILD_ENABLED);
+}

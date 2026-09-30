@@ -1,6 +1,7 @@
 /**
  * routes/workspace-build-jobs.ts — SI 티어 Train B — B5: T1 빌드 잡 (D-4 · D-5 · D-6 · D-7 · D-12).
  *
+ *   GET  /workspace/build-availability                 — [만들기]를 내밀어도 되는가(B-8 #578 결함 2: POST와 같은 BUILD_ENABLED + 설정)
  *   POST /workspace/projects/:id/build                 — 지시서가 있는 프로젝트의 빌드 잡 시작(S 모드, 계정 0)
  *   GET  /workspace/projects/:id/build-jobs            — 최근 잡 목록
  *   GET  /workspace/projects/:id/build-jobs/:jobId     — 잡 + 타임라인
@@ -33,7 +34,7 @@ import type { Env } from "../env.js";
 import { getOwnedProject } from "../workspace/db.js";
 import { validateDevSpec, type DevSpec } from "../workspace/dev-spec.js";
 import { renderDevSpecFiles } from "../workspace/render-dev-spec.js";
-import { createProjectD1, ensureNamespace, toHostedSlug, HOSTING_NAMESPACE } from "../workspace/hosting-provision.js";
+import { createProjectD1, ensureNamespace, toHostedSlug, HOSTED_D1_PREFIX, HOSTING_NAMESPACE } from "../workspace/hosting-provision.js";
 import { ensureHostedRepo } from "../workspace/hosting-repo.js";
 import {
   advanceBuildJob, appendBuildJobEvent, findActiveBuildJobForProject, getBuildJobById, insertQueuedBuildJob,
@@ -42,6 +43,7 @@ import {
 } from "../workspace/build-job-db.js";
 import { RESERVED_SLUGS_FOR_HOSTING } from "../workspace/hosting-reserved.js";
 import { recordCallbackUsage } from "../workspace/llm-usage.js";
+import { BUILD_DISABLED, buildEnabled } from "../workspace/service-switches.js";
 
 /**
  * L-3 (Train L): 콜백 본문의 선택 필드 `usage[]`를 원장에 쓴다. project·user는 **D1 잡 행에서**
@@ -94,6 +96,7 @@ export type BuildDispatchPayload = {
 };
 
 export async function dispatchBuild(env: Env, payload: BuildDispatchPayload): Promise<{ dispatched: boolean; note?: string }> {
+  if (!buildEnabled(env)) return { dispatched: false, note: BUILD_DISABLED };
   if (!env.BUILDER) return { dispatched: false, note: "builder_unavailable" };
   try {
     const id = env.BUILDER.idFromName(`build-${payload.jobId}`);
@@ -106,12 +109,48 @@ export async function dispatchBuild(env: Env, payload: BuildDispatchPayload): Pr
   }
 }
 
+/**
+ * B-8 (PR #578 검증 결함 2) — 문 (a) "만들기"가 **지금 이 서버에서 끝까지 되는가.**
+ *
+ * 대시보드는 buildEnabled가 true일 때만 [만들기]를 보인다. "빌드 라우트가 있다"만으로는 부족하다: 실행체가
+ * kind=build를 끝까지 못 하는 동안(builder_stage_not_implemented) 버튼을 내밀면, 누르기 전 안내(길면 45분 ·
+ * Simsa 주소에 올라가요)가 없는 기능을 약속하고 모든 사용자가 "준비 중인 단계에서 멈췄어요"로 끝난다.
+ *
+ * 열림 = POST /build가 503으로 막을 것이 **하나도 없음** — POST와 **같은 판정을 같은 순서로**:
+ *   1) 빌드 킬스위치 `buildEnabled(env)`(service-switches.ts 단일 출처, BUILD_ENABLED가 정확히 "off"면 꺼짐)
+ *   2) 콜백 토큰 · BUILDER · 호스팅 · LLM 설정
+ * 스위치는 이것 하나다(#578 스위치 단일화). 예전의 별도 공개 스위치는 없앴다 — 둘이면 하나만 켠 배포에서 화면과
+ * 라우트가 어긋난다. 프로덕션 [vars]는 BUILD_ENABLED = "off"라 화면도 닫혀 보인다. 켜는 것은 실행체 묶음(PR #569)
+ * 배포 + B-5b 라이브 확인 뒤 한 줄("on") + deploy — 그때 라우트와 [만들기]가 함께 열린다.
+ * reason은 운영 확인용(비밀 없음 — POST 오류 코드와 같은 말).
+ */
+export type BuildAvailabilityReason = "open" | typeof BUILD_DISABLED | "callback_token_missing" | "builder_unavailable" | "hosting_not_configured" | "llm_not_configured";
+
+export function buildAvailabilityFor(env: Env): { buildEnabled: boolean; reason: BuildAvailabilityReason } {
+  const closed = (reason: BuildAvailabilityReason) => ({ buildEnabled: false, reason });
+  if (!buildEnabled(env)) return closed(BUILD_DISABLED);
+  if (!env.INTERNAL_CALLBACK_TOKEN) return closed("callback_token_missing");
+  if (!env.BUILDER) return closed("builder_unavailable");
+  if (!env.HOSTING_CF_API_TOKEN || !env.HOSTING_CF_ACCOUNT_ID || !(env.HOSTING_ROOT_DOMAIN ?? "").trim()) return closed("hosting_not_configured");
+  if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) return closed("llm_not_configured");
+  return { buildEnabled: true, reason: "open" };
+}
+
 export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
   app.use("/workspace/*", corsMiddleware);
 
+  // ── GET /workspace/build-availability ───────────────────────────────────────
+  // 프로젝트와 무관한 서버 사실(계정·userKey 불필요). 옛 서버는 이 경로가 없어 전역 404 → 대시보드는 닫힘으로 본다.
+  app.get("/workspace/build-availability", (c) => {
+    const a = buildAvailabilityFor(c.env);
+    return c.json({ ok: true, buildEnabled: a.buildEnabled, reason: a.reason }, 200, { "cache-control": "no-store" });
+  });
+
   // ── POST /workspace/projects/:id/build ──────────────────────────────────────
   app.post("/workspace/projects/:id/build", async (c) => {
+    // Kill switch first — before parsing, ownership, provisioning or any row (hotfix 2026-10-01).
+    if (!buildEnabled(c.env)) return c.json({ ok: false, error: BUILD_DISABLED }, 503);
     const projectId = c.req.param("id");
     let body: Record<string, unknown>;
     try { body = (await c.req.json()) as Record<string, unknown>; } catch { return c.json({ ok: false, error: "invalid_json" }, 400); }
@@ -143,7 +182,13 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
     const slug = toHostedSlug(project.title, project.id, RESERVED_SLUGS_FOR_HOSTING);
     const ns = await ensureNamespace(c.env);
     if (!ns.ok) return c.json({ ok: false, error: "hosting_namespace_failed", detail: ns.error, cf: ns.cfErrors ?? null }, 502);
-    const d1 = await createProjectD1(c.env, slug);
+    // #578 검증 결함 3: [다시 시도]는 같은 프로젝트·같은 slug다 — 전 잡의 D1을 그대로 쓴다(D-12 프로젝트당 D1 하나).
+    // 종전엔 매번 새로 만들려다 이름 충돌 → 502 hosting_d1_failed로 다시 시도가 막다른 길이었다. 전 잡 행이 없는데
+    // D1만 남은 경우(고아)는 createProjectD1이 이름으로 찾아 쓴다.
+    const prior = (await listBuildJobsForProject(c.env, projectId, 20)).find((j) => j.slug === slug && j.d1Id);
+    const d1 = prior?.d1Id
+      ? { ok: true as const, value: { id: prior.d1Id, name: `${HOSTED_D1_PREFIX}${slug}` } }
+      : await createProjectD1(c.env, slug);
     if (!d1.ok) return c.json({ ok: false, error: "hosting_d1_failed", detail: d1.error, cf: d1.cfErrors ?? null }, 502);
 
     // 3) 저장소 — 조직/App이 준비된 경우에만. 없으면 정직하게 없이 간다(zip은 여전히 가능).
@@ -155,7 +200,7 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
 
     // 4) 잡 행 + 디스패치
     const job = await insertQueuedBuildJob(c.env, { projectId, userKey, slug, wbsTotal: wbs.length, budgetUsd: DEFAULT_BUILD_BUDGET_USD, locale, d1Id: d1.value.id, repoFullName: repo ? `${repo.org}/${repo.name}` : null });
-    await appendBuildJobEvent(c.env, job.id, "queued", repo ? "repo_ready" : `repo_skipped:${repoNote ?? "unknown"}`, { slug, d1Id: d1.value.id });
+    await appendBuildJobEvent(c.env, job.id, "queued", repo ? "repo_ready" : `repo_skipped:${repoNote ?? "unknown"}`, { slug, d1Id: d1.value.id, d1Reused: Boolean(prior) });
 
     const base = (c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin).replace(/\/+$/, "");
     const payload: BuildDispatchPayload = {
@@ -242,7 +287,9 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
       if (!r.ok && r.reason === "build_not_green") {
         // D-4: 컨테이너가 done이라 해도 빌드가 green이 아니면 믿지 않는다.
         await markBuildJobFailed(c.env, jobId, { failedStage: "building", error: `done claimed with build exit ${buildExitCode}`, spentUsd, buildExitCode });
-        await appendBuildJobEvent(c.env, jobId, "failed", "build_not_green_rejected", { buildExitCode });
+        // #578 검증 결함 5: 잡에는 주소를 저장하지 않지만(확인되지 않은 앱을 '내 앱'으로 보이지 않게), 컨테이너가
+        // 올렸다고 주장한 주소는 남긴다 — 그 주소에 무언가 떠 있을 수 있고, 운영자가 찾아 내릴 수 있어야 한다.
+        await appendBuildJobEvent(c.env, jobId, "failed", "build_not_green_rejected", { buildExitCode, claimedUrl: deployedUrl.slice(0, 300) });
         return c.json({ ok: true, accepted: false, reason: "build_not_green" });
       }
       await appendBuildJobEvent(c.env, jobId, "done", "deployed", { deployedUrl });

@@ -39,6 +39,8 @@ const EN = {
     // check is the step itself; the PR screen is labelled as the developer tool it is.
     checkApp: "Check the app",
     githubDev: "Code changes (PR) — for developers",
+    // B-8 (D-17 N3 "내 앱"): the app Simsa builds from the spec — progress, address, report link.
+    myApp: "My app",
     benchmark: "Benchmark",
     experiment: "Experiment",
     visualChecks: "Visual checks",
@@ -403,6 +405,18 @@ const EN = {
     // #559 검증 결함 2: a check that is still running is not a result yet.
     viewProgress: "See how it's going",
     viewProgressDesc: "We're opening your app and clicking through it. This can take a few minutes.",
+    // B-8 (PR #578 검증 결함 1·8): the idea/plan doors once making is open — the same answer as the
+    // spec screen's [Build it], and after the build the app itself (never "build it with your AI tool").
+    makeApp: "Build the app",
+    makeAppDesc: "Your development spec is ready. Press Build it and Simsa builds the app and puts it on a Simsa address — no sign-up anywhere.",
+    makeSpec: "Write the development spec",
+    makeSpecDesc: "Your acceptance items are ready. Write the development spec next — Simsa builds the app from it.",
+    viewBuild: "See progress",
+    viewBuildDesc: "Simsa is building your app now. You can see which step it's on.",
+    viewApp: "Open My app",
+    viewAppDesc: "Your app is built and running on its Simsa address.",
+    buildStopped: "See why it stopped",
+    buildStoppedDesc: "The build stopped. See why, and what you can do next.",
   },
   stepsNav: {
     prepare: "Prepare",
@@ -418,6 +432,8 @@ const EN = {
     // overview asks for the same thing) — linking code is optional (D-17 amend).
     lockNeedUrl: "Add your app's address first.",
     lockNeedBuild: "Get your builder pack and connect your app's URL first.",
+    // B-8 (#578 결함 1·8): with making open, the app gets built right here.
+    lockNeedBuildMake: "Build the app first (My app) — results show up here after that.",
     next: "Next",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
     whySeeProblems: "The review found things that need attention. Here they are, with a fix for each.",
@@ -490,6 +506,9 @@ const EN = {
     // #559 여정 렌즈 결함 10: the same step in the default view's name (sidebar: "Build guide").
     gsIdeaStep2Guide: "Get the build guide — paste it into your dev AI and it builds the app for you.",
     gsIdeaStep3: "When it's live, paste the address here — Simsa checks it works, in plain words.",
+    // B-8 (PR #578 검증 결함 1·8): the same list once making is open — the path the [Build it] button takes.
+    gsIdeaStep2Make: "Write the development spec and press Build it — Simsa builds the app and puts it on a Simsa address. No account needed.",
+    gsIdeaStep3Make: "When it's done, open its address from My app.",
     sampleBanner: "This is a hands-on sample. Try everything — re-run the check, open fix ideas, export the build pack.",
     sampleCta: "Start with my own idea",
   },
@@ -605,8 +624,10 @@ const EN = {
     screens: "Screens",
     entities: "Things we store",
     excluded: "Not in this version",
-    countScreens: "{n} screens",
-    countEntities: "{n} kinds",
+    // PR #578 검증 결함 6: "{n} screens"/"{n} kinds" read "1 screens"/"1 kinds". The label beside
+    // it already names the thing, so the number stands alone (right for any count).
+    countScreens: "{n}",
+    countEntities: "{n}",
     none: "(none)",
     humanOnly: "{n} of the checks need a person's judgment — Simsa will not call those done on its own.",
     inferredNote: "This spec was inferred from an existing app. Only the items you confirmed are treated as final.",
@@ -638,6 +659,104 @@ const EN = {
     secTests: "Test plan",
     secAssumptions: "Assumptions",
     secOpen: "Still to decide",
+  },
+  // B-8 (SI tier Train B · D-4·D-6·D-7·D-17): door (a) "Build it" — no account, progress as
+  // steps (never a %), the My app card. Numbers shown here come from the server only (D-7).
+  // devPath/devPathLink are developer-mode only (makeIntroKeys) — everything else is the
+  // default flow: no developer words, no account buttons (test/build-make-copy.test.mjs).
+  makeApp: {
+    panelTitle: "Build the app from this spec",
+    // #578 결함 6: count-agnostic ("1 kinds of data" before).
+    what: "What: {what} · Screens: {screens} · Kinds of data: {entities}",
+    excluded: "Not in this version: {excluded}",
+    eta: "Time: up to about {minutes} minutes (pilot — this may change).",
+    free: "No charge (beta).",
+    hosted: "When it's done, the app goes live on a Simsa address. No account needed.",
+    devPath: "Developer? You can also take the spec and build it in your own repository and hosting —",
+    devPathLink: "Builder pack →",
+    make: "Build it",
+    starting: "Starting…",
+    activeLine: "Simsa is building this app now.",
+    viewProgress: "See progress →",
+    doneLine: "The app is built and live on its Simsa address.",
+    viewApp: "Open My app →",
+    pageSubtitle: "The app built from your spec — and how the build is going.",
+    loading: "Loading…",
+    loadError: "Couldn't load the build status.",
+    needDevSpec: "Building starts from a development spec. Write one first.",
+    needDevSpecLink: "Write the development spec →",
+    notForThisProject: "This project already has an app, so Simsa doesn't build a new one here. Checking that app is the way forward.",
+    backToOverview: "Back to the overview →",
+    progressTitle: "Building your app",
+    stages: {
+      prepare: "Getting ready",
+      skeleton: "Laying out the app",
+      features: "Building features",
+      verify: "Build check",
+      test: "Checking it works",
+      publish: "Putting it online",
+      done: "Done",
+    },
+    stageHints: {
+      prepare: "Getting everything ready to build.",
+      skeleton: "Setting up the app's basic frame.",
+      features: "Building the spec's features one by one.",
+      verify: "Checking that what was built comes together cleanly.",
+      test: "Checking that it works as planned.",
+      publish: "Putting it on its Simsa address.",
+      done: "All steps are finished.",
+    },
+    nowTag: "now",
+    stoppedTag: "stopped here",
+    featuresCount: "Features built: {done} of {total}",
+    budget: "This build's limit: ${budget} · used so far: ${spent} · no charge (beta)",
+    leaveOk: "You can close this page — the build keeps going. Come back any time and it picks up here.",
+    failedTitle: "The build stopped",
+    failures: {
+      notImplemented: "It stopped at a step that isn't ready yet. Part of building an app from start to finish is still being finished on our side — nothing you did caused this.",
+      budget: "It stopped because this build reached its set limit.",
+      interrupted: "The build was cut off partway (our build machine stopped). Trying again starts a fresh build.",
+      startFailed: "The build couldn't start — our build machine didn't respond.",
+      buildFailed: "It stopped at the build check: what was built didn't come together cleanly, so it wasn't put online.",
+      // #578 결함 5: the builder said it was done (with an address), but the build check didn't pass — we
+      // don't know what is on that address, so we say only what we know.
+      buildUnverified: "It didn't pass the build check, so we didn't count it as finished. Something may already be on its address, but it isn't verified — so we don't show it as your app.",
+      testFailed: "It stopped because the app didn't pass the check that it works as planned, so it wasn't put online.",
+      publishFailed: "It stopped while putting the app online.",
+      generic: "It stopped for a reason we couldn't identify.",
+    },
+    noCharge: "You weren't charged (beta).",
+    retry: "Try again",
+    takeSpec: "Take the spec with you",
+    // #578 결함 4: "Take the spec" downloads the spec document itself, right here.
+    takeSpecWorking: "Getting the spec…",
+    takeSpecDone: "Downloaded. Hand this file as-is to a developer or a team that builds apps.",
+    takeSpecError: "We couldn't get the spec just now.",
+    takeSpecErrorLink: "Open the development spec →",
+    appTitle: "Your app is live",
+    address: "Address",
+    hostedNote: "Running on a Simsa address · not a production deployment",
+    openApp: "Open the app ↗",
+    lastCheck: "See the latest check →",
+    report: "Report this app",
+    download: "Download the code",
+    startErrors: {
+      unavailable: "Building apps isn't open here yet. For now, you can take the spec and build it yourself.",
+      notSynced: "This project isn't saved on the server yet. Write the development spec first, then try again.",
+      needSpec: "Building starts from a development spec. Write one first.",
+      noWorkItems: "The development spec has no work to build. Rewrite the spec, then try again.",
+      alreadyActive: "This app is already being built.",
+      notReady: "Building isn't ready yet — a setup issue on our side. You weren't charged.",
+      // build_disabled (503): no date is set to reopen — don't promise one; the notice already offers the spec.
+      paused: "Building is paused for now. You can still take the spec and build it yourself.",
+      dailyLimitReached: "You've used today's builds. You can build again tomorrow (after midnight UTC).",
+      dailyLimitReachedAt: "You've used today's builds. You can build again {when}.",
+      dailyLimitCleared: "Your daily builds have reset. You can build again now.",
+      // #578 결함 3: trying again may stop at the same place — don't promise it; offer the spec instead.
+      hostingFailed: "We couldn't set up a place to put the app online (a problem on our side). You weren't charged. You can take the spec with you now.",
+      network: "Couldn't reach the server. Check your connection and try again.",
+      generic: "Couldn't start the build. Please try again.",
+    },
   },
   items: {
     addItem: "Add item",
@@ -2913,6 +3032,8 @@ const KO = {
     // PR 화면은 개발자 도구라는 걸 이름에서 밝힌다.
     checkApp: "앱 확인하기",
     githubDev: "코드 변경(PR) — 개발자용",
+    // B-8 (D-17 N3 "내 앱"): 지시서대로 Simsa가 만드는 앱 — 진행·주소·신고 링크.
+    myApp: "내 앱",
     benchmark: "벤치마크",
     experiment: "실험",
     visualChecks: "시각 검수",
@@ -3270,6 +3391,18 @@ const KO = {
     // #559 검증 결함 2: 아직 도는 확인은 결과가 아니다.
     viewProgress: "진행 상황 보기",
     viewProgressDesc: "앱을 열어 눌러 보는 중이에요. 몇 분 걸릴 수 있어요.",
+    // B-8 (PR #578 검증 결함 1·8): 만들기가 열린 아이디어·기획서 문 — 지시서 화면의 [만들기]와 같은 답,
+    // 다 만든 뒤에는 그 앱("쓰시는 AI 도구로 만드세요"라고 하지 않는다).
+    makeApp: "앱 만들기",
+    makeAppDesc: "개발 지시서가 준비됐어요. [만들기]를 누르면 Simsa가 앱을 만들어 Simsa 주소에 올려 드려요 — 따로 가입할 곳은 없어요.",
+    makeSpec: "개발 지시서 만들기",
+    makeSpecDesc: "확인 항목이 준비됐어요. 이어서 개발 지시서를 만들면 Simsa가 그대로 앱을 만들어요.",
+    viewBuild: "진행 상황 보기",
+    viewBuildDesc: "지금 이 앱을 만들고 있어요. 어느 단계인지 볼 수 있어요.",
+    viewApp: "내 앱 보기",
+    viewAppDesc: "앱을 다 만들어 Simsa 주소에서 운영 중이에요.",
+    buildStopped: "멈춘 이유 보기",
+    buildStoppedDesc: "만들기가 멈췄어요. 왜 멈췄는지, 다음에 무엇을 할 수 있는지 확인해 주세요.",
   },
   stepsNav: {
     prepare: "준비",
@@ -3284,6 +3417,8 @@ const KO = {
     // 코드 연결은 선택이다(D-17 amend).
     lockNeedUrl: "앱 주소를 먼저 넣으세요.",
     lockNeedBuild: "빌더 팩을 받아 앱을 만들고, 앱 URL을 먼저 연결하세요.",
+    // B-8 (#578 결함 1·8): 만들기가 열려 있으면 앱은 여기서 만든다.
+    lockNeedBuildMake: "먼저 '내 앱'에서 앱을 만들어 주세요 — 그다음 결과가 여기에 나와요.",
     next: "다음",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
     whySeeProblems: "검수에서 살펴봐야 할 것이 나왔어요. 각각 어떻게 고치는지까지 함께 있습니다.",
@@ -3356,6 +3491,9 @@ const KO = {
     // #559 여정 렌즈 결함 10: 기본 보기의 이름으로 같은 단계(사이드바: "만들기 안내").
     gsIdeaStep2Guide: "만들기 안내 받기 — 쓰시는 개발 AI에 붙여넣으면 앱을 만들어 드려요.",
     gsIdeaStep3: "완성되면 주소를 여기 넣기 — 실제로 작동하는지 쉬운 말로 확인해 드려요.",
+    // B-8 (PR #578 검증 결함 1·8): 만들기가 열리면 같은 목록이 [만들기] 경로를 말한다.
+    gsIdeaStep2Make: "개발 지시서를 만들고 [만들기] 누르기 — Simsa가 앱을 만들어 Simsa 주소에 올려요. 따로 가입할 곳은 없어요.",
+    gsIdeaStep3Make: "다 만들면 '내 앱'에서 주소를 열어 봐요.",
     sampleBanner: "체험용 예시예요. 다시 확인, 고쳐보기, 만들기 패키지까지 자유롭게 눌러보세요.",
     sampleCta: "내 아이디어로 시작하기",
   },
@@ -3504,6 +3642,102 @@ const KO = {
     secTests: "테스트 계획",
     secAssumptions: "가정",
     secOpen: "아직 결정이 필요한 것",
+  },
+  // B-8 (SI 티어 Train B · D-4·D-6·D-7·D-17): 문 (a) "만들기" — 계정 0, 진행은 단계로(퍼센트 아님),
+  // 내 앱 카드. 숫자는 서버가 준 것만(D-7). devPath/devPathLink는 개발자 모드 전용(makeIntroKeys) —
+  // 나머지는 기본 흐름: 개발 용어·계정 버튼 0 (test/build-make-copy.test.mjs).
+  makeApp: {
+    panelTitle: "이 지시서대로 앱 만들기",
+    what: "무엇을 만드는지: {what} · 화면 {screens}개 · 저장하는 것 {entities}가지",
+    excluded: "이번엔 안 만드는 것: {excluded}",
+    eta: "걸리는 시간: 길면 {minutes}분쯤 (시험 운영 중이라 달라질 수 있어요)",
+    free: "비용은 받지 않아요(베타).",
+    hosted: "다 만들면 앱은 Simsa 주소에 올라가요. 따로 가입할 곳은 없어요.",
+    devPath: "개발자라면 지시서를 받아 내 저장소·내 배포로 직접 만들 수도 있어요 —",
+    devPathLink: "빌더 팩 →",
+    make: "만들기",
+    starting: "시작하는 중…",
+    activeLine: "지금 이 앱을 만들고 있어요.",
+    viewProgress: "진행 상황 보기 →",
+    doneLine: "앱을 다 만들어 Simsa 주소에 올렸어요.",
+    viewApp: "내 앱 보기 →",
+    pageSubtitle: "지시서대로 만든 앱과, 만드는 과정을 여기서 봐요.",
+    loading: "불러오는 중…",
+    loadError: "만들기 상태를 불러오지 못했어요.",
+    needDevSpec: "만들기는 개발 지시서에서 시작해요. 먼저 지시서를 만들어 주세요.",
+    needDevSpecLink: "개발 지시서 만들기 →",
+    notForThisProject: "이 프로젝트에는 이미 만든 앱이 있어서, 여기서 새로 만들지 않아요. 그 앱을 확인하는 쪽으로 이어 가요.",
+    backToOverview: "개요로 돌아가기 →",
+    progressTitle: "앱을 만들고 있어요",
+    stages: {
+      prepare: "준비",
+      skeleton: "뼈대 만들기",
+      features: "기능 만들기",
+      verify: "빌드 확인",
+      test: "작동 확인",
+      publish: "올리기",
+      done: "끝",
+    },
+    stageHints: {
+      prepare: "만들 준비를 하고 있어요.",
+      skeleton: "앱의 기본 틀을 잡고 있어요.",
+      features: "지시서의 기능을 하나씩 만들고 있어요.",
+      verify: "만든 것이 문제없이 합쳐지는지 보고 있어요.",
+      test: "기획대로 작동하는지 확인하고 있어요.",
+      publish: "Simsa 주소에 올리고 있어요.",
+      done: "모든 단계를 마쳤어요.",
+    },
+    nowTag: "지금",
+    stoppedTag: "여기서 멈춤",
+    featuresCount: "만든 기능 {done} / {total}개",
+    budget: "이번 만들기 한도 ${budget} · 지금까지 ${spent} · 비용은 받지 않아요(베타)",
+    leaveOk: "이 화면을 닫아도 계속 만들어요. 다시 들어오면 여기서 이어서 보여 드려요.",
+    failedTitle: "만들기가 멈췄어요",
+    failures: {
+      notImplemented: "아직 준비 중인 단계에서 멈췄어요. 앱을 처음부터 끝까지 만드는 기능 일부가 아직 완성되지 않았어요 — 저희 쪽 사정이에요.",
+      budget: "이번 만들기에 정해 둔 한도에 닿아 멈췄어요.",
+      interrupted: "만드는 도중에 끊겼어요(저희 쪽 만드는 기계가 멈췄어요). 다시 하면 처음부터 새로 만들어요.",
+      startFailed: "시작하지 못했어요 — 저희 쪽 만드는 기계가 응답하지 않았어요.",
+      buildFailed: "빌드 확인에서 멈췄어요. 만든 것이 문제없이 합쳐지지 않아 올리지 않았어요.",
+      // #578 결함 5: 만드는 쪽은 다 됐다(주소 포함)고 알려 왔지만 빌드 확인을 통과하지 못했다 — 그 주소에
+      // 무엇이 떠 있는지는 모른다. 아는 것만 말한다.
+      buildUnverified: "빌드 확인을 통과하지 못해 완성으로 치지 않았어요. 주소에 무언가 올라갔을 수는 있지만, 확인되지 않은 앱이라 내 앱으로 보여 드리지 않아요.",
+      testFailed: "기획대로 작동하는지 확인을 통과하지 못해 멈췄어요. 확인되지 않은 앱은 올리지 않았어요.",
+      publishFailed: "앱을 올리는 중에 멈췄어요.",
+      generic: "알 수 없는 이유로 멈췄어요.",
+    },
+    noCharge: "비용은 받지 않았어요(베타).",
+    retry: "다시 시도",
+    takeSpec: "지시서 받아가기",
+    // #578 결함 4: 지시서 받아가기 = 그 자리에서 지시서 문서를 받는다.
+    takeSpecWorking: "지시서를 준비하는 중…",
+    takeSpecDone: "받았어요. 이 파일을 개발자나 앱을 만드는 업체에 그대로 넘기면 돼요.",
+    takeSpecError: "지시서를 지금 받지 못했어요.",
+    takeSpecErrorLink: "개발 지시서 화면에서 보기 →",
+    appTitle: "내 앱이 준비됐어요",
+    address: "주소",
+    hostedNote: "Simsa 주소에서 운영 중 · 정식 운영(프로덕션)용은 아니에요",
+    openApp: "앱 열기 ↗",
+    lastCheck: "마지막 확인 결과 보기 →",
+    report: "이 앱 신고하기",
+    download: "코드 받아가기",
+    startErrors: {
+      unavailable: "앱 만들기는 아직 여기서 열리지 않았어요. 지금은 지시서를 받아 직접 만들 수 있어요.",
+      notSynced: "이 프로젝트가 아직 서버에 저장되지 않았어요. 개발 지시서를 먼저 만든 뒤 다시 시도해 주세요.",
+      needSpec: "만들기는 개발 지시서에서 시작해요. 먼저 지시서를 만들어 주세요.",
+      noWorkItems: "지시서에 만들 작업이 비어 있어요. 지시서를 다시 만든 뒤 시도해 주세요.",
+      alreadyActive: "이미 이 앱을 만들고 있어요.",
+      notReady: "만들기 준비가 아직 안 끝났어요 — 저희 쪽 설정 문제예요. 비용은 받지 않았어요.",
+      // build_disabled(503): 다시 여는 때가 정해지지 않았다 — 약속하지 않고, 알림이 함께 주는 지시서를 말한다.
+      paused: "지금은 만들기를 잠시 멈췄어요. 지시서를 받아 직접 만들 수는 있어요.",
+      dailyLimitReached: "오늘 만들 수 있는 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
+      dailyLimitReachedAt: "오늘 만들 수 있는 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
+      dailyLimitCleared: "만들기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
+      // #578 결함 3: 다시 해도 같은 곳에서 막힐 수 있다 — 약속하지 않고 지시서를 준다.
+      hostingFailed: "앱을 올릴 자리를 만들지 못했어요(저희 쪽 문제예요). 비용은 받지 않았어요. 지시서는 지금 받아 갈 수 있어요.",
+      network: "서버에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.",
+      generic: "만들기를 시작하지 못했어요. 다시 시도해 주세요.",
+    },
   },
   items: {
     addItem: "항목 추가",

@@ -205,8 +205,17 @@ export function computeProjectSteps(facts) {
  * add_url의 slug("sources")는 주소를 넣을 수 있는 화면이다. 개요는 이 행동을
  * 링크가 아니라 **그 자리의 입력칸**으로 그린다(D4) — slug는 다른 소비자를 위한 폴백.
  *
- * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasRepoSource?: boolean | null, hasReviewRun: boolean | null, hasVisualCheck?: boolean | null, visualCheckActive?: boolean | null, hasDeployUrl?: boolean | null, entryPath?: "idea" | "code" | "spec" | null }} facts
- * @returns {{ action: "create_items" | "connect_code" | "add_url" | "get_pack" | "run_review" | "view_progress" | "view_results", slug: string } | null}
+ * ★B-8 (PR #578 검증 결함 1·8): 앱이 없는 아이디어·기획서 문의 다음 행동은 **만들기 사실**을 본다
+ * (makeStepAction). 종전엔 만들기 전·만드는 중·만든 뒤 모두 "만들기 안내 받아 쓰시는 AI 도구로 만드세요"
+ * (get_pack — A 경로)였다. 지시서 화면은 [만들기](S)를 말하는데 홈은 외부 도구를 말해 답이 둘이었고,
+ * 앱이 올라간 뒤에도 "앱을 만드세요"라고 했다.
+ *
+ * @param {{ hasItems: boolean | null, hasRepo: boolean | null, hasRepoSource?: boolean | null, hasReviewRun: boolean | null, hasVisualCheck?: boolean | null, visualCheckActive?: boolean | null, hasDeployUrl?: boolean | null, entryPath?: "idea" | "code" | "spec" | null, makeOpen?: boolean | null, buildState?: "none" | "active" | "done" | "failed" | null, hasDevSpec?: boolean | null }} facts
+ *   makeOpen: the server confirmed making is open (buildOpenFact) — null while asking.
+ *   buildState: the latest build Simsa started for this project (hostedBuildState) — null while asking.
+ *   hasDevSpec: a development spec is saved — null while asking.
+ *   A caller that passes none of makeOpen/buildState keeps the former contract (get_pack).
+ * @returns {{ action: "create_items" | "connect_code" | "add_url" | "get_pack" | "make_spec" | "make_app" | "view_build" | "view_app" | "build_stopped" | "run_review" | "view_progress" | "view_results", slug: string } | null}
  */
 export function nextProjectAction(facts) {
   const f = facts ?? {};
@@ -223,9 +232,10 @@ export function nextProjectAction(facts) {
       f.hasDeployUrl !== null;
     if (!confirmedNoApp) return null;
     if (f.hasItems === false) return { action: "create_items", slug: "items" };
-    // No repo AND no deploy URL → get the handoff pack, build the app
-    // elsewhere, come back with a deploy URL. GitHub is never the forced step.
-    if (f.hasDeployUrl === false) return { action: "get_pack", slug: "export" };
+    // No repo AND no deploy URL → build it: on Simsa when making is open (B-8, the
+    // default S path), otherwise the handoff pack (build elsewhere, come back with
+    // a deploy URL). GitHub is never the forced step.
+    if (f.hasDeployUrl === false) return makeStepAction(f);
     return null;
   }
 
@@ -249,6 +259,30 @@ export function nextProjectAction(facts) {
   if (f.visualCheckActive === null) return null;
   // Never checked, or only runs that failed to finish → (re)run the real-app check.
   return { action: "run_review", slug: "visual-checks" };
+}
+
+/**
+ * B-8 (PR #578 검증 결함 1·8) — 앱이 없는 문(항목 있음·주소 없음 확정)의 "만들기" 한 걸음.
+ *
+ *  - Simsa가 이미 시작한 빌드가 있으면 그 결과가 답이다(만들기가 지금 닫혀도 — 쓰는 것은 숨기지 않는다):
+ *    만드는 중 → 진행 상황 보기 · 끝 → 내 앱 보기 · 멈춤 → 멈춘 이유 보기. 목적지는 모두 내 앱.
+ *  - 없으면: 만들기가 열렸을 때 지시서가 있으면 [만들기](내 앱), 없으면 지시서 만들기.
+ *  - 만들기가 닫혔으면(서버가 확인하지 않음) 종전대로 만들기 안내(팩) — 늘 되는 길.
+ *  - 아직 묻는 중인 사실이 있으면 null(뒤집히는 CTA 금지).
+ * 만들기 사실을 하나도 넘기지 않는 호출자는 종전 계약(get_pack).
+ * @param {{ makeOpen?: boolean | null, buildState?: "none" | "active" | "done" | "failed" | null, hasDevSpec?: boolean | null }} f
+ */
+function makeStepAction(f) {
+  if (f.makeOpen === undefined && f.buildState === undefined) return { action: /** @type {const} */ ("get_pack"), slug: "export" };
+  if (f.makeOpen === null || f.buildState === null) return null;
+  if (f.buildState === "active") return { action: /** @type {const} */ ("view_build"), slug: "my-app" };
+  if (f.buildState === "done") return { action: /** @type {const} */ ("view_app"), slug: "my-app" };
+  if (f.buildState === "failed") return { action: /** @type {const} */ ("build_stopped"), slug: "my-app" };
+  if (f.makeOpen !== true) return { action: /** @type {const} */ ("get_pack"), slug: "export" };
+  if (f.hasDevSpec === null) return null;
+  return f.hasDevSpec === true
+    ? { action: /** @type {const} */ ("make_app"), slug: "my-app" }
+    : { action: /** @type {const} */ ("make_spec"), slug: "dev-spec" };
 }
 
 /**
@@ -277,25 +311,33 @@ export function nextProjectAction(facts) {
  *    that screen once an app exists. `hasApp: true` walks the app route.
  * @param {string} slug current screen slug ("" = overview)
  * @param {"idea" | "code" | "spec" | null} [entryPath] the branch this project entered through
- * @param {{ developerMode?: boolean, hasApp?: boolean, hasDeployUrl?: boolean | null }} [opts]
+ * @param {{ developerMode?: boolean, hasApp?: boolean, hasDeployUrl?: boolean | null, makeOpen?: boolean | null }} [opts]
  *   hasDeployUrl: the app's address is connected (only read on the PR screen).
+ *   makeOpen: the server confirmed making is open (B-8 — only read at the end of the idea walk).
  * @returns {string | null} next slug, or null when there is no obvious next
  */
 export function nextScreenSlug(slug, entryPath, opts) {
   const developerMode = opts?.developerMode === true;
   const appWalk = entryPath === "code" || opts?.hasApp === true;
-  // Idea/spec entries have NO CODE YET: their walk ends at the builder pack
-  // (go build it), never marching into repo-connect/PR screens — that funnel
+  // Idea/spec entries have NO CODE YET: their walk ends where the app gets built
+  // — "내 앱" (on Simsa, B-8) or the builder pack — never marching into repo-connect/PR screens — that funnel
   // only makes sense AFTER the app exists (2026-07-10 live walkthrough: an
   // idea-branch user was walked settings→github→history in a loop with
   // nothing to connect). The post-build return path (/p/:id/connect, checks)
   // is reachable from the export screen and the sidebar, not a forced walk.
   const fullAppWalk = ["settings", "visual-checks", "github", "items", "checks", "fixes"];
+  // ★B-8 (D-17 — 아이디어·기획서 문의 "만들기"는 S): when the server confirmed making is open
+  //  (makeOpen true) the pre-build walk ends at "내 앱"(my-app) — the spec screen's own primary is then
+  //  "만들기", and "다음: 만들기 안내"(the pack) under it would be a second, different answer.
+  //  ★PR #578 검증 결함 2: only then. Closed (or not confirmed) → the pack, as before — the spec screen's
+  //  primary is the pack too. Unknown (null) at the spec screen → no "다음" yet (it would flip).
+  if (!appWalk && slug === "dev-spec" && opts?.makeOpen === null) return null;
+  const buildEnd = !appWalk && opts?.makeOpen === true ? "my-app" : "export";
   const order = appWalk
     ? developerMode
       ? fullAppWalk
       : fullAppWalk.filter((s) => s !== "github")
-    : ["idea", "spec", "items", "dev-spec", "export"];
+    : ["idea", "spec", "items", "dev-spec", buildEnd];
   const i = order.indexOf(slug);
   if (i !== -1) return i === order.length - 1 ? null : (order[i + 1] ?? null);
   // The PR screen outside developer mode (the sidebar shows it to anyone with
@@ -396,19 +438,33 @@ export function stepMapView(facts, settled) {
  *    item moves from one step to another under the reader.
  *
  * A screen never appears in two steps at once.
- * @param {{ hasApp: boolean | null, developerMode?: boolean, hasPrReviewHistory?: boolean | null }} input
+ *
+ * ★B-8 (D-17 N3 "개요 / 만들 것 / 내 앱 / 확인 결과 / 설정"): "내 앱"(my-app) — the app Simsa
+ * builds from the spec, its progress and its address. (The route is `my-app`, not `build`: the
+ * repo .gitignore ignores every `build/` folder as build output — a route there would be dropped
+ * from git and hidden from rg.)
+ *  - No app yet: it LEADS step 2, before the build guide — making it on Simsa is the default
+ *    path for the idea/plan doors (no account); the guide is the take-it-elsewhere path.
+ *    ★PR #578 검증 결함 2: only when the server confirmed making is open (`makeOpen: true`), or
+ *    Simsa already built one here (`hasHostedBuild: true`). Closed / not confirmed → the former
+ *    [build guide] only — a "내 앱" that can only say "not open yet" is a detour, not a step.
+ *  - App exists: only when Simsa already built (or is building) one for this project
+ *    (`hasHostedBuild: true` — never hide something in use). Unknown/false → not shown.
+ *  - Unknown app presence: held with the rest (no item moves under the reader).
+ * @param {{ hasApp: boolean | null, developerMode?: boolean, hasPrReviewHistory?: boolean | null, hasHostedBuild?: boolean | null, makeOpen?: boolean | null }} input
  * @returns {{ review: string[], results: string[] }}
  */
 export function sidebarStepItems(input) {
   const dev = input?.developerMode === true;
   if (input?.hasApp === true) {
-    const review = ["visual-checks"];
+    const review = input?.hasHostedBuild === true ? ["my-app", "visual-checks"] : ["visual-checks"];
     if (prReviewVisible(input)) review.push("github");
     if (dev) review.push("export");
     return { review, results: ["checks"] };
   }
   if (input?.hasApp === null) return { review: [], results: ["checks"] };
-  return { review: ["export"], results: ["checks", "visual-checks"] };
+  const myApp = input?.makeOpen === true || input?.hasHostedBuild === true;
+  return { review: myApp ? ["my-app", "export"] : ["export"], results: ["checks", "visual-checks"] };
 }
 
 /**
@@ -435,6 +491,9 @@ export function navLabelKey(slug, opts) {
       return "githubDev";
     case "dev-spec":
       return "devSpec";
+    // B-8: the app Simsa builds from the spec (progress · address · report link).
+    case "my-app":
+      return "myApp";
     case "idea":
     case "spec":
     case "items":
@@ -537,6 +596,34 @@ export function packCopyKeys(developerMode) {
   return developerMode === true
     ? { label: "getPack", step2: "gsIdeaStep2" }
     : { label: "getGuide", step2: "gsIdeaStep2Guide" };
+}
+
+/**
+ * B-8 (PR #578 검증 결함 1·8) — the overview's "how this works" list for a project without an app.
+ * When the server confirmed making is open, steps 2–3 describe THAT path ("만들기 — Simsa가 만들어
+ * Simsa 주소에 올려요" · "내 앱에서 주소를 열어요") — the list used to keep saying "get the build guide,
+ * paste it into your dev AI" right under a [만들기] answer. Closed / unknown → the former pack list.
+ * @param {{ developerMode: boolean, makeOpen: boolean | null | undefined }} input
+ * @returns {{ step2: "gsIdeaStep2Make" | "gsIdeaStep2Guide" | "gsIdeaStep2", step3: "gsIdeaStep3Make" | "gsIdeaStep3" }}
+ */
+export function ideaExplainerKeys(input) {
+  if (input?.makeOpen === true) return { step2: "gsIdeaStep2Make", step3: "gsIdeaStep3Make" };
+  return { step2: packCopyKeys(input?.developerMode === true).step2, step3: "gsIdeaStep3" };
+}
+
+/**
+ * The sidebar's hint on a locked step (key under t.stepsNav). B-8 (#578 결함 1·8): the builder
+ * branch's results lock ("need_build") said "get your builder pack, build the app, connect its URL"
+ * — with making open, the way there is [만들기] on Simsa, so the hint says that instead.
+ * @param {"need_items" | "need_url" | "need_build" | null} reason
+ * @param {{ makeOpen?: boolean | null }} [opts]
+ * @returns {"lockNeedItems" | "lockNeedUrl" | "lockNeedBuild" | "lockNeedBuildMake" | null}
+ */
+export function lockHintKey(reason, opts) {
+  if (reason === "need_url") return "lockNeedUrl";
+  if (reason === "need_items") return "lockNeedItems";
+  if (reason === "need_build") return opts?.makeOpen === true ? "lockNeedBuildMake" : "lockNeedBuild";
+  return null;
 }
 
 // ─── Facts from API responses — one rule for the overview and the sidebar ───
@@ -740,6 +827,7 @@ export function packReadiness(checkResults, fixSuggestions) {
  *   developerMode?: boolean,
  *   hasApp?: boolean,
  *   hasDeployUrl?: boolean | null,
+ *   makeOpen?: boolean | null,
  * }} ctx developerMode: the PR screen joins the code walk only for developers (D9).
  *   hasApp: the app already exists (restored idea-branch project with a repo or
  *   address) → walk the app route, never to the builder pack (#559 검증 결함 5).
@@ -753,6 +841,8 @@ export function nextStepFromHere(slug, ctx = {}) {
     developerMode: ctx.developerMode === true,
     hasApp: ctx.hasApp === true,
     hasDeployUrl: ctx.hasDeployUrl ?? null,
+    // B-8 (#578 결함 2): the spec screen's "다음" is 내 앱 only when making is open.
+    makeOpen: ctx.makeOpen,
   };
 
   // ★검수를 본 직후 — 여기서만 결과가 다음을 정한다.
