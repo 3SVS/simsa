@@ -82,9 +82,12 @@ export function accountCtaLabels(actionTexts) {
   return out;
 }
 
-/** Journeys where the beginner standard applies at P0 severity. */
+/**
+ * Journeys where the beginner standard applies at P0 severity.
+ * J6 (B-8): idea → spec → "만들기" → progress — the default S path, no account (D-17).
+ */
 export function isDefaultFlowJourney(journeyName) {
-  return /^J0\b|^J2\b|^J7\b/.test(String(journeyName ?? ""));
+  return /^J0\b|^J2\b|^J6\b|^J7\b/.test(String(journeyName ?? ""));
 }
 
 /**

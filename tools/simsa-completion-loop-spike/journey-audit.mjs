@@ -17,14 +17,30 @@
  * Usage:
  *   node journey-audit.mjs            → KO+EN 전체 (기본)
  *   node journey-audit.mjs --ko-only  → KO만 (빠른 재감사)
+ *   node journey-audit.mjs --local http://localhost:3002 [--ko-only]
+ *       → **로컬 가짜 서버 모드**(B-8 J6): 로컬 next build+start 위에서 central-plane 응답을
+ *         Playwright route로 가짜 주입(lib/fake-central.mjs). J6(만들기)만 돈다 — [만들기]는 실제
+ *         빌드를 시작하므로 **라이브에서는 절대 돌리지 않는다.** 라이브 여정(J0~J5·J7)은 이 모드에서 돌지 않는다.
  * 산출물: journey-audit-shots/*.png · journey-audit-result.json (steps+findings)
+ *         (--local: journey-audit-shots/local/*.png · journey-audit-local-result.json)
  * 배포 게이트 절차: ./JOURNEY-AUDIT.md
  */
 import { chromium } from "playwright";
 import { devTermHits, accountCtaLabels, isDefaultFlowJourney, firstVisitLocaleMismatch } from "./lib/beginner-terms.mjs";
+import { createFakeCentral, fakeCorsHeaders } from "./lib/fake-central.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-const BASE = "https://app.trysimsa.com";
+const argValue = (name) => {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? (process.argv[i + 1] ?? null) : null;
+};
+/** --local <base>: 로컬 가짜 서버 모드. 없으면 종전 그대로 라이브 BASE. */
+const LOCAL_BASE = argValue("--local");
+if (LOCAL_BASE !== null && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test(LOCAL_BASE)) {
+  // 가짜 주입 모드를 라이브 주소에 겨누는 실수를 막는다 — 로컬 주소만 받는다.
+  throw new Error(`--local accepts only http://localhost[:port] — got ${LOCAL_BASE}`);
+}
+const BASE = LOCAL_BASE ? LOCAL_BASE.replace(/\/+$/, "") : "https://app.trysimsa.com";
 const KO_ONLY = process.argv.includes("--ko-only");
 
 /**
@@ -35,11 +51,11 @@ const CODE_SUBMISSION = {
   website: "https://app.trysimsa.com/",
   repo: "https://github.com/3SVS/simsa",
 };
-const SHOTS = new URL("./journey-audit-shots", import.meta.url).pathname.replace(/^\/(\w):/, "$1:");
+const SHOTS = new URL(LOCAL_BASE ? "./journey-audit-shots/local" : "./journey-audit-shots", import.meta.url).pathname.replace(/^\/(\w):/, "$1:");
 mkdirSync(SHOTS, { recursive: true });
 
 const browser = await chromium.launch();
-const audit = { startedAt: new Date().toISOString(), version: 2, journeys: [], findings: [] };
+const audit = { startedAt: new Date().toISOString(), version: 2, mode: LOCAL_BASE ? `local-fake:${BASE}` : "live", journeys: [], findings: [], fakeUnhandled: [] };
 
 async function newUserPage(locale = "ko") {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -364,7 +380,133 @@ async function runFirstVisitLocale(browserLocale) {
   }
 }
 
-// ── 실행: KO 전체 + (기본) EN 축 ──────────────────────────────────────────────
+// ── J6 (B-8): 만들기 — 아이디어 → 지시서 → 만들기 → 진행 화면 (로컬 가짜 서버 전용) ─────────
+// [만들기]는 실제 빌드를 시작한다(호스팅 D1·컨테이너·LLM 비용). 그래서 라이브에서는 돌지 않고,
+// `--local`에서 central-plane 응답을 가짜로 주입해서만 돈다(lib/fake-central.mjs).
+// 기대 문구는 대시보드 사전에서 직접 읽는다 — 카피가 바뀌어도 장비가 옛 문장을 찾지 않게.
+// Rule 6: 프로젝트 "(주)트루픽셀 예약 앱", 한국어 기획(지시서 픽스처).
+const J6_PROJECT = { id: "wsp_tp7x9k2m1q", ko: "(주)트루픽셀 예약 앱", en: "TruePixel booking app" };
+
+async function j6Page(locale, fake) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+  // central-plane 요청은 전부 여기서 답한다 — 라이브 주소와 가짜 주소 둘 다(fake.origins).
+  for (const origin of fake.origins) {
+    await ctx.route(`${origin}/**`, async (route) => {
+      const req = route.request();
+      const r = fake.handle(req.method(), req.url());
+      await route.fulfill({
+        status: r.status,
+        headers: { ...fakeCorsHeaders(req.headers()["origin"]), "content-type": "application/json" },
+        body: r.status === 204 ? "" : JSON.stringify(r.json),
+      });
+    });
+  }
+  // 같은 출처 로그인 프록시(/api/auth/*)는 Next 서버가 central로 넘긴다 — 브라우저에서 먼저 답한다(로그아웃).
+  await ctx.route(`${BASE}/api/auth/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
+  await ctx.addInitScript((seed) => {
+    try {
+      localStorage.setItem("conclave:locale", seed.locale);
+      if (!localStorage.getItem("conclave_user_key")) localStorage.setItem("conclave_user_key", "uk_j6localfake01");
+      const pk = "conclave_wf_projects:anon";
+      if (!localStorage.getItem(pk)) {
+        localStorage.setItem(pk, JSON.stringify([{
+          id: seed.id, name: seed.name, description: seed.desc, createdAt: "2026-09-30",
+          spec: { completeness: 80, goal: seed.desc, included: [], excluded: [], openDecisions: [] },
+          requirements: seed.items,
+        }]));
+        localStorage.setItem(`conclave_wf_ext_${seed.id}`, JSON.stringify({ entryPath: "idea", productSpec: { productName: seed.name, oneLine: seed.desc } }));
+      }
+    } catch {}
+  }, {
+    locale,
+    id: J6_PROJECT.id,
+    name: J6_PROJECT[locale === "en" ? "en" : "ko"],
+    desc: locale === "en" ? "Customers book their own photo sessions" : "손님이 직접 촬영 예약을 잡는 웹앱",
+    items: [
+      { id: "it_1", title: locale === "en" ? "Book an open slot" : "빈 시간 보고 예약하기", status: "not_started", category: "flow", priority: "must" },
+      { id: "it_2", title: locale === "en" ? "See the booking back" : "예약 확인 화면", status: "not_started", category: "flow", priority: "must" },
+    ],
+  });
+  const page = await ctx.newPage();
+  page._simsaLocale = locale;
+  return page;
+}
+
+/** J6 기대값 — 어긋나면 P0(기본 흐름의 만들기 여정이 안 됨). 문구를 같이 남긴다. */
+function j6Expect(row, ok, what) {
+  if (!ok) audit.findings.push({ sev: "P0", journey: audit.journeys.at(-1).name, locale: row.locale, step: row.label, what: `J6 기대 불일치 — ${what}` });
+}
+
+async function runMakeJourney(locale, scenario) {
+  const { DICTIONARIES } = await import("../../apps/dashboard/src/i18n/dictionary.mjs");
+  const t = DICTIONARIES[locale];
+  const mk = t.makeApp;
+  const fake = createFakeCentral({ projectId: J6_PROJECT.id, scenario, locale });
+  try {
+    journey(`J6 만들기(${scenario}): 아이디어 → 지시서 → 만들기 → 진행 화면`, locale);
+    const page = await j6Page(locale, fake);
+    const mainText = () => page.evaluate(() => (document.querySelector("main")?.innerText || "").replace(/\s+/g, " "));
+
+    // ① 아이디어 문의 끝 — 지시서 화면: 4줄 요약 + 만들기 안내 + 주 버튼 하나(만들기)
+    await page.goto(`${BASE}/projects/${J6_PROJECT.id}/dev-spec`, { waitUntil: "networkidle", timeout: 90000 });
+    await settleForNextAction(page, 15000);
+    const r1 = await facts(page, "J6-1 지시서 화면 — 만들기 안내·주 버튼");
+    const t1 = await mainText();
+    j6Expect(r1, r1.primaryCtaCount === 1 && r1.primaryCta.includes(mk.make), `주 버튼이 [${mk.make}] 하나여야 함 — 실제 ${JSON.stringify(r1.primaryCta)}`);
+    j6Expect(r1, t1.includes(mk.free) && t1.includes(mk.hosted), "시작 전 안내(비용 없음·Simsa 주소)가 보여야 함");
+    j6Expect(r1, !t1.includes(mk.devPath), "개발자 모드가 아닌데 A 경로 문장이 보임");
+
+    // ② 만들기 한 번 → 내 앱(진행 화면)
+    await page.locator("main .btn-primary", { hasText: mk.make }).first().click();
+    await page.waitForURL(/\/my-app$/, { timeout: 30000 });
+    await page.waitForSelector('main [aria-current="step"]', { timeout: 20000 }).catch(() => {});
+    const r2 = await facts(page, "J6-2 만드는 중 진행 화면 — 지금 단계 강조");
+    const steps2 = await page.locator('main [aria-current="step"]').count();
+    const t2 = await mainText();
+    j6Expect(r2, (r2.h1 ?? []).includes(t.nav.myApp), `제목이 '${t.nav.myApp}'여야 함 — 실제 ${JSON.stringify(r2.h1)}`);
+    j6Expect(r2, steps2 === 1 && t2.includes(mk.nowTag), `지금 단계가 정확히 하나 강조돼야 함 — ${steps2}개`);
+    j6Expect(r2, !/\d+\s*%/.test(t2), "진행률 %가 보이면 안 됨(D-4: 단계로)");
+
+    if (scenario === "not_implemented") {
+      // ③ 실행체가 아직 준비 중 — 화면이 정직하게 말하는가
+      await page.waitForFunction((s) => (document.querySelector("main")?.innerText || "").includes(s), mk.failures.notImplemented.slice(0, 20), { timeout: 45000 }).catch(() => {});
+      const r3 = await facts(page, "J6-3 ★정직 실패 막힘 — 준비 중인 단계에서 멈춤");
+      const t3 = await mainText();
+      j6Expect(r3, t3.includes(mk.failures.notImplemented), "준비 중 단계 실패 문구가 보여야 함");
+      j6Expect(r3, t3.includes(mk.noCharge), "'비용은 받지 않았어요(베타)'가 보여야 함");
+      j6Expect(r3, r3.primaryCtaCount === 1 && r3.primaryCta.includes(mk.takeSpec), `주 버튼은 [${mk.takeSpec}] — 실제 ${JSON.stringify(r3.primaryCta)}`);
+      j6Expect(r3, r3.buttons.includes(mk.retry), `[${mk.retry}]가 있어야 함`);
+      // ④ 새로고침·재방문 — 최근 잡 복원
+      await page.reload({ waitUntil: "networkidle", timeout: 60000 });
+      await page.waitForFunction((s) => (document.querySelector("main")?.innerText || "").includes(s), mk.failures.notImplemented.slice(0, 20), { timeout: 20000 }).catch(() => {});
+      const r4 = await facts(page, "J6-4 새로고침 후 막힘 화면 복원");
+      j6Expect(r4, (await mainText()).includes(mk.failures.notImplemented), "새로고침 뒤에도 같은 잡(멈춤)이 복원돼야 함");
+    } else {
+      // ③ 끝 — 내 앱 카드(D-6)
+      await page.waitForFunction((s) => (document.querySelector("main")?.innerText || "").includes(s), mk.appTitle, { timeout: 120000 }).catch(() => {});
+      const r3 = await facts(page, "J6-3 내 앱 카드 — 주소·프로덕션 아님·신고");
+      const t3 = await mainText();
+      j6Expect(r3, t3.includes(mk.hostedNote), "'Simsa 주소에서 운영 중 · 프로덕션 아님'이 보여야 함");
+      j6Expect(r3, (await page.locator('main a[href$="/.well-known/simsa-report"]').count()) === 1, "이 앱 신고하기 링크가 하나 있어야 함");
+      j6Expect(r3, (await page.locator('main a[href^="https://app-7x9k2m1q.simsa.page"]').count()) >= 1, "앱 주소 링크가 있어야 함");
+      j6Expect(r3, r3.primaryCtaCount === 1 && r3.primaryCta.includes(mk.openApp), `주 버튼은 [${mk.openApp}] — 실제 ${JSON.stringify(r3.primaryCta)}`);
+    }
+    await page.context().close();
+  } catch (err) {
+    audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
+  }
+  if (fake.unhandled.length) audit.fakeUnhandled.push({ journey: audit.journeys.at(-1)?.name, locale, paths: [...new Set(fake.unhandled)] });
+}
+
+// ── 실행 ────────────────────────────────────────────────────────────────────────
+
+if (LOCAL_BASE) {
+  // 로컬 가짜 서버 모드: J6만(라이브 여정은 라이브 서버가 필요하다).
+  await runMakeJourney("ko", "not_implemented");
+  await runMakeJourney("ko", "done");
+  if (!KO_ONLY) await runMakeJourney("en", "not_implemented");
+} else {
+// ── 라이브: KO 전체 + (기본) EN 축 — J6는 여기서 돌지 않는다(실제 빌드를 시작하므로) ──────
 
 await runFirstVisitLocale("ko-KR");
 await runIdeaEntry("ko");
@@ -390,6 +532,7 @@ if (!KO_ONLY) {
     audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
   }
 }
+} // 라이브 끝
 
 // ── P0/P1/P2 자동 분류 (결정론 — 후보를 빠뜨리지 않기 위한 기계 패스) ─────────
 // 사람이 산출물(스크린샷 포함)을 읽고 최종 판정한다. 규칙:
@@ -408,8 +551,9 @@ for (const j of audit.journeys) {
     }
     // 갈래 선택(chooser)은 3개의 동등한 문 설계라 primary-0이 정상 — 기준선
     // 판독(2026-07-21)에서 거짓 양성으로 확정, 규칙 예외. (추천 배지는 D16이
-    // 별도로 담당한다.)
-    if (s.primaryCtaCount === 0 && !/입력 후|변환 중|갈래 선택/.test(s.label)) {
+    // 별도로 담당한다.) "만드는 중"(B-8 J6-2)은 "변환 중"과 같은 기다림 화면 —
+    // 할 일이 없는 동안 버튼을 만들어 넣으면 그게 거짓 행동이다.
+    if (s.primaryCtaCount === 0 && !/입력 후|변환 중|만드는 중|갈래 선택/.test(s.label)) {
       audit.findings.push({ sev: "P1", journey: j.name, locale: s.locale, step: s.label, what: "primary CTA 0 — 다음 행동이 버튼으로 안 보임" });
     }
     if (s.primaryCtaCount >= 3) {
@@ -439,9 +583,12 @@ for (const j of audit.journeys) {
   }
 }
 
-writeFileSync(new URL("./journey-audit-result.json", import.meta.url), JSON.stringify(audit, null, 2));
+// 로컬 가짜 모드는 라이브 기준선(journey-audit-result.json)을 덮지 않는다.
+const RESULT_FILE = LOCAL_BASE ? "./journey-audit-local-result.json" : "./journey-audit-result.json";
+writeFileSync(new URL(RESULT_FILE, import.meta.url), JSON.stringify(audit, null, 2));
 const bySev = { P0: 0, P1: 0, P2: 0 };
 for (const f of audit.findings) bySev[f.sev]++;
 console.log(`\nfindings: P0=${bySev.P0} P1=${bySev.P1} P2=${bySev.P2}`);
-console.log("saved: journey-audit-result.json / shots:", SHOTS);
+if (audit.fakeUnhandled.length) console.log("fake-central unhandled:", JSON.stringify(audit.fakeUnhandled));
+console.log(`saved: ${RESULT_FILE} / shots:`, SHOTS);
 await browser.close();

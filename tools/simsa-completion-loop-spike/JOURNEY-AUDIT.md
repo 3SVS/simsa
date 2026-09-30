@@ -25,6 +25,33 @@ node journey-audit.mjs --ko-only  # KO만 (수정 후 빠른 재감사)
 
 산출물: `journey-audit-result.json`(steps+findings) · `journey-audit-shots/*.png`
 
+### J6 만들기 여정 — 로컬 가짜 서버 모드 (B-8, 2026-09-30)
+
+**J6 = 아이디어 → 지시서 → [만들기] → 진행 화면(→ 멈춤 또는 내 앱 카드).** [만들기]는 실제 빌드
+잡을 시작한다(호스팅 D1 생성·컨테이너·LLM 비용) — **라이브에서는 절대 돌리지 않는다.** 로컬
+`next build`+`start` 위에서 central-plane 응답을 Playwright route로 가짜 주입해서만 돈다
+(`lib/fake-central.mjs` — 라이브 central 주소와 가짜 주소 둘 다 가로채, 브라우저 밖으로 나가는 API 요청 0).
+
+```bash
+cd apps/dashboard
+NEXT_PUBLIC_CENTRAL_PLANE_URL=https://central.fake.invalid CENTRAL_PLANE_AUTH_ORIGIN=http://127.0.0.1:9 npx next build
+npx next start --port 3187 &          # 다른 세션이 3002를 쓰고 있을 수 있다
+cd ../../tools/simsa-completion-loop-spike
+node journey-audit.mjs --local http://localhost:3187            # KO(멈춤·끝) + EN(멈춤)
+node journey-audit.mjs --local http://localhost:3187 --ko-only
+```
+
+- `.invalid`로 구우면 가로채기를 놓친 요청도 라이브에 닿지 못한다(DNS 실패). `--local`은 localhost만 받는다.
+- 시나리오: `not_implemented`(지금 실제 서버의 정직한 실패 — `builder_stage_not_implemented:build`) ·
+  `done`(서버 상태 순서대로 끝까지 → 내 앱 카드).
+- J6 기대값(어긋나면 P0): 지시서 화면 주 버튼 = [만들기] 하나 · 시작 전 안내(비용 없음·Simsa 주소) ·
+  A 경로 문장 없음 · 진행 화면 제목 '내 앱' · 지금 단계 정확히 하나 · 진행률 % 없음 · 멈춤 문구 +
+  "비용은 받지 않았어요" + 주 버튼 [지시서 받아가기] + [다시 시도] · 새로고침 복원 ·
+  내 앱 카드("Simsa 주소에서 운영 중 · 프로덕션 아님"·신고 링크 1·주소 링크). 기대 문구는 대시보드 사전에서 읽는다.
+- J6는 기본 흐름이다 — 개발 용어·외부 계정 CTA는 P0(`isDefaultFlowJourney`).
+- 산출물: `journey-audit-local-result.json`(라이브 기준선 파일을 덮지 않는다) · `journey-audit-shots/local/*.png` ·
+  `fakeUnhandled`(가짜가 답하지 못한 경로 — 조용히 삼키지 않는다).
+
 ## 배포 게이트 절차 (표준)
 
 유저 여정에 닿는 변경(dashboard 전반, central-plane의 유저 대면 라우트)을 배포한 뒤:

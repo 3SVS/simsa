@@ -49,6 +49,8 @@ describe("beginner-terms: developer vocabulary in the default flow (Train N6)", 
     assert.equal(isDefaultFlowJourney("J0 아이디어 갈래 입구: 첫 화면 → 스텝1 → 인터뷰 진입"), true);
     assert.equal(isDefaultFlowJourney("J2 기획서 갈래: 붙여넣기→변환→다음 행동"), true);
     assert.equal(isDefaultFlowJourney("J7 첫 방문 locale"), true);
+    // B-8: 아이디어 문 → 지시서 → 만들기 → 진행 화면은 기본 흐름(S, 계정 0) — 개발 용어·계정 버튼은 P0.
+    assert.equal(isDefaultFlowJourney("J6 만들기: 아이디어 → 지시서 → 만들기 → 진행 화면"), true);
     assert.equal(isDefaultFlowJourney("J1 기존-앱 갈래: 주소 하나로 검수까지 완주 (AF 트레인)"), false);
     assert.equal(isDefaultFlowJourney("J3 repo 연결 여정: GitHub 미연결 신규 유저"), false);
   });
