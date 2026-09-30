@@ -27,14 +27,16 @@ LEGACY_AUTO_REVIEW = "off"
 INSPECTION_ENABLED = "on"
 REPAIR_ENABLED = "on"
 # 일일 상한 [PILOT] (코드 기본값, 설정 줄 없음 = 기본값): 검수 유저 10 · 네트워크 30 · 서비스 전체 300,
-# 수리 유저 5 · 네트워크 15 · 서비스 전체 20(2026-09-30 비용 권고로 50→20). 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL]
-# 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
+# 수리 유저 5 · 네트워크 6 · 서비스 전체 20(2026-09-30 비용 권고로 50→20, 네트워크는 #576 검증으로 15→6 — 서비스의 30% 몫 유지).
+# 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL] 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
+# 전부 요청 수 상한이다 — 달러 천장이 아니다(잡당 $2 상한은 "다음 호출 전" 검사라 잡마다 호출 1회만큼 넘칠 수 있다).
 # 수리 잡당 AI 달러 상한 [PILOT] (2026-09-30 비용 권고 ②, 코드 기본값 $2, 설정 줄 없음 = 기본값):
 # 조정 = REPAIR_JOB_BUDGET_USD = "3" 처럼 양의 수 + deploy. 컨테이너가 호출마다 실응답 모델 단가로 누적해
 # 다음 호출 전에 멈춘다(ConclaveSandbox 이미지가 이 필드를 아는 버전이어야 집행됨).
-# 생성·지시서 서비스 전체 일일 상한 [PILOT] (2026-09-30 비용 권고 ③, 코드 기본값): 생성 계열 500 · 지시서 200.
-# 조정 = BETA_GENERATION_DAILY_LIMIT_GLOBAL / BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL 양의 정수 + deploy
-# (src/workspace/generation-capacity.ts — 가득 차면 LLM 0회 + 503 generation_capacity).
+# 생성·지시서 일일 상한 [PILOT] (2026-09-30 비용 권고 ③, 코드 기본값): 네트워크 몫 생성 100 · 지시서 40 →
+# 서비스 전체 생성 계열(PR 검토 포함) 500 · 지시서 200. canary가 생성 버킷에서 하루 약 96건을 먼저 쓴다.
+# 조정 = BETA_GENERATION_DAILY_LIMIT_{PER_IP,GLOBAL} / BETA_DEV_SPEC_DAILY_LIMIT_{PER_IP,GLOBAL} 양의 정수 + deploy
+# (src/workspace/generation-capacity.ts — 가득 차면 LLM 0회 + 429(네트워크 몫)/503(서비스) generation_capacity).
 # Stage 271 — public sign-up OPEN (Bae approved 2026-07-02: "env 변경도 저건 승인할게").
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.

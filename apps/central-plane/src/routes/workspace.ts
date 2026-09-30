@@ -11,9 +11,11 @@
  *
  * Service-wide daily capacity (비용 권고 ③, 2026-09-30, D-7 amend [PILOT]): every
  * LLM route here (idea-to-spec-draft · check-draft · recommend-answer · unstick ·
- * fix-suggestion) also takes a slot from the "generation" bucket (default 500/day,
- * workspace/generation-capacity.ts) right before the LLM; full → 503
- * { ok:false, error:"generation_capacity", reason:"daily_capacity", resetAt }.
+ * fix-suggestion) also takes a slot from the "generation" buckets — this network's share
+ * (default 100/day) then the service bucket (default 500/day), workspace/generation-capacity.ts
+ * — right before the LLM; full → 429 (network share) / 503 (service)
+ * { ok:false, error:"generation_capacity", reason, scope, resetAt }. Every route counts the
+ * vendor answers with a usage sink so a billed failure keeps its slot (PR #576 review P1-2).
  *
  * CORS: allowed for dashboard origins and localhost in dev.
  */
@@ -75,6 +77,7 @@ import { generationCapacityResponse, takeGenerationSlot } from "../workspace/gen
 import {
   betaProjectCreateDailyLimit,
   BETA_PROJECT_CREATE_DAILY_BUCKET,
+  clientNetworkKey,
 } from "../workspace/beta-limits.js";
 
 /**
@@ -253,7 +256,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     }
 
     // ── Service-wide daily capacity (비용 권고 ③) — right before the LLM ────────
-    const slot = await takeGenerationSlot(c.env, "generation");
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot, headers);
 
     // ── Generate ─────────────────────────────────────────────────────────────
@@ -592,7 +595,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
 
     // ── Service-wide daily capacity (비용 권고 ③) — after validation · ownership ·
     //    plan, before the first LLM call of either mode. ───────────────────────
-    const slot = await takeGenerationSlot(c.env, "generation");
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot, headers);
 
     if (reviewMode === "council") {
@@ -729,10 +732,13 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       return new Response(JSON.stringify({ ok: false, error: "question_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
 
-    // 비용 권고 ③ — service-wide daily capacity. No usage collector on this path, so a
-    // failure cannot prove it was billed → refunded (billedCalls null).
-    const slot = await takeGenerationSlot(c.env, "generation");
+    // 비용 권고 ③ — daily capacity (network share → service). PR #576 review P1-2: the
+    // question is free text, so a caller can steer the model into prose; a billed answer
+    // that does not parse must KEEP its slot. The sink counts vendor answers (the ledger
+    // does not record this path yet — llm-usage.ts LEDGER_NOT_METERED).
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot, headers);
+    const billing = createUsageCollector();
 
     let result;
     try {
@@ -747,17 +753,18 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         c.env.ANTHROPIC_API_KEY,
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
         vendorFallback(c.env),
+        billing.sink,
       );
     } catch (err) {
       console.error("[workspace/recommend-answer] error:", err);
-      await slot.settle({ failed: true, billedCalls: null });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
     }
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
     if (result.ok === false) {
-      await slot.settle({ failed: true, billedCalls: null });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
     }
 
@@ -800,9 +807,11 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       return new Response(JSON.stringify({ ok: false, error: "problemText_required" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
 
-    // 비용 권고 ③ — service-wide daily capacity (no usage collector here → failures refund).
-    const slot = await takeGenerationSlot(c.env, "generation");
+    // 비용 권고 ③ — daily capacity (network share → service). A billed answer that does not
+    // parse keeps its slot (PR #576 review P1-2 — problemText is free text).
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot, headers);
+    const billing = createUsageCollector();
 
     let result;
     try {
@@ -816,17 +825,18 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         c.env.ANTHROPIC_API_KEY,
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
         vendorFallback(c.env),
+        billing.sink,
       );
     } catch (err) {
       console.error("[workspace/unstick] error:", err);
-      await slot.settle({ failed: true, billedCalls: null });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
     }
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
     if (result.ok === false) {
-      await slot.settle({ failed: true, billedCalls: null });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
     }
 
@@ -881,23 +891,25 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       fixProjectOwned = Boolean(await getOwnedProject(c.env, req.projectId, fixUserKey).catch(() => null));
     }
 
-    // 비용 권고 ③ — service-wide daily capacity (no usage collector here → failures refund).
-    const slot = await takeGenerationSlot(c.env, "generation");
+    // 비용 권고 ③ — daily capacity (network share → service). A billed answer that does not
+    // parse keeps its slot (PR #576 review P1-2).
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot, headers);
+    const billing = createUsageCollector();
 
     let result;
     try {
-      result = await generateFixSuggestion(req as WorkspaceFixSuggestionRequest, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env));
+      result = await generateFixSuggestion(req as WorkspaceFixSuggestionRequest, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), billing.sink);
     } catch (err) {
       console.error("[workspace/fix-suggestion] error:", err);
-      await slot.settle({ failed: true, billedCalls: null });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return new Response(JSON.stringify({ ok: false, error: "internal_error" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
     }
 
     await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
 
     if (result.ok === false) {
-      await slot.settle({ failed: true, billedCalls: null });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503, headers: { "content-type": "application/json", ...headers } });
     }
 

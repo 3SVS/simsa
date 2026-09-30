@@ -29,6 +29,7 @@ import {
 import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 import { GENERATION_CAPACITY_ERROR, takeGenerationSlot } from "../workspace/generation-capacity.js";
+import { clientNetworkKey } from "../workspace/beta-limits.js";
 import {
   insertProjectSource,
   listProjectSources,
@@ -222,15 +223,19 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       });
     }
 
-    // 비용 권고 ③ — service-wide daily capacity ("generation" bucket, the same as
-    // idea-to-spec-draft), right before the LLM. Full → this route's own convention:
-    // 200 with inferred:null and a reason, so the card says it plainly (no LLM call).
-    const slot = await takeGenerationSlot(c.env, "generation");
+    // 비용 권고 ③ — daily capacity ("generation" buckets, the same as idea-to-spec-draft:
+    // this network's share, then the service bucket), right before the LLM. This route has
+    // no other limiter and the card calls it on every mount, so the network share is what
+    // keeps one client from emptying the service bucket (PR #576 review P1-1). Full → this
+    // route's own convention: 200 with inferred:null and a reason (+ whose share ran out),
+    // so the card says it plainly (no LLM call).
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
     if (slot.limited) {
       return c.json({
         ok: true,
         inferred: null,
         reason: GENERATION_CAPACITY_ERROR,
+        scope: slot.scope,
         resetAt: slot.resetAt,
         readSources: evidence.readSources,
         stack: evidence.stack,

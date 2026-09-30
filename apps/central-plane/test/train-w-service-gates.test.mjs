@@ -772,22 +772,32 @@ function anonymousFleet(n, prefix) {
 
 const ipHeader = (ip) => ({ "cf-connecting-ip": ip });
 
-test("⑩ 기본값: 네트워크·서비스 전체 일일 상한이 있다 (검수 30/300 · 수리 15/20 [PILOT])", async () => {
+test("⑩ 기본값: 네트워크·서비스 전체 일일 상한이 있다 (검수 30/300 · 수리 6/20 [PILOT])", async () => {
   const limits = await import("../dist/workspace/beta-limits.js");
   for (const fn of ["inspectionDailyLimitPerIp", "inspectionDailyLimitGlobal", "repairDailyLimitPerIp", "repairDailyLimitGlobal"]) {
     assert.equal(typeof limits[fn], "function", `${fn} must exist`);
   }
   assert.equal(limits.inspectionDailyLimitPerIp({}), 30);
   assert.equal(limits.inspectionDailyLimitGlobal({}), 300);
-  assert.equal(limits.repairDailyLimitPerIp({}), 15);
+  // 의도된 변경 (#576 검증 P2-4): 서비스 전체를 50 → 20으로 내리면서 네트워크 15를 그대로 두면 한 네트워크가
+  // 하루 용량의 75%를 쓰고 두 네트워크면 전원이 막혔다. 이전 몫(15/50 = 30%)을 지켜 20의 30% = 6.
+  assert.equal(limits.repairDailyLimitPerIp({}), 6);
   // 의도된 변경 (2026-09-30 비용 권고 ①, D-7 amend [PILOT]): 수리 서비스 전체 50 → 20.
-  // 수리 1시도 원가 평균 $0.50 · 잡당 상한 $2(권고 ②) → 일일 천장 $40 (옛 50 × 최악 $9 ≈ $450).
+  // 요청 수 상한이다 — 달러 천장이 아니다(잡당 상한 $2는 "다음 호출 전" 검사라 잡마다 호출 1회만큼 넘칠 수 있다).
   assert.equal(limits.repairDailyLimitGlobal({}), 20);
   const serviceCap = limits.dailyCapsFor("repair", {}, "uk_any", null).find((c) => c.scope === "service");
   assert.equal(serviceCap?.limit, 20, "the dispatch path takes its service slot against the new default");
+  // 불변식: 한 네트워크가 서비스 전체의 절반 이상을 쓸 수 없다(두 네트워크로 전원 차단 불가).
+  for (const kind of ["inspection", "repair"]) {
+    const caps = limits.dailyCapsFor(kind, {}, "uk_any", "198.51.100.1");
+    const net = caps.find((c) => c.scope === "network")?.limit;
+    const svc = caps.find((c) => c.scope === "service")?.limit;
+    assert.ok(net * 2 < svc, `${kind}: network ${net} must be < half of service ${svc}`);
+  }
   // [PILOT] numbers move without a code change; junk falls back to the default.
   assert.equal(limits.inspectionDailyLimitGlobal({ BETA_INSPECTION_DAILY_LIMIT_GLOBAL: "120" }), 120);
-  assert.equal(limits.repairDailyLimitPerIp({ BETA_REPAIR_DAILY_LIMIT_PER_IP: "0" }), 15);
+  assert.equal(limits.repairDailyLimitPerIp({ BETA_REPAIR_DAILY_LIMIT_PER_IP: "0" }), 6);
+  assert.equal(limits.repairDailyLimitPerIp({ BETA_REPAIR_DAILY_LIMIT_PER_IP: "15" }), 15, "the old number is one [vars] line away");
   assert.equal(limits.repairDailyLimitGlobal({ BETA_REPAIR_DAILY_LIMIT_GLOBAL: "50" }), 50, "the old number is one [vars] line away");
   assert.equal(limits.repairDailyLimitGlobal({ BETA_REPAIR_DAILY_LIMIT_GLOBAL: "junk" }), 20);
 });

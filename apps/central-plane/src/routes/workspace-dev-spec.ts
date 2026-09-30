@@ -21,7 +21,7 @@ import { validateDevSpec, summarizeForBeginner, type DevSpecValidation } from ".
 import { generateDevSpec, makeDevSpecLlmCaller } from "../workspace/generate-dev-spec.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
 import { consumeUserDailyLimit } from "../workspace/rate-limit.js";
-import { betaProjectCreateDailyLimit } from "../workspace/beta-limits.js";
+import { betaProjectCreateDailyLimit, clientNetworkKey } from "../workspace/beta-limits.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
@@ -112,11 +112,13 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
       return json(headers, 503, { ok: false, error: "llm_unavailable" });
     }
 
-    // 비용 권고 ③ — service-wide daily capacity of dev-spec generation (default 200/day).
+    // 비용 권고 ③ — daily capacity of dev-spec generation: this network's share (default
+    // 40/day, PR #576 review — userKeys are free to mint, so the per-user 20 alone let one
+    // network use the whole service bucket) then the service bucket (default 200/day).
     // Taken BEFORE the user's own daily slot: a request refused for capacity must not use
-    // up the user's quota (that slot has no refund); a user-capped request hands the
-    // service slot back below.
-    const slot = await takeGenerationSlot(c.env, "dev_spec");
+    // up the user's quota (that slot has no refund); a user-capped request hands both
+    // capacity slots back below.
+    const slot = await takeGenerationSlot(c.env, "dev_spec", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot, headers);
 
     const daily = await consumeUserDailyLimit(c.env, BETA_DEV_SPEC_DAILY_BUCKET, userKey, betaProjectCreateDailyLimit(c.env));

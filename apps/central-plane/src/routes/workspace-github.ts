@@ -60,7 +60,9 @@ import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { detectContentLang } from "../workspace/topic-tags.js";
 import { getProject, getOwnedProject, listProjectsByUser, EXAMPLE_PROJECT_IDS } from "../workspace/db.js";
 import { consumeUserHourlyLimit, consumeUserDailyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
-import { betaReviewDailyLimit, BETA_REVIEW_DAILY_BUCKET } from "../workspace/beta-limits.js";
+import { betaReviewDailyLimit, BETA_REVIEW_DAILY_BUCKET, clientNetworkKey } from "../workspace/beta-limits.js";
+import { generationCapacityResponse, takeGenerationSlot } from "../workspace/generation-capacity.js";
+import { createUsageCollector } from "../workspace/llm-usage.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
 import { normalizeProductSpec, normalizeCheckableItems } from "../workspace/check.js";
 import { generatePRFixBrief } from "../workspace/pr-fix-brief.js";
@@ -937,6 +939,17 @@ export function createWorkspaceGitHubRoutes(
       console.warn("[workspace/pr-review] credit enforcement failed (non-fatal):", err);
     }
 
+    // 5c. Daily generation capacity (PR #576 review P2-9) — the same "generation" buckets as
+    // the idea/spec family (this network's share, then the service bucket), after every
+    // check above and BEFORE the run row: a refused review leaves no "running" row and
+    // makes no LLM call. Before this, PR review was the one user-callable LLM path outside
+    // the service ceiling (only per-user 30/h · 100/day, credit blocking off). Known
+    // trade-off: the per-user daily review slot above has no refund, so a capacity refusal
+    // still counts as one of that user's 100 daily reviews.
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
+    if (slot.limited) return generationCapacityResponse(slot, corsHeaders(origin));
+    const billing = createUsageCollector();
+
     // 6. Insert run as running (with rerun lineage if applicable)
     const run = await insertReviewRun(c.env, {
       projectId, userKey,
@@ -947,7 +960,10 @@ export function createWorkspaceGitHubRoutes(
       status: "running",
       rerunOfReviewRunId: rerunOfReviewRunId,
     }).catch(() => null);
-    if (!run) return json({ ok: false, error: "run_create_failed" }, 500, origin);
+    if (!run) {
+      await slot.settle({ failed: true, billedCalls: 0 });
+      return json({ ok: false, error: "run_create_failed" }, 500, origin);
+    }
 
     // 7. Fetch PR files
     const [owner, repoName] = repo.repoFullName.split("/");
@@ -959,6 +975,8 @@ export function createWorkspaceGitHubRoutes(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await updateReviewRun(c.env, run.id, { status: "error", errorMessage: `PR 파일 가져오기 실패: ${msg}` });
+      // No LLM call yet → the capacity slots go back.
+      await slot.settle({ failed: true, billedCalls: 0 });
       return json({ ok: false, error: "pr_fetch_failed", details: msg }, 502, origin);
     }
 
@@ -979,11 +997,14 @@ export function createWorkspaceGitHubRoutes(
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
         // 벤더 폴백: Anthropic이 Worker egress에서 차단될 때 OpenAI로.
         vendorFallback(c.env),
+        // Counts vendor answers only — a billed answer that did not parse keeps its slot.
+        billing.sink,
       );
       if (reviewResult.warnings?.length) warnings.push(...reviewResult.warnings);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await updateReviewRun(c.env, run.id, { status: "error", errorMessage: `리뷰 실행 실패: ${msg}` });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return json({ ok: false, error: "review_failed", details: msg }, 500, origin);
     }
 

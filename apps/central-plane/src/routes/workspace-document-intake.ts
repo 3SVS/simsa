@@ -38,6 +38,7 @@ import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterRespon
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { ipRateLimitKey } from "../workspace/rate-limit-key.js";
 import { generationCapacityResponse, takeGenerationSlot } from "../workspace/generation-capacity.js";
+import { clientNetworkKey } from "../workspace/beta-limits.js";
 
 const DEFAULT_LIMIT_PER_HOUR = 20;
 
@@ -168,7 +169,7 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
     }
 
     // ── Service-wide daily capacity (비용 권고 ③) — same bucket as idea-to-spec-draft
-    const slot = await takeGenerationSlot(c.env, "generation");
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot);
 
     // ── Generate via the SAME path as idea-to-spec-draft ────────────────────
