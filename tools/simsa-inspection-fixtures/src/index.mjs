@@ -8,6 +8,7 @@
  *
  * C-A7 (2026-10-01): /intent-mismatch/* — 작동은 하지만 의도와 다른 앱 10변형(문 (c)).
  * 정답지: docs/pilot-2026-10/intent-mismatch-answer-key.md (먼저 커밋됨).
+ * 정정 A1(러너 실행 전): IM07은 저장을 안 하는 문 (b) 고장이라 무효(문 (b) 대조군), IM11을 더했다.
  */
 import { INTENT_MISMATCH_INDEX, INTENT_MISMATCH_ROUTES } from "./intent-mismatch.mjs";
 

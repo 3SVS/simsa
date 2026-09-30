@@ -7,6 +7,10 @@
  * 전부 **작동은 하는** 앱이다 — 버튼이 눌리고, 화면이 바뀌고, 오류가 없다. 다른 것은 의도다.
  * 그래서 이 픽스처들은 "고장"이 아니라 "기준과 다름"을 재는 자다.
  *
+ * 정정 A1(2026-10-01, 러너 실행 전 — 정답지에 먼저 커밋): IM07은 저장을 안 하는 문 (b) 고장 픽스처라
+ * 무효(문 (b) 대조군으로만 잰다), 대신 IM11(저장은 되는데 합계가 없음)을 더했다. 기존 픽스처 HTML은
+ * 고치지 않는다 — 고치면 먼저 기록한 예측의 대상이 바뀐다.
+ *
  * 지켜야 할 것(정답지 §설계상 주의 — 정적 테스트가 고정한다):
  *  - 핵심 흐름의 지속성 확인은 목록(li)이 자랄 때만 새로고침한다. IM07만 저장하지 않는다.
  *    목록이 자라는 IM06·IM09는 저장해 "사라짐"으로 잘못 걸리지 않게 하고, 나머지는 결과를
@@ -248,6 +252,42 @@ const MOBILE_BUTTON_HIDDEN = shell(
 </style>`,
 );
 
+// IM11 (정정 A1, 2026-10-01) — 기록은 저장되는데(새로고침해도 남는다) 원래 의도인 '이번 달 합계'가 어디에도 없다.
+// 무효가 된 IM07(저장을 안 함 = 문 (b) 고장)을 대신하는 "작동은 하는데 의도와 다른" 변형.
+// 목록이 자라는 앱이라 저장한다(핵심 흐름 지속성 확인을 통과해야 한다). 기록 뒤 안내("기록했어요")는
+// 저장하지 않는 일회성 글이다 — control AC-002는 이 글에 묶여, 앞선 흐름이 저장한 항목과 섞이지 않는다.
+// 판정 휴리스틱이 부분 문자열 일치라 mismatch 기준의 내용어(이번·달·지출·합계·함께)는 화면 어디에도 없다.
+const LEDGER_NO_TOTAL = shell(
+  "우리집 가계부",
+  `<h1>💸 우리집 가계부</h1>
+<p class="sub">쓴 곳을 적고 기록을 누르세요</p>
+<div class="row"><input id="w" placeholder="쓴 곳"><button id="add">기록</button></div>
+<div class="result" id="msg"></div>
+<ul id="list"></ul>
+<script>
+  const KEY = "im11_spends";
+  const spends = JSON.parse(localStorage.getItem(KEY) || "[]");
+  const render = () => {
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    spends.forEach((w) => {
+      const li = document.createElement("li");
+      li.textContent = "🧾 " + w + " · 오늘";
+      list.appendChild(li);
+    });
+  };
+  document.getElementById("add").addEventListener("click", () => {
+    const w = document.getElementById("w").value.trim() || "가게";
+    spends.push(w);
+    localStorage.setItem(KEY, JSON.stringify(spends));
+    document.getElementById("w").value = "";
+    document.getElementById("msg").textContent = "기록했어요: " + w;
+    render();
+  });
+  render();
+</script>`,
+);
+
 /** 경로 → HTML. index.mjs의 ROUTES에 합쳐진다. */
 export const INTENT_MISMATCH_ROUTES = {
   "/intent-mismatch/booking-no-date": BOOKING_NO_DATE,
@@ -261,6 +301,7 @@ export const INTENT_MISMATCH_ROUTES = {
   "/intent-mismatch/search-exact-only": SEARCH_EXACT_ONLY,
   "/intent-mismatch/delete-no-confirm": DELETE_NO_CONFIRM,
   "/intent-mismatch/mobile-button-hidden": MOBILE_BUTTON_HIDDEN,
+  "/intent-mismatch/ledger-no-total": LEDGER_NO_TOTAL,
 };
 
 /** 인덱스 화면용 목록(id · 경로 · 한 줄). */
@@ -271,8 +312,9 @@ export const INTENT_MISMATCH_INDEX = [
   ["IM04", "/intent-mismatch/required-field-missing", "체험 신청 — 필수 칸 없음"],
   ["IM05", "/intent-mismatch/button-wrong-page", "스토어 — 버튼이 다른 화면으로"],
   ["IM06", "/intent-mismatch/english-copy", "가게 메모 — 안내가 영어"],
-  ["IM07", "/intent-mismatch/not-persisted", "독서 기록 — 새로고침하면 사라짐"],
+  ["IM07", "/intent-mismatch/not-persisted", "독서 기록 — 새로고침하면 사라짐 (정정 A1: 무효 → 문 (b) 대조군)"],
   ["IM08", "/intent-mismatch/search-exact-only", "카페 찾기 — 부분 검색 안 됨"],
   ["IM09", "/intent-mismatch/delete-no-confirm", "팀 메모 — 묻지 않고 삭제"],
   ["IM10", "/intent-mismatch/mobile-button-hidden", "코트 예약 — 휴대폰에서 버튼 사라짐"],
+  ["IM11", "/intent-mismatch/ledger-no-total", "가계부 — 저장은 되는데 이번 달 합계 없음 (정정 A1)"],
 ];
