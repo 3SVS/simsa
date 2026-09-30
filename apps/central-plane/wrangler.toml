@@ -43,6 +43,11 @@ AUTH_SIGNUP_MODE = "open"
 PROBE_MAIL_DOMAIN = "simsa.page"
 # B5 — S 모드 호스팅 앱 주소 루트(hosting-dispatch와 동일). 잡 응답의 hostUrl·배포 주소에 쓴다.
 HOSTING_ROOT_DOMAIN = "simsa.page"
+# B-7 — 호스팅 앱 신고 접수(POST /hosting/report) 스위치. 정확히 "on"일 때만 받는다(미설정·다른 값 = 꺼짐,
+# JSON 503 reports_not_open · 폼 303 error=closed). hosting_reports에 연락처·자유 서술이 들어가므로
+# 개인정보처리방침에 '앱 신고' 항목(수집 항목·목적·보유 180일)을 고지한 **뒤에** 켠다 — hosting-dispatch의 같은
+# 변수와 함께 "on" + 두 Worker 배포.
+HOSTING_REPORTS_ENABLED = "off"
 # Cloudflare AI Gateway (gateway "simsa") — REQUIRED: direct Worker→Anthropic
 # egress is ~90% 403 "Request not allowed" (measured 2026-07-05, retry-6 = 1/10).
 # The gateway path reaches Anthropic with no 403. Gateway must be UNAUTHENTICATED
@@ -118,7 +123,7 @@ bucket_name = "simsa-evidence"
 # SI 티어 Train B — B-7 호스팅 사업자 의무(D-6): 정지 목록 Workers KV. apps/hosting-dispatch/wrangler.toml과
 # **같은 id**여야 한다(이 Worker가 suspended:<slug>를 쓰고 라우터가 읽는다 · 라우터가 strike:를 쓰고 10분 크론이 읽는다).
 # 네임스페이스가 아직 없어 주석으로 둔다 — 가짜 id를 넣으면 **모든 central-plane 배포가 실패**한다.
-# 없으면: 관리자 정지 503 suspension_store_not_configured(정지된 척하지 않음) · 자동 정지 스윕 건너뜀 · 신고 접수는 정상.
+# 없으면: 관리자 정지 503 suspension_store_not_configured(정지된 척하지 않음) · 요청 몰림 플래그 스윕 건너뜀 · 신고 접수는 정상.
 # 켜는 법(Bae 액션): Cloudflare 대시보드 → Storage & Databases → KV → Create → `simsa-hosting-suspended`
 #   → ID를 여기와 hosting-dispatch 양쪽에 적고 주석 해제 → PR·머지 → deploy central-plane · deploy hosting-dispatch.
 # [[kv_namespaces]]

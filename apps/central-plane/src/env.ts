@@ -137,9 +137,14 @@ export interface Env {
    * B-7 호스팅 사업자 의무(D-6): 정지 목록 Workers KV — hosting-dispatch와 **같은 네임스페이스**.
    * 키 `suspended:<slug>`(정지, 이 Worker가 씀·라우터가 읽음) · `strike:<slug>:<분>`(요청 상한 초과, 라우터가 씀·
    * 10분 크론이 읽음). 없으면 관리자 정지는 503 suspension_store_not_configured(정지된 척하지 않는다),
-   * 자동 정지 스윕은 건너뛴다. 신고 접수는 KV 없이도 된다. 규칙은 workspace/hosting-duties.ts.
+   * 요청 몰림 플래그 스윕은 건너뛴다. 신고 접수는 KV 없이도 된다. 규칙은 workspace/hosting-duties.ts.
    */
   HOSTING_SUSPENDED?: KVNamespace;
+  /**
+   * B-7 신고 접수 스위치. 정확히 "on"일 때만 POST /hosting/report가 신고를 저장한다(기본 off — [vars]).
+   * 개인정보처리방침에 '앱 신고' 수집 항목을 고지한 뒤에 켠다.
+   */
+  HOSTING_REPORTS_ENABLED?: string;
   /** B5 [PILOT]: T1 구현 모델. 기본 claude-sonnet-4-6(워커 기본과 동일). 킬스위치 시 폴백. */
   BUILD_MODEL?: string;
   /**
