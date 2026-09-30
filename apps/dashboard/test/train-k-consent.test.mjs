@@ -11,8 +11,9 @@
  *
  * 표시 규칙(#558 규칙 계승 — 회귀 증거를 부풀리지 않는다):
  *   [서버 사실]  서버 소스를 읽어 문구의 전제를 고정 — 옛 코드에서도 통과, 회귀 증거 아님.
- *   [서버 K]     Train K 서버 PR(0071·privacy-prefs)이 main에 들어오기 전에는 todo. 들어온 뒤 이 PR의 CI를
- *                다시 돌리면 자동으로 켜진다(머지 순서: 서버 PR → 이 PR 재검증 → 머지).
+ *   [서버 K]     Train K 서버 PR #574(0071·privacy-prefs·색인)의 사실 — 0071이 같은 트리에 있을 때 하드 테스트.
+ *   [서버 K 게이트] 0071이 없으면 방침에 끄기·삭제 약속이 없어야 한다 → 이 PR 단독이면 **실패(의도)**.
+ *                두 PR은 함께 머지한다(#574 머지 → 이 PR 브랜치 갱신 → CI 초록 → 머지). todo 없음(#573 검증 8).
  *   [가드]       하네스 자체 검사 — 회귀 증거 아님.
  *   표시 없음    고치기 전 코드(origin/main 3a1ca07)에서 실패한다.
  */
@@ -462,11 +463,16 @@ describe("[서버 사실] 학습 사본 문구의 전제", () => {
   });
 });
 
-// ─── 9. [서버 K] Train K 서버 PR — 머지 전에는 todo ──────────────────────────
+// ─── 9. [서버 K] Train K 서버 PR(#574) — 머지 순서 게이트 + 서버 사실 (todo 없음) ─────────────────
+// #573 검증 8: 예전에는 0071이 없으면 [서버 K] 6개가 todo였다 → 이 PR만 main에 들어가도 초록이라, 서버가 하지
+// 않는 '기록 끄기'·'색인된 사본 삭제'를 방침이 약속한 채 배포될 수 있었다(머지 순서를 강제하지 못함).
+// 이제 어느 트리에서든 통과/실패가 정해진다:
+//   - 0071이 있다(서버 PR과 같은 트리) → 아래 서버 사실 전부를 하드 테스트로 확인.
+//   - 0071이 없다 → 게이트 하나: 방침(정적 문구)에 끄기·삭제 약속이 **없어야** 한다. 이 PR은 약속을 담으므로
+//     서버 없이 돌리면 **실패한다(의도)** — 두 PR은 함께 머지한다(#574 먼저 → 이 PR 브랜치 갱신 → CI 초록).
+// 화면의 약속(결과 카드·운영 정보 줄·설정 '지워요')은 런타임에 서버 응답이 있어야만 보이므로(옛 서버 방어,
+// §2·§14) 게이트 대상은 서버 응답과 상관없이 게시되는 방침 문구다.
 const k0071 = readdirSync(MIGRATIONS_DIR).find((f) => /^0071_.+\.sql$/.test(f)) ?? null;
-const SERVER_K = k0071
-  ? {}
-  : { todo: "Train K 서버 PR(0071·privacy-prefs) 머지 전 — 서버 PR 머지 후 이 PR의 CI를 다시 돌리면 켜진다" };
 const cpFiles = walk(CP, /\.ts$/);
 const cpText = (re) => cpFiles.filter((f) => re.test(read(f)));
 // 서버 PR이 색인 쓰기·지우기를 어느 파일에 두든(같은 파일이든 새 모듈이든) 잡는다: 테이블 이름을 직접 쓰거나,
@@ -477,9 +483,51 @@ const usesIndex = (src) =>
   /training_records_index/.test(src) ||
   indexModules().some((m) => new RegExp(`from\\s+["'][^"']*/${m}(\\.js)?["']`).test(src));
 
-describe("[서버 K] 이 PR의 문구가 기대는 서버 사실 (계약 1~4)", () => {
-  it("[서버 K] 0071 = 계약 1: decided_at · privacy_prefs(ops_meta on/off) · training_records_index(r2_key·user_key·project_id)", SERVER_K, () => {
-    const sql = k0071 ? read(path.join(MIGRATIONS_DIR, k0071)) : "";
+/**
+ * 방침(서버 응답과 상관없이 게시되는 정적 문구)이 서버 K 기능을 약속하는 곳. 빈 배열 = 약속 없음.
+ * @param {{ optOut: string, copyNote: string, page: string, changeLog: string }} src
+ */
+function staticServerKPromises(src) {
+  const out = [];
+  if (/기록을 끄실 수 있습니다/.test(src.optOut)) out.push("OPS_INFO_OPT_OUT: 운영 정보 기록 끄기(privacy_prefs·캡처 게이트)");
+  if (/색인된 사본을 지웁니다/.test(src.copyNote)) out.push("TRAINING_COPY_NOTE: 철회·프로젝트 삭제 시 색인된 사본 삭제(training_records_index)");
+  if (/철회하시면 색인된 학습 데이터 사본을 지웁니다/.test(src.page)) out.push("방침 §6: 철회 시 색인된 사본 삭제");
+  if (/운영 정보 기록을 끄실 수 있습니다|운영 정보 기록은[^.]*끌 수 있습니다/.test(src.page)) out.push("방침 §6: 운영 정보 기록 끄기");
+  if (/기록 끄기/.test(src.changeLog)) out.push("변경 이력: '기록 끄기' 추가");
+  return out;
+}
+const livePromises = () =>
+  staticServerKPromises({
+    optOut: ops.OPS_INFO_OPT_OUT ?? "",
+    copyNote: ops.TRAINING_COPY_NOTE ?? "",
+    page: privacyPageSrc,
+    changeLog: (ops.PRIVACY_CHANGE_LOG ?? []).at(-1)?.summary ?? "",
+  });
+
+describe("[서버 K 게이트] 머지 순서 — 방침이 끄기·삭제를 약속하면 서버(0071)가 같은 트리에 있어야 한다", () => {
+  it("[서버 K 게이트] 0071이 없으면 방침에 '기록 끄기'·'색인된 사본 삭제' 약속이 없어야 한다 (이 PR 단독이면 실패 = 의도: #574와 함께 머지)", () => {
+    // 서버가 같은 트리에 있으면 약속의 근거는 아래 [서버 K] 하드 테스트가 하나씩 확인한다.
+    if (k0071) return;
+    assert.deepEqual(
+      livePromises(),
+      [],
+      "방침이 서버 PR #574(0071·privacy-prefs·training_records_index)의 기능을 약속하는데 그 서버가 이 트리에 없다. " +
+        "두 PR을 함께 머지하세요: #574 머지 → 이 PR 브랜치를 main으로 갱신 → CI 초록 → 머지. (배포도 central → dashboard 순서)",
+    );
+  });
+
+  it("[가드] 약속 탐지기가 이 PR의 약속을 실제로 찾는다 (탐지기가 조용히 빈 배열을 내지 않게)", () => {
+    assert.ok(livePromises().length >= 3, JSON.stringify(livePromises()));
+    assert.deepEqual(staticServerKPromises({ optOut: "준비 중입니다.", copyNote: "지워지지 않습니다.", page: "", changeLog: "" }), []);
+  });
+});
+
+// 0071이 있는 트리에서만 등록된다(없으면 위 게이트가 실패로 막는다) — todo로 숨기지 않는다.
+if (k0071) describe("[서버 K] 이 PR의 문구가 기대는 서버 사실 (계약 1~4, 서버 PR #574)", () => {
+  const prefsSrc = read(path.join(CP, "workspace/privacy-prefs.ts"));
+
+  it("[서버 K] 0071 = 계약 1: decided_at · privacy_prefs(ops_meta on/off) · training_records_index(r2_key·user_key·project_id)", () => {
+    const sql = read(path.join(MIGRATIONS_DIR, k0071));
     assert.match(sql, /ADD COLUMN\s+decided_at\s+TEXT/i);
     assert.match(sql, /CREATE TABLE(?: IF NOT EXISTS)?\s+privacy_prefs/i);
     assert.match(sql, /ops_meta\s+IN\s*\(\s*'on'\s*,\s*'off'\s*\)/i);
@@ -487,32 +535,42 @@ describe("[서버 K] 이 PR의 문구가 기대는 서버 사실 (계약 1~4)", 
     for (const c of ["r2_key", "user_key", "project_id", "deleted_at"]) assert.match(sql, new RegExp(`\\b${c}\\b`), c);
   });
 
-  it("[서버 K] GET/POST /workspace/privacy-prefs 경로가 있다 (설정·결과 화면 끄기의 서버)", SERVER_K, () => {
+  it("[서버 K] GET/POST /workspace/privacy-prefs 경로가 있다 (설정·결과 화면 끄기의 서버)", () => {
     assert.ok(cpText(/["'`]\/workspace\/privacy-prefs["'`]/).length > 0);
   });
 
-  it("[서버 K] 거절은 버전을 지우지 않는다 (재초대 결함 ①)", SERVER_K, () => {
+  it("[서버 K] 거절은 버전을 지우지 않는다 (재초대 결함 ①)", () => {
     const db = read(path.join(CP, "workspace/training-consent-db.ts"));
     assert.ok(!/consented \? TRAINING_CONSENT_VERSION : null/.test(db), "decline still clears consent_version");
     assert.ok(cpText(/decided_at/).length > 0, "decided_at is written somewhere");
   });
 
-  it("[서버 K] 프로젝트 삭제가 학습 사본 색인을 정리한다 (계약 4b → TRAINING_COPY_NOTE '프로젝트를 삭제하시면')", SERVER_K, () => {
+  it("[서버 K] 프로젝트 삭제가 학습 사본 색인을 정리한다 (계약 4b → TRAINING_COPY_NOTE '프로젝트를 삭제하시면')", () => {
     assert.ok(usesIndex(read(path.join(CP, "workspace/db.ts"))), "db.ts deleteProject does not touch training_records_index");
   });
 
-  it("[서버 K] 학습 사본 캡처가 색인을 쓴다 (계약 3 → '색인된 사본')", SERVER_K, () => {
+  it("[서버 K] 학습 사본 캡처가 색인을 쓴다 (계약 3 → '색인된 사본')", () => {
     assert.ok(usesIndex(trainingStoreTs), "training-store.ts");
     assert.ok(usesIndex(journeyStoreTs), "journey-store.ts");
   });
 
-  it("[서버 K] EU/EEA·영국·스위스 기본 off 목록 (계약 2 → 방침 '켜시기 전까지 기록하지 않습니다')", SERVER_K, () => {
+  it("[서버 K] 색인을 못 쓰면 사본을 저장하지 않는다(fail-closed) → 카드 '그 뒤 저장되는 학습 사본은 … 지워요'", () => {
+    for (const [name, src] of [["training-store.ts", trainingStoreTs], ["journey-store.ts", journeyStoreTs]]) {
+      assert.match(src, /if \(!idx\.indexed\) return \{ stored: false/, `${name}: an unindexed copy must not be written`);
+    }
+  });
+
+  it("[서버 K] EU/EEA·영국·스위스 기본 off 목록 (계약 2 → 방침 '켜시기 전까지 기록하지 않습니다')", () => {
     const codes = ["DE", "FR", "IS", "LI", "NO", "GB", "CH"];
     const owners = cpFiles
       .map(read)
       .filter((src) => /ops_?meta|opsMeta|privacy/i.test(src))
       .filter((src) => codes.every((cc) => new RegExp(`["']${cc}["']`).test(src)));
     assert.ok(owners.length > 0, `no server file lists ${codes.join(",")} next to the ops-meta default`);
+  });
+
+  it("[서버 K] 접속 국가를 모르면(null) 기본 off → opsDefaultOffNote·방침 '알 수 없는 경우'", () => {
+    assert.match(prefsSrc, /export function defaultOpsMetaForRegion\(region: string \| null\): OpsMeta \{\s*if \(!region \|\| !region\.trim\(\)\) return "off";/);
   });
 });
 
