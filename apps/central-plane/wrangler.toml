@@ -29,6 +29,9 @@ REPAIR_ENABLED = "on"
 # 일일 상한 [PILOT] (코드 기본값, 설정 줄 없음 = 기본값): 검수 유저 10 · 네트워크 30 · 서비스 전체 300,
 # 수리 유저 5 · 네트워크 15 · 서비스 전체 20(2026-09-30 비용 권고로 50→20). 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL]
 # 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
+# 수리 잡당 AI 달러 상한 [PILOT] (2026-09-30 비용 권고 ②, 코드 기본값 $2, 설정 줄 없음 = 기본값):
+# 조정 = REPAIR_JOB_BUDGET_USD = "3" 처럼 양의 수 + deploy. 컨테이너가 호출마다 실응답 모델 단가로 누적해
+# 다음 호출 전에 멈춘다(ConclaveSandbox 이미지가 이 필드를 아는 버전이어야 집행됨).
 # Stage 271 — public sign-up OPEN (Bae approved 2026-07-02: "env 변경도 저건 승인할게").
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.

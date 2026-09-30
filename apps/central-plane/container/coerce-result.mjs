@@ -125,27 +125,167 @@ export function classifyCloneError(stderrText) {
 export function buildBriefOnlyDiagnosis(diag, locale) {
   const loc = locale === "en" ? "en" : "ko";
   const skipped = Array.isArray(diag?.skippedOversize) ? diag.skippedOversize : [];
+  const budgetStopped = diag?.budgetExceeded === true;
   const reason =
     typeof diag?.reason === "string" && diag.reason ? diag.reason : "worker_no_applicable_fix";
   const kb = (b) => `${Math.round(b / 1024)}KB`;
   const list = skipped.map((s) => `${s.path}(${kb(s.bytes)})`).join(", ");
   const modeReason = skipped.length ? `${reason}; oversize_skipped: ${list}` : reason;
   const fileList = skipped.map((s) => `\`${s.path}\`(${kb(s.bytes)})`).join(", ");
-  const prNote = skipped.length
-    ? (loc === "en"
+  // One block per cause, then ONE closing "hand this brief" line. The oversize-only
+  // note is byte-identical to before the budget stop existed.
+  const causes = [];
+  if (skipped.length) {
+    causes.push(
+      ...(loc === "en"
         ? [
             "> **Some files could not be auto-fixed.**",
             `> ${fileList} — larger than the auto-fix size limit (200KB), so the worker could not open them.`,
-            "> Hand this brief (`SIMSA-FIX-BRIEF.md`) to your coding agent as-is and it can make the fix.",
           ]
         : [
             "> **자동수정을 시도하지 못한 파일이 있어요.**",
             `> ${fileList} — 자동수정 크기 한도(200KB)를 넘는 파일이라 워커가 열어보지 못했어요.`,
-            "> 이 지시서(`SIMSA-FIX-BRIEF.md`)를 쓰시는 코딩 에이전트에게 그대로 전달하면 고칠 수 있어요.",
+          ]),
+    );
+  }
+  if (budgetStopped) {
+    // 비용 권고 ② — honest, and never our cost numbers: this text lands in the user's repo.
+    causes.push(
+      ...(loc === "en"
+        ? [
+            "> **Auto-fix stopped at its usage limit.**",
+            "> This repair reached the AI usage limit set for one repair, so no further attempts were made. No code was changed.",
           ]
-      ).join("\n")
+        : [
+            "> **자동 수정 시도를 정해 둔 한도에서 멈췄어요.**",
+            "> 이번 수리에 쓸 수 있는 AI 사용 한도에 닿아 더 시도하지 않았어요. 코드는 바꾸지 않았어요.",
+          ]),
+    );
+  }
+  const prNote = causes.length
+    ? [
+        ...causes,
+        loc === "en"
+          ? "> Hand this brief (`SIMSA-FIX-BRIEF.md`) to your coding agent as-is and it can make the fix."
+          : "> 이 지시서(`SIMSA-FIX-BRIEF.md`)를 쓰시는 코딩 에이전트에게 그대로 전달하면 고칠 수 있어요.",
+      ].join("\n")
     : null;
   return { modeReason, prNote };
+}
+
+// ─── 비용 권고 ② (2026-09-30, D-7 amend [PILOT]) — 수리 잡당 달러 상한 ─────────────
+//
+// The Worker sends `repairBudgetUsd` (env REPAIR_JOB_BUDGET_USD, default $2) with the
+// job. Every worker LLM call reports a usage record through ClaudeWorker's onUsage —
+// BEFORE the response is parsed, so a paid call whose answer cannot be used still
+// counts — with `costUsd` priced at the ACTUAL model by @simsa/agent-worker (a model
+// outside the price table gets the table's highest per-component price, never $0).
+//
+// Why not the worker's own EfficiencyGate ($0.50 default): it reserves an ESTIMATE
+// and commits only calls that returned a parseable answer. A call that failed parsing
+// (WorkerParseError) cost money but was never committed, so a loop of such calls was
+// not bounded (measured in test/train-w-repair-budget.test.mjs ③).
+//
+// The stop is checked BEFORE each call (budgetedWorker), so a job overshoots by at
+// most the one call that crossed the line. The stop is honest: attemptAutoFix ends,
+// the tree is clean (a success returns at once; failed attempts are reset), and the
+// job closes through the existing brief-only fallback (draft PR with the fix brief —
+// no LLM call) with modeReason "budget_exceeded(cap=$X.XX)…" + a PR note.
+
+/** Fallback when the payload carries no usable budget (an older Worker). */
+export const DEFAULT_REPAIR_JOB_BUDGET_USD = 2;
+
+/** The modeReason prefix of a budget stop — lock-stepped with repair-job-db.ts REPAIR_BUDGET_STOP_REASON. */
+export const REPAIR_BUDGET_STOP = "budget_exceeded";
+
+/** Payload value → budget. Only a positive finite NUMBER counts; anything else → $2. */
+export function resolveRepairBudgetUsd(raw) {
+  return typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_REPAIR_JOB_BUDGET_USD;
+}
+
+/**
+ * Running LLM spend of one repair job.
+ *   onUsage(record) — the ClaudeWorker sink. A record whose costUsd is not a finite
+ *                     number ≥ 0 counts as the WHOLE budget (unknown cost → stop, never 0).
+ *                     A non-object is not a call and is ignored. Never throws.
+ *   spentUsd()      — the sum so far.
+ *   exceeded()      — spent ≥ cap (at the cap = stop).
+ *   stopReason()    — "budget_exceeded(cap=$2.00)" (the cap, not the spend: the ledger
+ *                     has the per-call cost, priced by the Worker — single source).
+ */
+export function createRepairBudget(capUsd) {
+  const cap = resolveRepairBudgetUsd(capUsd);
+  let spent = 0;
+  return {
+    capUsd: cap,
+    onUsage(u) {
+      try {
+        if (!u || typeof u !== "object") return;
+        const c = u.costUsd;
+        spent += typeof c === "number" && Number.isFinite(c) && c >= 0 ? c : cap;
+      } catch {
+        /* never throw from the sink */
+      }
+    },
+    spentUsd() {
+      return spent;
+    },
+    exceeded() {
+      // 1e-9: float sums (0.7 + 0.6 + 0.7 = 1.9999999999999998) must not buy an extra call.
+      return spent + 1e-9 >= cap;
+    },
+    stopReason() {
+      return `${REPAIR_BUDGET_STOP}(cap=$${cap.toFixed(2)})`;
+    },
+  };
+}
+
+/** Thrown by budgetedWorker INSTEAD of making a call once the budget is spent. */
+export class RepairBudgetExceededError extends Error {
+  constructor(budget) {
+    super(budget && typeof budget.stopReason === "function" ? budget.stopReason() : REPAIR_BUDGET_STOP);
+    this.name = "RepairBudgetExceededError";
+    this.code = REPAIR_BUDGET_STOP;
+  }
+}
+
+export function isRepairBudgetStop(err) {
+  return Boolean(err) && typeof err === "object" && err.code === REPAIR_BUDGET_STOP;
+}
+
+/**
+ * Wrap a ClaudeWorker so every call first asks the budget. Under the cap → the
+ * call goes through unchanged; at/over it → RepairBudgetExceededError and the
+ * worker (and so the LLM) is never called.
+ */
+export function budgetedWorker(worker, budget) {
+  const guard = () => {
+    if (budget.exceeded()) throw new RepairBudgetExceededError(budget);
+  };
+  return {
+    async work(ctx) {
+      guard();
+      return worker.work(ctx);
+    },
+    async workEdits(ctx) {
+      guard();
+      return worker.workEdits(ctx);
+    },
+  };
+}
+
+/**
+ * Record the budget stop in attemptAutoFix's diagnosis: budgetExceeded = true and
+ * reason = "budget_exceeded(cap=$2.00)" plus the attempt's previous reason as
+ * "; last=…" (API diagnostics — why the tries before the stop gave nothing).
+ * Idempotent.
+ */
+export function markBudgetStop(diag, budget) {
+  if (!diag || typeof diag !== "object") return;
+  const prev = typeof diag.reason === "string" && diag.reason ? diag.reason : null;
+  diag.budgetExceeded = true;
+  if (prev && prev.startsWith(REPAIR_BUDGET_STOP)) return;
+  diag.reason = prev ? `${budget.stopReason()}; last=${prev}` : budget.stopReason();
 }
 
 /**

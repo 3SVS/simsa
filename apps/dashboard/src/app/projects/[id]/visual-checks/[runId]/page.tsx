@@ -72,6 +72,7 @@ import {
   repairErrorTone,
   showBuildUnverified,
   repairDoneKind,
+  repairStoppedByBudget,
   REPAIR_POLL_INTERVAL_MS,
 } from "@/lib/repair-state.mjs";
 import type { RepairErrorKey } from "@/lib/repair-state.mjs";
@@ -590,6 +591,10 @@ function RepairSection({
           </p>
           {showBuildUnverified(repair) && (
             <p className="mt-2 text-sm leading-relaxed text-amber-700">{s.buildUnverified}</p>
+          )}
+          {/* 비용 권고 ② — why the brief card has no code change this time (usage limit). */}
+          {repairStoppedByBudget(repair) && (
+            <p className="mt-2 text-sm leading-relaxed text-amber-700">{s.budgetStopped}</p>
           )}
           {isEnvCause(repair) && (
             <div className="callout mt-3 border-amber-200 bg-amber-50 text-amber-700">

@@ -66,3 +66,11 @@ export function showBuildUnverified(
 
 /** "autoFix" (real code changes, Stage 270) · "briefOnly" (fix-brief draft PR, legacy/unknown). */
 export function repairDoneKind(repair: { mode?: unknown } | null | undefined): "autoFix" | "briefOnly";
+
+/**
+ * 비용 권고 ② (2026-09-30): true only for a finished brief-card job whose server says
+ * stoppedByBudget === true (it stopped at the per-repair AI usage limit). Old servers → false.
+ */
+export function repairStoppedByBudget(
+  repair: { status?: unknown; mode?: unknown; stoppedByBudget?: unknown } | null | undefined,
+): boolean;

@@ -75,6 +75,12 @@ export const BETA_LIMITS = {
   /** [PILOT]: service-wide per UTC day — the daily cost ceiling for the container paths. */
   inspectionsPerDayGlobal: 300,
   repairsPerDayGlobal: 20,
+  /**
+   * 비용 권고 ② (2026-09-30) [PILOT]: USD one repair job may spend on LLM calls. The container
+   * adds up every worker call at the ACTUAL model's price (unknown model → the table's
+   * highest price, never $0) and stops before the next call once the sum reaches this.
+   */
+  repairJobBudgetUsd: 2,
 } as const;
 
 /** Daily-bucket names (workspace_rate_limit key prefix). */
@@ -138,6 +144,18 @@ export function repairDailyLimitPerIp(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_PE
 /** Service-wide daily repair cap (default 20 — was 50 before the 2026-09-30 cost review). */
 export function repairDailyLimitGlobal(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_GLOBAL">): number {
   return dailyLimitFromEnv(env.BETA_REPAIR_DAILY_LIMIT_GLOBAL, BETA_LIMITS.repairsPerDayGlobal);
+}
+
+/**
+ * Per-repair-job LLM budget in USD (비용 권고 ②, default $2). Env REPAIR_JOB_BUDGET_USD —
+ * a positive finite number ("0.75", "3.5"); anything else (empty, "0", "-1", "2abc",
+ * "Infinity") → the default. The Worker sends it in the dispatch payload
+ * (`repairBudgetUsd`); a container image that predates the field ignores it.
+ */
+export function repairJobBudgetUsd(env: Pick<Env, "REPAIR_JOB_BUDGET_USD">): number {
+  const raw = (env.REPAIR_JOB_BUDGET_USD ?? "").trim();
+  const n = raw === "" ? Number.NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : BETA_LIMITS.repairJobBudgetUsd;
 }
 
 /**

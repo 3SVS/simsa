@@ -2395,6 +2395,8 @@ export type Dictionary = {
       doneBodyAutoFix: string;
       /** Train W — W-3 ③ (contract 4): shown only when buildVerified === false. */
       buildUnverified: string;
+      /** 비용 권고 ② (2026-09-30): shown only on a brief card whose job stopped at its usage limit. */
+      budgetStopped: string;
       openPr: string;
       branchLabel: string;
       noPrNote: string;

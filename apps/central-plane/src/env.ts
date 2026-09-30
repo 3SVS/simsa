@@ -327,13 +327,20 @@ export interface Env {
   /**
    * PR #561 review P1 — userKey is anonymous, so the per-user cap is not a cost
    * ceiling. Per-network (cf-connecting-ip as a keyed HMAC; default 검수 30 · 수리 15) and
-   * service-wide (default 검수 300 · 수리 50) daily caps on the same consume.
+   * service-wide (default 검수 300 · 수리 20 — 2026-09-30 비용 권고로 50→20) daily caps on the same consume.
    * Same override rule ([PILOT], positive integers only).
    */
   BETA_INSPECTION_DAILY_LIMIT_PER_IP?: string;
   BETA_INSPECTION_DAILY_LIMIT_GLOBAL?: string;
   BETA_REPAIR_DAILY_LIMIT_PER_IP?: string;
   BETA_REPAIR_DAILY_LIMIT_GLOBAL?: string;
+  /**
+   * 비용 권고 ② (2026-09-30, D-7 amend [PILOT]) — 수리 잡 1건이 쓸 수 있는 LLM 달러 상한(USD).
+   * 기본 2. 양의 유한수만, 그 외 = 기본값(workspace/beta-limits.ts repairJobBudgetUsd). Worker가 읽어
+   * 디스패치 페이로드 `repairBudgetUsd`로 컨테이너에 넘기고, 컨테이너가 호출마다 실응답 모델 단가로
+   * 누적해 다음 호출 전에 멈춘다. 비밀 아님 — [vars].
+   */
+  REPAIR_JOB_BUDGET_USD?: string;
   /**
    * In-app feedback (workspace-feedback.ts) admin notification targets.
    * ADMIN_TELEGRAM_CHAT_ID: numeric chat id to DM new feedback to (uses the

@@ -2621,6 +2621,7 @@ const EN = {
       doneBodyAutoFix: "Simsa changed the code to fix this problem. Look it over before it goes into your live app.",
       // Contract 4 — only when the server says buildVerified === false.
       buildUnverified: "We couldn't confirm that the fixed code actually builds.",
+      budgetStopped: "Automatic fixing stopped because this repair reached its AI usage limit. You can continue from the fix instructions.",
       openPr: "Open the repair PR on GitHub",
       branchLabel: "Branch",
       noPrNote: "The PR address was not returned. Please check the branch on your GitHub repository.",
@@ -5467,6 +5468,7 @@ const KO = {
       doneBodyAutoFix: "Simsa가 이 문제를 고치도록 코드를 바꿔 두었어요. 실제 앱에 반영하기 전에 한번 살펴봐 주세요.",
       // 계약 4 — 서버가 buildVerified === false라고 할 때만.
       buildUnverified: "고친 코드가 실제로 빌드되는지는 확인하지 못했어요.",
+      budgetStopped: "이번 수리에 쓸 수 있는 AI 사용 한도에 닿아 자동 수정 시도를 멈췄어요. 고침 지시서로 이어서 진행할 수 있어요.",
       openPr: "GitHub에서 수리 PR 열기",
       branchLabel: "브랜치",
       noPrNote: "PR 주소를 받지 못했어요. GitHub 저장소에서 브랜치를 확인해주세요.",

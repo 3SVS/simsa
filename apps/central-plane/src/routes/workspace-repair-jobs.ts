@@ -42,6 +42,13 @@
  *     1개 가드는 삽입 뒤 rowid 순으로 한 번 더(같은 수리 브랜치를 두 컨테이너가 동시에 밀지 않게).
  *   - W-3 잡 뷰 `buildVerified` — 컨테이너의 사후 검증(node --check)이 바뀐 파일을 전부 덮었는가.
  *     auto_fix만 boolean, brief_only·레거시·판단 불가 = null (repair-job-db.ts, 새 컬럼 없음).
+ *
+ * 비용 권고 ② (2026-09-30, D-7 amend [PILOT]) — 수리 잡당 AI 달러 상한:
+ *   - 디스패치 페이로드 `repairBudgetUsd` = env REPAIR_JOB_BUDGET_USD(기본 $2, beta-limits.ts).
+ *   - 컨테이너(container/coerce-result.mjs createRepairBudget·budgetedWorker)가 호출마다 실응답 모델 단가로
+ *     누적하고(가격표 밖 = 보수 단가), 다음 호출 전에 누적 ≥ 상한이면 부르지 않는다. 멈춘 잡은 기존 정직 폴백
+ *     (지시서 draft PR)으로 마감 + modeReason "budget_exceeded(…)" → 잡 뷰 `stoppedByBudget: true`.
+ *   - 옛 컨테이너 이미지는 필드를 무시한다(집행은 이미지 재빌드 뒤) — 콜백 계약은 그대로라 호환.
  */
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
@@ -55,7 +62,7 @@ import { getAppInstallationToken, resolveRepoAccessToken } from "../workspace/gi
 import { regionFromRequest } from "../workspace/envelope.js";
 import { REPAIR_DISABLED, repairEnabled } from "../workspace/service-switches.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
-import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
+import { clientNetworkKey, dailyCapRejection, dailyCapsFor, repairJobBudgetUsd } from "../workspace/beta-limits.js";
 import type { FetchLike } from "../github.js";
 import {
   discardQueuedRepairJob,
@@ -169,6 +176,11 @@ function repairJobView(job: DbRepairJob) {
     // builds". Only an auto_fix job carries a boolean; brief_only / legacy /
     // in-flight / undecidable → null (never a guess).
     buildVerified: job.buildVerified,
+    // 비용 권고 ② (2026-09-30): the container stopped calling the AI because this
+    // job reached its budget, then closed with the fix-brief draft PR. Only a DONE
+    // brief_only job can say true; everything else (auto_fix, failed, in flight,
+    // old containers) → false. The dashboard adds one line to the done card.
+    stoppedByBudget: job.stoppedByBudget,
     error: job.error ?? null,
     // Train C · C2a (0069): the re-inspection verify-sweep dispatched after the
     // PR merged, and its outcome (true/false; null = not verified yet/at all).
@@ -253,6 +265,10 @@ export async function dispatchRepairJob(
     decision: args.decision,
     envCause: args.envCause,
     locale: args.locale,
+    // 비용 권고 ② (2026-09-30): this job's LLM budget in USD. The container adds up
+    // every worker call and stops BEFORE the next one once the sum reaches it (an
+    // image that predates the field ignores it; a payload without it → $2 there).
+    repairBudgetUsd: repairJobBudgetUsd(env),
     callbackUrl: `${base}/internal/repair-done`,
     runningUrl: `${base}/internal/repair-running`,
     callbackToken: env.INTERNAL_CALLBACK_TOKEN,
