@@ -2,11 +2,15 @@
 /**
  * count-unindexed-training-copies — Train K · K-3 도구 (가격·동의 계획 §4 "철회·삭제", 0071).
  *
- * 왜: 학습 사본 색인(training_records_index, 0071)은 **생긴 뒤의 캡처**만 담는다. 그 전에 R2에 쌓인 사본 중
- *   - 검수 사본(events/…)은 workspace_pr_review_runs.training_r2_key에 키가 남아 있어 철회·프로젝트 삭제·
- *     6시간 크론이 색인으로 옮겨 지운다(training-records-index.ts).
- *   - **여정 사본(journey/…)은 사람·프로젝트 기록이 어디에도 없어 자동으로 지울 수 없다.**
- * 방침에 "과거 일부 사본은 예외"라고 적는 대신 그 "일부"가 몇 개인지 세는 도구다. 지우지 않는다(읽기 전용).
+ * 왜: 학습 사본 색인(training_records_index, 0071)은 **생긴 뒤의 캡처**만 담는다. 그 전에 R2에 쌓인 사본은
+ *   모두 본문에 subject_hash(= sha256(userKey))·project_id가 있어 사람·프로젝트를 **찾을 수는 있다**
+ *   (PR #574 검증 #574-2로 정정 — 예전 문구 "여정 사본은 사람 기록이 어디에도 없다"는 틀렸다). 다만
+ *   - 자동 경로(철회·프로젝트 삭제·6시간 크론)가 백필 없이 닿는 것은 검수 런 행(workspace_pr_review_runs.
+ *     training_r2_key, 0057)이 **아직 가리키는** events/ 사본뿐이다.
+ *   - 여정 사본(journey/…) 전부와, 검수 런 행이 사라진 events/ 사본(0071 이전에 삭제된 프로젝트의 사본·0057 이전
+ *     캡처·키 기록 실패분)은 일회성 백필 scripts/backfill-training-index.mjs(적용은 별도 승인) 전까지 자동으로
+ *     지워지지 않는다.
+ * 방침의 "과거 일부 사본" 예외가 몇 개인지 세는 도구다. 지우지 않는다(읽기 전용).
  *
  * 무엇을 세나: 버킷의 events/ · journey/ · training/(0054 머리말에만 있던 옛 접두어 — 실제로 쓰였는지 확인용)
  * 아래 객체 수, 그리고 그중 --before 시각(0071 적용·배포 시각) **이전**에 마지막으로 쓰인 수.
@@ -119,11 +123,15 @@ export function render(rows, before) {
     "|---|---|---|---|",
   ];
   for (const r of rows) lines.push(`| ${r.prefix} | ${r.total} | ${r.beforeCutoff} | ${r.unknownTime} |`);
-  lines.push("", "events/ 이전분은 검수 런 행으로 찾아 지울 수 있다(크론·철회·프로젝트 삭제). journey/ 이전분은 자동 삭제 대상이 아니다.");
+  lines.push(
+    "",
+    "기준 시각 이전 사본은 모두 본문의 subject_hash·project_id로 사람·프로젝트를 찾을 수 있다. 백필 전 자동 삭제(크론·철회·프로젝트 삭제)가 닿는 것은 검수 런 행이 아직 가리키는 events/ 사본뿐이고, journey/ 전부와 검수 런 행이 사라진 events/ 사본은 backfill-training-index.mjs(적용은 별도 승인) 뒤에 같은 경로로 지워진다.",
+  );
   return lines.join("\n");
 }
 
-async function listAll({ fetchImpl, accountId, bucket, prefix, accessKeyId, secretAccessKey, now = () => new Date() }) {
+/** 한 접두어의 전체 목록(ListObjectsV2 페이지 이어받기). backfill-training-index.mjs도 쓴다. */
+export async function listAll({ fetchImpl, accountId, bucket, prefix, accessKeyId, secretAccessKey, now = () => new Date() }) {
   const host = `${accountId}.r2.cloudflarestorage.com`;
   const objects = [];
   let token = null;
