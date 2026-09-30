@@ -645,6 +645,104 @@ describe("#574 수정 반영 — 국가 모름 = 기본 off · 0071 이전 사�
   });
 });
 
+// ─── 13. PR #573 검증 5 — 학습 사본 '담기는 것' = 서버 TrainingRecord·JourneyRecord 칸 전부 ─────────
+// 옛 고지는 제품 설명·확인 항목·결과·변경 내용·저장소 이름·진행 기록만 말했지만, 사본(training-store
+// buildTrainingRecord)에는 만든 도구·앱 유형·진입 경로·유입 경로·화면/입력 언어·프로젝트 수·요금제·AI 사용량·
+// PR 번호·커밋 해시(와 운영 정보 기록이 켜져 있으면 접속 국가 코드)도 담긴다. 서버 레코드 타입의 칸마다
+// '고지하는 말' 또는 '내용이 아닌 이유'를 정하게 강제한다 — 서버에 칸이 늘면 여기서 실패한다.
+const TRAINING_FIELD_WORDS = {
+  // 칸: [방침 TRAINING_DATA_SCOPE(KO), 카드 pointWhat KO, 카드 pointWhat EN] — null = 그 자리에서는 생략(이유 주석)
+  product_spec: ["제품 설명", "제품 설명", "product description"],
+  acceptance_items: ["확인 항목", "확인 항목", "checklist"],
+  pr_files: ["변경 내용", "변경 내용", "changes"],
+  results: ["확인 결과", "결과", "result"],
+  summary: ["확인 결과", "결과", "result"],
+  final_status: ["확인 결과", "결과", "result"],
+  outcome: ["확인 결과", "결과", "result"],
+  repo_full_name: ["저장소 이름", "저장소 이름", "code project's name"],
+  pr_number: ["변경 요청 번호", "변경 요청 번호", "change request number"],
+  head_sha: ["코드 버전 식별값", "코드 버전 식별값", "code version ID"],
+  region: ["접속 국가 코드", "접속 국가 코드", "country code"],
+  locale: ["화면 언어", "화면 언어", "screen language"],
+  content_lang: ["입력 언어", "입력 언어", "input language"],
+  entry_path: ["진입 경로", "진입 경로", "entry"],
+  built_with: ["만든 도구", "만든 도구", "build tool"],
+  topic_tags: ["앱 유형", "앱 유형", "app type"],
+  acquisition: ["유입 경로", "유입 경로", "source"],
+  user_context: ["프로젝트 수", "프로젝트 수", "number of projects"],
+  commercial: ["요금제", "요금제", "plan"],
+  cost_meta: ["AI 사용량", "AI 사용량", "AI usage"],
+  event_type: ["진행 기록", "진행 기록", "record of the steps"],
+  payload: ["진행 기록", "진행 기록", "record of the steps"],
+  // 카드는 짧게 — 사용자 키 변환값은 방침('자세히')에서 말한다.
+  subject_hash: ["변환한 값", null, null],
+};
+/** 사람·앱에 대한 내용이 아닌 칸 — 이유를 적는다. */
+const TRAINING_FIELD_NOT_CONTENT = new Map([
+  ["event_id", "사본 번호(확인 실행 번호와 같음) — 내부 식별자"],
+  ["captured_at", "저장 시각"],
+  ["schema_version", "사본 형식 버전"],
+  ["consent_version", "동의한 조항 버전"],
+  ["project_id", "프로젝트 내부 번호 — 프로젝트 삭제 때 사본을 찾아 지우는 데 쓴다"],
+  ["review_run_id", "확인 실행 내부 번호"],
+  ["rerun_of_review_run_id", "다시 확인한 원래 실행의 내부 번호"],
+  ["workspace_hash", "빈 칸 — 캡처 호출이 값을 넣지 않는다(workspaceHash 없음)"],
+  ["timezone", "빈 칸 — buildTrainingRecord가 항상 null"],
+  ["assistance", "안내 기능 여부 — 안내 기능이 없어 항상 wild"],
+  ["channel", "들어온 경로 — 웹 확인 경로라 항상 web"],
+  ["mcp_client", "빈 칸 — 웹 경로에서는 항상 null"],
+  ["payload_scrub_state", "비밀 키 지우기 처리 상태"],
+  ["review_source", "어느 확인 엔진이 판정했는지"],
+  ["device_context", "예약 칸 — 항상 null"],
+  ["experiment_arm", "예약 칸 — 항상 null"],
+  ["quality_signals", "예약 칸 — 항상 null"],
+]);
+
+function recordTypeFields(src, typeName) {
+  const start = src.indexOf(`export type ${typeName} = {`);
+  if (start < 0) return null;
+  const body = src.slice(start, src.indexOf("\n};", start));
+  return [...body.matchAll(/^ {2}(\w+)\s*:/gm)].map((m) => m[1]);
+}
+
+describe("#573 검증 5 — 학습 사본 '담기는 것' = 서버 기록 칸", () => {
+  const trainingFields = recordTypeFields(trainingStoreTs, "TrainingRecord");
+  const journeyFields = recordTypeFields(journeyStoreTs, "JourneyRecord");
+
+  it("[가드] 서버 TrainingRecord·JourneyRecord 칸을 읽었다 (파서가 조용히 0개를 읽지 않게)", () => {
+    assert.ok(trainingFields && trainingFields.length >= 30, JSON.stringify(trainingFields));
+    assert.ok(journeyFields && journeyFields.length >= 6, JSON.stringify(journeyFields));
+    for (const f of ["built_with", "cost_meta", "pr_number", "head_sha", "region"]) assert.ok(trainingFields.includes(f), f);
+  });
+
+  it("[서버 사실] 서버 기록의 모든 칸이 '고지하는 말' 또는 '내용이 아닌 이유' 중 정확히 하나에 있다", () => {
+    const all = [...new Set([...(trainingFields ?? []), ...(journeyFields ?? [])])];
+    const unclassified = all.filter((f) => !(f in TRAINING_FIELD_WORDS) && !TRAINING_FIELD_NOT_CONTENT.has(f));
+    assert.deepEqual(unclassified, [], `새 칸 — 고지 문구(TRAINING_DATA_SCOPE·pointWhat)와 이 표를 함께 고치세요: ${unclassified.join(", ")}`);
+    const both = all.filter((f) => f in TRAINING_FIELD_WORDS && TRAINING_FIELD_NOT_CONTENT.has(f));
+    assert.deepEqual(both, []);
+  });
+
+  it("방침 TRAINING_DATA_SCOPE와 카드 pointWhat(KO/EN)이 담기는 칸을 모두 말한다", () => {
+    const scope = ops.TRAINING_DATA_SCOPE ?? "";
+    const ko = DICTIONARIES.ko.trainingConsent.pointWhat;
+    const en = DICTIONARIES.en.trainingConsent.pointWhat;
+    const missing = [];
+    for (const [field, [policyWord, koWord, enWord]] of Object.entries(TRAINING_FIELD_WORDS)) {
+      if (policyWord && !scope.includes(policyWord)) missing.push(`policy:${field}(${policyWord})`);
+      if (koWord && !ko.includes(koWord)) missing.push(`ko:${field}(${koWord})`);
+      if (enWord && !en.includes(enWord)) missing.push(`en:${field}(${enWord})`);
+    }
+    assert.deepEqual(missing, []);
+  });
+
+  it("접속 국가 코드는 운영 정보 기록이 켜져 있을 때만 담긴다고 조건을 붙인다 (서버: 끄면 사본 region도 null)", () => {
+    assert.match(ops.TRAINING_DATA_SCOPE ?? "", /운영 정보 기록을 켜 두셨으면 접속 국가 코드/);
+    assert.match(DICTIONARIES.ko.trainingConsent.pointWhat, /운영 정보 기록이 켜져 있으면 접속 국가 코드/);
+    assert.match(DICTIONARIES.en.trainingConsent.pointWhat, /country code if operating info recording is on/);
+  });
+});
+
 // [서버 사실] 서버 privacy-prefs.ts 머리말의 '무엇을 끄는가'·'끄지 않는 것' 표 = 대시보드 STOPS·KEEPS.
 // 서버 파일이 이 트리에 없으면(서버 PR #574가 base에 없음) todo — 머지 순서는 아래 [서버 K 게이트]가 강제한다.
 const serverPrefsTs = read(path.join(CP, "workspace/privacy-prefs.ts"));

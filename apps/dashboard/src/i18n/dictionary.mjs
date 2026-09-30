@@ -1301,7 +1301,7 @@ const EN = {
   trainingConsent: {
     title: "Share training data (optional)",
     settingsDesc: "Choose whether Simsa may keep copies of your code checks to get better at checking and fixing apps.",
-    pointWhat: "What — when you check changes to code you connected: a copy of the product description, checklist, result, changes, the code project's name and a record of the steps. Checks of an app by its web address are not included. Values that look like secret keys are removed first; your account email is not included.",
+    pointWhat: "What — when you check changes to code you connected: a copy of the product description, checklist, result, changes, the code project's name, the change request number, the code version ID and a record of the steps. It also carries operating info from that time: build tool, app type, entry, source, screen language, input language, number of projects, plan and AI usage (amount processed and model) — plus your country code if operating info recording is on. Checks of an app by its web address are not included. Values that look like secret keys are removed first; your account email is not included.",
     pointHow: "How — used to make Simsa's checks and fixes better, including training Simsa's own AI model. Individual data is never sold or handed to anyone else.",
     pointControl: "Control — change it anytime in a project's Settings. If you allow now, the training copies saved from then on are deleted when you withdraw or delete the project.",
     equalNote: "Whichever you choose, every feature works the same for you.",
@@ -4197,7 +4197,7 @@ const KO = {
   trainingConsent: {
     title: "학습 데이터 제공 (선택)",
     settingsDesc: "Simsa가 확인·고치기를 더 잘하도록, 코드 확인 기록의 사본을 보관해도 되는지 정해 주세요.",
-    pointWhat: "무엇을 — 연결하신 코드의 변경 사항을 확인하실 때 쓰인 제품 설명·확인 항목·결과·변경 내용·저장소 이름과 진행 기록의 사본이에요. 주소로 하는 화면 확인 결과는 담기지 않아요. 비밀 키처럼 보이는 값은 먼저 지우고, 계정 이메일은 담지 않아요.",
+    pointWhat: "무엇을 — 연결하신 코드의 변경 사항을 확인하실 때 쓰인 제품 설명·확인 항목·결과·변경 내용·저장소 이름·변경 요청 번호·코드 버전 식별값과 진행 기록의 사본이에요. 그때의 만든 도구·앱 유형·진입 경로·유입 경로·화면 언어·입력 언어·프로젝트 수·요금제·AI 사용량(처리한 글자 양과 모델)도 함께 담겨요(운영 정보 기록이 켜져 있으면 접속 국가 코드도). 주소로 하는 화면 확인 결과는 담기지 않아요. 비밀 키처럼 보이는 값은 먼저 지우고, 계정 이메일은 담지 않아요.",
     pointHow: "어떻게 — Simsa의 확인·고치기를 더 잘하게 만드는 데 쓰고, 이 데이터로 Simsa의 AI 모델을 학습시킬 수 있어요. 개인 데이터를 팔거나 다른 곳에 넘기지 않아요.",
     pointControl: "바꾸기 — 프로젝트 설정에서 언제든 바꿀 수 있어요. 지금 허용하시면, 그 뒤 저장되는 학습 사본은 철회하시거나 프로젝트를 삭제하실 때 지워요.",
     equalNote: "어느 쪽을 선택해도 모든 기능을 똑같이 쓸 수 있어요.",
