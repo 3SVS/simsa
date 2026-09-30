@@ -1,0 +1,510 @@
+/**
+ * Train K — 동의·프라이버시 대시보드 (계약 5 · 동의 계획 2026-09-27 §4 · §5.2 K-1·K-2).
+ *
+ * 고치는 결함(코드 확인된 사실):
+ *   ① 거절한 사람이 새 브라우저에서 다시 초대됐다(서버 결함 — 서버 PR). 대시보드는 서버가 말하는
+ *      training.state만 믿고, "undecided"일 때만 묻는다.
+ *   ② 압박 카피("무료 베타는 이 참여로 운영돼요", "나중에") — 삭제.
+ *   ③ 비대칭 버튼(btn-primary 참여 vs btn-ghost 나중에 + ✕) — 같은 클래스 하나의 두 버튼, 닫기 없음.
+ *   + 떠다니는 팝업(ImproveSimsaPrompt, layout 마운트) → 첫 완료 결과 화면의 인라인 카드.
+ *   + 운영 정보(ⓐ) 고지 한 줄 + 끄기, 설정 토글 두 개, 방침 문구 = 서버가 실제로 하는 일.
+ *
+ * 표시 규칙(#558 규칙 계승 — 회귀 증거를 부풀리지 않는다):
+ *   [서버 사실]  서버 소스를 읽어 문구의 전제를 고정 — 옛 코드에서도 통과, 회귀 증거 아님.
+ *   [서버 K]     Train K 서버 PR(0071·privacy-prefs)이 main에 들어오기 전에는 todo. 들어온 뒤 이 PR의 CI를
+ *                다시 돌리면 자동으로 켜진다(머지 순서: 서버 PR → 이 PR 재검증 → 머지).
+ *   [가드]       하네스 자체 검사 — 회귀 증거 아님.
+ *   표시 없음    고치기 전 코드(origin/main 3a1ca07)에서 실패한다.
+ */
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, "../../..");
+const SRC = path.resolve(HERE, "../src");
+const CP = path.join(REPO, "apps/central-plane/src");
+const MIGRATIONS_DIR = path.join(REPO, "apps/central-plane/migrations");
+
+const K = await import("../src/lib/privacy-prefs.mjs").catch(() => ({}));
+const ops = await import("../src/lib/privacy-ops-info.mjs").catch(() => ({}));
+const { DICTIONARIES } = await import("../src/i18n/dictionary.mjs");
+const { devTermHits } = await import("../../../tools/simsa-completion-loop-spike/lib/beginner-terms.mjs");
+
+function read(p) {
+  try {
+    return readFileSync(p, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function walk(dir, ext, out = []) {
+  for (const name of readdirSync(dir)) {
+    const p = path.join(dir, name);
+    if (statSync(p).isDirectory()) walk(p, ext, out);
+    else if (ext.test(name)) out.push(p);
+  }
+  return out;
+}
+
+const cardSrc = read(path.join(SRC, "components/TrainingConsentCard.tsx"));
+const resultSectionSrc = read(path.join(SRC, "components/ResultPrivacySection.tsx"));
+const settingsSectionSrc = read(path.join(SRC, "components/PrivacySettingsSection.tsx"));
+const runPageSrc = read(path.join(SRC, "app/projects/[id]/visual-checks/[runId]/page.tsx"));
+const settingsPageSrc = read(path.join(SRC, "app/projects/[id]/settings/page.tsx"));
+const layoutSrc = read(path.join(SRC, "app/layout.tsx"));
+const privacyPageSrc = read(path.join(SRC, "app/legal/privacy/page.tsx"));
+
+const VALID = {
+  ok: true,
+  opsMeta: "on",
+  opsMetaSource: "default",
+  region: "KR",
+  training: { state: "undecided", version: "2026-07-03", decidedAt: null },
+};
+
+// ─── 1. 카드 노출 조건 ────────────────────────────────────────────────────────
+describe("학습 카드 노출 조건 표 (trainingCardVisible)", () => {
+  const rows = [
+    // [이유, resultDone, state, seenRuns, runId, 기대]
+    ["첫 완료 결과 — 아직 정하지 않음", true, "undecided", [], "r1", true],
+    ["같은 결과를 다시 열어도 새 노출로 세지 않는다", true, "undecided", ["r1"], "r1", true],
+    ["다음 완료 결과에서 1회만 다시", true, "undecided", ["r1"], "r2", true],
+    ["그 뒤로는 설정에서만", true, "undecided", ["r1", "r2"], "r3", false],
+    ["이미 보여 준 두 번째 결과를 다시 열 때는 그대로", true, "undecided", ["r1", "r2"], "r2", true],
+    ["허용한 사람에게는 묻지 않는다", true, "consented", [], "r1", false],
+    ["거절한 사람에게도 다시 묻지 않는다 (결함 ①)", true, "declined", [], "r1", false],
+    ["서버를 모르면(옛 서버·네트워크) 숨긴다", true, null, [], "r1", false],
+    ["진행 중·실패 결과에는 없다", false, "undecided", [], "r1", false],
+    ["runId 없음", true, "undecided", [], "", false],
+  ];
+  for (const [why, resultDone, trainingState, seenRuns, runId, want] of rows) {
+    it(`${why} → ${want}`, () => {
+      assert.equal(K.trainingCardVisible({ resultDone, trainingState, seenRuns, runId }), want);
+    });
+  }
+
+  it("결정 없이 떠나는 흐름: 결과 1·2에서 보이고 3부터는 안 보인다 (브라우저 기억 = rememberTrainingCardSeen)", () => {
+    let seen = [];
+    const shown = [];
+    for (const runId of ["r1", "r2", "r3", "r4"]) {
+      const v = K.trainingCardVisible({ resultDone: true, trainingState: "undecided", seenRuns: seen, runId });
+      shown.push(v);
+      if (v) seen = K.rememberTrainingCardSeen(seen, runId);
+    }
+    assert.deepEqual(shown, [true, true, false, false]);
+    assert.equal(K.TRAINING_CARD_MAX_EXPOSURES, 2);
+  });
+
+  it("브라우저 기억은 망가진 값을 빈 목록으로 읽고, 상한을 넘겨 쌓지 않는다", () => {
+    assert.deepEqual(K.parseSeenRuns(null), []);
+    assert.deepEqual(K.parseSeenRuns("not json"), []);
+    assert.deepEqual(K.parseSeenRuns('{"a":1}'), []);
+    assert.deepEqual(K.parseSeenRuns('["a","a",3,"b","c"]'), ["a", "b"]);
+    assert.deepEqual(K.rememberTrainingCardSeen(["a", "b"], "c"), ["a", "b"]);
+    assert.deepEqual(K.rememberTrainingCardSeen(["a"], "a"), ["a"]);
+  });
+});
+
+// ─── 2. 옛 서버 방어 ──────────────────────────────────────────────────────────
+describe("옛 서버 방어 — 응답 경계 검사와 화면 상태", () => {
+  it("계약 모양이면 정규화, 아니면 null (옛 서버 notFound·빈 응답·반쪽 응답)", () => {
+    assert.deepEqual(K.normalizePrivacyPrefs(VALID), {
+      opsMeta: "on",
+      opsMetaSource: "default",
+      region: "KR",
+      training: { state: "undecided", version: "2026-07-03", decidedAt: null },
+    });
+    assert.equal(K.normalizePrivacyPrefs({ error: "not found", path: "/workspace/privacy-prefs" }), null);
+    assert.equal(K.normalizePrivacyPrefs(null), null);
+    assert.equal(K.normalizePrivacyPrefs({ ok: true }), null);
+    assert.equal(K.normalizePrivacyPrefs({ ...VALID, ok: false }), null);
+    assert.equal(K.normalizePrivacyPrefs({ ...VALID, opsMeta: "maybe" }), null);
+    assert.equal(K.normalizePrivacyPrefs({ ...VALID, opsMetaSource: "admin" }), null);
+    assert.equal(K.normalizePrivacyPrefs({ ...VALID, training: { state: "yes" } }), null);
+    assert.equal(K.normalizePrivacyPrefs({ ...VALID, training: null }), null);
+    assert.equal(K.normalizePrivacyPrefs({ ...VALID, region: "kr" })?.region, null, "bad region → null, rest kept");
+  });
+
+  it("옛 training-consent 응답은 {ok, active, storageConfigured}로만 읽는다", () => {
+    assert.deepEqual(
+      K.normalizeTrainingConsent({ ok: true, consented: true, consentVersion: "v", currentVersion: "v", active: true, storageConfigured: true }),
+      { ok: true, active: true, storageConfigured: true },
+    );
+    assert.deepEqual(K.normalizeTrainingConsent({ ok: false, error: "db_error" }), { ok: false, active: false, storageConfigured: false });
+    assert.deepEqual(K.normalizeTrainingConsent({ ok: true }), { ok: false, active: false, storageConfigured: false });
+  });
+
+  it("설정 토글: 서버를 모르면 운영 정보 토글은 비활성, 학습 토글은 옛 경로로(끄면 '지워요'라고 하지 않음)", () => {
+    assert.deepEqual(K.privacySettingsState({ prefs: null, legacy: null }), {
+      opsMeta: { available: false, on: false, defaultOff: false },
+      training: { available: false, on: false, offDeletes: false },
+    });
+    assert.deepEqual(K.privacySettingsState({ prefs: null, legacy: { ok: true, active: true } }).training, {
+      available: true,
+      on: true,
+      offDeletes: false,
+    });
+    const k = K.privacySettingsState({
+      prefs: K.normalizePrivacyPrefs({ ...VALID, opsMeta: "off", training: { state: "declined", version: "v", decidedAt: "t" } }),
+      legacy: { ok: true, active: false },
+    });
+    assert.deepEqual(k, {
+      opsMeta: { available: true, on: false, defaultOff: true },
+      training: { available: true, on: false, offDeletes: true },
+    });
+  });
+
+  it("운영 정보 한 줄: 모름이면 그리지 않고, 켬·기본 끔(EU/UK/CH)·직접 끔을 구분한다", () => {
+    const n = (o) => K.normalizePrivacyPrefs({ ...VALID, ...o });
+    assert.equal(K.opsInfoLineVariant(null), null);
+    assert.equal(K.opsInfoLineVariant(n({ opsMeta: "on", opsMetaSource: "default" })), "recording");
+    assert.equal(K.opsInfoLineVariant(n({ opsMeta: "on", opsMetaSource: "user" })), "recording");
+    assert.equal(K.opsInfoLineVariant(n({ opsMeta: "off", opsMetaSource: "default", region: "DE" })), "off_default");
+    assert.equal(K.opsInfoLineVariant(n({ opsMeta: "off", opsMetaSource: "user" })), "off_user");
+    for (const loc of ["ko", "en"]) {
+      const p = DICTIONARIES[loc].privacyPrefs;
+      assert.deepEqual(K.opsInfoLineCopy("recording", p), { text: p.lineRecording, action: p.turnOff, next: "off" });
+      assert.deepEqual(K.opsInfoLineCopy("off_default", p), { text: p.lineOffDefault, action: p.turnOn, next: "on" });
+      assert.deepEqual(K.opsInfoLineCopy("off_user", p), { text: p.lineOffUser, action: p.turnOnAgain, next: "on" });
+      assert.equal(K.opsInfoLineCopy(null, p), null);
+    }
+  });
+
+  it("저장 결과: 요청대로 저장됐을 때만 '저장됨'", () => {
+    assert.equal(K.trainingSaveOutcome(true, { ok: true, active: true }), "consented");
+    assert.equal(K.trainingSaveOutcome(false, { ok: true, active: false }), "declined");
+    assert.equal(K.trainingSaveOutcome(true, { ok: true, active: false }), "error");
+    assert.equal(K.trainingSaveOutcome(false, { ok: true, active: true }), "error");
+    assert.equal(K.trainingSaveOutcome(true, { ok: false, active: false }), "error");
+  });
+
+  it("API 클라이언트는 응답을 정규화 함수로만 읽는다 (as 캐스트 없음) — 404·네트워크는 null", () => {
+    const prefsApi = read(path.join(SRC, "lib/workspace-privacy-prefs-api.ts"));
+    const consentApi = read(path.join(SRC, "lib/workspace-training-consent-api.ts"));
+    assert.match(prefsApi, /normalizePrivacyPrefs\(raw\)/);
+    assert.match(prefsApi, /if \(!res\.ok\) return null;/);
+    assert.match(consentApi, /normalizeTrainingConsent\(raw\)/);
+    for (const src of [prefsApi, consentApi]) assert.ok(!/\) as \w/.test(src), "no `as` cast of the wire value");
+  });
+});
+
+// ─── 3. 동등 버튼 · 인라인 · 사전 선택 없음 ──────────────────────────────────
+describe("학습 카드 — 동등 버튼 2개, 사전 선택·닫기·오버레이 없음 (결함 ③)", () => {
+  it("버튼은 정확히 2개이고, 둘 다 같은 클래스 상수 하나를 쓴다", () => {
+    assert.ok(cardSrc, "TrainingConsentCard.tsx exists");
+    // 여는 태그 안에 화살표 함수(`=>`)가 있어 `[^>]*`로는 못 자른다 — `<button`부터 `</button>`까지를 본다.
+    const buttons = cardSrc.split("<button").slice(1).map((c) => c.slice(0, c.indexOf("</button>")));
+    assert.equal(buttons.length, 2, buttons.join("\n---\n"));
+    for (const b of buttons) {
+      const classes = [...b.matchAll(/className=(\{[^}]+\}|"[^"]*")/g)].map((m) => m[1]);
+      assert.deepEqual(classes, ["{CONSENT_CHOICE_CLASS}"], b);
+    }
+  });
+
+  it("그 클래스에는 강조가 없다 (primary·색 배경·색 글자 없음)", () => {
+    const cls = /const CONSENT_CHOICE_CLASS = "([^"]+)";/.exec(cardSrc)?.[1] ?? "";
+    assert.ok(cls, "CONSENT_CHOICE_CLASS");
+    assert.ok(!/primary|\bbg-(?!white)|text-(red|green|brand|emerald|blue)/.test(cls), cls);
+  });
+
+  it("순서는 [허용하지 않기] [허용하기] — 허용이 먼저 눈에 띄지 않는다", () => {
+    const decline = cardSrc.indexOf("{s.decline}");
+    const allow = cardSrc.indexOf("{s.allow}");
+    assert.ok(decline > 0 && allow > decline, `decline@${decline} allow@${allow}`);
+    assert.match(cardSrc, /onClick=\{\(\) => void choose\(false\)\}[^>]*>\s*\{s\.decline\}/);
+    assert.match(cardSrc, /onClick=\{\(\) => void choose\(true\)\}[^>]*>\s*\{s\.allow\}/);
+  });
+
+  it("닫기(X)·체크박스 사전 선택·모달/오버레이가 없다 (옛 팝업: ✕ + fixed z-50)", () => {
+    assert.ok(cardSrc && resultSectionSrc, "inline card + result section exist");
+    // 옛 팝업 파일이 남아 있으면 그것도 검사 대상이다 — 옛 코드에서는 여기서 실패한다.
+    const popupSrc = read(path.join(SRC, "components/ImproveSimsaPrompt.tsx"));
+    for (const src of [cardSrc, resultSectionSrc, popupSrc]) {
+      assert.ok(!/✕|×|aria-label=\{t\.common\.dismiss\}|onClose|dismiss\(/.test(src), "no close button");
+      assert.ok(!/type="checkbox"|defaultChecked/.test(src), "no pre-checked box");
+      assert.ok(!/\bfixed\b|z-50|aria-modal|role="dialog"/.test(src), "inline only");
+    }
+  });
+
+  it("'자세히'는 방침의 학습 데이터 문단(#training-data), 만 14세 표기를 함께 둔다", () => {
+    assert.match(cardSrc, /href="\/legal\/privacy#training-data"/);
+    assert.match(cardSrc, /\{s\.ageNote\}/);
+    assert.match(cardSrc, /\{s\.equalNote\}/);
+  });
+});
+
+// ─── 4. 팝업 제거 ────────────────────────────────────────────────────────────
+describe("떠다니는 참여 팝업 제거 (ImproveSimsaPrompt)", () => {
+  it("컴포넌트 파일이 없고 layout이 마운트하지 않는다", () => {
+    assert.ok(!existsSync(path.join(SRC, "components/ImproveSimsaPrompt.tsx")), "component file removed");
+    assert.ok(!/ImproveSimsaPrompt/.test(layoutSrc.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")), "layout no longer mounts it");
+  });
+
+  it("어느 화면도 옛 팝업 기억 키를 쓰지 않는다", () => {
+    const hits = walk(SRC, /\.(tsx|ts|mjs)$/).filter((f) => read(f).includes("simsa:improve-prompt-dismissed"));
+    assert.deepEqual(hits.map((f) => path.relative(SRC, f)), []);
+  });
+
+  it("압박 카피 키가 사전에서 사라졌다 (betaNote·joinCta·laterCta·manageInSettings)", () => {
+    for (const loc of ["en", "ko"]) {
+      const tc = DICTIONARIES[loc].trainingConsent;
+      for (const k of ["betaNote", "joinCta", "laterCta", "manageInSettings"]) {
+        assert.ok(!(k in tc), `${loc}.trainingConsent.${k} still present`);
+      }
+    }
+  });
+});
+
+// ─── 5. 사전 — 파리티·금칙어·압박 카피 ───────────────────────────────────────
+function leafStrings(obj) {
+  return Object.values(obj).flatMap((v) => (v && typeof v === "object" ? leafStrings(v) : [v]));
+}
+
+describe("사전 — KO/EN 파리티·초보자 금칙어 0·압박 카피 0", () => {
+  it("trainingConsent·privacyPrefs 키가 두 언어에서 같다", () => {
+    for (const block of ["trainingConsent", "privacyPrefs"]) {
+      const en = Object.keys(DICTIONARIES.en[block] ?? {}).sort();
+      const ko = Object.keys(DICTIONARIES.ko[block] ?? {}).sort();
+      assert.ok(en.length > 0, `${block} exists`);
+      assert.deepEqual(ko, en, block);
+    }
+  });
+
+  for (const loc of ["ko", "en"]) {
+    it(`[${loc}] 두 블록의 모든 문구에 개발 용어 0 (beginner-terms)`, () => {
+      const d = DICTIONARIES[loc];
+      for (const s of [...leafStrings(d.trainingConsent), ...leafStrings(d.privacyPrefs)]) {
+        assert.equal(typeof s, "string");
+        assert.deepEqual(devTermHits(s), [], s);
+      }
+    });
+
+    it(`[${loc}] 압박·지연 카피가 없다 (무료 베타는 이 참여로 운영 · 나중에 · Maybe later · Join in)`, () => {
+      const all = [...leafStrings(DICTIONARIES[loc].trainingConsent), ...leafStrings(DICTIONARIES[loc].privacyPrefs)].join("\n");
+      assert.ok(!/무료 베타|이 참여로 운영|나중에|free beta|runs on this|maybe later|join in|smarter for everyone/i.test(all), all);
+    });
+  }
+
+  it("계약 문구 그대로: 무차별 보장·운영 정보 고지 줄(KO)", () => {
+    const ko = DICTIONARIES.ko;
+    assert.equal(ko.trainingConsent.equalNote, "어느 쪽을 선택해도 모든 기능을 똑같이 쓸 수 있어요.");
+    assert.equal(ko.privacyPrefs.lineRecording, "이 확인에는 접속 국가 코드·화면 언어·만든 도구·실패 유형 같은 비식별 운영 정보가 기록됩니다");
+    assert.match(ko.privacyPrefs.lineOffDefault, /기록하지 않고 있어요$/);
+    assert.equal(ko.privacyPrefs.turnOff, "기록 끄기");
+    assert.equal(ko.privacyPrefs.turnOn, "켜기");
+    assert.equal(ko.trainingConsent.allow, "허용하기");
+    assert.equal(ko.trainingConsent.decline, "허용하지 않기");
+  });
+
+  it("만 14세 표기가 두 언어에 있다", () => {
+    assert.match(DICTIONARIES.ko.trainingConsent.ageNote, /만 14세/);
+    assert.match(DICTIONARIES.en.trainingConsent.ageNote, /14/);
+  });
+});
+
+// ─── 6. 화면 배선 ────────────────────────────────────────────────────────────
+describe("배선 — 결과 화면(인라인)·설정 화면(두 토글)", () => {
+  it("완료된 확인 결과 화면: '이번 결과, 어떠셨어요?' 다음에 ResultPrivacySection (결과 done일 때만)", () => {
+    assert.match(runPageSrc, /import \{ ResultPrivacySection \} from "@\/components\/ResultPrivacySection";/);
+    const verdictAt = runPageSrc.indexOf("<UserVerdictSection");
+    const privacyAt = runPageSrc.indexOf("<ResultPrivacySection");
+    assert.ok(verdictAt > 0 && privacyAt > verdictAt, `verdict@${verdictAt} privacy@${privacyAt}`);
+    assert.match(runPageSrc, /<ResultPrivacySection runId=\{runId\} resultDone=\{check\.status === "done"\}/);
+  });
+
+  it("결과 화면 섹션은 서버 상태로만 카드를 띄우고, 운영 정보 '자세히'는 #ops-info", () => {
+    assert.match(resultSectionSrc, /fetchPrivacyPrefs\(userKey\)/);
+    assert.match(resultSectionSrc, /trainingCardVisible\(/);
+    assert.match(resultSectionSrc, /rememberTrainingCardSeen\(/);
+    assert.match(resultSectionSrc, /opsInfoLineCopy\(opsInfoLineVariant\(prefs\), p\)/);
+    assert.match(resultSectionSrc, /href="\/legal\/privacy#ops-info"/);
+  });
+
+  it("설정 화면: PrivacySettingsSection 하나로 두 토글, 옛 학습 섹션(베타 문구)은 없다", () => {
+    assert.match(settingsPageSrc, /<PrivacySettingsSection userKey=\{userKey\} t=\{t\} \/>/);
+    assert.ok(!/betaNote|trainConsented|handleToggleTrainingConsent/.test(settingsPageSrc));
+    assert.match(settingsSectionSrc, /id="ops-meta"/);
+    assert.match(settingsSectionSrc, /id="train-consent"/);
+  });
+
+  it("설정 화면 옛 서버 방어: 모르면 토글 비활성 + 설명, 끄기 안내는 서버가 하는 일만", () => {
+    assert.match(settingsSectionSrc, /disabled=\{!state\.opsMeta\.available \|\| opsPhase === "saving"\}/);
+    assert.match(settingsSectionSrc, /disabled=\{!state\.training\.available \|\| trainPhase === "saving"\}/);
+    assert.match(settingsSectionSrc, /!state\.opsMeta\.available && <p[^>]*>\{p\.unavailable\}/);
+    assert.match(settingsSectionSrc, /!state\.training\.available && <p[^>]*>\{s\.unavailable\}/);
+    assert.match(settingsSectionSrc, /state\.training\.offDeletes \? s\.offNoteDeletes : s\.offNoteStops/);
+  });
+});
+
+// ─── 7. 방침 문구 = 계약 4의 실제 동작 ───────────────────────────────────────
+describe("방침·카드 문구 = 서버가 실제로 하는 일 (계약 4: 색인 삭제 · 과거분 예외)", () => {
+  it("TRAINING_COPY_NOTE: 철회·프로젝트 삭제 시 색인된 사본 삭제 + 색인 전 사본은 자동 삭제 불가·문의 처리", () => {
+    const s = ops.TRAINING_COPY_NOTE ?? "";
+    assert.match(s, /동의를 철회하시거나 그 프로젝트를 삭제하시면 색인된 사본을 지웁니다/, s);
+    assert.match(s, /삭제 기능이 생기기 전에 저장된 일부 사본은[^.]*자동으로 지우지 못합니다/, s);
+    assert.match(s, /문의 이메일로 요청하시면 찾을 수 있는 범위에서 지워 드립니다/, s);
+    assert.ok(!/지워지지 않습니다/.test(s), "old 'never deleted' sentence");
+    assert.ok(!/모두 지웁니다|전부 지웁니다/.test(s), "must not over-promise");
+  });
+
+  it("카드의 '바꾸기'는 지금 허용한 뒤 저장되는 사본만 약속한다 (색인이 있는 사본)", () => {
+    assert.match(DICTIONARIES.ko.trainingConsent.pointControl, /지금 허용하시면, 그 뒤 저장되는 학습 사본은 철회하시거나 프로젝트를 삭제하실 때 지워요/);
+    assert.match(DICTIONARIES.en.trainingConsent.pointControl, /If you allow now, the training copies saved from then on are deleted when you withdraw or delete the project/);
+  });
+
+  it("설정의 끄기 안내는 과거분 예외를 숨기지 않는다", () => {
+    assert.match(DICTIONARIES.ko.trainingConsent.offNoteDeletes, /삭제 기능이 생기기 전에 저장된 일부 사본은 자동으로 지워지지 않을 수 있어요/);
+    assert.match(DICTIONARIES.en.trainingConsent.offNoteDeletes, /before deletion was available may not be removed automatically/);
+  });
+
+  it("방침 페이지: §2 학습 데이터 문단(#training-data)과 §1 운영 정보(#ops-info) 앵커가 있다", () => {
+    assert.match(privacyPageSrc, /id="training-data"/);
+    assert.match(privacyPageSrc, /id="ops-info"/);
+    for (const k of ["TRAINING_DATA_TITLE", "TRAINING_DATA_SCOPE", "TRAINING_DATA_PURPOSE", "TRAINING_DATA_BASIS", "TRAINING_DATA_CHOICE"]) {
+      assert.match(privacyPageSrc, new RegExp(`\\{${k}\\}`), k);
+      assert.equal(typeof ops[k], "string", k);
+    }
+    const s2 = privacyPageSrc.slice(privacyPageSrc.indexOf("2. AI 처리 위탁"), privacyPageSrc.indexOf("3. 보관과 파기"));
+    assert.ok(s2.includes("{TRAINING_COPY_NOTE}"), "§2 carries the same withdrawal/deletion sentence");
+  });
+
+  it("학습 데이터 문단: 동의 근거·무차별·만 14세·팔거나 넘기지 않음", () => {
+    assert.match(ops.TRAINING_DATA_BASIS ?? "", /동의/);
+    assert.match(ops.TRAINING_DATA_BASIS ?? "", /제15조 제1항 제1호/);
+    assert.match(ops.TRAINING_DATA_CHOICE ?? "", /모든 기능을 똑같이/);
+    assert.match(ops.TRAINING_DATA_CHOICE ?? "", /만 14세 이상/);
+    assert.match(ops.TRAINING_DATA_PURPOSE ?? "", /팔거나 다른 곳에 넘기지 않/);
+  });
+
+  it("변경 이력 새 줄(시행일 상수, 게시일 2026-09-30 이후): 기록 끄기·학습 데이터·만 14세를 말한다", () => {
+    const last = (ops.PRIVACY_CHANGE_LOG ?? []).at(-1);
+    assert.ok(last, "change log");
+    assert.equal(last.date, ops.PRIVACY_EFFECTIVE_DATE);
+    assert.ok(last.date > "2026-09-30", `new line must be after the published 2026-09-30 line: ${last.date}`);
+    assert.match(last.summary, /기록 끄기/);
+    assert.match(last.summary, /학습 데이터/);
+    assert.match(last.summary, /만 14세/);
+  });
+
+  it("끄기 표: 고지된 모든 칸이 '끄면 멈춤' 또는 '끄셔도 남음' 중 정확히 하나다", () => {
+    const stops = new Set(ops.OPS_META_OFF_STOPS ?? []);
+    const keeps = new Set(ops.OPS_META_OFF_KEEPS ?? []);
+    assert.ok(stops.size > 0 && keeps.size > 0);
+    const overlap = [...stops].filter((c) => keeps.has(c));
+    assert.deepEqual(overlap, [], "a column cannot be both stopped and kept");
+    const disclosed = new Set((ops.OPS_INFO_ITEMS ?? []).flatMap((i) => i.columns ?? []));
+    disclosed.add("envelope_json");
+    const unclassified = [...disclosed].filter((c) => !stops.has(c) && !keeps.has(c));
+    assert.deepEqual(unclassified, [], `끄기 표에 없는 고지 칸: ${unclassified.join(", ")}`);
+    // 계약 3: 끄기 대상은 0069 통계용 운영 정보 4칸.
+    assert.deepEqual([...stops].sort(), ["envelope_json", "finding_codes_json", "region", "region_at_create"]);
+  });
+});
+
+// ─── 8. [서버 사실] 학습 사본 문구의 전제 (지금 main에 있는 서버) ─────────────
+const trainingStoreTs = read(path.join(CP, "workspace/training-store.ts"));
+const journeyStoreTs = read(path.join(CP, "workspace/journey-store.ts"));
+
+describe("[서버 사실] 학습 사본 문구의 전제", () => {
+  it("[서버 사실] 학습 사본을 만드는 곳은 연결한 코드 확인 경로 하나 (화면 확인 경로에는 캡처가 없다)", () => {
+    const callers = walk(CP, /\.ts$/)
+      .filter((f) => !/workspace[\\/](training|journey)-store\.ts$/.test(f))
+      .filter((f) => /\bcapture(TrainingRecord|JourneyEvent)\(/.test(read(f)))
+      .map((f) => path.relative(CP, f).replace(/\\/g, "/"));
+    assert.deepEqual(callers, ["routes/workspace-github.ts"], "a new capture site → update pointWhat / TRAINING_DATA_SCOPE");
+  });
+
+  it("→ 그래서 카드와 방침이 '주소로 하는 화면 확인 결과는 담기지 않는다'고 적는다", () => {
+    assert.match(DICTIONARIES.ko.trainingConsent.pointWhat, /주소로 하는 화면 확인 결과는 담기지 않아요/);
+    assert.match(DICTIONARIES.en.trainingConsent.pointWhat, /Checks of an app by its web address are not included/);
+    assert.match(ops.TRAINING_DATA_SCOPE ?? "", /주소로 하는 화면 확인 결과는 담지 않습니다/);
+  });
+
+  it("[서버 사실] 저장 전 비밀 키 지우기(redactSecrets) — 두 저장소 모두", () => {
+    assert.match(trainingStoreTs, /import \{ redactSecrets \} from "@simsa\/secret-guard";/);
+    assert.match(journeyStoreTs, /import \{ redactSecrets \} from "@simsa\/secret-guard";/);
+  });
+
+  it("[서버 사실] 기록에 제품 설명·저장소 이름·sha256(userKey)(비밀 키 없음)가 들어간다", () => {
+    assert.match(trainingStoreTs, /product_spec: scrubJson\(input\.productSpec\)/);
+    assert.match(trainingStoreTs, /repo_full_name: input\.repoFullName/);
+    assert.match(trainingStoreTs, /subjectHash \?\? \(await sha256Hex\(input\.userKey\)\)/);
+  });
+
+  it("→ 그래서 카드도 제품 설명·저장소 이름을 적고, '이름을 담지 않는다'고 하지 않는다(저장소 이름에 계정 이름이 들어갈 수 있다)", () => {
+    const ko = DICTIONARIES.ko.trainingConsent.pointWhat;
+    const en = DICTIONARIES.en.trainingConsent.pointWhat;
+    assert.match(ko, /제품 설명/);
+    assert.match(ko, /저장소 이름/);
+    assert.ok(!/이름·이메일은 담지 않/.test(ko), ko);
+    assert.match(en, /product description/);
+    assert.match(en, /code project's name/);
+    assert.ok(!/name and email are never included/.test(en), en);
+  });
+
+  it("→ 그래서 방침이 제품 설명·저장소 이름을 적고, '되돌릴 수 없게'가 아니라 '연결할 수 있다'고 적는다", () => {
+    const scope = ops.TRAINING_DATA_SCOPE ?? "";
+    assert.match(scope, /제품 설명/);
+    assert.match(scope, /저장소 이름/);
+    assert.match(scope, /연결할 수 있습니다/);
+    assert.ok(!/되돌릴 수 없/.test(scope), scope);
+  });
+});
+
+// ─── 9. [서버 K] Train K 서버 PR — 머지 전에는 todo ──────────────────────────
+const k0071 = readdirSync(MIGRATIONS_DIR).find((f) => /^0071_.+\.sql$/.test(f)) ?? null;
+const SERVER_K = k0071
+  ? {}
+  : { todo: "Train K 서버 PR(0071·privacy-prefs) 머지 전 — 서버 PR 머지 후 이 PR의 CI를 다시 돌리면 켜진다" };
+const cpFiles = walk(CP, /\.ts$/);
+const cpText = (re) => cpFiles.filter((f) => re.test(read(f)));
+// 서버 PR이 색인 쓰기·지우기를 어느 파일에 두든(같은 파일이든 새 모듈이든) 잡는다: 테이블 이름을 직접 쓰거나,
+// 테이블 이름을 쓰는 모듈을 가져오면 "색인을 쓴다"로 본다 — 이름 추측으로 거짓 실패하지 않게.
+const indexModules = () =>
+  cpText(/training_records_index/).map((f) => path.basename(f).replace(/\.ts$/, ""));
+const usesIndex = (src) =>
+  /training_records_index/.test(src) ||
+  indexModules().some((m) => new RegExp(`from\\s+["'][^"']*/${m}(\\.js)?["']`).test(src));
+
+describe("[서버 K] 이 PR의 문구가 기대는 서버 사실 (계약 1~4)", () => {
+  it("[서버 K] 0071 = 계약 1: decided_at · privacy_prefs(ops_meta on/off) · training_records_index(r2_key·user_key·project_id)", SERVER_K, () => {
+    const sql = k0071 ? read(path.join(MIGRATIONS_DIR, k0071)) : "";
+    assert.match(sql, /ADD COLUMN\s+decided_at\s+TEXT/i);
+    assert.match(sql, /CREATE TABLE(?: IF NOT EXISTS)?\s+privacy_prefs/i);
+    assert.match(sql, /ops_meta\s+IN\s*\(\s*'on'\s*,\s*'off'\s*\)/i);
+    assert.match(sql, /CREATE TABLE(?: IF NOT EXISTS)?\s+training_records_index/i);
+    for (const c of ["r2_key", "user_key", "project_id", "deleted_at"]) assert.match(sql, new RegExp(`\\b${c}\\b`), c);
+  });
+
+  it("[서버 K] GET/POST /workspace/privacy-prefs 경로가 있다 (설정·결과 화면 끄기의 서버)", SERVER_K, () => {
+    assert.ok(cpText(/["'`]\/workspace\/privacy-prefs["'`]/).length > 0);
+  });
+
+  it("[서버 K] 거절은 버전을 지우지 않는다 (재초대 결함 ①)", SERVER_K, () => {
+    const db = read(path.join(CP, "workspace/training-consent-db.ts"));
+    assert.ok(!/consented \? TRAINING_CONSENT_VERSION : null/.test(db), "decline still clears consent_version");
+    assert.ok(cpText(/decided_at/).length > 0, "decided_at is written somewhere");
+  });
+
+  it("[서버 K] 프로젝트 삭제가 학습 사본 색인을 정리한다 (계약 4b → TRAINING_COPY_NOTE '프로젝트를 삭제하시면')", SERVER_K, () => {
+    assert.ok(usesIndex(read(path.join(CP, "workspace/db.ts"))), "db.ts deleteProject does not touch training_records_index");
+  });
+
+  it("[서버 K] 학습 사본 캡처가 색인을 쓴다 (계약 3 → '색인된 사본')", SERVER_K, () => {
+    assert.ok(usesIndex(trainingStoreTs), "training-store.ts");
+    assert.ok(usesIndex(journeyStoreTs), "journey-store.ts");
+  });
+
+  it("[서버 K] EU/EEA·영국·스위스 기본 off 목록 (계약 2 → 방침 '켜시기 전까지 기록하지 않습니다')", SERVER_K, () => {
+    const codes = ["DE", "FR", "IS", "LI", "NO", "GB", "CH"];
+    const owners = cpFiles
+      .map(read)
+      .filter((src) => /ops_?meta|opsMeta|privacy/i.test(src))
+      .filter((src) => codes.every((cc) => new RegExp(`["']${cc}["']`).test(src)));
+    assert.ok(owners.length > 0, `no server file lists ${codes.join(",")} next to the ops-meta default`);
+  });
+});
