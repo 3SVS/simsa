@@ -51,7 +51,14 @@ const T = {
     assumptions: "가정",
     open: "아직 결정이 필요한 것",
     yes: "예", no: "아니오",
-    prov: { confirmed: "사용자가 확인한 수용 기준", builtWith: "만든 도구", stack: "감지한 구성", entry: "들어온 갈래" },
+    prov: {
+      confirmed: "사용자가 확인한 수용 기준",
+      builtWith: "만든 도구",
+      stack: "감지한 구성",
+      entry: "시작한 곳",
+      // 첫 화면 세 문의 말 그대로(enum 원값 idea·code·spec을 내보내지 않는다).
+      entryv: { idea: "아이디어", code: "이미 만든 앱", spec: "기획서" },
+    },
   },
   en: {
     readme: "Development spec",
@@ -86,7 +93,13 @@ const T = {
     assumptions: "Assumptions",
     open: "Still to decide",
     yes: "yes", no: "no",
-    prov: { confirmed: "Acceptance criteria the user confirmed", builtWith: "Built with", stack: "Detected setup", entry: "Entry path" },
+    prov: {
+      confirmed: "Acceptance criteria the user confirmed",
+      builtWith: "Built with",
+      stack: "Detected setup",
+      entry: "Started from",
+      entryv: { idea: "An idea", code: "An app already built", spec: "A plan or spec" },
+    },
   },
 } as const;
 
@@ -104,7 +117,7 @@ function provenanceLines(spec: DevSpec, locale: RenderLocale): string[] {
     out.push(`- ${t.prov.confirmed}: ${ids.length ? ids.join(", ") : t.none}`);
   }
   if (p.builtWith) out.push(`- ${t.prov.builtWith}: ${p.builtWith}`);
-  if (p.entryPath) out.push(`- ${t.prov.entry}: ${p.entryPath}`);
+  if (p.entryPath) out.push(`- ${t.prov.entry}: ${t.prov.entryv[p.entryPath]}`);
   const st = p.detectedStack;
   if (st) {
     const parts = [st.hosting, st.data, ...(st.tools ?? [])].filter((x): x is string => typeof x === "string" && x.length > 0);

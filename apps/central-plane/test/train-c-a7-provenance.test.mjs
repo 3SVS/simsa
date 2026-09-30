@@ -23,6 +23,7 @@ const { DevSpecSchema, DevSpecMetaSchema, validateDevSpec, checkDevSpecIntegrity
 const { generateDevSpec, planInferredConfirmation, buildPassPrompt } = await import("../dist/workspace/generate-dev-spec.js");
 const { provenanceFrom, mergeStackHints } = await import("../dist/workspace/provenance.js");
 const { acceptancePlanFromDevSpec } = await import("../dist/acceptance-plan.js");
+const { renderDevSpecFiles } = await import("../dist/workspace/render-dev-spec.js");
 const { createApp } = await import("../dist/router.js");
 const { __resetAnthropicBreaker } = await import("../dist/workspace/anthropic-fetch.js");
 
@@ -438,6 +439,107 @@ describe("⑤ POST /dev-spec/generate — 기존 앱 문은 서버가 inferred�
       const r = await post(env, `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, confirmedItemIds: bad });
       assert.equal(r.status, 400, JSON.stringify(bad));
       assert.equal(r.json.error, "invalid_confirmed_items");
+    }
+  });
+});
+
+// ─── ⑥ README 출처 줄 (PR #577 리뷰 P2-3) ─────────────────────────────────────
+
+/** 역추론 지시서의 README에서 출처 표기(생성 줄 다음 ~ 문서 구성 앞)만 잘라낸다. */
+function provenanceBlock(readme) {
+  const lines = readme.split("\n");
+  const start = lines.findIndex((l) => l.startsWith("_") && l.endsWith("_"));
+  const end = lines.findIndex((l) => l.startsWith("## "));
+  assert.ok(start > 0 && end > start, readme);
+  return lines.slice(start, end);
+}
+
+describe("⑥ README 출처 줄 — 무엇을 근거로 한 지시서인지 KO/EN으로 밝힌다", () => {
+  const inferredWithProvenance = () =>
+    specWith(
+      {
+        provenance: {
+          builtWith: "lovable",
+          entryPath: "code",
+          detectedStack: { hosting: "lovable", data: "supabase", tools: ["React", "Tailwind CSS"] },
+          userConfirmedAcIds: ["AC-001"],
+        },
+      },
+      [
+        { id: "FR-001", title: "날짜 선택 예약", description: "달력에서 날짜를 골라 예약한다", priority: "must" },
+        { id: "FR-002", title: "후기 작성", description: "방문 후기를 남긴다", priority: "should" },
+      ],
+    );
+
+  it("KO 스냅샷 — 확인한 수용 기준·만든 도구·시작한 곳(사람이 읽는 말)·감지한 구성", () => {
+    const v = validateDevSpec(inferredWithProvenance());
+    assert.equal(v.ok, true, JSON.stringify(v));
+    const readme = renderDevSpecFiles(v.spec, "ko").find((f) => f.path.endsWith("README.md")).content;
+    assert.deepEqual(provenanceBlock(readme), [
+      "_기존 앱에서 역추론 — 사용자가 확인한 항목만 확정 · 2026-09-30T01:00:00.000Z_",
+      "",
+      "- 사용자가 확인한 수용 기준: AC-001",
+      "- 만든 도구: lovable",
+      "- 시작한 곳: 이미 만든 앱",
+      "- 감지한 구성: lovable · supabase · React · Tailwind CSS",
+      "",
+    ]);
+    // enum 원값("code")을 그대로 내보내지 않는다.
+    assert.doesNotMatch(readme, /: code$/m);
+  });
+
+  it("EN 스냅샷 — 같은 줄 수·같은 순서(D-11), 한글 0", () => {
+    const v = validateDevSpec(inferredWithProvenance());
+    const readme = renderDevSpecFiles(v.spec, "en").find((f) => f.path.endsWith("README.md")).content;
+    const block = provenanceBlock(readme);
+    assert.deepEqual(block, [
+      "_inferred from an existing app — only user-confirmed items are final · 2026-09-30T01:00:00.000Z_",
+      "",
+      "- Acceptance criteria the user confirmed: AC-001",
+      "- Built with: lovable",
+      "- Started from: An app already built",
+      "- Detected setup: lovable · supabase · React · Tailwind CSS",
+      "",
+    ]);
+    for (const l of block) assert.doesNotMatch(l, /[가-힣]/, l);
+  });
+
+  it("세 갈래 모두 사람이 읽는 말로(KO/EN) — 아이디어·기획서", () => {
+    for (const [entryPath, ko, en] of [
+      ["idea", "아이디어", "An idea"],
+      ["spec", "기획서", "A plan or spec"],
+    ]) {
+      const v = validateDevSpec(specWith({ source: "generated", provenance: { entryPath } }));
+      assert.equal(v.ok, true, JSON.stringify(v));
+      const koReadme = renderDevSpecFiles(v.spec, "ko").find((f) => f.path.endsWith("README.md")).content;
+      const enReadme = renderDevSpecFiles(v.spec, "en").find((f) => f.path.endsWith("README.md")).content;
+      assert.match(koReadme, new RegExp(`^- 시작한 곳: ${ko}$`, "m"));
+      assert.match(enReadme, new RegExp(`^- Started from: ${en}$`, "m"));
+    }
+  });
+
+  it("확인한 수용 기준이 0개인 역추론 → '(없음)'으로 정직하게", () => {
+    const v = validateDevSpec(
+      specWith({ provenance: { userConfirmedAcIds: [] } }, [
+        { id: "FR-001", title: "날짜 선택 예약", description: "d", priority: "should" },
+        { id: "FR-002", title: "후기 작성", description: "d", priority: "could" },
+      ]),
+    );
+    assert.equal(v.ok, true, JSON.stringify(v));
+    const readme = renderDevSpecFiles(v.spec, "ko").find((f) => f.path.endsWith("README.md")).content;
+    assert.deepEqual(provenanceBlock(readme).slice(2, -1), ["- 사용자가 확인한 수용 기준: (없음)"]);
+  });
+
+  it("provenance 없는 지시서(옛 저장·generated) → 출처 줄 0줄(가드 — 옛 코드에서도 통과, 회귀 증거 아님)", () => {
+    for (const source of ["generated", "manual"]) {
+      const v = validateDevSpec(specWith({ source }));
+      assert.equal(v.ok, true, JSON.stringify(v));
+      for (const loc of ["ko", "en"]) {
+        const readme = renderDevSpecFiles(v.spec, loc).find((f) => f.path.endsWith("README.md")).content;
+        const block = provenanceBlock(readme);
+        assert.equal(block.length, 2, `${source}/${loc}: ${JSON.stringify(block)}`);
+        assert.equal(block[1], "");
+      }
     }
   });
 });
