@@ -601,6 +601,25 @@ describe("#573 검증 1 [P1] — 끄기 문구 = 서버가 실제로 멈추는 �
   });
 });
 
+// ─── 11. PR #573 검증 2 — EN은 'anonymous'가 아니라 'non-identifying' (KO '비식별'과 같은 말) ──────
+// 운영 정보는 사용자 키로 그 이용자의 다른 기록과 연결되는 프로젝트·검수 행에 함께 저장된다 → 'anonymous'
+// (익명)는 KO '비식별'보다 센 주장이다. 두 블록 EN 전체에서 금지하고, 기록 줄은 어디에 저장되는지 말한다.
+describe("#573 검증 2 — EN 운영 정보 문구: non-identifying, anonymous 금지", () => {
+  it("privacyPrefs·trainingConsent EN 어디에도 'anonymous'가 없다", () => {
+    for (const block of ["privacyPrefs", "trainingConsent"]) {
+      for (const s of leafStrings(DICTIONARIES.en[block])) assert.ok(!/anonym/i.test(s), `${block}: ${s}`);
+    }
+  });
+
+  it("EN 기록 줄·토글은 'non-identifying'(KO '비식별')이고, 기록 줄은 프로젝트 기록과 함께 저장된다고 말한다", () => {
+    const p = DICTIONARIES.en.privacyPrefs;
+    assert.match(DICTIONARIES.ko.privacyPrefs.lineRecording, /비식별/);
+    assert.match(p.lineRecording, /non-identifying/);
+    assert.match(p.lineRecording, /stored with your project records/);
+    assert.match(p.opsToggle, /non-identifying/);
+  });
+});
+
 // [서버 사실] 서버 privacy-prefs.ts 머리말의 '무엇을 끄는가'·'끄지 않는 것' 표 = 대시보드 STOPS·KEEPS.
 // 서버 파일이 이 트리에 없으면(서버 PR #574가 base에 없음) todo — 머지 순서는 아래 [서버 K 게이트]가 강제한다.
 const serverPrefsTs = read(path.join(CP, "workspace/privacy-prefs.ts"));

@@ -1322,7 +1322,8 @@ const EN = {
     unavailable: "Couldn't load this setting right now. Please reopen this page in a moment.",
     saveError: "Could not save your choice. Please try again.",
   },
-  // Train K (consent plan §4 ⓐ): anonymous operating info — recorded by default
+  // Train K (consent plan §4 ⓐ): non-identifying operating info (KO 비식별 — not
+  // "anonymous": it is stored with project/check rows tied to the user key) — recorded by default
   // with an off switch; EU/EEA/UK/CH visitors start off (turn on to record).
   privacyPrefs: {
     sectionTitle: "Privacy choices",
@@ -1334,7 +1335,7 @@ const EN = {
     opsKeepNote: "Still recorded when off: the screen language used to show your results; the build tool, app type, entry and source saved with a project; your answers about results, re-check links and whether a fix worked; AI usage; and request-limit records.",
     opsSavedOn: "Recording is on.",
     opsSavedOff: "Operating info for statistics is off. New projects, checks and fixes won't record values such as your country code and failure types. To erase what was already recorded, use the contact email in Details.",
-    lineRecording: "This check records anonymous operating info such as your country code, screen language, the tool you built with and failure types",
+    lineRecording: "This check records non-identifying operating info — such as your country code, screen language, the tool you built with and failure types — stored with your project records",
     lineOffDefault: "We're not recording non-identifying operating info for statistics, such as your country code and failure types",
     lineOffUser: "You turned off operating info for statistics. New checks won't record values such as your country code and failure types",
     turnOff: "Turn off recording",
