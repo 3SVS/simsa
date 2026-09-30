@@ -14,7 +14,9 @@ import { fetchPrivacyPrefs, savePrivacyPrefs } from "@/lib/workspace-privacy-pre
 import { fetchTrainingConsent, saveTrainingConsent } from "@/lib/workspace-training-consent-api";
 import {
   privacySettingsState,
+  trainingOffNoteCopy,
   trainingSaveOutcome,
+  trainingToggleSavedCopy,
   type LegacyTrainingConsent,
   type PrivacyPrefs,
 } from "@/lib/privacy-prefs.mjs";
@@ -74,6 +76,7 @@ export function PrivacySettingsSection({ userKey, t }: { userKey: string; t: Dic
 
   const p = t.privacyPrefs;
   const s = t.trainingConsent;
+  const offNote = trainingOffNoteCopy(state.training, s);
 
   return (
     <div className="mt-10">
@@ -136,15 +139,11 @@ export function PrivacySettingsSection({ userKey, t }: { userKey: string; t: Dic
           </div>
           <p className="text-[11px] text-gray-500">{s.ageNote}</p>
           {loaded && !state.training.available && <p className="text-xs text-gray-500">{s.unavailable}</p>}
-          {state.training.available && state.training.on && (
-            <p className="text-xs leading-relaxed text-gray-500">
-              {state.training.offDeletes ? s.offNoteDeletes : s.offNoteStops}
-            </p>
-          )}
+          {state.training.available && offNote && <p className="text-xs leading-relaxed text-gray-500">{offNote}</p>}
           {legacy?.ok && !legacy.storageConfigured && <p className="text-xs text-gray-500">{s.storageNote}</p>}
           {trainPhase === "saved" && (
             <p role="status" className="text-xs text-gray-600">
-              {state.training.on ? s.savedOn : state.training.offDeletes ? s.savedOffDeletes : s.savedOffStops}
+              {trainingToggleSavedCopy(state.training, s)}
             </p>
           )}
           {trainPhase === "error" && <p className="text-xs text-red-600">{s.saveError}</p>}

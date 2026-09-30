@@ -63,6 +63,16 @@ export function opsInfoLineCopy(
     turnOnAgain: string;
   },
 ): { text: string; action: string; next: OpsMeta } | null;
+/** Settings training switch: message after saving — only what the server actually did. */
+export function trainingToggleSavedCopy(
+  training: { on: boolean; offDeletes: boolean },
+  s: { savedOn: string; savedOffDeletes: string; savedOffStops: string },
+): string;
+/** Settings training switch while on: what turning it off will do (null when off). */
+export function trainingOffNoteCopy(
+  training: { on: boolean; offDeletes: boolean },
+  s: { offNoteDeletes: string; offNoteStops: string },
+): string | null;
 export function privacySettingsState(input: {
   prefs: PrivacyPrefs | null;
   legacy: { ok: boolean; active: boolean } | null;

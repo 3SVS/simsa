@@ -240,3 +240,26 @@ export function privacySettingsState(input) {
       : { available: false, on: false, offDeletes: false };
   return { opsMeta, training };
 }
+
+/**
+ * 설정 화면 학습 토글을 저장한 뒤의 안내 — 서버가 실제로 한 일만(#573 검증 7).
+ *   켬 → savedOn / 끔 + Train K 서버(offDeletes) → savedOffDeletes("삭제를 시작했어요")
+ *   끔 + 옛 서버 → savedOffStops("새 확인은 보관하지 않아요" — 옛 서버는 지우지 않는다)
+ * @param {{ on: boolean, offDeletes: boolean }} training privacySettingsState(...).training
+ * @param {{ savedOn: string, savedOffDeletes: string, savedOffStops: string }} s t.trainingConsent
+ */
+export function trainingToggleSavedCopy(training, s) {
+  if (training.on) return s.savedOn;
+  return training.offDeletes ? s.savedOffDeletes : s.savedOffStops;
+}
+
+/**
+ * 학습 토글이 켜져 있을 때, 끄면 무엇이 되는지 미리 알리는 안내(꺼져 있으면 null).
+ * @param {{ available?: boolean, on: boolean, offDeletes: boolean }} training
+ * @param {{ offNoteDeletes: string, offNoteStops: string }} s
+ * @returns {string | null}
+ */
+export function trainingOffNoteCopy(training, s) {
+  if (!training.on) return null;
+  return training.offDeletes ? s.offNoteDeletes : s.offNoteStops;
+}

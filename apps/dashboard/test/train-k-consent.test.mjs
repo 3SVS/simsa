@@ -342,7 +342,8 @@ describe("배선 — 결과 화면(인라인)·설정 화면(두 토글)", () =>
     assert.match(settingsSectionSrc, /disabled=\{!state\.training\.available \|\| trainPhase === "saving"\}/);
     assert.match(settingsSectionSrc, /!state\.opsMeta\.available && <p[^>]*>\{p\.unavailable\}/);
     assert.match(settingsSectionSrc, /!state\.training\.available && <p[^>]*>\{s\.unavailable\}/);
-    assert.match(settingsSectionSrc, /state\.training\.offDeletes \? s\.offNoteDeletes : s\.offNoteStops/);
+    // 끄기 안내·저장 안내의 갈래는 순수 함수로 옮겼다 — 표는 §16(#573 검증 7).
+    assert.match(settingsSectionSrc, /trainingOffNoteCopy\(state\.training, s\)/);
   });
 });
 
@@ -853,6 +854,37 @@ describe("#573 검증 3 — 철회 = 동의와 같은 화면·같은 클릭 수"
     const s6 = privacyPageSrc.slice(privacyPageSrc.indexOf("6. 이용자의 권리"), privacyPageSrc.indexOf("7. 개인정보 보호책임자"));
     assert.match(s6, /학습 데이터 제공 동의는[^.]*확인 결과 화면에서[^.]*철회/, s6);
     assert.match(ops.TRAINING_DATA_CHOICE ?? "", /확인 결과 화면에서도 한 번에 철회/);
+  });
+});
+
+// ─── 16. PR #573 검증 7 — 설정 학습 토글: 끈 뒤 안내가 서버가 한 일과 맞는지 (분기 고정) ───────────────
+// 옛 배선 `state.training.offDeletes ? s.savedOffDeletes : s.savedOffStops`는 테스트가 없었다 — 두 갈래가
+// 뒤바뀌면 옛 서버(지우지 않음)에서 "삭제를 시작했어요"라고 말한다. 순수 함수로 옮겨 표로 고정한다.
+describe("#573 검증 7 — 설정 학습 토글 저장 안내 = 서버가 한 일", () => {
+  const Pd = (state) => K.normalizePrivacyPrefs({ ...VALID, training: { state, version: "v", decidedAt: "t" } });
+  for (const loc of ["ko", "en"]) {
+    const s = DICTIONARIES[loc].trainingConsent;
+    const rows = [
+      // [이유, privacySettingsState 입력, 저장 뒤 안내, 켜져 있을 때 끄기 안내]
+      ["Train K 서버 · 허용 저장", { prefs: Pd("consented"), legacy: { ok: true, active: true } }, s.savedOn, s.offNoteDeletes],
+      ["Train K 서버 · 끔 = 철회 + 삭제 시작", { prefs: Pd("declined"), legacy: { ok: true, active: false } }, s.savedOffDeletes, null],
+      ["옛 서버(privacy-prefs 없음) · 허용", { prefs: null, legacy: { ok: true, active: true } }, s.savedOn, s.offNoteStops],
+      ["옛 서버 · 끔 = 새 확인만 멈춤('지워요'라고 하지 않음)", { prefs: null, legacy: { ok: true, active: false } }, s.savedOffStops, null],
+    ];
+    for (const [why, input, saved, offNote] of rows) {
+      it(`[${loc}] ${why}`, () => {
+        assert.equal(typeof K.trainingToggleSavedCopy, "function");
+        const training = K.privacySettingsState(input).training;
+        assert.equal(K.trainingToggleSavedCopy(training, s), saved);
+        assert.equal(K.trainingOffNoteCopy(training, s), offNote);
+      });
+    }
+  }
+
+  it("설정 화면은 두 함수로만 문구를 고른다 (인라인 분기 없음)", () => {
+    assert.match(settingsSectionSrc, /trainingToggleSavedCopy\(state\.training, s\)/);
+    assert.match(settingsSectionSrc, /trainingOffNoteCopy\(state\.training, s\)/);
+    assert.ok(!/offDeletes \?/.test(settingsSectionSrc), "inline branch on offDeletes");
   });
 });
 
