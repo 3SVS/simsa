@@ -144,25 +144,63 @@ const KEY_INDEX: Array<[string, InterviewSection]> = INTERVIEW_SECTIONS.flatMap(
   KEY_ALIASES[sec].map((a) => [normKey(a), sec] as [string, InterviewSection]),
 );
 
+// 선형 시간 규칙(C-A7 검증 P1, 2026-10-01): 이 파서는 인증 없이 누구나 부를 수 있는 라우트가 유저가 붙여넣은
+// 긴 텍스트에 돌린다. 그래서 여기 정규식은 **겹치는 반복을 나란히 두지 않는다**(`(a+\s*)*`, `\s*(x)?\s*` 같은 것).
+// 옛 키 줄 정규식 `^\s*(?:[#>*\-•·]+\s*)*…([^:：=]{1,30}?)…`은 '-'·'*'·'#'만 이어진 줄에서 지수적으로
+// (대시 24개 ≈ 0.6초, 26개 ≈ 1초), 공백만 이어진 줄에서도 다항식으로(공백 1,000개 + 글자 > 30초) 되돌아가
+// 줄 하나로 Worker CPU 한도를 다 썼다. 아래는 모두 구분자 탐색·앵커 붙은 단일 문자 클래스·짧은 머리로만 읽는다.
+
+/** 키 머리(구분자 앞, 글머리를 벗긴 뒤)의 최대 길이 — 키(별칭 최대 12자 남짓) + 강조 기호 + 공백. 넘으면 키 줄이 아니다. */
+const KEY_HEAD_MAX = 64;
+/** 줄 앞의 글머리·제목·인용·강조 기호와 공백(한 번에 벗긴다 — 앵커 + 단일 클래스라 선형). */
+const LEADING_DECOR = /^[\s#>*\-•·]+/;
+/** 구분선 — 꾸밈 글자와 공백만 있는 줄(`---`·`***`·`===`·`───`). 빈 줄처럼 넘긴다(항목이 아니다). */
+const DIVIDER_LINE = /^[\s\-*_=#~·•─━—–]+$/;
+
 /** "INTENT: …" / "**MUST**:" / "## 의도：" / "- MUST:" → [section, 같은 줄의 나머지]. 키 줄이 아니면 null. */
 function matchKeyLine(line: string): [InterviewSection, string] | null {
-  const m = /^\s*(?:[#>*\-•·]+\s*)*(?:\*\*|__)?\s*([^:：=]{1,30}?)\s*(?:\*\*|__)?\s*[:：=]\s*(.*)$/.exec(line);
-  if (!m) return null;
-  const key = normKey((m[1] ?? "").replace(/[*_`]/g, ""));
+  const body = line.replace(LEADING_DECOR, "");
+  // 키에는 구분자가 없으므로 줄의 첫 구분자가 곧 키의 끝이다(옛 정규식과 같은 규칙).
+  const sep = body.search(/[:：=]/);
+  if (sep < 1 || sep > KEY_HEAD_MAX) return null;
+  const key = normKey(body.slice(0, sep).replace(/[*_`]/g, ""));
+  if (!key) return null;
   const hit = KEY_INDEX.find(([k]) => k === key);
   if (!hit) return null;
-  return [hit[1], (m[2] ?? "").replace(/^\s*(?:\*\*|__)\s*/, "").trim()];
+  return [hit[1], stripLeadingEmphasis(body.slice(sep + 1)).trim()];
 }
 
-const END_LINE = /^\s*(?:\*\*)?\s*(?:END|끝)\s*(?:\*\*)?\s*\.?\s*$/i;
+/** 값 앞의 `**`/`__`(키 강조가 콜론 뒤에서 닫힌 경우 — `**INTENT:** …`)와 공백. */
+function stripLeadingEmphasis(s: string): string {
+  const t = s.trimStart();
+  return t.startsWith("**") || t.startsWith("__") ? t.slice(2) : t;
+}
+
+/** END 줄: `END` / `**END**` / `** END ** .` / `끝.` — 공백을 먼저 한 칸으로 줄여 겹치는 `\s*`를 없앴다. */
+function isEndLine(line: string): boolean {
+  const t = line.trim();
+  if (t.length > 64) return false;
+  return /^(?:\*\* ?)?(?:END|끝)(?: ?\*\*)?(?: ?\.)?$/i.test(t.replace(/\s+/g, " "));
+}
+
 const LIST_ITEM = /^\s*(?:[-*•·]|\d{1,2}[.)])\s+(.*)$/;
 /** "없음"·"none"·"-" 같은 빈 값, 그리고 양식 안내문이 그대로 되돌아온 것(괄호로 감싼 설명). */
 const EMPTY_VALUE = /^(?:없음|없습니다|해당 없음|none|nothing|n\/?a|-|—|\.\.\.|…)\.?$/i;
 const TEMPLATE_ECHO = /^\(.*\)$/;
+const QUOTE_CHARS = "\"'“”‘’";
+
+/** 앞뒤 따옴표를 벗긴다 — 정규식 `["']+$`는 긴 따옴표 줄에서 자리마다 다시 훑어(제곱) 손으로 센다. */
+function stripQuotes(v: string): string {
+  let start = 0;
+  let end = v.length;
+  while (start < end && QUOTE_CHARS.includes(v.charAt(start))) start += 1;
+  while (end > start && QUOTE_CHARS.includes(v.charAt(end - 1))) end -= 1;
+  return v.slice(start, end);
+}
 
 function cleanValue(raw: string, max: number): string | null {
   let v = raw.normalize("NFC").replace(/\*\*|__|`/g, "").replace(/\s+/g, " ").trim();
-  v = v.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+  v = stripQuotes(v).trim();
   if (!v || EMPTY_VALUE.test(v) || TEMPLATE_ECHO.test(v)) return null;
   return v.slice(0, max);
 }
@@ -220,7 +258,8 @@ export function parseInterviewAnswer(text: unknown): InterviewParseResult {
       return;
     }
     // 같은 줄에 여러 개를 적은 경우(";" 또는 "|"로 구분) — 쉼표는 문장 안에서도 쓰이므로 나누지 않는다.
-    for (const part of value.split(/\s*[;|]\s*/)) {
+    // 앞뒤 공백은 cleanValue가 다듬는다(`\s*[;|]\s*`로 나누면 긴 공백에서 자리마다 다시 훑는다).
+    for (const part of value.split(/[;|]/)) {
       const v = cleanValue(part, MAX_ITEM_CHARS);
       if (!v) continue;
       const list = lists[sec];
@@ -230,10 +269,11 @@ export function parseInterviewAnswer(text: unknown): InterviewParseResult {
 
   for (const line of lines) {
     if (/^\s*```/.test(line)) continue; // 코드블록 울타리
-    if (END_LINE.test(line)) {
+    if (isEndLine(line)) {
       if (seen.size > 0) break;
       continue;
     }
+    if (!line.trim() || DIVIDER_LINE.test(line)) continue; // 빈 줄·구분선(---·***·===)은 내용이 아니다
     const key = matchKeyLine(line);
     if (key) {
       current = key[0];
@@ -241,7 +281,6 @@ export function parseInterviewAnswer(text: unknown): InterviewParseResult {
       if (key[1]) push(current, key[1]);
       continue;
     }
-    if (!line.trim()) continue;
     if (!current) {
       ignored += 1; // 양식 앞의 인사말·설명
       continue;

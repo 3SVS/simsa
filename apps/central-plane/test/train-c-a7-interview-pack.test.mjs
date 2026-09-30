@@ -13,6 +13,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { Worker } from "node:worker_threads";
 import { makeFakeD1, projectRow, websiteSource, makeDoStub } from "./_train-c-fake-d1.mjs";
 
 const { buildInterviewPrompt, parseInterviewAnswer, InterviewAnswerSchema, MAX_ANSWER_CHARS } = await import("../dist/workspace/interview-pack.js");
@@ -240,6 +241,72 @@ describe("② parseInterviewAnswer — 정상·망가진 답(한글)", () => {
   it("14. 상한 밖의 긴 입력은 잘라서 읽는다(MAX_ANSWER_CHARS)", () => {
     const r = parseInterviewAnswer(`${GOOD_KO}\n${"잡담 ".repeat(MAX_ANSWER_CHARS)}`);
     assert.equal(r.ok, true);
+  });
+
+  it("15. 구분선(---·***·===)은 빈 줄처럼 넘긴다 — 항목이 되지 않는다", () => {
+    const a = ok("---\nINTENT: 동네 꽃집 주문을 원화로 받는 앱\nMUST:\n- 가격이 원화로 보인다\n---\nNOT_NEEDED:\n- 없음\n***\nDIFFERENT_NOW:\n- 가격이 달러로 나온다\n===\n─────────\nEND");
+    assert.deepEqual(a.must, ["가격이 원화로 보인다"]);
+    assert.deepEqual(a.notNeeded, []);
+    assert.deepEqual(a.differentNow, ["가격이 달러로 나온다"]);
+    assert.equal(a.ignoredLines, 0, "구분선은 잡담이 아니다");
+  });
+
+  it("16. [동작 보존 가드 — 옛 코드에서도 통과] 키 줄 모양(인용 >·밑줄 강조 __·별 하나 강조·앞 공백 + 전각 콜론)은 그대로 읽는다", () => {
+    const a = ok("> INTENT: 인용으로 적은 의도\n__MUST__: 밑줄 강조 키\n  ## 없어도 되는 것 ：  후기\n*DIFFERENT NOW*: 별 하나 강조\n- NOT_NEEDED 아님: 이 줄은 항목이다");
+    assert.equal(a.intent, "인용으로 적은 의도");
+    assert.deepEqual(a.must, ["밑줄 강조 키"]);
+    assert.deepEqual(a.notNeeded, ["후기"]);
+    assert.deepEqual(a.differentNow, ["별 하나 강조", "NOT_NEEDED 아님: 이 줄은 항목이다"]);
+  });
+});
+
+// ─── ②-b 파서 선형 시간 (C-A7 검증 P1) ────────────────────────────────────────
+// 옛 키 줄 정규식의 중첩 반복 `(?:[#>*\-•·]+\s*)*`은 '-'·'*'·'#'만 이어진 줄에서 지수적으로,
+// 공백만 이어진 줄에서도 다항식으로 되돌아갔다(대시 24개 ≈ 0.6초, 공백 1,000개 + 글자 > 30초).
+// 정규식은 이벤트 루프를 막아 테스트 시간 제한으로 끊을 수 없다 → 워커에서 재고, 늦으면 워커를 죽여 실패로 센다.
+const PARSER_URL = new URL("../dist/workspace/interview-pack.js", import.meta.url).href;
+const PARSE_BUDGET_MS = 50;
+const WORKER_DEADLINE_MS = 8_000;
+
+/** 입력 여러 개를 한 워커에서 파싱하고 각각의 시간(ms)을 잰다. 마감을 넘기면 { timedOut: true }. */
+function timeParsesInWorker(inputs) {
+  const src = `
+    const { parentPort, workerData } = require("node:worker_threads");
+    import(workerData.url).then(({ parseInterviewAnswer }) => {
+      const out = workerData.inputs.map((text) => {
+        const t0 = performance.now();
+        const r = parseInterviewAnswer(text);
+        return { ms: performance.now() - t0, ok: r.ok, must: r.ok ? r.answer.must : null };
+      });
+      parentPort.postMessage(out);
+    });`;
+  return new Promise((resolve, reject) => {
+    const w = new Worker(src, { eval: true, workerData: { url: PARSER_URL, inputs } });
+    const timer = setTimeout(() => { void w.terminate(); resolve({ timedOut: true }); }, WORKER_DEADLINE_MS);
+    w.once("message", (m) => { clearTimeout(timer); void w.terminate(); resolve({ timedOut: false, results: m }); });
+    w.once("error", (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+describe("②-b parseInterviewAnswer — 줄 하나로 CPU를 다 쓰지 않는다(선형)", () => {
+  const DIVIDERS = ["-".repeat(60), "*".repeat(60), "#".repeat(60), "•".repeat(60), "- ".repeat(60), "#>*".repeat(60)];
+  const cases = [
+    ["대시·별·#·글머리 60자 구분선이 섞인 답", [DIVIDERS[0], GOOD_KO.replace("MUST:", `MUST:\n${DIVIDERS[1]}`), DIVIDERS[2], DIVIDERS[3], DIVIDERS[4], DIVIDERS[5]].join("\n")],
+    ["구분선 뒤에 글자(콜론 없음)", `${GOOD_KO.replace("END", "")}\n${"-".repeat(200)}x`],
+    ["공백만 이어진 줄 + 글자(목록 칸 안)", `INTENT: 예약 앱\nMUST:\n${" ".repeat(5_000)}x`],
+    ["END 뒤 공백 + 글자", `INTENT: 예약 앱\nEND${" ".repeat(5_000)}x`],
+    ["항목 안의 긴 따옴표·공백", `INTENT: 예약 앱\nMUST: 가${"\"".repeat(5_000)}나 ; 다${" ".repeat(5_000)}라`],
+    ["상한 가득 한 줄(공백 20,000자)", " ".repeat(MAX_ANSWER_CHARS - 1) + "x"],
+  ];
+
+  it(`병적인 줄 ${cases.length}종 — 각각 ${PARSE_BUDGET_MS}ms 안에 끝나고 정상 양식은 그대로 읽힌다`, async () => {
+    const r = await timeParsesInWorker(cases.map(([, text]) => text));
+    assert.equal(r.timedOut, false, `파서가 ${WORKER_DEADLINE_MS}ms 안에 끝나지 않았다(되돌아가기 폭주)`);
+    r.results.forEach((res, i) => {
+      assert.ok(res.ms < PARSE_BUDGET_MS, `${cases[i][0]}: ${res.ms.toFixed(1)}ms`);
+    });
+    // 구분선이 섞여도 내용은 같다 — 구분선은 항목이 아니다.
+    assert.deepEqual(r.results[0].must, ["원하는 날짜를 골라 예약할 수 있다", "예약 확인 화면에 고른 날짜가 보인다"]);
   });
 });
 
