@@ -1,0 +1,97 @@
+name: deploy-hosting-dispatch
+
+# SI 티어 Train B — B-7 (2026-09-30). S 모드 호스팅 라우터(apps/hosting-dispatch, Worker
+# `simsa-hosting-dispatch`, route `*.simsa.page/*`)의 **유일한 배포 경로.** 이전엔 배포 워크플로가 없어
+# 누가 어떤 커밋을 올렸는지 확인할 수단이 없었다(2026-09-25 배포 `7e258f89`는 기록만 남음).
+#
+# deploy-central-plane.yml과 같은 규율:
+#   - 수동(workflow_dispatch)만. push·PR·스케줄로 배포되지 않는다(머지 ≠ 배포).
+#   - main에서만. 다른 브랜치로 실행하면 첫 단계에서 멈춘다.
+#   - confirm 입력에 정확히 "deploy".
+#   - 빌드 → 라우터 테스트 → wrangler deploy(--var DEPLOYED_SHA) → 헬스 경로에서 SHA 확인.
+#
+# 승인 문구: `deploy hosting-dispatch approved.` (Bae) — 1회 실행분만.
+#
+# 시크릿: central-plane 배포와 같은 CLOUDFLARE_API_TOKEN · CLOUDFLARE_ACCOUNT_ID를 재사용한다(새 시크릿 없음).
+#   그 토큰은 "Edit Cloudflare Workers" 템플릿(Workers Scripts·Workers Routes·KV Edit) + D1 Edit이다.
+#   route가 simsa.page 존에 걸리므로 토큰의 Zone 범위에 simsa.page가 없으면 배포 단계가 권한 오류로 실패한다
+#   — 그때 토큰에 Zone → Workers Routes: Edit(simsa.page)를 추가(Bae 액션). 라이브에 반쪽 배포는 없다.
+
+on:
+  # push 트리거 없음 — 배포는 사람이 누른다.
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm a production deploy of the hosting router'
+        required: true
+        default: ''
+
+concurrency:
+  group: deploy-hosting-dispatch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::deploy-hosting-dispatch must run on 'main', got ${{ github.ref }}"
+          exit 1
+
+      - name: Confirm deploy intent
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "Refusing to deploy: the 'confirm' input must be exactly 'deploy'."
+          echo "Re-run via Actions → deploy-hosting-dispatch → Run workflow (on main) and type 'deploy'."
+          exit 1
+
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      # 라우터 테스트는 central-plane과의 락스텝(KV 키·신고 주소·사유 값)을 dist로 대조하므로 둘 다 빌드한다.
+      - name: Build hosting-dispatch (+ central-plane for lock-step tests)
+        run: pnpm turbo run build --filter ./apps/hosting-dispatch --filter @simsa/central-plane
+
+      - name: Test hosting-dispatch
+        working-directory: apps/hosting-dispatch
+        run: node --test test/*.test.mjs
+
+      - name: Deploy Worker
+        working-directory: apps/hosting-dispatch
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # 배포 커밋을 Worker에 찍는다 — 헬스 응답 sha와 모든 응답의 x-simsa-dispatch-sha 헤더로 확인한다.
+          npx wrangler deploy --var DEPLOYED_SHA:"${GITHUB_SHA}"
+
+      - name: Verify deployed SHA via health path
+        run: |
+          set -u
+          # status는 예약어라 유저 앱이 될 수 없다 — 헬스 경로는 어느 호스트에서나 라우터가 직접 답한다.
+          url="https://status.simsa.page/.well-known/simsa-health"
+          for i in 1 2 3 4 5 6; do
+            sha=$(curl -sS -m 15 -D - -o /tmp/health.json "$url" | tr -d '\r' | awk 'tolower($1)=="x-simsa-dispatch-sha:"{print $2}')
+            if [ "$sha" = "$GITHUB_SHA" ]; then
+              echo "x-simsa-dispatch-sha matches ${GITHUB_SHA}"
+              cat /tmp/health.json; echo
+              exit 0
+            fi
+            echo "attempt $i: x-simsa-dispatch-sha='${sha}' (want ${GITHUB_SHA}) — waiting for propagation"
+            sleep 10
+          done
+          echo "::error::health path did not report the deployed SHA"
+          cat /tmp/health.json 2>/dev/null || true
+          exit 1

@@ -6,6 +6,9 @@
 #
 # 결정(2026-09-25): 도메인 simsa.page · WfP Paid 구독 완료(Bae).
 # 배포 순서: 네임스페이스 simsa-hosted 생성 → `*` 와일드카드 DNS → deploy.
+# B-7(2026-09-30): 배포는 Actions → deploy-hosting-dispatch(main·confirm "deploy")로만. 로컬 wrangler 금지.
+#   배포 SHA는 워크플로가 `--var DEPLOYED_SHA:$GITHUB_SHA`로 넣는다(이 파일에 적지 않는다) →
+#   `https://status.simsa.page/.well-known/simsa-health`의 sha·응답 헤더 x-simsa-dispatch-sha로 확인.
 name = "simsa-hosting-dispatch"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
@@ -13,10 +16,29 @@ compatibility_date = "2026-09-01"
 [vars]
 # 예: "simsa.app" — 비어 있으면 모든 요청에 503 hosting_not_configured(정직하게 꺼짐).
 HOSTING_ROOT_DOMAIN = "simsa.page"
+# B-7: report.simsa.page 신고 폼이 보내는 central-plane(https만). 비우면 신고 페이지가 503 "지금은 받을 수 없어요".
+SIMSA_API_BASE = "https://conclave-ai.seunghunbae.workers.dev"
 
 [[dispatch_namespaces]]
 binding = "DISPATCHER"
 namespace = "simsa-hosted"
+
+# B-7 [PILOT] slug당 요청 상한 — Workers Rate Limiting 바인딩(외부 리소스 생성 없음, namespace_id는 계정 안에서
+# 고른 고유 정수). 수치는 src/route.ts HOSTING_RATE_LIMIT와 같아야 한다(테스트가 대조). period는 10 또는 60만.
+# 카운터는 Cloudflare 지역(데이터센터)별·근사치다 — 전 세계 정확 합계가 아니다.
+[[ratelimits]]
+name = "HOSTING_RATE_LIMITER"
+namespace_id = "7301"
+simple = { limit = 600, period = 60 }
+
+# B-7 정지 목록(Workers KV) — **central-plane wrangler.toml과 같은 id**를 적어야 한다(한쪽이 쓰고 한쪽이 읽는다).
+# 아직 네임스페이스가 없어 주석으로 둔다(가짜 id를 넣으면 배포가 실패한다). 없으면 라우터는 정지 확인 없이
+# 서빙하고(fail-open, 근거는 src/index.ts 헤더) 헬스에 suspensionList "unbound"로 드러난다.
+# 켜는 법(Bae 액션): Cloudflare 대시보드 → Storage & Databases → KV → Create → 이름 `simsa-hosting-suspended`
+#   → 생성된 ID를 아래와 central-plane 양쪽에 적고 주석 해제 → PR·머지 → 두 Worker 배포.
+# [[kv_namespaces]]
+# binding = "HOSTING_SUSPENDED"
+# id = "<simsa-hosting-suspended KV ID>"
 
 # 2026-09-25 Bae 결정: 호스팅 도메인 = simsa.page (Cloudflare Registrar 구매, 같은 계정 활성 존).
 # 대시보드 trysimsa.com·랜딩 simsa.dev와 등록 도메인이 달라 쿠키·평판이 격리된다(github.io·vercel.app 방식).
