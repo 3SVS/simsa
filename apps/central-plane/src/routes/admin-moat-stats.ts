@@ -22,8 +22,13 @@
  *   - 셀 개수는 런 수다. 발견 코드가 여럿인 런은 코드마다 한 번씩 센다(finding_code 축만 펼친다) — 그래서 셀 합은
  *     런 수보다 클 수 있다. 런 수는 checks.rows, 축별 런 수는 marginals.
  *   - finding_code: [] = 측정된 "발견 0" → none, NULL = 옛 컨테이너(기록 안 됨) → unrecorded.
- *   - resolved(런): 그 런에 달린 수리 잡 중 재검수 결과의 MAX — 하나라도 works=true면 resolved, 수리가 있었지만
- *     재검수 판정이 없으면 unverified, 수리가 없으면 no_repair. 채움률 분모 = 수리가 있었던 런.
+ *   - resolved(런): 그 런의 **가장 최근 완료(done) 수리 잡**의 재검수 결과 — works=true면 resolved, false면
+ *     not_resolved, 판정 전이면 unverified. 완료된 수리가 없으면: 진행 중인 잡이 있으면 repair_in_progress,
+ *     실패만 했으면 repair_failed(고친 것이 없어 영원히 검증될 수 없다), 수리가 없으면 no_repair.
+ *     채움률 분모 = 완료된 수리가 있는 런. (PR #572 검증 [7]: 종전 MAX(resolved)는 뒤 수리에서 되돌아간 런을
+ *     resolved로 부풀렸고, 실패 잡을 unverified로 세어 분모를 키웠다.)
+ *   - resolved(수리 잡): 같은 규칙을 잡 하나에 — done이면 resolved/not_resolved/unverified, failed면 repair_failed,
+ *     queued·running이면 repair_in_progress. 재검수 연결·해결 채움률 분모 = 완료 잡.
  *   - 재검수 런(source_check_id 있음)도 자기 봉투·판정을 가진 한 런으로 센다(marginals.runKind로 구분).
  *
  * 상한: 절마다 가장 **최근** 행부터 최대 50,000행. 넘치면 truncated:true, 경계 타임스탬프 행을 버린
@@ -45,18 +50,24 @@ import { coveredWindow, internalBearerRejection, parseStatsWindow } from "./admi
 export const MOAT_STATS_ROW_LIMIT = 50_000;
 const DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** 검수 런 + 그 런에 달린 수리 잡의 개수·재검수 결과(MAX). 바인딩: since(포함), until(제외), limit. */
+/**
+ * 검수 런 + 그 런에 달린 수리 잡의 개수(전체·완료·실패)와 **가장 최근 완료 수리**의 재검수 결과.
+ * 바인딩: since(포함), until(제외), limit.
+ */
 export const MOAT_CHECKS_SQL = `SELECT v.created_at, v.region, v.envelope_json, v.finding_codes_json, v.user_verdict,
        (v.source_check_id IS NOT NULL) AS is_recheck,
        (SELECT COUNT(*) FROM workspace_repair_jobs r WHERE r.visual_check_id = v.id) AS repair_count,
-       (SELECT MAX(r.resolved) FROM workspace_repair_jobs r WHERE r.visual_check_id = v.id) AS repair_resolved
+       (SELECT COUNT(*) FROM workspace_repair_jobs r WHERE r.visual_check_id = v.id AND r.status = 'done') AS repair_done_count,
+       (SELECT COUNT(*) FROM workspace_repair_jobs r WHERE r.visual_check_id = v.id AND r.status = 'failed') AS repair_failed_count,
+       (SELECT r.resolved FROM workspace_repair_jobs r WHERE r.visual_check_id = v.id AND r.status = 'done'
+         ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS repair_resolved
   FROM workspace_visual_checks v
  WHERE v.created_at >= ? AND v.created_at < ?
  ORDER BY v.created_at DESC
  LIMIT ?`;
 
-/** 수리 잡. 바인딩: since, until, limit. */
-export const MOAT_REPAIRS_SQL = `SELECT created_at, region, (verify_check_id IS NOT NULL) AS verify_linked, resolved
+/** 수리 잡. status는 끝나지 못한 잡(failed·queued·running)을 가르는 데만 쓴다. 바인딩: since, until, limit. */
+export const MOAT_REPAIRS_SQL = `SELECT created_at, region, status, (verify_check_id IS NOT NULL) AS verify_linked, resolved
   FROM workspace_repair_jobs
  WHERE created_at >= ? AND created_at < ?
  ORDER BY created_at DESC
@@ -72,7 +83,7 @@ export const MOAT_PROJECTS_SQL = `SELECT created_at, region_at_create, built_wit
 // ─── 닫힌 어휘 ─────────────────────────────────────────────────────────────────
 
 const UNRECORDED = "unrecorded";
-const RESOLVED_VALUES = ["resolved", "not_resolved", "unverified", "no_repair"] as const;
+const RESOLVED_VALUES = ["resolved", "not_resolved", "unverified", "repair_failed", "repair_in_progress", "no_repair"] as const;
 type ResolvedAxis = (typeof RESOLVED_VALUES)[number];
 
 const KNOWN_TOOLS: ReadonlySet<string> = new Set<string>(KNOWN_BUILT_WITH_TOOLS);
@@ -160,6 +171,27 @@ function resolvedFromFlag(v: unknown): ResolvedAxis {
   return n === 1 ? "resolved" : n === 0 ? "not_resolved" : "unverified";
 }
 
+/**
+ * 런 하나의 resolved 축. 완료된 수리가 있으면 가장 최근 완료 수리의 값(SQL이 골라 준다). 없으면 끝나지 못한
+ * 수리를 따로 접는다 — 진행 중인 잡이 하나라도 있으면 repair_in_progress, 실패만 했으면 repair_failed.
+ */
+function runResolvedAxis(row: MoatCheckRow): { axis: ResolvedAxis; verifiable: boolean } {
+  const total = int(row["repair_count"]) ?? 0;
+  if (total <= 0) return { axis: "no_repair", verifiable: false };
+  const done = int(row["repair_done_count"]) ?? 0;
+  if (done > 0) return { axis: resolvedFromFlag(row["repair_resolved"]), verifiable: true };
+  const failed = int(row["repair_failed_count"]) ?? 0;
+  return { axis: total - failed > 0 ? "repair_in_progress" : "repair_failed", verifiable: false };
+}
+
+/** 수리 잡 하나의 resolved 축. 완료 잡만 재검수로 이어질 수 있다. */
+function jobResolvedAxis(row: MoatCheckRow): { axis: ResolvedAxis; verifiable: boolean } {
+  const status = text(row["status"]);
+  if (status === "done") return { axis: resolvedFromFlag(row["resolved"]), verifiable: true };
+  if (status === "failed") return { axis: "repair_failed", verifiable: false };
+  return { axis: "repair_in_progress", verifiable: false };
+}
+
 // ─── 집계 ─────────────────────────────────────────────────────────────────────
 
 export type Fill = { filled: number; total: number; rate: number | null };
@@ -205,7 +237,8 @@ export function aggregateMoatChecks(rows: readonly MoatCheckRow[]) {
     runKind: {} as Counter,
   };
   const filled = { region: 0, builtWith: 0, topic: 0, findingCodes: 0, userVerdict: 0, resolved: 0 };
-  let withRepair = 0;
+  /** 완료된 수리가 있는 런 — resolved 채움률의 분모(검증될 수 있는 런만). */
+  let withDoneRepair = 0;
 
   for (const row of rows) {
     const env = EnvelopeShape.safeParse(parseJson(row["envelope_json"]));
@@ -214,16 +247,15 @@ export function aggregateMoatChecks(rows: readonly MoatCheckRow[]) {
     const topic = env.success ? topicAxis(env.data.topicTags) : UNRECORDED;
     const codes = findingCodeAxes(row["finding_codes_json"]);
     const userVerdict = userVerdictAxis(row["user_verdict"]);
-    const repairCount = int(row["repair_count"]) ?? 0;
-    const resolved: ResolvedAxis = repairCount > 0 ? resolvedFromFlag(row["repair_resolved"]) : "no_repair";
+    const { axis: resolved, verifiable } = runResolvedAxis(row);
 
     if (region !== UNRECORDED) filled.region += 1;
     if (builtWith !== UNRECORDED) filled.builtWith += 1;
     if (topic !== UNRECORDED) filled.topic += 1;
     if (codes[0] !== UNRECORDED) filled.findingCodes += 1;
     if (userVerdict !== UNRECORDED) filled.userVerdict += 1;
-    if (repairCount > 0) {
-      withRepair += 1;
+    if (verifiable) {
+      withDoneRepair += 1;
       if (resolved !== "unverified") filled.resolved += 1;
     }
 
@@ -246,7 +278,7 @@ export function aggregateMoatChecks(rows: readonly MoatCheckRow[]) {
       topic: fill(filled.topic, total),
       findingCodes: fill(filled.findingCodes, total),
       userVerdict: fill(filled.userVerdict, total),
-      resolved: fill(filled.resolved, withRepair),
+      resolved: fill(filled.resolved, withDoneRepair),
     },
     marginals,
     cells: sortedCells(cells),
@@ -255,23 +287,26 @@ export function aggregateMoatChecks(rows: readonly MoatCheckRow[]) {
 
 const REPAIR_AXES = ["region", "resolved"] as const;
 
-/** 수리 잡 집계: region × resolved + 채움률. */
+/** 수리 잡 집계: region × resolved + 채움률(region은 모든 잡, 재검수 연결·해결은 완료 잡이 분모). */
 export function aggregateMoatRepairs(rows: readonly MoatCheckRow[]) {
   const cells = new Map<string, { key: Record<(typeof REPAIR_AXES)[number], string>; count: number }>();
   let region = 0;
+  let done = 0;
   let verifyLinked = 0;
   let resolvedFilled = 0;
   for (const row of rows) {
     const r = regionAxis(row["region"]);
-    const resolved = resolvedFromFlag(row["resolved"]);
+    const { axis: resolved, verifiable } = jobResolvedAxis(row);
     if (r !== UNRECORDED) region += 1;
-    if (int(row["verify_linked"]) === 1) verifyLinked += 1;
-    if (resolved !== "unverified") resolvedFilled += 1;
+    if (verifiable) {
+      done += 1;
+      if (int(row["verify_linked"]) === 1) verifyLinked += 1;
+      if (resolved !== "unverified") resolvedFilled += 1;
+    }
     addCell(cells, REPAIR_AXES, { region: r, resolved });
   }
-  const total = rows.length;
   return {
-    fill: { region: fill(region, total), verifyLinked: fill(verifyLinked, total), resolved: fill(resolvedFilled, total) },
+    fill: { region: fill(region, rows.length), verifyLinked: fill(verifyLinked, done), resolved: fill(resolvedFilled, done) },
     cells: sortedCells(cells),
   };
 }

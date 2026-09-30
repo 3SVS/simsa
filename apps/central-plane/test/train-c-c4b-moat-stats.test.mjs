@@ -51,26 +51,30 @@ const ENV_LOVABLE = JSON.stringify({
 });
 const ENV_IDEA_EMPTY = JSON.stringify({ builtWith: null, entryPath: "idea", topicTags: null, locale: "en", contentLang: "en" });
 
-/** Rows exactly as MOAT_CHECKS_SQL returns them (the join/subqueries are already applied). */
+/**
+ * Rows exactly as MOAT_CHECKS_SQL returns them (the join/subqueries are already applied).
+ * PR #572 검증 [7]: repair_resolved = 그 런의 **가장 최근 완료(done) 수리**의 resolved(MAX 아님),
+ * repair_done_count·repair_failed_count로 끝나지 못한 수리를 따로 접는다.
+ */
 const CHECK_ROWS = [
-  // v1: KR · lovable · commerce · 두 코드 · still_broken · 수리 1건 resolved=1
-  { created_at: "2026-09-28T03:00:00.000Z", region: "KR", envelope_json: ENV_LOVABLE, finding_codes_json: '["network_5xx","console_error"]', user_verdict: "still_broken", is_recheck: 0, repair_count: 1, repair_resolved: 1 },
+  // v1: KR · lovable · commerce · 두 코드 · still_broken · 완료 수리 1건 resolved=1
+  { created_at: "2026-09-28T03:00:00.000Z", region: "KR", envelope_json: ENV_LOVABLE, finding_codes_json: '["network_5xx","console_error"]', user_verdict: "still_broken", is_recheck: 0, repair_count: 1, repair_done_count: 1, repair_failed_count: 0, repair_resolved: 1 },
   // v2: v1의 재검수 · 발견 0 · as_intended · 수리 없음
-  { created_at: "2026-09-28T05:00:00.000Z", region: "KR", envelope_json: ENV_LOVABLE, finding_codes_json: "[]", user_verdict: "as_intended", is_recheck: 1, repair_count: 0, repair_resolved: null },
-  // v3: 레거시 런 — 봉투·코드·판정 없음 · 수리 1건(실패, resolved NULL)
-  { created_at: "2026-09-28T06:00:00.000Z", region: null, envelope_json: null, finding_codes_json: null, user_verdict: null, is_recheck: 0, repair_count: 1, repair_resolved: null },
-  // v4: PH · 봉투는 있지만 도구·주제 미기록 · 모르는 코드 + 중복 코드 · 수리 2건 MAX(resolved)=0
-  { created_at: "2026-09-28T07:00:00.000Z", region: "PH", envelope_json: ENV_IDEA_EMPTY, finding_codes_json: '["ac_broken","weird_future_code","ac_broken"]', user_verdict: "works_but_different", is_recheck: 0, repair_count: 2, repair_resolved: 0 },
+  { created_at: "2026-09-28T05:00:00.000Z", region: "KR", envelope_json: ENV_LOVABLE, finding_codes_json: "[]", user_verdict: "as_intended", is_recheck: 1, repair_count: 0, repair_done_count: 0, repair_failed_count: 0, repair_resolved: null },
+  // v3: 레거시 런 — 봉투·코드·판정 없음 · 수리 1건(실패 — 고친 것이 없어 검증될 수 없다 → repair_failed)
+  { created_at: "2026-09-28T06:00:00.000Z", region: null, envelope_json: null, finding_codes_json: null, user_verdict: null, is_recheck: 0, repair_count: 1, repair_done_count: 0, repair_failed_count: 1, repair_resolved: null },
+  // v4: PH · 봉투는 있지만 도구·주제 미기록 · 모르는 코드 + 중복 코드 · 수리 2건(완료 resolved=0 + 실패) → 최근 완료 = 0
+  { created_at: "2026-09-28T07:00:00.000Z", region: "PH", envelope_json: ENV_IDEA_EMPTY, finding_codes_json: '["ac_broken","weird_future_code","ac_broken"]', user_verdict: "works_but_different", is_recheck: 0, repair_count: 2, repair_done_count: 1, repair_failed_count: 1, repair_resolved: 0 },
   // 기간 밖
-  { created_at: "2026-09-20T00:00:00.000Z", region: "JP", envelope_json: ENV_LOVABLE, finding_codes_json: "[]", user_verdict: "as_intended", is_recheck: 0, repair_count: 0, repair_resolved: null },
+  { created_at: "2026-09-20T00:00:00.000Z", region: "JP", envelope_json: ENV_LOVABLE, finding_codes_json: "[]", user_verdict: "as_intended", is_recheck: 0, repair_count: 0, repair_done_count: 0, repair_failed_count: 0, repair_resolved: null },
 ];
 
 const REPAIR_ROWS = [
-  { created_at: "2026-09-28T04:00:00.000Z", region: "KR", verify_linked: 1, resolved: 1 },
-  { created_at: "2026-09-28T06:30:00.000Z", region: null, verify_linked: 0, resolved: null },
-  { created_at: "2026-09-28T07:30:00.000Z", region: "PH", verify_linked: 1, resolved: 0 },
-  { created_at: "2026-09-28T08:00:00.000Z", region: "PH", verify_linked: 0, resolved: null },
-  { created_at: "2026-09-10T00:00:00.000Z", region: "JP", verify_linked: 1, resolved: 1 }, // 기간 밖
+  { created_at: "2026-09-28T04:00:00.000Z", region: "KR", status: "done", verify_linked: 1, resolved: 1 },
+  { created_at: "2026-09-28T06:30:00.000Z", region: null, status: "failed", verify_linked: 0, resolved: null },
+  { created_at: "2026-09-28T07:30:00.000Z", region: "PH", status: "done", verify_linked: 1, resolved: 0 },
+  { created_at: "2026-09-28T08:00:00.000Z", region: "PH", status: "failed", verify_linked: 0, resolved: null },
+  { created_at: "2026-09-10T00:00:00.000Z", region: "JP", status: "done", verify_linked: 1, resolved: 1 }, // 기간 밖
 ];
 
 const PROJECT_ROWS = [
@@ -135,7 +139,7 @@ function assertSeedAggregation(body) {
     "KR|lovable|commerce|network_5xx|still_broken|resolved": 1,
     "KR|lovable|commerce|console_error|still_broken|resolved": 1,
     "KR|lovable|commerce|none|as_intended|no_repair": 1,
-    "unrecorded|unrecorded|unrecorded|unrecorded|unrecorded|unverified": 1,
+    "unrecorded|unrecorded|unrecorded|unrecorded|unrecorded|repair_failed": 1,
     "PH|unrecorded|unrecorded|ac_broken|works_but_different|not_resolved": 1,
     "PH|unrecorded|unrecorded|other|works_but_different|not_resolved": 1,
   });
@@ -147,7 +151,8 @@ function assertSeedAggregation(body) {
   assert.deepEqual(ch.fill.topic, { filled: 2, total: 4, rate: 0.5 });
   assert.deepEqual(ch.fill.findingCodes, { filled: 3, total: 4, rate: 0.75 }, "[] = 측정된 '발견 0'은 채움");
   assert.deepEqual(ch.fill.userVerdict, { filled: 3, total: 4, rate: 0.75 });
-  assert.deepEqual(ch.fill.resolved, { filled: 2, total: 3, rate: 0.6667 }, "분모 = 수리가 있었던 런");
+  // PR #572 검증 [7]: 분모 = 완료된 수리가 있는 런(실패만 한 런은 검증될 수 없어 분모에 넣지 않는다).
+  assert.deepEqual(ch.fill.resolved, { filled: 2, total: 2, rate: 1 }, "분모 = 완료된 수리가 있었던 런");
 
   // ── 한계 합계(런 단위; findingCode는 그 코드를 가진 런 수) ──
   assert.deepEqual(ch.marginals.region, { KR: 2, unrecorded: 1, PH: 1 });
@@ -155,17 +160,18 @@ function assertSeedAggregation(body) {
   assert.deepEqual(ch.marginals.topic, { commerce: 2, unrecorded: 2 });
   assert.deepEqual(ch.marginals.findingCode, { network_5xx: 1, console_error: 1, none: 1, unrecorded: 1, ac_broken: 1, other: 1 });
   assert.deepEqual(ch.marginals.userVerdict, { still_broken: 1, as_intended: 1, unrecorded: 1, works_but_different: 1 });
-  assert.deepEqual(ch.marginals.resolved, { resolved: 1, no_repair: 1, unverified: 1, not_resolved: 1 });
+  assert.deepEqual(ch.marginals.resolved, { resolved: 1, no_repair: 1, repair_failed: 1, not_resolved: 1 });
   assert.deepEqual(ch.marginals.runKind, { first: 3, recheck: 1 });
 
   // ── 수리 잡 절 ──
   const rp = body.repairs;
   assert.equal(rp.rows, 4);
   assert.deepEqual(rp.fill.region, { filled: 3, total: 4, rate: 0.75 });
-  assert.deepEqual(rp.fill.verifyLinked, { filled: 2, total: 4, rate: 0.5 });
-  assert.deepEqual(rp.fill.resolved, { filled: 2, total: 4, rate: 0.5 });
+  // 재검수 연결·해결 채움률의 분모 = 완료된 수리 잡(실패·진행 중 잡은 재검수로 이어질 수 없다).
+  assert.deepEqual(rp.fill.verifyLinked, { filled: 2, total: 2, rate: 1 });
+  assert.deepEqual(rp.fill.resolved, { filled: 2, total: 2, rate: 1 });
   assert.deepEqual(Object.fromEntries(rp.cells.map((c) => [`${c.region}|${c.resolved}`, c.count])), {
-    "KR|resolved": 1, "unrecorded|unverified": 1, "PH|not_resolved": 1, "PH|unverified": 1,
+    "KR|resolved": 1, "unrecorded|repair_failed": 1, "PH|not_resolved": 1, "PH|repair_failed": 1,
   });
 
   // ── 프로젝트 절 ──
@@ -279,7 +285,7 @@ describe("③ 교차 집계 — region × built_with × topic × finding_code ×
     for (const k of ["builtWith", "topic", "findingCode", "userVerdict", "resolved"]) assert.ok(Array.isArray(axes[k]) && axes[k].length > 0, k);
     assert.ok(axes.builtWith.includes("lovable") && axes.builtWith.includes("multiple") && axes.builtWith.includes("unrecorded"));
     assert.ok(axes.findingCode.includes("network_5xx") && axes.findingCode.includes("other") && axes.findingCode.includes("none"));
-    assert.deepEqual(axes.resolved, ["resolved", "not_resolved", "unverified", "no_repair"]);
+    assert.deepEqual(axes.resolved, ["resolved", "not_resolved", "unverified", "repair_failed", "repair_in_progress", "no_repair"]);
     for (const c of r.body.checks.cells) {
       assert.ok(/^[A-Z0-9]{2}$/.test(c.region) || c.region === "unrecorded", c.region);
       assert.ok(axes.builtWith.includes(c.builtWith), c.builtWith);
@@ -299,6 +305,44 @@ describe("③ 교차 집계 — region × built_with × topic × finding_code ×
     assert.deepEqual(r.body.checks.cells.map(cellKey), ["unrecorded|unrecorded|unrecorded|unrecorded|unrecorded|no_repair"]);
     const text = JSON.stringify(r.body);
     for (const leak of ["서울", "script", "완전좋음", "not json"]) assert.ok(!text.includes(leak), leak);
+  });
+});
+
+// ─── ③-b resolved 축 정의 (PR #572 검증 [7]) ─────────────────────────────────────
+
+describe("③-b resolved 축 — 끝나지 못한 수리는 따로 접고, 분모는 완료된 수리만", () => {
+  const row = (patch) => ({ created_at: "2026-09-28T03:00:00.000Z", region: "KR", envelope_json: null, finding_codes_json: "[]", user_verdict: null, is_recheck: 0, repair_resolved: null, ...patch });
+
+  it("★실패만 한 수리 → repair_failed · 진행 중만 → repair_in_progress — 둘 다 해결 채움률 분모에 넣지 않는다", () => {
+    assert.ok(moat, "dist/routes/admin-moat-stats.js must exist");
+    const agg = moat.aggregateMoatChecks([
+      row({ repair_count: 1, repair_done_count: 0, repair_failed_count: 1 }),
+      row({ repair_count: 1, repair_done_count: 0, repair_failed_count: 0 }),
+      row({ repair_count: 2, repair_done_count: 1, repair_failed_count: 1, repair_resolved: 1 }),
+    ]);
+    assert.deepEqual(agg.marginals.resolved, { repair_failed: 1, repair_in_progress: 1, resolved: 1 });
+    assert.deepEqual(agg.fill.resolved, { filled: 1, total: 1, rate: 1 });
+  });
+
+  it("★수리 잡 절: 실패 잡 → repair_failed · 진행 중 → repair_in_progress · 재검수 연결·해결 채움률 분모 = 완료 잡", () => {
+    const agg = moat.aggregateMoatRepairs([
+      { created_at: "2026-09-28T04:00:00.000Z", region: "KR", status: "done", verify_linked: 1, resolved: 1 },
+      { created_at: "2026-09-28T04:10:00.000Z", region: "KR", status: "done", verify_linked: 0, resolved: null },
+      { created_at: "2026-09-28T04:20:00.000Z", region: "KR", status: "failed", verify_linked: 0, resolved: null },
+      { created_at: "2026-09-28T04:30:00.000Z", region: "KR", status: "running", verify_linked: 0, resolved: null },
+    ]);
+    assert.deepEqual(Object.fromEntries(agg.cells.map((c) => [c.resolved, c.count])), {
+      resolved: 1, unverified: 1, repair_failed: 1, repair_in_progress: 1,
+    });
+    assert.deepEqual(agg.fill.verifyLinked, { filled: 1, total: 2, rate: 0.5 });
+    assert.deepEqual(agg.fill.resolved, { filled: 1, total: 2, rate: 0.5 });
+    assert.deepEqual(agg.fill.region, { filled: 4, total: 4, rate: 1 }, "region 채움률은 모든 잡");
+  });
+
+  it("★MOAT_REPAIRS_SQL은 status를 읽는다(끝나지 못한 잡을 가르기 위해) · 검수 런 SQL은 최근 완료 수리의 resolved를 읽는다(MAX 아님)", () => {
+    assert.match(moat.MOAT_REPAIRS_SQL, /\bstatus\b/);
+    assert.doesNotMatch(moat.MOAT_CHECKS_SQL, /MAX\s*\(/i);
+    assert.match(moat.MOAT_CHECKS_SQL, /status\s*=\s*'done'/);
   });
 });
 
@@ -456,6 +500,38 @@ describe("⑤ 실제 SQLite — 실제 마이그레이션 스키마(0027·0050·
     const r = await get({ DB: d1Over(db), INTERNAL_CALLBACK_TOKEN: TOKEN });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assertSeedAggregation(r.body);
+    assertNoLeak(r.body);
+  });
+
+  it("★PR #572 검증 [7]: 런의 resolved = 가장 최근 완료 수리의 값(앞 수리가 해결됐어도 뒤 수리에서 되돌아가면 not_resolved) · 실패·진행 중만이면 따로", async () => {
+    const db = freshDb();
+    db.prepare(`INSERT INTO workspace_projects (id, user_key, title, idea, created_at, updated_at) VALUES ('wsp_p', 'uk_secret_owner', '(주)트루픽셀', '', ?, ?)`).run(SINCE, SINCE);
+    const V = db.prepare(`INSERT INTO workspace_visual_checks (id, project_id, user_key, target_url, intent, decision, works, status, executor, report_json, evidence_keys_json, created_at, updated_at, region, finding_codes_json)
+                          VALUES (?, 'wsp_p', 'uk_secret_owner', 'https://secret-bakery.example.app', '몰래 확인할 의도 — 예약 버튼', 'Needs Fix', 0, 'done', 'container', '{}', '[]', ?, ?, 'KR', '[]')`);
+    const at = (h) => `2026-09-28T${String(h).padStart(2, "0")}:00:00.000Z`;
+    for (const [id, h] of [["wvc_a", 1], ["wvc_b", 2], ["wvc_c", 3], ["wvc_d", 4]]) V.run(id, at(h), at(h));
+    const R = db.prepare(`INSERT INTO workspace_repair_jobs (id, project_id, user_key, visual_check_id, repo_full_name, status, env_cause, created_at, updated_at, mode, region, verify_check_id, resolved)
+                          VALUES (?, 'wsp_p', 'uk_secret_owner', ?, 'acme/secret-repo', ?, 0, ?, ?, 'auto_fix', 'KR', ?, ?)`);
+    // a: 앞 수리 해결(1) → 뒤 수리에서 되돌아감(0). MAX면 resolved로 부풀려진다.
+    R.run("wrj_a1", "wvc_a", "done", at(5), at(5), "wvc_va1", 1);
+    R.run("wrj_a2", "wvc_a", "done", at(6), at(6), "wvc_va2", 0);
+    // b: 실패만 — 고친 것이 없어 검증될 수 없다.
+    R.run("wrj_b1", "wvc_b", "failed", at(7), at(7), null, null);
+    // c: 아직 고치는 중.
+    R.run("wrj_c1", "wvc_c", "queued", at(8), at(8), null, null);
+    // d: 완료(판정 전) 뒤 실패 — 최근 '완료' 수리는 아직 판정 전.
+    R.run("wrj_d1", "wvc_d", "done", at(9), at(9), null, null);
+    R.run("wrj_d2", "wvc_d", "failed", at(10), at(10), null, null);
+
+    const r = await get({ DB: d1Over(db), INTERNAL_CALLBACK_TOKEN: TOKEN });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.checks.marginals.resolved, { not_resolved: 1, repair_failed: 1, repair_in_progress: 1, unverified: 1 });
+    assert.deepEqual(r.body.checks.fill.resolved, { filled: 1, total: 2, rate: 0.5 }, "분모 = 완료된 수리가 있는 런(a·d)");
+    assert.deepEqual(Object.fromEntries(r.body.repairs.cells.map((c) => [c.resolved, c.count])), {
+      resolved: 1, not_resolved: 1, unverified: 1, repair_failed: 2, repair_in_progress: 1,
+    });
+    assert.deepEqual(r.body.repairs.fill.verifyLinked, { filled: 2, total: 3, rate: 0.6667 });
+    assert.deepEqual(r.body.repairs.fill.resolved, { filled: 2, total: 3, rate: 0.6667 });
     assertNoLeak(r.body);
   });
 
