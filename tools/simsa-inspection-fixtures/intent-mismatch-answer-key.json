@@ -1,0 +1,327 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-01",
+  "design": "docs/pilot-2026-10/intent-mismatch-answer-key.md",
+  "heuristicRev": "a5-acceptance-4",
+  "typedValue": "서울",
+  "rules": {
+    "acClass": "no_problem → missed · broken → detected · not_confirmed + note 'then_not_observed:' → detected · 그 밖의 not_confirmed/not_run/없음 → no_call",
+    "blindSpot": "safety_rail이면 mismatch AC는 결과와 무관하게 no_call(동작을 누르지 않았으므로 증거가 아니다)",
+    "detectBy": "acceptance = mismatch AC의 acClass / core_flow = 검수 works(false → detected, true → missed, null → no_call)",
+    "confusion": "mismatch detected → TP, missed → FN / control no_problem → TN, detected → FP / 나머지 no_call"
+  },
+  "variants": [
+    {
+      "id": "IM01",
+      "path": "/intent-mismatch/booking-no-date",
+      "title": "미용실 예약 — 날짜를 고를 수 없음",
+      "intent": "손님이 원하는 날짜를 골라 미용실 예약을 잡을 수 있어야 한다",
+      "differentNow": "날짜를 고르는 칸이 없고, 예약은 항상 '오늘'로 접수된다",
+      "detectBy": "acceptance",
+      "blindSpot": null,
+      "predicted": { "outcome": "TP", "control": "TN", "works": "not_true" },
+      "expectedFinding": "ac_not_confirmed — then_not_observed: 고른, 날짜, 내역, 함께",
+      "expectedFailurePoint": "예약하기 뒤 확인 문구에 날짜가 없다(항상 '오늘').",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "원하는 날짜로 예약",
+          "given": "미용실 예약 화면", "when": "예약자 이름을 적고 '예약하기'를 누르면",
+          "then": "고른 날짜가 예약 내역에 함께 표시된다",
+          "steps": ["첫 화면 열기", "예약자 이름 입력", "'예약하기' 누르기"],
+          "expectedStatus": "not_confirmed",
+          "afterText": "✂️ 동네 미용실 예약\n이름을 적고 예약하기를 누르면 바로 접수돼요\n예약하기\n예약이 접수되었어요 — 예약자: {typed} · 방문: 오늘"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "예약 접수 안내",
+          "given": "미용실 예약 화면", "when": "예약자 이름을 적고 '예약하기'를 누르면",
+          "then": "'예약이 접수되었어요' 안내가 보인다",
+          "steps": ["첫 화면 열기", "예약자 이름 입력", "'예약하기' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "✂️ 동네 미용실 예약\n이름을 적고 예약하기를 누르면 바로 접수돼요\n예약하기\n예약이 접수되었어요 — 예약자: {typed} · 방문: 오늘"
+        }
+      ],
+      "markers": { "mustContain": ["방문: 오늘"], "mustNotContain": ["type=\"date\"", "날짜"] }
+    },
+    {
+      "id": "IM02",
+      "path": "/intent-mismatch/price-in-dollars",
+      "title": "꽃집 주문 — 가격이 원화가 아니라 달러",
+      "intent": "꽃다발 가격과 합계가 원화(원)로 보여야 한다",
+      "differentNow": "가격과 합계가 달러($)로 나온다",
+      "detectBy": "acceptance",
+      "blindSpot": null,
+      "predicted": { "outcome": "TP", "control": "TN", "works": "not_true" },
+      "expectedFinding": "ac_not_confirmed — then_not_observed: 금액, 원화, 단위",
+      "expectedFailurePoint": "담기 뒤 합계가 '$12.00' — 화면 어디에도 '원'이 없다.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "원화 가격 표시",
+          "given": "꽃다발 목록", "when": "받는 분 이름을 적고 '담기'를 누르면",
+          "then": "금액이 원화 단위로 보인다",
+          "steps": ["첫 화면 열기", "받는 분 이름 입력", "'담기' 누르기"],
+          "expectedStatus": "not_confirmed",
+          "afterText": "💐 동네 꽃집 주문\n꽃다발을 고르고 담기를 누르세요\n장미 꽃다발 — $12.00\n튤립 꽃다발 — $9.50\n담기\n장바구니: 장미 꽃다발 1개 · 합계 $12.00 · 받는 분: {typed}"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "장바구니 담기",
+          "given": "꽃다발 목록", "when": "받는 분 이름을 적고 '담기'를 누르면",
+          "then": "장바구니에 장미 꽃다발이 담긴다",
+          "steps": ["첫 화면 열기", "받는 분 이름 입력", "'담기' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "💐 동네 꽃집 주문\n꽃다발을 고르고 담기를 누르세요\n장미 꽃다발 — $12.00\n튤립 꽃다발 — $9.50\n담기\n장바구니: 장미 꽃다발 1개 · 합계 $12.00 · 받는 분: {typed}"
+        }
+      ],
+      "markers": { "mustContain": ["$12.00"], "mustNotContain": ["원", "₩"] }
+    },
+    {
+      "id": "IM03",
+      "path": "/intent-mismatch/sort-reversed",
+      "title": "아파트 공지 — 최신이 아니라 오래된 순",
+      "intent": "가장 최근 공지가 맨 위에 보여야 한다",
+      "differentNow": "공지가 오래된 것부터 나와 최신 공지가 맨 아래에 있다",
+      "detectBy": "acceptance",
+      "blindSpot": "order",
+      "predicted": { "outcome": "FN", "control": "TN", "works": "true_or_null" },
+      "expectedFinding": "없음(예상 미탐) — then의 내용어(9월·30일·추석·연휴·공지)가 전부 화면에 있다",
+      "expectedFailurePoint": "현 판정(then 내용어가 화면에 있는가)은 **순서**를 보지 않는다 — 최신 공지가 맨 아래여도 '관찰됨'.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "최신 공지가 맨 위",
+          "given": "공지 3건", "when": "'공지 목록 보기'를 누르면",
+          "then": "맨 위에 9월 30일 추석 연휴 공지가 보인다",
+          "steps": ["첫 화면 열기", "'공지 목록 보기' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "📢 아파트 공지 게시판\n공지 목록 보기를 누르면 공지가 나타나요\n공지 목록 보기\n9월 1일 · 분리수거 요일 변경\n9월 15일 · 엘리베이터 점검\n9월 30일 · 추석 연휴 관리사무소 휴무\n총 3건"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "공지 목록",
+          "given": "공지 3건", "when": "'공지 목록 보기'를 누르면",
+          "then": "공지 3건이 목록에 보인다",
+          "steps": ["첫 화면 열기", "'공지 목록 보기' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "📢 아파트 공지 게시판\n공지 목록 보기를 누르면 공지가 나타나요\n공지 목록 보기\n9월 1일 · 분리수거 요일 변경\n9월 15일 · 엘리베이터 점검\n9월 30일 · 추석 연휴 관리사무소 휴무\n총 3건"
+        }
+      ],
+      "markers": { "mustContain": [], "mustNotContain": [".reverse(", ".sort("], "order": ["9월 1일", "9월 15일", "9월 30일"] }
+    },
+    {
+      "id": "IM04",
+      "path": "/intent-mismatch/required-field-missing",
+      "title": "체험 신청 — 꼭 받아야 할 전화번호 칸이 없음",
+      "intent": "체험 신청을 받을 때 전화번호를 꼭 함께 받아야 한다",
+      "differentNow": "이름만 받고 전화번호를 적는 칸이 없다",
+      "detectBy": "acceptance",
+      "blindSpot": null,
+      "predicted": { "outcome": "TP", "control": "TN", "works": "not_true" },
+      "expectedFinding": "ac_not_confirmed — then_not_observed: 내역, 전화번호, 함께",
+      "expectedFailurePoint": "신청 완료 문구에 전화번호가 없다 — 입력칸 자체가 없다.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "전화번호 필수 입력",
+          "given": "체험 신청 화면", "when": "이름을 적고 '신청하기'를 누르면",
+          "then": "신청 내역에 전화번호가 함께 보인다",
+          "steps": ["첫 화면 열기", "신청자 이름 입력", "'신청하기' 누르기"],
+          "expectedStatus": "not_confirmed",
+          "afterText": "🧪 무료 체험 신청\n이름을 적고 신청하기를 눌러 주세요\n신청하기\n신청이 완료되었어요: {typed}님"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "신청 완료 안내",
+          "given": "체험 신청 화면", "when": "이름을 적고 '신청하기'를 누르면",
+          "then": "'신청이 완료되었어요' 문구가 보인다",
+          "steps": ["첫 화면 열기", "신청자 이름 입력", "'신청하기' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "🧪 무료 체험 신청\n이름을 적고 신청하기를 눌러 주세요\n신청하기\n신청이 완료되었어요: {typed}님"
+        }
+      ],
+      "markers": { "mustContain": [], "mustNotContain": ["type=\"tel\"", "전화", "연락처"] }
+    },
+    {
+      "id": "IM05",
+      "path": "/intent-mismatch/button-wrong-page",
+      "title": "이어폰 스토어 — '장바구니 보기'가 고객센터로 감",
+      "intent": "'장바구니 보기'를 누르면 담은 상품이 보이는 장바구니 화면이 나와야 한다",
+      "differentNow": "'장바구니 보기'를 누르면 고객센터 화면으로 간다",
+      "detectBy": "acceptance",
+      "blindSpot": null,
+      "predicted": { "outcome": "TP", "control": "TN", "works": "not_true" },
+      "expectedFinding": "ac_not_confirmed — then_not_observed: 장바구니, 담, 무선, 이어폰",
+      "expectedFailurePoint": "누른 뒤 도착한 고객센터 화면에 장바구니·상품이 없다.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "장바구니 화면",
+          "given": "상품 화면", "when": "'장바구니 보기'를 누르면",
+          "then": "장바구니에 담은 무선 이어폰이 보인다",
+          "steps": ["첫 화면 열기", "'장바구니 보기' 누르기"],
+          "expectedStatus": "not_confirmed",
+          "afterPath": "/intent-mismatch/button-wrong-page/help",
+          "afterText": "📞 고객센터\n자주 묻는 질문\n배송은 2~3일 걸려요\n교환은 7일 안에 가능해요\n처음으로"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "찜하기",
+          "given": "상품 화면", "when": "'찜하기'를 누르면",
+          "then": "찜 목록에 무선 이어폰이 담겼다고 나온다",
+          "steps": ["첫 화면 열기", "'찜하기' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "🎧 무선 이어폰 스토어\n무선 이어폰 — 59,000원\n장바구니 보기\n찜하기\n찜 목록에 담았어요: 무선 이어폰"
+        }
+      ],
+      "markers": { "mustContain": ["/intent-mismatch/button-wrong-page/help"], "mustNotContain": [], "afterPathMustNotContain": ["장바구니", "이어폰"] }
+    },
+    {
+      "id": "IM06",
+      "path": "/intent-mismatch/english-copy",
+      "title": "가게 메모 — 한국어 앱인데 완료 안내가 영어",
+      "intent": "화면의 안내 문구가 모두 한국어로 보여야 한다",
+      "differentNow": "저장하면 'Saved! Your place was added.'라는 영어 안내가 나온다",
+      "detectBy": "acceptance",
+      "blindSpot": null,
+      "predicted": { "outcome": "TP", "control": "TN", "works": "not_true" },
+      "expectedFinding": "ac_not_confirmed — then_not_observed: 맛집, 저장했어요, 문구",
+      "expectedFailurePoint": "저장 뒤 안내가 영어라 한국어 완료 문구가 없다(저장 자체는 새로고침 뒤에도 남는다).",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "한국어 완료 안내",
+          "given": "가게 메모 화면", "when": "가게 이름을 적고 '저장'을 누르면",
+          "then": "'맛집을 저장했어요' 완료 문구가 보인다",
+          "steps": ["첫 화면 열기", "가게 이름 입력", "'저장' 누르기"],
+          "expectedStatus": "not_confirmed",
+          "afterText": "🍜 동네 가게 메모\n가게 이름을 적고 저장을 누르세요\n저장\nSaved! Your place was added.\n내 가게 목록\n📍 {typed}"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "가게 저장",
+          "given": "가게 메모 화면", "when": "가게 이름을 적고 '저장'을 누르면",
+          "then": "저장한 가게가 내 가게 목록에 보인다",
+          "steps": ["첫 화면 열기", "가게 이름 입력", "'저장' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "🍜 동네 가게 메모\n가게 이름을 적고 저장을 누르세요\n저장\nSaved! Your place was added.\n내 가게 목록\n📍 {typed}"
+        }
+      ],
+      "markers": { "mustContain": ["Saved! Your place was added.", "localStorage.setItem"], "mustNotContain": ["저장했어요", "맛집"] }
+    },
+    {
+      "id": "IM07",
+      "path": "/intent-mismatch/not-persisted",
+      "title": "독서 기록 — 저장은 되는데 새로고침하면 사라짐",
+      "intent": "기록한 책 목록이 새로고침한 뒤에도 남아 있어야 한다",
+      "differentNow": "추가하면 목록에 보이지만 새로고침하면 전부 사라진다",
+      "detectBy": "core_flow",
+      "blindSpot": "ac_no_reload",
+      "predicted": { "outcome": "TP", "control": "TN", "works": "false" },
+      "expectedFinding": "step_failed — 새로고침하니 입력한 내용이 사라짐(핵심 흐름 지속성 확인). AC-001 자체는 then 내용어(추가·책·목록)가 보여 no_problem 예상",
+      "expectedFailurePoint": "수용 기준 시나리오는 새로고침을 하지 않는다 — 잡는 것은 핵심 흐름의 지속성 확인(F6와 같은 경로)이다.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "새로고침 뒤에도 유지",
+          "given": "독서 기록 화면", "when": "책 제목을 적고 '기록 추가'를 누른 뒤 새로고침하면",
+          "then": "새로고침한 뒤에도 추가한 책이 목록에 남아 있다",
+          "steps": ["첫 화면 열기", "책 제목 입력", "'기록 추가' 누르기", "새로고침"],
+          "expectedStatus": "no_problem",
+          "afterText": "📚 독서 기록장\n읽은 책 제목을 적고 기록 추가를 누르세요\n기록 추가\n내 책 목록\n📖 {typed}"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "책 추가",
+          "given": "독서 기록 화면", "when": "책 제목을 적고 '기록 추가'를 누르면",
+          "then": "추가한 책이 목록에 바로 보인다",
+          "steps": ["첫 화면 열기", "책 제목 입력", "'기록 추가' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "📚 독서 기록장\n읽은 책 제목을 적고 기록 추가를 누르세요\n기록 추가\n내 책 목록\n📖 {typed}"
+        }
+      ],
+      "markers": { "mustContain": ["<li>"], "mustNotContain": ["localStorage", "sessionStorage", "indexedDB", "fetch("] }
+    },
+    {
+      "id": "IM08",
+      "path": "/intent-mismatch/search-exact-only",
+      "title": "카페 찾기 — 이름 일부로는 검색이 안 됨",
+      "intent": "카페 이름 일부만 입력해도 검색되어야 한다",
+      "differentNow": "카페 이름을 정확히 다 적어야만 검색된다('서울'로는 '서울숲 로스터리'가 안 나온다)",
+      "detectBy": "acceptance",
+      "blindSpot": null,
+      "predicted": { "outcome": "TP", "control": "TN", "works": "not_true" },
+      "expectedFinding": "ac_not_confirmed — then_not_observed: 서울숲, 로스터리, 목록, 뜬",
+      "expectedFailurePoint": "검색창에 '서울'을 넣고 검색하면 '검색 결과가 없어요' — 부분 일치가 없다.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "이름 일부로 검색",
+          "given": "카페 3곳", "when": "검색창에 '서울'을 넣고 '검색'을 누르면",
+          "then": "서울숲 로스터리가 목록에 뜬다",
+          "steps": ["첫 화면 열기", "검색창에 '서울' 입력", "'검색' 누르기"],
+          "expectedStatus": "not_confirmed",
+          "afterText": "☕ 동네 카페 찾기\n카페 이름으로 검색해 보세요\n검색\n전체 보기\n검색 결과가 없어요"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "전체 목록",
+          "given": "카페 3곳", "when": "'전체 보기'를 누르면",
+          "then": "전체 목록에 서울숲 로스터리와 망원 베이커리가 보인다",
+          "steps": ["첫 화면 열기", "'전체 보기' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "☕ 동네 카페 찾기\n카페 이름으로 검색해 보세요\n검색\n전체 보기\n전체 목록 (3곳)\n서울숲 로스터리\n성수 브루어스\n망원 베이커리"
+        }
+      ],
+      "markers": { "mustContain": ["=== q"], "mustNotContain": ["includes(", "indexOf(", "startsWith("] }
+    },
+    {
+      "id": "IM09",
+      "path": "/intent-mismatch/delete-no-confirm",
+      "title": "팀 메모 — 지울 때 묻지 않고 바로 삭제",
+      "intent": "메모를 지울 때는 정말 지울지 한 번 더 물어봐야 한다",
+      "differentNow": "삭제 버튼을 누르면 묻지 않고 바로 지워진다",
+      "detectBy": "acceptance",
+      "blindSpot": "safety_rail",
+      "predicted": { "outcome": "no_call", "control": "TN", "works": "any" },
+      "expectedFinding": "판정 없음(no_call) — 검수는 안전 규칙상 '삭제'를 절대 누르지 않는다. AC-001이 not_confirmed로 나와도 우연(다른 버튼을 누른 결과)이라 참양성으로 세지 않는다",
+      "expectedFailurePoint": "파괴적 동작(삭제)은 안전 레일이 막는다 — 이 불일치는 자동 검수로 잴 수 없고, 사람 확인(user_verdict)이 필요하다.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "삭제 전 확인",
+          "given": "메모 2개", "when": "첫 메모의 '삭제'를 누르면",
+          "then": "'정말 삭제할까요?' 확인 문구가 먼저 나온다",
+          "steps": ["첫 화면 열기", "첫 메모의 '삭제' 누르기"],
+          "expectedStatus": "not_confirmed",
+          "afterText": "🗒️ 팀 메모 보드\n메모를 추가하거나 지울 수 있어요\n추가\n회의는 목요일 오후 3시\n삭제\n간식은 금요일에\n삭제"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "메모 추가",
+          "given": "메모 2개", "when": "메모 내용을 적고 '추가'를 누르면",
+          "then": "추가한 메모가 보드에 보인다",
+          "steps": ["첫 화면 열기", "메모 내용 입력", "'추가' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "🗒️ 팀 메모 보드\n메모를 추가하거나 지울 수 있어요\n추가\n회의는 목요일 오후 3시\n삭제\n간식은 금요일에\n삭제\n{typed}\n삭제"
+        }
+      ],
+      "markers": { "mustContain": ["삭제", "localStorage.setItem"], "mustNotContain": ["confirm(", "정말"] }
+    },
+    {
+      "id": "IM10",
+      "path": "/intent-mismatch/mobile-button-hidden",
+      "title": "코트 예약 — 휴대폰에서는 예약 버튼이 안 보임",
+      "intent": "휴대폰에서도 예약 요청 버튼을 누를 수 있어야 한다",
+      "differentNow": "휴대폰처럼 좁은 화면에서는 '예약 요청' 버튼이 사라진다",
+      "detectBy": "acceptance",
+      "blindSpot": "desktop_viewport",
+      "predicted": { "outcome": "FN", "control": "TN", "works": "true_or_null" },
+      "expectedFinding": "없음(예상 미탐) — 검수 화면이 1280×800 데스크톱이라 버튼이 보이고 눌린다",
+      "expectedFailurePoint": "검수 브라우저가 데스크톱 크기 하나뿐 — 좁은 화면 전용 결함은 보지 못한다.",
+      "acceptance": [
+        {
+          "id": "AC-001", "role": "mismatch", "featureTitle": "휴대폰에서 예약 요청",
+          "given": "휴대폰 화면", "when": "원하는 시간을 적고 '예약 요청'을 누르면",
+          "then": "휴대폰 화면에서도 '예약 요청을 보냈어요' 문구가 보인다",
+          "steps": ["휴대폰 화면으로 열기", "원하는 시간 입력", "'예약 요청' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "🏸 배드민턴 코트 예약\n원하는 시간을 적고 예약 요청을 누르세요\n예약 요청\n예약 요청을 보냈어요: {typed}"
+        },
+        {
+          "id": "AC-002", "role": "control", "featureTitle": "예약 요청",
+          "given": "예약 화면", "when": "원하는 시간을 적고 '예약 요청'을 누르면",
+          "then": "'예약 요청을 보냈어요' 문구가 보인다",
+          "steps": ["첫 화면 열기", "원하는 시간 입력", "'예약 요청' 누르기"],
+          "expectedStatus": "no_problem",
+          "afterText": "🏸 배드민턴 코트 예약\n원하는 시간을 적고 예약 요청을 누르세요\n예약 요청\n예약 요청을 보냈어요: {typed}"
+        }
+      ],
+      "markers": { "mustContain": ["@media (max-width: 480px)", "#req { display: none; }"], "mustNotContain": [] }
+    }
+  ],
+  "predictedTally": { "TP": 7, "FN": 2, "no_call": 1, "FP": 0, "TN": 10 }
+}
