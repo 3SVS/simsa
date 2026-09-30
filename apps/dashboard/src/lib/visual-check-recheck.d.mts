@@ -24,3 +24,13 @@ export function buildRecheckBody(
   locale: "ko" | "en",
   opts?: { confirmedIntent?: unknown },
 ): RecheckBody;
+
+/**
+ * PR #571 검증 결함 3: a check with the one-line the user just confirmed on the
+ * intent card (door (c)) — explicit intent, no sourceCheckId, cut at 1000 chars.
+ */
+export function intentRecheckBody(
+  oneLine: unknown,
+  userKey: string,
+  locale: "ko" | "en",
+): { userKey: string; locale: "ko" | "en"; intent?: string };

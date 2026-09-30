@@ -36,7 +36,7 @@ import { useToast } from "@/components/Toast";
 import { BranchGlyph } from "@/components/brand/BranchGlyph";
 import { buildStepper, rotatingWaitLine } from "@/lib/wizard-steps.mjs";
 import { composeCodeIntent } from "@/lib/code-intent.mjs";
-import { ENTRY_DOORS, doorBranch, doorFromSearch, doorHref } from "@/lib/entry-doors.mjs";
+import { ENTRY_DOORS, doorBranch, doorFromSearch, doorHref, entryDoorForSave } from "@/lib/entry-doors.mjs";
 import type { EntryDoor } from "@/lib/entry-doors.mjs";
 
 type Step = 1 | 2 | 3 | 4;
@@ -385,7 +385,8 @@ function NewProjectInner() {
     saveExtendedProjectData(id, {
       entryPath: "code",
       // C-N7: 문 (c)로 왔으면 의도 확인 카드가 "원래 만들려던 것"을 묻는다.
-      entryDoor: entryDoor === "differs" ? "differs" : "broken",
+      // PR #571 검증 결함 10: 값은 순수 함수가 정한다(테스트가 매핑을 고정).
+      entryDoor: entryDoorForSave(entryDoor),
       ...(builtWithTools.length ? { builtWithTools } : {}),
     });
 

@@ -2506,6 +2506,9 @@ export type Dictionary = {
     saveMine: string;
     /** C-N7 door (c) — asks for the ORIGINAL intent instead of confirming the app as it is. */
     differsTitle: string; differsSubtitle: string; differsOneLineLabel: string; differsConfirm: string;
+    /** PR #571 검증 결함 1·9·3 — door (c): read-only as-is line, items hint, re-check offer after confirming. */
+    differsReadNowLabel: string; differsItemsHint: string;
+    differsRecheckLead: string; differsRecheckButton: string; differsRecheckBusy: string;
   };
   stackCard: { title: string; desc: string; saved: string };
   sources: {

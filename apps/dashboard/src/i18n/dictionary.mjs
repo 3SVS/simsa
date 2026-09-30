@@ -429,7 +429,10 @@ const EN = {
     optionalTag: "optional",
   },
   branch: {
-    title: "What do you have to start with?",
+    // PR #571 검증 결함 4: the same question the landing page asks above the same
+    // three doors — the answers are situations, not things you have. (KO stays
+    // "무엇부터 시작할까요?" until Bae decides whether to match the landing too.)
+    title: "Where are you starting from?",
     // C-N7 (D-17 amend 2026-09-27): the three first doors. Copy pending Bae's review.
     subtitle: "Pick the one closest to where you are — every door ends in the same place: your app, reviewed.",
     backToChooser: "Back to the three choices",
@@ -2774,9 +2777,18 @@ const EN = {
     // C-N7 door (c) "It works, but not how I meant": ask for the ORIGINAL intent —
     // confirming what the app currently IS would lock in the wrong yardstick.
     differsTitle: "What did you mean it to do?",
-    differsSubtitle: "Below is what we read from your app as it is now. Change it to what you actually meant — that becomes what we check against.",
+    // PR #571 검증 결함 1·9: the field starts EMPTY (the as-is line is a read-only
+    // reference above it) — so "write", not "change". Copy pending Bae's review.
+    differsSubtitle: "Below is what we read from your app as it is now. Write what you actually meant it to do — that becomes what we check against.",
     differsOneLineLabel: "What you meant it to do",
     differsConfirm: "That's what I meant",
+    differsReadNowLabel: "What we read from your app now",
+    differsItemsHint: "These are read from your app as it is now. Uncheck any that aren't what you meant.",
+    // PR #571 검증 결함 3: after confirming on door (c) — the first check ran before
+    // the question, so the result reflects what they meant only after checking again.
+    differsRecheckLead: "Saved. Your results reflect it once you check again against it.",
+    differsRecheckButton: "Check again against this",
+    differsRecheckBusy: "An earlier check is still running. Press this again once it finishes.",
   },
   stackCard: {
     title: "Where this app runs",
@@ -5629,9 +5641,18 @@ const KO = {
     // C-N7 문 (c) "만들었는데 생각과 달라요": 지금 앱이 무엇인지가 아니라 **원래 의도**를
     // 묻는다 — 지금 앱을 확정하면 잘못된 자로 재게 된다.
     differsTitle: "원래 만들려던 건 무엇이었나요?",
-    differsSubtitle: "아래는 지금 앱에서 읽어낸 내용이에요. 원래 생각하신 것으로 고쳐 주세요 — 고친 내용이 앞으로 검수하는 기준이 됩니다.",
+    // PR #571 검증 결함 1·9: 칸은 **비어서** 시작한다(지금 앱 문장은 위에 읽기 전용 참고) —
+    // 그래서 "고쳐"가 아니라 "적어". Bae 검토 대상.
+    differsSubtitle: "아래는 지금 앱에서 읽어낸 내용이에요. 원래 만들려던 것을 직접 적어 주세요 — 적어 주신 내용이 앞으로 검수하는 기준이 됩니다.",
     differsOneLineLabel: "원래 만들려던 것",
     differsConfirm: "이게 원래 만들려던 거예요",
+    differsReadNowLabel: "지금 앱에서 읽은 것",
+    differsItemsHint: "지금 앱에서 읽은 항목이에요. 원래 생각과 다른 항목은 체크를 풀어 주세요.",
+    // PR #571 검증 결함 3: 문 (c)에서 확정한 뒤 — 첫 확인은 질문 전에 돌았으므로
+    // 다시 확인해야 원래 의도가 결과에 반영된다.
+    differsRecheckLead: "저장했어요. 이 기준으로 다시 확인해야 결과에 반영돼요.",
+    differsRecheckButton: "이 기준으로 다시 확인하기",
+    differsRecheckBusy: "앞선 확인이 아직 진행 중이에요. 끝나면 이 버튼을 다시 눌러 주세요.",
   },
   stackCard: {
     title: "이 앱이 돌아가는 곳",

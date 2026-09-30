@@ -35,6 +35,31 @@ describe("hero — 세 문 1줄씩", () => {
   });
 });
 
+describe("랜딩 ↔ 앱 — 같은 세 문, 같은 질문 (PR #571 검증 결함 4·10)", () => {
+  // 앱(대시보드)의 문 정의가 정본이다. 랜딩은 Next 빌드가 따로라 주소를 복제해 두므로,
+  // 둘이 갈라지면(한쪽만 바뀌면) 여기서 깨진다.
+  const DOORS_LIB = new URL("../../dashboard/src/lib/entry-doors.mjs", import.meta.url);
+  const DASH_DICT = new URL("../../dashboard/src/i18n/dictionary.mjs", import.meta.url);
+
+  /** page.tsx의 `const DOOR_PATHS = [ … ] as const;`에서 문자열만 꺼낸다. */
+  function doorPathsFromPage() {
+    const m = /const DOOR_PATHS = \[([\s\S]*?)\] as const;/.exec(PAGE);
+    assert.ok(m, "DOOR_PATHS 배열을 찾지 못함");
+    return [...(m[1] ?? "").matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+  }
+
+  it("[행동 보존 가드] 랜딩 DOOR_PATHS[i] === 대시보드 doorHref(ENTRY_DOORS[i]) — 순서까지", async () => {
+    const { ENTRY_DOORS, doorHref } = await import(DOORS_LIB.href);
+    assert.deepEqual(doorPathsFromPage(), ENTRY_DOORS.map((d) => doorHref(d)));
+  });
+
+  it("EN: 앱 첫 화면 제목 = 랜딩 세 문의 질문 ('Where are you starting from?')", async () => {
+    const { DICTIONARIES } = await import(DASH_DICT.href);
+    assert.equal(DICTIONARIES.en.branch.title, LANDING_DICT.en.hero.doors.lead);
+    // KO를 랜딩('지금 어디쯤이세요?')에 맞출지는 Bae 검토 대상 — 여기서 강제하지 않는다.
+  });
+});
+
 describe("FAQ — 어떤 도구로 만들었든", () => {
   const find = (lang, re) => LANDING_DICT[lang].faq.items.find((it) => re.test(it.q));
 

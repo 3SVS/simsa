@@ -30,18 +30,27 @@ const LANG = [{ text: "EN", href: null }, { text: "KO", href: null }];
  * 2026-09-28 Bae 신고 화면 — #559 직전 /github (저장소 연결됨 · 열린 PR 0개).
  * 문구는 당시 사전(github.openPulls·noPulls·loadPulls·viewHistory)에서, 요소는
  * 당시 page.tsx(이력 링크·저장소 외부 링크·목록 불러오기 버튼)에서 재구성.
+ *
+ * PR #571 검증 결함 7: 레이아웃의 하단 '다음 한 걸음' 바도 넣는다. #559 직전
+ * (6e54f4e~1) project-steps.mjs nextScreenSlug는 코드 갈래에서 settings → github →
+ * items … 순서였고, projects/[id]/layout.tsx에 한 번 달린 StepNextButton이 /github에
+ * "하시던 곳에서 이어서 가요." + **보조(btn-secondary)** "다음: 확인 항목 →"을 그렸다
+ * (저장소만 넣은 J1b 경로 = 코드 갈래). 그래서 실제 화면의 앞으로 가는 것은 0개가 아니라
+ * **보조 2개**였고, 주 버튼이 0개였다 — 이 화면이 잡히는 근거는 "빈 상태 + 주 버튼 없음"이다.
  */
 const BAE_PR_ZERO = {
   mainText:
     "코드 변경(PR) 이력 보기 → 연결된 저장소 3SVS/simsa → main 코드 변경(PR) 목록 불러오기 " +
     "0 개 열려 있는 코드 변경(PR) 확인할 코드 변경(PR)이 없어요. PR(pull request)은 새 코드를 검토용으로 " +
-    "제안하는 방식이에요 — 사용 중인 AI 도구에서 \"PR 만들기\" 또는 \"GitHub에 푸시\" 기능을 실행한 뒤 여기서 새로고침해주세요.",
+    "제안하는 방식이에요 — 사용 중인 AI 도구에서 \"PR 만들기\" 또는 \"GitHub에 푸시\" 기능을 실행한 뒤 여기서 새로고침해주세요. " +
+    "하시던 곳에서 이어서 가요. 다음: 확인 항목 →",
   hasEditableField: false,
   mainActions: [
     ...LANG,
     { text: "이력 보기 →", href: `${P}/github/history` },
     { text: "3SVS/simsa", href: "https://github.com/3SVS/simsa", external: true },
     { text: "코드 변경(PR) 목록 불러오기", href: null },
+    { text: "다음: 확인 항목 →", href: `${P}/items` },
   ],
 };
 
@@ -64,6 +73,14 @@ describe("① 막다른 길 — deadEndCheck (C-J1)", () => {
     assert.equal(r.deadEnd, true);
     assert.equal(r.kind, "empty_state_without_action");
     assert.match(r.emptyState, /0 개 열려 있는/, "빈 상태 문구를 그대로 남긴다(개수만 세지 않는다)");
+  });
+
+  it("[행동 보존 가드] Bae 화면의 앞으로 가는 것은 보조 2개(이력 보기 · 다음: 확인 항목)였다 — [PILOT] 빈 화면 상한(앞으로 가는 것 ≤ 2)을 1로 줄이면 이 화면을 놓친다", () => {
+    // PR #571 검증 결함 7: 픽스처에 하단 '다음 한 걸음' 바가 빠져 있어 상한 조정이 이 화면을
+    // 조용히 놓쳐도 테스트가 초록이었다. 이제 실제 개수를 고정하고, 상한을 줄이면 위 테스트가 깨진다.
+    const r = mod.deadEndCheck(BAE_PR_ZERO);
+    assert.deepEqual(r.forward, ["이력 보기 →", "다음: 확인 항목 →"]);
+    assert.deepEqual(r.primaryForward, []);
   });
 
   it("같은 빈 상태라도 주 버튼(실제 앱 확인하기)이 있으면 막다른 길이 아니다 — #559 D8 이후", () => {
@@ -161,6 +178,27 @@ describe("① 막다른 길 — deadEndCheck (C-J1)", () => {
     assert.equal(mod.deadEndCheck({ mainText: "고칠 내용", hasEditableField: false, mainActions: [...LANG, { text: "고침 지시 복사", href: null }] }).deadEnd, true);
   });
 
+  it("★같은 '문제 없음' 결과 화면은 KO와 EN에서 같은 판정이다 — EN에서만 P0가 되지 않는다 (PR #571 검증 결함 6)", () => {
+    // 고칠 것이 없는 결과(#564) — 보조 행동 둘: 다시 확인 · 다음: 빌더팩.
+    const screen = (lang) =>
+      lang === "ko"
+        ? {
+            mainText: "검수 결과 문제 없음 확인한 화면 3개 다시 확인하기 다음: 빌더팩 →",
+            hasEditableField: false,
+            mainActions: [...LANG, { text: "다시 확인하기", href: null }, { text: "다음: 빌더팩 →", href: `${P}/export` }],
+          }
+        : {
+            mainText: "Inspection result No problems found Screens checked: 3 Check again Next: Builder pack →",
+            hasEditableField: false,
+            mainActions: [...LANG, { text: "Check again", href: null }, { text: "Next: Builder pack →", href: `${P}/export` }],
+          };
+    const ko = mod.deadEndCheck(screen("ko"));
+    const en = mod.deadEndCheck(screen("en"));
+    assert.equal(ko.deadEnd, false);
+    assert.equal(en.deadEnd, ko.deadEnd, `EN ${JSON.stringify(en)} ≠ KO ${JSON.stringify(ko)}`);
+    assert.equal(en.kind, ko.kind);
+  });
+
   it("빈 상태 + 보조 링크만(주 버튼 없음) = 막다른 길 — 다음 행동이 버튼으로 안 보인다", () => {
     const r = mod.deadEndCheck({
       mainText: "No checks yet.",
@@ -180,6 +218,19 @@ describe("① 빈 상태 문구 감지 — emptyStateSnippet", () => {
     assert.match(mod.emptyStateSnippet("No open code changes found."), /No open code changes found/);
     assert.match(mod.emptyStateSnippet("No checks yet."), /No checks yet/);
     assert.match(mod.emptyStateSnippet("Nothing here yet — this project started from code"), /Nothing here yet/);
+  });
+
+  it("★좋은 결과 문장('No problems found' · 'No issues were found')은 빈 상태가 아니다 — KO '문제 없음'과 같게 (PR #571 검증 결함 6)", () => {
+    // 대시보드 사전: visualChecks.worksNoProblems "No problems found" · acceptanceStatus.no_problem
+    // "No problem found" · noFindings "No issues were found in this inspection." ↔ KO "문제 없음".
+    assert.equal(mod.emptyStateSnippet("No problems found"), "");
+    assert.equal(mod.emptyStateSnippet("No problem found"), "");
+    assert.equal(mod.emptyStateSnippet("No issues were found in this inspection."), "");
+    assert.equal(mod.emptyStateSnippet("No remaining blockers found for the recommended candidate."), "");
+    assert.equal(mod.emptyStateSnippet("문제 없음"), "");
+    // 목록 명사의 빈 상태는 그대로 잡는다.
+    assert.match(mod.emptyStateSnippet("No open code changes found."), /No open code changes found/);
+    assert.match(mod.emptyStateSnippet("No checks yet."), /No checks yet/);
   });
 
   it("0이 들어간 다른 수(10개·2.0건)나 일상어('걱정 없어요')는 빈 상태가 아니다", () => {

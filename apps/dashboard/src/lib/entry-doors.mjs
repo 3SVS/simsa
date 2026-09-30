@@ -58,6 +58,7 @@ const PLAIN_CARD = Object.freeze({
   emptyTitle: "emptyTitle",
   oneLineLabel: "oneLineLabel",
   confirm: "confirm",
+  itemsHint: "itemsHint",
 });
 
 const DIFFERS_CARD = Object.freeze({
@@ -66,6 +67,8 @@ const DIFFERS_CARD = Object.freeze({
   emptyTitle: "differsTitle",
   oneLineLabel: "differsOneLineLabel",
   confirm: "differsConfirm",
+  // PR #571 검증 결함 1: the inferred items describe the app as it is NOW.
+  itemsHint: "differsItemsHint",
 });
 
 /**
@@ -75,4 +78,71 @@ const DIFFERS_CARD = Object.freeze({
  */
 export function intentCardCopyKeys(entryDoor) {
   return entryDoor === "differs" ? DIFFERS_CARD : PLAIN_CARD;
+}
+
+/**
+ * The door a code-branch project is saved with (`ExtendedProjectData.entryDoor`).
+ * Only door (c) is remembered as such; everything else on the code branch is (b).
+ * @param {unknown} entryDoor
+ * @returns {"broken" | "differs"}
+ */
+export function entryDoorForSave(entryDoor) {
+  return entryDoor === "differs" ? "differs" : "broken";
+}
+
+/** @param {unknown} s */
+function trimmed(s) {
+  return typeof s === "string" ? s.trim() : "";
+}
+
+/** @param {string} s */
+function sameWords(s) {
+  return s.replace(/\s+/g, " ");
+}
+
+// PR #571 검증 결함 1·9 (2026-10-01): on door (c) the line inferred from the app
+// describes what the app does NOW — the very thing the user says is not what they
+// meant. Pre-filling it into "원래 만들려던 것" let one click save the as-is app
+// as the yardstick, so later checks measured the app against itself. The line is
+// shown as a read-only reference instead, and the field starts empty.
+
+/**
+ * What the confirm card starts with.
+ * @param {unknown} entryDoor
+ * @param {unknown} inferredOneLine the one-line inferred from the app (may be missing)
+ * @returns {{ initialOneLine: string, readNow: string | null }}
+ *   initialOneLine — what the editable field starts with;
+ *   readNow — door (c) only: the inferred line, shown read-only ("지금 앱에서 읽은 것").
+ */
+export function intentCardDraft(entryDoor, inferredOneLine) {
+  const inferred = trimmed(inferredOneLine);
+  if (entryDoor === "differs") return { initialOneLine: "", readNow: inferred || null };
+  return { initialOneLine: inferred, readNow: null };
+}
+
+/**
+ * May the card's confirm button be pressed? Door (c): only once the user wrote
+ * something that is not simply the inferred as-is line (whitespace ignored).
+ * Other doors keep the pre-C-N7 behaviour: always.
+ * @param {{ entryDoor?: unknown, oneLine?: unknown, inferredOneLine?: unknown }} input
+ * @returns {boolean}
+ */
+export function intentCardCanConfirm(input) {
+  if (input?.entryDoor !== "differs") return true;
+  const mine = sameWords(trimmed(input?.oneLine));
+  if (!mine) return false;
+  return mine !== sameWords(trimmed(input?.inferredOneLine));
+}
+
+/**
+ * What the card does after the user confirms. Door (c): the first automatic check
+ * (AF-2) ran before the question was asked, against the generic sentence — so the
+ * card stays and offers to check again with what the user meant (a button, never
+ * an automatic run: every run counts against the daily cap). Other doors: the
+ * card goes away as before.
+ * @param {unknown} entryDoor
+ * @returns {"recheck" | "hide"}
+ */
+export function intentCardAfterConfirm(entryDoor) {
+  return entryDoor === "differs" ? "recheck" : "hide";
 }

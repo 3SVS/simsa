@@ -75,10 +75,19 @@ function movesForward(kind, a) {
   return (kind === "copy" || kind === "external") && a?.primary === true;
 }
 
+/**
+ * Nouns that make "No … found" a GOOD result, not an empty list: "No problems
+ * found" (visualChecks.worksNoProblems) · "No problem found" · "No issues were
+ * found". The KO equivalents ("문제 없음" · "문제를 찾지 못했어요") never matched,
+ * so the same clean-result screen was a P0 dead end in EN only (PR #571 검증 결함 6).
+ */
+const GOOD_RESULT_NOUN = String.raw`(?:problems?|issues?|blockers?|errors?|bugs?|defects?|failures?)\b`;
+
 const EMPTY_STATE_PATTERNS = [
   /(?<![\d.,])0\s?(?:개|건)/,
   /아직\s[^.!?。]{0,24}?(?:없어요|없습니다|없네요|없음)/,
-  /\bno\s(?:[a-z()]+\s){0,4}?(?:yet|found)\b/i,
+  // "No <list noun…> yet|found" — no word in between may be a good-result noun.
+  new RegExp(String.raw`\bno\s(?:(?!${GOOD_RESULT_NOUN})[a-z()]+\s){0,4}?(?:yet|found)\b`, "i"),
   /\bnothing (?:here|yet)\b/i,
   /(?<![\d.,])0 (?:open|items?|results?|runs?|checks?|projects?)\b/i,
 ];
