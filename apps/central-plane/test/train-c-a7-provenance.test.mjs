@@ -114,6 +114,13 @@ describe("① provenance 스키마 — 추가만(하위호환)", () => {
 
   it("provenance 안의 모르는 키·틀린 AC id·틀린 갈래는 거부(strict 경계)", () => {
     const base = { version: 1, source: "inferred", locale: "ko", generatedAt: "2026-09-30T01:00:00.000Z" };
+    // 양성 대조(PR #577 리뷰 P2-4): **같은 base**에 유효한 provenance는 통과해야 한다. 이게 없으면
+    // provenance 키 자체를 거부하는 옛 스키마(.strict())에서도 아래 거부 검사가 공허하게 통과한다.
+    const good = DevSpecMetaSchema.safeParse({
+      ...base,
+      provenance: { builtWith: "lovable", entryPath: "code", detectedStack: { hosting: "lovable", tools: ["React"] }, userConfirmedAcIds: ["AC-001"] },
+    });
+    assert.equal(good.success, true, JSON.stringify(good.error?.issues));
     for (const bad of [
       { userConfirmedItemIds: ["req_001"] },
       { userConfirmedAcIds: ["req_001"] },

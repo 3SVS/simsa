@@ -3,7 +3,8 @@
  *
  * **라이브 실행이 아니다.** 픽스처 워커는 이 PR에서 배포하지 않는다(`deploy simsa-inspection-fixtures approved.`
  * 뒤에 러너를 돌린다). 여기서는 정적으로 고정한다:
- *   ① 정답지 두 판(md·json)이 같은 변형·AC를 말한다, 예측 합계가 맞다
+ *   ① [문서 lint] 정답지 두 판(md·json)이 같은 변형·AC를 말한다, 예측 합계가 맞다
+ *      — 코드(src)와 무관하게 통과한다. 테스트 수에서 "문서 lint"로 따로 세고 회귀 증거로 세지 않는다.
  *   ② 픽스처 HTML이 정답지의 불일치를 **실제로 담고 있다** — 변형별(10개):
  *      표식(있어야/없어야 할 글·순서) · 기대 화면 글이 페이지 소스에서 나온다 · 검수와 같은 판정 휴리스틱
  *      (observeThen)으로 mismatch는 안 보이고 control은 보인다 · 검수와 같은 플래너(planVisualFlow)가
@@ -68,9 +69,9 @@ const namedButton = (steps) => {
 
 const withTyped = (t) => t.replaceAll("{typed}", KEY.typedValue);
 
-// ─── ① 정답지 ────────────────────────────────────────────────────────────────
+// ─── ① 정답지 (문서 lint — 코드 회귀 증거 아님) ──────────────────────────────
 
-describe("① 정답지 — md·json 같은 내용, 예측 합계", () => {
+describe("① [문서 lint] 정답지 — md·json 같은 내용, 예측 합계(코드 회귀 증거 아님)", () => {
   it("10변형 IM01~IM10, 변형마다 mismatch 1 + control 1, 휴리스틱 버전이 검수 러너와 같다", () => {
     assert.deepEqual(KEY.variants.map((v) => v.id), ["IM01", "IM02", "IM03", "IM04", "IM05", "IM06", "IM07", "IM08", "IM09", "IM10"]);
     for (const v of KEY.variants) {
