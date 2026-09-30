@@ -56,12 +56,21 @@ jobs:
           # 4. THE crown jewel: generation must be a REAL llm draft, not a mock.
           #    (This is exactly what silently broke.) One call/15min; the
           #    per-IP hourly rate limit won't trip at this cadence.
+          #    Cost note (비용 권고 ③, PR #576 review P2-5): every call takes one slot
+          #    of the service-wide "generation" daily bucket (default 500), so this
+          #    probe uses ~96 of it per day. When the bucket is full the Worker
+          #    answers generation_capacity WITHOUT calling the model — that is a
+          #    different alarm (users are being turned away until UTC midnight), not
+          #    an LLM outage, so it is reported as its own line.
           gen=$(curl -sS --max-time 90 -X POST "$BASE/workspace/idea-to-spec-draft" \
                 -H "content-type: application/json" \
                 -d '{"idea":"canary — a small app to track daily water intake","locale":"en"}')
           src=$(printf '%s' "$gen" | sed -n 's/.*"source":"\([^"]*\)".*/\1/p')
           err=$(printf '%s' "$gen" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')
-          if [ "$src" != "llm" ]; then
+          scope=$(printf '%s' "$gen" | sed -n 's/.*"scope":"\([^"]*\)".*/\1/p')
+          if [ "$err" = "generation_capacity" ]; then
+            fails="$fails\n- generation capacity full (scope=${scope:-service}): today's daily AI generation cap is used up, so users see 'paused' until UTC midnight. Not an LLM outage — check traffic, then raise BETA_GENERATION_DAILY_LIMIT_GLOBAL (or _PER_IP) in wrangler.toml [vars] if it is legitimate."
+          elif [ "$src" != "llm" ]; then
             fails="$fails\n- generation NOT real: source=${src:-none} error=${err:-none}"
           fi
 
