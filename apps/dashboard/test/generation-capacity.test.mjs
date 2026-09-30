@@ -46,15 +46,56 @@ test("readGenerationCapacity: 503 본문·의도 추론 reason 모두 읽고, �
   assert.equal(readGenerationCapacity("generation_capacity"), null);
 });
 
-test("capacityFromResponse: 503 + 그 본문일 때만, 본문을 소비하지 않는다(뒤에서 다시 읽을 수 있다)", async () => {
+test("capacityFromResponse: 503(서비스)·429(네트워크 몫) + 그 본문일 때만, 본문을 소비하지 않는다", async () => {
   const { capacityFromResponse } = await capacityLib();
-  const body = JSON.stringify({ ok: false, error: "generation_capacity", reason: "daily_capacity", resetAt: RESET_AT });
+  const body = JSON.stringify({ ok: false, error: "generation_capacity", reason: "daily_capacity", scope: "service", resetAt: RESET_AT });
   const r = new Response(body, { status: 503 });
   assert.deepEqual(await capacityFromResponse(r), { resetAt: RESET_AT });
   assert.equal((await r.json()).error, "generation_capacity", "the original body is still readable");
   assert.equal(await capacityFromResponse(new Response(JSON.stringify({ ok: false, error: "llm_unavailable" }), { status: 503 })), null);
-  assert.equal(await capacityFromResponse(new Response(body, { status: 429 })), null);
   assert.equal(await capacityFromResponse(new Response("upstream down", { status: 503 })), null, "non-JSON 503 is not capacity");
+  // 의도된 변경 (#576 검증 P1-1·P1-3): 한 네트워크의 몫이 차면 서버가 429 { error:"generation_capacity",
+  // scope:"network" }로 답한다(#561 패턴). 같은 문장(오늘은 멈췄어요 + 리셋 시각)이어야 한다 — 시간당
+  // 한도 문구("약 N분 후")로 보이면 거짓이다.
+  const network = new Response(JSON.stringify({ ok: false, error: "generation_capacity", reason: "network_daily_limit", scope: "network", resetAt: RESET_AT }), { status: 429 });
+  assert.deepEqual(await capacityFromResponse(network), { resetAt: RESET_AT });
+  // 행동 보존: 시간당 한도 429(rate_limited)는 이 경로가 아니다.
+  const hourly = new Response(JSON.stringify({ ok: false, error: "rate_limited", retryAfterSeconds: 1200 }), { status: 429 });
+  assert.equal(await capacityFromResponse(hourly), null);
+  assert.equal((await hourly.json()).error, "rate_limited", "the hourly body is still readable by the caller");
+});
+
+test("[소스 불변식·약함] API 클라이언트: 용량 응답을 429 분기보다 먼저 읽는다 (네트워크 몫 429가 '약 N분 후'로 보이지 않게)", () => {
+  const cases = [
+    ["lib/workspace-api.ts", 2],
+    ["lib/workspace-check-api.ts", 3],
+  ];
+  for (const [file, n] of cases) {
+    const src = read(file);
+    let from = 0;
+    for (let i = 0; i < n; i++) {
+      const cap = src.indexOf("await capacityFromResponse(resp)", from);
+      assert.ok(cap > 0, `${file}: capacity read #${i + 1}`);
+      // the nearest 429 branch BEFORE this capacity read must belong to an earlier function
+      const prev429 = src.lastIndexOf("resp.status === 429", cap);
+      const prevFn = src.lastIndexOf("export async function", cap);
+      assert.ok(prev429 < prevFn, `${file}: capacity read #${i + 1} comes before its function's 429 branch`);
+      from = cap + 1;
+    }
+  }
+  const devSpec = read("lib/dev-spec-api.ts");
+  assert.ok(devSpec.indexOf("await capacityFromResponse(resp)") < devSpec.indexOf("resp.status === 429"));
+});
+
+test("PR 검토 화면: generation_capacity가 일반 오류·'요청이 너무 많아요'로 뭉개지지 않는다", async () => {
+  const { errorText } = await import("../src/i18n/error-text.mjs");
+  for (const loc of ["ko", "en"]) {
+    assert.equal(errorText(DICTIONARIES[loc], "generation_capacity"), DICTIONARIES[loc].errors.generationCapacity, loc);
+  }
+  const gh = read("app/projects/[id]/github/page.tsx");
+  const finalCodes = gh.slice(gh.indexOf("const finalServerCodes"), gh.indexOf("]);", gh.indexOf("const finalServerCodes")));
+  assert.match(finalCodes, /"generation_capacity"/, "a capacity answer is final — do not poll for a run that was never created");
+  assert.ok((gh.match(/generationCapacityText\(/g) ?? []).length >= 2, "spec generation + PR review both use the reset-time sentence");
 });
 
 test("generationCapacityText: 리셋 시각은 읽는 사람의 시계로(서울 = 내일 오전 9시) · 시각을 모르면 일반 문장", async () => {

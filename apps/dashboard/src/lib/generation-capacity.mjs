@@ -4,8 +4,13 @@
 //
 // PURE except capacityFromResponse (reads a cloned fetch Response). The server answers a
 // full bucket WITHOUT calling the AI:
-//   503 { ok:false, error:"generation_capacity", reason:"daily_capacity", resetAt:"<ISO>" }
-// (infer-intent keeps its own 200 { ok:true, inferred:null, reason:"generation_capacity", resetAt }).
+//   503 { ok:false, error:"generation_capacity", reason:"daily_capacity", scope:"service", resetAt:"<ISO>" }
+//   429 { ok:false, error:"generation_capacity", reason:"network_daily_limit", scope:"network", resetAt }
+//       — one network's share of the day (PR #576 review), so one client cannot lock everyone out
+// (infer-intent keeps its own 200 { ok:true, inferred:null, reason:"generation_capacity", scope, resetAt }).
+// Both get the same sentence: "paused for today, try again {when}" is true for either. The API
+// clients read this BEFORE their hourly-429 branch — the network share is a daily limit, and
+// the hourly copy ("try again in about N min") would be false for it.
 //
 // Before this the screens showed that 503 as "the AI connection is having trouble — try
 // again in a moment" (llmUnavailable) — false: trying again in a moment does not help
@@ -33,14 +38,15 @@ export function readGenerationCapacity(body) {
 }
 
 /**
- * Read the capacity answer from a fetch Response — 503 only — WITHOUT consuming it (a
- * clone is read), so the caller's own parsing still works when it is something else.
+ * Read the capacity answer from a fetch Response — 503 (service) or 429 (network share),
+ * with the generation_capacity body — WITHOUT consuming it (a clone is read), so the
+ * caller's own parsing still works when it is something else (e.g. the hourly 429).
  *
  * @param {Response} resp
  * @returns {Promise<{ resetAt: string | null } | null>}
  */
 export async function capacityFromResponse(resp) {
-  if (!resp || resp.status !== 503) return null;
+  if (!resp || (resp.status !== 503 && resp.status !== 429)) return null;
   try {
     return readGenerationCapacity(await resp.clone().json());
   } catch {

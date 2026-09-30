@@ -93,6 +93,12 @@ export async function callWorkspaceApi(
     return { ok: false, error: "network", fallback: buildLocalFallback(input) };
   }
 
+  // ── generation_capacity (비용 권고 ③) — today's AI capacity is full: 503 (service) or
+  //    429 (this network's share, PR #576 review). NOT a connection problem, NOT a mock-draft
+  //    case, and NOT the hourly limit below: say it plainly with the reset time. Read FIRST.
+  const capacity = await capacityFromResponse(resp);
+  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
+
   // ── 429 rate limited — do NOT fall back to mock ───────────────────────────
   if (resp.status === 429) {
     let retryAfterSeconds: number | undefined;
@@ -109,11 +115,6 @@ export async function callWorkspaceApi(
     }
     return { ok: false, error: "rate_limited", message, retryAfterSeconds };
   }
-
-  // ── 503 generation_capacity (비용 권고 ③) — today's AI capacity is full. NOT a
-  //    connection problem and NOT a mock-draft case: say it plainly with the reset time.
-  const capacity = await capacityFromResponse(resp);
-  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
 
   // ── Other non-2xx ─────────────────────────────────────────────────────────
   if (!resp.ok) {
@@ -188,6 +189,11 @@ export async function recommendAnswer(
     return { ok: false, error: "llm_unavailable" };
   }
 
+  // 비용 권고 ③ — today's AI capacity is full (a different sentence from "try again soon").
+  // Before the hourly 429: the network share also answers 429 (PR #576 review).
+  const capacity = await capacityFromResponse(resp);
+  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
+
   if (resp.status === 429) {
     let retryAfterSeconds: number | undefined;
     let message = "잠시 후 다시 시도해주세요. 요청이 많이 발생했어요.";
@@ -198,10 +204,6 @@ export async function recommendAnswer(
     } catch { /* use default */ }
     return { ok: false, error: "rate_limited", message, retryAfterSeconds };
   }
-
-  // 비용 권고 ③ — today's AI capacity is full (a different sentence from "try again soon").
-  const capacity = await capacityFromResponse(resp);
-  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
 
   if (!resp.ok) {
     // 503 llm_unavailable or any other server error → honest, no fabrication.

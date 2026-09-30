@@ -177,6 +177,10 @@ export async function callCheckDraftApi(
       // council(협의체)은 다중 모델 2라운드라 기본 검수보다 오래 걸린다.
       signal: AbortSignal.timeout(input.reviewMode === "council" ? 90000 : 25000),
     });
+    // 비용 권고 ③ — today's AI capacity is full (503 service / 429 network share, no AI call):
+    // its own sentence. Read before the hourly 429 below (PR #576 review).
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (resp.status === 429) {
       // 서버 429는 body 파싱 전에 나가 locale을 모른다(KO 고정) — EN UI에서는
       // 서버 문구 대신 클라이언트 EN 문구를 쓴다.
@@ -192,9 +196,6 @@ export async function callCheckDraftApi(
       } catch { /* ignore */ }
       return { ok: false, error: "rate_limited", message: msg, retryAfterSeconds };
     }
-    // 비용 권고 ③ — today's AI capacity is full (503, no AI call): its own sentence.
-    const capacity = await capacityFromResponse(resp);
-    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     // RC-4: 402 = 플랜 부족, 503 council_not_ready = 준비 중 — 서버 메시지를
     // 그대로 보여준다 (일반 서버 오류로 뭉개지 않는다).
     if (resp.status === 402 || resp.status === 503) {
@@ -247,6 +248,9 @@ export async function callUnstickApi(input: {
       body: JSON.stringify({ ...input, locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       signal: AbortSignal.timeout(30000),
     });
+    // 비용 권고 ③ — today's AI capacity is full (503 / 429 network share) — before the hourly 429.
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (resp.status === 429) {
       let msg = "잠시 후 다시 시도해주세요. 요청이 많이 발생했어요.";
       try {
@@ -255,9 +259,6 @@ export async function callUnstickApi(input: {
       } catch { /* default */ }
       return { ok: false, error: "rate_limited", message: msg };
     }
-    // 비용 권고 ③ — today's AI capacity is full.
-    const capacity = await capacityFromResponse(resp);
-    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     const data = (await resp.json()) as UnstickResponse;
     if (!data.ok || typeof data.whatHappened !== "string" || !Array.isArray(data.nextSteps)) {
@@ -455,6 +456,9 @@ export async function callFixSuggestionApi(
       body: JSON.stringify({ ...input, locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       signal: AbortSignal.timeout(25000),
     });
+    // 비용 권고 ③ — today's AI capacity is full (503 / 429 network share) — before the hourly 429.
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (resp.status === 429) {
       // 서버 429는 locale을 모른다(파싱 전) — EN UI는 클라이언트 EN 문구.
       const en = readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) === "en";
@@ -465,9 +469,6 @@ export async function callFixSuggestionApi(
       } catch { /* ignore */ }
       return { ok: false, error: "rate_limited", message: msg };
     }
-    // 비용 권고 ③ — today's AI capacity is full.
-    const capacity = await capacityFromResponse(resp);
-    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     return (await resp.json()) as FixSuggestionResponse;
   } catch (err) {
