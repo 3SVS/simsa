@@ -43,6 +43,7 @@ import {
 } from "../workspace/build-job-db.js";
 import { RESERVED_SLUGS_FOR_HOSTING } from "../workspace/hosting-reserved.js";
 import { recordCallbackUsage } from "../workspace/llm-usage.js";
+import { BUILD_DISABLED, buildEnabled } from "../workspace/service-switches.js";
 
 /**
  * L-3 (Train L): 콜백 본문의 선택 필드 `usage[]`를 원장에 쓴다. project·user는 **D1 잡 행에서**
@@ -95,6 +96,7 @@ export type BuildDispatchPayload = {
 };
 
 export async function dispatchBuild(env: Env, payload: BuildDispatchPayload): Promise<{ dispatched: boolean; note?: string }> {
+  if (!buildEnabled(env)) return { dispatched: false, note: BUILD_DISABLED };
   if (!env.BUILDER) return { dispatched: false, note: "builder_unavailable" };
   try {
     const id = env.BUILDER.idFromName(`build-${payload.jobId}`);
@@ -142,6 +144,8 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
 
   // ── POST /workspace/projects/:id/build ──────────────────────────────────────
   app.post("/workspace/projects/:id/build", async (c) => {
+    // Kill switch first — before parsing, ownership, provisioning or any row (hotfix 2026-10-01).
+    if (!buildEnabled(c.env)) return c.json({ ok: false, error: BUILD_DISABLED }, 503);
     const projectId = c.req.param("id");
     let body: Record<string, unknown>;
     try { body = (await c.req.json()) as Record<string, unknown>; } catch { return c.json({ ok: false, error: "invalid_json" }, 400); }
