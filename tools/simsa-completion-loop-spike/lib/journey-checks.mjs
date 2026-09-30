@@ -15,16 +15,34 @@
 const BACK_RE = /←|‹|뒤로|돌아가|처음 선택|모든 프로젝트|^back\b|\bback to\b|\ball projects\b/i;
 
 /**
- * Controls that act on THIS screen without moving the journey: language
- * toggle (inside <main> in the root layout), copy, reload, dismiss, sign-out.
- * A reload is not a next step — "refresh after you push" was exactly the dead
- * end Bae hit.
+ * A reload is never a next step — "refresh after you push" was exactly the
+ * dead end Bae hit.
  */
-const UTILITY_RE =
-  /^(?:EN|KO|English|한국어)$|복사|\bcopy\b|새로고침|\brefresh\b|\breload\b|다시 불러오|목록 불러오|\bload (?:code changes|the list|more)\b|나중에|^later$|닫기|^close$|\bdismiss\b|숨기기|^hide\b|로그아웃|\bsign out\b|\blog out\b/i;
+const RELOAD_RE = /새로고침|\brefresh\b|\breload\b|다시 불러오|목록 불러오|\bload (?:code changes|the list|more)\b/i;
+
+/** Screen chrome: language toggle (inside <main> in the root layout), dismiss, sign-out. */
+const CHROME_RE = /^(?:EN|KO|English|한국어)$|나중에|^later$|닫기|^close$|\bdismiss\b|숨기기|^hide\b|로그아웃|\bsign out\b|\blog out\b/i;
+
+/**
+ * Copy buttons and external links move the journey only when the screen puts
+ * them forward as THE action (primary): "고침 지시 복사" is door (b)'s next step
+ * (paste into the builder chat). A secondary copy / outbound link is not.
+ * (Live baseline 2026-09-30: counting every copy as a dead-end utility gave a
+ * false P0 on the run-detail screen.)
+ */
+const COPY_RE = /복사|\bcopy\b/i;
 
 /** Planned mid-flight snapshots — same exception as the primary-CTA-0 rule. */
 const IN_PROGRESS_LABEL_RE = /변환 중/;
+
+/**
+ * [PILOT] "Only an empty state on screen": at most this many forward actions
+ * and this much text in <main>. The Bae screen had 1 forward link and ~330
+ * chars; a report with a sub-section "아직 … 없어요" and four verdict buttons
+ * is not an empty screen. Tune from audit results, not by feel.
+ */
+const EMPTY_SCREEN_MAX_FORWARD = 2;
+const EMPTY_SCREEN_MAX_CHARS = 1200;
 
 function normalizeText(s) {
   return String(s ?? "").replace(/\s+/g, " ").trim();
@@ -33,20 +51,28 @@ function normalizeText(s) {
 /**
  * @typedef {{ text: string, href?: string | null, external?: boolean, disabled?: boolean, primary?: boolean }} MainAction
  * @param {MainAction} a
- * @returns {"forward" | "back" | "utility" | "external" | "disabled" | "unlabeled"}
+ * @returns {"forward" | "back" | "reload" | "chrome" | "copy" | "external" | "disabled" | "unlabeled"}
  */
 export function classifyAction(a) {
   const text = normalizeText(a?.text);
   if (!text) return "unlabeled";
   if (BACK_RE.test(text)) return "back";
-  if (UTILITY_RE.test(text)) return "utility";
+  if (RELOAD_RE.test(text)) return "reload";
+  if (CHROME_RE.test(text)) return "chrome";
   const href = typeof a?.href === "string" ? a.href : null;
   if (href !== null) {
-    if (href === "#" || /^javascript:/i.test(href)) return "utility";
+    if (href === "#" || /^javascript:/i.test(href)) return "chrome";
     if (a?.external === true || /^(?:mailto|tel):/i.test(href)) return "external";
   }
   if (a?.disabled === true) return "disabled";
+  if (COPY_RE.test(text)) return "copy";
   return "forward";
+}
+
+/** Does this action move the journey on? Copy / outbound only when put forward as primary. */
+function movesForward(kind, a) {
+  if (kind === "forward") return true;
+  return (kind === "copy" || kind === "external") && a?.primary === true;
 }
 
 const EMPTY_STATE_PATTERNS = [
@@ -76,10 +102,13 @@ export function emptyStateSnippet(mainText) {
 /**
  * Is this screen a dead end?
  *   - no_forward_action: nothing in <main> moves the journey (back, language,
- *     copy, reload, external links and disabled buttons don't count — a
- *     disabled button counts only while there is a field that can enable it).
- *   - empty_state_without_action: an empty state ("0 개 …") and no PRIMARY
- *     forward action — secondary links like "이력 보기" are not "what to do next".
+ *     reload, dismiss, secondary copy / external links and disabled buttons
+ *     don't count — a disabled button counts only while there is a field that
+ *     can enable it).
+ *   - empty_state_without_action: the screen is essentially an empty state
+ *     ("0 개 …", ≤ EMPTY_SCREEN_MAX_FORWARD forward actions, ≤ EMPTY_SCREEN_MAX_CHARS
+ *     of text) and has no PRIMARY forward action — a secondary link like
+ *     "이력 보기" is not "what to do next".
  *
  * @param {{ mainActions?: MainAction[], mainText?: string, hasEditableField?: boolean }} input
  * @returns {{ deadEnd: boolean, kind: "no_forward_action" | "empty_state_without_action" | null, forward: string[], primaryForward: string[], emptyState: string }}
@@ -88,7 +117,7 @@ export function deadEndCheck(input) {
   const actions = Array.isArray(input?.mainActions) ? input.mainActions : [];
   const canEnable = input?.hasEditableField === true;
   const classified = actions.map((a) => ({ a, kind: classifyAction(a), text: normalizeText(a?.text) }));
-  const forward = classified.filter((c) => c.kind === "forward");
+  const forward = classified.filter((c) => movesForward(c.kind, c.a));
   // Disabled next step next to an input: fill the field and it turns on.
   const pending = canEnable ? classified.filter((c) => c.kind === "disabled") : [];
   const primaryForward = forward.filter((c) => c.a?.primary === true);
@@ -102,7 +131,11 @@ export function deadEndCheck(input) {
     emptyState,
   });
   if (forward.length + pending.length === 0) return result(true, "no_forward_action");
-  if (emptyState && primaryForward.length + pendingPrimary.length === 0) return result(true, "empty_state_without_action");
+  const emptyScreen =
+    emptyState !== "" &&
+    forward.length <= EMPTY_SCREEN_MAX_FORWARD &&
+    normalizeText(input?.mainText).length <= EMPTY_SCREEN_MAX_CHARS;
+  if (emptyScreen && primaryForward.length + pendingPrimary.length === 0) return result(true, "empty_state_without_action");
   return result(false, null);
 }
 

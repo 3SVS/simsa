@@ -117,6 +117,50 @@ describe("① 막다른 길 — deadEndCheck (C-J1)", () => {
     assert.equal(r.deadEnd, false);
   });
 
+  // ★라이브 기준선(2026-09-30, app.trysimsa.com KO)이 낸 거짓 P0: J5 런 상세의 "왜 이 판정"을
+  // 펼치면 하위 섹션에 "이 프로젝트에는 확인 항목이 아직 없어요"가 나온다. 화면의 주 버튼은
+  // "고침 지시 복사"(빌더 채팅에 붙여넣는 것 — 문 (b)의 바로 그 다음 행동)와 "GitHub에서 수리
+  // PR 열기"(외부)였다. 주 버튼으로 내민 복사·외부 링크는 다음 행동이고, 판정 버튼이 여럿인
+  // 화면의 하위 빈칸은 "빈 상태만 있는 화면"이 아니다.
+  const J5_RUN_DETAIL = {
+    mainText:
+      "검수 결과 문제를 찾았어요 코드를 바꿔 두었어요. 실제 앱에 반영하기 전에 한번 살펴봐 주세요. " +
+      "왜 이 판정 상태 근거가 필요해요 확인 항목 ↔ 관찰 이 프로젝트에는 확인 항목이 아직 없어요 — 검증할 기준이 없습니다. " +
+      "브라우저가 본 사실 작동 여부 확인 필요 결과가 어땠나요? 생각대로 됐어요 되긴 하는데 달라요 아직 안 돼요 모르겠어요",
+    hasEditableField: false,
+    mainActions: [
+      ...LANG,
+      { text: "GitHub에서 수리 PR 열기", href: "https://github.com/3SVS/simsa-autofix-test/pull/9", external: true, primary: true },
+      { text: "수리 확인 재검수", href: null },
+      { text: "고침 지시 복사", href: null, primary: true },
+      { text: "생각대로 됐어요", href: null },
+      { text: "되긴 하는데 달라요", href: null },
+      { text: "아직 안 돼요", href: null },
+      { text: "모르겠어요", href: null },
+    ],
+  };
+
+  it("★라이브 거짓 P0 회귀: 주 버튼으로 내민 복사·외부 링크는 다음 행동이다 (J5 런 상세)", () => {
+    const r = mod.deadEndCheck(J5_RUN_DETAIL);
+    assert.equal(r.deadEnd, false);
+    assert.deepEqual(r.primaryForward.sort(), ["GitHub에서 수리 PR 열기", "고침 지시 복사"].sort());
+  });
+
+  it("★라이브 거짓 P0 회귀: 행동이 여럿인 화면의 하위 빈칸은 '빈 상태만 있는 화면'이 아니다 (주 버튼이 없어도)", () => {
+    // #564 이후 고칠 것이 없는 결과엔 복사·수리 버튼이 없다 — 판정 버튼 넷만 남는다.
+    const noFix = {
+      ...J5_RUN_DETAIL,
+      mainActions: J5_RUN_DETAIL.mainActions.filter((a) => !a.primary && a.text !== "수리 확인 재검수"),
+    };
+    const r = mod.deadEndCheck(noFix);
+    assert.equal(r.deadEnd, false);
+  });
+
+  it("주 버튼 복사 하나만 있어도 앞으로 가는 길이다 — 보조 복사·외부 링크는 아니다", () => {
+    assert.equal(mod.deadEndCheck({ mainText: "고칠 내용", hasEditableField: false, mainActions: [...LANG, { text: "고침 지시 복사", href: null, primary: true }] }).deadEnd, false);
+    assert.equal(mod.deadEndCheck({ mainText: "고칠 내용", hasEditableField: false, mainActions: [...LANG, { text: "고침 지시 복사", href: null }] }).deadEnd, true);
+  });
+
   it("빈 상태 + 보조 링크만(주 버튼 없음) = 막다른 길 — 다음 행동이 버튼으로 안 보인다", () => {
     const r = mod.deadEndCheck({
       mainText: "No checks yet.",
