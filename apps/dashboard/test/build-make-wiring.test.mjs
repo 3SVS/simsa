@@ -81,6 +81,11 @@ test("W4: 진행 화면 — 복원·폴링·탭 숨김·단계 줄·실패·내 
   assert.match(buildPage, /budgetLine\(job\)/);
   assert.match(buildPage, /availability === "missing"/);
   assert.match(buildPage, /mk\.startErrors\.unavailable/);
+  // D-17: 주소로 들어온 '이미 앱이 있는' 프로젝트에는 만들기를 내밀지 않는다 — 지시서 화면과 같은 규칙.
+  assert.match(buildPage, /makePanelVisible\(\{ entryPath: loadExtendedProjectData\(id\)\?\.entryPath \?\? null, presence, specSource: view\?\.source \?\? null, availability \}\)/);
+  assert.match(buildPage, /makeHere === false && \(/);
+  assert.match(buildPage, /mk\.notForThisProject/);
+  assert.match(buildPage, /makeHere === true &&/);
   assert.match(visibleHook, /addEventListener\("visibilitychange"/);
   assert.match(visibleHook, /document\.visibilityState !== "hidden"/);
 });

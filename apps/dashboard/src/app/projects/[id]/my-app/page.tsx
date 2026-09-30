@@ -14,10 +14,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
-import { getLocalProject, getUserKey } from "@/lib/workflow-store";
+import { getLocalProject, getUserKey, loadExtendedProjectData } from "@/lib/workflow-store";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 import { MakeAppPanel, StartNoticeCallout } from "@/components/MakeAppPanel";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useAppPresence } from "@/lib/use-app-presence";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { useStartBuild, type StartedBuild } from "@/lib/use-start-build";
@@ -34,6 +35,7 @@ import {
   failureActions,
   isBuildActive,
   latestBuildJob,
+  makePanelVisible,
   nextBuildPollDelayMs,
   stageForStatus,
   type BuildJobEventView,
@@ -55,13 +57,15 @@ const GLYPH_CLASS: Record<BuildStageState, string> = {
   todo: "border-gray-200 bg-white text-gray-400",
 };
 
-export default function BuildPage() {
+export default function MyAppPage() {
   const { id } = useParams<{ id: string }>();
   const { t, locale } = useI18n();
   const mk = t.makeApp;
   const project = getLocalProject(id) ?? getProject(id);
   const [developerMode] = useDeveloperMode();
   const visible = usePageVisible();
+  // D-17: 만들기는 아이디어·기획서 문의 길이다 — 이미 앱이 있는 프로젝트(주소로 들어온 경우)에는 내밀지 않는다.
+  const presence = useAppPresence(id);
 
   const [list, setList] = useState<BuildJobListOk | BuildApiFailure | null>(null);
   const [job, setJob] = useState<BuildJobView | null>(null);
@@ -197,6 +201,12 @@ export default function BuildPage() {
   const actions = failKind ? failureActions(failKind) : null;
   const currentStage = job && active ? stageForStatus(job.status) : null;
   const budget = budgetLine(job);
+  // 아직 만든 적 없을 때만 묻는다: 이 프로젝트가 만들기 문인가(true) · 이미 앱이 있는가(false) · 아직 모름(null).
+  const makeHere =
+    availability === "available" && !job && devSpecLoaded
+      ? makePanelVisible({ entryPath: loadExtendedProjectData(id)?.entryPath ?? null, presence, specSource: view?.source ?? null, availability })
+      : null;
+  const holding = availability === "loading" || (availability === "available" && !job && (!devSpecLoaded || makeHere === null));
 
   async function handleRetry() {
     const started = await retry.start();
@@ -227,7 +237,7 @@ export default function BuildPage() {
         <p className="page-subtitle">{mk.pageSubtitle}</p>
       </div>
 
-      {(availability === "loading" || (availability === "available" && !job && !devSpecLoaded)) && (
+      {holding && (
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-gray-500" />
           {mk.loading}
@@ -251,8 +261,18 @@ export default function BuildPage() {
         </div>
       )}
 
+      {/* 이미 앱이 있는 프로젝트 — 새로 만들지 않는다(D-17), 그 앱을 확인하는 길로 */}
+      {makeHere === false && (
+        <section className="card p-5">
+          <p className="text-sm leading-relaxed text-gray-700">{mk.notForThisProject}</p>
+          <Link href={base} className="btn btn-md btn-primary mt-4">
+            {mk.backToOverview}
+          </Link>
+        </section>
+      )}
+
       {/* 아직 만든 적 없음 — 만들기(지시서가 있으면) 또는 지시서 먼저 */}
-      {availability === "available" && !job && devSpecLoaded &&
+      {makeHere === true &&
         (view ? (
           <MakeAppPanel projectId={id} view={view} latestJob={null} developerMode={developerMode} onStarted={handleStarted} />
         ) : (

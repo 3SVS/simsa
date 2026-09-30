@@ -98,7 +98,7 @@ describe("B-8 초보자 기준 (D-17) — 기본 흐름 문구에 개발 용어 
     });
 
     it(`[${loc}] 버튼·링크 라벨에 외부 계정 CTA 0`, () => {
-      const labels = ["make", "starting", "viewProgress", "viewApp", "needDevSpecLink", "retry", "takeSpec", "openApp", "lastCheck", "report", "download"].map((k) => m(loc)[k]);
+      const labels = ["make", "starting", "viewProgress", "viewApp", "needDevSpecLink", "backToOverview", "retry", "takeSpec", "openApp", "lastCheck", "report", "download"].map((k) => m(loc)[k]);
       assert.deepEqual(accountCtaLabels(labels), []);
     });
 

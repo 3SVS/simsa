@@ -552,6 +552,8 @@ export type Dictionary = {
     loadError: string;
     needDevSpec: string;
     needDevSpecLink: string;
+    notForThisProject: string;
+    backToOverview: string;
     progressTitle: string;
     stages: Record<"prepare" | "skeleton" | "features" | "verify" | "test" | "publish" | "done", string>;
     stageHints: Record<"prepare" | "skeleton" | "features" | "verify" | "test" | "publish" | "done", string>;

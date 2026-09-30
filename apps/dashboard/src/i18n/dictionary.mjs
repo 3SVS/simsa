@@ -665,6 +665,8 @@ const EN = {
     loadError: "Couldn't load the build status.",
     needDevSpec: "Building starts from a development spec. Write one first.",
     needDevSpecLink: "Write the development spec →",
+    notForThisProject: "This project already has an app, so Simsa doesn't build a new one here. Checking that app is the way forward.",
+    backToOverview: "Back to the overview →",
     progressTitle: "Building your app",
     stages: {
       prepare: "Getting ready",
@@ -3617,6 +3619,8 @@ const KO = {
     loadError: "만들기 상태를 불러오지 못했어요.",
     needDevSpec: "만들기는 개발 지시서에서 시작해요. 먼저 지시서를 만들어 주세요.",
     needDevSpecLink: "개발 지시서 만들기 →",
+    notForThisProject: "이 프로젝트에는 이미 만든 앱이 있어서, 여기서 새로 만들지 않아요. 그 앱을 확인하는 쪽으로 이어 가요.",
+    backToOverview: "개요로 돌아가기 →",
     progressTitle: "앱을 만들고 있어요",
     stages: {
       prepare: "준비",
