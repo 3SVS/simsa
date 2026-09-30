@@ -73,7 +73,11 @@ export default function DevSpecPage() {
       setError({ ok: false, error: "not_found" });
       return;
     }
-    const r = await generateDevSpecApi(id, getUserKey(), locale === "en" ? "en" : "ko");
+    // C-A7 (D-2 amend): 기존 앱 문이면 유저가 확인한 항목 id를 함께 보낸다 — 역추론 지시서의 must는
+    // 그 목록에서만 나온다(서버가 entry_path로 역추론 여부를 정한다).
+    const r = await generateDevSpecApi(id, getUserKey(), locale === "en" ? "en" : "ko", {
+      confirmedItemIds: ext?.intentConfirmedItemIds,
+    });
     setPhase("idle");
     if (r.ok) {
       setDevSpec(r.devSpec);

@@ -17,7 +17,8 @@ import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
-import { getProject } from "../workspace/db.js";
+import { getProject, type DbProject } from "../workspace/db.js";
+import { provenanceFrom } from "../workspace/provenance.js";
 import { normalizeGithubRepoRef } from "../workspace/github-repo-ref.js";
 import { probeGithubRepo, probeWebsite, type Reachability } from "../workspace/source-reachability.js";
 import {
@@ -71,11 +72,11 @@ async function requireOwnedProject(
   env: Env,
   projectId: string,
   userKey: string,
-): Promise<{ ok: true } | { ok: false; status: 403 | 404; error: string }> {
+): Promise<{ ok: true; project: DbProject } | { ok: false; status: 403 | 404; error: string }> {
   const project = await getProject(env, projectId);
   if (!project) return { ok: false, status: 404, error: "project_not_found" };
   if (project.userKey !== userKey) return { ok: false, status: 403, error: "forbidden" };
-  return { ok: true };
+  return { ok: true, project };
 }
 
 export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
@@ -209,6 +210,14 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: true, inferred: null, reason: "unreadable", readSources: [] });
     }
 
+    // D-2 amend: 역추론 결과에 **출처**를 싣는다 — 어떤 도구로 만든 앱인지(빌더 호스트 감지 또는
+    // 유저가 적은 도구), 어느 갈래로 들어왔는지, 무엇을 감지했는지. 새 감지기가 아니라 위 증거 그대로.
+    const provenance = provenanceFrom({
+      stack: evidence.stack,
+      entryPath: owned.project.entryPath,
+      declaredBuiltWith: owned.project.builtWith,
+    });
+
     const idea = composeIdeaFromEvidence(evidence, locale);
     if (!idea) {
       // 읽을 수 있는 설명이 없었다. 그대로 말한다 — 사용자가 직접 적으면 된다.
@@ -218,6 +227,7 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
         reason: "no_evidence",
         readSources: evidence.readSources,
         stack: evidence.stack,
+        provenance,
       });
     }
 
@@ -234,7 +244,7 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "generate", jobId: newLlmJobId("inf"), projectId, userKey }));
     }
     if ("ok" in draft && draft.ok === false) {
-      return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack });
+      return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack, provenance });
     }
 
     // #311 경계: llmUsage(토큰·지연·벤더 라우팅)는 운영 관측 데이터 — 사용자 응답에 싣지 않는다.
@@ -243,6 +253,7 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       inferred: toClientDraft(draft),
       readSources: evidence.readSources,
       stack: evidence.stack,
+      provenance,
       ...(evidence.title ? { detectedName: evidence.title } : {}),
     });
   });

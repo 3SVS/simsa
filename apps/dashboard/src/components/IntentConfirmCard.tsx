@@ -28,7 +28,7 @@ import {
   saveProject,
 } from "@/lib/workflow-store";
 import { CENTRAL_PLANE_URL } from "@/lib/workspace-sources-api";
-import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
+import { mirrorThenBuildIntentRuler } from "@/lib/intent-ruler";
 
 type InferredItem = { id: string; title: string; criteria?: string[] };
 type InferResponse = {
@@ -133,13 +133,16 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
       // 사용자가 확인했다는 사실 자체를 남긴다 — 카드가 다시 뜨지 않도록,
       // 그리고 "누가 이 기준을 정했나"의 답이 되도록.
       intentConfirmedAt: new Date().toISOString(),
+      // C-A7 (D-2 amend): 체크를 남긴 항목 id — 역추론 지시서의 must는 여기서만 나온다.
+      intentConfirmedItemIds: kept.map((i) => i.id),
     } as Parameters<typeof saveExtendedProjectData>[1]);
     // Train C — C0 (재정렬 §1 끊김 #1 · W1-6): 확정한 의도를 **판정의 자**로 만든다.
     // 위 저장은 localStorage(+디바운스 ext 블롭)에만 닿았고, 검수·지시서가 읽는
     // D1 workspace_projects(idea/productSpec/items)에는 닿지 않았다 — 그래서
     // "맞나요?"에 답해도 검수 기준은 바뀌지 않았다. 로컬이 정본이므로 미러는
     // 뒤에, 그리고 실패해도 조용히(확정 자체를 막지 않는다).
-    void mirrorLocalProjectToDb(projectId).catch(() => undefined);
+    // C-A7: 미러가 끝난 **뒤** kept id를 동봉해 역추론 지시서를 만든다 → 다음 검수에 must AC가 들어간다.
+    void mirrorThenBuildIntentRuler(projectId, locale === "en" ? "en" : "ko", kept.map((i) => i.id)).catch(() => undefined);
     setPhase("done");
   }
 

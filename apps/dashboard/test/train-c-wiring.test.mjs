@@ -38,16 +38,21 @@ function confirmBody(src) {
   return src.slice(start, end);
 }
 
-test("C0-a: IntentConfirmCard.confirm()이 로컬 저장 뒤 mirrorLocalProjectToDb(projectId)를 부른다 (실패는 조용히)", () => {
-  assert.match(card, /import \{ mirrorLocalProjectToDb \} from "@\/lib\/project-mirror"/);
+test("C0-a: IntentConfirmCard.confirm()이 로컬 저장 뒤 D1 미러를 부른다 (실패는 조용히)", () => {
+  // C-A7: 미러는 mirrorThenBuildIntentRuler 안으로 옮겨졌다 — 미러가 끝난 뒤 역추론 지시서를 만든다.
+  assert.match(card, /import \{ mirrorThenBuildIntentRuler \} from "@\/lib\/intent-ruler"/);
   const body = confirmBody(card);
   const save = body.indexOf("saveExtendedProjectData(");
-  const mirror = body.indexOf("mirrorLocalProjectToDb(projectId)");
+  const mirror = body.indexOf("mirrorThenBuildIntentRuler(projectId");
   assert.ok(save >= 0, "confirm() saves extended data");
   assert.ok(mirror >= 0, "confirm() mirrors to D1");
   assert.ok(mirror > save, "mirror runs AFTER the local save — local is the source of truth");
   // 실패는 조용히: 로컬이 정본이므로 미러 실패가 확정을 막지 않는다.
-  assert.match(body, /void mirrorLocalProjectToDb\(projectId\)\.catch\(\(\) => undefined\)/);
+  assert.match(body, /void mirrorThenBuildIntentRuler\(projectId, [^;]+\)\.catch\(\(\) => undefined\)/);
+  // 헬퍼는 미러를 **먼저** 끝낸다(서버는 D1 items를 읽는다).
+  const helper = readFileSync(path.join(SRC, "lib/intent-ruler.ts"), "utf8");
+  assert.ok(helper.indexOf("await mirrorLocalProjectToDb(projectId)") >= 0);
+  assert.ok(helper.indexOf("await mirrorLocalProjectToDb(projectId)") < helper.indexOf("generateDevSpecApi("));
 });
 
 test("C0-b: 재검수가 buildRecheckBody(check, userKey, locale, { confirmedIntent })를 거친다 — {userKey, locale}만 보내지 않는다", () => {

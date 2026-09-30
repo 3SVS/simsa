@@ -12,9 +12,13 @@
  * 구분하지 않는다(프로젝트 id 탐색 방지, workspace-ext와 동일 규율).
  */
 import { Hono } from "hono";
+import { z } from "zod";
 import type { Env } from "../env.js";
 import { corsHeaders, corsMiddleware } from "./cors.js";
-import { getOwnedProject } from "../workspace/db.js";
+import { getOwnedProject, type DbProject } from "../workspace/db.js";
+import { listProjectSources } from "../workspace/project-sources-db.js";
+import { evidenceFromRepo, evidenceFromWebsite, type FetchLike, type StackHint } from "../workspace/source-evidence.js";
+import { mergeStackHints, provenanceFrom, type BaseProvenance } from "../workspace/provenance.js";
 import { validateDevSpec, summarizeForBeginner, type DevSpecValidation } from "../workspace/dev-spec.js";
 import { generateDevSpec, makeDevSpecLlmCaller } from "../workspace/generate-dev-spec.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
@@ -49,6 +53,45 @@ export function parseDevSpecUpsert(body: unknown): DevSpecUpsertParse {
 
 const json = (headers: Record<string, string>, status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+
+/**
+ * D-2 amend — 유저가 확인한 항목 id(= "맞나요?" 카드에서 체크를 남긴 items[].id, 인터뷰 회수의 MUST).
+ * 없으면 빈 배열(옛 클라이언트: 확인된 must 0). 모양이 틀리면 400 — 조용히 버리지 않는다.
+ */
+export const ConfirmedItemIdsSchema = z.array(z.string().trim().min(1).max(64)).max(60).optional();
+
+/**
+ * 기존 앱 문(entry_path = "code")의 지시서는 **앱에서 읽어낸 것**이다 — 클라이언트가 출처를 고르지
+ * 않는다(정직성은 서버가 정한다). 나머지 갈래는 종전대로 generated.
+ */
+export function devSpecSourceFor(project: Pick<DbProject, "entryPath">): "generated" | "inferred" {
+  return project.entryPath === "code" ? "inferred" : "generated";
+}
+
+/**
+ * 역추론 출처 수집 — 새 감지기 없이 infer-intent가 쓰는 증거 수집기를 그대로 부른다.
+ * 실패는 조용히: 스택을 못 읽으면 스택 키를 비울 뿐 생성은 계속한다(부가 정보).
+ */
+export async function gatherInferredProvenance(
+  env: Env,
+  project: Pick<DbProject, "id" | "entryPath" | "builtWith">,
+  fetchImpl: FetchLike,
+): Promise<BaseProvenance> {
+  let stack: StackHint | null = null;
+  try {
+    const sources = await listProjectSources(env, project.id);
+    const repo = sources.find((s) => s.type === "github_repo");
+    const site = sources.find((s) => s.type === "website");
+    const [siteEv, repoEv] = await Promise.all([
+      site ? evidenceFromWebsite(site.reference, fetchImpl).catch(() => null) : Promise.resolve(null),
+      repo ? evidenceFromRepo(repo.reference, fetchImpl).catch(() => null) : Promise.resolve(null),
+    ]);
+    stack = mergeStackHints(siteEv?.stack ?? null, repoEv?.stack ?? null);
+  } catch (err) {
+    console.warn("[workspace/dev-spec] provenance evidence failed:", err);
+  }
+  return provenanceFrom({ stack, entryPath: project.entryPath, declaredBuiltWith: project.builtWith });
+}
 
 export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
   const app = new Hono<{ Bindings: Env }>();
@@ -100,6 +143,9 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     const userKey = typeof b["userKey"] === "string" ? b["userKey"].trim().slice(0, 64) : "";
     if (!userKey) return json(headers, 400, { ok: false, error: "userKey_required" });
     const locale = b["locale"] === "en" ? "en" : "ko";
+    const confirmedParse = ConfirmedItemIdsSchema.safeParse(b["confirmedItemIds"] ?? undefined);
+    if (!confirmedParse.success) return json(headers, 400, { ok: false, error: "invalid_confirmed_items" });
+    const confirmedItemIds = confirmedParse.data ?? [];
 
     const owned = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
     if (!owned) return json(headers, 404, { ok: false, error: "not_found" });
@@ -120,8 +166,19 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     // L-3 (Train L): 패스·재시도 호출마다 원장 1행(job_kind dev_spec, 한 job_id). 422·503이어도 기록 — 비용은 났다.
     const usage = createUsageCollector();
     const call = makeDevSpecLlmCaller(c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), c.env.DEV_SPEC_MODEL || undefined, usage.sink);
+    // D-2 amend: 기존 앱 문은 역추론 — 출처(도구·갈래·스택)와 유저 확인 목록이 함께 간다.
+    const source = devSpecSourceFor(owned);
+    const provenance =
+      source === "inferred" ? await gatherInferredProvenance(c.env, owned, fetch.bind(globalThis) as FetchLike) : undefined;
     const result = await generateDevSpec(
-      { brief: owned.productSpec, items: owned.items, idea: owned.idea, locale, source: "generated" },
+      {
+        brief: owned.productSpec,
+        items: owned.items,
+        idea: owned.idea,
+        locale,
+        source,
+        ...(source === "inferred" ? { confirmedItemIds, ...(provenance ? { provenance } : {}) } : {}),
+      },
       call,
     );
     if (usage.events.length > 0) {
@@ -145,7 +202,7 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
         }),
       );
     }
-    await insertUsageEvent(c.env, { userKey, eventType: "workspace_dev_spec_generated", metadata: { ok: result.ok, passes: result.passes.length } }).catch(() => undefined);
+    await insertUsageEvent(c.env, { userKey, eventType: "workspace_dev_spec_generated", metadata: { ok: result.ok, passes: result.passes.length, source, confirmedItems: source === "inferred" ? confirmedItemIds.length : 0 } }).catch(() => undefined);
 
     if (!result.ok) {
       if (result.error === "llm_unavailable") return json(headers, 503, { ok: false, error: "llm_unavailable" });

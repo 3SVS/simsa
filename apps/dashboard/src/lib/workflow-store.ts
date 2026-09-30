@@ -279,6 +279,10 @@ export type ExtendedProjectData = {
   /** AF-4: 사용자가 추론된 의도를 확인한 시각. 카드가 다시 뜨지 않게 하고,
    *  "누가 이 기준을 정했나"의 답이 된다. */
   intentConfirmedAt?: string;
+  /** C-A7 (D-2 amend): 유저가 "맞나요?" 카드에서 체크를 남긴(kept) 항목 id + 인터뷰 회수의
+   *  MUST 항목 id. 역추론 지시서의 must는 **이 목록에서만** 나온다 — 서버가 userConfirmedAcIds로
+   *  바꿔 저장한다. 없으면(옛 저장) 확인된 must 0. */
+  intentConfirmedItemIds?: string[];
   stackProfile?: {
     hosting?: { id: string; other?: string };
     data?: { id: string; other?: string };
