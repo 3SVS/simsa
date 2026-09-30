@@ -38,7 +38,7 @@
  *     같은 헬퍼로 행·토큰 조회 전에 묻고 503 `repair_disabled`.
  *   - W-2 일일 상한 수리 5/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
  *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"repair", limit, resetAt }.
- *     PR #561 검증 후속: 네트워크 15/일·서비스 전체 50/일 버킷을 같은 차감에(원자적), 진행 중
+ *     PR #561 검증 후속: 네트워크 15/일·서비스 전체 20/일(2026-09-30 비용 권고로 50→20) 버킷을 같은 차감에(원자적), 진행 중
  *     1개 가드는 삽입 뒤 rowid 순으로 한 번 더(같은 수리 브랜치를 두 컨테이너가 동시에 밀지 않게).
  *   - W-3 잡 뷰 `buildVerified` — 컨테이너의 사후 검증(node --check)이 바뀐 파일을 전부 덮었는가.
  *     auto_fix만 boolean, brief_only·레거시·판단 불가 = null (repair-job-db.ts, 새 컬럼 없음).
@@ -424,7 +424,7 @@ export function createWorkspaceRepairJobRoutes(
     }
 
     // Train W · W-2 — daily caps (D-7 amend [PILOT]): this user 5 · this network
-    // 15 · the whole service 50 (beta-limits.ts). Same placement as the
+    // 15 · the whole service 20 (beta-limits.ts). Same placement as the
     // inspection route: after ownership + validation + the one-active-repair
     // guard, one atomic statement per bucket, refunded below if the job never
     // starts.

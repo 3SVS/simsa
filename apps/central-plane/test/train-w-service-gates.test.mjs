@@ -772,7 +772,7 @@ function anonymousFleet(n, prefix) {
 
 const ipHeader = (ip) => ({ "cf-connecting-ip": ip });
 
-test("⑩ 기본값: 네트워크·서비스 전체 일일 상한이 있다 (검수 30/300 · 수리 15/50 [PILOT])", async () => {
+test("⑩ 기본값: 네트워크·서비스 전체 일일 상한이 있다 (검수 30/300 · 수리 15/20 [PILOT])", async () => {
   const limits = await import("../dist/workspace/beta-limits.js");
   for (const fn of ["inspectionDailyLimitPerIp", "inspectionDailyLimitGlobal", "repairDailyLimitPerIp", "repairDailyLimitGlobal"]) {
     assert.equal(typeof limits[fn], "function", `${fn} must exist`);
@@ -780,10 +780,16 @@ test("⑩ 기본값: 네트워크·서비스 전체 일일 상한이 있다 (검
   assert.equal(limits.inspectionDailyLimitPerIp({}), 30);
   assert.equal(limits.inspectionDailyLimitGlobal({}), 300);
   assert.equal(limits.repairDailyLimitPerIp({}), 15);
-  assert.equal(limits.repairDailyLimitGlobal({}), 50);
+  // 의도된 변경 (2026-09-30 비용 권고 ①, D-7 amend [PILOT]): 수리 서비스 전체 50 → 20.
+  // 수리 1시도 원가 평균 $0.50 · 잡당 상한 $2(권고 ②) → 일일 천장 $40 (옛 50 × 최악 $9 ≈ $450).
+  assert.equal(limits.repairDailyLimitGlobal({}), 20);
+  const serviceCap = limits.dailyCapsFor("repair", {}, "uk_any", null).find((c) => c.scope === "service");
+  assert.equal(serviceCap?.limit, 20, "the dispatch path takes its service slot against the new default");
   // [PILOT] numbers move without a code change; junk falls back to the default.
   assert.equal(limits.inspectionDailyLimitGlobal({ BETA_INSPECTION_DAILY_LIMIT_GLOBAL: "120" }), 120);
   assert.equal(limits.repairDailyLimitPerIp({ BETA_REPAIR_DAILY_LIMIT_PER_IP: "0" }), 15);
+  assert.equal(limits.repairDailyLimitGlobal({ BETA_REPAIR_DAILY_LIMIT_GLOBAL: "50" }), 50, "the old number is one [vars] line away");
+  assert.equal(limits.repairDailyLimitGlobal({ BETA_REPAIR_DAILY_LIMIT_GLOBAL: "junk" }), 20);
 });
 
 test("⑩ 같은 네트워크에서 userKey를 바꿔 가며 검수 → 네트워크 상한에서 429 scope=network · 행 0 · 컨테이너 0 · 다른 네트워크는 영향 없음", async () => {

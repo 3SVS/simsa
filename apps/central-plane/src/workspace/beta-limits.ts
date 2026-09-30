@@ -13,7 +13,10 @@
  * start a container on our bill:
  *
  *   - inspections:  10 / day per userKey · 30 / day per network · 300 / day service-wide
- *   - repairs:       5 / day per userKey · 15 / day per network ·  50 / day service-wide
+ *   - repairs:       5 / day per userKey · 15 / day per network ·  20 / day service-wide
+ *     (service-wide was 50 until the 2026-09-30 cost review — Bae "1번 권고대로":
+ *      a repair attempt averages ~$0.50 and is now capped at $2 per job, so 20/day
+ *      bounds the repair path at ~$40/day)
  *     (UTC day; POST …/visual-checks/run and POST …/:runId/repair)
  *
  *   Why three buckets (PR #561 review P1): userKey is an anonymous id the client
@@ -71,7 +74,7 @@ export const BETA_LIMITS = {
   repairsPerDayPerIp: 15,
   /** [PILOT]: service-wide per UTC day — the daily cost ceiling for the container paths. */
   inspectionsPerDayGlobal: 300,
-  repairsPerDayGlobal: 50,
+  repairsPerDayGlobal: 20,
 } as const;
 
 /** Daily-bucket names (workspace_rate_limit key prefix). */
@@ -132,7 +135,7 @@ export function repairDailyLimitPerIp(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_PE
   return dailyLimitFromEnv(env.BETA_REPAIR_DAILY_LIMIT_PER_IP, BETA_LIMITS.repairsPerDayPerIp);
 }
 
-/** Service-wide daily repair cap (default 50). */
+/** Service-wide daily repair cap (default 20 — was 50 before the 2026-09-30 cost review). */
 export function repairDailyLimitGlobal(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_GLOBAL">): number {
   return dailyLimitFromEnv(env.BETA_REPAIR_DAILY_LIMIT_GLOBAL, BETA_LIMITS.repairsPerDayGlobal);
 }
