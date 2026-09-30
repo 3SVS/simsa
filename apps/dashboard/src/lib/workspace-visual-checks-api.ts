@@ -27,6 +27,10 @@ export type VisualCheckListItem = {
   executor: VisualCheckExecutor;
   evidenceCount: number;
   createdAt: string;
+  /** Train C — C0 (0069): the run this one re-checked. The server has sent it since C0; absent on older servers. */
+  sourceCheckId?: string | null;
+  /** Train C — C2b (0069): the human acceptance label (plain string on the wire — normalize before use). */
+  userVerdict?: string | null;
 };
 
 export type NonDevFinding = {
@@ -203,6 +207,15 @@ export type RepairJob = {
    * on old servers. Read only through showBuildUnverified().
    */
   buildVerified?: boolean | null;
+  /** Stage 270: number of code files the repair changed (auto_fix). Null otherwise; absent on old servers. */
+  changedFiles?: number | null;
+  /**
+   * Train C — C2a (0069): the re-check verify-sweep ran after this repair, and its outcome
+   * (true works · false still broken · null not judged). Read by the C-3 receipt only through
+   * buildReceiptView() — the fix and the verdict stay in separate sections.
+   */
+  verifyCheckId?: string | null;
+  resolved?: boolean | null;
 };
 
 export type RepairRequestResponse =
