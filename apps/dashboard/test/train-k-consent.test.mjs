@@ -485,10 +485,11 @@ const usesIndex = (src) =>
 
 /**
  * 방침(서버 응답과 상관없이 게시되는 정적 문구)이 서버 K 기능을 약속하는 곳. 빈 배열 = 약속 없음.
- * @param {{ optOut: string, copyNote: string, page: string, changeLog: string }} src
+ * @param {{ optOut: string, copyNote: string, page: string, changeLog: string, landingTerms?: string }} src
  */
 function staticServerKPromises(src) {
   const out = [];
+  if (/delete the indexed saved copies/.test(src.landingTerms ?? "")) out.push("랜딩 약관 VI: 철회·프로젝트 삭제 시 색인된 사본 삭제");
   if (/기록을 끄실 수 있습니다/.test(src.optOut)) out.push("OPS_INFO_OPT_OUT: 운영 정보 기록 끄기(privacy_prefs·캡처 게이트)");
   if (/색인된 사본을 지웁니다/.test(src.copyNote)) out.push("TRAINING_COPY_NOTE: 철회·프로젝트 삭제 시 색인된 사본 삭제(training_records_index)");
   if (/철회하시면 색인된 학습 데이터 사본을 지웁니다/.test(src.page)) out.push("방침 §6: 철회 시 색인된 사본 삭제");
@@ -502,6 +503,8 @@ const livePromises = () =>
     copyNote: ops.TRAINING_COPY_NOTE ?? "",
     page: privacyPageSrc,
     changeLog: (ops.PRIVACY_CHANGE_LOG ?? []).at(-1)?.summary ?? "",
+    // 랜딩 약관 VI(#573 검증 9)도 서버 응답과 상관없이 게시된다.
+    landingTerms: read(path.join(REPO, "apps/landing/src/app/terms/page.tsx")).replace(/\s+/g, " "),
   });
 
 describe("[서버 K 게이트] 머지 순서 — 방침이 끄기·삭제를 약속하면 서버(0071)가 같은 트리에 있어야 한다", () => {
@@ -943,6 +946,50 @@ describe("#573 검증 7 — 설정 학습 토글 저장 안내 = 서버가 한 �
     assert.match(settingsSectionSrc, /trainingToggleSavedCopy\(state\.training, s\)/);
     assert.match(settingsSectionSrc, /trainingOffNoteCopy\(state\.training, s\)/);
     assert.ok(!/offDeletes \?/.test(settingsSectionSrc), "inline branch on offDeletes");
+  });
+});
+
+// ─── 17. PR #573 검증 9 — 랜딩 약관 VI = 대시보드 설정 이름·방침 사실 ─────────────────────────────
+// 랜딩 약관(apps/landing/src/app/terms/page.tsx VI)이 사라진 설정 이름 "Help improve Simsa"와 틀린 문장
+// "your account handle and email are never included"(저장소 이름이 담긴다)·"anonymized identifier cannot be
+// reversed"(비밀 키 없는 sha256 — 서비스는 연결할 수 있다)를 말했다. 랜딩 패키지엔 테스트가 없어(test 스크립트 없음)
+// 대시보드 사전·방침과 함께 여기서 묶는다.
+const landingTermsSrc = read(path.join(REPO, "apps/landing/src/app/terms/page.tsx"));
+const landingVI = (() => {
+  const at = landingTermsSrc.indexOf("VI. Data &amp; model training");
+  const end = landingTermsSrc.indexOf("VII. Outputs");
+  return at >= 0 && end > at ? landingTermsSrc.slice(at, end).replace(/\s+/g, " ") : "";
+})();
+
+describe("#573 검증 9 — 랜딩 약관 VI = 대시보드 설정 이름·방침 사실", () => {
+  it("[가드] 약관 VI 절을 찾았다", () => {
+    assert.ok(landingVI.length > 200, landingVI);
+  });
+
+  it("설정 이름은 지금 화면의 이름(EN·KO) — 사라진 'Help improve Simsa'가 없다", () => {
+    assert.ok(!/Help improve Simsa/.test(landingVI), landingVI);
+    assert.ok(landingVI.includes(DICTIONARIES.en.trainingConsent.title), `EN label: ${DICTIONARIES.en.trainingConsent.title}`);
+    assert.ok(landingVI.includes(DICTIONARIES.ko.trainingConsent.title), `KO label: ${DICTIONARIES.ko.trainingConsent.title}`);
+    assert.equal(DICTIONARIES.ko.trainingConsent.title, ops.TRAINING_DATA_TITLE, "UI 이름 = 방침 절 이름");
+  });
+
+  it("TRAINING_DATA_SCOPE와 같은 사실: 이메일 칸은 없고 저장소 이름은 담긴다 · 변환값은 연결 가능 · 주소 확인 제외", () => {
+    assert.ok(!/never included/.test(landingVI), "old 'handle and email are never included'");
+    assert.ok(!/cannot be reversed|anonymi[sz]/i.test(landingVI), "old 'anonymized identifier cannot be reversed'");
+    assert.match(landingVI, /no account-email field/);
+    assert.match(landingVI, /repository/);
+    assert.match(landingVI, /can still link/);
+    assert.match(landingVI, /web address are not included/);
+    for (const w of ["build tool", "app type", "AI usage", "change request number", "code version ID", "country code if operating info recording is on"]) {
+      assert.ok(landingVI.includes(w), `landing VI missing: ${w}`);
+    }
+  });
+
+  it("철회·삭제는 방침(TRAINING_COPY_NOTE)과 같게: 1클릭 철회, 색인된 사본 삭제, 과거분은 자동으로 못 지울 수 있음", () => {
+    assert.match(landingVI, /one click/);
+    assert.match(landingVI, /delete the indexed saved copies/);
+    assert.match(landingVI, /may not be removed automatically/);
+    assert.ok(!/may remain in training sets/.test(landingVI), "old 'already-anonymized records may remain'");
   });
 });
 
