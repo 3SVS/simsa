@@ -10,7 +10,8 @@
  *   - 0055·0056의 프로젝트 행 P1 캡처 컬럼(만든 도구·진입 경로·앱 유형·유입 경로)이 대응 (P2-5)
  *   - apps/central-plane/src/workspace/envelope.ts 의 RunEnvelope 필드 전부가 고지 항목에 대응
  * 서버에 컬럼·테이블·봉투 필드가 늘었는데 방침이 그대로면 여기서 실패한다(고지 누락 = 버그).
- * 그리고 없는 기능을 약속하지 않는다: '기록 끄기' 토글은 아직 없다.
+ * 그리고 없는 기능을 약속하지 않는다: Train K 전에는 '기록 끄기' 토글이 없었다(→ "준비 중"). Train K부터는
+ * 토글·학습 사본 삭제가 서버 PR(0071·privacy-prefs)에 있고, 그 서버 사실은 test/train-k-consent.test.mjs가 묶는다.
  *
  * ★머지 순서 (#558 검증 2차 P2-3) — 이 가드는 **대시보드 패키지 밖**(central-plane/migrations)을 읽는다.
  *  0069 이상 마이그레이션을 추가하는 PR(서버 PR 포함)은 **같은 PR에서** 고지 항목(src/lib/privacy-ops-info.mjs
@@ -112,11 +113,14 @@ describe("W-9 고지 항목 ↔ 서버가 실제로 기록하는 것", () => {
     assert.match(ops.OPS_INFO_RETENTION ?? "", /서비스 운영 기간/);
   });
 
-  it("없는 기능을 약속하지 않는다 — 끄기는 '준비 중', 요청은 문의 이메일로", () => {
+  // Train K: 끄기 토글이 생겼다(설정·확인 결과 화면, 서버 privacy_prefs 0071). 이미 쌓인 값을 지우는 자동
+  // 기능은 없으므로 그것만 문의 이메일로 받는다 — '준비 중'은 이제 사실이 아니다.
+  it("끄기는 실제 토글 안내 — 설정·확인 결과 화면에서 끄고, 이미 기록된 것은 문의 이메일로", () => {
     const s = ops.OPS_INFO_OPT_OUT ?? "";
+    assert.match(s, /설정 화면/);
+    assert.match(s, /확인 결과 화면/);
     assert.match(s, /문의 이메일/);
-    assert.match(s, /준비 중/);
-    assert.ok(!/설정에서 (끌|끄실) 수 있/.test(s), s);
+    assert.ok(!/준비 중/.test(s), s);
   });
 
   it("시행일은 YYYY-MM-DD 상수 한 곳 (배포일에 맞춰 이것만 바꾼다)", () => {
@@ -146,6 +150,10 @@ const OPS_MIGRATIONS_FROM = 69;
 /** '운영 메타 아님' — 고지 대상이 아닌 새 컬럼/테이블. 넣을 때는 이유를 적는다. */
 const NOT_OPS_META = new Map([
   // 예: ["build_verified", "수리 잡의 빌드 검사 결과 — 사람에 대한 값이 아님"],
+  // Train K 0071 — 서버 PR과 대시보드 PR에 같은 세 줄(먼저 머지되는 쪽이 가드를 통과시킨다).
+  ["decided_at", "학습 데이터 제공을 허용·거절한 시각(0071) — 이용자의 선택 기록이며 통계용 운영 정보가 아님"],
+  ["table:privacy_prefs", "운영 정보 기록 켜기·끄기 선택(0071) — 이용자의 선택을 지키는 설정이며 통계용 운영 정보가 아님"],
+  ["table:training_records_index", "학습 사본 삭제용 색인(0071) — 철회·프로젝트 삭제 때 사본을 찾아 지우기 위한 것이며 통계용 운영 정보가 아님"],
 ]);
 
 /** 0069 이전에 생겨 프로젝트 행에 저장되는 P1 운영 메타 컬럼(0055·0056). */
@@ -205,6 +213,19 @@ describe("P2-5: 0069 이후 모든 마이그레이션 + 0069 이전 P1 캡처 �
       "-- ALTER TABLE x ADD COLUMN commented_out TEXT;",
     ].join("\n");
     assert.deepEqual(undisclosed([hypothetical], ops.OPS_INFO_ITEMS ?? []), ["referrer_host", "table:ops_meta_daily"]);
+  });
+
+  it("[가드] Train K 계약 1의 0071(서버 PR)이 들어와도 가드를 통과한다 — decided_at·privacy_prefs·training_records_index는 '운영 메타 아님'", () => {
+    // 계약 1 그대로의 가상 0071 — 서버 PR이 먼저 머지돼도 이 PR이 먼저 머지돼도 가드가 깨지지 않게 한다.
+    const contract0071 = [
+      "ALTER TABLE workspace_training_consent ADD COLUMN decided_at TEXT;",
+      "CREATE TABLE IF NOT EXISTS privacy_prefs (user_key TEXT PRIMARY KEY, ops_meta TEXT CHECK (ops_meta IN ('on','off')), updated_at TEXT NOT NULL);",
+      "CREATE TABLE IF NOT EXISTS training_records_index (id TEXT PRIMARY KEY, user_key TEXT NOT NULL, project_id TEXT, r2_key TEXT NOT NULL, kind TEXT NOT NULL, captured_at TEXT NOT NULL, deleted_at TEXT);",
+    ].join("\n");
+    assert.deepEqual(undisclosed([contract0071], ops.OPS_INFO_ITEMS ?? []), []);
+    for (const k of ["decided_at", "table:privacy_prefs", "table:training_records_index"]) {
+      assert.ok((NOT_OPS_META.get(k) ?? "").length > 10, `${k}: reason required`);
+    }
   });
 
   it("0069 이전 P1 캡처 컬럼(0055·0056)도 항목에 대응한다 — 유입 경로(acquisition_json) 포함", () => {
@@ -276,50 +297,59 @@ describe("P2-6: 보유 기간 — 학습 데이터 사본 예외를 적는다", 
     assert.match(trainingStoreTs, /return `events\/\$\{safeRegion\}\//);
   });
 
-  it("§1 보유 문장: 삭제 범위를 한정하고 학습 데이터 사본은 지워지지 않는다고 적는다", () => {
+  // Train K(계약 4): 서버가 캡처할 때 색인(training_records_index)을 남기고 철회·프로젝트 삭제 때 색인된
+  // 사본을 지운다. 색인 전 사본은 자동으로 못 지운다 → "지워지지 않는다"(옛 문장)도, "모두 지운다"도 아니다.
+  it("§1 보유 문장: 삭제 범위를 한정하고, 학습 데이터 사본은 색인된 것만 지운다(삭제 기능 전 사본은 예외)고 적는다", () => {
     const s = ops.OPS_INFO_RETENTION ?? "";
     assert.match(s, /서비스 운영 기간/, s);
     assert.match(s, /학습 데이터 제공에 동의하신 경우/, s);
-    assert.match(s, /지워지지 않/, s);
+    assert.match(s, /색인된 사본을 지웁니다/, s);
+    assert.match(s, /삭제 기능이 생기기 전에 저장된 일부 사본/, s);
   });
 
-  it("§3 보관과 파기도 같은 예외를 적는다 (§1과 §3이 서로 다르게 말하지 않게)", () => {
+  it("§3 보관과 파기도 같은 문장을 쓴다 (§1과 §3이 서로 다르게 말하지 않게)", () => {
     const s3 = page.slice(page.indexOf("3. 보관과 파기"), page.indexOf("4. 저장 위치"));
     assert.ok(s3.length > 0, "§3 found");
     // 한 문장을 두 곳이 같이 쓴다 — 모듈 상수로 그리거나 같은 말을 직접 적는다.
     const saysIt = s3.includes("{TRAINING_COPY_NOTE}") || /학습 데이터 제공에 동의하신 경우/.test(s3);
     assert.ok(saysIt, s3);
     assert.match(ops.TRAINING_COPY_NOTE ?? "", /학습 데이터 제공에 동의하신 경우/);
-    assert.match(ops.TRAINING_COPY_NOTE ?? "", /지워지지 않/);
+    assert.match(ops.TRAINING_COPY_NOTE ?? "", /철회/);
+    assert.match(ops.TRAINING_COPY_NOTE ?? "", /프로젝트를 삭제/);
   });
 });
 
 // PR #558 검증 P2-7 — "기록을 원하지 않으시면 문의 이메일로 요청"은 요청하면 기록이 멈추는 것처럼
-// 읽혔다. 실제로는 regionFromRequest가 생성·검수·수리 요청마다 조건 없이 불리고 사용자별 제외
-// 플래그가 없다(K-1 ops_meta_opt_out + 0071에서 생김). 그리고 익명 사용자는 화면에서 자기 키를 볼 수
-// 없어 이메일에 무엇을 적어야 할지 모른다 → 요청이 **실제로 하는 일**과 **무엇을 적을지**를 말한다.
+// 읽혔다. 그때는 regionFromRequest가 생성·검수·수리 요청마다 조건 없이 불리고 사용자별 제외 플래그가
+// 없었다. Train K(계약 2·3)는 서버에 '기록 끄기'(privacy_prefs, 0071)와 캡처 게이트를 더한다 → 방침은
+// 끄기가 **실제로 멈추는 것**과 **끄셔도 남는 것**을 적고, 이미 쌓인 값은 여전히 문의로 받는다(자동 삭제 없음).
+// 끄기가 서버에 있다는 사실(0071·privacy-prefs 경로)은 test/train-k-consent.test.mjs의 [서버 사실]이 묶는다.
 const repairRouteTs = readFileSync(path.join(CP, "routes/workspace-repair-jobs.ts"), "utf8");
 const runRouteTs = readFileSync(path.join(CP, "routes/workspace-visual-check-runs.ts"), "utf8");
 
-describe("P2-7: '원하지 않으시면' — 요청이 실제로 하는 일만 약속한다", () => {
-  it("[서버 사실] 국가 코드는 요청마다 조건 없이 기록된다 (사용자별 제외 플래그 없음)", () => {
+describe("P2-7 → Train K: '기록 끄기' — 끄기가 실제로 하는 일만 약속한다", () => {
+  it("[서버 사실] 끄기 대상 칸은 생성·검수·수리 요청에서 기록된다 (regionFromRequest 세 곳)", () => {
     for (const src of [workspaceRouteTs, runRouteTs, repairRouteTs]) {
       assert.match(src, /regionFromRequest\(c\.req\.raw\)/);
     }
-    assert.ok(!/ops_meta_opt_out|opsMetaOptOut/.test(workspaceRouteTs + runRouteTs + repairRouteTs));
   });
 
-  it("요청하면 지금까지 기록된 것을 지운다 — 앞으로의 기록을 멈춘다고 하지 않는다", () => {
+  it("끄면 그 뒤로의 기록을 멈춘다 — 이미 기록된 것은 요청하면 지운다(자동 삭제라고 하지 않는다)", () => {
     const s = ops.OPS_INFO_OPT_OUT ?? "";
-    assert.match(s, /지금까지 기록된/, s);
-    assert.match(s, /지워/, s);
-    assert.ok(!/요청하시면[^.]*(멈추|멈춰|중단|기록하지 않)/.test(s), s);
+    assert.match(s, /끄시면 그 뒤로/, s);
+    assert.match(s, /이미 기록된 운영 정보를 지우시려면[^.]*문의 이메일로 요청/, s);
+    assert.ok(!/끄시면[^.]*(지워|삭제)/.test(s), s);
   });
 
-  it("앞으로의 기록을 끄는 설정은 '준비 중'이고, 그 전까지는 계속 기록된다고 말한다", () => {
+  it("끄셔도 남는 것을 숨기지 않는다 — 기능 데이터·프로젝트 행·AI 사용량·요청 횟수 제한", () => {
     const s = ops.OPS_INFO_OPT_OUT ?? "";
-    assert.match(s, /준비 중/, s);
-    assert.match(s, /그 전까지는[^.]*기록/, s);
+    for (const w of ["결과 판정 선택", "다시 확인 연결", "해결 여부", "AI 사용량", "요청 횟수 제한", "유입 경로"]) {
+      assert.ok(s.includes(w), `missing keep item: ${w}`);
+    }
+  });
+
+  it("유럽연합·유럽경제지역·영국·스위스는 켜기 전까지 기록하지 않는다고 적는다 (계약 2 기본값)", () => {
+    assert.match(ops.OPS_INFO_OPT_OUT ?? "", /유럽연합·유럽경제지역·영국·스위스[^.]*켜시기 전까지[^.]*기록하지 않/);
   });
 
   it("익명 사용자도 자기 기록을 특정할 수 있게 무엇을 적을지 알려 준다 (프로젝트 화면 주소)", () => {
@@ -427,22 +457,26 @@ describe("요청 횟수 제한 — 방침 = 서버가 실제로 하는 일", () 
     assert.ok(s3.includes("{RATE_LIMIT_RETENTION_NOTE}"), s3);
   });
 
-  it("변경 이력: 새 줄을 더했다 — 요청 횟수 제한을 말하고, 날짜는 시행일 상수(배포일로 갱신)", () => {
+  // Train K가 줄을 하나 더 붙인 뒤로 #566 줄은 마지막 줄이 아니다 — 게시된 날짜(2026-09-30)로 찾는다.
+  const rateLimitLogLine = () => (ops.PRIVACY_CHANGE_LOG ?? []).find((e) => e.date === "2026-09-30" && /요청 횟수 제한/.test(e.summary));
+
+  it("변경 이력: #566 줄 — 요청 횟수 제한·48시간을 말한다(2026-09-30 게시)", () => {
     const log = ops.PRIVACY_CHANGE_LOG ?? [];
-    const last = log.at(-1);
-    assert.ok(last && /요청 횟수 제한/.test(last.summary), JSON.stringify(last));
-    assert.match(last.summary, /48시간/);
-    assert.equal(last.date, ops.PRIVACY_EFFECTIVE_DATE);
+    const line = rateLimitLogLine();
+    assert.ok(line, JSON.stringify(log.map((e) => e.date)));
+    assert.match(line.summary, /48시간/);
+    assert.equal(log.at(-1)?.date, ops.PRIVACY_EFFECTIVE_DATE, "the newest line follows the constant");
     assert.ok(log.some((e) => /대표자/.test(e.summary)), "the #558 line is still there, unedited");
   });
 
-  it("변경 이력: 게시된 2026-09-29 줄은 날짜를 문자열로 고정 — 시행일 상수를 배포일로 올려도 옛 줄이 따라 움직이지 않는다", () => {
+  it("변경 이력: 게시된 줄(2026-09-29 · 2026-09-30)은 날짜를 문자열로 고정 — 시행일 상수를 배포일로 올려도 옛 줄이 따라 움직이지 않는다", () => {
     // 라이브 확인 2026-09-29: app.trysimsa.com/legal/privacy에 '시행일: 2026-09-29'와 그 날짜의 변경 줄이 게시돼 있다.
+    // 라이브 확인 2026-09-30: 같은 곳에 '시행일: 2026-09-30'과 #566 줄이 게시돼 있다(Train K PR 작성 중 확인).
     // 옛 코드는 그 줄이 `date: PRIVACY_EFFECTIVE_DATE`라, 다음 배포에서 상수를 올리는 순간 게시된 이력이 고쳐 쓰였다.
     const start = opsSource.indexOf("export const PRIVACY_CHANGE_LOG = [");
     const body = opsSource.slice(start, opsSource.indexOf("];", start));
     const dates = [...body.matchAll(/date:\s*("(\d{4}-\d{2}-\d{2})"|PRIVACY_EFFECTIVE_DATE)/g)].map((m) => m[1]);
-    assert.deepEqual(dates.slice(0, -1), ['"2026-07-19"', '"2026-09-29"'], `published lines are literal: ${dates.join(", ")}`);
+    assert.deepEqual(dates.slice(0, -1), ['"2026-07-19"', '"2026-09-29"', '"2026-09-30"'], `published lines are literal: ${dates.join(", ")}`);
     assert.equal(dates.at(-1), "PRIVACY_EFFECTIVE_DATE", "only the newest (unpublished) line follows the constant");
   });
 });
@@ -503,9 +537,9 @@ describe("요청 횟수 제한 — PR #566 리뷰 후속: 문장이 서버보다
     assert.match(detail, /연결할 수 있습니다/, detail);
   });
 
-  it("변경 이력 새 줄이 사용자 키와 AI 사용량 정정을 말한다", () => {
-    const last = (ops.PRIVACY_CHANGE_LOG ?? []).at(-1)?.summary ?? "";
-    assert.match(last, /사용자 키/, last);
-    assert.match(last, /AI 사용량/, last);
+  it("변경 이력 #566 줄이 사용자 키와 AI 사용량 정정을 말한다", () => {
+    const line = (ops.PRIVACY_CHANGE_LOG ?? []).find((e) => e.date === "2026-09-30")?.summary ?? "";
+    assert.match(line, /사용자 키/, line);
+    assert.match(line, /AI 사용량/, line);
   });
 });
