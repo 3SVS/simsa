@@ -90,26 +90,42 @@ export function openSqliteD1({ upTo = Infinity } = {}) {
   return { db, d1: d1FromSqlite(db, log), log };
 }
 
-/** 메모리 R2: put/get/delete/list + 호출 기록. failDelete(key)가 true면 그 키 delete는 던진다. */
+/**
+ * 메모리 R2: put/get/delete/list + 호출 기록. failDelete(key)가 true면 그 키 delete는 던진다.
+ * 실제 R2 모양을 따른다(모크가 버그를 정답으로 굳히지 않게): 객체마다 etag(쓸 때마다 바뀜), get 결과에 etag,
+ * put은 R2Object({ key, etag })를 돌려주고 `onlyIf.etagMatches`가 맞지 않으면(객체가 없어도) **null**을 돌려주며
+ * 쓰지 않는다. delete는 키 하나 또는 키 배열(R2 bulk delete)을 받는다.
+ */
 export function makeMemoryR2({ failDelete = () => false } = {}) {
   const objects = new Map();
+  const etags = new Map();
   const calls = [];
+  let version = 0;
   return {
     objects,
+    etags,
     calls,
-    async put(key, value) {
+    async put(key, value, options = {}) {
       calls.push(["put", key]);
+      const want = options?.onlyIf?.etagMatches;
+      if (want !== undefined && etags.get(key) !== want) return null;
       objects.set(key, typeof value === "string" ? value : String(value));
+      const etag = `etag-${++version}`;
+      etags.set(key, etag);
+      return { key, etag };
     },
     async get(key) {
       calls.push(["get", key]);
       const v = objects.get(key);
-      return v === undefined ? null : { text: async () => v };
+      return v === undefined ? null : { key, etag: etags.get(key), text: async () => v };
     },
-    async delete(key) {
-      calls.push(["delete", key]);
-      if (failDelete(key)) throw new Error(`r2 delete failed: ${key}`);
-      objects.delete(key);
+    async delete(keys) {
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        calls.push(["delete", key]);
+        if (failDelete(key)) throw new Error(`r2 delete failed: ${key}`);
+        objects.delete(key);
+        etags.delete(key);
+      }
     },
     async list({ prefix = "", cursor, limit = 1000 } = {}) {
       calls.push(["list", prefix]);

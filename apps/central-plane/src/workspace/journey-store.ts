@@ -17,7 +17,7 @@ import type { Env } from "../env.js";
 import { redactSecrets } from "@simsa/secret-guard";
 import { sha256Hex } from "../util.js";
 import { TRAINING_CONSENT_VERSION, hasActiveTrainingConsent } from "./training-consent-db.js";
-import { indexTrainingRecord, settleAfterPut } from "./training-records-index.js";
+import { captureReasonForIndex, indexTrainingRecord, settleAfterPut } from "./training-records-index.js";
 import type { BuiltWith } from "./built-with.js";
 
 export const JOURNEY_SCHEMA_VERSION = 1;
@@ -150,14 +150,19 @@ export function journeyRecordKey(capturedAt: string, projectId: string, eventId:
 
 export type JourneyCaptureResult =
   | { stored: true; key: string }
-  | { stored: false; reason: "no_consent" | "no_bucket" | "error" | "index_error" };
+  | {
+      stored: false;
+      reason: "no_consent" | "no_project" | "no_bucket" | "error" | "index_error" | "deletion_requested";
+    };
 
 /**
  * Consent-gated, best-effort capture. Never throws. No consent → no bucket read.
  * Train K · K-3 (0071): same order as training-store — index row first (the
  * project id lives in the index, NOT parsed out of the key: non-ASCII project
  * ids are squashed to "_" in journeyRecordKey and can collide), then the copy,
- * then a re-check. No index row → no copy (reason "index_error").
+ * then a re-check. No index row → no copy ("no_consent" / "no_project" —
+ * the project was deleted mid-review / "index_error"); a deletion requested
+ * mid-capture removes the copy at once ("deletion_requested").
  */
 export async function captureJourneyEvent(
   env: Env,
@@ -184,11 +189,11 @@ export async function captureJourneyEvent(
       capturedAt,
       consentVersion: TRAINING_CONSENT_VERSION,
     });
-    if (!idx.indexed) return { stored: false, reason: idx.reason === "no_consent" ? "no_consent" : "index_error" };
+    if (!idx.indexed) return { stored: false, reason: captureReasonForIndex(idx.reason) };
     await env.EVIDENCE.put(key, JSON.stringify(record), {
       httpMetadata: { contentType: "application/json" },
     });
-    if (!(await settleAfterPut(env, idx.id, key))) return { stored: false, reason: "no_consent" };
+    if (!(await settleAfterPut(env, idx.id, key))) return { stored: false, reason: "deletion_requested" };
     return { stored: true, key };
   } catch (err) {
     console.warn("[journey-store] capture failed (non-fatal):", err instanceof Error ? err.message : err);

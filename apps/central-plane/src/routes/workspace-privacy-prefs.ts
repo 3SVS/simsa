@@ -9,7 +9,7 @@
  * - opsMeta = 통계용 운영 정보 기록(0069 region·envelope_json·finding_codes_json·region_at_create·수리 잡 region).
  *   선택이 없으면 접속 국가로 정한 기본값(EU/EEA·GB·CH 등은 off — workspace/privacy-prefs.ts).
  * - region = 이 요청의 접속 국가 코드(request.cf.country). 대시보드가 "기록하지 않고 있어요 · 켜기"처럼
- *   기본값의 이유를 보여 줄 때 쓴다. 저장하지 않는다.
+ *   기본값의 이유를 보여 줄 때 쓴다. 저장하지 않는다. 모르면 null이고, 그때 기본값은 off다(#574-5).
  * - training = 학습 데이터 동의 상태(설정 화면이 두 토글을 한 번에 그리도록). version = 저장된 조항 버전
  *   (없으면 null), currentVersion = 지금 조항 버전.
  * - 소유권: userKey로만 — 자기 선택만 읽고 바꾼다(다른 라우트와 같은 SaaS 핸들). 입력은 Zod로 받는다.

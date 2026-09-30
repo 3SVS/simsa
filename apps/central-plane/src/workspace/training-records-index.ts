@@ -1,18 +1,28 @@
 /**
  * workspace/training-records-index.ts — Train K · K-3 학습 사본 색인·삭제 (가격·동의 계획 §4 "철회·삭제", 0071).
  *
- * 왜: 학습 사본(R2 `events/{region}/…` = training-store, `journey/…` = journey-store)은 키에 사람이 없다
- * (사본 안에도 sha256(userKey)뿐). 그래서 동의를 철회하거나 프로젝트를 지워도 어느 객체가 그 사람 것인지 찾을
- * 방법이 없었다. 이 색인은 **캡처할 때** R2 키를 사람(원문 user_key — 동의 행과 같은 방식)·프로젝트와 함께 적는다.
+ * 왜: 학습 사본(R2 `events/{region}/…` = training-store, `journey/…` = journey-store)은 **키**에 사람이 없고
+ * (여정 키의 프로젝트 id는 비ASCII가 `_`로 뭉개져 겹친다), 사본 **본문**에만 subject_hash = sha256(userKey)(솔트 없음)와
+ * 원문 project_id가 있다. 버킷을 전부 읽지 않고는 철회·프로젝트 삭제 때 어느 객체가 그 사람 것인지 찾을 수 없었다.
+ * 이 색인은 **캡처할 때** R2 키를 사람(원문 user_key — 동의 행과 같은 방식)·프로젝트와 함께 적는다.
  *
  * 순서 원칙 (지울 수 없는 사본을 만들지 않는다):
- *   캡처  = 색인 먼저(동의가 지금 유효할 때만 — 한 문장으로) → R2 put → 색인 재확인(그 사이 삭제가 요청됐으면 바로 지움)
- *           색인이 실패하면 그 사본은 저장하지 않는다(요청 자체는 영향 없음 — 캡처는 원래 best-effort).
+ *   캡처  = 색인 먼저(동의가 지금 유효하고 그 사람의 프로젝트가 아직 있을 때만 — 한 문장으로) → R2 put →
+ *           색인 재확인(그 사이 삭제가 요청됐으면 바로 지움). 색인이 실패하면 그 사본은 저장하지 않는다
+ *           (요청 자체는 영향 없음 — 캡처는 원래 best-effort; 계약 대비 변경, PR #574 본문 참고).
  *   삭제  = D1에 요청 먼저(delete_requested_at, 철회·프로젝트 삭제와 같은 배치) → R2 delete → 성공한 것만 deleted_at
  *           R2가 실패하면 요청이 남아 있으므로 6시간 크론이 다시 시도한다.
+ *   고쳐 쓰기(outcome 갱신) = 조건부 put(etag) → 키로 재확인. 삭제된 사본을 되살리지 않는다.
+ *   묘비 청소(30일) = 그 키를 R2에서 한 번 더 지운 뒤에만 행을 지운다(재확인이 실패해 남은 사본의 안전망).
  *
- * ★한계(정직하게): 이 색인이 생기기 전(0071 이전)에 저장된 사본은 색인에 없다 → 여기로는 지울 수 없다.
- *   개수는 scripts/count-unindexed-training-copies.mjs(R2 list)로 셀 수 있다. 문의가 오면 사람이 처리한다.
+ * ★0071 이전 사본(정직하게 — PR #574 검증 #574-2로 정정):
+ *   - 사본 본문의 subject_hash·project_id로 사람·프로젝트를 **찾을 수 있다**(동의 행의 원문 user_key를 sha256하면 1:1).
+ *     일회성 백필 scripts/backfill-training-index.mjs(읽기 전용 R2 → SQL 파일, 적용은 별도 승인)가 색인에 넣으면
+ *     그 뒤로는 철회·프로젝트 삭제·크론이 같은 경로로 지운다.
+ *   - 백필 전 자동 경로가 닿는 것은 **검수 런 행(workspace_pr_review_runs.training_r2_key, 0057)이 아직 가리키는
+ *     events/ 사본**뿐이다(아래 LEGACY_BACKFILL). 닿지 않는 것: 모든 여정 사본(journey/…), 그리고 검수 런 행이 사라진
+ *     events/ 사본 — 0071 이전에 삭제된 프로젝트의 사본, 0057 이전 캡처, 키 기록(setReviewRunTrainingKey)이 실패한 사본.
+ *   개수는 scripts/count-unindexed-training-copies.mjs(R2 list, 읽기 전용)로 셀 수 있다.
  *
  * 모든 함수는 던지지 않는다(삭제 스윕) 또는 호출자가 잡는다(색인 쓰기). 로그는 한 줄 JSON.
  */
@@ -27,9 +37,13 @@ export async function trainingIndexId(r2Key: string): Promise<string> {
 }
 
 /**
- * 동의가 **지금** 유효할 때만 색인 행을 쓴다(한 문장 — 동의 확인과 색인 사이에 철회가 끼면 행이 생기지 않는다).
+ * 동의가 **지금** 유효하고, 사본이 속한 프로젝트가 **아직 그 사람 것으로 있을 때만** 색인 행을 쓴다(한 문장 —
+ * 동의 확인과 색인 사이에 철회가 끼거나, 리뷰 도중 프로젝트가 삭제되면 행이 생기지 않고 사본도 저장되지 않는다.
+ * 프로젝트 조건이 없으면 삭제 뒤에 끝난 캡처가 요청 없는 행을 만들어 프로젝트 삭제·크론이 영영 못 지운다 — #574-3).
+ * 프로젝트 id가 null이면 프로젝트 조건은 보지 않는다(철회로만 지워진다).
  * 같은 키를 다시 쓰면(outcome 갱신이 아니라 재캡처) 새 사본이므로 삭제 표시를 지운다 — 옛 내용은 덮어써져 없다.
- * Binds: (id, user_key, project_id, r2_key, kind, captured_at, consent_user_key, consent_version).
+ * Binds: (id, user_key, project_id, r2_key, kind, captured_at, consent_user_key, consent_version,
+ *         project_id, project_id, project_user_key).
  */
 export const TRAINING_INDEX_INSERT_SQL = `INSERT INTO training_records_index
    (id, user_key, project_id, r2_key, kind, captured_at, delete_requested_at, deleted_at)
@@ -37,6 +51,9 @@ export const TRAINING_INDEX_INSERT_SQL = `INSERT INTO training_records_index
   WHERE EXISTS (
     SELECT 1 FROM workspace_training_consent
      WHERE user_key = ? AND consented = 1 AND consent_version = ?)
+    AND (? IS NULL OR EXISTS (
+    SELECT 1 FROM workspace_projects
+     WHERE id = ? AND user_key = ?))
  ON CONFLICT(id) DO UPDATE SET
    user_key = excluded.user_key,
    project_id = excluded.project_id,
@@ -45,8 +62,23 @@ export const TRAINING_INDEX_INSERT_SQL = `INSERT INTO training_records_index
    delete_requested_at = NULL,
    deleted_at = NULL`;
 
+/**
+ * 색인이 거부됐을 때(변경 0) 이유를 가른다 — 로그·결과가 "동의 없음"과 "프로젝트 없음"을 섞지 않게.
+ * Binds: (user_key, consent_version, project_id, project_id, user_key).
+ */
+export const TRAINING_INDEX_REFUSAL_SQL = `SELECT
+   EXISTS (SELECT 1 FROM workspace_training_consent
+            WHERE user_key = ? AND consented = 1 AND consent_version = ?) AS consent_ok,
+   (? IS NULL OR EXISTS (SELECT 1 FROM workspace_projects WHERE id = ? AND user_key = ?)) AS project_ok`;
+
 /** Binds: (id). put 뒤 재확인 — 그 사이 철회·프로젝트 삭제로 요청이 찍혔는가. */
 export const TRAINING_INDEX_STATE_SQL = `SELECT delete_requested_at, deleted_at FROM training_records_index WHERE id = ? LIMIT 1`;
+
+/**
+ * Binds: (r2_key). 고쳐 쓴 뒤 재확인(outcome 갱신) — 키로 찾는다: 0071 이전 검수 사본의 행은 id가
+ * 'trl_' + 검수 런 id라 trainingIndexId(key)로는 찾을 수 없다.
+ */
+export const TRAINING_INDEX_STATE_BY_KEY_SQL = `SELECT id, delete_requested_at, deleted_at FROM training_records_index WHERE r2_key = ?`;
 
 /** 철회: 이 사람의 아직 안 지운 사본 전부. Binds: (requested_at, user_key). */
 export const TRAINING_INDEX_REQUEST_DELETE_FOR_USER_SQL = `UPDATE training_records_index
@@ -62,7 +94,9 @@ export const TRAINING_INDEX_REQUEST_DELETE_FOR_PROJECT_SQL = `UPDATE training_re
  * 0071 이전 검수 사본 옮기기(삭제 요청과 함께). 이 사본들은 색인이 없지만 0057부터 검수 런 행
  * (workspace_pr_review_runs.training_r2_key)에 키가 남아 있다 — 그 행의 user_key·project_id로 색인에 넣는다.
  * 이미 색인에 있는 키(0071 이후 캡처는 두 곳에 다 적힌다)는 건너뛴다. 행 id = 'trl_' + 검수 런 id(런당 사본 1개).
- * 0071 이전 **여정 사본(journey/…)은 어디에도 사람·프로젝트 기록이 없어 옮길 수 없다** — 자동 삭제 대상이 아니다.
+ * 이 경로는 **검수 런 행이 아직 키를 가리키는 events/ 사본만** 닿는다. 여정 사본(journey/…)과 검수 런 행이
+ * 사라진 events/ 사본은 D1에 키 기록이 없어 여기로 옮길 수 없지만, 사본 본문의 subject_hash·project_id로
+ * 찾을 수 있다 → 일회성 백필 scripts/backfill-training-index.mjs(적용은 별도 승인)가 색인에 넣는다(#574-2).
  */
 const LEGACY_BACKFILL_HEAD = `INSERT INTO training_records_index
    (id, user_key, project_id, r2_key, kind, captured_at, delete_requested_at, deleted_at)
@@ -114,24 +148,38 @@ export const TRAINING_INDEX_MARK_DELETED_SQL = `UPDATE training_records_index
 
 /**
  * 삭제 기록(묘비) 보관 기간. 지운 뒤에도 "언제 지웠는지"를 문의에 답할 만큼만 두고, 그 뒤에는 사람과 키의
- * 연결까지 지운다(6시간 크론).
+ * 연결까지 지운다(6시간 크론). 행을 지우기 **전에** 그 키를 R2에서 한 번 더 지운다 — 삭제 표시 뒤에 사본이
+ * 되살아난 경우(put 뒤 재확인의 D1 읽기·R2 삭제가 실패한 경우)도 이 기간 안에 닫힌다(#574-4).
  */
 export const TRAINING_INDEX_TOMBSTONE_DAYS = 30;
 
-/** Binds: (cutoff_iso, limit). */
-export const TRAINING_INDEX_TOMBSTONE_PURGE_SQL = `DELETE FROM training_records_index
- WHERE rowid IN (
-   SELECT rowid FROM training_records_index
-    WHERE deleted_at IS NOT NULL AND deleted_at <= ?
-    LIMIT ?)`;
+/**
+ * Binds: (cutoff_iso, limit). 오래된 묘비 + 같은 키에 살아 있는(아직 안 지운) 행이 있는가 — 있으면 그 키는
+ * R2에서 지우지 않는다(다시 캡처된 사본일 수 있다).
+ */
+export const TRAINING_INDEX_TOMBSTONE_SELECT_SQL = `SELECT i.id, i.r2_key,
+       EXISTS (SELECT 1 FROM training_records_index j
+                WHERE j.r2_key = i.r2_key AND j.deleted_at IS NULL) AS live
+  FROM training_records_index i
+ WHERE i.deleted_at IS NOT NULL AND i.deleted_at <= ?
+ ORDER BY i.deleted_at
+ LIMIT ?`;
+
+/** 묘비 행 지우기(R2 재삭제가 끝난 id만). Binds: (cutoff_iso, ...ids). */
+export function tombstoneDeleteSql(idCount: number): string {
+  const marks = Array.from({ length: idCount }, () => "?").join(", ");
+  return `DELETE FROM training_records_index
+ WHERE deleted_at IS NOT NULL AND deleted_at <= ? AND id IN (${marks})`;
+}
 
 export type IndexCaptureResult =
   | { indexed: true; id: string }
-  | { indexed: false; reason: "no_consent" | "error"; error?: string };
+  | { indexed: false; reason: "no_consent" | "no_project" | "error"; error?: string };
 
 /**
- * 캡처 직전 색인. 동의가 지금 유효하지 않으면 { indexed:false, reason:"no_consent" }(행 없음).
- * D1 오류는 { indexed:false, reason:"error" } — 호출자는 사본을 저장하지 않는다. 던지지 않는다.
+ * 캡처 직전 색인. 동의가 지금 유효하지 않으면 { indexed:false, reason:"no_consent" }, 프로젝트가 없거나 그 사람
+ * 것이 아니면 { indexed:false, reason:"no_project" }(둘 다 행 없음). D1 오류는 { indexed:false, reason:"error" }
+ * — 호출자는 사본을 저장하지 않는다. 던지지 않는다.
  */
 export async function indexTrainingRecord(
   env: Pick<Env, "DB">,
@@ -148,11 +196,15 @@ export async function indexTrainingRecord(
   try {
     const id = await trainingIndexId(input.r2Key);
     const res = await env.DB.prepare(TRAINING_INDEX_INSERT_SQL)
-      .bind(id, input.userKey, input.projectId, input.r2Key, input.kind, input.capturedAt, input.userKey, input.consentVersion)
+      .bind(
+        id, input.userKey, input.projectId, input.r2Key, input.kind, input.capturedAt,
+        input.userKey, input.consentVersion,
+        input.projectId, input.projectId, input.userKey,
+      )
       .run();
     const changes = (res as { meta?: { changes?: unknown } } | null)?.meta?.changes;
-    // 변경 0 = 동의 조건이 맞지 않아 아무것도 쓰지 않았다. 숫자가 아니면(모르는 드라이버) 썼다고 보지 않는다.
-    if (typeof changes !== "number" || changes < 1) return { indexed: false, reason: "no_consent" };
+    // 변경 0 = 동의·프로젝트 조건이 맞지 않아 아무것도 쓰지 않았다. 숫자가 아니면(모르는 드라이버) 썼다고 보지 않는다.
+    if (typeof changes !== "number" || changes < 1) return { indexed: false, reason: await refusalReason(env, input) };
     return { indexed: true, id };
   } catch (err) {
     const error = (err instanceof Error ? err.message : String(err)).slice(0, 200);
@@ -161,9 +213,33 @@ export async function indexTrainingRecord(
   }
 }
 
+/** 색인 거부 이유 → 캡처 결과 이유(training-store·journey-store 공용). */
+export function captureReasonForIndex(
+  reason: "no_consent" | "no_project" | "error",
+): "no_consent" | "no_project" | "index_error" {
+  return reason === "error" ? "index_error" : reason;
+}
+
+/** 거부 이유(거부된 드문 경우에만 한 번 더 읽는다). 못 읽으면 "no_consent"(보수적 — 어느 쪽이든 사본은 없다). */
+async function refusalReason(
+  env: Pick<Env, "DB">,
+  input: { userKey: string; projectId: string | null; consentVersion: string },
+): Promise<"no_consent" | "no_project"> {
+  try {
+    const row = await env.DB.prepare(TRAINING_INDEX_REFUSAL_SQL)
+      .bind(input.userKey, input.consentVersion, input.projectId, input.projectId, input.userKey)
+      .first<{ consent_ok?: unknown; project_ok?: unknown }>();
+    if (row && Number(row.consent_ok) === 1 && Number(row.project_ok) !== 1) return "no_project";
+    return "no_consent";
+  } catch {
+    return "no_consent";
+  }
+}
+
 /**
  * put 뒤 재확인: 캡처 도중 삭제가 요청됐으면 방금 쓴 객체를 바로 지우고 deleted_at을 찍는다.
- * 반환 true = 사본이 남아 있다(정상), false = 방금 지웠다. 던지지 않는다(확인 실패는 로그 — 요청은 남아 크론이 지운다).
+ * 반환 true = 사본이 남아 있다(정상), false = 방금 지웠다. 던지지 않는다. 확인이 실패하면 로그를 남기고 true —
+ * 행이 '요청됨'이면 크론이 지우고, 이미 '지움'으로 찍힌 뒤라면 묘비 청소(30일)가 R2를 한 번 더 지운다.
  */
 export async function settleAfterPut(
   env: Pick<Env, "DB" | "EVIDENCE">,
@@ -187,6 +263,44 @@ export async function settleAfterPut(
   } catch (err) {
     console.error(
       JSON.stringify({ at: "training-index", op: "settle", error: (err instanceof Error ? err.message : String(err)).slice(0, 200) }),
+    );
+    return true;
+  }
+}
+
+/**
+ * 고쳐 쓴 뒤 재확인(outcome 갱신): 그 키의 어느 색인 행이든 삭제가 요청됐거나 이미 지워졌으면, 방금 쓴 객체를
+ * 바로 지우고 아직 안 찍힌 행에 deleted_at을 찍는다. 키로 찾는다(0071 이전 사본의 'trl_' 행 포함).
+ * 반환 true = 사본이 남아 있다(정상), false = 방금 지웠다. 던지지 않는다(확인 실패는 settleAfterPut과 같은 안전망).
+ */
+export async function settleKeyAfterRewrite(
+  env: Pick<Env, "DB" | "EVIDENCE">,
+  r2Key: string,
+  now: () => string = () => new Date().toISOString(),
+): Promise<boolean> {
+  try {
+    const rows =
+      (await env.DB.prepare(TRAINING_INDEX_STATE_BY_KEY_SQL)
+        .bind(r2Key)
+        .all<{ id: string; delete_requested_at?: unknown; deleted_at?: unknown }>()).results ?? [];
+    const isSet = (v: unknown) => typeof v === "string" && v !== "";
+    const gone = rows.filter((r) => isSet(r.delete_requested_at) || isSet(r.deleted_at));
+    if (gone.length === 0) return true;
+    if (env.EVIDENCE) {
+      await env.EVIDENCE.delete(r2Key);
+      for (const r of gone) {
+        if (!isSet(r.deleted_at)) await env.DB.prepare(TRAINING_INDEX_MARK_DELETED_SQL).bind(now(), r.id).run();
+      }
+    }
+    console.log(JSON.stringify({ at: "training-index", op: "settle-rewrite", note: "deletion requested during rewrite — removed" }));
+    return false;
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        at: "training-index",
+        op: "settle-rewrite",
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+      }),
     );
     return true;
   }
@@ -279,20 +393,61 @@ export async function sweepTrainingDeletions(
   return result;
 }
 
-/** 삭제한 지 TRAINING_INDEX_TOMBSTONE_DAYS가 지난 묘비 행을 지운다. 던지지 않는다. */
+/** 크론 1회 묘비 청소 최대 수 = R2 bulk delete 1회 한도(키 1,000개). 남으면 다음 틱이 이어간다. */
+const TOMBSTONE_PAGE = 1_000;
+/** D1은 문장당 bind 인자 100개가 한도 — id 목록을 이 크기로 나눈다(+ cutoff 1개). */
+const D1_IDS_PER_STATEMENT = 90;
+
+export type TombstonePurgeResult = {
+  cutoff: string;
+  /** 지운 묘비 행 수. */
+  deleted: number;
+  /** 행을 지우기 전에 R2에서 한 번 더 지운 키 수(같은 키에 살아 있는 행이 있으면 세지 않는다). */
+  redeleted: number;
+  /** EVIDENCE 버킷이 없으면 R2 재삭제를 못 하므로 묘비를 남긴다(안전망을 잃지 않게). */
+  skipped?: "no_bucket";
+  error?: string;
+};
+
+/**
+ * 삭제한 지 TRAINING_INDEX_TOMBSTONE_DAYS가 지난 묘비 행을 지운다 — 그 전에 그 키를 R2에서 한 번 더 지운다
+ * (bulk delete 1회, 없는 키 delete는 성공). R2 재삭제가 실패하면 행을 남겨 다음 틱이 다시 시도한다. 던지지 않는다.
+ */
 export async function purgeTrainingIndexTombstones(
-  env: Pick<Env, "DB">,
+  env: Pick<Env, "DB" | "EVIDENCE">,
   now: Date = new Date(),
-  limit = 5_000,
-): Promise<{ cutoff: string; deleted: number; error?: string }> {
+  limit = TOMBSTONE_PAGE,
+): Promise<TombstonePurgeResult> {
   const cutoff = new Date(now.getTime() - TRAINING_INDEX_TOMBSTONE_DAYS * 86_400_000).toISOString();
+  const result: TombstonePurgeResult = { cutoff, deleted: 0, redeleted: 0 };
   try {
-    const res = await env.DB.prepare(TRAINING_INDEX_TOMBSTONE_PURGE_SQL).bind(cutoff, limit).run();
-    const changes = (res as { meta?: { changes?: unknown } } | null)?.meta?.changes;
-    return { cutoff, deleted: typeof changes === "number" ? changes : 0 };
+    if (!env.EVIDENCE) {
+      result.skipped = "no_bucket";
+      return result;
+    }
+    const rows =
+      (await env.DB.prepare(TRAINING_INDEX_TOMBSTONE_SELECT_SQL)
+        .bind(cutoff, Math.min(limit, TOMBSTONE_PAGE))
+        .all<{ id: string; r2_key: string; live: unknown }>()).results ?? [];
+    if (rows.length === 0) return result;
+    const keys = [...new Set(rows.filter((r) => Number(r.live) !== 1).map((r) => r.r2_key))];
+    if (keys.length > 0) await env.EVIDENCE.delete(keys);
+    result.redeleted = keys.length;
+    const ids = rows.map((r) => r.id);
+    const stmts = [];
+    for (let i = 0; i < ids.length; i += D1_IDS_PER_STATEMENT) {
+      const chunk = ids.slice(i, i + D1_IDS_PER_STATEMENT);
+      stmts.push(env.DB.prepare(tombstoneDeleteSql(chunk.length)).bind(cutoff, ...chunk));
+    }
+    const out = await env.DB.batch(stmts);
+    for (const r of out) {
+      const changes = (r as { meta?: { changes?: unknown } } | null)?.meta?.changes;
+      if (typeof changes === "number") result.deleted += changes;
+    }
   } catch (err) {
-    return { cutoff, deleted: 0, error: (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+    result.error = (err instanceof Error ? err.message : String(err)).slice(0, 200);
   }
+  return result;
 }
 
 /** 크론 1회에 옮기는 옛 검수 사본(과거 철회자) 최대 수. 남으면 다음 틱이 이어간다. */
@@ -304,12 +459,12 @@ export type TrainingPrivacyCronResult = {
   /** 과거 철회자의 옛 검수 사본을 색인으로 옮긴(삭제 요청과 함께) 수. */
   legacyDeclined: { requested: number; error?: string };
   sweep: TrainingDeletionSweepResult;
-  tombstones: { cutoff: string; deleted: number; error?: string };
+  tombstones: TombstonePurgeResult;
 };
 
 /**
  * 6시간 크론: ① 과거 철회자의 옛 검수 사본 요청 → ② 요청된 삭제 실행(철회·프로젝트 삭제 때 실패한 것 포함)
- * → ③ 30일 지난 묘비 청소. 각 단계는 따로 시도하고, 던지지 않는다.
+ * → ③ 30일 지난 묘비 청소(R2 한 번 더 지운 뒤). 각 단계는 따로 시도하고, 던지지 않는다.
  */
 export async function runTrainingPrivacyCron(
   env: Pick<Env, "DB" | "EVIDENCE">,

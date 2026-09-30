@@ -13,7 +13,17 @@
  *   ⑨ 0071 SQL은 additive만 (+ 실제 SQLite에 0001~0071 전부 적용)
  *   ⑩ 대시보드 방침 가드(NOT_OPS_META)가 0071 추가분을 이유와 함께 가진다 — 가드 자체는 대시보드 테스트가 돌린다
  *
+ *
+ * PR #574 검증 결함(#574-N = 검증 목록 번호) — 고친 뒤 더한 회귀 테스트:
+ *   #574-1  0071 이전 EU 런(게이트 없이 region DE가 찍힘) → 재검수·완료 콜백이 운영 정보를 기록하지 않는다
+ *   #574-3  PR 검토 중 프로젝트를 지우면, 삭제 뒤 끝난 캡처는 사본을 남기지 않는다
+ *   #574-4  outcome 갱신(get→put)이 철회·삭제와 겹쳐도 사본을 되살리지 않는다 · 묘비 청소 전 R2 한 번 더 삭제
+ *   #574-5  국가 모름(null)도 기본 off
+ *   #574-9  [변이 가드] 색인 문장의 consent_version 조건 · #574-10 [변이 가드] 캡처 경로의 put 뒤 재확인
+ *   (#574-2 과거 사본 백필은 backfill-training-index.test.mjs, #574-11 CORS는 workspace-cors.test.mjs)
+ *
  * 표시 규칙: [가드] = 옛 코드에서도 통과할 수 있는 형태 검사(회귀 증거 아님). 표시 없음 = 고치기 전 코드에서 실패.
+ * [변이 가드] = 고치기 전 코드에서도 통과하지만, 지키는 조건 한 줄을 지우면 실패하는 것을 확인한 테스트.
  * 실제 SQLite(node:sqlite) 테스트는 Node 20에서 건너뛴다(건너뜀 = 미측정, 통과 아님). 네트워크 없음.
  * 리얼 데이터(Rule 6): 한글 프로젝트 id·제목·의도 문장을 섞는다 — 색인이 R2 키(비ASCII는 _로 뭉개짐)가 아니라
  * project_id 칸으로 찾는지가 여기서 드러난다.
@@ -176,6 +186,7 @@ describe("⑦ 캡처 시 색인 행 — 색인 먼저, 그다음 사본", { skip
   it("동의한 사람의 검수·여정 사본 → 색인 행(원문 user_key·project_id·r2_key·kind)이 사본 키와 1:1", async () => {
     const { h, env, r2 } = sqliteEnv();
     consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
     // Shared clock between D1 and R2: how many SQL statements had run when each put happened.
     const putAt = [];
     const put = r2.put.bind(r2);
@@ -239,10 +250,47 @@ describe("⑦ 캡처 시 색인 행 — 색인 먼저, 그다음 사본", { skip
     assert.equal(indexRows(h).length, 0);
   });
 
+  it("#574-9 [변이 가드] 옛 조항 버전에 동의한 행으로는 색인하지 않는다 — 색인 문장의 consent_version 조건", async () => {
+    // hasActiveTrainingConsent가 앞에서 거르지만, 확인과 색인 사이에 조항이 바뀌거나(버전 올림) 다른 호출자가
+    // 확인 없이 부르면 이 문장 하나가 마지막 문이다. `AND consent_version = ?`를 지우면 이 테스트가 실패한다.
+    const { h, env } = sqliteEnv();
+    consentRow(h, UK_A, { consented: true, version: "1970-01-01" });
+    projectSql(h, P_BAKERY, UK_A);
+    const r = await tindex.indexTrainingRecord(env, {
+      userKey: UK_A, projectId: P_BAKERY, r2Key: "events/KR/2026/09/30/wprr_oldclause.json", kind: "training",
+      capturedAt: "2026-09-30T00:00:00.000Z", consentVersion: TRAINING_CONSENT_VERSION,
+    });
+    assert.deepEqual(r, { indexed: false, reason: "no_consent" });
+    assert.equal(indexRows(h).length, 0);
+  });
+
+  it("#574-10 [변이 가드] 캡처 경로가 put 뒤 재확인을 부른다 — put 도중 철회되면 사본을 남기지 않는다(검수·여정 둘 다)", async () => {
+    // put이 끝나는 순간에 철회 배치가 요청을 찍는다(캡처 중 철회). 두 캡처 함수에서
+    // `if (!(await settleAfterPut(...))) return …` 줄을 지우면 이 테스트가 실패한다.
+    const { h, env, r2 } = sqliteEnv();
+    consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
+    const put = r2.put.bind(r2);
+    r2.put = async (k, v, o) => {
+      const out = await put(k, v, o);
+      h.db.prepare(`UPDATE training_records_index SET delete_requested_at = 't-withdraw' WHERE r2_key = ?`).run(k);
+      return out;
+    };
+    const t = await trainingStore.captureTrainingRecord(env, trainingInput({ reviewRunId: "wprr_midput" }));
+    const j = await journeyStore.captureJourneyEvent(env, journeyInput({ eventId: "wprr_midput" }));
+    assert.deepEqual(t, { stored: false, reason: "deletion_requested" });
+    assert.deepEqual(j, { stored: false, reason: "deletion_requested" });
+    assert.equal(r2.objects.size, 0, "both copies removed right after the put");
+    const rows = indexRows(h);
+    assert.equal(rows.length, 2);
+    for (const r of rows) assert.ok(r.deleted_at, `deleted_at stamped: ${r.r2_key}`);
+  });
+
   it("put 뒤 재확인: 캡처 도중 삭제가 요청됐으면 방금 쓴 사본을 바로 지운다", async () => {
     assert.equal(typeof tindex.settleAfterPut, "function");
     const { h, env, r2 } = sqliteEnv();
     consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
     const key = "events/KR/2026/09/30/wprr_race.json";
     const idx = await tindex.indexTrainingRecord(env, {
       userKey: UK_A, projectId: P_BAKERY, r2Key: key, kind: "training", capturedAt: "2026-09-30T00:00:00.000Z",
@@ -264,6 +312,8 @@ describe("② 철회 → 그 사람의 학습 사본 삭제, 다른 사람 무�
     const { h, env, r2 } = sqliteEnv();
     consentRow(h, UK_A, { consented: true });
     consentRow(h, UK_B, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
+    projectSql(h, P_FLOWER, UK_B, "꽃집 주문");
     const a1 = await trainingStore.captureTrainingRecord(env, trainingInput());
     const a2 = await journeyStore.captureJourneyEvent(env, journeyInput());
     const b1 = await trainingStore.captureTrainingRecord(env, trainingInput({ userKey: UK_B, projectId: P_FLOWER, reviewRunId: "wprr_b1" }));
@@ -301,6 +351,7 @@ describe("② 철회 → 그 사람의 학습 사본 삭제, 다른 사람 무�
   it("R2 삭제가 실패하면 요청이 남고(deleted_at 없음) 응답은 그대로 성공한다", async () => {
     const { h, env, r2 } = sqliteEnv({ failDelete: () => true });
     consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
     const a1 = await trainingStore.captureTrainingRecord(env, trainingInput());
     const res = await consentRoute(env, "POST", { userKey: UK_A, consented: false });
     assert.equal(res.status, 200);
@@ -368,6 +419,33 @@ describe("③ 프로젝트 삭제 → 그 프로젝트 사본만, D1 먼저 R2 �
     assert.equal(h.db.prepare(`SELECT COUNT(*) AS n FROM workspace_projects WHERE id = ?`).get(P_BAKERY).n, 0);
     assert.equal(h.db.prepare(`SELECT COUNT(*) AS n FROM workspace_projects WHERE id = ?`).get(P_FLOWER).n, 1);
   });
+
+  it("#574-3 PR 검토 중 프로젝트를 지우면, 삭제 뒤에 끝난 캡처는 사본을 남기지 않는다(색인이 프로젝트를 확인 → 저장 안 함)", async () => {
+    // 리뷰 라우트는 소유권을 처음에만 본다 — LLM 리뷰·검증 패널(수십 초) 뒤 캡처 사이에 삭제가 끼는 경합.
+    const { h, env, r2 } = sqliteEnv();
+    consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A, "동네 빵집 예약");
+    await deleteProject(env, P_BAKERY, UK_A);
+    const t = await trainingStore.captureTrainingRecord(env, trainingInput({ reviewRunId: "wprr_inflight" }));
+    const j = await journeyStore.captureJourneyEvent(env, journeyInput({ eventId: "wprr_inflight" }));
+    assert.deepEqual(t, { stored: false, reason: "no_project" });
+    assert.deepEqual(j, { stored: false, reason: "no_project" });
+    assert.equal(r2.calls.filter((c) => c[0] === "put").length, 0, "no copy of a deleted project");
+    assert.equal(indexRows(h).length, 0);
+    const cron = await tindex.runTrainingPrivacyCron(env, new Date("2026-10-01T06:00:00Z"));
+    assert.equal(cron.sweep.pending, 0);
+    assert.equal(r2.objects.size, 0);
+  });
+
+  it("#574-3 남의 프로젝트 id로 캡처해도 색인되지 않는다(프로젝트 소유자 = 캡처한 사람일 때만 — 라우트 소유권 확인 뒤의 심층 방어)", async () => {
+    const { h, env, r2 } = sqliteEnv();
+    consentRow(h, UK_B, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
+    const t = await trainingStore.captureTrainingRecord(env, trainingInput({ userKey: UK_B }));
+    assert.equal(t.stored, false);
+    assert.equal(indexRows(h).length, 0);
+    assert.equal(r2.objects.size, 0);
+  });
 });
 
 // ─── ⑧ 크론 ──────────────────────────────────────────────────────────────────────
@@ -377,6 +455,7 @@ describe("⑧ 크론(6시간) — 재시도 · 과거 철회자 · 묘비 청소
     let failing = true;
     const { h, env, r2 } = sqliteEnv({ failDelete: () => failing });
     consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
     const a1 = await trainingStore.captureTrainingRecord(env, trainingInput());
     await consentRoute(env, "POST", { userKey: UK_A, consented: false });
     assert.equal(r2.objects.has(a1.key), true, "first attempt failed");
@@ -421,6 +500,113 @@ describe("⑧ 크론(6시간) — 재시도 · 과거 철회자 · 묘비 청소
     assert.deepEqual(indexRows(h).map((x) => x.id).sort(), ["tri_live", "tri_recent"]);
   });
 
+  it("#574-4 재검수 outcome 갱신(get→put) 사이에 철회·삭제가 끝나면, put이 사본을 되살리지 않는다(조건부 put)", async () => {
+    const { h, env, r2 } = sqliteEnv();
+    consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
+    const cap = await trainingStore.captureTrainingRecord(env, trainingInput({ reviewRunId: "wprr_prior" }));
+    assert.equal(cap.stored, true);
+    // 라우트의 전제(workspace-github.ts): 이 순간 동의는 유효하다.
+    assert.equal(await consentDb.hasActiveTrainingConsent(env, UK_A), true);
+    // get이 끝난 직후, put 전에 철회(요청 배치) + 삭제 스윕이 끝난다.
+    let fire = async () => {
+      await consentDb.setTrainingConsent(env, UK_A, false);
+      await tindex.sweepTrainingDeletions(env, { kind: "user", userKey: UK_A }, { site: "withdrawal" });
+    };
+    const get = r2.get.bind(r2);
+    r2.get = async (k) => {
+      const obj = await get(k);
+      if (fire) {
+        const f = fire;
+        fire = null;
+        await f();
+      }
+      return obj;
+    };
+    const res = await trainingStore.updateTrainingRecordOutcome(env, cap.key, "resolved");
+    assert.deepEqual(res, { updated: false });
+    assert.equal(r2.objects.has(cap.key), false, "the deleted copy stays deleted");
+    const [row] = indexRows(h);
+    assert.ok(row.deleted_at);
+    await tindex.runTrainingPrivacyCron(env, new Date("2026-10-01T06:00:00.000Z"));
+    assert.equal(r2.objects.has(cap.key), false);
+  });
+
+  it("#574-4 삭제가 요청됐지만 아직 안 지운 사본의 outcome 갱신 → 쓴 직후 재확인이 바로 지운다(색인 사본·0071 이전 검수 사본 둘 다)", async () => {
+    const { h, env, r2 } = sqliteEnv();
+    consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
+    const cap = await trainingStore.captureTrainingRecord(env, trainingInput({ reviewRunId: "wprr_req" }));
+    const legacy = "events/KR/2026/08/01/wprr_legacy_req.json";
+    legacyReviewRun(h, r2, { id: "wprr_legacy_req", projectId: P_BAKERY, userKey: UK_A, key: legacy });
+    await r2.put(legacy, JSON.stringify({ event_id: "wprr_legacy_req", outcome: "pending" }));
+    // 철회 배치가 요청만 찍고(옛 검수 사본은 'trl_' 행으로 옮겨짐) 스윕은 아직 안 돈 상태.
+    h.db.prepare(`UPDATE training_records_index SET delete_requested_at = 't-req' WHERE r2_key = ?`).run(cap.key);
+    h.db
+      .prepare(
+        `INSERT INTO training_records_index (id, user_key, project_id, r2_key, kind, captured_at, delete_requested_at, deleted_at)
+         VALUES ('trl_wprr_legacy_req', ?, ?, ?, 'training', 't0', 't-req', NULL)`,
+      )
+      .run(UK_A, P_BAKERY, legacy);
+    for (const key of [cap.key, legacy]) {
+      assert.deepEqual(await trainingStore.updateTrainingRecordOutcome(env, key, "resolved"), { updated: false }, key);
+      assert.equal(r2.objects.has(key), false, `removed right after the rewrite: ${key}`);
+    }
+    for (const r of indexRows(h)) assert.ok(r.deleted_at, `deleted_at: ${r.id}`);
+  });
+
+  it("[가드] 삭제 요청이 없는 사본의 outcome 갱신은 그대로 된다(동의 유효)", async () => {
+    const { h, env, r2 } = sqliteEnv();
+    consentRow(h, UK_A, { consented: true });
+    projectSql(h, P_BAKERY, UK_A);
+    const cap = await trainingStore.captureTrainingRecord(env, trainingInput({ reviewRunId: "wprr_ok" }));
+    assert.deepEqual(await trainingStore.updateTrainingRecordOutcome(env, cap.key, "resolved"), { updated: true });
+    assert.equal(JSON.parse(r2.objects.get(cap.key)).outcome, "resolved");
+    assert.equal(indexRows(h)[0].deleted_at, null);
+  });
+
+  it("#574-4 안전망: 30일 지난 묘비를 지우기 전에 그 키를 R2에서 한 번 더 지운다 — 같은 키의 살아 있는 행이 있으면 건드리지 않는다", async () => {
+    const { h, env, r2 } = sqliteEnv();
+    const ins = h.db.prepare(
+      `INSERT INTO training_records_index (id, user_key, project_id, r2_key, kind, captured_at, delete_requested_at, deleted_at)
+       VALUES (?, ?, ?, ?, ?, 't', ?, ?)`,
+    );
+    const back = "events/KR/2026/08/01/wprr_back.json"; // 삭제 표시 뒤 되살아난 사본(재확인이 실패한 경우)
+    const live = `journey/2026/08/01/wsp______/wprr_live.json`;
+    ins.run("tri_back", UK_A, P_BAKERY, back, "training", "2026-08-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z");
+    ins.run("trl_live_old", UK_A, P_BAKERY, live, "journey", "2026-08-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z");
+    ins.run("tri_live_now", UK_A, P_BAKERY, live, "journey", null, null);
+    await r2.put(back, "{}");
+    await r2.put(live, "{}");
+    const r = await tindex.runTrainingPrivacyCron(env, new Date("2026-09-30T06:00:00.000Z"));
+    assert.equal(r2.objects.has(back), false, "the resurrected copy is deleted before its tombstone goes");
+    assert.equal(r2.objects.has(live), true, "a key that has a live index row is not deleted");
+    assert.equal(r.tombstones.deleted, 2);
+    assert.deepEqual(indexRows(h).map((x) => x.id), ["tri_live_now"]);
+  });
+
+  it("#574-4 묘비의 R2 재삭제가 실패하면 묘비를 남긴다(연결을 잃지 않고 다음 크론이 다시 시도)", async () => {
+    let failing = true;
+    const { h, env, r2 } = sqliteEnv({ failDelete: () => failing });
+    const back = "events/KR/2026/08/01/wprr_back2.json";
+    h.db
+      .prepare(
+        `INSERT INTO training_records_index (id, user_key, project_id, r2_key, kind, captured_at, delete_requested_at, deleted_at)
+         VALUES ('tri_back2', ?, ?, ?, 'training', 't', '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z')`,
+      )
+      .run(UK_A, P_BAKERY, back);
+    await r2.put(back, "{}");
+    const r1 = await tindex.runTrainingPrivacyCron(env, new Date("2026-09-30T06:00:00.000Z"));
+    assert.equal(r1.tombstones.deleted, 0);
+    assert.ok(r1.tombstones.error, "the failure is reported");
+    assert.equal(indexRows(h).length, 1, "tombstone kept");
+    failing = false;
+    const r2nd = await tindex.runTrainingPrivacyCron(env, new Date("2026-09-30T12:00:00.000Z"));
+    assert.equal(r2nd.tombstones.deleted, 1);
+    assert.equal(r2.objects.has(back), false);
+    assert.equal(indexRows(h).length, 0);
+  });
+
   // The Worker entry (dist/index.js) imports @cloudflare/containers, which does not load under Node —
   // so the wiring is pinned on the source, like rate-limit-ip-keyed-hash.test.mjs ④ 배선 does.
   it("배선: 워커의 6시간 크론(0 */6 * * *)이 runTrainingPrivacyCron을 부르고, 실패는 잡아 한 줄 JSON으로 남긴다", () => {
@@ -439,13 +625,22 @@ describe("⑧ 크론(6시간) — 재시도 · 과거 철회자 · 묘비 청소
 // ─── ⑤ 기본값 ───────────────────────────────────────────────────────────────────
 
 describe("⑤ 운영 정보 기본값 — 접속 국가", () => {
-  it("EU/EEA·GB·CH는 off, KR·US·PH는 on, 엣지 밖(null)은 on", () => {
+  it("EU/EEA·GB·CH는 off, KR·US·PH는 on", () => {
     assert.equal(typeof prefs.defaultOpsMetaForRegion, "function");
     const d = prefs.defaultOpsMetaForRegion;
     for (const c of ["DE", "FR", "GR", "IE", "PL", "SE", "IS", "LI", "NO", "GB", "CH"]) assert.equal(d(c), "off", c);
     for (const c of ["KR", "US", "PH", "TH", "JP", "SG"]) assert.equal(d(c), "on", c);
-    assert.equal(d(null), "on");
     assert.equal(d("de"), "off", "case-insensitive");
+  });
+
+  it("#574-5 국가를 모르면(null — 엣지 밖·앞으로 생길 내부 호출자) 'XX'(미상)·'T1'과 같이 off", () => {
+    const d = prefs.defaultOpsMetaForRegion;
+    assert.equal(d(null), "off");
+    assert.equal(d(""), "off");
+    assert.equal(d("XX"), "off");
+    assert.equal(d("T1"), "off");
+    assert.deepEqual(prefs.resolveOpsMetaFrom(null, null), { opsMeta: "off", source: "default" });
+    assert.deepEqual(prefs.resolveOpsMetaFrom("on", null), { opsMeta: "on", source: "user" }, "an explicit on still wins");
   });
 
   it("[가드] EU 27개국이 전부 들어 있다 · 같은 법 영역(올란드·프랑스 해외 주)·Tor·미상도 off", () => {
@@ -643,6 +838,78 @@ describe("④ 운영 정보 '끔' → 운영 정보 칸 NULL, '켬' → 채움 (
     assert.equal(reOn.region, "KR");
     assert.ok(reOn.envelope_json);
   });
+
+  it("#574-1 0071 이전 EU 런(게이트 없이 region DE·봉투가 찍힘) + 선택 없음 → 재검수는 물려받지 않고, 완료 콜백도 실패 유형을 기록하지 않는다", async () => {
+    // 0071 배포 전 런은 게이트 없이 region·envelope_json이 기록됐다 — '런을 만들 때 켜져 있었다'로 읽으면
+    // EU 기본 off가 뒤집힌다. 원 런이 얼마나 오래됐든 수리 PR이 배포 뒤 머지되면 이 경로를 탄다.
+    const NOW = Date.parse("2026-10-02T12:00:00Z");
+    const iso = (ms) => new Date(NOW - ms).toISOString();
+    const EU_USER = "uk_베를린_빵집";
+    const EU_PROJECT = "wsp_베를린_빵집";
+    const RUN = "wvc_pre0071_de";
+    assert.equal(prefs.defaultOpsMetaForRegion("DE"), "off");
+    const origin = checkRow({
+      id: RUN, project_id: EU_PROJECT, user_key: EU_USER, locale: "en", region: "DE",
+      envelope_json: JSON.stringify({ builtWith: { tools: ["bolt"] }, entryPath: "code", topicTags: null, locale: "en", contentLang: "en" }),
+      created_at: "2026-09-25T00:00:00.000Z", updated_at: "2026-09-25T00:00:00.000Z",
+    });
+    const job = {
+      id: "wrj_de", project_id: EU_PROJECT, user_key: EU_USER, visual_check_id: RUN, repo_full_name: "acme/베를린-빵집",
+      status: "done", branch_name: `fix/simsa-${RUN}`, pr_url: "https://github.com/acme/x/pull/9", pr_number: 9,
+      env_cause: 0, mode: "auto_fix", changed_files: 1, error: null, region: "DE", verify_check_id: null, resolved: null,
+      created_at: iso(1800_000), updated_at: iso(1800_000),
+    };
+    const events = [{
+      id: "evt_de", user_key: EU_USER, project_id: EU_PROJECT, event_type: REPAIR_MERGED_EVENT,
+      metadata_json: JSON.stringify({ runId: RUN, prNumber: 9 }), created_at: iso(10 * 60_000),
+    }];
+    const env = {
+      ENVIRONMENT: "test", INTERNAL_CALLBACK_TOKEN: TOKEN, PUBLIC_BASE_URL: "https://base",
+      INSPECTOR: makeDoStub({ names: [], calls: [] }),
+      DB: withPrefs(makeFakeD1({ projects: new Map([[EU_PROJECT, projectRow(EU_PROJECT, EU_USER)]]), checks: [origin], jobs: [job], events }), new Map()),
+    };
+    assert.equal((await runVerifySweep(env, { nowMs: NOW })).dispatched, 1);
+    const re = env.DB._checks.find((c) => c.id !== RUN);
+    assert.equal(re.region, null, "region not inherited");
+    assert.equal(re.envelope_json, null, "envelope not inherited");
+    assert.equal(re.source_check_id, RUN, "lineage (functional) is kept");
+    const done = await send(createApp(), env, "/internal/visual-check-done", {
+      body: { runId: re.id, ok: true, decision: "Needs Fix", works: false, report: REPORT },
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    assert.equal(done.status, 200, JSON.stringify(done.json));
+    assert.equal(env.DB._checks.find((c) => c.id === re.id).finding_codes_json, null, "no finding codes");
+    // 배포 시점에 진행 중이던 0071 이전 런의 콜백도 같다.
+    const inflight = await send(createApp(), env, "/internal/visual-check-done", {
+      body: { runId: RUN, ok: true, decision: "Needs Fix", works: false, report: REPORT },
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    assert.equal(inflight.status, 200);
+    assert.equal(env.DB._checks.find((c) => c.id === RUN).finding_codes_json, null);
+  });
+
+  it("#574-1 요청 없는 경로의 기본값 = 런에 기록된 국가의 기본값(DE·GB·CH off · KR on · 국가 없음 off) — 명시 선택이 이긴다", async () => {
+    const env = { DB: withPrefs(makeFakeD1(), new Map([["uk_on", "on"], ["uk_off", "off"]])) };
+    const allowed = (userKey, region, envelopeJson = "{}") =>
+      prefs.opsMetaAllowedForRun(env, { userKey, region, envelopeJson }, "test");
+    for (const c of ["DE", "GB", "CH"]) assert.equal(await allowed("uk_none", c), false, c);
+    assert.equal(await allowed("uk_none", "KR"), true);
+    assert.equal(await allowed("uk_none", null, "{}"), false, "a run with no country is not 'on' by default");
+    assert.equal(await allowed("uk_none", null, null), false);
+    assert.equal(await allowed("uk_on", "DE"), true);
+    assert.equal(await allowed("uk_off", "KR"), false);
+  });
+
+  it("#574-5 국가를 모르는 요청(cf 없음) + 선택 없음 → 운영 정보 칸 NULL · 명시 on이면 채움(국가 칸은 모르니 NULL)", async () => {
+    const row = await runAndFinish(runEnv());
+    assert.equal(row.region, null);
+    assert.equal(row.envelope_json, null);
+    assert.equal(row.finding_codes_json, null);
+    const on = await runAndFinish(runEnv({ choices: new Map([[USER, "on"]]) }));
+    assert.equal(on.region, null);
+    assert.ok(on.envelope_json);
+    assert.deepEqual(JSON.parse(on.finding_codes_json), ["network_5xx"]);
+  });
 });
 
 describe("④ 수리 잡 region", () => {
@@ -720,6 +987,15 @@ describe("⑥ /workspace/privacy-prefs — Zod 경계 · userKey 범위", { skip
       region: "KR",
       training: { state: "undecided", version: null, decidedAt: null, currentVersion: TRAINING_CONSENT_VERSION },
     });
+  });
+
+  it("#574-5 GET 국가 모름(cf 없음) → off/default · region null", async () => {
+    const { env } = sqliteEnv();
+    const r = await req(env, "GET", { query: `?userKey=${encodeURIComponent("uk_홍길동")}` });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.opsMeta, "off");
+    assert.equal(r.json.opsMetaSource, "default");
+    assert.equal(r.json.region, null);
   });
 
   it("GET 기본값(DE) → off/default", async () => {

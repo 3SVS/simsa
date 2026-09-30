@@ -142,7 +142,8 @@ export async function runVerifySweep(
     const acceptancePlan = acceptancePlanFromDevSpec(project?.devSpec);
 
     // Train K · K-1 (0071): 운영 정보는 이 사람이 지금 '끔'이면 물려받지 않는다(요청이 없으니 명시 선택,
-    // 없으면 원 런을 만들 때의 결정 — opsMetaAllowedForRun). 계보(source_check_id)는 기능 데이터라 그대로.
+    // 없으면 원 런에 기록된 국가의 기본값 — opsMetaAllowedForRun; 0071 이전 EU 런의 'DE'도 off).
+    // 계보(source_check_id)는 기능 데이터라 그대로.
     const opsOn = await opsMetaAllowedForRun(env, origin, "verify-sweep");
 
     let run;

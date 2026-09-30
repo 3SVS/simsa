@@ -742,7 +742,8 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     }
 
     // Train K · K-1 (0071): finding codes are ops meta. No request here (container callback) → the
-    // person's explicit choice, else the decision taken when the run was inserted (opsMetaAllowedForRun).
+    // person's explicit choice, else the default for the country recorded on the run (opsMetaAllowedForRun —
+    // a pre-0071 EU run recorded 'DE' without the gate, and 'DE' is off by default).
     if (findingCodesJson !== null && !(await opsMetaAllowedForRun(c.env, run, "inspection-done"))) {
       findingCodesJson = null;
     }
