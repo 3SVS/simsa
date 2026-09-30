@@ -9,7 +9,9 @@
 //    않았어요(베타)" + 다시 시도 · 지시서 받아가기. 모르는 코드는 일반 문구.
 //  - 끝: 내 앱 카드 — 주소 · (있으면) 마지막 확인 결과 · 이 앱 신고하기 · (있으면) 받아가기 ·
 //    "Simsa 주소에서 운영 중 · 프로덕션 아님"(D-6).
-//  - 옛 서버(빌드 라우트 없음): 만들기 버튼 대신 정직한 안내 + 지시서 받아가기.
+//  - 옛 서버(빌드 라우트 없음)·서버가 만들기를 열지 않음(#578 결함 2): 만들기 버튼 대신 정직한 안내 + 지시서
+//    받아가기. 닫혀 있으면 멈춤 화면에 [다시 시도]도 내밀지 않는다(누르면 막힐 버튼).
+//  - 지시서 받아가기(#578 결함 4): 그 자리에서 지시서 문서를 받는다(개발 도구 고르는 화면으로 보내지 않는다).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -17,8 +19,10 @@ import { getProject } from "@/lib/mock-data";
 import { getLocalProject, getUserKey, loadExtendedProjectData } from "@/lib/workflow-store";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 import { MakeAppPanel, StartNoticeCallout } from "@/components/MakeAppPanel";
+import { TakeSpecButton } from "@/components/TakeSpecButton";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useAppPresence } from "@/lib/use-app-presence";
+import { useBuildOpen } from "@/lib/use-build-open";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { useStartBuild, type StartedBuild } from "@/lib/use-start-build";
@@ -31,13 +35,15 @@ import {
   budgetLine,
   buildAvailability,
   buildFailureKind,
+  buildPollStart,
   buildStageRow,
   failureActions,
   isBuildActive,
   latestBuildJob,
-  makePanelVisible,
+  myAppEmptyState,
   nextBuildPollDelayMs,
   stageForStatus,
+  startBuildPolling,
   type BuildJobEventView,
   type BuildJobView,
   type BuildStageState,
@@ -66,6 +72,8 @@ export default function MyAppPage() {
   const visible = usePageVisible();
   // D-17: 만들기는 아이디어·기획서 문의 길이다 — 이미 앱이 있는 프로젝트(주소로 들어온 경우)에는 내밀지 않는다.
   const presence = useAppPresence(id);
+  // #578 결함 2: 서버가 "만들기가 끝까지 된다"고 확인했는가(사이드바·지시서 화면과 같은 한 번의 답).
+  const makeOpen = useBuildOpen();
 
   const [list, setList] = useState<BuildJobListOk | BuildApiFailure | null>(null);
   const [job, setJob] = useState<BuildJobView | null>(null);
@@ -137,37 +145,33 @@ export default function MyAppPage() {
   }, [job?.status]);
   const pollStartedAt = useRef(Date.now());
   const wasHidden = useRef(false);
+  // #578 결함 9: 켜고 끄는 규칙(buildPollStart)과 루프(startBuildPolling)는 순수 함수 — 가짜 타이머 테스트가 중단·재개를
+  // 동작으로 고정한다. 여기서는 그 둘을 가시성에 묶기만 한다: 탭이 숨으면 이 effect의 cleanup(stop)이 예약을 지우고
+  // 늦게 돌아온 조회도 다시 예약하지 않는다. 돌아오면 기다리지 않고 바로(0) 한 번.
   useEffect(() => {
     if (!visible) {
       wasHidden.current = true;
       return;
     }
-    if (!jobId || !active) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const delayFor = (status: string | null) =>
-      nextBuildPollDelayMs(status, {
-        hidden: document.visibilityState === "hidden",
-        elapsedMs: Date.now() - pollStartedAt.current,
-      });
-    const tick = async () => {
-      const r = await getBuildJob(id, jobId, getUserKey());
-      if (cancelled) return;
-      if (r.ok) {
-        setJob(r.job);
-        setEvents(r.events);
-      }
-      const next = delayFor(r.ok ? r.job.status : statusRef.current);
-      if (next !== null) timer = setTimeout(tick, next);
-    };
-    // 탭이 돌아온 직후에는 기다리지 않고 바로 한 번 — 오래 떠 있던 화면이 5초 동안 옛 단계를 보이지 않게.
-    const first = wasHidden.current ? 0 : delayFor(statusRef.current);
+    const first = buildPollStart({ visible, active: Boolean(jobId) && active, resumed: wasHidden.current, status: statusRef.current, elapsedMs: Date.now() - pollStartedAt.current });
     wasHidden.current = false;
-    if (first !== null) timer = setTimeout(tick, first);
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
+    if (!jobId) return;
+    return startBuildPolling({
+      firstDelayMs: first,
+      tick: async () => {
+        const r = await getBuildJob(id, jobId, getUserKey());
+        if (r.ok) {
+          setJob(r.job);
+          setEvents(r.events);
+        }
+        return nextBuildPollDelayMs(r.ok ? r.job.status : statusRef.current, {
+          hidden: document.visibilityState === "hidden",
+          elapsedMs: Date.now() - pollStartedAt.current,
+        });
+      },
+      schedule: (fn, ms) => setTimeout(fn, ms),
+      cancel: (handle) => clearTimeout(handle),
+    });
   }, [id, jobId, active, visible]);
 
   const handleStarted = useCallback(
@@ -198,15 +202,25 @@ export default function MyAppPage() {
   const row = job ? buildStageRow(job, events) : null;
   const failed = job?.status === "failed";
   const failKind = failed ? buildFailureKind(job) : null;
-  const actions = failKind ? failureActions(failKind) : null;
+  // #578 결함 3: 만들기가 닫혀 있으면 [다시 시도]는 누르면 막힐 버튼 — 지시서 받아가기 하나만. 열림을 묻는 동안은
+  // 행동 줄을 잠시 그리지 않는다(주 버튼이 지시서→다시 시도로 뒤집히지 않게).
+  const actions = failKind && makeOpen !== null ? failureActions(failKind, { canRetry: makeOpen === true }) : null;
   const currentStage = job && active ? stageForStatus(job.status) : null;
   const budget = budgetLine(job);
-  // 아직 만든 적 없을 때만 묻는다: 이 프로젝트가 만들기 문인가(true) · 이미 앱이 있는가(false) · 아직 모름(null).
-  const makeHere =
-    availability === "available" && !job && devSpecLoaded
-      ? makePanelVisible({ entryPath: loadExtendedProjectData(id)?.entryPath ?? null, presence, specSource: view?.source ?? null, availability })
-      : null;
-  const holding = availability === "loading" || (availability === "available" && !job && (!devSpecLoaded || makeHere === null));
+  // 아직 만든 적 없을 때만 묻는다(myAppEmptyState — 한 곳에서): 만들기 · 지시서 먼저 · 이미 앱 있음 · 닫힘 · 보류.
+  const empty = !job
+    ? myAppEmptyState({
+        availability,
+        open: makeOpen,
+        entryPath: loadExtendedProjectData(id)?.entryPath ?? null,
+        presence,
+        specSource: view?.source ?? null,
+        devSpecLoaded,
+        hasDevSpec: Boolean(view),
+      })
+    : null;
+  const holding = empty === "hold";
+  const title = project.name;
 
   async function handleRetry() {
     const started = await retry.start();
@@ -224,11 +238,11 @@ export default function MyAppPage() {
       {retry.starting ? mk.starting : mk.retry}
     </button>
   );
-  const takeSpecLink = (primary: boolean) => (
-    <Link key="takeSpec" href={`${base}/export`} className={`btn btn-md ${primary ? "btn-primary" : "btn-secondary"}`}>
-      {mk.takeSpec}
-    </Link>
+  const takeSpecButton = (primary: boolean) => (
+    <TakeSpecButton key="takeSpec" projectId={id} title={title} variant={primary ? "primary" : "secondary"} />
   );
+  const actionButton = (which: "retry" | "takeSpec", primary: boolean) =>
+    which === "retry" ? retryButton(primary) : takeSpecButton(primary);
 
   return (
     <div className="space-y-6">
@@ -244,11 +258,11 @@ export default function MyAppPage() {
         </div>
       )}
 
-      {/* 옛 서버 — 누르면 막히는 버튼 대신 정직한 안내 */}
-      {availability === "missing" && (
+      {/* 옛 서버·아직 열리지 않음(#578 결함 2) — 누르면 막히는 버튼 대신 정직한 안내 + 그 자리에서 지시서 받기 */}
+      {empty === "closed" && (
         <section className="card p-5">
           <p className="text-sm leading-relaxed text-gray-700">{mk.startErrors.unavailable}</p>
-          <div className="mt-4">{takeSpecLink(true)}</div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">{takeSpecButton(true)}</div>
         </section>
       )}
 
@@ -262,7 +276,7 @@ export default function MyAppPage() {
       )}
 
       {/* 이미 앱이 있는 프로젝트 — 새로 만들지 않는다(D-17), 그 앱을 확인하는 길로 */}
-      {makeHere === false && (
+      {empty === "notForThis" && (
         <section className="card p-5">
           <p className="text-sm leading-relaxed text-gray-700">{mk.notForThisProject}</p>
           <Link href={base} className="btn btn-md btn-primary mt-4">
@@ -272,17 +286,17 @@ export default function MyAppPage() {
       )}
 
       {/* 아직 만든 적 없음 — 만들기(지시서가 있으면) 또는 지시서 먼저 */}
-      {makeHere === true &&
-        (view ? (
-          <MakeAppPanel projectId={id} view={view} latestJob={null} developerMode={developerMode} onStarted={handleStarted} />
-        ) : (
-          <section className="card p-5">
-            <p className="text-sm leading-relaxed text-gray-700">{mk.needDevSpec}</p>
-            <Link href={`${base}/dev-spec`} className="btn btn-md btn-primary mt-4">
-              {mk.needDevSpecLink}
-            </Link>
-          </section>
-        ))}
+      {empty === "make" && view && (
+        <MakeAppPanel projectId={id} projectTitle={title} view={view} latestJob={null} developerMode={developerMode} onStarted={handleStarted} />
+      )}
+      {empty === "needSpec" && (
+        <section className="card p-5">
+          <p className="text-sm leading-relaxed text-gray-700">{mk.needDevSpec}</p>
+          <Link href={`${base}/dev-spec`} className="btn btn-md btn-primary mt-4">
+            {mk.needDevSpecLink}
+          </Link>
+        </section>
+      )}
 
       {/* 끝 — 내 앱 카드 (D-6) */}
       {card && (
@@ -354,14 +368,18 @@ export default function MyAppPage() {
       )}
 
       {/* 멈춤 — 종류별 정직한 이유 + 비용 없음 + 다시 시도 · 지시서 받아가기 */}
-      {failed && failKind && actions && (
+      {failed && failKind && (
         <section className="card p-5">
           <p className="text-sm leading-relaxed text-gray-800">{mk.failures[failKind]}</p>
           <p className="mt-1.5 text-xs text-gray-500">{mk.noCharge}</p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {actions.primary === "retry" ? [retryButton(true), takeSpecLink(false)] : [takeSpecLink(true), retryButton(false)]}
-          </div>
-          {retry.notice && <StartNoticeCallout notice={retry.notice} projectId={id} />}
+          {actions && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {actionButton(actions.primary, true)}
+              {actions.secondary && actionButton(actions.secondary, false)}
+            </div>
+          )}
+          {/* 멈춤 화면의 행동 줄에는 [지시서 받아가기]가 이미 있다 — 알림 안에 한 번 더 두지 않는다. */}
+          {retry.notice && <StartNoticeCallout notice={retry.notice} projectId={id} projectTitle={title} takeSpecNearby={actions !== null} />}
         </section>
       )}
     </div>

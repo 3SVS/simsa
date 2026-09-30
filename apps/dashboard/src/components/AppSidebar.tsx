@@ -15,6 +15,7 @@ import {
   stepMapView,
   sidebarStepItems,
   navLabelKey,
+  lockHintKey,
   visualCheckFact,
   reviewRunFact,
   sourceFacts,
@@ -28,6 +29,7 @@ import { listBuildJobs } from "@/lib/build-job-api";
 import { hostedBuildFact } from "@/lib/build-job-view.mjs";
 import { SIMSA_REPO_URL } from "@/lib/simsa-share.mjs";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
+import { useBuildOpen } from "@/lib/use-build-open";
 import { sidebarDeveloperItems } from "@/lib/developer-mode.mjs";
 
 const MOCK_IDS = new Set(MOCK_PROJECTS.map((p) => p.id));
@@ -317,24 +319,27 @@ export function AppSidebar() {
   useEffect(() => {
     if (projectId && factsProjectId === projectId) publishAppAddress(projectId, hasDeployUrl);
   }, [projectId, factsProjectId, hasDeployUrl]);
-  // B-8 (D-17 N3 "내 앱"): once an app exists, "내 앱" stays only when Simsa built (or is
-  // building) one for this project — never hide something in use. Asked once per project and
-  // only when it matters (an app exists); the no-app sidebar always shows "내 앱".
+  // B-8 (D-17 N3 "내 앱"): "내 앱" shows when Simsa built (or is building) one for this project —
+  // never hide something in use — and, before any app exists, when the server confirmed making is
+  // open (PR #578 검증 결함 2: a "내 앱" that can only say "not open yet" is a detour). Asked once
+  // per project; the availability answer is shared with the other screens (useBuildOpen).
+  const makeOpen = useBuildOpen();
   const [hasHostedBuild, setHasHostedBuild] = useState<boolean | null>(null);
   useEffect(() => {
     setHasHostedBuild(null);
-    if (!projectId || !hasApp) return;
+    if (!projectId) return;
     let cancelled = false;
     listBuildJobs(projectId, getUserKey())
       .then((res) => { if (!cancelled) setHasHostedBuild(hostedBuildFact(res)); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [projectId, hasApp]);
+  }, [projectId]);
   const stepSlugs = sidebarStepItems({
     hasApp: view.known ? hasApp : null,
     developerMode,
     hasPrReviewHistory: hasReviewRun,
     hasHostedBuild,
+    makeOpen,
   });
   // Same name as the bottom bar for the same screen (결함 13): "앱 확인하기"
   // only once the app exists; before that the former "시각 검수".
@@ -359,14 +364,12 @@ export function AppSidebar() {
       items: labelled(stepSlugs.results),
     },
   };
-  const lockHint = (reason: "need_items" | "need_url" | "need_build" | null) =>
-    reason === "need_url"
-      ? t.stepsNav.lockNeedUrl
-      : reason === "need_build"
-        ? t.stepsNav.lockNeedBuild
-        : reason === "need_items"
-          ? t.stepsNav.lockNeedItems
-          : "";
+  // B-8 (#578 결함 1·8): with making open, the results lock says "build it in 내 앱 first" — not
+  // "get the builder pack and connect your URL" next to a [만들기] answer (lockHintKey).
+  const lockHint = (reason: "need_items" | "need_url" | "need_build" | null) => {
+    const key = lockHintKey(reason, { makeOpen });
+    return key ? t.stepsNav[key] : "";
+  };
   const statusGlyph = (status: string) =>
     status === "done" ? "✓" : status === "current" ? "●" : "○";
   const advancedItems = [["experiment", t.nav.experiment], ["benchmark", t.nav.benchmark]] as const;

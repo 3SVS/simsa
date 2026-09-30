@@ -405,6 +405,18 @@ const EN = {
     // #559 검증 결함 2: a check that is still running is not a result yet.
     viewProgress: "See how it's going",
     viewProgressDesc: "We're opening your app and clicking through it. This can take a few minutes.",
+    // B-8 (PR #578 검증 결함 1·8): the idea/plan doors once making is open — the same answer as the
+    // spec screen's [Build it], and after the build the app itself (never "build it with your AI tool").
+    makeApp: "Build the app",
+    makeAppDesc: "Your development spec is ready. Press Build it and Simsa builds the app and puts it on a Simsa address — no sign-up anywhere.",
+    makeSpec: "Write the development spec",
+    makeSpecDesc: "Your acceptance items are ready. Write the development spec next — Simsa builds the app from it.",
+    viewBuild: "See progress",
+    viewBuildDesc: "Simsa is building your app now. You can see which step it's on.",
+    viewApp: "Open My app",
+    viewAppDesc: "Your app is built and running on its Simsa address.",
+    buildStopped: "See why it stopped",
+    buildStoppedDesc: "The build stopped. See why, and what you can do next.",
   },
   stepsNav: {
     prepare: "Prepare",
@@ -420,6 +432,8 @@ const EN = {
     // overview asks for the same thing) — linking code is optional (D-17 amend).
     lockNeedUrl: "Add your app's address first.",
     lockNeedBuild: "Get your builder pack and connect your app's URL first.",
+    // B-8 (#578 결함 1·8): with making open, the app gets built right here.
+    lockNeedBuildMake: "Build the app first (My app) — results show up here after that.",
     next: "Next",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
     whySeeProblems: "The review found things that need attention. Here they are, with a fix for each.",
@@ -492,6 +506,9 @@ const EN = {
     // #559 여정 렌즈 결함 10: the same step in the default view's name (sidebar: "Build guide").
     gsIdeaStep2Guide: "Get the build guide — paste it into your dev AI and it builds the app for you.",
     gsIdeaStep3: "When it's live, paste the address here — Simsa checks it works, in plain words.",
+    // B-8 (PR #578 검증 결함 1·8): the same list once making is open — the path the [Build it] button takes.
+    gsIdeaStep2Make: "Write the development spec and press Build it — Simsa builds the app and puts it on a Simsa address. No account needed.",
+    gsIdeaStep3Make: "When it's done, open its address from My app.",
     sampleBanner: "This is a hands-on sample. Try everything — re-run the check, open fix ideas, export the build pack.",
     sampleCta: "Start with my own idea",
   },
@@ -607,8 +624,10 @@ const EN = {
     screens: "Screens",
     entities: "Things we store",
     excluded: "Not in this version",
-    countScreens: "{n} screens",
-    countEntities: "{n} kinds",
+    // PR #578 검증 결함 6: "{n} screens"/"{n} kinds" read "1 screens"/"1 kinds". The label beside
+    // it already names the thing, so the number stands alone (right for any count).
+    countScreens: "{n}",
+    countEntities: "{n}",
     none: "(none)",
     humanOnly: "{n} of the checks need a person's judgment — Simsa will not call those done on its own.",
     inferredNote: "This spec was inferred from an existing app. Only the items you confirmed are treated as final.",
@@ -647,7 +666,8 @@ const EN = {
   // default flow: no developer words, no account buttons (test/build-make-copy.test.mjs).
   makeApp: {
     panelTitle: "Build the app from this spec",
-    what: "What: {what} · {screens} screens · {entities} kinds of data",
+    // #578 결함 6: count-agnostic ("1 kinds of data" before).
+    what: "What: {what} · Screens: {screens} · Kinds of data: {entities}",
     excluded: "Not in this version: {excluded}",
     eta: "Time: up to about {minutes} minutes (pilot — this may change).",
     free: "No charge (beta).",
@@ -698,6 +718,9 @@ const EN = {
       interrupted: "The build was cut off partway (our build machine stopped). Trying again starts a fresh build.",
       startFailed: "The build couldn't start — our build machine didn't respond.",
       buildFailed: "It stopped at the build check: what was built didn't come together cleanly, so it wasn't put online.",
+      // #578 결함 5: the builder said it was done (with an address), but the build check didn't pass — we
+      // don't know what is on that address, so we say only what we know.
+      buildUnverified: "It didn't pass the build check, so we didn't count it as finished. Something may already be on its address, but it isn't verified — so we don't show it as your app.",
       testFailed: "It stopped because the app didn't pass the check that it works as planned, so it wasn't put online.",
       publishFailed: "It stopped while putting the app online.",
       generic: "It stopped for a reason we couldn't identify.",
@@ -705,6 +728,11 @@ const EN = {
     noCharge: "You weren't charged (beta).",
     retry: "Try again",
     takeSpec: "Take the spec with you",
+    // #578 결함 4: "Take the spec" downloads the spec document itself, right here.
+    takeSpecWorking: "Getting the spec…",
+    takeSpecDone: "Downloaded. Hand this file as-is to a developer or a team that builds apps.",
+    takeSpecError: "We couldn't get the spec just now.",
+    takeSpecErrorLink: "Open the development spec →",
     appTitle: "Your app is live",
     address: "Address",
     hostedNote: "Running on a Simsa address · not a production deployment",
@@ -723,7 +751,8 @@ const EN = {
       dailyLimitReached: "You've used today's builds. You can build again tomorrow (after midnight UTC).",
       dailyLimitReachedAt: "You've used today's builds. You can build again {when}.",
       dailyLimitCleared: "Your daily builds have reset. You can build again now.",
-      hostingFailed: "We couldn't set up a place to put the app online. You weren't charged — please try again in a bit.",
+      // #578 결함 3: trying again may stop at the same place — don't promise it; offer the spec instead.
+      hostingFailed: "We couldn't set up a place to put the app online (a problem on our side). You weren't charged. You can take the spec with you now.",
       network: "Couldn't reach the server. Check your connection and try again.",
       generic: "Couldn't start the build. Please try again.",
     },
@@ -3361,6 +3390,18 @@ const KO = {
     // #559 검증 결함 2: 아직 도는 확인은 결과가 아니다.
     viewProgress: "진행 상황 보기",
     viewProgressDesc: "앱을 열어 눌러 보는 중이에요. 몇 분 걸릴 수 있어요.",
+    // B-8 (PR #578 검증 결함 1·8): 만들기가 열린 아이디어·기획서 문 — 지시서 화면의 [만들기]와 같은 답,
+    // 다 만든 뒤에는 그 앱("쓰시는 AI 도구로 만드세요"라고 하지 않는다).
+    makeApp: "앱 만들기",
+    makeAppDesc: "개발 지시서가 준비됐어요. [만들기]를 누르면 Simsa가 앱을 만들어 Simsa 주소에 올려 드려요 — 따로 가입할 곳은 없어요.",
+    makeSpec: "개발 지시서 만들기",
+    makeSpecDesc: "확인 항목이 준비됐어요. 이어서 개발 지시서를 만들면 Simsa가 그대로 앱을 만들어요.",
+    viewBuild: "진행 상황 보기",
+    viewBuildDesc: "지금 이 앱을 만들고 있어요. 어느 단계인지 볼 수 있어요.",
+    viewApp: "내 앱 보기",
+    viewAppDesc: "앱을 다 만들어 Simsa 주소에서 운영 중이에요.",
+    buildStopped: "멈춘 이유 보기",
+    buildStoppedDesc: "만들기가 멈췄어요. 왜 멈췄는지, 다음에 무엇을 할 수 있는지 확인해 주세요.",
   },
   stepsNav: {
     prepare: "준비",
@@ -3375,6 +3416,8 @@ const KO = {
     // 코드 연결은 선택이다(D-17 amend).
     lockNeedUrl: "앱 주소를 먼저 넣으세요.",
     lockNeedBuild: "빌더 팩을 받아 앱을 만들고, 앱 URL을 먼저 연결하세요.",
+    // B-8 (#578 결함 1·8): 만들기가 열려 있으면 앱은 여기서 만든다.
+    lockNeedBuildMake: "먼저 '내 앱'에서 앱을 만들어 주세요 — 그다음 결과가 여기에 나와요.",
     next: "다음",
     // 결과를 아는 다음 걸음의 이유 한 줄 — "다음 →"만으로는 유도가 안 된다.
     whySeeProblems: "검수에서 살펴봐야 할 것이 나왔어요. 각각 어떻게 고치는지까지 함께 있습니다.",
@@ -3447,6 +3490,9 @@ const KO = {
     // #559 여정 렌즈 결함 10: 기본 보기의 이름으로 같은 단계(사이드바: "만들기 안내").
     gsIdeaStep2Guide: "만들기 안내 받기 — 쓰시는 개발 AI에 붙여넣으면 앱을 만들어 드려요.",
     gsIdeaStep3: "완성되면 주소를 여기 넣기 — 실제로 작동하는지 쉬운 말로 확인해 드려요.",
+    // B-8 (PR #578 검증 결함 1·8): 만들기가 열리면 같은 목록이 [만들기] 경로를 말한다.
+    gsIdeaStep2Make: "개발 지시서를 만들고 [만들기] 누르기 — Simsa가 앱을 만들어 Simsa 주소에 올려요. 따로 가입할 곳은 없어요.",
+    gsIdeaStep3Make: "다 만들면 '내 앱'에서 주소를 열어 봐요.",
     sampleBanner: "체험용 예시예요. 다시 확인, 고쳐보기, 만들기 패키지까지 자유롭게 눌러보세요.",
     sampleCta: "내 아이디어로 시작하기",
   },
@@ -3652,6 +3698,9 @@ const KO = {
       interrupted: "만드는 도중에 끊겼어요(저희 쪽 만드는 기계가 멈췄어요). 다시 하면 처음부터 새로 만들어요.",
       startFailed: "시작하지 못했어요 — 저희 쪽 만드는 기계가 응답하지 않았어요.",
       buildFailed: "빌드 확인에서 멈췄어요. 만든 것이 문제없이 합쳐지지 않아 올리지 않았어요.",
+      // #578 결함 5: 만드는 쪽은 다 됐다(주소 포함)고 알려 왔지만 빌드 확인을 통과하지 못했다 — 그 주소에
+      // 무엇이 떠 있는지는 모른다. 아는 것만 말한다.
+      buildUnverified: "빌드 확인을 통과하지 못해 완성으로 치지 않았어요. 주소에 무언가 올라갔을 수는 있지만, 확인되지 않은 앱이라 내 앱으로 보여 드리지 않아요.",
       testFailed: "기획대로 작동하는지 확인을 통과하지 못해 멈췄어요. 확인되지 않은 앱은 올리지 않았어요.",
       publishFailed: "앱을 올리는 중에 멈췄어요.",
       generic: "알 수 없는 이유로 멈췄어요.",
@@ -3659,6 +3708,11 @@ const KO = {
     noCharge: "비용은 받지 않았어요(베타).",
     retry: "다시 시도",
     takeSpec: "지시서 받아가기",
+    // #578 결함 4: 지시서 받아가기 = 그 자리에서 지시서 문서를 받는다.
+    takeSpecWorking: "지시서를 준비하는 중…",
+    takeSpecDone: "받았어요. 이 파일을 개발자나 앱을 만드는 업체에 그대로 넘기면 돼요.",
+    takeSpecError: "지시서를 지금 받지 못했어요.",
+    takeSpecErrorLink: "개발 지시서 화면에서 보기 →",
     appTitle: "내 앱이 준비됐어요",
     address: "주소",
     hostedNote: "Simsa 주소에서 운영 중 · 정식 운영(프로덕션)용은 아니에요",
@@ -3677,7 +3731,8 @@ const KO = {
       dailyLimitReached: "오늘 만들 수 있는 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
       dailyLimitReachedAt: "오늘 만들 수 있는 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
       dailyLimitCleared: "만들기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
-      hostingFailed: "앱을 올릴 자리를 만들지 못했어요. 비용은 받지 않았어요 — 잠시 뒤 다시 시도해 주세요.",
+      // #578 결함 3: 다시 해도 같은 곳에서 막힐 수 있다 — 약속하지 않고 지시서를 준다.
+      hostingFailed: "앱을 올릴 자리를 만들지 못했어요(저희 쪽 문제예요). 비용은 받지 않았어요. 지시서는 지금 받아 갈 수 있어요.",
       network: "서버에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.",
       generic: "만들기를 시작하지 못했어요. 다시 시도해 주세요.",
     },

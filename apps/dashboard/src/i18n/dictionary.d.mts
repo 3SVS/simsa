@@ -316,6 +316,17 @@ export type Dictionary = {
     viewResultsDesc: string;
     viewProgress: string;
     viewProgressDesc: string;
+    // B-8 (PR #578 fix 1/8): idea/plan doors once making is open.
+    makeApp: string;
+    makeAppDesc: string;
+    makeSpec: string;
+    makeSpecDesc: string;
+    viewBuild: string;
+    viewBuildDesc: string;
+    viewApp: string;
+    viewAppDesc: string;
+    buildStopped: string;
+    buildStoppedDesc: string;
   };
   stepsNav: {
     prepare: string;
@@ -325,6 +336,7 @@ export type Dictionary = {
     lockNeedItems: string;
     lockNeedUrl: string;
     lockNeedBuild: string;
+    lockNeedBuildMake: string;
     next: string;
     whySeeProblems: string;
     whyAfterFix: string;
@@ -386,6 +398,8 @@ export type Dictionary = {
     gsIdeaStep2: string;
     gsIdeaStep2Guide: string;
     gsIdeaStep3: string;
+    gsIdeaStep2Make: string;
+    gsIdeaStep3Make: string;
     sampleBanner: string;
     sampleCta: string;
     gsStep2: string;
@@ -564,12 +578,24 @@ export type Dictionary = {
     leaveOk: string;
     failedTitle: string;
     failures: Record<
-      "notImplemented" | "budget" | "interrupted" | "startFailed" | "buildFailed" | "testFailed" | "publishFailed" | "generic",
+      | "notImplemented"
+      | "budget"
+      | "interrupted"
+      | "startFailed"
+      | "buildFailed"
+      | "buildUnverified"
+      | "testFailed"
+      | "publishFailed"
+      | "generic",
       string
     >;
     noCharge: string;
     retry: string;
     takeSpec: string;
+    takeSpecWorking: string;
+    takeSpecDone: string;
+    takeSpecError: string;
+    takeSpecErrorLink: string;
     appTitle: string;
     address: string;
     hostedNote: string;

@@ -4,7 +4,10 @@
  * 서버 계약과의 대조는 **서버 소스를 읽어서** 한다: central-plane의 상태 목록·오류 코드·실패 문장이
  * 바뀌면 이 파일이 깨진다(그래야 화면이 모르는 상태를 조용히 "알 수 없음"으로 그리지 않는다).
  *
- * 네임스페이스 import — 옛 코드(모듈 없음)에서는 import 자체가 실패해 파일 전체가 실패한다.
+ * 네임스페이스 import — 옛 코드(모듈 없음)에서는 import 자체가 실패해 파일 전체가 실패한다(ERR_MODULE_NOT_FOUND).
+ * 그건 "모듈이 없다"는 증거일 뿐 개별 테스트의 판별력 증거가 아니다(#578 검증 결함 7). 이 파일의 대상은 전부 새
+ * 모듈(build-job-view.mjs)의 순수 로직이라 옛 트리에 대응물이 없다 — 개별 판별이 필요한 결함 재현은
+ * build-make-verify-fixes.test.mjs(테스트마다 제 이유로 실패)에 있다.
  * Rule 6: 픽스처는 한국어 리얼 데이터 — 프로젝트 "(주)트루픽셀 예약 앱", 한글 호스트명(IDN) 포함.
  */
 import { describe, it } from "node:test";
@@ -145,9 +148,11 @@ describe("B-8 실패 종류 — 서버가 실패를 만드는 모든 자리의 �
     }
   });
 
-  it("빌드가 green이 아닌데 done을 주장 → buildFailed (D-4: 올리지 않았다)", () => {
+  it("빌드가 green이 아닌데 done을 주장 → buildUnverified (D-4: 완성으로 치지 않았다 — 올렸는지는 모른다)", () => {
     assert.match(route, /failedStage: "building", error: `done claimed with build exit/);
-    assert.equal(view.buildFailureKind({ status: "failed", failedStage: "building", error: "done claimed with build exit 1" }), "buildFailed");
+    // ★의도된 변경 (PR #578 검증 결함 5): 종전 buildFailed("올리지 않았어요")는 서버가 모르는 것을 단정했다.
+    assert.equal(view.buildFailureKind({ status: "failed", failedStage: "building", error: "done claimed with build exit 1" }), "buildUnverified");
+    assert.equal(view.buildFailureKind({ status: "failed", failedStage: "building", error: "tsc exited 2" }), "buildFailed");
   });
 
   it("예산 정지(D-7) → budget", () => {
@@ -163,14 +168,14 @@ describe("B-8 실패 종류 — 서버가 실패를 만드는 모든 자리의 �
   });
 
   it("모든 종류가 BUILD_FAILURE_KINDS에 있다", () => {
-    for (const k of ["notImplemented", "budget", "interrupted", "startFailed", "buildFailed", "testFailed", "publishFailed", "generic"]) {
+    for (const k of ["notImplemented", "budget", "interrupted", "startFailed", "buildFailed", "buildUnverified", "testFailed", "publishFailed", "generic"]) {
       assert.ok(view.BUILD_FAILURE_KINDS.includes(k), k);
     }
   });
 
   it("준비 중 단계에서 멈춘 것은 다시 해도 같다 → 지시서 받아가기가 주 버튼, 나머지는 다시 시도가 주", () => {
     assert.deepEqual(view.failureActions("notImplemented"), { primary: "takeSpec", secondary: "retry" });
-    for (const k of ["budget", "interrupted", "startFailed", "buildFailed", "testFailed", "publishFailed", "generic"]) {
+    for (const k of ["budget", "interrupted", "startFailed", "buildFailed", "buildUnverified", "testFailed", "publishFailed", "generic"]) {
       assert.deepEqual(view.failureActions(k), { primary: "retry", secondary: "takeSpec" }, k);
     }
   });
@@ -355,8 +360,9 @@ describe("B-8 가용성 — 옛 서버면 만들기를 내밀지 않는다", () 
     assert.equal(view.hostedBuildFact(null), null);
   });
 
-  it("makePanelVisible: 아이디어·기획서 문만(D-17 항상 S) · 앱 있는 문·역추론 지시서·옛 서버는 숨김 · 모르면 보류", () => {
-    const v = (x) => view.makePanelVisible({ entryPath: "idea", presence: false, specSource: "generated", availability: "available", ...x });
+  it("makePanelVisible: 아이디어·기획서 문만(D-17 S) · 앱 있는 문·역추론 지시서·옛 서버·닫힘은 숨김 · 모르면 보류", () => {
+    // ★의도된 변경 (PR #578 검증 결함 2): 서버가 열었다고 확인한 경우(open true)에만 보인다.
+    const v = (x) => view.makePanelVisible({ entryPath: "idea", presence: false, specSource: "generated", availability: "available", open: true, ...x });
     assert.equal(v({}), true);
     assert.equal(v({ entryPath: "spec" }), true);
     assert.equal(v({ entryPath: "code" }), false);
@@ -365,8 +371,26 @@ describe("B-8 가용성 — 옛 서버면 만들기를 내밀지 않는다", () 
     assert.equal(v({ availability: "missing" }), false);
     assert.equal(v({ availability: "loading" }), null);
     assert.equal(v({ presence: null }), null);
-    // 목록 조회가 일시 실패해도 버튼은 보인다 — 누르면 서버가 정직하게 답한다.
+    assert.equal(v({ open: false }), false);
+    assert.equal(v({ open: null }), null);
+    // 목록 조회가 일시 실패해도(열림은 확인됨) 버튼은 보인다 — 누르면 서버가 정직하게 답한다(409면 그 잡을 잇는다).
     assert.equal(v({ availability: "unknown" }), true);
+  });
+
+  it("myAppEmptyState: 잡이 없을 때 내 앱 화면이 그리는 것 — 한 곳에서", () => {
+    const s = (x) => view.myAppEmptyState({ availability: "available", open: true, entryPath: "idea", presence: false, specSource: "generated", devSpecLoaded: true, hasDevSpec: true, ...x });
+    assert.equal(s({}), "make");
+    assert.equal(s({ hasDevSpec: false }), "needSpec");
+    assert.equal(s({ open: false }), "closed");
+    assert.equal(s({ availability: "missing" }), "closed");
+    assert.equal(s({ entryPath: "code" }), "notForThis");
+    assert.equal(s({ presence: true, open: false }), "notForThis", "이미 앱이 있으면 닫힘보다 그 말이 먼저");
+    assert.equal(s({ specSource: "inferred" }), "notForThis");
+    assert.equal(s({ availability: "loading" }), "hold");
+    assert.equal(s({ presence: null, open: false }), "hold", "앱 유무를 모르면 닫힘도 아직 말하지 않는다(뒤집힘 방지)");
+    assert.equal(s({ open: null }), "hold");
+    assert.equal(s({ devSpecLoaded: false }), "hold");
+    assert.equal(s({ availability: "unknown" }), null);
   });
 
   it("makePanelState: 최근 잡 기준", () => {

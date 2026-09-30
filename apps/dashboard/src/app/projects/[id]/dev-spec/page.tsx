@@ -8,9 +8,10 @@
 //
 // 정직성: 서버는 무결성 통과본만 돌려준다. 실패하면 이유를 말하고 예시로 대체하지 않는다.
 //
-// B-8 (D-17 — 아이디어·기획서 문의 "만들기"는 항상 S): 지시서가 있으면 이 화면의 주 버튼은 "만들기"
-// (MakeAppPanel)다 — 계정 없이 Simsa가 만들고 Simsa 주소에 올린다. "팩으로 받기"는 보조로 내려간다
-// (한 화면에 주 버튼 하나). 이미 만든 앱이 있는 문·역추론 지시서·옛 서버(빌드 라우트 없음)에서는
+// B-8 (D-17 — 아이디어·기획서 문의 "만들기"는 S): 지시서가 있고 **서버가 만들기를 열었다고 확인하면**
+// 이 화면의 주 버튼은 "만들기"(MakeAppPanel)다 — 계정 없이 Simsa가 만들고 Simsa 주소에 올린다. "팩으로 받기"는
+// 보조로 내려간다(한 화면에 주 버튼 하나). 이미 만든 앱이 있는 문·역추론 지시서·옛 서버(빌드 라우트 없음)·
+// ★서버가 열지 않음(#578 검증 결함 2: 라우트는 있어도 실행체가 끝까지 못 하면 안내가 없는 기능을 약속한다)에서는
 // 만들기를 내밀지 않고 종전 그대로 팩이 주 버튼이다(makePanelVisible).
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -23,6 +24,7 @@ import { devSpecView, generateButtonState, generateErrorKey } from "@/lib/dev-sp
 import { listBuildJobs, type BuildApiFailure, type BuildJobListOk } from "@/lib/build-job-api";
 import { buildAvailability, latestBuildJob, makePanelVisible } from "@/lib/build-job-view.mjs";
 import { useAppPresence } from "@/lib/use-app-presence";
+import { useBuildOpen } from "@/lib/use-build-open";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
@@ -43,6 +45,8 @@ export default function DevSpecPage() {
   // B-8: 만들기를 여기서 쓸 수 있는가 + 최근 잡(진행 중·끝이면 다시 만들라고 하지 않는다).
   const [buildList, setBuildList] = useState<BuildJobListOk | BuildApiFailure | null>(null);
   const presence = useAppPresence(id);
+  // #578 결함 2: 서버가 "만들기가 끝까지 된다"고 확인했는가 — 확인 전엔 보류, 확인 못 하면 종전대로 팩이 주 버튼.
+  const makeOpen = useBuildOpen();
   const [developerMode] = useDeveloperMode();
 
   useEffect(() => {
@@ -83,6 +87,7 @@ export default function DevSpecPage() {
         presence,
         specSource: view.source,
         availability: buildAvailability(buildList),
+        open: makeOpen,
       })
     : false;
   const latestJob = buildList?.ok ? latestBuildJob(buildList.jobs) : null;
@@ -177,6 +182,7 @@ export default function DevSpecPage() {
       {view && showMake === true && (
         <MakeAppPanel
           projectId={id}
+          projectTitle={project.name}
           view={view}
           latestJob={latestJob}
           developerMode={developerMode}

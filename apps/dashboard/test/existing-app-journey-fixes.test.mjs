@@ -189,11 +189,9 @@ test("결함5: 앱이 있으면(복원된 아이디어 갈래) 코드 갈래 걸
   assert.equal(steps.nextStepFromHere("items", { entryPath: "idea", hasApp: true })?.slug, "checks");
 });
 
-test("결함5 [행동 보존 가드]: 앱이 없는 아이디어 갈래는 앱 걸음으로 가지 않는다", () => {
+test("결함5 [행동 보존 가드]: 앱이 없는 아이디어 갈래는 종전 걸음 그대로", () => {
   for (const hasApp of [false, undefined]) {
-    // ★의도된 변경 (B-8, D-17 — 아이디어 문의 만들기는 항상 S): 지시서 다음은 빌더 팩이 아니라
-    //  "내 앱"(my-app). 앱 걸음(visual-checks)으로는 여전히 가지 않는다 — 이 가드의 요지는 그대로.
-    assert.equal(steps.nextScreenSlug("dev-spec", "idea", { hasApp }), "my-app");
+    assert.equal(steps.nextScreenSlug("dev-spec", "idea", { hasApp }), "export");
     assert.equal(steps.nextScreenSlug("fixes", "idea", { hasApp }), "export");
   }
 });
@@ -249,8 +247,12 @@ test("결함6: 사이드바 잠금 안내가 개요의 '앱 주소' 요구와 �
   assert.equal(DICTIONARIES.ko.stepsNav.lockNeedUrl, "앱 주소를 먼저 넣으세요.");
   assert.equal(typeof DICTIONARIES.en.stepsNav.lockNeedUrl, "string");
   const sidebar = readFileSync(path.join(SRC, "components/AppSidebar.tsx"), "utf8");
-  assert.match(sidebar, /reason === "need_url"/);
-  assert.match(sidebar, /t\.stepsNav\.lockNeedUrl/);
+  // ★의도된 변경 (PR #578 검증 결함 1·8): 잠김 안내 매핑은 순수 함수 lockHintKey 한 곳으로 옮겼다(만들기가 열리면
+  //  need_build 안내가 [만들기] 경로를 말한다). need_url은 그대로 "앱 주소를 먼저" — 여기서 행동으로 고정한다.
+  assert.equal(steps.lockHintKey("need_url", { makeOpen: true }), "lockNeedUrl");
+  assert.equal(steps.lockHintKey("need_url", {}), "lockNeedUrl");
+  assert.match(sidebar, /lockHintKey\(reason, \{ makeOpen \}\)/);
+  assert.match(sidebar, /t\.stepsNav\[key\]/);
   assert.ok(!/need_code/.test(sidebar), "sidebar still maps the retired need_code reason");
   // 코드 갈래에서는 확정된 "주소 없음"을 넘긴다 (그래야 잠금이 개요와 같은 사실로 정해진다).
   assert.match(sidebar, /entryPath === "code" \? hasDeployUrl/);

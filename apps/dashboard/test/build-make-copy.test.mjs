@@ -5,7 +5,13 @@
  *  - 초보자 금칙어 0 · 계정 요구 CTA 0 (D-17) — 감사 장비(beginner-terms.mjs)와 같은 규칙으로 사전 자체를 검사
  *  - 개발자 모드 아닐 때 A 경로 문장 0 (makeIntroKeys가 고른 키만 그린다)
  *  - 사이드바 '내 앱' 노출 조건 · 라벨 · 다음 걸음 (project-steps.mjs)
- * 옛 코드: makeApp 사전·myApp·build 걸음이 없어 실패한다.
+ *
+ * 옛 코드에서 어떻게 실패하나(#578 검증 결함 7 — 기전을 정확히):
+ *  - 파일 단위: 옛 트리에는 build-job-view.mjs가 없어 **import가 실패해 파일 전체가** 실패한다(ERR_MODULE_NOT_FOUND).
+ *    이것만으로는 개별 테스트가 무엇을 가려내는지 말해 주지 않는다.
+ *  - 개별 판별(새 모듈은 두고 기존 모듈 project-steps·dictionary·AppSidebar·dev-spec 화면만 origin/main으로 되돌린
+ *    격리 실험): 대부분은 사전 키(makeApp·nav.myApp)·사이드바 항목·다음 걸음이 없어 **제 이유로** 실패한다.
+ *    "[가드]"로 표시한 것은 회귀 증거가 아니라 보존 가드다(옛 코드에서도 통과할 수 있다).
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -113,10 +119,12 @@ describe("B-8 초보자 기준 (D-17) — 기본 흐름 문구에 개발 용어 
 });
 
 describe("B-8 사이드바 '내 앱' — project-steps.mjs 규칙", () => {
-  it("앱이 없는 문(아이디어·기획서): 2단계 맨 앞에 내 앱, 그다음 만들기 안내 — 개발자 모드와 무관", () => {
+  it("앱이 없는 문(아이디어·기획서): 만들기가 열렸으면 2단계 맨 앞에 내 앱, 그다음 만들기 안내 — 개발자 모드와 무관", () => {
     for (const developerMode of [false, true]) {
-      const it = steps.sidebarStepItems({ hasApp: false, developerMode, hasPrReviewHistory: false });
+      const it = steps.sidebarStepItems({ hasApp: false, developerMode, hasPrReviewHistory: false, makeOpen: true });
       assert.deepEqual(it.review, ["my-app", "export"]);
+      // ★의도된 변경 (PR #578 검증 결함 2): 서버가 만들기를 열었다고 확인하지 않으면 종전 [만들기 안내]만.
+      assert.deepEqual(steps.sidebarStepItems({ hasApp: false, developerMode, hasPrReviewHistory: false, makeOpen: false }).review, ["export"]);
     }
   });
 
@@ -127,7 +135,7 @@ describe("B-8 사이드바 '내 앱' — project-steps.mjs 규칙", () => {
     }
   });
 
-  it("앱 유무를 모르면 보류(항목이 단계 사이를 옮겨 다니지 않는다)", () => {
+  it("[가드] 앱 유무를 모르면 보류(항목이 단계 사이를 옮겨 다니지 않는다)", () => {
     assert.deepEqual(steps.sidebarStepItems({ hasApp: null, hasHostedBuild: true }), { review: [], results: ["checks"] });
   });
 
@@ -146,12 +154,12 @@ describe("B-8 사이드바 '내 앱' — project-steps.mjs 규칙", () => {
     assert.equal(DICTIONARIES.en.nav.myApp, "My app");
   });
 
-  it("다음 걸음: 지시서 → 내 앱(이유 '이어서') · 내 앱 다음은 없음 · 코드 갈래는 내 앱으로 걷지 않는다", () => {
-    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "idea" }), { slug: "my-app", reason: "continue" });
-    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "spec" }), { slug: "my-app", reason: "continue" });
-    assert.equal(steps.nextStepFromHere("my-app", { entryPath: "idea" }), null);
-    assert.notEqual(steps.nextScreenSlug("dev-spec", "code"), "my-app");
-    assert.notEqual(steps.nextScreenSlug("dev-spec", "idea", { hasApp: true }), "my-app");
+  it("다음 걸음: (만들기가 열렸으면) 지시서 → 내 앱(이유 '이어서') · 내 앱 다음은 없음 · 코드 갈래는 내 앱으로 걷지 않는다", () => {
+    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "idea", makeOpen: true }), { slug: "my-app", reason: "continue" });
+    assert.deepEqual(steps.nextStepFromHere("dev-spec", { entryPath: "spec", makeOpen: true }), { slug: "my-app", reason: "continue" });
+    assert.equal(steps.nextStepFromHere("my-app", { entryPath: "idea", makeOpen: true }), null);
+    assert.notEqual(steps.nextScreenSlug("dev-spec", "code", { makeOpen: true }), "my-app");
+    assert.notEqual(steps.nextScreenSlug("dev-spec", "idea", { hasApp: true, makeOpen: true }), "my-app");
   });
 
   it("[가드] 내 앱 라우트는 git이 무시하는 `build/` 폴더가 아니다(.gitignore의 build/ = 빌드 산출물)", async () => {

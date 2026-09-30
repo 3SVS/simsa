@@ -42,6 +42,25 @@ function failure(status: number, body: unknown): BuildApiFailure {
   return { ok: false, status, error, routeMissing: isRouteMissing(status, body), body };
 }
 
+export type BuildAvailabilityOk = { ok: true; open: boolean };
+
+/**
+ * GET /workspace/build-availability — 서버가 "만들기가 지금 끝까지 된다"고 확인하는가(#578 검증 결함 2).
+ * 프로젝트·userKey와 무관한 서버 사실. 옛 서버는 경로가 없어 전역 404 → 실패로 돌려주고, buildOpenFact가 닫힘으로 본다.
+ */
+export async function getBuildAvailability(): Promise<BuildAvailabilityOk | BuildApiFailure> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/build-availability`, { signal: AbortSignal.timeout(10000) });
+    const body = await readBody(resp);
+    if (resp.ok && body && typeof body === "object" && (body as { ok?: unknown }).ok === true) {
+      return { ok: true, open: (body as { buildEnabled?: unknown }).buildEnabled === true };
+    }
+    return failure(resp.status, body);
+  } catch {
+    return failure(0, null);
+  }
+}
+
 export async function listBuildJobs(projectId: string, userKey: string): Promise<BuildJobListOk | BuildApiFailure> {
   try {
     const resp = await fetch(`${projectPath(projectId)}/build-jobs?userKey=${encodeURIComponent(userKey)}`, {

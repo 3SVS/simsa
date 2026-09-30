@@ -127,7 +127,7 @@ export function buildStageRow(job, events) {
 //   stuck-cleanup.ts                   "builder container did not report progress within 60 minutes …"(failedStage = 멈춘 상태)
 //   D-7 예산 정지                      failedStage "budget"(설계 — B-6 실행체가 보낸다)
 
-/** @typedef {"notImplemented" | "budget" | "interrupted" | "startFailed" | "buildFailed" | "testFailed" | "publishFailed" | "generic"} BuildFailureKind */
+/** @typedef {"notImplemented" | "budget" | "interrupted" | "startFailed" | "buildFailed" | "buildUnverified" | "testFailed" | "publishFailed" | "generic"} BuildFailureKind */
 
 export const BUILD_FAILURE_KINDS = Object.freeze([
   "notImplemented",
@@ -135,6 +135,9 @@ export const BUILD_FAILURE_KINDS = Object.freeze([
   "interrupted",
   "startFailed",
   "buildFailed",
+  // #578 검증 결함 5: 컨테이너는 다 됐다(주소 포함)고 알렸지만 빌드가 green이 아니라 서버가 거절한 경우.
+  // 서버는 그 주소에 무엇이 떠 있는지 모른다 — "올리지 않았어요"라고 단정하지 않는다.
+  "buildUnverified",
   "testFailed",
   "publishFailed",
   "generic",
@@ -152,7 +155,9 @@ export function buildFailureKind(job) {
   // 컨테이너가 죽었거나(롤아웃·sleepAfter) 시간 상한에 걸렸거나 보고가 끊긴 경우 — 어느 단계였든 "끊김".
   if (/did not report progress|was killed by|timed out/i.test(error)) return "interrupted";
   if (stage === "queued") return "startFailed";
-  if (stage === "building" || /^done claimed with build exit/.test(error)) return "buildFailed";
+  // workspace-build-jobs.ts /internal/build-done: ok:true + deployedUrl이 왔지만 buildExitCode≠0 → 거절(D-4).
+  if (/^done claimed with build exit/.test(error)) return "buildUnverified";
+  if (stage === "building") return "buildFailed";
   if (stage === "testing") return "testFailed";
   if (stage === "pushed" || stage === "deploying") return "publishFailed";
   return "generic";
@@ -162,10 +167,15 @@ export function buildFailureKind(job) {
  * 실패 화면의 두 행동 중 무엇이 주(primary)인가 — 한 화면에 주 버튼은 하나.
  * "준비 중인 단계"에서 멈춘 것은 다시 해도 같은 자리에서 멈춘다 → 지시서 받아가기가 주.
  * 나머지는 다시 시도가 주(지시서 받아가기는 보조로 항상 있다).
+ *
+ * #578 검증 결함 3: 만들기가 지금 닫혀 있으면(서버가 열림을 확인하지 않음) [다시 시도]는 누르면 막힐 버튼이다 —
+ * 내밀지 않고 지시서 받아가기 하나만 둔다.
  * @param {BuildFailureKind} kind
- * @returns {{ primary: "retry" | "takeSpec", secondary: "retry" | "takeSpec" }}
+ * @param {{ canRetry?: boolean }} [opts] 기본 true(종전 계약)
+ * @returns {{ primary: "retry" | "takeSpec", secondary: "retry" | "takeSpec" | null }}
  */
-export function failureActions(kind) {
+export function failureActions(kind, opts = {}) {
+  if (opts.canRetry === false) return { primary: "takeSpec", secondary: null };
   return kind === "notImplemented"
     ? { primary: "takeSpec", secondary: "retry" }
     : { primary: "retry", secondary: "takeSpec" };
@@ -192,6 +202,56 @@ export function nextBuildPollDelayMs(status, opts = {}) {
   if (opts.hidden === true) return null;
   const elapsed = typeof opts.elapsedMs === "number" && Number.isFinite(opts.elapsedMs) ? opts.elapsedMs : 0;
   return elapsed >= BUILD_POLL_SLOW_AFTER_MS ? BUILD_POLL_SLOW_MS : BUILD_POLL_INTERVAL_MS;
+}
+
+/**
+ * 폴링을 켤 때 첫 조회까지 기다릴 시간 — 또는 켜지 않으면 null (#578 검증 결함 9: 화면 배선을 동작으로 고정).
+ *   - 탭이 숨었거나 진행 중인 잡이 없으면 켜지 않는다
+ *   - 탭이 돌아온 직후(resumed)는 기다리지 않고 바로(0) — 오래 떠 있던 화면이 5초 동안 옛 단계를 보이지 않게
+ *   - 그 밖에는 nextBuildPollDelayMs(5초 · 10분 뒤 15초)
+ * @param {{ visible: boolean, active: boolean, resumed: boolean, status: unknown, elapsedMs?: number }} input
+ * @returns {number | null}
+ */
+export function buildPollStart(input) {
+  if (input?.visible !== true || input?.active !== true) return null;
+  if (input.resumed === true) return 0;
+  return nextBuildPollDelayMs(input.status, { hidden: false, elapsedMs: input.elapsedMs });
+}
+
+/**
+ * 폴링 루프 하나 — 내 앱 화면의 effect가 켜고, effect의 cleanup(탭 숨김·잡 바뀜·화면 떠남)이 stop으로 끈다.
+ * 타이머는 주입한다(테스트는 가짜 타이머로 중단·재개를 **동작으로** 고정한다 — 결함 9).
+ *   - firstDelayMs가 null이면 아무것도 하지 않는다
+ *   - tick()이 다음 지연(ms)을 돌려주면 다시 예약하고, null이면 멈춘다(끝난 상태·모르는 상태)
+ *   - stop() 뒤에는 예약을 지우고, **이미 떠난 조회가 늦게 돌아와도 다시 예약하지 않는다**
+ *   - tick이 던지면 멈춘다(탭이 다시 보이면 화면이 새로 켠다)
+ * @template H
+ * @param {{ firstDelayMs: number | null, tick: () => Promise<number | null>, schedule: (fn: () => Promise<void>, ms: number) => H, cancel: (handle: H) => void }} opts
+ * @returns {() => void} stop
+ */
+export function startBuildPolling(opts) {
+  let stopped = false;
+  /** @type {H | null} */
+  let handle = null;
+  /** 절대 던지지 않는다(tick 오류는 멈춤으로) — setTimeout이 약속을 버려도 처리되지 않은 거부가 없다. */
+  const run = async () => {
+    handle = null;
+    /** @type {number | null} */
+    let next = null;
+    try {
+      next = await opts.tick();
+    } catch {
+      next = null;
+    }
+    if (stopped || next === null || next === undefined) return;
+    handle = opts.schedule(run, next);
+  };
+  if (opts.firstDelayMs !== null && opts.firstDelayMs !== undefined) handle = opts.schedule(run, opts.firstDelayMs);
+  return () => {
+    stopped = true;
+    if (handle !== null) opts.cancel(handle);
+    handle = null;
+  };
 }
 
 // ─── 시작 요청 오류 (POST …/build) ────────────────────────────────────────────
@@ -272,6 +332,16 @@ export function startErrorTone(key) {
   return key === "unavailable" || key === "notReady" || key === "paused" || key === "dailyLimitReached" || key === "alreadyActive"
     ? "info"
     : "error";
+}
+
+/**
+ * 알림 안에 [지시서 받아가기]를 함께 줄까 — **다시 눌러도 같은 곳에서 막힐** 시작 실패들(#578 검증 결함 3).
+ * 아직 열리지 않음·저희 쪽 설정·잠시 멈춤·호스팅 자리 실패. 이때 "다시 시도"만 남기면 막다른 길이다.
+ * (네트워크·일반 오류는 다시 해 볼 만하고, 지시서·작업이 없는 경우는 알림 자체가 다음 할 일을 말한다.)
+ * @param {StartErrorKey} key
+ */
+export function startNoticeOffersTakeSpec(key) {
+  return key === "unavailable" || key === "hostingFailed" || key === "notReady" || key === "paused";
 }
 
 // ─── 응답 경계 파싱 (대시보드에는 zod가 없다 — daily-limit.mjs처럼 필드마다 검사) ───────
@@ -372,6 +442,40 @@ export function buildAvailability(res) {
 }
 
 /**
+ * 서버가 "만들기가 지금 끝까지 된다"고 **확인해 줬는가**(GET /workspace/build-availability — #578 검증 결함 2).
+ *   null  — 아직 묻는 중(화면은 만들기에 달린 것을 보류한다)
+ *   true  — 서버가 buildEnabled:true로 답했다
+ *   false — 그 밖 전부: 닫힘 · 옛 서버(경로 없음) · 네트워크·5xx · 모양이 다름.
+ * 확인하지 못한 것을 열림으로 치지 않는다 — 누르면 막힐 버튼이 약속을 깨는 것보다, 늘 되는 길(지시서 받아
+ * 직접 만들기)을 보이는 쪽이 정직하다.
+ * @param {{ ok: boolean, open?: unknown } | null | undefined} res
+ * @returns {boolean | null}
+ */
+export function buildOpenFact(res) {
+  if (!res) return null;
+  return res.ok === true && res.open === true;
+}
+
+/**
+ * 개요 '지금 할 일'용 빌드 사실(#578 검증 결함 1): 가장 최근 잡 기준.
+ *   null — 아직 묻는 중 · "none" — 잡 없음 · "active" · "done" · "failed"
+ * 목록을 못 읽으면(옛 서버·프로젝트 없음·일시 실패) "none" — 만들기 행동은 모두 같은 화면(내 앱)으로 가고,
+ * 그 화면이 다시 읽어 사실대로 말한다(잘못 고른 건 버튼 이름뿐, 목적지는 같다).
+ * @param {{ ok: boolean, jobs?: Array<{ status?: unknown, createdAt?: string }> } | null | undefined} res
+ * @returns {"none" | "active" | "done" | "failed" | null}
+ */
+export function hostedBuildState(res) {
+  if (!res) return null;
+  if (!res.ok) return "none";
+  const latest = latestBuildJob(/** @type {Array<{ status?: unknown, createdAt: string }>} */ (Array.isArray(res.jobs) ? res.jobs : []));
+  if (!latest) return "none";
+  if (latest.status === "done") return "done";
+  if (latest.status === "failed") return "failed";
+  // 진행 중 — 또는 새 서버의 모르는 상태: "진행 상황 보기"가 가장 덜 틀린 이름이다(내 앱 화면이 사실대로 그린다).
+  return "active";
+}
+
+/**
  * 사이드바 '내 앱'용 사실: 이 프로젝트에 Simsa가 만든(또는 만드는 중인) 앱이 있는가.
  * 라우트가 없거나 프로젝트가 서버에 없으면 확정적으로 없음(false), 일시 실패는 모름(null).
  * @param {{ ok: boolean, jobs?: unknown[], status?: number, routeMissing?: boolean } | null | undefined} res
@@ -391,16 +495,42 @@ export function hostedBuildFact(res) {
  *   - 이미 만든 앱이 있는 문(코드 갈래·앱 있음 확정)이면 아니다 — 그 앱을 확인하는 길이다.
  *   - 이미 만든 앱에서 역추론한 지시서(inferred)면 아니다(같은 이유).
  *   - 옛 서버(라우트 없음)면 아니다 — 누르면 막히는 버튼을 내밀지 않는다.
- *   - 앱 유무·가용성이 아직 모르면 null(잠시 그리지 않는다 — 그렸다 지우는 깜빡임 방지).
- * @param {{ entryPath?: string | null, presence: boolean | null, specSource?: string | null, availability: "loading" | "available" | "missing" | "unknown" }} input
+ *   - ★서버가 만들기를 열었다고 확인하지 않았으면(open false) 아니다(#578 검증 결함 2). 라우트가 있어도 실행체가
+ *     끝까지 못 하면 누르기 전 안내(45분·Simsa 주소)가 없는 기능을 약속한다. 그때는 종전대로 팩이 주 버튼.
+ *   - 앱 유무·가용성·열림이 아직 모르면 null(잠시 그리지 않는다 — 그렸다 지우는 깜빡임 방지).
+ * @param {{ entryPath?: string | null, presence: boolean | null, specSource?: string | null, availability: "loading" | "available" | "missing" | "unknown", open: boolean | null }} input
  * @returns {boolean | null}
  */
 export function makePanelVisible(input) {
   if (input?.entryPath === "code" || input?.presence === true) return false;
   if (input?.specSource === "inferred") return false;
   if (input?.availability === "missing") return false;
+  if (input?.open === false) return false;
   if (input?.availability === "loading" || input?.presence === null || input?.presence === undefined) return null;
+  if (input?.open !== true) return null;
   return true;
+}
+
+/**
+ * 내 앱 화면에 잡이 **없을 때** 무엇을 그리나 — 한 곳에서 정한다(#578 검증 결함 2).
+ *   hold        — 아직 묻는 중(목록·앱 유무·열림·지시서)
+ *   notForThis  — 이미 앱이 있는 문(코드 갈래·앱 있음·역추론 지시서): 새로 만들지 않는다(D-17)
+ *   closed      — 옛 서버이거나 서버가 만들기를 열었다고 확인하지 않음: 정직한 안내 + 지시서 받아가기
+ *   make        — 만들기 패널
+ *   needSpec    — 지시서 먼저
+ *   null        — 목록을 못 읽음(화면이 따로 다시 시도를 그린다)
+ * 앱 유무를 모르는 동안은 "닫힘"도 말하지 않는다(나중에 "이미 앱이 있어요"로 뒤집히지 않게).
+ * @param {{ availability: "loading" | "available" | "missing" | "unknown", open: boolean | null, entryPath?: string | null, presence: boolean | null, specSource?: string | null, devSpecLoaded: boolean, hasDevSpec: boolean }} input
+ * @returns {"hold" | "notForThis" | "closed" | "make" | "needSpec" | null}
+ */
+export function myAppEmptyState(input) {
+  if (input.availability === "loading") return "hold";
+  if (input.availability === "unknown") return null;
+  if (input.entryPath === "code" || input.specSource === "inferred" || input.presence === true) return "notForThis";
+  if (input.presence === null || input.presence === undefined) return "hold";
+  if (input.availability === "missing" || input.open === false) return "closed";
+  if (input.open !== true || !input.devSpecLoaded) return "hold";
+  return input.hasDevSpec ? "make" : "needSpec";
 }
 
 /**
@@ -505,4 +635,39 @@ export function budgetLine(job) {
   const spent = Math.max(0, num(job?.spentUsd) ?? 0);
   const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
   return { budget: fmt(budget), spent: fmt(spent) };
+}
+
+// ─── 지시서 받아가기 (#578 검증 결함 4) ─────────────────────────────────────────
+//
+// 라벨이 "지시서 받아가기"면 받는 것은 **지시서**여야 한다. 종전 목적지는 빌더 팩 화면(export)이었고, 거기 첫
+// 질문은 "어떤 개발 AI용으로 받으시겠어요?"(Claude Code·Codex·Lovable·v0·Bolt) — 기본 흐름의 복구 동선에 A 경로
+// 도구 고르기가 들어왔다. 이제 그 자리에서 지시서 문서 하나를 받는다. 문서는 서버의 지시서 렌더러가 만든 것 그대로
+// (빌더 팩 응답의 `dev-spec/` 파일들 — 렌더러를 대시보드에 복제하지 않는다, #498 교훈).
+
+const DEV_SPEC_FILE_RE = /(^|\/)dev-spec\/([^/]+\.md)$/;
+
+/**
+ * 빌더 팩 파일 목록 → 지시서 문서 하나(쉬운 요약 README가 맨 앞, 나머지는 번호순). 지시서 파일이 없으면 null.
+ * 개발 도구용 프롬프트·비밀 파일(.env.local 등)은 `dev-spec/` 밖이라 들어가지 않는다.
+ * 파일 이름은 제목을 살린다(Rule 6: 한글 그대로, 기호만 "-"로).
+ * @param {Array<{ path: string, content: string }> | null | undefined} files
+ * @param {{ title: string, locale: "ko" | "en" }} opts
+ * @returns {{ filename: string, content: string } | null}
+ */
+export function devSpecDocument(files, opts) {
+  const picked = [];
+  for (const f of Array.isArray(files) ? files : []) {
+    const m = f && typeof f.path === "string" ? DEV_SPEC_FILE_RE.exec(f.path) : null;
+    if (m && typeof f.content === "string") picked.push({ name: /** @type {string} */ (m[2]), content: f.content });
+  }
+  if (picked.length === 0) return null;
+  picked.sort((a, b) => (a.name === "README.md" ? -1 : b.name === "README.md" ? 1 : a.name.localeCompare(b.name)));
+  const content = picked.map((p) => `<!-- dev-spec/${p.name} -->\n\n${p.content.trim()}\n`).join("\n---\n\n");
+  const safe = String(opts?.title ?? "")
+    .replace(/[^A-Za-z0-9가-힣]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+  const stem = opts?.locale === "en" ? "dev-spec" : "개발지시서";
+  return { filename: `${stem}-${safe || "project"}.md`, content };
 }

@@ -13,6 +13,12 @@ export type ProjectStepFacts = {
   visualCheckActive?: boolean | null;
   hasDeployUrl?: boolean | null;
   entryPath?: "idea" | "code" | "spec" | null;
+  /** B-8 (#578 fix 1/2): server confirmed making is open (buildOpenFact). null = asking. Omit = legacy. */
+  makeOpen?: boolean | null;
+  /** B-8: latest build Simsa started for this project (hostedBuildState). null = asking. Omit = legacy. */
+  buildState?: "none" | "active" | "done" | "failed" | null;
+  /** B-8: a development spec is saved. null = asking. */
+  hasDevSpec?: boolean | null;
 };
 
 export type AppFacts = {
@@ -31,7 +37,7 @@ export function computeProjectSteps(facts: ProjectStepFacts): ProjectStep[];
 export function nextScreenSlug(
   slug: string,
   entryPath?: "idea" | "code" | "spec" | null,
-  opts?: { developerMode?: boolean; hasApp?: boolean; hasDeployUrl?: boolean | null },
+  opts?: { developerMode?: boolean; hasApp?: boolean; hasDeployUrl?: boolean | null; makeOpen?: boolean | null },
 ): string | null;
 
 export type NextProjectAction =
@@ -39,6 +45,11 @@ export type NextProjectAction =
   | "connect_code"
   | "add_url"
   | "get_pack"
+  | "make_spec"
+  | "make_app"
+  | "view_build"
+  | "view_app"
+  | "build_stopped"
   | "run_review"
   | "view_progress"
   | "view_results";
@@ -61,6 +72,8 @@ export function sidebarStepItems(input: {
   hasPrReviewHistory?: boolean | null;
   /** B-8: Simsa built (or is building) an app for this project — keeps "내 앱" once an app exists. */
   hasHostedBuild?: boolean | null;
+  /** B-8 (#578 fix 2): server confirmed making is open — leads the no-app step 2 with "my-app". */
+  makeOpen?: boolean | null;
 }): { review: string[]; results: string[] };
 
 export type NavLabelKey =
@@ -111,6 +124,16 @@ export function packCopyKeys(
   developerMode: boolean,
 ): { label: "getGuide" | "getPack"; step2: "gsIdeaStep2Guide" | "gsIdeaStep2" };
 
+export function ideaExplainerKeys(input: {
+  developerMode: boolean;
+  makeOpen: boolean | null | undefined;
+}): { step2: "gsIdeaStep2Make" | "gsIdeaStep2Guide" | "gsIdeaStep2"; step3: "gsIdeaStep3Make" | "gsIdeaStep3" };
+
+export function lockHintKey(
+  reason: StepLockReason,
+  opts?: { makeOpen?: boolean | null },
+): "lockNeedItems" | "lockNeedUrl" | "lockNeedBuild" | "lockNeedBuildMake" | null;
+
 export function visualCheckFact(
   res: { ok: boolean; checks?: Array<{ status?: string }>; error?: string } | null | undefined,
 ): boolean | null;
@@ -158,6 +181,7 @@ export function nextStepFromHere(
     developerMode?: boolean;
     hasApp?: boolean;
     hasDeployUrl?: boolean | null;
+    makeOpen?: boolean | null;
   },
 ): { slug: string; reason: NextStepReason } | null;
 

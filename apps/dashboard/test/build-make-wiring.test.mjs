@@ -1,8 +1,13 @@
 /**
  * B-8 — 화면 배선 정적 검사 (train-w-wiring.test.mjs 방식: 소스를 grep 한다).
  *
- * 순수 함수가 맞아도 화면이 그 함수를 부르지 않으면 소용없다. 각 검사는 고치기 전 코드에서 실패한다
- * (파일·import·호출이 없다).
+ * 순수 함수가 맞아도 화면이 그 함수를 부르지 않으면 소용없다.
+ *
+ * 옛 코드에서 어떻게 실패하나(#578 검증 결함 7 — 기전을 정확히): 옛 트리에는 my-app/page.tsx가 없어 파일을 읽는
+ * 순간 ENOENT로 **파일 전체가** 실패한다. 새 파일은 두고 기존 화면(dev-spec·AppSidebar)만 되돌린 격리 실험에서
+ * 기존 화면 변경을 가려내는 것은 W1·W5뿐이고, W2·W3·W4·W6은 새 파일만 있으면 통과한다(새 파일의 배선 고정).
+ * 이 검사들은 소스 정규식이라 **동작 증거가 아니다** — 폴링 중단·재개는 build-make-verify-fixes.test.mjs(가짜 타이머)와
+ * journey-audit J6(실브라우저 탭 숨김·복귀 계측)가 동작으로 고정한다(결함 9).
  *
  *  W1 지시서 화면: 만들기 패널(makePanelVisible·buildAvailability) · 팩은 만들기가 보이면 보조 · 시작 뒤 /my-app(내 앱)으로
  *  W2 만들기 패널: 안내 줄은 makeIntroKeys가 고른 것만 · 예상 소요는 [PILOT] 상수 · 알림은 본문 전체(resetAt·receivedAt)
@@ -65,27 +70,30 @@ test("W3: 시작 훅 — 본문 전체로 매핑, 이미 진행 중이면 그 �
   assert.match(api, /routeMissing: isRouteMissing\(status, body\)/);
 });
 
-test("W4: 진행 화면 — 복원·폴링·탭 숨김·단계 줄·실패·내 앱 카드·옛 서버", () => {
+test("W4: 진행 화면 — 복원·폴링·탭 숨김·단계 줄·실패·내 앱 카드·옛 서버·닫힘", () => {
   assert.match(buildPage, /latestBuildJob\(res\.jobs\)/, "restore the latest job on reload/revisit");
-  assert.match(buildPage, /nextBuildPollDelayMs\(status, \{/);
+  // ★의도된 변경 (PR #578 검증 결함 9): 폴링은 순수 함수(buildPollStart·startBuildPolling)로 — 동작은 가짜 타이머 테스트가 고정.
+  assert.match(buildPage, /nextBuildPollDelayMs\(r\.ok \? r\.job\.status : statusRef\.current, \{/);
+  assert.match(buildPage, /return startBuildPolling\(\{/);
   assert.match(buildPage, /usePageVisible\(\)/);
   assert.match(buildPage, /if \(!visible\) \{/);
   assert.match(buildPage, /buildStageRow\(job, events\)/);
   assert.match(buildPage, /buildFailureKind\(job\)/);
-  assert.match(buildPage, /failureActions\(failKind\)/);
+  // ★의도된 변경 (결함 3): 만들기가 닫혀 있으면 [다시 시도]를 내밀지 않는다.
+  assert.match(buildPage, /failureActions\(failKind, \{ canRetry: makeOpen === true \}\)/);
   assert.match(buildPage, /mk\.failures\[failKind\]/);
   assert.match(buildPage, /mk\.noCharge/);
   assert.match(buildPage, /appCardView\(job, checks\)/);
   assert.match(buildPage, /mk\.hostedNote/);
   assert.match(buildPage, /card\.reportUrl/);
   assert.match(buildPage, /budgetLine\(job\)/);
-  assert.match(buildPage, /availability === "missing"/);
   assert.match(buildPage, /mk\.startErrors\.unavailable/);
-  // D-17: 주소로 들어온 '이미 앱이 있는' 프로젝트에는 만들기를 내밀지 않는다 — 지시서 화면과 같은 규칙.
-  assert.match(buildPage, /makePanelVisible\(\{ entryPath: loadExtendedProjectData\(id\)\?\.entryPath \?\? null, presence, specSource: view\?\.source \?\? null, availability \}\)/);
-  assert.match(buildPage, /makeHere === false && \(/);
+  // ★의도된 변경 (결함 2): 잡이 없을 때 무엇을 그릴지는 myAppEmptyState 한 곳 — 옛 서버·닫힘·이미 앱 있음(D-17)·만들기·지시서 먼저.
+  assert.match(buildPage, /myAppEmptyState\(\{[\s\S]*?open: makeOpen,[\s\S]*?presence,[\s\S]*?\}\)/);
+  assert.match(buildPage, /empty === "closed" && \(/);
+  assert.match(buildPage, /empty === "notForThis" && \(/);
   assert.match(buildPage, /mk\.notForThisProject/);
-  assert.match(buildPage, /makeHere === true &&/);
+  assert.match(buildPage, /empty === "make" && view && \(/);
   assert.match(visibleHook, /addEventListener\("visibilitychange"/);
   assert.match(visibleHook, /document\.visibilityState !== "hidden"/);
 });

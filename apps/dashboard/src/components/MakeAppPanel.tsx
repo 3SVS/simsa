@@ -19,20 +19,24 @@ import {
   makeIntroKeys,
   makePanelState,
   startErrorTone,
+  startNoticeOffersTakeSpec,
   type BuildJobView,
 } from "@/lib/build-job-view.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { useStartBuild, type StartNotice, type StartedBuild } from "@/lib/use-start-build";
+import { TakeSpecButton } from "@/components/TakeSpecButton";
 
 type Props = {
   projectId: string;
+  /** The project's name — the downloaded spec's file name (Rule 6: kept as written). */
+  projectTitle: string;
   view: DevSpecViewModel;
   latestJob: BuildJobView | null;
   developerMode: boolean;
   onStarted: (started: StartedBuild) => void;
 };
 
-export function MakeAppPanel({ projectId, view, latestJob, developerMode, onStarted }: Props) {
+export function MakeAppPanel({ projectId, projectTitle, view, latestJob, developerMode, onStarted }: Props) {
   const { t, locale } = useI18n();
   const mk = t.makeApp;
   const { start, starting, notice } = useStartBuild(projectId, locale === "en" ? "en" : "ko");
@@ -101,25 +105,34 @@ export function MakeAppPanel({ projectId, view, latestJob, developerMode, onStar
       >
         {starting ? mk.starting : mk.make}
       </button>
-      {notice && <StartNoticeCallout notice={notice} projectId={projectId} />}
+      {notice && <StartNoticeCallout notice={notice} projectId={projectId} projectTitle={projectTitle} />}
     </section>
   );
 }
 
-/** 시작 요청이 막혔을 때 한 줄 — 상한은 "언제 다시", 옛 서버는 지시서 받아가기로. */
-export function StartNoticeCallout({ notice, projectId }: { notice: StartNotice; projectId: string }) {
+/**
+ * 시작 요청이 막혔을 때 한 줄 — 상한은 "언제 다시". 다시 눌러도 같은 곳에서 막힐 실패(아직 안 열림·저희 쪽 설정·
+ * 잠시 멈춤·호스팅 자리 실패)는 그 자리에서 [지시서 받아가기]를 함께 준다(#578 검증 결함 3 — 막다른 길 금지).
+ */
+export function StartNoticeCallout({
+  notice,
+  projectId,
+  projectTitle,
+  takeSpecNearby = false,
+}: {
+  notice: StartNotice;
+  projectId: string;
+  projectTitle: string;
+  /** The screen already shows [지시서 받아가기] right above (a stopped build's action row) — don't repeat it. */
+  takeSpecNearby?: boolean;
+}) {
   const { t } = useI18n();
   const mk = t.makeApp;
   const tone = startErrorTone(notice.errorKey);
   return (
-    <div className={`callout mt-3 ${tone === "info" ? "callout-info" : "callout-error"}`}>
-      {errorNoticeText(mk.startErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
-      {notice.errorKey === "unavailable" && (
-        <>
-          {" "}
-          <Link href={`/projects/${encodeURIComponent(projectId)}/export`} className="underline">{mk.takeSpec}</Link>
-        </>
-      )}
+    <div className={`callout mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 ${tone === "info" ? "callout-info" : "callout-error"}`}>
+      <span>{errorNoticeText(mk.startErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}</span>
+      {!takeSpecNearby && startNoticeOffersTakeSpec(notice.errorKey) && <TakeSpecButton projectId={projectId} title={projectTitle} variant="inline" />}
     </div>
   );
 }
