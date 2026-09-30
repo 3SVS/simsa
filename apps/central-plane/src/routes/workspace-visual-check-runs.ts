@@ -60,6 +60,7 @@ import type { Env } from "../env.js";
 import { getProject, type DbProject } from "../workspace/db.js";
 import { getProjectSourceById, listProjectSources } from "../workspace/project-sources-db.js";
 import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
+import { opsMetaAllowedForRun, opsMetaRecordingAllowed } from "../workspace/privacy-prefs.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { resolveRepairJobsByVerifyCheck } from "../workspace/repair-job-db.js";
 import { INSPECTION_DISABLED, inspectionEnabled } from "../workspace/service-switches.js";
@@ -491,8 +492,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // C4a (0069): the envelope is stamped at insert — that is when the edge
     // country and the project snapshot are in hand. Nothing here is invented:
     // absent values are null.
-    const region = regionFromRequest(c.req.raw);
-    const envelopeJson = JSON.stringify(buildRunEnvelope(project, locale, intent));
+    // Train K · K-1 (0071): only when this person's ops-meta recording is on (explicit choice, else the
+    // country default — EU/EEA·GB·CH off). Off → both columns NULL; the run itself is unaffected.
+    const edgeRegion = regionFromRequest(c.req.raw);
+    const opsOn = await opsMetaRecordingAllowed(c.env, userKey, edgeRegion, "inspection-run");
+    const region = opsOn ? edgeRegion : null;
+    const envelopeJson = opsOn ? JSON.stringify(buildRunEnvelope(project, locale, intent)) : null;
 
     let run;
     try {
@@ -734,6 +739,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const agentPrompt = typeof body.agentPrompt === "string" && body.agentPrompt ? body.agentPrompt : undefined;
     if (agentPrompt && agentPrompt.length > MAX_PROMPT_BYTES) {
       return c.json({ error: "agent_prompt_too_large" }, 400);
+    }
+
+    // Train K · K-1 (0071): finding codes are ops meta. No request here (container callback) → the
+    // person's explicit choice, else the decision taken when the run was inserted (opsMetaAllowedForRun).
+    if (findingCodesJson !== null && !(await opsMetaAllowedForRun(c.env, run, "inspection-done"))) {
+      findingCodesJson = null;
     }
 
     await markVisualCheckDone(c.env, body.runId, {
