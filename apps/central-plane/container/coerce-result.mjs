@@ -206,7 +206,9 @@ export function resolveRepairBudgetUsd(raw) {
 /**
  * Running LLM spend of one repair job.
  *   onUsage(record) — the ClaudeWorker sink. A record whose costUsd is not a finite
- *                     number ≥ 0 counts as the WHOLE budget (unknown cost → stop, never 0).
+ *                     number ≥ 0, OR that says `usageUnknown: true` (the vendor answered
+ *                     without usage — PR #576 review P2-8; agent-worker then prices only an
+ *                     estimate), counts as the WHOLE budget (unknown cost → stop, never 0).
  *                     A non-object is not a call and is ignored. Never throws.
  *   spentUsd()      — the sum so far.
  *   exceeded()      — spent ≥ cap (at the cap = stop).
@@ -222,7 +224,8 @@ export function createRepairBudget(capUsd) {
       try {
         if (!u || typeof u !== "object") return;
         const c = u.costUsd;
-        spent += typeof c === "number" && Number.isFinite(c) && c >= 0 ? c : cap;
+        const known = u.usageUnknown !== true && typeof c === "number" && Number.isFinite(c) && c >= 0;
+        spent += known ? c : cap;
       } catch {
         /* never throw from the sink */
       }
@@ -257,8 +260,16 @@ export function isRepairBudgetStop(err) {
  * Wrap a ClaudeWorker so every call first asks the budget. Under the cap → the
  * call goes through unchanged; at/over it → RepairBudgetExceededError and the
  * worker (and so the LLM) is never called.
+ *
+ * The budget is REQUIRED (PR #576 review P2-6): a missing or malformed one throws
+ * here, at construction, so a wiring slip fails the auto-fix attempt (runRepairJob
+ * then closes with the no-LLM brief) instead of quietly running without a cap. It
+ * must also be the budget the worker's onUsage feeds — see server.mjs runRepairJob.
  */
 export function budgetedWorker(worker, budget) {
+  if (!budget || typeof budget !== "object" || typeof budget.exceeded !== "function" || typeof budget.stopReason !== "function") {
+    throw new TypeError("budgetedWorker: a repair budget (createRepairBudget) is required");
+  }
   const guard = () => {
     if (budget.exceeded()) throw new RepairBudgetExceededError(budget);
   };

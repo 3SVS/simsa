@@ -291,7 +291,114 @@ test("③ 응답 파싱이 실패한 호출도 센다 — 기존 게이트(성�
   assert.equal(bare.calls.length, 4, "without the job budget, four paid calls ($4.40) went out");
 });
 
+// ─── ③′ usage 없는 과금 응답 (#576 검증 P2-8) ───────────────────────────────────
+//
+// 예산 싱크는 "비용을 못 읽으면 상한 전체"였지만, 그 판정 **앞**에서 두 경로가 샜다:
+//   (A) OpenAI 폴백 응답에 usage가 없으면 변환이 토큰을 0으로 만들어 costUsd = 0(유한수)으로 누적됐다.
+//   (B) Anthropic 형태 응답에 usage가 없으면 meter()가 TypeError로 죽어 onUsage가 불리지 않았다(루프는 계속).
+// 이제 agent-worker가 usage를 "모름"(usageUnknown: true, unpriced, 보수 추정 비용)으로 내보내고, 잡 예산은
+// 그런 레코드를 상한 전체로 친다(모르면 멈춘다).
+
+const TOOL_NAME = "submit_rewrite";
+const badToolInput = JSON.stringify({ rewrites: "not-an-array" });
+
+async function runUntilStop(worker, isStop, n = 3) {
+  const outcomes = [];
+  for (let i = 0; i < n; i++) {
+    try {
+      await worker.work(CTX);
+      outcomes.push("ok");
+    } catch (err) {
+      outcomes.push(isStop(err) ? "budget" : err?.name ?? "error");
+    }
+  }
+  return outcomes;
+}
+
+test("③′ 잡 예산: usageUnknown 레코드는 비용 값과 상관없이 상한 전체로 친다", () => {
+  const b = need("createRepairBudget")(2);
+  b.onUsage({ modelActual: "gpt-5.4", costUsd: 0.01, unpriced: true, usageUnknown: true });
+  assert.equal(b.exceeded(), true, "a paid call whose usage we could not read stops the job");
+});
+
+test("③′ (A) OpenAI 폴백 응답에 usage가 없으면 — 0으로 치지 않고 첫 호출 뒤 멈춘다", async () => {
+  const { withOpenAiFallback } = await import("../../../packages/agent-worker/dist/openai-fallback.js");
+  const budget = need("createRepairBudget")(2);
+  const isStop = need("isRepairBudgetStop");
+  let openAiCalls = 0;
+  const fetchImpl = async () => {
+    openAiCalls++;
+    return new Response(
+      JSON.stringify({
+        model: "gpt-5.4-2026-03-05",
+        choices: [{ message: { tool_calls: [{ id: "c1", type: "function", function: { name: TOOL_NAME, arguments: badToolInput } }] }, finish_reason: "tool_calls" }],
+        // no "usage" block
+      }),
+      { status: 200 },
+    );
+  };
+  const client = withOpenAiFallback(null, { openaiApiKey: "test-openai-key", preferFallback: true, fetchImpl });
+  const worker = need("budgetedWorker")(new ClaudeWorker({ client, onUsage: budget.onUsage }), budget);
+  const outcomes = await runUntilStop(worker, isStop);
+  assert.deepEqual(outcomes, ["WorkerParseError", "budget", "budget"]);
+  assert.equal(openAiCalls, 1, "one paid call with unknown usage, then no more");
+});
+
+test("③′ (B) Anthropic 형태 응답에 usage가 없으면 — 계측이 죽지 않고 첫 호출 뒤 멈춘다", async () => {
+  const budget = need("createRepairBudget")(2);
+  const isStop = need("isRepairBudgetStop");
+  let calls = 0;
+  const client = {
+    messages: {
+      async create(params) {
+        calls++;
+        return { id: "m", model: "claude-sonnet-4-6", content: [{ type: "tool_use", id: "tu_1", name: params.tools[0].name, input: { rewrites: "not-an-array" } }], stop_reason: "tool_use" };
+      },
+    },
+  };
+  const worker = need("budgetedWorker")(new ClaudeWorker({ client, onUsage: budget.onUsage }), budget);
+  const outcomes = await runUntilStop(worker, isStop);
+  assert.deepEqual(outcomes, ["WorkerParseError", "budget", "budget"], "no TypeError from the meter; the budget saw the call");
+  assert.equal(calls, 1);
+});
+
+test("③′ 행동 보존: usage가 있는 응답은 종전대로 실응답 모델 단가로 누적(모름 표시 없음)", async () => {
+  const budget = need("createRepairBudget")(2);
+  const records = [];
+  const m = mockClient({ model: "gpt-5.4", inputTokens: 1_000, outputTokens: 100, validTool: false });
+  const worker = need("budgetedWorker")(new ClaudeWorker({ client: m.client, onUsage: (u) => { records.push(u); budget.onUsage(u); } }), budget);
+  await worker.work(CTX).catch(() => undefined);
+  assert.equal(records.length, 1);
+  assert.notEqual(records[0].usageUnknown, true);
+  assert.ok(Math.abs(budget.spentUsd() - (1_000 * 2.5 + 100 * 15) / 1_000_000) < 1e-12);
+});
+
+// ─── ⑤ 예산 배선이 빠지면 조용히 무제한이 되지 않는다 (#576 검증 P2-6) ─────────────
+//
+// attemptAutoFix의 기본 인자 `budget = createRepairBudget()`는 onUsage와 연결되지 않은 새 예산이라, 호출부에서
+// budget만 빠져도 exceeded()가 늘 false였다(변이 실험: 51/51 통과). 이제 budgetedWorker는 예산 없이 만들 수
+// 없고(→ attemptAutoFix가 던지고 runRepairJob이 LLM 0회 지시서 폴백으로 마감), 기본 인자는 없다.
+
+test("⑤ budgetedWorker는 쓸 수 있는 예산 없이는 만들어지지 않는다(빠지면 LLM 0회로 멈춘다)", () => {
+  const budgetedWorker = need("budgetedWorker");
+  const inner = { async work() { throw new Error("must not be called"); }, async workEdits() { throw new Error("must not be called"); } };
+  for (const bad of [undefined, null, {}, { exceeded: true }, "2"]) {
+    assert.throws(() => budgetedWorker(inner, bad), /budget/i, `bad budget ${JSON.stringify(bad)}`);
+  }
+  assert.doesNotThrow(() => budgetedWorker(inner, need("createRepairBudget")(2)));
+});
+
 // ─── ④ server.mjs 배선 — [소스 불변식·약함] (컨테이너는 node --test에서 못 돈다) ─────
+
+test("④ [소스 불변식·약함] attemptAutoFix는 예산을 기본값 없이 받고, 호출부 두 곳이 예산을 넘긴다", () => {
+  assert.doesNotMatch(serverMjs, /budget\s*=\s*createRepairBudget\(\s*\)/, "no silent default budget (a fresh one never sees onUsage)");
+  const sigStart = serverMjs.indexOf("async function attemptAutoFix(");
+  assert.ok(sigStart > 0);
+  const sig = serverMjs.slice(sigStart, serverMjs.indexOf(") {", sigStart));
+  assert.match(sig, /\bbudget\b/, "attemptAutoFix takes the job budget");
+  assert.match(serverMjs, /attemptAutoFix\(\{[^}]*\bonUsage\b[^}]*\bbudget\b[^}]*\}\)/, "runRepairJob passes the SAME budget its onUsage feeds");
+  assert.match(serverMjs, /attemptOversizeEditFix\(\{[^}]*\bbudget\b[^}]*\}\)/, "the oversize rung gets it too");
+});
 
 const serverMjs = readFileSync(path.join(ROOT, "container/server.mjs"), "utf8");
 

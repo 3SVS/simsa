@@ -708,8 +708,14 @@ async function quickSyntaxCheck(workDir, changedFiles) {
  * Returns { changedFiles, prContent } on success, or null when the brief /
  * worker produced nothing applicable — callers reset the tree + fall back
  * to brief-only. Never leaves a dirty tree on the null path.
+ *
+ * `budget` is REQUIRED and must be the one `onUsage` feeds (runRepairJob builds
+ * both). No default on purpose (PR #576 review P2-6): a fresh default budget never
+ * sees a usage record, so a caller that forgot to pass it ran without a cap and
+ * every test still passed. Missing now → budgetedWorker throws → the caller falls
+ * back to brief-only with no LLM call.
  */
-async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null }, vendor = {}, onUsage, budget = createRepairBudget() }) {
+async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null }, vendor = {}, onUsage, budget }) {
   const { openaiApiKey, openaiBaseUrl, preferFallback } = vendor;
   const jobId = payload.jobId;
   const deadline = Date.now() + AUTO_FIX_DEADLINE_MS;
