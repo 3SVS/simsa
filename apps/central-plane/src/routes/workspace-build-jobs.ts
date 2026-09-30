@@ -4,17 +4,22 @@
  *   POST /workspace/projects/:id/build                 — 지시서가 있는 프로젝트의 빌드 잡 시작(S 모드, 계정 0)
  *   GET  /workspace/projects/:id/build-jobs            — 최근 잡 목록
  *   GET  /workspace/projects/:id/build-jobs/:jobId     — 잡 + 타임라인
- *   POST /internal/build-progress                      — 컨테이너 단계 콜백(Bearer = 그 잡의 jobToken)
- *   POST /internal/build-done                          — 컨테이너 최종 콜백(같은 인증)
- *   (LLM은 routes/build-llm-proxy.ts — 같은 jobToken, 서버 키, 서버 권위 예산)
+ *   POST /internal/build-progress                      — 컨테이너 단계 콜백(Bearer = 그 잡의 jobToken) — 단계·wbsDone만
+ *   POST /internal/build-done                          — 컨테이너 **실패** 콜백(같은 인증). done은 Worker만(S3)
+ *   (LLM은 routes/build-llm-proxy.ts — 같은 jobToken, 서버 키, 서버 권위 예산·예약)
  *
  * ★B-5b S1 (2026-10-01) — 컨테이너 비밀 최소화 + B-6 예산 정지:
  *   - 컨테이너 페이로드에 **비밀이 없다**: 운영 CF 토큰·전역 콜백 토큰·조직 설치 토큰·LLM 키·userKey를 싣지 않는다.
  *     B-5b-2부터 그 컨테이너가 LLM이 만든 코드와 의존성(postinstall 포함)을 실행하기 때문이다(D-6 "운영 자격은
  *     Worker/Actions secret에만"). 컨테이너가 받는 것은 식별자(jobId·slug·d1Id)·지시서·locale·예산·Worker 주소, 그리고
  *     이 잡에만 통하는 **jobToken**(build-job-token.ts) 하나. 배포·push는 Worker가 한다(S3).
- *   - 콜백 인증: 그 잡의 jobToken(다른 잡의 토큰은 403 — 교차 잡 위조 차단). 전역 INTERNAL_CALLBACK_TOKEN은 옛 이미지를
- *     위해 **한 릴리스만** 받는다(TODO — build-job-token.ts authenticateBuildCallback).
+ *   - 콜백 인증: 그 잡의 jobToken만(다른 잡의 토큰 403 — 교차 잡 위조 차단, 전역 INTERNAL_CALLBACK_TOKEN도 403 —
+ *     PR #569 S1 검증 결함 8로 호환 분기를 코드에서 닫았다).
+ *   - 콜백이 쓸 수 있는 칸(결함 1·2): 단계·wbsDone·실패 사유뿐. repo_full_name(push 대상)·commit_sha·build_exit_code·
+ *     wbs_total·deployed_url·done은 **Worker 소유** — S3의 push·배포는 insert 때 정한 repo_full_name·slug로 Worker가 한다
+ *     (콜백 입력에서 대상을 받지 않는다). 콜백은 끝난 잡에 아무 흔적도 남기지 않는다(결함 7 — 이벤트는 전이가 있을 때만).
+ *   - 킬스위치 BUILD_ENABLED="off"는 새 빌드뿐 아니라 **진행 중인 빌드**도 멈춘다(결함 6 — 진행 콜백·LLM 프록시에서).
+ *     S3에서 더할 Worker 쪽 push·배포 단계도 시작 전에 buildEnabled를 먼저 본다(꺼져 있으면 stopActiveBuildJob).
  *   - 원가: **LLM 프록시 한 곳에서만** 원장·spent_usd를 쓴다. 콜백 본문의 usage[]·spentUsd는 무시한다(이중 계상 금지 —
  *     L-3 #562의 콜백 usage[] 경로는 수리 컨테이너(repair-done)에만 남는다).
  *   - 일일 상한(build-daily-caps.ts): 사용자 3 · 네트워크 5 [PILOT] · 서비스 30 [PILOT] / UTC 일. 일이 시작되지 않으면 환급.
@@ -36,7 +41,7 @@ import { createProjectD1, ensureNamespace, toHostedSlug } from "../workspace/hos
 import { ensureHostedRepo } from "../workspace/hosting-repo.js";
 import {
   advanceBuildJob, appendBuildJobEvent, findActiveBuildJobForProject, getBuildJobById, insertQueuedBuildJob,
-  listBuildJobEvents, listBuildJobsForProject, markBuildJobDone, markBuildJobFailed, BUILD_JOB_STATUSES, DEFAULT_BUILD_BUDGET_USD,
+  listBuildJobEvents, listBuildJobsForProject, markBuildJobFailed, stopActiveBuildJob, BUILD_JOB_STATUSES, DEFAULT_BUILD_BUDGET_USD,
   type BuildJobStatus,
 } from "../workspace/build-job-db.js";
 import { RESERVED_SLUGS_FOR_HOSTING } from "../workspace/hosting-reserved.js";
@@ -49,6 +54,8 @@ import { OPENAI_FALLBACK_MODEL } from "../workspace/anthropic-fetch.js";
 import { DEFAULT_BUILD_MODEL } from "./build-llm-proxy.js";
 
 const MAX_ERROR_CHARS = 500;
+/** 컨테이너가 done(ok:true)을 주장했을 때의 오류 코드 — 배포는 Worker만 한다(PR #569 S1 검증 결함 2). */
+export const DONE_NOT_WORKER_OWNED = "done_not_worker_owned";
 
 /** 컨테이너가 받는 WBS 항목(지시서에서 순서대로). */
 export type BuildWbsItem = { id: string; title: string; order: number; acceptanceIds: string[]; dependsOn: string[] };
@@ -217,7 +224,9 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
   });
 
   // ── POST /internal/build-progress ───────────────────────────────────────────
-  // 본문의 usage[]·spentUsd는 읽지 않는다(B-5b S1): 원가·예산은 LLM 프록시만 쓴다 — 여기서도 쓰면 같은 호출이 두 번 잡힌다.
+  // 컨테이너가 쓸 수 있는 것은 단계(status)와 wbsDone뿐이다(PR #569 S1 검증 결함 1). repoFullName·commitSha·buildExitCode·
+  // wbsTotal은 본문에 있어도 읽지 않는다 — push 대상·커밋·빌드 결과·WBS 수는 Worker 소유(insert 때 · S3에서 Worker가).
+  // 본문의 usage[]·spentUsd도 읽지 않는다(B-5b S1): 원가·예산은 LLM 프록시만 쓴다 — 여기서도 쓰면 같은 호출이 두 번 잡힌다.
   app.post("/internal/build-progress", async (c) => {
     const auth = await authenticateBuildCallback(c.env, c.req.header("authorization"));
     if (!auth.ok) return c.json({ ok: false, error: auth.error }, auth.status);
@@ -228,19 +237,25 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
     if (!jobId || !(BUILD_JOB_STATUSES as readonly string[]).includes(status) || status === "done" || status === "failed") return c.json({ ok: false, error: "invalid_progress" }, 400);
     const scope = checkCallbackJob(auth, jobId);
     if (!scope.ok) return c.json({ ok: false, error: scope.error }, scope.status);
+    // 킬스위치(결함 6): 꺼졌으면 진행 중인 잡도 여기서 멈춘다 — failed(그 단계, build_disabled) + transitioned:false
+    // (컨테이너는 transitioned:false를 받으면 다음 단계로 가지 않는다). 새 빌드만 막던 종전 스위치는 폭주를 못 멈췄다.
+    if (!buildEnabled(c.env)) {
+      const stopped = await stopActiveBuildJob(c.env, jobId, BUILD_DISABLED);
+      return c.json({ ok: true, transitioned: false, reason: BUILD_DISABLED, stopped });
+    }
     const ok = await advanceBuildJob(c.env, jobId, {
       status: status as Exclude<BuildJobStatus, "done" | "failed">,
       wbsDone: typeof body["wbsDone"] === "number" ? body["wbsDone"] : undefined,
-      wbsTotal: typeof body["wbsTotal"] === "number" ? body["wbsTotal"] : undefined,
-      commitSha: typeof body["commitSha"] === "string" ? body["commitSha"] : undefined,
-      repoFullName: typeof body["repoFullName"] === "string" ? body["repoFullName"] : undefined,
-      buildExitCode: typeof body["buildExitCode"] === "number" ? body["buildExitCode"] : undefined,
     });
-    if (typeof body["message"] === "string" && body["message"]) await appendBuildJobEvent(c.env, jobId, status, body["message"], typeof body["meta"] === "object" && body["meta"] ? (body["meta"] as Record<string, unknown>) : {});
+    // 이벤트는 전이가 실제로 일어났을 때만(결함 7) — 끝난 잡·역행 콜백은 타임라인에 아무것도 남기지 않는다.
+    if (ok && typeof body["message"] === "string" && body["message"]) await appendBuildJobEvent(c.env, jobId, status, body["message"], typeof body["meta"] === "object" && body["meta"] ? (body["meta"] as Record<string, unknown>) : {});
     return c.json({ ok: true, transitioned: ok });
   });
 
   // ── POST /internal/build-done ───────────────────────────────────────────────
+  // 컨테이너는 **실패만** 보고한다(PR #569 S1 검증 결함 2). S1부터 컨테이너에는 배포 자격이 없으므로 컨테이너의 done 주장은
+  // 실제 배포로 뒷받침될 수 없다 — ok:true는 409 done_not_worker_owned, 잡은 정직하게 failed(그 단계). done·deployed_url·
+  // commit_sha는 S3에서 Worker가 자기 배포 뒤 markBuildJobDone으로 쓴다(주소는 job.slug + HOSTING_ROOT_DOMAIN으로 계산).
   app.post("/internal/build-done", async (c) => {
     const auth = await authenticateBuildCallback(c.env, c.req.header("authorization"));
     if (!auth.ok) return c.json({ ok: false, error: auth.error }, auth.status);
@@ -250,25 +265,16 @@ export function createWorkspaceBuildJobRoutes(): Hono<{ Bindings: Env }> {
     if (!jobId) return c.json({ ok: false, error: "jobId_required" }, 400);
     const scope = checkCallbackJob(auth, jobId);
     if (!scope.ok) return c.json({ ok: false, error: scope.error }, scope.status);
-    // spent_usd는 프록시가 계량한 값 그대로 — 본문 spentUsd로 올리지도 내리지도 않는다(서버 권위). usage[]도 무시(이중 계상 금지).
-    const buildExitCode = typeof body["buildExitCode"] === "number" ? body["buildExitCode"] : null;
     if (body["ok"] === true) {
-      const deployedUrl = typeof body["deployedUrl"] === "string" ? body["deployedUrl"] : "";
-      if (!deployedUrl) return c.json({ ok: false, error: "deployedUrl_required" }, 400);
-      const r = await markBuildJobDone(c.env, jobId, { deployedUrl, commitSha: typeof body["commitSha"] === "string" ? body["commitSha"] : null, spentUsd: 0, buildExitCode: buildExitCode ?? -1, wbsDone: typeof body["wbsDone"] === "number" ? body["wbsDone"] : 0 });
-      if (!r.ok && r.reason === "build_not_green") {
-        // D-4: 컨테이너가 done이라 해도 빌드가 green이 아니면 믿지 않는다.
-        await markBuildJobFailed(c.env, jobId, { failedStage: "building", error: `done claimed with build exit ${buildExitCode}`, buildExitCode });
-        await appendBuildJobEvent(c.env, jobId, "failed", "build_not_green_rejected", { buildExitCode });
-        return c.json({ ok: true, accepted: false, reason: "build_not_green" });
-      }
-      await appendBuildJobEvent(c.env, jobId, "done", "deployed", { deployedUrl });
-      return c.json({ ok: true, accepted: r.ok });
+      await stopActiveBuildJob(c.env, jobId, DONE_NOT_WORKER_OWNED);
+      return c.json({ ok: false, error: DONE_NOT_WORKER_OWNED }, 409);
     }
+    // 실패 보고는 킬스위치가 꺼져 있어도 받는다(사유를 잃지 않게). spent_usd는 프록시가 계량한 값 그대로 — 본문
+    // spentUsd·usage[]는 무시(서버 권위·이중 계상 금지). 빌드 종료 코드도 컨테이너의 주장이라 저장하지 않는다(결함 1).
     const error = typeof body["error"] === "string" ? body["error"] : "unknown_error";
     const failedStage = typeof body["failedStage"] === "string" ? body["failedStage"] : "unknown";
-    const ok = await markBuildJobFailed(c.env, jobId, { failedStage, error: error.slice(0, MAX_ERROR_CHARS), buildExitCode });
-    await appendBuildJobEvent(c.env, jobId, "failed", error.slice(0, MAX_ERROR_CHARS), { failedStage });
+    const ok = await markBuildJobFailed(c.env, jobId, { failedStage, error: error.slice(0, MAX_ERROR_CHARS) });
+    if (ok) await appendBuildJobEvent(c.env, jobId, "failed", error.slice(0, MAX_ERROR_CHARS), { failedStage });
     return c.json({ ok: true, accepted: ok });
   });
 

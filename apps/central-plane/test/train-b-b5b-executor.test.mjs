@@ -27,8 +27,16 @@ const run = await import("../builder-container/builder-run.mjs");
 const { BUILD_JOB_STATUSES, insertQueuedBuildJob, getBuildJobById } = await import("../dist/workspace/build-job-db.js");
 const { createApp } = await import("../dist/router.js");
 const { summarizeSelfCheck } = await import("../dist/routes/builder-probe.js");
-const { mintBuildJobToken } = await import("../dist/workspace/build-job-token.js");
+// B-5b S1 모듈 — 옛 코드(eb6b696 이전)에는 없다. 하드 import면 파일 전체가 모듈 오류 1건으로 떨어져 테스트별 판별이
+// 안 된다(PR #569 S1 검증 결함 3) → 관대한 import + 쓰는 테스트에서만 assert(그 테스트만 각자 실패).
+const { mintBuildJobToken } = await import("../dist/workspace/build-job-token.js").catch(() => ({ mintBuildJobToken: null }));
 const { dailyCapsRun } = await import("./_daily-caps-fake.mjs");
+
+/** 이 잡의 jobToken — build-job-token 모듈이 없으면(옛 코드) 그 테스트만 실패한다. */
+async function mintJobToken(env, jobId) {
+  assert.equal(typeof mintBuildJobToken, "function", "workspace/build-job-token module (B-5b S1)");
+  return mintBuildJobToken(env, jobId);
+}
 
 const dockerfile = readFileSync(path.join(ROOT, "builder-container/Dockerfile"), "utf8");
 const serverMjs = readFileSync(path.join(ROOT, "builder-container/server.mjs"), "utf8");
@@ -118,9 +126,18 @@ function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
             }
             if (sql.includes("INSERT INTO build_job_events")) { const [id, job_id, at, stage, message, meta_json] = args; events.push({ id, job_id, at, stage, message, meta_json }); return { meta: { changes: 1 } }; }
             if (sql.includes("UPDATE build_jobs") && sql.includes("SET status = ?")) {
-              const [status, wbs_done, wbs_total, spent_usd, commit_sha, repo_full_name, build_exit_code, updated_at, id] = args;
+              // 진행 전이: 새 문장(PR #569 S1 검증 결함 1)은 status·wbs_done·updated_at만. 옛 문장(9 바인딩)도 흉내낸다.
+              const [status, wbs_done] = args;
+              const updated_at = args[args.length - 2];
+              const id = args[args.length - 1];
               const row = jobs.find((r) => r.id === id && !["done", "failed"].includes(r.status));
-              if (row) Object.assign(row, { status, wbs_done, wbs_total, spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code, updated_at });
+              if (row) {
+                Object.assign(row, { status, wbs_done, updated_at });
+                if (args.length === 9) {
+                  const [, , wbs_total, spent_usd, commit_sha, repo_full_name, build_exit_code] = args;
+                  Object.assign(row, { wbs_total, spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code });
+                }
+              }
               return { meta: { changes: row ? 1 : 0 } };
             }
             if (sql.includes("SET status = 'failed'")) {
@@ -473,7 +490,7 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
     const app = createApp();
     const poster = posterIntoWorker(app, env);
     // B-5b S1: Worker가 이 잡에 발급한 jobToken — 컨테이너의 모든 콜백 Bearer.
-    const payload = buildPayload({ jobId: job.id, jobToken: await mintBuildJobToken(env, job.id) });
+    const payload = buildPayload({ jobId: job.id, jobToken: await mintJobToken(env, job.id) });
     const result = await run.runBuildJob(payload, { workRoot: await tmpDir("wr8"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post });
     assert.equal((await getBuildJobById(env, job.id)).status, "scaffolding");
     assert.deepEqual(db._events.filter((e) => e.job_id === job.id).map((e) => [e.stage, e.message]), [["scaffolding", "scaffold_started"], ["scaffolding", "scaffold_ready"]]);
@@ -499,7 +516,7 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
     const env = workerEnv(db);
     const job = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-y", wbsTotal: 1 });
     const poster = posterIntoWorker(createApp(), env);
-    await poster.post("https://cp.example/internal/build-done", await mintBuildJobToken(env, job.id), run.failureCallbackBody(job.id, err));
+    await poster.post("https://cp.example/internal/build-done", await mintJobToken(env, job.id), run.failureCallbackBody(job.id, err));
     assert.equal((await getBuildJobById(env, job.id)).failedStage, "scaffolding");
 
     assert.doesNotMatch(serverMjs, /failedAt/, "server.mjs must not send the key the Worker ignores");

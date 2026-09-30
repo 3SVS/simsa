@@ -17,7 +17,11 @@
  *   - jobId를 토큰 안에 싣는다: LLM 프록시(/internal/build-llm/*)는 SDK가 주는 헤더(x-api-key·Bearer)만 받으므로
  *     어느 잡인지 토큰에서 읽어야 한다. jobId를 바꾸면 mac이 맞지 않는다(위조 = 401).
  *   - 비교는 상수 시간.
- *   - 이 토큰으로 할 수 있는 것: 그 잡의 진행·최종 콜백, 그 잡 예산 안의 LLM 호출. 그 밖은 없다.
+ *   - 이 토큰으로 할 수 있는 것(PR #569 S1 검증 뒤): 그 잡의 **단계·WBS 진행** 보고, **실패** 보고, 그 잡 예산 안의 LLM
+ *     호출(예약 — 동시 호출 초과 ≤ 1회). done·배포 주소·push 대상·커밋·빌드 결과는 쓸 수 없다(Worker 소유, S3).
+ *   - 유효 범위는 잡이 활성인 동안이다: 끝난 잡에서는 프록시 409, 콜백은 아무 행도 바꾸지 않고 이벤트도 남기지 않는다.
+ *     (토큰 자체에 만료 시각은 없다 — 활성 수명은 컨테이너 마감 45분·스턱 스윕 60분이 묶고, 살아 있는 잡을 붙잡는
+ *     컨테이너가 할 수 있는 최대치는 그 잡의 예산과 잡당 이벤트 상한이다.)
  */
 import type { Env } from "../env.js";
 
@@ -110,35 +114,35 @@ export function bearerOf(header: string | undefined | null): string | null {
 }
 
 export type BuildCallbackAuth =
-  | { ok: true; via: "job" | "global"; tokenJobId: string | null }
-  | { ok: false; status: 401 | 503; error: "unauthorized" | "callback_disabled" };
+  | { ok: true; tokenJobId: string }
+  | { ok: false; status: 401 | 403 | 503; error: "unauthorized" | "job_token_required" | "callback_disabled" };
 
 /**
  * 빌드 콜백(/internal/build-progress · build-done)의 인증 1단계 — 본문을 읽기 **전에**.
- *   - 그 잡의 jobToken → ok(via job, tokenJobId). 본문 jobId와 같은지는 checkCallbackJob가 본다.
- *   - 전역 INTERNAL_CALLBACK_TOKEN → ok(via global).
- *     TODO(B-5b S1 + 1 release): 옛 이미지(RUNNER_REV b5b1-builder-4 이하)가 진행 중일 수 있는 롤아웃 한 번만의 호환.
- *     다음 릴리스에서 이 분기를 지운다(test/train-b-b5b-s1-secrets-budget.test.mjs '[호환·한 릴리스 뒤 제거]'도 함께).
- *   - 그 밖 → 401. 비밀이 하나도 설정되지 않았으면 503.
+ *   - 그 잡의 jobToken → ok(tokenJobId). 본문 jobId와 같은지는 checkCallbackJob가 본다.
+ *   - 전역 INTERNAL_CALLBACK_TOKEN → **403 job_token_required**(LLM 프록시와 같은 답).
+ *     PR #569 S1 검증 결함 8: 종전에는 옛 이미지 호환으로 전역 토큰을 "한 릴리스만" 받았는데, 끝이 TODO뿐이었고 그동안
+ *     전역 토큰(검수·수리 컨테이너 페이로드에도 실린다)을 가진 누구나 **어느 빌드 잡이든** 진행·실패·done으로 만들 수 있었다.
+ *     지켜 줄 옛 잡이 없다: 프로덕션 빌더 이미지(b1-builder-1)는 kind=build를 받자마자 builder_stage_not_implemented로
+ *     실패하고(진행 중인 긴 잡이 없다), 새 페이로드에는 callbackToken·projectId·userKey가 없어 옛 이미지는 202 전에 400
+ *     (디스패치 실패 = 즉시 failed(queued))이다. 배포 순간 몇 초 창에 걸린 옛 실패 콜백은 스턱 스윕(60분)이 정리한다.
+ *     그래서 호환 분기를 코드에서 지웠다.
+ *   - 그 밖 → 401. 루트 비밀(KEK·전역 토큰)이 하나도 없으면 503(잡 토큰을 검증할 수 없다).
  */
 export async function authenticateBuildCallback(env: TokenEnv, authorization: string | undefined): Promise<BuildCallbackAuth> {
-  const hasGlobal = typeof env.INTERNAL_CALLBACK_TOKEN === "string" && env.INTERNAL_CALLBACK_TOKEN.length > 0;
-  if (!hasGlobal && rootOf(env) === null) return { ok: false, status: 503, error: "callback_disabled" };
+  if (rootOf(env) === null) return { ok: false, status: 503, error: "callback_disabled" };
   const presented = bearerOf(authorization);
   if (!presented) return { ok: false, status: 401, error: "unauthorized" };
   if (parseBuildJobToken(presented)) {
     const v = await verifyBuildJobToken(env, presented);
-    return v.ok ? { ok: true, via: "job", tokenJobId: v.jobId } : { ok: false, status: 401, error: "unauthorized" };
+    return v.ok ? { ok: true, tokenJobId: v.jobId } : { ok: false, status: 401, error: "unauthorized" };
   }
-  if (hasGlobal && constantTimeEqual(presented, env.INTERNAL_CALLBACK_TOKEN as string)) return { ok: true, via: "global", tokenJobId: null };
+  const ict = env.INTERNAL_CALLBACK_TOKEN;
+  if (typeof ict === "string" && ict.length > 0 && constantTimeEqual(presented, ict)) return { ok: false, status: 403, error: "job_token_required" };
   return { ok: false, status: 401, error: "unauthorized" };
 }
 
-/**
- * 인증 2단계 — 본문 jobId와 토큰의 잡이 같은가. 다른 잡의 토큰(교차 잡 위조)은 403, 상태를 바꾸지 않는다.
- * 전역 토큰은 어느 잡이든 통과(호환 기간).
- */
+/** 인증 2단계 — 본문 jobId와 토큰의 잡이 같은가. 다른 잡의 토큰(교차 잡 위조)은 403, 상태를 바꾸지 않는다. */
 export function checkCallbackJob(auth: Extract<BuildCallbackAuth, { ok: true }>, bodyJobId: string): { ok: true } | { ok: false; status: 403; error: "job_token_mismatch" } {
-  if (auth.via === "global") return { ok: true };
-  return auth.tokenJobId !== null && constantTimeEqual(auth.tokenJobId, bodyJobId) ? { ok: true } : { ok: false, status: 403, error: "job_token_mismatch" };
+  return constantTimeEqual(auth.tokenJobId, bodyJobId) ? { ok: true } : { ok: false, status: 403, error: "job_token_mismatch" };
 }

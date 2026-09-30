@@ -212,10 +212,13 @@ export const CALLBACK_USAGE_MAX = 200;
 const tokenField = z.number().finite().nonnegative().max(50_000_000).transform((n) => Math.floor(n));
 
 /**
- * 콜백 계약(빌더·수리 컨테이너 → /internal/build-progress · build-done · repair-done).
+ * 콜백 계약 — **수리 컨테이너(→ /internal/repair-done) 전용**.
+ * 빌드 잡은 이 경로를 쓰지 않는다: B-5b S1부터 빌드 원가는 Worker의 /internal/build-llm 프록시가 호출마다 계량해 원장·
+ * spent_usd에 쓰고(routes/build-llm-proxy.ts), /internal/build-progress · build-done은 본문의 usage[]·spentUsd를 **무시**한다
+ * (이중 계상 금지). 빌더 컨테이너에 onUsage→콜백 배선이나 usage 우편함을 되살리지 말 것(PR #569 S1 검증 결함 10).
  *
  * ★ 재전송·중복 규약(#562 결함 1·2) — 생산자는 이것을 지킨다:
- *   1. 각 콜백은 **직전 콜백 이후 새로 생긴 호출만(델타)** 싣는다. build-done은 아직 보내지 않은 나머지만.
+ *   1. 각 콜백은 **직전 콜백 이후 새로 생긴 호출만(델타)** 싣는다. 최종 콜백은 아직 보내지 않은 나머지만.
  *      (runBuildLoop의 onUsage(턴별)와 outcome.usage(누적)를 **둘 다** 보내지 않는다.)
  *   2. 각 항목에 `callId`를 싣는다 — **그 잡 안에서 유일**하고 재전송해도 **같은 값**(예: `<실행 nonce>:<순번>`).
  *      잡이 여러 번 실행될 수 있거나 runBuildLoop를 여러 번 부르면 nonce/태스크 id를 넣어 겹치지 않게 한다.

@@ -10,6 +10,9 @@
  *      402 → 그 WBS에서 멈추고 커밋 → failed(implementing, budget_exhausted) · 자식 env에 비밀 0
  *   ⑥ 일일 상한 3층(user 3 · network 5 · service 30) · 환급 · 킬스위치가 먼저
  *   ⑦ 실제 SQLite — 프록시 증가와 진행 전이가 겹쳐도 spent_usd를 잃지 않는다
+ *   ⑧ PR #569 S1 검증 결함 — 콜백은 Worker 소유 칸(repo·commit·exit·done·주소)을 못 쓴다 · 예산은 예약(동시 호출
+ *      초과 ≤ 1회) · 과금 필드 허용 목록 · 킬스위치가 진행 중 빌드도 멈춘다 · 끝난 잡 콜백은 이벤트 0 · 잡당 이벤트 상한
+ *      (전역 토큰 거절은 ②, 환급 두 경로는 ⑥)
  *
  * 네트워크 0: Cloudflare·GitHub·LLM은 전부 가짜 fetch. Anthropic SDK는 진짜(agent-worker 의존성)를 쓰되 fetch를
  * Worker 앱(app.fetch)에 잇는다 — 컨테이너 클라이언트 ↔ 프록시 경로·헤더 계약을 한 번에 검사한다.
@@ -97,6 +100,8 @@ function makeDb({ projects = new Map([[PROJECT, projectRow()]]), jobs = [] } = {
           }
           if (sql.includes("INSERT INTO build_job_events")) {
             const [id, job_id, at, stage, message, meta_json] = args;
+            // 잡당 이벤트 상한(검증 결함 7): `… WHERE (SELECT COUNT(*) …) < ?` 문장이면 상한을 흉내낸다.
+            if (sql.includes("SELECT COUNT(*)") && db.events.filter((e) => e.job_id === job_id).length >= Number(args[args.length - 1])) return { meta: { changes: 0 } };
             db.events.push({ id, job_id, at, stage, message, meta_json });
             return { meta: { changes: 1 } };
           }
@@ -106,18 +111,43 @@ function makeDb({ projects = new Map([[PROJECT, projectRow()]]), jobs = [] } = {
             db.ledger.push(row);
             return { meta: { changes: 1 } };
           }
+          const maxSpent = sql.includes("MAX(spent_usd, ?)");
+          const active = (r) => !["done", "failed"].includes(r.status);
+          // 예약(검증 결함 4): 활성이고 spent < budget일 때만 최악 비용을 원자적으로 더한다. JS 한 틱 = 원자.
+          if (sql.includes("SET spent_usd = spent_usd + ?") && sql.includes("spent_usd < budget_usd")) {
+            const [delta, updated_at, id] = args;
+            const row = jobs.find((r) => r.id === id && active(r) && r.spent_usd < r.budget_usd);
+            if (row) Object.assign(row, { spent_usd: row.spent_usd + delta, updated_at });
+            return { meta: { changes: row ? 1 : 0 } };
+          }
+          // 정산: 예약분을 빼고 실제 비용을 더한다(0 아래로 안 내려간다). 상태 무관.
+          if (sql.includes("MAX(0, spent_usd - ? + ?)")) {
+            const [reserved, actual, updated_at, id] = args;
+            const row = jobs.find((r) => r.id === id);
+            if (row) Object.assign(row, { spent_usd: Math.max(0, row.spent_usd - reserved + actual), updated_at });
+            return { meta: { changes: row ? 1 : 0 } };
+          }
           if (sql.includes("SET spent_usd = spent_usd + ?")) {
             const [delta, updated_at, id] = args;
             const row = jobs.find((r) => r.id === id);
             if (row) Object.assign(row, { spent_usd: row.spent_usd + delta, updated_at });
             return { meta: { changes: row ? 1 : 0 } };
           }
-          const maxSpent = sql.includes("MAX(spent_usd, ?)");
-          const active = (r) => !["done", "failed"].includes(r.status);
           if (sql.includes("UPDATE build_jobs") && sql.includes("SET status = ?")) {
-            const [status, wbs_done, wbs_total, spent_usd, commit_sha, repo_full_name, build_exit_code, updated_at, id] = args;
+            // 새 문장(검증 결함 1): status·wbs_done·updated_at만. 옛 문장(9 바인딩)은 repo·commit·exit·wbs_total·spent까지 썼다 —
+            // 옛 코드에서 새 테스트가 "왜" 실패하는지 보이도록 두 모양을 다 흉내낸다.
+            const legacy = args.length === 9;
+            const [status, wbs_done] = args;
+            const updated_at = args[args.length - 2];
+            const id = args[args.length - 1];
             const row = jobs.find((r) => r.id === id && active(r));
-            if (row) Object.assign(row, { status, wbs_done, wbs_total, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code, updated_at });
+            if (row) {
+              Object.assign(row, { status, wbs_done, updated_at });
+              if (legacy) {
+                const [, , wbs_total, spent_usd, commit_sha, repo_full_name, build_exit_code] = args;
+                Object.assign(row, { wbs_total, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code });
+              }
+            }
             return { meta: { changes: row ? 1 : 0 } };
           }
           if (sql.includes("SET status = 'done'")) {
@@ -177,13 +207,18 @@ function envFor(db, extra = {}) {
 }
 
 /** Cloudflare API 가짜(global fetch — 프로비저닝은 global을 쓴다). */
-async function withHostingFetch(fn, { d1Ok = true } = {}) {
+async function withHostingFetch(fn, { d1Ok = true, nsOk = true } = {}) {
   const orig = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(url);
     calls.push(`${init.method ?? "GET"} ${u.pathname}`);
-    if (u.pathname.endsWith("/workers/dispatch/namespaces")) return new Response(JSON.stringify({ success: false, errors: [{ code: 100120, message: "already exist" }] }), { status: 400 });
+    if (u.pathname.endsWith("/workers/dispatch/namespaces")) {
+      // nsOk=false: "이미 있음"(100120)이 아닌 진짜 실패 — 우리 쪽 문제다(사용자 시도가 아니다 → 환급).
+      return nsOk
+        ? new Response(JSON.stringify({ success: false, errors: [{ code: 100120, message: "already exist" }] }), { status: 400 })
+        : new Response(JSON.stringify({ success: false, errors: [{ code: 10013, message: "internal error" }] }), { status: 500 });
+    }
     if (u.pathname.endsWith("/d1/database")) {
       return d1Ok
         ? new Response(JSON.stringify({ success: true, result: { uuid: D1_UUID } }), { status: 200 })
@@ -198,7 +233,7 @@ async function withHostingFetch(fn, { d1Ok = true } = {}) {
   }
 }
 
-async function postBuild(env, { projectId = PROJECT, userKey = USER, ip = "203.0.113.7", d1Ok = true } = {}) {
+async function postBuild(env, { projectId = PROJECT, userKey = USER, ip = "203.0.113.7", d1Ok = true, nsOk = true } = {}) {
   const { result, calls } = await withHostingFetch(async () => {
     const res = await createApp().fetch(new Request(`${ORIGIN}/workspace/projects/${encodeURIComponent(projectId)}/build`, {
       method: "POST",
@@ -206,7 +241,7 @@ async function postBuild(env, { projectId = PROJECT, userKey = USER, ip = "203.0
       body: JSON.stringify({ userKey, locale: "ko" }),
     }), env);
     return { status: res.status, body: await res.json(), retryAfter: res.headers.get("retry-after") };
-  }, { d1Ok });
+  }, { d1Ok, nsOk });
   return { ...result, cfCalls: calls };
 }
 
@@ -400,17 +435,28 @@ describe("② 잡 범위 토큰", () => {
     assert.equal(db.jobs[0].error, "budget_exhausted");
   });
 
-  it("[호환·한 릴리스 뒤 제거] 전역 INTERNAL_CALLBACK_TOKEN도 빌드 콜백에 받는다(롤아웃 중인 옛 이미지)", async () => {
+  it("★[검증 결함 8] 전역 INTERNAL_CALLBACK_TOKEN은 빌드 콜백에 통하지 않는다 — 403 job_token_required, 상태·이벤트·주소 불변", async () => {
+    // 호환 분기는 코드로 닫았다(TODO가 아니라): 프로덕션 빌더 이미지(b1-builder-1)는 kind=build를 받자마자 실패하고,
+    // 새 페이로드(callbackToken 없음)는 202 전에 400이라 옛 이미지가 새 잡을 돌릴 수 없다 — 지켜 줄 진행 중 잡이 없다.
     const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "scaffolding" })] });
     const env = envFor(db);
     const app = createApp();
-    const r = await postJson(app, env, "/internal/build-progress", { jobId: "bj_aaaaaaaaaa", status: "implementing" }, bearer(ICT));
-    assert.equal(r.status, 200);
-    assert.equal(r.body.transitioned, true);
-    const d = await postJson(app, env, "/internal/build-done", { jobId: "bj_aaaaaaaaaa", ok: false, failedStage: "implementing", error: "x" }, bearer(ICT));
-    assert.equal(d.body.accepted, true);
+    const r = await postJson(app, env, "/internal/build-progress", { jobId: "bj_aaaaaaaaaa", status: "implementing", message: "전역 토큰 진행" }, bearer(ICT));
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.equal(r.body.error, "job_token_required");
+    for (const body of [
+      { jobId: "bj_aaaaaaaaaa", ok: false, failedStage: "implementing", error: "x" },
+      { jobId: "bj_aaaaaaaaaa", ok: true, buildExitCode: 0, deployedUrl: "https://evil.example" },
+    ]) {
+      const d = await postJson(app, env, "/internal/build-done", body, bearer(ICT));
+      assert.equal(d.status, 403, JSON.stringify(d.body));
+      assert.equal(d.body.error, "job_token_required");
+    }
+    assert.equal(db.jobs[0].status, "scaffolding");
+    assert.equal(db.jobs[0].deployed_url, null);
+    assert.equal(db.events.length, 0);
     const src = readFileSync(path.join(ROOT, "src/workspace/build-job-token.ts"), "utf8");
-    assert.match(src, /TODO\(B-5b S1 \+ 1 release\)/, "the compat branch carries its removal TODO");
+    assert.doesNotMatch(src, /TODO\(B-5b S1 \+ 1 release\)|via: "global"/, "no global-token compat branch left to remove later");
   });
 });
 
@@ -543,11 +589,11 @@ describe("③ LLM 프록시 — 정상 전달 = 서버 키로 업스트림 · �
     near(Number(r.headers.get("x-simsa-build-spent-usd")), 0.5 + cost, 1e-6);
   });
 
-  it("★OpenAI: 게이트웨이/chat/completions에 Bearer 서버 키 · 캐시 할인 반영 · service_tier 제거 · 원장 1행", async () => {
+  it("★OpenAI: 게이트웨이/chat/completions에 Bearer 서버 키 · 캐시 할인 반영 · 원장 1행 (service_tier는 이제 400 — ⑧-5)", async () => {
     assert.ok(tokenMod, "build-job-token module");
     const w = await proxyWorld();
     const tok = await mint(w.env, "bj_aaaaaaaaaa");
-    const r = await postJson(w.app, w.env, O, openAiReq({ service_tier: "priority" }), bearer(tok));
+    const r = await postJson(w.app, w.env, O, openAiReq(), bearer(tok));
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const call = w.upstream.calls[0];
     assert.equal(call.url, `${GW_O}/chat/completions`);
@@ -617,11 +663,11 @@ describe("④ 원장·spent_usd는 프록시 한 곳에서만", () => {
     near(w.db.jobs[0].spent_usd, cost, 1e-9);
   });
 
-  it("컨테이너가 본문 spentUsd로 지출을 **내릴** 수도 없다 — done도 MAX(spent_usd)", async () => {
+  it("done(Worker 경로, S3)도 지출을 **내리지** 못한다 — markBuildJobDone은 MAX(spent_usd) (컨테이너의 done 주장은 ⑧-2에서 거절)", async () => {
     const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "deploying", spent_usd: 3.25 })] });
     const env = envFor(db);
-    const r = await postJson(createApp(), env, "/internal/build-done", { jobId: "bj_aaaaaaaaaa", ok: true, deployedUrl: "https://app-3f9a1c2b.simsa.page", buildExitCode: 0, spentUsd: 0, wbsDone: 2 }, bearer(ICT));
-    assert.equal(r.body.accepted, true);
+    const r = await buildDb.markBuildJobDone(env, "bj_aaaaaaaaaa", { deployedUrl: "https://app-3f9a1c2b.simsa.page", commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 2 });
+    assert.deepEqual(r, { ok: true });
     assert.equal(db.jobs[0].status, "done");
     assert.equal(db.jobs[0].spent_usd, 3.25);
   });
@@ -870,6 +916,45 @@ describe("⑥ 빌드 일일 상한 — user 3 · network 5 · service 30 (#561 �
     assert.equal(again.status, 429, "the one real build used the slot");
   });
 
+  it("★[검증 결함 9] 환급: 네임스페이스 실패(502)·행 저장 실패(500 save_failed)도 슬롯을 돌려준다 — 상한 1에서 다음 빌드 202", async () => {
+    // (a) 네임스페이스 API가 '이미 있음'이 아닌 오류 → 502, 잡 없음, 슬롯 환급
+    const db1 = makeDb({ projects: projects(2) });
+    const env1 = envFor(db1, { BETA_BUILD_DAILY_LIMIT: "1" });
+    const ns = await postBuild(env1, { projectId: "wsp_cap_0", nsOk: false });
+    assert.equal(ns.status, 502, JSON.stringify(ns.body));
+    assert.equal(ns.body.error, "hosting_namespace_failed");
+    assert.equal(db1.jobs.length, 0);
+    const afterNs = await postBuild(env1, { projectId: "wsp_cap_1" });
+    assert.equal(afterNs.status, 202, `slot refunded after namespace failure: ${JSON.stringify(afterNs.body)}`);
+
+    // (b) INSERT INTO build_jobs가 던진다 → 500 save_failed, 슬롯 환급
+    const db2 = makeDb({ projects: projects(2) });
+    const realPrepare = db2.prepare.bind(db2);
+    let armed = true;
+    db2.prepare = (sql) => {
+      if (armed && sql.includes("INSERT INTO build_jobs")) {
+        armed = false;
+        const boom = { run: async () => { throw new Error("D1_ERROR: simulated insert failure"); } };
+        return { bind: () => boom, ...boom };
+      }
+      return realPrepare(sql);
+    };
+    const env2 = envFor(db2, { BETA_BUILD_DAILY_LIMIT: "1" });
+    const origError = console.error;
+    console.error = () => {};
+    let save;
+    try {
+      save = await postBuild(env2, { projectId: "wsp_cap_0" });
+    } finally {
+      console.error = origError;
+    }
+    assert.equal(save.status, 500, JSON.stringify(save.body));
+    assert.equal(save.body.error, "save_failed");
+    assert.equal(db2.jobs.length, 0);
+    const afterSave = await postBuild(env2, { projectId: "wsp_cap_1" });
+    assert.equal(afterSave.status, 202, `slot refunded after save failure: ${JSON.stringify(afterSave.body)}`);
+  });
+
   it("킬스위치가 상한보다 먼저 — BUILD_ENABLED=off면 슬롯도 SQL도 없다 · env 재정의 해석", async () => {
     const db = makeDb();
     const env = envFor(db, { BUILD_ENABLED: "off" });
@@ -897,24 +982,26 @@ try {
 }
 const noSqlite = DatabaseSync ? false : "node:sqlite 없음(Node < 22.13) — 미측정";
 
-describe("⑦ 실제 SQLite — spent_usd를 잃지 않는다", { skip: noSqlite }, () => {
-  /** node:sqlite 위의 얇은 D1 어댑터. afterFirst: SELECT 한 번 뒤에 끼어드는 다른 쓰기(동시성 재현). */
-  function d1Over(sqlite, hooks = {}) {
-    const stmt = (sql, args) => ({
-      async run() { const r = sqlite.prepare(sql).run(...args); return { meta: { changes: Number(r.changes) } }; },
-      async first() { const row = sqlite.prepare(sql).get(...args) ?? null; if (hooks.afterFirst) { const h = hooks.afterFirst; hooks.afterFirst = null; h(sql); } return row; },
-      async all() { return { results: sqlite.prepare(sql).all(...args) }; },
-    });
-    return { prepare: (sql) => ({ bind: (...a) => stmt(sql, a), run: () => stmt(sql, []).run(), first: () => stmt(sql, []).first(), all: () => stmt(sql, []).all() }) };
-  }
-  function fresh() {
-    const sqlite = new DatabaseSync(":memory:");
-    sqlite.exec(readFileSync(path.join(ROOT, "migrations/0068_build_jobs.sql"), "utf8"));
-    return sqlite;
-  }
-  const spentOf = (sqlite, id) => sqlite.prepare("SELECT spent_usd FROM build_jobs WHERE id = ?").get(id).spent_usd;
+/** node:sqlite 위의 얇은 D1 어댑터. afterFirst: SELECT 한 번 뒤에 끼어드는 다른 쓰기(동시성 재현). */
+function d1Over(sqlite, hooks = {}) {
+  const stmt = (sql, args) => ({
+    async run() { const r = sqlite.prepare(sql).run(...args); return { meta: { changes: Number(r.changes) } }; },
+    async first() { const row = sqlite.prepare(sql).get(...args) ?? null; if (hooks.afterFirst) { const h = hooks.afterFirst; hooks.afterFirst = null; h(sql); } return row; },
+    async all() { return { results: sqlite.prepare(sql).all(...args) }; },
+  });
+  return { prepare: (sql) => ({ bind: (...a) => stmt(sql, a), run: () => stmt(sql, []).run(), first: () => stmt(sql, []).first(), all: () => stmt(sql, []).all() }) };
+}
+/** 실제 마이그레이션으로 만든 메모리 DB. ledger=true면 0070(llm_usage)까지 — 프록시를 통째로 돌릴 때. */
+function fresh({ ledger = false } = {}) {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(readFileSync(path.join(ROOT, "migrations/0068_build_jobs.sql"), "utf8"));
+  if (ledger) sqlite.exec(readFileSync(path.join(ROOT, "migrations/0070_llm_usage.sql"), "utf8"));
+  return sqlite;
+}
+const spentOf = (sqlite, id) => sqlite.prepare("SELECT spent_usd FROM build_jobs WHERE id = ?").get(id).spent_usd;
 
-  it("★진행 전이가 읽은 뒤 프록시가 비용을 더해도(끼어들기) 전이가 그 몫을 지우지 않는다 — MAX(spent_usd, ?)", async () => {
+describe("⑦ 실제 SQLite — spent_usd를 잃지 않는다", { skip: noSqlite }, () => {
+  it("★진행 전이가 읽은 뒤 프록시가 비용을 더해도(끼어들기) 전이가 그 몫을 지우지 않는다 — 전이는 spent_usd를 쓰지 않는다", async () => {
     const sqlite = fresh();
     const hooks = {};
     const env = { DB: d1Over(sqlite, hooks) };
@@ -926,13 +1013,314 @@ describe("⑦ 실제 SQLite — spent_usd를 잃지 않는다", { skip: noSqlite
     assert.equal(spentOf(sqlite, job.id), 1.5, "done never lowers the metered spend");
   });
 
-  it("addBuildJobSpend: 원자 증가(여러 번 더하면 합) · 모르는 잡은 0행 · 음수·NaN은 0으로", async () => {
-    assert.equal(typeof buildDb.addBuildJobSpend, "function", "addBuildJobSpend export");
+  it("예약·정산 누적: 여러 호출의 실제 비용이 합으로 남는다 · 음수·NaN 비용은 0으로 · 모르는 잡은 예약 없음 (결함 4 뒤 addBuildJobSpend 대체)", async () => {
+    assert.equal(typeof buildDb.reserveBuildJobSpend, "function", "reserveBuildJobSpend export");
     const sqlite = fresh();
     const env = { DB: d1Over(sqlite) };
     const job = await buildDb.insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-3f9a1c2b", wbsTotal: 1 });
-    for (const d of [0.25, 0.5, -3, Number.NaN]) await buildDb.addBuildJobSpend(env, job.id, d);
+    for (const actual of [0.25, 0.5, -3, Number.NaN]) {
+      assert.equal(await buildDb.reserveBuildJobSpend(env, job.id, 2), true);
+      await buildDb.settleBuildJobSpend(env, job.id, 2, actual);
+    }
     assert.equal(spentOf(sqlite, job.id), 0.75);
-    assert.equal(await buildDb.addBuildJobSpend(env, "bj_ghost00000", 1), 0);
+    assert.equal(await buildDb.reserveBuildJobSpend(env, "bj_ghost00000", 1), false);
+  });
+});
+
+// ══ ⑧ PR #569 S1 검증 결함 ═════════════════════════════════════════════════════════════════════════
+// 결함마다 재현 → 고침. 옛 코드(acfe2b6)에서 실패, 새 코드에서 통과(표는 PR #569 코멘트). 결함 3(executor 테스트
+// 하드 import)은 train-b-b5b-executor.test.mjs, 결함 8은 ②, 결함 9는 ⑥, 결함 10(주석)은 테스트 없음.
+
+const PA = "/internal/build-llm/anthropic/v1/messages";
+const PO = "/internal/build-llm/openai/v1/chat/completions";
+const json200 = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+describe("⑧-1 · ⑧-2 콜백은 Worker 소유 칸을 못 쓴다 — push 대상·커밋·빌드 결과·배포 주소·done", () => {
+  it("★[결함 1] 진행 콜백이 repoFullName·commitSha·buildExitCode·wbsTotal을 실어도 행은 그대로 — 자기 jobToken이어도(단계 전이만)", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "scaffolding", repo_full_name: "simsa-hosted/app-3f9a1c2b", wbs_total: 2 })] });
+    const env = envFor(db);
+    const tok = await mint(env, "bj_aaaaaaaaaa");
+    const r = await postJson(createApp(), env, "/internal/build-progress", {
+      jobId: "bj_aaaaaaaaaa", status: "implementing", message: "wbs_started",
+      repoFullName: "simsa-hosted/someone-elses-app", commitSha: "deadbeef", buildExitCode: 0, wbsTotal: 99, wbsDone: 50,
+    }, bearer(tok));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.transitioned, true, "the stage itself still moves");
+    const row = db.jobs[0];
+    assert.equal(row.status, "implementing");
+    assert.equal(row.repo_full_name, "simsa-hosted/app-3f9a1c2b", "push target = the Worker's insert-time value, never callback input");
+    assert.equal(row.commit_sha, null, "commit is the Worker's (S3 push), not the container's claim");
+    assert.equal(row.build_exit_code, null, "build result is not a container claim");
+    assert.equal(row.wbs_total, 2, "WBS count is fixed at insert from the spec");
+    assert.equal(row.wbs_done, 2, "wbsDone is clamped to the job's WBS count");
+  });
+
+  it("★[결함 2] 컨테이너의 done(ok:true)은 받지 않는다 — 409 done_not_worker_owned · 잡은 failed(그 단계) · deployed_url·commit 없음 · done 이벤트 없음", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    for (const deployedUrl of ["javascript:alert(document.cookie)", "https://app-3f9a1c2b.simsa.page"]) {
+      const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "implementing" })] });
+      const env = envFor(db);
+      const tok = await mint(env, "bj_aaaaaaaaaa");
+      const r = await postJson(createApp(), env, "/internal/build-done", { jobId: "bj_aaaaaaaaaa", ok: true, buildExitCode: 0, deployedUrl, commitSha: "deadbeef", wbsDone: 2 }, bearer(tok));
+      assert.equal(r.status, 409, `${deployedUrl}: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body.error, "done_not_worker_owned");
+      const row = db.jobs[0];
+      assert.equal(row.status, "failed", "a done claim the container cannot back is an honest failure, not a spinner");
+      assert.equal(row.failed_stage, "implementing");
+      assert.equal(row.error, "done_not_worker_owned");
+      assert.equal(row.deployed_url, null);
+      assert.equal(row.commit_sha, null);
+      assert.ok(!db.events.some((e) => e.stage === "done"), "no done event");
+    }
+  });
+
+  it("[결함 2] markBuildJobDone(S3에서 Worker가 부른다)은 https가 아닌 주소·자격 증명이 든 주소를 저장하지 않는다", async () => {
+    const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "deploying" })] });
+    const env = envFor(db);
+    for (const bad of ["javascript:alert(1)", "http://app-3f9a1c2b.simsa.page", "https://user:pw@app-3f9a1c2b.simsa.page", "소금빵 예약 페이지"]) {
+      assert.deepEqual(
+        await buildDb.markBuildJobDone(env, "bj_aaaaaaaaaa", { deployedUrl: bad, commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 2 }),
+        { ok: false, reason: "invalid_deployed_url" },
+        bad,
+      );
+    }
+    assert.equal(db.jobs[0].status, "deploying");
+    assert.equal(db.jobs[0].deployed_url, null);
+  });
+});
+
+describe("⑧-4 예산은 예약이다 — 동시 호출이 몇 개든 초과 폭 ≤ 호출 1회", () => {
+  const big = { input_tokens: 150_000, output_tokens: 32_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  const oneCall = (150_000 * 3 + 32_000 * 15) / 1_000_000;
+
+  /** 게이트에서 기다리는 느린 업스트림 + 40개 동시 호출. 게이트 앞 도착 + 끝난 호출 = 40이 되면 연다. */
+  async function burst(w, tok, n = 40) {
+    let settled = 0;
+    const ps = Array.from({ length: n }, () =>
+      postJson(w.app, w.env, PA, anthropicReq({ max_tokens: 32_768 }), { "x-api-key": tok }).finally(() => {
+        settled += 1;
+      }),
+    );
+    for (let i = 0; i < 300 && w.upstream.calls.length + settled < n; i++) await new Promise((r) => setTimeout(r, 10));
+    w.release();
+    return (await Promise.all(ps)).map((r) => r.status);
+  }
+  function gatedWorld() {
+    let release;
+    const gate = new Promise((r) => (release = r));
+    const upstream = makeUpstream({ anthropic: async (_c, n) => { await gate; return json200(anthropicMessage({ id: `msg_slow_${n}`, usage: big })); } });
+    return { upstream, release: () => release() };
+  }
+
+  it("★[결함 4] spent 9.999/10에서 40개 동시(max_tokens 32768·느린 업스트림) → 업스트림 1 · 402 39 · spent = 9.999 + 호출 1회", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    const g = gatedWorld();
+    const w = await proxyWorld({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", budget_usd: 10, spent_usd: 9.999 })], upstream: g.upstream });
+    const tok = await mint(w.env, "bj_aaaaaaaaaa");
+    const statuses = await burst({ ...w, release: g.release }, tok);
+    assert.equal(w.upstream.calls.length, 1, `upstream calls: ${w.upstream.calls.length}`);
+    assert.equal(statuses.filter((s) => s === 200).length, 1);
+    assert.equal(statuses.filter((s) => s === 402).length, 39);
+    near(w.db.jobs[0].spent_usd, 9.999 + oneCall, 1e-6);
+    assert.ok(w.db.jobs[0].spent_usd <= 10 + oneCall + 1e-9, "overshoot ≤ one call");
+    assert.equal(w.db.ledger.length, 1);
+  });
+
+  it("[결함 4 · 행동 보존] 예약은 업스트림 실패(529·연결 실패)면 풀린다 — spent 원래대로, 다음 호출이 들어간다", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    let n = 0;
+    const upstream = makeUpstream({
+      anthropic: () => {
+        n += 1;
+        if (n === 1) return new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }), { status: 529 });
+        if (n === 2) throw new TypeError("fetch failed");
+        return json200(anthropicMessage({ id: "msg_after_release" }));
+      },
+    });
+    const w = await proxyWorld({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", budget_usd: 10, spent_usd: 1 })], upstream });
+    const tok = await mint(w.env, "bj_aaaaaaaaaa");
+    assert.equal((await postJson(w.app, w.env, PA, anthropicReq({ max_tokens: 32_768 }), { "x-api-key": tok })).status, 529);
+    near(w.db.jobs[0].spent_usd, 1, 1e-9);
+    assert.equal((await postJson(w.app, w.env, PA, anthropicReq({ max_tokens: 32_768 }), { "x-api-key": tok })).status, 502);
+    near(w.db.jobs[0].spent_usd, 1, 1e-9);
+    assert.equal((await postJson(w.app, w.env, PA, anthropicReq(), { "x-api-key": tok })).status, 200);
+    near(w.db.jobs[0].spent_usd, 1 + (1_000 * 3 + 200 * 15) / 1_000_000, 1e-9);
+  });
+
+  it("★[결함 4] 실제 SQLite(0068+0070)로 프록시를 통째로: 동시 10개 → 업스트림 1 · 원장 1행 · spent = 9.999 + 호출 1회", { skip: noSqlite }, async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    const sqlite = fresh({ ledger: true });
+    const g = gatedWorld();
+    const env = envFor(d1Over(sqlite));
+    const job = await buildDb.insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-3f9a1c2b", wbsTotal: 2 });
+    sqlite.prepare("UPDATE build_jobs SET status = 'implementing', spent_usd = 9.999 WHERE id = ?").run(job.id);
+    const w = { app: createApp({ fetch: g.upstream.fetchImpl }), env, upstream: g.upstream, release: g.release };
+    const statuses = await burst(w, await mint(env, job.id), 10);
+    assert.equal(g.upstream.calls.length, 1);
+    assert.deepEqual([statuses.filter((s) => s === 200).length, statuses.filter((s) => s === 402).length], [1, 9]);
+    near(spentOf(sqlite, job.id), 9.999 + oneCall, 1e-6);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM llm_usage WHERE job_id = ?").get(job.id).n, 1);
+  });
+
+  it("[결함 4] reserveBuildJobSpend·settleBuildJobSpend(실제 SQLite): 활성·spent<budget일 때만 예약 · 정산은 0 아래로 안 간다", { skip: noSqlite }, async () => {
+    assert.equal(typeof buildDb.reserveBuildJobSpend, "function", "reserveBuildJobSpend export");
+    assert.equal(typeof buildDb.settleBuildJobSpend, "function", "settleBuildJobSpend export");
+    const sqlite = fresh();
+    const env = { DB: d1Over(sqlite) };
+    const job = await buildDb.insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-3f9a1c2b", wbsTotal: 1, budgetUsd: 10 });
+    assert.equal(await buildDb.reserveBuildJobSpend(env, job.id, 3), true);
+    assert.equal(spentOf(sqlite, job.id), 3);
+    await buildDb.settleBuildJobSpend(env, job.id, 3, 0.5);
+    assert.equal(spentOf(sqlite, job.id), 0.5);
+    assert.equal(await buildDb.reserveBuildJobSpend(env, job.id, 50), true, "admission is spent < budget; the reservation may exceed it (one call)");
+    assert.equal(await buildDb.reserveBuildJobSpend(env, job.id, 0.01), false, "no second admission while spent ≥ budget");
+    await buildDb.settleBuildJobSpend(env, job.id, 50, 0);
+    assert.equal(spentOf(sqlite, job.id), 0.5);
+    await buildDb.settleBuildJobSpend(env, job.id, 100, 0);
+    assert.equal(spentOf(sqlite, job.id), 0, "never below zero");
+    sqlite.prepare("UPDATE build_jobs SET status = 'failed' WHERE id = ?").run(job.id);
+    assert.equal(await buildDb.reserveBuildJobSpend(env, job.id, 1), false, "no reservation on a finished job");
+  });
+});
+
+describe("⑧-5 과금을 바꾸는 필드는 업스트림에 가지 않는다 — 빌드 루프가 실제로 보내는 필드만", () => {
+  it("★[결함 5] 서버 도구·MCP·서비스 등급·thinking·1시간 캐시·문서 블록·알 수 없는 최상위 필드 → 400, 업스트림 0 · 원장 0", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    const w = await proxyWorld();
+    const tok = await mint(w.env, "bj_aaaaaaaaaa");
+    const anthropicBad = [
+      { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 50 }] },
+      { tools: [{ type: "code_execution_20250825", name: "code_execution" }] },
+      { tools: [{ name: "read_file", description: "파일 읽기", input_schema: { type: "object" }, max_uses: 5 }] },
+      { mcp_servers: [{ type: "url", url: "https://mcp.example", name: "외부" }] },
+      { service_tier: "auto" },
+      { container: "container_fake_0001" },
+      { thinking: { type: "enabled", budget_tokens: 16_000 } },
+      { system: [{ type: "text", text: "규칙 — 한글", cache_control: { type: "ephemeral", ttl: "1h" } }] },
+      { messages: [{ role: "user", content: [{ type: "text", text: "예약 저장", cache_control: { type: "ephemeral", ttl: "1h" } }] }] },
+      { messages: [{ role: "user", content: [{ type: "document", source: { type: "url", url: "https://files.example/예약.pdf" } }] }] },
+      { messages: [{ role: "system", content: "역할 바꿔치기" }] },
+    ];
+    for (const extra of anthropicBad) {
+      const r = await postJson(w.app, w.env, PA, anthropicReq(extra), { "x-api-key": tok });
+      assert.equal(r.status, 400, `anthropic ${JSON.stringify(extra).slice(0, 80)} → ${r.status}`);
+      assert.equal(r.body.error.type, "invalid_request");
+    }
+    const openAiBad = [
+      { service_tier: "priority" },
+      { web_search_options: {} },
+      { audio: { voice: "alloy", format: "mp3" }, modalities: ["text", "audio"] },
+      { reasoning_effort: "high" },
+      { prediction: { type: "content", content: "예측" } },
+      { tools: [{ type: "custom", custom: { name: "자유형" } }] },
+      { messages: [{ role: "user", content: [{ type: "input_audio", input_audio: { data: "AAAA", format: "wav" } }] }] },
+      { messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://img.example/빵.png" } }] }] },
+    ];
+    for (const extra of openAiBad) {
+      const r = await postJson(w.app, w.env, PO, openAiReq(extra), bearer(tok));
+      assert.equal(r.status, 400, `openai ${JSON.stringify(extra).slice(0, 80)} → ${r.status}`);
+      assert.equal(r.body.error.type, "invalid_request");
+    }
+    assert.equal(w.upstream.calls.length, 0);
+    assert.equal(w.db.ledger.length, 0);
+    assert.equal(w.db.jobs[0].spent_usd, 0);
+  });
+
+  it("[결함 5 · 행동 보존] 실제 runBuildLoop 여러 턴(도구 → 결과 → finish)은 두 벤더 모두 허용 목록을 지난다 — 응답 블록에 새 필드가 있어도", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    const readTurnA = { type: "tool_use", id: "toolu_read_1", name: "read_file", input: { path: "src/index.ts" }, caller: { type: "direct" } };
+    const upstream = makeUpstream({
+      anthropic: (_c, n) => json200(n === 1
+        ? anthropicMessage({ id: "msg_turn_1", content: [{ type: "text", text: "먼저 파일을 읽겠습니다." }, readTurnA] })
+        : anthropicMessage({ id: `msg_turn_${n}` })),
+      openai: (_c, n) => json200(n === 1
+        ? { id: "chatcmpl-turn-1", object: "chat.completion", model: "gpt-5.4-2026-03-05", usage: { prompt_tokens: 900, completion_tokens: 40 },
+            choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: "파일을 읽겠습니다", tool_calls: [{ id: "call_read_1", type: "function", function: { name: "read_file", arguments: JSON.stringify({ path: "src/index.ts" }) } }] } }] }
+        : openAiCompletion({ id: `chatcmpl-turn-${n}` })),
+    });
+    const w = await proxyWorld({ upstream });
+    const tok = await mint(w.env, "bj_aaaaaaaaaa");
+    const job = run.validateBuildPayload(payloadFor("bj_aaaaaaaaaa", tok)).job;
+    const llm = run.buildLlmConfig(job, tok);
+    const executor = { readFile: async () => "export default { fetch: () => new Response('소금빵') };", listFiles: async () => ["src/index.ts"], createFile: async () => {}, runCommand: async () => ({ ok: true, code: 0, stdout: "", stderr: "" }) };
+    const task = { specMarkdown: job.specMarkdown, wbsId: "WBS-001", wbsTitle: "예약 저장 (D1 테이블)", acceptanceIds: ["AC-001"], locale: "ko", fileList: ["src/index.ts"] };
+    const sdk = new Anthropic({ apiKey: llm.apiKey, baseURL: llm.anthropicBaseUrl, fetch: fetchIntoWorker(w.app, w.env), maxRetries: 0 });
+    const ra = await agentWorker.runBuildLoop(task, { client: sdk, executor, model: llm.model });
+    assert.equal(ra.status, "done", ra.summary);
+    const fb = agentWorker.withOpenAiFallback(null, { openaiApiKey: llm.apiKey, openaiBaseUrl: llm.openaiBaseUrl, model: llm.openaiModel, preferFallback: true, fetchImpl: fetchIntoWorker(w.app, w.env) });
+    const ro = await agentWorker.runBuildLoop(task, { client: fb, executor, model: llm.model });
+    assert.equal(ro.status, "done", ro.summary);
+    assert.equal(w.upstream.calls.length, 4, "two turns per vendor reached the upstream");
+    const a2 = w.upstream.calls.find((c) => c.url.startsWith(GW_A) && c.body.messages.length > 1).body;
+    assert.ok(a2.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_result" && b.tool_use_id === "toolu_read_1")), "tool_result went through");
+    assert.ok(a2.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_use" && b.caller?.type === "direct")), "echoed tool_use keeps unknown response fields");
+    const o2 = w.upstream.calls.find((c) => c.url.startsWith(GW_O) && c.body.messages.some((m) => m.role === "tool")).body;
+    assert.equal(o2.messages.find((m) => m.role === "tool").tool_call_id, "call_read_1");
+    assert.equal(w.db.ledger.length, 4);
+  });
+});
+
+describe("⑧-6 킬스위치는 진행 중인 빌드도 멈춘다", () => {
+  it("★[결함 6] BUILD_ENABLED=off: 프록시 503 build_disabled(업스트림 0·재시도 금지) · 잡 failed(그 단계) · 진행 콜백 transitioned:false · 실패 보고는 받는다", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    const w = await proxyWorld({
+      jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "implementing" }), jobRow({ id: "bj_bbbbbbbbbb", status: "scaffolding" }), jobRow({ id: "bj_cccccccccc", status: "building" })],
+      extra: { BUILD_ENABLED: "off" },
+    });
+    const tokA = await mint(w.env, "bj_aaaaaaaaaa");
+    const a = await postJson(w.app, w.env, PA, anthropicReq(), { "x-api-key": tokA });
+    assert.equal(a.status, 503, JSON.stringify(a.body));
+    assert.equal(a.body.error.type, "build_disabled");
+    assert.equal(a.headers.get("x-should-retry"), "false");
+    assert.notEqual((await postJson(w.app, w.env, PO, openAiReq(), bearer(tokA))).status, 200);
+    assert.equal(w.upstream.calls.length, 0, "no LLM spend once the switch is off");
+    assert.deepEqual([w.db.jobs[0].status, w.db.jobs[0].failed_stage, w.db.jobs[0].error], ["failed", "implementing", "build_disabled"]);
+
+    const tokB = await mint(w.env, "bj_bbbbbbbbbb");
+    const p = await postJson(w.app, w.env, "/internal/build-progress", { jobId: "bj_bbbbbbbbbb", status: "implementing", message: "wbs_started" }, bearer(tokB));
+    assert.equal(p.status, 200);
+    assert.equal(p.body.transitioned, false, "the container stops on transitioned:false");
+    assert.deepEqual([w.db.jobs[1].status, w.db.jobs[1].failed_stage, w.db.jobs[1].error], ["failed", "scaffolding", "build_disabled"]);
+
+    const tokC = await mint(w.env, "bj_cccccccccc");
+    const d = await postJson(w.app, w.env, "/internal/build-done", { jobId: "bj_cccccccccc", ok: false, failedStage: "building", error: "빌드 실패 — 한글 오류" }, bearer(tokC));
+    assert.equal(d.body.accepted, true, "a failure report is never dropped");
+    assert.equal(w.db.jobs[2].error, "빌드 실패 — 한글 오류");
+  });
+});
+
+describe("⑧-7 끝난 잡의 토큰은 아무것도 남기지 못한다 · 이벤트는 잡당 상한", () => {
+  it("★[결함 7] failed 잡에 progress 5번(500자·3,000자 meta) + done 1번 → transitioned:false·accepted:false, 이벤트 0 · 첫 실패 사유 유지", async () => {
+    assert.ok(tokenMod, "build-job-token module");
+    const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "failed", failed_stage: "implementing", error: "budget_exhausted" })] });
+    const env = envFor(db);
+    const app = createApp();
+    const tok = await mint(env, "bj_aaaaaaaaaa");
+    for (let i = 0; i < 5; i++) {
+      const r = await postJson(app, env, "/internal/build-progress", { jobId: "bj_aaaaaaaaaa", status: "implementing", message: "가".repeat(500), meta: { pad: "나".repeat(3_000) } }, bearer(tok));
+      assert.equal(r.body.transitioned, false);
+    }
+    const d = await postJson(app, env, "/internal/build-done", { jobId: "bj_aaaaaaaaaa", ok: false, failedStage: "building", error: "늦게 온 실패" }, bearer(tok));
+    assert.equal(d.body.accepted, false);
+    assert.equal(db.events.length, 0, "a finished job's token adds no timeline rows");
+    assert.equal(db.jobs[0].error, "budget_exhausted");
+  });
+
+  it("[결함 7] 진행 중 잡도 이벤트는 잡당 BUILD_JOB_EVENT_CAP까지 — 실제 SQLite(0068)", { skip: noSqlite }, async () => {
+    assert.equal(typeof buildDb.BUILD_JOB_EVENT_CAP, "number", "BUILD_JOB_EVENT_CAP export");
+    const cap = buildDb.BUILD_JOB_EVENT_CAP;
+    assert.ok(cap >= 120 * 2 + 20, "room for the largest spec (120 WBS × started/done + stage events)");
+    const sqlite = fresh();
+    const env = { DB: d1Over(sqlite) };
+    const job = await buildDb.insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-3f9a1c2b", wbsTotal: 1 });
+    const other = await buildDb.insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-other", wbsTotal: 1 });
+    const results = [];
+    for (let i = 0; i < cap + 5; i++) results.push(await buildDb.appendBuildJobEvent(env, job.id, "implementing", `진행 ${i}`));
+    const count = (id) => sqlite.prepare("SELECT COUNT(*) AS n FROM build_job_events WHERE job_id = ?").get(id).n;
+    assert.equal(count(job.id), cap);
+    assert.deepEqual(results.slice(-5), [false, false, false, false, false]);
+    assert.equal(await buildDb.appendBuildJobEvent(env, other.id, "queued", "다른 잡은 따로 센다"), true);
+    assert.equal(count(other.id), 1);
   });
 });

@@ -10,6 +10,12 @@ import { dailyCapsRun } from "./_daily-caps-fake.mjs";
 
 const { createApp } = await import("../dist/router.js");
 const { advanceBuildJob, markBuildJobDone, markBuildJobFailed, insertQueuedBuildJob, getBuildJobById } = await import("../dist/workspace/build-job-db.js");
+// B-5b S1: 빌드 콜백 인증은 그 잡의 jobToken뿐(전역 토큰 거절 — PR #569 S1 검증 결함 8). 모듈이 없으면 쓰는 테스트만 실패.
+const { mintBuildJobToken } = await import("../dist/workspace/build-job-token.js").catch(() => ({ mintBuildJobToken: null }));
+async function jobAuth(env, jobId) {
+  assert.equal(typeof mintBuildJobToken, "function", "workspace/build-job-token module (B-5b S1)");
+  return { authorization: `Bearer ${await mintBuildJobToken(env, jobId)}` };
+}
 
 const USER = "uk_owner";
 const PROJECT = "wsp_build1";
@@ -45,9 +51,18 @@ function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
             }
             if (sql.includes("INSERT INTO build_job_events")) { const [id, job_id, at, stage, message, meta_json] = args; events.push({ id, job_id, at, stage, message, meta_json }); return { meta: { changes: 1 } }; }
             if (sql.includes("UPDATE build_jobs") && sql.includes("SET status = ?")) {
-              const [status, wbs_done, wbs_total, spent_usd, commit_sha, repo_full_name, build_exit_code, updated_at, id] = args;
+              // 진행 전이: 새 문장(PR #569 S1 검증 결함 1)은 status·wbs_done·updated_at만. 옛 문장(9 바인딩)도 흉내낸다.
+              const [status, wbs_done] = args;
+              const updated_at = args[args.length - 2];
+              const id = args[args.length - 1];
               const row = jobs.find((r) => r.id === id && !["done", "failed"].includes(r.status));
-              if (row) Object.assign(row, { status, wbs_done, wbs_total, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code, updated_at });
+              if (row) {
+                Object.assign(row, { status, wbs_done, updated_at });
+                if (args.length === 9) {
+                  const [, , wbs_total, spent_usd, commit_sha, repo_full_name, build_exit_code] = args;
+                  Object.assign(row, { wbs_total, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code });
+                }
+              }
               return { meta: { changes: row ? 1 : 0 } };
             }
             if (sql.includes("SET status = 'done'")) {
@@ -191,50 +206,54 @@ test("POST /build: 호스팅 미설정 503 · D1 생성 실패면 잡을 만들�
   assert.equal(db._jobs[0].failed_stage, "queued");
 });
 
-test("progress 콜백: 토큰 게이트 · 전진만(역행 거부) · wbsDone 단조 · 이벤트 기록", async () => {
+test("progress 콜백: 토큰 게이트 · 전진만(역행 거부) · wbsDone 단조 · 이벤트는 전이가 있을 때만 · 빌드 결과는 콜백이 못 쓴다", async () => {
   const db = makeDb();
   const env = envFor({ db });
   const job = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-x", wbsTotal: 3 });
   const app = createApp();
   assert.equal((await post(app, env, "/internal/build-progress", { jobId: job.id, status: "implementing" })).status, 401);
-  const h = { authorization: `Bearer ${TOKEN}` };
+  const h = await jobAuth(env, job.id);
   let r = await post(app, env, "/internal/build-progress", { jobId: job.id, status: "implementing", wbsDone: 1, spentUsd: 0.4, message: "WBS-001 done" }, h);
   assert.equal(r.body.transitioned, true);
-  r = await post(app, env, "/internal/build-progress", { jobId: job.id, status: "scaffolding" }, h); // 역행
+  r = await post(app, env, "/internal/build-progress", { jobId: job.id, status: "scaffolding", message: "늦게 온 역행" }, h); // 역행
   assert.equal(r.body.transitioned, false);
   r = await post(app, env, "/internal/build-progress", { jobId: job.id, status: "building", wbsDone: 0, buildExitCode: 0 }, h);
   const j = await getBuildJobById(env, job.id);
   assert.equal(j.status, "building");
   assert.equal(j.wbsDone, 1); // 0으로 내려가지 않음
-  assert.equal(j.buildExitCode, 0);
+  // PR #569 S1 검증 결함 1: 빌드 종료 코드는 컨테이너의 주장이 아니다(D-4 판정은 Worker가 한다 — S3).
+  assert.equal(j.buildExitCode, null);
+  // 전이가 거절된 역행 콜백은 이벤트를 남기지 않는다(결함 7).
   assert.equal(db._events.filter((e) => e.job_id === job.id).length, 1);
   assert.equal((await post(app, env, "/internal/build-progress", { jobId: job.id, status: "done" }, h)).status, 400);
 });
 
-test("done 콜백: D-4 — 빌드 exit≠0이면 done을 거부하고 failed(building)로 · exit 0이면 done+deployedUrl", async () => {
+test("done 콜백: 컨테이너의 done 주장은 받지 않는다(PR #569 S1 검증 결함 2 — 배포는 Worker, S3) · 실패 보고는 받는다", async () => {
   const db = makeDb();
   const env = envFor({ db });
   const app = createApp();
-  const h = { authorization: `Bearer ${TOKEN}` };
   const j1 = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "a", wbsTotal: 1 });
-  let r = await post(app, env, "/internal/build-done", { jobId: j1.id, ok: true, deployedUrl: "https://a.simsa.page", buildExitCode: 1, spentUsd: 2 }, h);
-  assert.deepEqual(r.body, { ok: true, accepted: false, reason: "build_not_green" });
+  let r = await post(app, env, "/internal/build-done", { jobId: j1.id, ok: true, deployedUrl: "https://a.simsa.page", buildExitCode: 1, spentUsd: 2 }, await jobAuth(env, j1.id));
+  assert.equal(r.status, 409);
+  assert.deepEqual(r.body, { ok: false, error: "done_not_worker_owned" });
   const s1 = await getBuildJobById(env, j1.id);
   assert.equal(s1.status, "failed");
-  assert.equal(s1.failedStage, "building");
+  assert.equal(s1.failedStage, "queued");
   const j2 = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "b", wbsTotal: 1 });
-  r = await post(app, env, "/internal/build-done", { jobId: j2.id, ok: true, deployedUrl: "https://b.simsa.page", buildExitCode: 0, spentUsd: 3.5, wbsDone: 1, commitSha: "abc" }, h);
-  assert.deepEqual(r.body, { ok: true, accepted: true });
+  r = await post(app, env, "/internal/build-done", { jobId: j2.id, ok: true, deployedUrl: "https://b.simsa.page", buildExitCode: 0, spentUsd: 3.5, wbsDone: 1, commitSha: "abc" }, await jobAuth(env, j2.id));
+  assert.equal(r.status, 409, "exit 0 is still only the container's word");
   const s2 = await getBuildJobById(env, j2.id);
-  assert.equal(s2.status, "done");
-  assert.equal(s2.deployedUrl, "https://b.simsa.page");
-  // B-5b S1: 지출은 서버 권위(LLM 프록시가 계량) — 컨테이너 본문의 spentUsd 3.5는 쓰지 않는다.
-  assert.equal(s2.spentUsd, 0);
-  // 최종 상태 뒤 전이 불가
-  assert.equal(await advanceBuildJob(env, j2.id, { status: "building" }), false);
-  assert.equal(await markBuildJobFailed(env, j2.id, { failedStage: "x", error: "late" }), false);
+  assert.equal(s2.status, "failed");
+  assert.equal(s2.deployedUrl, null);
+  assert.equal(s2.commitSha, null);
+  assert.equal(s2.spentUsd, 0, "지출은 서버 권위 — 본문 spentUsd를 쓰지 않는다");
+  // done은 Worker 경로(markBuildJobDone — S3)로만. 최종 상태 뒤 전이 불가.
+  const j4 = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "d", wbsTotal: 1 });
+  assert.deepEqual(await markBuildJobDone(env, j4.id, { deployedUrl: "https://d.simsa.page", commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 1 }), { ok: true });
+  assert.equal(await advanceBuildJob(env, j4.id, { status: "building" }), false);
+  assert.equal(await markBuildJobFailed(env, j4.id, { failedStage: "x", error: "late" }), false);
   const j3 = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "c", wbsTotal: 1 });
-  r = await post(app, env, "/internal/build-done", { jobId: j3.id, ok: false, failedStage: "budget", error: "budget exceeded $10", spentUsd: 10.2 }, h);
+  r = await post(app, env, "/internal/build-done", { jobId: j3.id, ok: false, failedStage: "budget", error: "budget exceeded $10", spentUsd: 10.2 }, await jobAuth(env, j3.id));
   assert.equal(r.body.accepted, true);
   assert.equal((await getBuildJobById(env, j3.id)).failedStage, "budget");
 });

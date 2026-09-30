@@ -143,6 +143,12 @@ async function post(app, env, path, body, headers = {}) {
   return { status: res.status, body: json };
 }
 const AUTH = { authorization: `Bearer ${TOKEN}` };
+// 빌드 콜백은 그 잡의 jobToken만 받는다(B-5b S1 — PR #569 S1 검증 결함 8로 전역 토큰 호환도 닫았다). 수리 콜백은 전역 그대로.
+const { mintBuildJobToken } = await import("../dist/workspace/build-job-token.js").catch(() => ({ mintBuildJobToken: null }));
+async function buildAuth(jobId) {
+  assert.equal(typeof mintBuildJobToken, "function", "workspace/build-job-token module (B-5b S1)");
+  return { authorization: `Bearer ${await mintBuildJobToken({ INTERNAL_CALLBACK_TOKEN: TOKEN }, jobId)}` };
+}
 async function quiet(fn) {
   const o = { log: console.log, warn: console.warn, error: console.error };
   console.log = () => {}; console.warn = () => {}; console.error = () => {};
@@ -310,7 +316,7 @@ describe("⑤ 콜백 usage[] → 원장 (project/user는 잡 행에서)", () => 
     const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-progress", {
       jobId: "bj_1", status: "implementing", wbsDone: 1, projectId: "wsp_forged", userKey: OTHER_USER,
       usage: [usageItem(), usageItem({ vendor: "anthropic", modelActual: "claude-sonnet-4-6", cacheReadTokens: 0 })],
-    }, AUTH);
+    }, await buildAuth("bj_1"));
     assert.equal(r.status, 200);
     assert.equal(r.body.transitioned, true);
     assert.equal(db.ledger.length, 0, "the build LLM proxy is the only ledger writer for builds");
@@ -318,7 +324,7 @@ describe("⑤ 콜백 usage[] → 원장 (project/user는 잡 행에서)", () => 
 
   it("★잘못된 usage는 400이 아니다 — 무시하고 본 처리(상태 전이) 진행", async () => {
     const db = makeDb({ buildJobs: [buildJobRow()] });
-    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-progress", { jobId: "bj_1", status: "building", usage: "not-an-array" }, AUTH);
+    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-progress", { jobId: "bj_1", status: "building", usage: "not-an-array" }, await buildAuth("bj_1"));
     assert.equal(r.status, 200);
     assert.equal(r.body.transitioned, true);
     assert.equal(db.ledger.length, 0);
@@ -328,11 +334,11 @@ describe("⑤ 콜백 usage[] → 원장 (project/user는 잡 행에서)", () => 
     const db = makeDb({ buildJobs: [buildJobRow()] });
     const app = createApp();
     const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
-    const r = await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "implementing", error: "budget_exhausted", spentUsd: 10.2, usage: Array.from({ length: 201 }, () => usageItem()) }, AUTH);
+    const r = await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "implementing", error: "budget_exhausted", spentUsd: 10.2, usage: Array.from({ length: 201 }, () => usageItem()) }, await buildAuth("bj_1"));
     assert.equal(r.status, 200);
     assert.equal(db.ledger.length, 0);
     const db2 = makeDb();
-    await post(app, { DB: db2, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-done", { jobId: "bj_ghost", ok: false, error: "x", usage: [usageItem()] }, AUTH);
+    await post(app, { DB: db2, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-done", { jobId: "bj_ghost", ok: false, error: "x", usage: [usageItem()] }, await buildAuth("bj_ghost"));
     assert.equal(db2.ledger.length, 0);
   });
 
@@ -458,8 +464,8 @@ describe("⑧ 콜백 재전송이 원장을 두 배로 만들지 않는다", () 
       const app = createApp();
       const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
       const t1 = usageItem({ callId: "run-a:0", inputTokens: 1_000 });
-      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 0, usage: [t1] }, AUTH);
-      await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "building", error: "빌드 실패", spentUsd: 0.01, usage: [t1] }, AUTH);
+      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 0, usage: [t1] }, await buildAuth("bj_1"));
+      await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "building", error: "빌드 실패", spentUsd: 0.01, usage: [t1] }, await buildAuth("bj_1"));
       assert.equal(db.ledger.length, 0);
     });
 

@@ -35,7 +35,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** 이미지 롤아웃 확인용 마커(인스펙터 RUNNER_REV와 같은 용도 — 옛 이미지가 서빙 중인지 판별). */
-export const RUNNER_REV = "b5bS1-builder-5";
+export const RUNNER_REV = "b5bS1-builder-6";
 
 /**
  * D-4 잡 상태 머신 — **D1 build_jobs.status와 같은 목록·같은 순서**(build-job-db.ts BUILD_JOB_STATUSES).

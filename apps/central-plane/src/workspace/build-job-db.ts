@@ -104,51 +104,61 @@ export async function findActiveBuildJobForProject(env: Env, projectId: string):
 }
 
 /**
- * 진행 전이(컨테이너 progress 콜백). 현재 상태가 활성이고 **뒤로 가지 않을 때만** 갱신.
- * wbsDone·spentUsd·d1Id·repo·commit은 있으면 함께 갱신(단조 증가/마지막 값).
+ * 진행 전이(컨테이너 progress 콜백). 현재 상태가 활성이고 **뒤로 가지 않을 때만** 갱신. 쓰는 칸은 status·wbs_done뿐.
  *
- * B-5b S1: spent_usd는 SQL 안에서 `MAX(spent_usd, ?)` — 읽은 값으로 덮어쓰지 않는다. LLM 프록시가 같은 행을
- * `spent_usd + 비용`으로 올리는 사이에 이 전이가 끼어도(읽기 → 쓰기 사이) 올린 몫을 지우지 않게(잃어버린 갱신 방지).
+ * PR #569 S1 검증 결함 1: 이 함수는 컨테이너가 부른다 — 컨테이너(B-5b-2부터 LLM이 만든 코드를 실행)가 정할 수 있는 것은
+ * "지금 어느 단계인가"와 "WBS 몇 개 끝냈나"뿐이다. repo_full_name(push 대상)·commit_sha·build_exit_code·wbs_total은
+ * **Worker 소유**다: repo와 WBS 수는 insert 때 Worker가 정하고, 커밋·빌드 결과·배포 주소는 S3에서 Worker가 자기 push·
+ * 배포 뒤에 쓴다(콜백 입력에서 받지 않는다 — 종전에는 잡 토큰 하나로 push 대상을 조직의 다른 저장소로 바꿀 수 있었다).
+ * wbsDone은 단조 증가 + wbs_total 상한. spent_usd는 건드리지 않는다(LLM 프록시만 — 잃어버린 갱신이 원천적으로 없다).
  */
 export async function advanceBuildJob(
   env: Env,
   id: string,
-  input: { status: Exclude<BuildJobStatus, "done" | "failed">; wbsDone?: number; wbsTotal?: number; spentUsd?: number; commitSha?: string; repoFullName?: string; buildExitCode?: number },
+  input: { status: Exclude<BuildJobStatus, "done" | "failed">; wbsDone?: number },
 ): Promise<boolean> {
   const current = await getBuildJobById(env, id);
   if (!current || !BUILD_JOB_ACTIVE.has(current.status)) return false;
   if (STAGE_ORDER[input.status] < STAGE_ORDER[current.status]) return false;
+  const claimed = Number.isFinite(input.wbsDone) ? Math.floor(input.wbsDone as number) : 0;
+  const wbsDone = Math.min(Math.max(current.wbsDone, claimed), Math.max(current.wbsTotal, current.wbsDone));
   const res = await env.DB.prepare(
     `UPDATE build_jobs
-        SET status = ?, wbs_done = ?, wbs_total = ?, spent_usd = MAX(spent_usd, ?), commit_sha = COALESCE(?, commit_sha),
-            repo_full_name = COALESCE(?, repo_full_name), build_exit_code = COALESCE(?, build_exit_code), updated_at = ?
+        SET status = ?, wbs_done = ?, updated_at = ?
       WHERE id = ? AND status IN ('queued','scaffolding','implementing','building','testing','pushed','deploying')`,
   )
-    .bind(
-      input.status,
-      Math.max(current.wbsDone, input.wbsDone ?? 0),
-      input.wbsTotal ?? current.wbsTotal,
-      input.spentUsd ?? 0,
-      input.commitSha ?? null,
-      input.repoFullName ?? null,
-      input.buildExitCode ?? null,
-      new Date().toISOString(),
-      id,
-    )
+    .bind(input.status, wbsDone, new Date().toISOString(), id)
     .run();
   return (res.meta?.changes ?? 0) > 0;
 }
 
 /**
- * 최종 성공. D-4: build_exit_code가 0이 아니면 done으로 못 간다 — 호출자가 걸러도 여기서 한 번 더 막는다.
- * spent_usd는 `MAX(spent_usd, ?)` — 프록시가 계량한 값보다 내려가지 않는다(B-5b S1).
+ * 배포 주소로 저장해도 되는가 — https, 자격 증명 없음. S3에서 Worker가 `https://<slug>.<HOSTING_ROOT_DOMAIN>`을 **스스로
+ * 계산해** 넘긴다(콜백 입력이 아니다). 그래도 이 칸은 B-8이 비개발자에게 링크로 보여 주므로 저장 직전에 한 번 더 막는다
+ * (PR #569 S1 검증 결함 2 — 종전 라우트는 `javascript:` 주소도 저장했다).
+ */
+export function isStorableDeployedUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  return u.protocol === "https:" && u.username === "" && u.password === "" && u.hostname.length > 0;
+}
+
+/**
+ * 최종 성공 — **Worker만 부른다**(S3: 자기 배포가 끝난 뒤). 컨테이너의 done 주장(/internal/build-done ok:true)은 라우트가
+ * 거절한다(결함 2). D-4: build_exit_code가 0이 아니면 done으로 못 간다 — 호출자가 걸러도 여기서 한 번 더 막는다.
+ * deployedUrl은 https만(isStorableDeployedUrl). spent_usd는 `MAX(spent_usd, ?)` — 프록시가 계량한 값보다 내려가지 않는다.
  */
 export async function markBuildJobDone(
   env: Env,
   id: string,
   input: { deployedUrl: string; commitSha: string | null; spentUsd: number; buildExitCode: number; wbsDone: number },
-): Promise<{ ok: true } | { ok: false; reason: "not_active" | "build_not_green" }> {
+): Promise<{ ok: true } | { ok: false; reason: "not_active" | "build_not_green" | "invalid_deployed_url" }> {
   if (input.buildExitCode !== 0) return { ok: false, reason: "build_not_green" };
+  if (!isStorableDeployedUrl(input.deployedUrl)) return { ok: false, reason: "invalid_deployed_url" };
   const res = await env.DB.prepare(
     `UPDATE build_jobs
         SET status = 'done', deployed_url = ?, commit_sha = COALESCE(?, commit_sha), spent_usd = MAX(spent_usd, ?), build_exit_code = 0, wbs_done = ?, updated_at = ?
@@ -171,23 +181,70 @@ export async function markBuildJobFailed(env: Env, id: string, input: { failedSt
 }
 
 /**
- * B-5b S1 (B-6 서버 권위 예산): LLM 프록시가 계량한 호출 한 번의 비용을 **원자적으로 더한다**.
- * spent_usd의 유일한 증가 경로다(컨테이너가 본문에 적어 보내는 spentUsd는 라우트가 쓰지 않는다).
- * 상태와 무관하게 더한다 — 잡이 그 사이 failed가 됐어도 이미 쓴 돈이다. updated_at도 올린다
- * (LLM 호출 = 진행 중 — 스턱 스윕이 일하는 잡을 치우지 않게). 반환: 변경된 행 수(0 = 모르는 잡).
+ * 활성 잡을 **지금 단계에서** 멈춘다: failed(현재 단계, reason) + 타임라인 한 줄(행이 실제로 바뀐 때만). 이미 끝난 잡이면
+ * 아무것도 하지 않는다. 킬스위치(build_disabled)·컨테이너의 done 주장 거절(done_not_worker_owned)이 쓴다 — 멈추는 이유가
+ * 스피너가 아니라 대시보드의 정직한 실패로 남게. `known`은 호출자가 이미 읽은 행(다시 읽지 않는다). 멈췄나를 돌려준다.
  */
-export async function addBuildJobSpend(env: Env, id: string, deltaUsd: number): Promise<number> {
-  const delta = Number.isFinite(deltaUsd) && deltaUsd > 0 ? deltaUsd : 0;
-  const res = await env.DB.prepare(`UPDATE build_jobs SET spent_usd = spent_usd + ?, updated_at = ? WHERE id = ?`)
-    .bind(delta, new Date().toISOString(), id)
-    .run();
-  return Number(res.meta?.changes ?? 0);
+export async function stopActiveBuildJob(env: Env, id: string, reason: string, known?: DbBuildJob | null): Promise<boolean> {
+  const job = known ?? (await getBuildJobById(env, id));
+  if (!job || !BUILD_JOB_ACTIVE.has(job.status)) return false;
+  const stopped = await markBuildJobFailed(env, id, { failedStage: job.status, error: reason });
+  if (stopped) await appendBuildJobEvent(env, id, "failed", reason, { failedStage: job.status });
+  return stopped;
 }
 
-export async function appendBuildJobEvent(env: Env, jobId: string, stage: string, message: string, meta: Record<string, unknown> = {}): Promise<void> {
-  await env.DB.prepare(`INSERT INTO build_job_events (id, job_id, at, stage, message, meta_json) VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(randId("bje"), jobId, new Date().toISOString(), stage.slice(0, 40), message.slice(0, 500), JSON.stringify(meta).slice(0, 4000))
+/** 활성 상태 목록 — SQL 조건용(BUILD_JOB_ACTIVE와 같은 집합). */
+const ACTIVE_SQL = `('queued','scaffolding','implementing','building','testing','pushed','deploying')`;
+
+/**
+ * B-6 서버 권위 예산 — spent_usd의 **유일한 증가 경로**는 LLM 프록시의 예약·정산이다(컨테이너 본문의 spentUsd는 라우트가
+ * 쓰지 않는다). updated_at도 올린다(LLM 호출 = 진행 중 — 스턱 스윕이 일하는 잡을 치우지 않게).
+ *
+ * PR #569 S1 검증 결함 4 — 예산은 **예약**이다(스키마 변경 없음, 같은 spent_usd 칸).
+ * LLM 프록시가 업스트림을 부르기 **전에** 그 호출의 최악 비용을 원자적으로 더한다. 조건: 잡이 활성이고 spent_usd < budget_usd
+ * (예약분 포함). 종전에는 "읽고 → 부르고 → 더하기"라 같은 잡의 동시 호출이 모두 같은 옛 spent를 보고 통과했다(40개 동시 →
+ * 예산의 4.7배). 이제 한 번에 하나만 들어가고, 들어간 호출의 초과 폭은 그 호출 1회 비용이 상한이다.
+ * 입장 조건을 "spent + 최악 ≤ budget"이 아니라 "spent < budget"으로 둔 이유: 최악 추정(바이트=토큰·최고 단가·출력 상한)은
+ * 실제보다 몇 배 크다 — 엄격 조건이면 예산의 1/3을 남긴 채 멈춘다. 반환: 예약했나(false = 예산 소진이거나 끝난 잡).
+ */
+export async function reserveBuildJobSpend(env: Env, id: string, maxUsd: number): Promise<boolean> {
+  const amount = Number.isFinite(maxUsd) && maxUsd > 0 ? maxUsd : 0;
+  const res = await env.DB.prepare(
+    `UPDATE build_jobs SET spent_usd = spent_usd + ?, updated_at = ? WHERE id = ? AND status IN ${ACTIVE_SQL} AND spent_usd < budget_usd`,
+  )
+    .bind(amount, new Date().toISOString(), id)
     .run();
+  return Number(res.meta?.changes ?? 0) > 0;
+}
+
+/**
+ * 예약 정산: 예약분을 빼고 실제 비용을 더한다(한 문장 — 원자). 상태와 무관(그 사이 잡이 끝났어도 쓴 돈은 쓴 돈).
+ * 0 아래로 내려가지 않는다. 업스트림이 실패하면 actual = 0(예약 해제). Worker가 정산 전에 죽으면 예약이 남는다 —
+ * 보수 쪽(예산이 덜 남는다)으로 실패한다.
+ */
+export async function settleBuildJobSpend(env: Env, id: string, reservedUsd: number, actualUsd: number): Promise<void> {
+  const reserved = Number.isFinite(reservedUsd) && reservedUsd > 0 ? reservedUsd : 0;
+  const actual = Number.isFinite(actualUsd) && actualUsd > 0 ? actualUsd : 0;
+  await env.DB.prepare(`UPDATE build_jobs SET spent_usd = MAX(0, spent_usd - ? + ?), updated_at = ? WHERE id = ?`)
+    .bind(reserved, actual, new Date().toISOString(), id)
+    .run();
+}
+
+/**
+ * 잡 하나의 타임라인 행 상한(PR #569 S1 검증 결함 7). 정상 잡의 최대 = WBS 120(dev-spec 상한) × (started·done) + 단계 행
+ * 십여 개 ≈ 260. 컨테이너가 진행 콜백을 무한히 보내도 D1 행은 이 수를 넘지 않는다.
+ */
+export const BUILD_JOB_EVENT_CAP = 400;
+
+/** 타임라인 한 줄. 잡당 BUILD_JOB_EVENT_CAP을 넘으면 쓰지 않는다(한 문장 — 세기와 쓰기 사이 경합 없음). 썼나를 돌려준다. */
+export async function appendBuildJobEvent(env: Env, jobId: string, stage: string, message: string, meta: Record<string, unknown> = {}): Promise<boolean> {
+  const res = await env.DB.prepare(
+    `INSERT INTO build_job_events (id, job_id, at, stage, message, meta_json)
+     SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM build_job_events WHERE job_id = ?) < ?`,
+  )
+    .bind(randId("bje"), jobId, new Date().toISOString(), stage.slice(0, 40), message.slice(0, 500), JSON.stringify(meta).slice(0, 4000), jobId, BUILD_JOB_EVENT_CAP)
+    .run();
+  return Number(res.meta?.changes ?? 0) > 0;
 }
 
 export async function listBuildJobEvents(env: Env, jobId: string, limit = 200): Promise<BuildJobEvent[]> {
