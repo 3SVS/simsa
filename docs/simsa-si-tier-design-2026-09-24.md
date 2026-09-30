@@ -123,9 +123,13 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 - `[PILOT]` 템플릿 내용(라우팅·D1 마이그레이션·간단 세션)은 파일럿 전 조정 가능. **앱 내 로그인·결제·이메일 발송은 파일럿 범위 밖** — 지시서에 "이번 버전 제외"로 정직하게 표기(넣는 순간 계정 문제가 돌아온다).
 
 ### D-6 [LOCKED] 유저의 배포 토큰은 갖지 않는다 — 실행은 우리 Cloudflare 계정(Workers for Platforms)에서
-> **[주석 ① 적용 범위 2026-09-30 — W-D, 계획 정본 `docs/simsa-pricing-entity-consent-plan-2026-09-27.md` §5.2 W-D·§5.3]** 아래 "호스팅 사업자 의무(파일럿 전 필수)"의 선행 조건은 **S 호스팅을 쓰는 파일럿 범위 (a)**(B10 (a) 3건: 지시서 → 빌드 → `<slug>.simsa.page`)에만 걸린다. 파일럿 (b)(c)는 Lovable·v0·Bolt가 호스팅하는 남의 앱을 검수·수리할 뿐 **우리 계정에 아무것도 올리지 않으므로** 이 의무가 `pilot start approved.`(b)(c)를 막지 않는다(계획 §5.3 (b)(c) 임계 경로에 B-7 없음). 원칙·의무 목록은 그대로다. `design lock approved` 없이 LOCKED 문장을 고치지 않으므로 주석으로만 둔다 — 이견이 있으면 D-6을 인용해 reopen.
+> **[주석 ① 적용 범위 — [제안 — design lock 대기] 2026-09-30 W-D, 계획 `docs/simsa-pricing-entity-consent-plan-2026-09-27.md` §5.2 W-D 행(`:199` "D-6 amend 2건")·§5.3]** **지금의 효력은 본문 그대로다.** 아래 "호스팅 사업자 의무(파일럿 전 필수 … 없으면 `pilot start approved` 불가)"에는 범위 한정이 없으므로, **D-6 amend가 발효되기 전까지는 파일럿 (b)(c)도 B7(호스팅 의무)이 선행한다.**
 >
-> **[주석 ② 파라미터 기록 2026-09-30 — W-D]** 아래 `[PILOT] 도메인명`은 **`simsa.page`**로 정해졌다(2026-09-25 Bae, Cloudflare Registrar 구매 — `docs/HANDOFF-2026-09-25.md:14-16`). 코드: `apps/hosting-dispatch/wrangler.toml:15` · `apps/central-plane/wrangler.toml:45` `HOSTING_ROOT_DOMAIN = "simsa.page"`(#538 `69605d4`). 본문의 `<slug>.simsa.app`은 원문 표기로 남긴다 — `simsa.app`은 타인 소유 도메인이다(RDAP, 같은 HANDOFF `:14`).
+> 제안하는 amend: `design lock approved`(D-6 amend)로 발효되면, 이 선행 조건은 S 호스팅을 쓰는 파일럿 범위 (a)(B10 (a) 3건: 지시서 → 빌드 → `<slug>.simsa.page`)에만 걸린다. (b)(c)는 Lovable·v0·Bolt가 호스팅하는 앱을 검수·수리할 뿐 우리 계정에 아무것도 올리지 않으므로 이 의무가 `pilot start approved.`(b)(c)를 막지 않게 된다. 원칙·의무 목록은 amend 뒤에도 그대로다.
+>
+> 계획 §5.3의 (b)(c) 임계 경로(`:249`)에 B-7이 없는 것은 이 amend를 전제로 한 것이다 — amend가 거절되면 (b)(c) 경로에 B-7을 넣어야 한다. 이 amend의 승인 근거는 아직 없다: `train W start approved`(2026-09-28)는 문서 작성 범위이고, D-6 amend의 설계 잠금 문구는 레포에 0건이다(재정렬 문서·`docs/HANDOFF-2026-09-27.md`·`docs/HANDOFF-2026-09-29.md`에서 "D-6" grep 0건, 계획 `:199`에만 등장). 이견이 있으면 D-6을 인용해 reopen.
+>
+> **[주석 ② 파라미터 기록 2026-09-30 — W-D]** 아래 `[PILOT] 도메인명`은 **`simsa.page`**로 정해졌다(2026-09-25 Bae, Cloudflare Registrar 구매 — `docs/HANDOFF-2026-09-25.md:14-16`). 코드 `HOSTING_ROOT_DOMAIN = "simsa.page"`: `apps/hosting-dispatch/wrangler.toml:15`(#538 `69605d4`, 2026-09-25) · `apps/central-plane/wrangler.toml:45`(#548 `e82f12e`, 2026-09-27 — `git log -S` 기준). 본문의 `<slug>.simsa.app`은 원문 표기로 남긴다 — `simsa.app`은 타인 소유 도메인이다(RDAP, 같은 HANDOFF `:14`).
 *(2026-09-24 오후 수정 — 종전 결정의 **의도**는 "유저 자격증명 미보관"이지 "유저 인프라에서 실행"이 아니었다)*
 - **S 모드:** 빌드 산출물을 **Cloudflare Workers for Platforms**(dispatch namespace, 테넌트별 격리)에 우리 계정 토큰으로 배포. 주소 `<slug>.simsa.app`(와일드카드 도메인, `[PILOT]` 도메인명). 이 토큰은 central-plane 배포와 같은 **운영 자격**이며 유저 자격증명이 아니다. 저장은 GitHub Actions/Worker secret만(로컬 wrangler 금지 — 기존 규율).
 - **유저 토큰 금지는 코드로 강제:** 환경변수 allowlist에 Vercel/Netlify/유저 CF 토큰 키 이름 없음, 워커 `run_command` allowlist에서 `vercel`·`netlify`·`wrangler deploy` 차단, 테스트로 고정.
@@ -136,13 +140,13 @@ T0 테스트 계획                 ──없으면──▶ T2 검수는 "핵�
 ### D-7 [LOCKED] 달러 예산은 잡 시작 전에 결정되고 UI에 보인다
 > **[amend 2026-09-27 — 재정렬 `docs/simsa-vision-realignment-2026-09-27.md` §2, `design lock approved`(재정렬) Bae]** [PILOT] 수치 추가 — 검수·수리 라우트 유저당 일일 상한(검수 10/일·수리 5/일) + `INSPECTION_ENABLED`/`REPAIR_ENABLED` [vars] 킬스위치. BM 분석(#550 §1)이 확인한 build-loop 요청-모델 과금·pricing.ts 단가 결함은 이 결정의 집행 전제.
 >
-> **[주석 2026-09-30 — W-D, 계획 정본 §5.2 W-D]** 아래 `[PILOT]`의 **T2 $5(프로젝트당 달러 예산)는 일일 횟수 상한으로 대체**한다. 실브라우저 검수는 LLM을 한 번도 부르지 않아 회당 원가 $0.004다(BM `docs/simsa-bm-economics-2026-09-27.md:17` — inspector-container grep 0건). 달러 계좌로 셀 것이 없으므로 비용 통제 수단은 횟수 상한·킬스위치다. **T1 $10·일 3빌드는 그대로**(B-6 예산 정지는 미구현 — main 기준 빌드 실행체 B5(b)가 없다, 계획 §5.1). 수치는 전부 `[PILOT]`이고 원칙("잡 시작 전 결정·UI에 보임·조용한 초과 없음")은 바뀌지 않는다.
+> **[주석 2026-09-30 — W-D, 계획 정본 §5.2 W-D]** 아래 `[PILOT]`의 **T2 $5(프로젝트당 달러 예산)는 일일 횟수 상한으로 대체**한다. 실브라우저 검수는 LLM을 한 번도 부르지 않아 회당 원가 $0.004다(BM `docs/simsa-bm-economics-2026-09-27.md:17` — inspector-container grep 0건). 달러 계좌로 셀 것이 없으므로 비용 통제 수단은 횟수 상한·킬스위치다. 단 **일일 상한 3층에 계상되는 것은 유저가 누른 검수·수리뿐**이다. 시스템이 시작하는 자동 재검수(verify-sweep, 10분 크론)는 일일 상한 밖에 있고, **스윕당 10건** 별도 상한과 킬스위치만 적용된다(아래 표 #561 행). **T1 $10·일 3빌드는 그대로**(B-6 예산 정지는 미구현 — main 기준 빌드 실행체 B5(b)가 없다, 계획 §5.1). 수치는 전부 `[PILOT]`이고 원칙("잡 시작 전 결정·UI에 보임·조용한 초과 없음")은 바뀌지 않는다.
 >
 > 2026-09-28~30 집행된 상한 (세 칸은 `docs/EVIDENCE-RULE.md` R2):
 >
 > | PR · 커밋 | 무엇 | 수치 `[PILOT]` | 배포 | 라이브확인 / 미측정 |
 > |---|---|---|---|---|
-> | #561 `a47e72a` | 검수·수리 **일일 상한 3층**(사용자·네트워크·서비스 전체) + 킬스위치 `INSPECTION_ENABLED`/`REPAIR_ENABLED`. 판정은 라우트가 아니라 `dispatchInspection`·`dispatchRepairJob` 내부라 크론(verify-sweep)도 같은 게이트 | 검수 10 · 30 · 300 / 수리 5 · 15 · 50 (UTC 하루) — `apps/central-plane/src/workspace/beta-limits.ts:60-76`, `apps/central-plane/wrangler.toml:27-31` | 2026-09-29 run 36503316428 | 라이브확인: 검수 2회 dispatch가 새 상한 경유(`docs/HANDOFF-2026-09-29.md:22`) / 미측정: 실제 429·503 화면(같은 파일 `:27`), 수치 Bae 확인 대기(`:35`) |
+> | #561 `a47e72a` | 검수·수리 **일일 상한 3층**(사용자·네트워크·서비스 전체) + 킬스위치 `INSPECTION_ENABLED`/`REPAIR_ENABLED`. **킬스위치**는 `dispatchInspection`·`dispatchRepairJob` 내부라 크론과 공유한다(`apps/central-plane/src/routes/workspace-visual-check-runs.ts:178` · `workspace-repair-jobs.ts:232`). **일일 상한 3층은 run 라우트에서만 차감**된다(검수 `workspace-visual-check-runs.ts:473-483` "Charged only here" · 수리 `workspace-repair-jobs.ts:426-431`). **verify-sweep 자동 재검수는 일일 상한에 계상되지 않고**, 스윕당 10건(`VERIFY_SWEEP_MAX_DISPATCH` — `apps/central-plane/src/workspace/verify-sweep.ts:24-29, 60, 131-135`)을 10분 주기(`apps/central-plane/src/index.ts:313-325`)로 따로 상한한다. 입력은 24시간 창의 수리 PR 머지 신호이고 신호당 재검수는 1회다(`verify-sweep.ts:12-15, 94`). `dispatchInspection` 호출자는 run 라우트(`workspace-visual-check-runs.ts:542`)와 verify-sweep(`verify-sweep.ts:169`) 둘뿐이다. 수리 dispatch 호출자는 라우트 하나(`workspace-repair-jobs.ts:479`)라 수리에는 상한 밖 경로가 없다 | 검수 10 · 30 · 300 / 수리 5 · 15 · 50 (UTC 하루) — `apps/central-plane/src/workspace/beta-limits.ts:60-76`, `apps/central-plane/wrangler.toml:27-31` | 2026-09-29 run 36503316428 | 라이브확인: 검수 2회 dispatch가 새 상한 경유(`docs/HANDOFF-2026-09-29.md:22`) / 미측정: 실제 429·503 화면(같은 파일 `:27`), 수치 Bae 확인 대기(`:35`) |
 > | #562 `4b3fe4f` | L-3 사용량 원장 `llm_usage`(0070) + `/admin/usage-stats` — **T1 달러 예산(B-6)의 입력** | 없음(단가 공식가 L-1) | 2026-09-29 run 36503316428(0070 적용) | 라우트 도달만(무토큰 401 — 상태 코드라 내용 증거 아님) / 미측정: 행 실제 적재(HANDOFF-2026-09-29 `:27`) |
 > | #566 `3a1ca07` | 상한 카운터 저장 키를 KEK 파생 HMAC(`v1:`)으로 · 48시간·옛 형식 청소 크론 · 방침 고지. **수치 불변**, 배포 순간 카운터 1회 초기화 | 불변 | 2026-09-30 run 36721292314(Version 7f14fb1d, 마이그레이션 없음) + dashboard `5jg3lrr6o` | 라이브확인: 방침 페이지 "요청 횟수 제한"·시행일 2026-09-30(2026-09-30 응답 본문 확인) / 미측정: 첫 `rate-limit-purge` 틱의 옛 행 삭제 |
 > | 진행 중 — **PR 번호 미정** | 비용 상한(브랜치 `feat/cost-caps-repair-generation`, 2026-09-30 기준 origin에 없음·열린 PR 0) — [추정] 브랜치 이름상 수리·생성 경로 | 미정 | — | 미측정. PR이 열리면 이 행을 번호·수치로 채운다 |
@@ -243,7 +247,7 @@ OAuth-first → App-fallback). 2026-07-20 Test B에서 private 자동수리가 `
 **① 과금 예외 범위와 순서** — 원칙 `[LOCKED 후보]` · 금액·쿼터 `[PILOT 후보]`
 - 전면 무료의 예외는 **두 가지뿐**이고 순서가 정해져 있다.
   1. **S2 수리 초과 $29 — 먼저.** 월 무료 수리 쿼터(3회) 소진 뒤, **재검수 통과(`repair_jobs.resolved=1`) 시에만** 청구. 미해결·타임아웃은 $0. "되긴 하는데 달라요"(`works_but_different`)는 환불이 아니라 7일 내 1회 재작업. 발효 조건: L0 계측 + W-2 상한 + 수리 라운드트립 ≥3건 실측 + Paddle 라이브 승인. 재검토 트리거: 첫 유료 10건의 support_minutes 중앙값 > 15분 → $39, > 25분 → $49(계획 §2.4 `:99`).
-  2. **S1 빌드 works-or-free — 표시 $199, 파일럿 (a) 뒤.** 발효 조건: B5(b)·B6·B7 라이브 + 파일럿 (a) 3건 spent_usd·성공률 실측 + 별도 건별 승인. 파일럿 (a) 실측값을 ⑦ 공식에 넣어 **$149 회귀 여부를 판정**한다(계획 §2.4 `:100` — 내리기는 쉽고 올리기는 어렵다).
+  2. **S1 빌드 works-or-free — 표시 $199, 파일럿 (a) 뒤.** 발효 조건: B5(b)·B6·B7 라이브 + 파일럿 (a) 3건 spent_usd·성공률 실측 + 별도 건별 승인. 파일럿 (a) 실측값을 ⑦ 공식에 넣어 **$149 회귀 여부를 판정**한다(계획 §2.4 `:100`; "내리기는 쉽고 올리기는 어렵다"는 §0 `:11`).
 - **영구 무료:** 검수 · 지시서 · 심사 · 호스팅 · 일 1회 감시 · 수리 월 쿼터(계획 §2.4 `:98`, BM §9 결정 ①).
 - 이번 범위 밖: S3 Care $19(M6+) · S6 검수 API(후불 인보이스) · 수리 3회권(Paddle AUP 서면 확인 전) · **크레딧 지갑 금지**(AUP "stored value", 계획 §1.1 `:34`).
 
@@ -280,7 +284,7 @@ charge_allowed(build) :=
 - 무료 경로는 계정 승격 없음(익명 `userKey` 유지, 계획 §5.6). 유료 경로의 계정 승격은 claim 1클릭(`$-1`).
 - 예외 자체의 근거: 계획 §5.2 B-8 행(`:219`). 제안: journey-audit "계정 요구 화면 0" 검사(N6)에 두는 예외도 이 1곳뿐으로 한다.
 
-**⑦ 가격 공식(D-22)** — 식·상수 `[LOCKED 후보]` · 입력값 `[PILOT]`
+**⑦ 가격 공식(D-22)** — 식·상수 `[LOCKED 후보]` · 입력값 `[PILOT 후보]`
 - 번호 주: 계획 문서가 "D-22 공식"이라 먼저 불렀지만 이 설계 문서에는 **D-22 절이 없다**. 여기 식을 싣고, 잠금 때 D-22로 떼어낼지 D-23에 둘지 함께 정한다.
 - 건당 기여(계획 §2.3 `:76`): `기여 = P − (0.05P + $0.50) − f·P − r·(P + $20) − S − C`
   (P 가격 · f 환불률 · r 차지백률 · S 건당 지원 원가 · C = 시도 원가 ÷ 성공률, D-7 상한 C_cap 기준)
@@ -423,11 +427,12 @@ charge_allowed(build) :=
 | 머지·배포 (집행) | `PR #556 merge approved.` `deploy central-plane approved.` | 2026-09-28 (Bae) | #556 `f8ad95e`(설치 리다이렉트·호스팅 전용 App 분리) · run 36380871543 Version 4f234bda. 호스팅 App 시크릿 Worker 반영(run 36381296460) |
 | 머지 (집행) | `PR #554/#557/#560/#558 merge approved.` `PR #561 merge approved.` `PR #563 merge approved.` `PR #562 merge approved.` `PR #559 merge approved.` | 2026-09-29 (Bae) | #554 `a62ecb1` · #557 `0bd1f2f` · #560 `c8e1296` · #558 `4f56aff` · #561 `a47e72a` · #563 `aabb962`(#561 반영 뒤 재CI) · #562 `4b3fe4f`(충돌 해소 뒤 재CI) · #559 `6e54f4e`(충돌 해소 뒤 재CI). 근거 `docs/HANDOFF-2026-09-29.md` §1 *(W-D 2026-09-30 추가 — 이 행 전까지 레지스트리 누락)* |
 | 마이그레이션·배포 (집행) | `migration 0070 apply approved.` `deploy central-plane approved.` `deploy dashboard approved.` | 2026-09-29 (Bae) | run 36503316428(0070 ✅, 게이트 `{"ok":true,"pending":[]}`, Version 96f3c523, healthz deployedSha 4b3fe4f) · dashboard `9i3cucrin` Ready·Production. 세 칸 결과 `docs/HANDOFF-2026-09-29.md` §2 *(W-D 추가)* |
-| 머지·배포 (집행) | **승인 문구 원문 레포 미기록** — 다음 HANDOFF에 원문 기입 필요 | 2026-09-30 | #567 `b725b58` · #564 `2956eb7` · #565 `9f02919` · #566 `3a1ca07`(13:07~13:23 UTC) · central run 36721292314 success(headSha 3a1ca07, 적용할 마이그레이션 없음, Version 7f14fb1d, smoke 401) · dashboard `5jg3lrr6o` Ready·Production(`vercel ls`, 2026-09-30). 라이브확인: 방침 페이지 본문에 시행일 2026-09-30·"요청 횟수 제한". 미측정: #564 결과 화면 재확인(HANDOFF-2026-09-29 §5-1) · 첫 `rate-limit-purge` 틱 *(W-D 추가)* |
+| 머지·배포 (집행) | `PR #566 merge approved.` → `deploy central-plane approved.` → `deploy dashboard approved.` (출처: 커밋 `3a1ca07` 메시지 "Bae 승인 체인(2026-09-30)"). **#564·#565·#567 머지 승인 문구 원문은 레포 미기록**(세 커밋 메시지·PR 스레드에서 "approved" grep 0건) — 다음 HANDOFF에 원문 기입 필요 | 2026-09-30 (Bae) | #567 `b725b58` · #564 `2956eb7` · #565 `9f02919` · #566 `3a1ca07`(13:07~13:23 UTC) · central run 36721292314 success(headSha 3a1ca07, 적용할 마이그레이션 없음, Version 7f14fb1d, smoke 401) · dashboard `5jg3lrr6o` Ready·Production(`vercel ls`, 2026-09-30). 라이브확인: 방침 페이지 본문에 시행일 2026-09-30·"요청 횟수 제한". 미측정: #564 결과 화면 재확인(HANDOFF-2026-09-29 §5-1) · 첫 `rate-limit-purge` 틱 *(W-D 추가)* |
 | 머지 | `PR #N merge approved.` | — | 해당 PR |
 | 배포 | `deploy central-plane approved.` / `deploy dashboard approved.` / `deploy hosting-dispatch approved.` | — | 해당 타겟 1회 (hosting-dispatch는 B-7 `deploy-hosting-dispatch.yml` 신설 뒤 — 계획 §5.2) |
 | 마이그레이션 | `migration <id> apply approved.` | — | 1건 |
-| 파일럿 | `pilot start approved.` | — | ~~B8 실기획 3건~~ → **B10**(amend 2026-09-27): 범위 (b)(c) 3건과 (a) 3건을 **따로** 발효(계획 §5.2 P-4·P-5, §5.3). 문구에 범위를 붙인다 — 예 `pilot start approved.` (b)(c) *[정정 2026-09-30 W-D]* |
+| 파일럿 | `pilot start approved.` | — | ~~B8 실기획 3건~~ → **B10**(amend 2026-09-27): 범위 (b)(c) 3건과 (a) 3건을 **따로** 발효(계획 §5.2 P-4·P-5, §5.3). 문구에 범위를 붙인다 — 예 `pilot start approved.` (b)(c). **단 D-6 amend(D-6 주석 ①)가 발효되기 전까지는 (b)(c)도 호스팅 의무(B7)가 선행한다**(D-6 본문 "없으면 `pilot start approved` 불가"에 범위 한정 없음) *[정정 2026-09-30 W-D]* |
+| 설계 잠금 (D-6 amend) | `design lock approved`(D-6 amend) | — | D-6 주석 ① 발효 — 호스팅 의무 선행을 파일럿 (a)로 한정. 이것 없이는 (b)(c)에도 B7 선행 *(W-D 추가 — 제안)* |
 | Train K 착수 | `train K start approved` | — | K-1~K-3 코드 작성만(마이그레이션 0071 적용은 별도 문구) *(W-D 추가 — 계획 §5.2)* |
 | 설계 잠금 (과금) | `design lock approved`(과금) | — | D-23 발효. 이것 없이 `$-1` 이후 착수 금지 *(W-D 추가)* |
 | 과금 라이브 | 표준 문구 없음 — 건별 명시 승인(`BILLING_ENABLED` on 배포 · S2 외부 개시 · Paddle 라이브 가입·서면 질의) | — | 건별 *(W-D 추가 — 계획 §5.2 $-7)* |
@@ -478,7 +483,7 @@ charge_allowed(build) :=
 
 ### 2026-09-30 — W-D 문서 정리 (Train W 범위, `train W start approved` 2026-09-28)
 - `docs/EVIDENCE-RULE.md` 정본 복원·확장(R1~R11). 원본 `91c4d33`(2026-08-25)은 PR 없이 브랜치 `docs/evidence-rule`에만 있었다.
-- D-6 주석 2건(호스팅 의무 선행 = 파일럿 (a)만 · 도메인 `simsa.page`) · D-7 주석(T2 $5 → 일일 횟수 상한, 2026-09-28~30 집행표) · 게이트 레지스트리 09-29·09-30 집행 행과 새 트레인 게이트 행 · 파일럿 행 B8 → B10 정정.
+- D-6 주석 2건(① 호스팅 의무 선행을 파일럿 (a)로 한정하는 amend **[제안 — design lock 대기, 발효 전에는 (b)(c)에도 B7 선행]** · ② 도메인 파라미터 `simsa.page` 기록) · D-7 주석(T2 $5 → 일일 횟수 상한, 2026-09-28~30 집행표 — verify-sweep 자동 재검수는 일일 상한 밖·스윕당 10건 별도 상한) · 게이트 레지스트리 09-29·09-30 집행 행과 새 트레인 게이트 행 · 파일럿 행 B8 → B10 정정.
 - **D-23 [제안]** 과금 설계 잠금 초안 신설 — Bae 결정 ④⑤⑥ + `design lock approved`(과금) 대기. 효력 없음.
 
 ### 2026-09-27 — 재정렬 design lock + Train C 착수
