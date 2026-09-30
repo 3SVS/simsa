@@ -224,12 +224,13 @@ test("sidebarStepItems: 앱 있음 → 2단계 [앱 확인하기], PR 이력/개
   );
 });
 
-test("sidebarStepItems: 앱 없음은 종전 항목 그대로 → 2단계 [만들기 안내], 3단계 [확인 결과, 앱 확인] — PR 탭 없음", () => {
+test("sidebarStepItems: 앱 없음 → 2단계 [내 앱, 만들기 안내], 3단계 [확인 결과, 앱 확인] — PR 탭 없음", () => {
   const { sidebarStepItems } = steps;
   for (const developerMode of [false, true]) {
+    // ★의도된 변경 (B-8, D-17 N3 "내 앱"): 2단계 맨 앞에 "내 앱"(build). 만들기 안내는 그대로 뒤에.
     assert.deepEqual(
       sidebarStepItems({ hasApp: false, developerMode, hasPrReviewHistory: false }),
-      { review: ["export"], results: ["checks", "visual-checks"] },
+      { review: ["build", "export"], results: ["checks", "visual-checks"] },
     );
   }
 });

@@ -59,6 +59,8 @@ export function sidebarStepItems(input: {
   hasApp: boolean | null;
   developerMode?: boolean;
   hasPrReviewHistory?: boolean | null;
+  /** B-8: Simsa built (or is building) an app for this project — keeps "내 앱" once an app exists. */
+  hasHostedBuild?: boolean | null;
 }): { review: string[]; results: string[] };
 
 export type NavLabelKey =
@@ -68,6 +70,7 @@ export type NavLabelKey =
   | "buildGuide"
   | "githubDev"
   | "devSpec"
+  | "myApp"
   | "idea"
   | "spec"
   | "items"

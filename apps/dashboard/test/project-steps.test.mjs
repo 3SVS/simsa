@@ -179,13 +179,16 @@ test("idea branch with confirmed-no items → create_items first", async () => {
   );
 });
 
-test("nextScreenSlug: idea/spec entries walk to the builder pack and STOP (no code yet)", () => {
+test("nextScreenSlug: idea/spec entries walk to 내 앱 (build it on Simsa) and STOP (no code yet)", () => {
   // Pre-build users must never be marched into repo-connect/PR screens —
   // that funnel only exists after the app does (2026-07-10 live walkthrough).
   assert.equal(nextScreenSlug("idea"), "spec");
   assert.equal(nextScreenSlug("spec"), "items");
   assert.equal(nextScreenSlug("items"), "dev-spec");
-  assert.equal(nextScreenSlug("dev-spec"), "export");
+  // ★의도된 변경 (B-8, D-17): 지시서 다음은 "내 앱"(build — S 만들기). 빌더 팩은 걸음에서 빠지고
+  //  사이드바·지시서 화면·멈춘 만들기의 "지시서 받아가기"에서 닿는다.
+  assert.equal(nextScreenSlug("dev-spec"), "build");
+  assert.equal(nextScreenSlug("build"), null); // the build screen carries its own actions
   assert.equal(nextScreenSlug("export"), null); // go build — return path is explicit, not a forced walk
   assert.equal(nextScreenSlug("settings"), null); // repo screens are outside the pre-build walk
   assert.equal(nextScreenSlug("github"), null);
@@ -209,10 +212,12 @@ test("nextScreenSlug: the CODE branch walks prep → real-app check FIRST (이�
   assert.equal(nextScreenSlug("fixes", "code"), null);
   // idea/spec are not on the code walk at all
   assert.equal(nextScreenSlug("idea", "code"), null);
-  // other entries walk to the builder pack (pre-build — no repo screens)
+  // other entries walk to 내 앱 (pre-build — no repo screens; ★의도된 변경 B-8: formerly the pack)
   assert.equal(nextScreenSlug("items", "idea"), "dev-spec");
   assert.equal(nextScreenSlug("items", null), "dev-spec");
-  assert.equal(nextScreenSlug("dev-spec", "idea"), "export");
+  assert.equal(nextScreenSlug("dev-spec", "idea"), "build");
+  // the build screen is never on the code walk (the app already exists)
+  assert.equal(nextScreenSlug("build", "code"), null);
 });
 
 // ── Fix-first routing (Bae 2026-07-17): 확인 결과 → 고쳐보기 → 빌더팩 ─────────
