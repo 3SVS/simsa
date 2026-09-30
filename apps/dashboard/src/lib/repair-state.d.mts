@@ -16,8 +16,11 @@ export type RepairErrorKey =
 export const REPAIR_POLL_INTERVAL_MS: number;
 
 export function canRepair(
-  check: { status?: unknown; works?: unknown } | null | undefined,
+  check: { status?: unknown; works?: unknown; decision?: unknown; report?: unknown } | null | undefined,
 ): boolean;
+
+/** Anything to fix? Same rule as the server report's next steps (non-info finding · not working · open verdict other than "no problem found"). */
+export function hasSomethingToFix(check: unknown): boolean;
 
 /** Train C — C2a: "repair" (linked repo) · "builder_paste" (address-only / unknown) · "none". */
 export type RepairEntryMode = "repair" | "builder_paste" | "none";
