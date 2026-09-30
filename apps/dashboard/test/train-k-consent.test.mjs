@@ -345,7 +345,7 @@ describe("방침·카드 문구 = 서버가 실제로 하는 일 (계약 4: 색�
   it("TRAINING_COPY_NOTE: 철회·프로젝트 삭제 시 색인된 사본 삭제 + 색인 전 사본은 자동 삭제 불가·문의 처리", () => {
     const s = ops.TRAINING_COPY_NOTE ?? "";
     assert.match(s, /동의를 철회하시거나 그 프로젝트를 삭제하시면 색인된 사본을 지웁니다/, s);
-    assert.match(s, /삭제 기능이 생기기 전에 저장된 일부 사본은[^.]*자동으로 지우지 못합니다/, s);
+    assert.match(s, /삭제 기능이 생기기 전에 저장된 일부 사본은[^.]*자동으로 지우지 못할 수 있습니다/, s);
     assert.match(s, /문의 이메일로 요청하시면 찾을 수 있는 범위에서 지워 드립니다/, s);
     assert.ok(!/지워지지 않습니다/.test(s), "old 'never deleted' sentence");
     assert.ok(!/모두 지웁니다|전부 지웁니다/.test(s), "must not over-promise");
@@ -617,6 +617,31 @@ describe("#573 검증 2 — EN 운영 정보 문구: non-identifying, anonymous 
     assert.match(p.lineRecording, /non-identifying/);
     assert.match(p.lineRecording, /stored with your project records/);
     assert.match(p.opsToggle, /non-identifying/);
+  });
+});
+
+// ─── 12. 서버 PR #574 수정 후(head 22da76c) 바뀐 사실을 문구에 반영 ─────────────────────────────
+//  ① defaultOpsMetaForRegion(null) = "off" — 접속 국가를 모르면(XX·T1과 같게) 켜기 전까지 기록하지 않는다.
+//     GET privacy-prefs가 region:null·opsMeta:"off"·opsMetaSource:"default"를 돌려주면 결과 화면은
+//     off_default 줄 + 설정의 opsDefaultOffNote를 보인다 → "접속하신 나라의 규칙에 따라"만으로는 틀린 이유.
+//  ② 0071 이전 사본: 본문 subject_hash=sha256(userKey)로 찾을 수는 있지만(백필 도구 — 실행은 Bae 승인 대기),
+//     그 전까지는 "자동으로 지우지 못할 수 있다(문의 시 처리)"가 사실 — '색인이 없어 못 지운다'는 단정은 틀림.
+describe("#574 수정 반영 — 국가 모름 = 기본 off · 0071 이전 사본은 '못할 수 있다'", () => {
+  it("opsDefaultOffNote(KO/EN)는 '나라를 알 수 없는 경우'도 이유로 말한다", () => {
+    assert.match(DICTIONARIES.ko.privacyPrefs.opsDefaultOffNote, /알 수 없/);
+    assert.match(DICTIONARIES.en.privacyPrefs.opsDefaultOffNote, /can't tell/);
+  });
+
+  it("방침 끄기 문단: 유럽연합 등 + 접속 나라를 알 수 없는 경우도 켜기 전까지 기록하지 않는다", () => {
+    assert.match(ops.OPS_INFO_OPT_OUT ?? "", /유럽연합·유럽경제지역·영국·스위스[^.]*알 수 없는 경우[^.]*켜시기 전까지[^.]*기록하지 않/);
+    assert.match((ops.PRIVACY_CHANGE_LOG ?? []).at(-1)?.summary ?? "", /알 수 없/);
+  });
+
+  it("TRAINING_COPY_NOTE: 0071 이전 사본은 '지우지 못할 수 있습니다' — '색인이 없어 못 지운다'고 단정하지 않는다", () => {
+    const s = ops.TRAINING_COPY_NOTE ?? "";
+    assert.match(s, /삭제 기능이 생기기 전에 저장된 일부 사본은 자동으로 지우지 못할 수 있습니다/, s);
+    assert.ok(!/색인이 없어/.test(s), s);
+    assert.ok(!/지우지 못합니다/.test(s), s);
   });
 });
 

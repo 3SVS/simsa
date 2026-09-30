@@ -150,7 +150,8 @@ export function trainingSaveOutcome(requested, res) {
 /**
  * 결과 화면의 운영 정보 한 줄 — 어느 문구를 쓸지.
  *   "recording"   — 기록 중(기본 on 또는 직접 켬) → "…기록됩니다 · 기록 끄기 · 자세히"
- *   "off_default" — 접속 나라 규칙으로 기본 off(EU/EEA·영국·스위스) → "…기록하지 않고 있어요 · 켜기"
+ *   "off_default" — 기본 off(접속 나라 규칙 EU/EEA·영국·스위스, 또는 접속 나라를 모름 — 서버 #574
+ *                   defaultOpsMetaForRegion(null) = "off") → "…기록하지 않고 있어요 · 켜기"
  *   "off_user"    — 직접 끔 → "…끄셨어요 · 다시 켜기"
  *   null          — 모름(옛 서버·네트워크) → 줄을 그리지 않는다(틀릴 수 있는 사실 문장을 쓰지 않는다)
  * @param {ReturnType<typeof normalizePrivacyPrefs>} prefs
