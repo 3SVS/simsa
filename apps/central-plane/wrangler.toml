@@ -131,6 +131,7 @@ enabled = true
 # */5   — SaaS jobs stuck-cleanup (fail jobs stuck in `accepted` >30 min)
 # 03:00 UTC daily — external design-reference refresh (Phase 4)
 # every 6h     — feedback classification retry (Sprint A: pending → classified)
+#                + request-limit rows purge (windows started ≥ 48h ago + pre-"v1:" legacy keys; rate-limit-retention.ts)
 # 04:00 UTC daily — seed-promoter (Sprint C: classified feedback → promoted_seeds)
 # 05:00 UTC Sundays — source-discovery (Sprint E1: scan GitHub for new design-pattern repos)
 # 06:00 UTC daily   — oss-pr-miner (Sprint E2: extract patterns from popular OSS bugfix PRs)

@@ -885,6 +885,23 @@ test("⑩ 수리도 같다 — 네트워크 상한 429(scope network) · 서비�
   assert.equal(calls.length, 3);
 });
 
+test("⑩ 네트워크 버킷에 저장되는 값은 비밀 키 HMAC — sha256(inspection-daily-ip::ip)가 아니다 (IPv4 전수 대입으로 IP 역산 불가)", async () => {
+  const { createHash, createHmac } = await import("node:crypto");
+  const calls = [];
+  const db = defaultDb();
+  const env = makeEnv({ db, inspector: acceptingNs(calls) });
+  const ip = "198.51.100.77";
+  assert.equal((await req(env, "POST", runPath(PROJECT), { userKey: USER }, ipHeader(ip))).status, 202);
+  const subkey = createHmac("sha256", Buffer.from(KEK, "utf8")).update("simsa/rate-limit-ip/v1", "utf8").digest();
+  // "v1:" = the format marker of every key the new code writes (rate-limit-key.ts).
+  const keyed = "v1:" + createHmac("sha256", subkey).update(`inspection-daily-ip::${ip}`, "utf8").digest("hex");
+  const unkeyed = createHash("sha256").update(`inspection-daily-ip::${ip}`, "utf8").digest("hex");
+  const stored = [...db.state.rate.keys()].map((k) => k.split("::")[0]);
+  assert.ok(stored.includes(keyed), "the network slot is stored under the keyed HMAC");
+  assert.ok(!stored.includes(unkeyed), "no brute-forceable SHA-256 of the IP");
+  assert.ok(!stored.some((h) => h.includes(ip)));
+});
+
 test("[가드] ⑩ verify-sweep(시스템 재검수)은 네트워크·서비스 버킷에도 세지 않는다", async () => {
   const calls = [];
   const db = makeDb({

@@ -20,7 +20,7 @@
  *   makes up (workspace.ts: "No auth"), so the per-userKey cap stops an honest
  *   user's runaway retry, not a loop that mints a new key per call — the eval /
  *   corpus scripts already call production exactly that way. The network bucket
- *   (hashed cf-connecting-ip, 3× the user cap so a shared office/home network
+ *   (cf-connecting-ip as a keyed HMAC, 3× the user cap so a shared office/home network
  *   is not punished for one person) raises the bar for a single scripted source;
  *   the service bucket is the actual daily cost ceiling. The kill switches
  *   (service-switches.ts) stay the hard stop.
@@ -66,7 +66,7 @@ export const BETA_LIMITS = {
   inspectionsPerDay: 10,
   /** Train W · W-2 [PILOT]: max dispatched repair jobs per userKey per UTC day. */
   repairsPerDay: 5,
-  /** [PILOT]: per network (hashed cf-connecting-ip) per UTC day — 3× the user cap. */
+  /** [PILOT]: per network (cf-connecting-ip, keyed HMAC) per UTC day — 3× the user cap. */
   inspectionsPerDayPerIp: 30,
   repairsPerDayPerIp: 15,
   /** [PILOT]: service-wide per UTC day — the daily cost ceiling for the container paths. */

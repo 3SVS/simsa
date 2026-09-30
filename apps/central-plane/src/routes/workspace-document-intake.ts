@@ -12,7 +12,7 @@
  *   row. The dashboard confirm flow persists via POST /workspace/projects.
  *
  *   Rate limit: shares the SAME hourly per-IP counter as idea-to-spec-draft
- *   (bucket namespace `workspace::`, WORKSPACE_GENERATION_LIMIT_PER_HOUR).
+ *   (bucket "workspace", WORKSPACE_GENERATION_LIMIT_PER_HOUR; keyed HMAC of the IP).
  *
  *   Errors:
  *     400 invalid_json | userKey_required | source_not_document
@@ -36,18 +36,15 @@ import {
 import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
+import { ipRateLimitKey } from "../workspace/rate-limit-key.js";
 
 const DEFAULT_LIMIT_PER_HOUR = 20;
 
 // ─── Rate limit helpers ──────────────────────────────────────────────────────
-// Same D1 table + SAME bucket namespace (`workspace::`) as the idea-to-spec
-// endpoint in routes/workspace.ts, so document intake and idea intake share
-// one hourly generation counter per IP.
-
-async function sha256Hex(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+// Same D1 table + SAME bucket ("workspace") as the idea-to-spec endpoint in
+// routes/workspace.ts, so document intake and idea intake share one hourly
+// generation counter per IP. The IP is stored only as a keyed HMAC
+// (workspace/rate-limit-key.ts) — the same helper, so both land on one row.
 
 function currentHourUtc(): string {
   return new Date().toISOString().slice(0, 13); // "2026-07-02T15"
@@ -152,7 +149,7 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
       c.req.header("cf-connecting-ip") ??
       (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ??
       "unknown";
-    const ipHash = await sha256Hex(`workspace::${rawIp}`);
+    const ipHash = await ipRateLimitKey(c.env, "workspace", rawIp);
     const hourUtc = currentHourUtc();
     const currentCount = await getRateLimitCount(c.env.DB, ipHash, hourUtc);
     if (currentCount >= limitPerHour) {
