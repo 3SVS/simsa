@@ -2,8 +2,9 @@
  * rate-limit-ipv6-network.test.mjs — IP로 거는 모든 요청 한도는 **네트워크** 단위로 센다 (2026-10-01).
  *
  * 문제 (3a1ca07 실측, 하니스 = 0026 스키마 node:sqlite):
- *   ipRateLimitKey가 cf-connecting-ip 원문 그대로 HMAC을 만들었다. IPv6 가입자·기기는 보통 /64 하나를 통째로
- *   받아 그 안에서 주소를 마음대로 바꿀 수 있으므로, 주소만 돌리면 매번 새 카운터였다.
+ *   ipRateLimitKey가 cf-connecting-ip 원문 그대로 HMAC을 만들었다. /64(LAN 하나) 안에서는 주소를 마음대로
+ *   바꿀 수 있으므로, 주소만 돌리면 매번 새 카운터였다. (/64보다 넓은 할당 — /56 가정·/48 터널 — 은
+ *   rate-limit-ipv6-wide-network.test.mjs가 맡는다: 일일 상한은 /48도 함께 센다.)
  *     - 검수 60회(매번 새 userKey, 같은 /64 안에서 주소 회전) → 60건 모두 수락(네트워크 상한 30은 한 번도 안 걸림)
  *     - 수리 60회 → 50건 수락 후 서비스 버킷에서만 멈춤 = 출처 하나가 그날 서비스 전체 수리 몫을 다 씀(가용성 공격)
  *     - 시간당 상한 5개 경로(workspace·check·recommend·unstick·fix) · 문서 인테이크 · 데모도 같은 키 함수
@@ -87,6 +88,17 @@ test("① networkPrefix: IPv4는 바이트 그대로 · ::ffff:a.b.c.d(점·16�
   assert.equal(networkPrefix("::FFFF:198.51.100.7"), V4);
   assert.equal(networkPrefix("::ffff:c633:6407"), V4, "hex form of the same mapped address");
   assert.equal(networkPrefix("0:0:0:0:0:ffff:c633:6407"), V4);
+});
+
+test("[가드] ① networkPrefix: mapped 꼬리의 앞자리 0은 받아들여 한 IPv4로 모은다 · 평문 IPv4는 앞자리 0도 그대로(바이트 단위)", () => {
+  // PR #580 검증 P2: node:net은 "::ffff:01.2.3.4"를 IPv6로 보지 않는다. 여기서는 느슨하게 읽어 1.2.3.4 행으로
+  // 모은다 — 같은 주소의 표기를 한 행으로 모으는 방향이라 카운터를 늘리지 않는다. 평문 "001.002.003.004"는
+  // IPv4 행 연속성 때문에 건드리지 않으므로 그 표기는 따로 센다. 둘 다 cf-connecting-ip가 내지 않는 표기다.
+  const networkPrefix = networkPrefixFn();
+  assert.equal(networkPrefix("::ffff:01.2.3.4"), "1.2.3.4");
+  assert.equal(networkPrefix("::ffff:001.002.003.004"), "1.2.3.4");
+  assert.equal(networkPrefix("001.002.003.004"), "001.002.003.004", "plain IPv4 is never rewritten");
+  assert.equal(networkPrefix("::1.2.3.4"), "0:0:0:0::/64", "IPv4-compatible (deprecated) = the ::/64 network");
 });
 
 test("① networkPrefix: IP가 아니면 그대로 — 빈 값·unknown·#575 태그·포트 붙은 값·깨진 주소·긴 값 · 멱등", () => {
@@ -205,6 +217,17 @@ async function sqliteWithRateTables(t) {
 const NOW = new Date("2026-10-01T05:00:00.000Z");
 const reqFrom = (ip) => new Request("http://localhost/x", { headers: { "cf-connecting-ip": ip } });
 
+/**
+ * main의 [PILOT] 수치(검수 네트워크 30·서비스 300 / 수리 15·50)를 명시한다 — #576이 기본값을 바꿔도
+ * (수리 6·20) 이 파일이 재는 것은 "/64 단위로 센다"이지 기본값이 아니다.
+ */
+const LIMITS = {
+  BETA_INSPECTION_DAILY_LIMIT_PER_IP: "30",
+  BETA_INSPECTION_DAILY_LIMIT_GLOBAL: "300",
+  BETA_REPAIR_DAILY_LIMIT_PER_IP: "15",
+  BETA_REPAIR_DAILY_LIMIT_GLOBAL: "50",
+};
+
 /** 매번 새 userKey(사용자 버킷은 한 번도 안 걸림) — 네트워크 상한만이 출처를 묶는다. */
 async function dispatch(t, kind, ips) {
   const db = await sqliteWithRateTables(t);
@@ -213,7 +236,7 @@ async function dispatch(t, kind, ips) {
   let accepted = 0;
   const stoppedBy = {};
   for (let i = 0; i < ips.length; i++) {
-    const caps = dailyCapsFor(kind, {}, `uk_회전_${i}`, clientNetworkKey(reqFrom(ips[i])));
+    const caps = dailyCapsFor(kind, LIMITS, `uk_회전_${i}`, clientNetworkKey(reqFrom(ips[i])));
     const r = await consumeDailyCaps(env, caps, NOW);
     if (r.limited) stoppedBy[r.scope] = (stoppedBy[r.scope] ?? 0) + 1;
     else accepted += 1;
@@ -245,6 +268,7 @@ test("③ IPv4-mapped와 점 표기가 섞여 와도 한 네트워크다", async
 });
 
 test("[가드] ③ 서로 다른 /64 두 곳은 각자 30건 · IPv4 대조군은 그대로 30건", async (t) => {
+  // 두 /64는 같은 /48(2001:db8:abcd::/48) 안이다 — 합계 60 = 그 /48의 몫(검수 2×30, 서비스 절반 미만)과 딱 같다.
   const two64 = Array.from({ length: 60 }, (_, i) => (i % 2 === 0 ? `2001:db8:abcd:12::${i + 1}` : `2001:db8:abcd:13::${i + 1}`));
   const r = await dispatch(t, "inspection", two64);
   if (!r) return;

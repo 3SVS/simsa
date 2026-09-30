@@ -56,12 +56,11 @@
  * ipRateLimitKey passes the IP through networkPrefix() before hashing:
  *   - IPv4: the address itself, byte for byte (so every IPv4 counter written
  *     before this change is still the same row — no reset).
- *   - IPv6: the first 64 bits, "a:b:c:d::/64". A subscriber or a device is
- *     normally handed a whole /64 and may pick any address inside it, so the
- *     full address let one caller rotate through 2^64 fresh counters: measured
- *     on 3a1ca07, 60 inspections from one /64 with rotating addresses were all
- *     accepted against a network cap of 30, and 50 repairs from one /64 drained
- *     the whole service's daily repair bucket (everyone else got "full").
+ *   - IPv6: the first 64 bits, "a:b:c:d::/64" — one LAN. Any address inside it
+ *     can be picked at will, so the full address let one caller rotate through
+ *     2^64 fresh counters: measured on 3a1ca07, 60 inspections from one /64 with
+ *     rotating addresses were all accepted against a network cap of 30, and 50
+ *     repairs from one /64 drained the whole service's daily repair bucket.
  *   - IPv4-mapped IPv6 (::ffff:a.b.c.d) is the IPv4 address — the same row as
  *     the plain dotted form.
  *   - Anything that is not an IP ("", "unknown", an already-tagged network like
@@ -71,6 +70,18 @@
  * old per-address IPv6 rows simply stop being read (their window ends — at most
  * the current hour / UTC day restarts once for an IPv6 caller — and the 48h
  * window purge in rate-limit-retention.ts removes them like any other row).
+ *
+ * But a /64 is not one caller's whole allocation (PR #580 review P1): home
+ * prefix delegation hands out a /56 (RIPE-690) or /60, and a free tunnel broker
+ * a routed /48 — measured on the /64-only code, one /48 gave 65,536 distinct
+ * 'repair-daily-ip' rows and one /56 gave 256, so 16 /64s of one /48 took all
+ * 50 of the service's daily repairs. The atomic daily caps therefore count an
+ * IPv6 caller at TWO widths (rate-limit.ts consumeDailyCaps): its /64 row (this
+ * key, the cap's own limit) AND the /48 around it (ipWideRateLimitKey, a larger
+ * share that stays under half of the service bucket). The /48 row lives under
+ * its own bucket name (`${bucket}/48`), so it can never be a /64 row. The older
+ * read-then-increment hourly caps (workspace.ts, document intake) and the demo
+ * count the /64 only — see docs/simsa-rate-limit-network-units-2026-10-01.md.
  */
 import type { Env } from "../env.js";
 
@@ -171,7 +182,18 @@ const MAX_IP_TEXT_LENGTH = 64;
 const HEX_GROUP = /^[0-9a-f]{1,4}$/;
 const DEC_OCTET = /^[0-9]{1,3}$/;
 
-/** "a.b.c.d" → four bytes, or null. Only used for an IPv6 address's dotted tail. */
+/**
+ * "a.b.c.d" → four bytes, or null. Only used for an IPv6 address's dotted tail.
+ *
+ * Leading zeros are accepted here on purpose (PR #580 review P2):
+ * "::ffff:001.002.003.004" is read as 1.2.3.4 — stricter than node:net, which
+ * rejects it. Being lenient only ever gathers spellings of one address into ONE
+ * row; it never splits one caller into more counters. A plain dotted IPv4 is
+ * never parsed at all (byte-for-byte continuity of the IPv4 rows), so
+ * "001.002.003.004" stays its own row. Neither spelling comes from
+ * cf-connecting-ip; only the x-forwarded-for fallback (no Cloudflare in front)
+ * can bring one.
+ */
 function parseDottedIpv4(s: string): [number, number, number, number] | null {
   const parts = s.split(".");
   if (parts.length !== 4) return null;
@@ -224,31 +246,68 @@ function parseIpv6Groups(text: string): number[] | null {
   return out;
 }
 
+/** How wide an IPv6 network is counted: one LAN (/64), or the site allocation around it (/48). */
+export type Ipv6PrefixBits = 48 | 64;
+
+/** The wider IPv6 tier of the daily caps (rate-limit.ts consumeDailyCaps). */
+export const IPV6_WIDE_PREFIX_BITS = 48;
+
+/**
+ * Bucket-name suffix of the wider tier's rows. Its stored input is
+ * `${bucket}/48::…` and a /64 row's is `${bucket}::…`, so no caller text can
+ * make one the other.
+ */
+export const IPV6_WIDE_BUCKET_SUFFIX = "/48";
+
+/** A client IP read once: an IPv4 address (only ever from an IPv4-mapped IPv6), or IPv6 groups. */
+type ReadIp = { kind: "ipv4"; dotted: string } | { kind: "ipv6"; groups: readonly number[] };
+
+/**
+ * IPv6 text → its address; null for everything else (plain IPv4 text — never
+ * rewritten — and anything that is not an IP). IPv4-mapped (::ffff:a.b.c.d)
+ * comes back as its IPv4 address.
+ */
+function readIpv6(ip: string): ReadIp | null {
+  if (typeof ip !== "string" || ip.length === 0 || ip.length > MAX_IP_TEXT_LENGTH) return null;
+  if (!ip.includes(":")) return null; // IPv4 (or not an IP): the address itself, never rewritten.
+  let text = ip.trim().toLowerCase();
+  const zone = text.indexOf("%");
+  if (zone !== -1) text = text.slice(0, zone);
+  const g = parseIpv6Groups(text);
+  if (!g) return null;
+  const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = g;
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
+    return { kind: "ipv4", dotted: `${g6 >> 8}.${g6 & 0xff}.${g7 >> 8}.${g7 & 0xff}` };
+  }
+  return { kind: "ipv6", groups: g };
+}
+
+/** "a:b:c:d::/64" or "a:b:c::/48" — lower-case hex, no leading zeros. */
+function ipv6PrefixText(groups: readonly number[], bits: Ipv6PrefixBits): string {
+  const [g0 = 0, g1 = 0, g2 = 0, g3 = 0] = groups;
+  const head = `${g0.toString(16)}:${g1.toString(16)}:${g2.toString(16)}`;
+  return bits === 48 ? `${head}::/48` : `${head}:${g3.toString(16)}::/64`;
+}
+
 /**
  * The network a client IP belongs to — the unit every IP-keyed limit counts.
  *
  *   IPv4                    → unchanged ("198.51.100.7")
  *   IPv6                    → first 64 bits, "2001:db8:abcd:12::/64" (lower-case,
- *                             no leading zeros — "2001:0DB8:ABCD:0012::1" is the same network)
- *   IPv4-mapped (::ffff:…)  → the dotted IPv4 ("::ffff:198.51.100.7" → "198.51.100.7")
- *   not an IP               → unchanged ("", "unknown", "v6:2001:db8::/64", …)
+ *                             no leading zeros — "2001:0DB8:ABCD:0012::1" is the same network);
+ *                             with ipv6Bits = 48 the first 48, "2001:db8:abcd::/48"
+ *   IPv4-mapped (::ffff:…)  → the dotted IPv4 ("::ffff:198.51.100.7" → "198.51.100.7"), at any width
+ *   not an IP               → unchanged ("", "unknown", "v6:2001:db8::/64", "2001:db8::/48", …)
  *
  * Idempotent: networkPrefix(networkPrefix(x)) === networkPrefix(x). The /64
  * text matches PR #575's hosting reporterNetwork() without its "v6:" tag.
+ * The /48 is always computed from the ADDRESS, never from a /64 text (which is
+ * "not an IP" here and passes through).
  */
-export function networkPrefix(ip: string): string {
-  if (typeof ip !== "string" || ip.length === 0 || ip.length > MAX_IP_TEXT_LENGTH) return ip;
-  if (!ip.includes(":")) return ip; // IPv4 (or not an IP): the address itself, never rewritten.
-  let text = ip.trim().toLowerCase();
-  const zone = text.indexOf("%");
-  if (zone !== -1) text = text.slice(0, zone);
-  const g = parseIpv6Groups(text);
-  if (!g) return ip;
-  const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = g;
-  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
-    return `${g6 >> 8}.${g6 & 0xff}.${g7 >> 8}.${g7 & 0xff}`;
-  }
-  return `${g0.toString(16)}:${g1.toString(16)}:${g2.toString(16)}:${g3.toString(16)}::/64`;
+export function networkPrefix(ip: string, ipv6Bits: Ipv6PrefixBits = 64): string {
+  const read = readIpv6(ip);
+  if (!read) return ip;
+  return read.kind === "ipv4" ? read.dotted : ipv6PrefixText(read.groups, ipv6Bits);
 }
 
 /**
@@ -272,6 +331,35 @@ export async function ipRateLimitKey(
   return (
     RATE_LIMIT_KEY_PREFIX +
     (await hmacHex(await subkeyFor(kek, RATE_LIMIT_IP_KEY_LABEL), `${bucket}::${networkPrefix(ip)}`))
+  );
+}
+
+/**
+ * The wider-tier row of an IP-keyed bucket: the /48 around an IPv6 caller,
+ * stored as `"v1:" + HMAC(subkey, `${bucket}/48::a:b:c::/48`)` under the same
+ * IP subkey. null when there is no wider tier to count:
+ *   - IPv4 and IPv4-mapped callers (an IPv4 address is already the whole unit),
+ *   - anything that is not an IPv6 address ("unknown", a tagged "v6:…/64", …),
+ *   - no KEK — the /64 bucket is then ONE shared counter for every caller
+ *     (ipRateLimitKey), already stricter than any wider tier, and not even
+ *     "this caller was IPv6" should reach the table.
+ */
+export async function ipWideRateLimitKey(
+  env: Pick<Env, "CONCLAVE_TOKEN_KEK">,
+  bucket: string,
+  ip: string,
+): Promise<string | null> {
+  const read = readIpv6(ip);
+  if (!read || read.kind !== "ipv6") return null;
+  const kek = kekOf(env);
+  if (!kek) {
+    warnNoKek("ip");
+    return null;
+  }
+  const network = ipv6PrefixText(read.groups, IPV6_WIDE_PREFIX_BITS);
+  return (
+    RATE_LIMIT_KEY_PREFIX +
+    (await hmacHex(await subkeyFor(kek, RATE_LIMIT_IP_KEY_LABEL), `${bucket}${IPV6_WIDE_BUCKET_SUFFIX}::${network}`))
   );
 }
 
