@@ -3,8 +3,8 @@
 // Train C · C-3 — 확인 영수증 (재정렬 D-19 amend).
 //
 // 한 번의 확인이 무엇을, 언제, 어디까지 봤는지를 인쇄·복사 가능한 한 장으로. 수리가 있었다면
-// '고친 내용'(고친 쪽의 사실)과 '다시 확인한 증거'(고친 뒤 실제 앱을 다시 연 별도 확인의 판정)를
-// 서로 다른 섹션으로 둔다 — 고친 주체가 판정하지 않는다.
+// '고친 내용'(고친 쪽의 사실)과 '다시 확인한 증거'(실제 앱을 다시 연 별도 확인의 판정 — 수리가 있으면
+// 그 수리가 끝난 뒤에 시작한 확인만)를 서로 다른 섹션으로 둔다 — 고친 주체가 판정하지 않는다.
 //
 // 새 서버 라우트 없음: 기존 GET 상세 · 수리 잡 · 목록(모두 서버가 프로젝트→userKey, 런→프로젝트 소유권을
 // 확인한다)을 조합하고, 그리는 내용은 순수 함수 buildReceiptView가 정한다(test/visual-check-receipt).
@@ -24,9 +24,14 @@ import {
   type VisualCheckDetail,
   type VisualCheckListItem,
 } from "@/lib/workspace-visual-checks-api";
-import { buildReceiptView, notSeenText, receiptPlainText } from "@/lib/visual-check-receipt.mjs";
+import {
+  buildReceiptView,
+  notSeenText,
+  receiptPlainText,
+  receiptVerdictLabel,
+  recheckTexts,
+} from "@/lib/visual-check-receipt.mjs";
 import type { ReceiptItemStatus, ReceiptNextAction, ReceiptReadyView } from "@/lib/visual-check-receipt.mjs";
-import { verdictLabel } from "@/lib/visual-check-view.mjs";
 import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import { userVerdictLabel } from "@/lib/user-verdict.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -70,7 +75,8 @@ type Loaded =
     };
 
 function VerdictChip({ works, decision, t }: { works: boolean | null; decision: string; t: Dictionary }) {
-  const v = verdictLabel(works, decision, t);
+  // The receipt's own label: "no problem found" reads the same as the items table (PR #572 검증 [12]).
+  const v = receiptVerdictLabel(works, decision, t);
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONE_CLASS[v.tone]}`}>
       {v.label}
@@ -88,7 +94,9 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 function nextHref(projectId: string, runId: string, next: ReceiptNextAction): string {
-  if (next.kind === "viewRecheck") return `/projects/${projectId}/visual-checks/${next.runId}`;
+  if (next.kind === "viewRecheck" || next.kind === "viewRecheckProgress") {
+    return `/projects/${projectId}/visual-checks/${next.runId}`;
+  }
   if (next.kind === "backToProject") return `/projects/${projectId}`;
   return `/projects/${projectId}/visual-checks/${runId}`;
 }
@@ -98,6 +106,7 @@ function ReadyReceipt({ view, projectId, t, locale }: { view: ReceiptReadyView; 
   const fmt = (iso: string) => formatDateTime(iso, locale);
   const fix = view.fix;
   const recheck = view.recheck;
+  const re = recheckTexts(view, r);
   return (
     <>
       {/* 확인한 것 */}
@@ -109,6 +118,7 @@ function ReadyReceipt({ view, projectId, t, locale }: { view: ReceiptReadyView; 
           <MetaRow label={r.checkedAt}><span className="text-gray-500">{fmt(view.checked.at)}</span></MetaRow>
           <MetaRow label={r.resultLabel}>
             <VerdictChip works={view.verdict.works} decision={view.verdict.decision} t={t} />
+            {view.uploaded && <span className="mt-1 block text-xs leading-relaxed text-gray-500">{r.uploadedNote}</span>}
           </MetaRow>
           <MetaRow label={r.yourAnswer}>
             {view.userVerdict ? userVerdictLabel(view.userVerdict, t) : <span className="text-gray-500">{r.yourAnswerNone}</span>}
@@ -180,6 +190,7 @@ function ReadyReceipt({ view, projectId, t, locale }: { view: ReceiptReadyView; 
             {fix.changedFiles !== null && <li>{r.changedFiles.replace("{count}", String(fix.changedFiles))}</li>}
             {fix.buildCheck === "passed" && <li>{r.buildPassed}</li>}
             {fix.buildCheck === "unverified" && <li className="text-amber-700">{r.buildUnverified}</li>}
+            {fix.pendingLive && <li className="text-gray-600">{r.fixPendingLive}</li>}
             {fix.envCause && <li className="text-amber-700">{t.visualChecks.repair.envCauseWarning}</li>}
           </ul>
           {fix.changesUrl && (
@@ -196,10 +207,8 @@ function ReadyReceipt({ view, projectId, t, locale }: { view: ReceiptReadyView; 
       {/* 다시 확인한 증거 — 별도 확인의 판정만(고친 쪽 필드 없음) */}
       {view.showRecheck && (
         <section className="card p-5">
-          <h3 className="section-title">{r.recheckTitle}</h3>
-          {(recheck.state === "done" || recheck.state === "linked") && (
-            <p className="section-desc leading-relaxed">{r.recheckBy}</p>
-          )}
+          <h3 className="section-title">{re.title}</h3>
+          {re.by && <p className="section-desc leading-relaxed">{re.by}</p>}
           {recheck.state === "done" && (
             <dl className="mt-3 space-y-2">
               <MetaRow label={r.recheckResult}>
@@ -215,7 +224,8 @@ function ReadyReceipt({ view, projectId, t, locale }: { view: ReceiptReadyView; 
           )}
           {recheck.state === "active" && <p className="mt-2 text-sm text-gray-600">{r.recheckActive}</p>}
           {recheck.state === "failed" && <p className="mt-2 text-sm text-gray-600">{r.recheckFailed}</p>}
-          {recheck.state === "none" && <p className="mt-2 text-sm leading-relaxed text-gray-600">{r.recheckNone}</p>}
+          {recheck.state === "unknown" && <p className="mt-2 text-sm leading-relaxed text-gray-600">{r.recheckUnknown}</p>}
+          {recheck.state === "none" && <p className="mt-2 text-sm leading-relaxed text-gray-600">{re.none}</p>}
           {(recheck.state === "done" || recheck.state === "linked") && (
             <Link
               href={`/projects/${projectId}/visual-checks/${recheck.runId}/receipt`}

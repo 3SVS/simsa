@@ -140,6 +140,8 @@ describe("④ 고친 내용과 다시 확인한 증거는 서로 다른 섹션",
     const v = mod().buildReceiptView({ check: BASE, repair: REPAIR_AUTO, checks: [RECHECK_ITEM] });
     assert.deepEqual(v.fix, {
       status: "done", kind: "autoFix", changesUrl: REPAIR_AUTO.prUrl, changedFiles: 3, buildCheck: "passed", envCause: false,
+      // PR #572 검증 [13]: 고친 쪽의 사실 — 머지 뒤 재검수 연결이 없으니 아직 실제 앱에 없을 수 있다.
+      pendingLive: true,
     });
     for (const k of ["works", "decision", "verdict", "runId", "resolved"]) assert.ok(!(k in v.fix), `fix must not carry ${k}`);
   });
@@ -243,7 +245,8 @@ describe("⑥ 레거시 런 · 끝나지 않은 런", () => {
 // ─── ⑦ 사전 · 금칙어 · 점수 · 정직 문구 · 글로 복사 ─────────────────────────────
 
 const STATUS_KEYS = ["pass", "broken", "notConfirmed", "noProblemFound"];
-const NEXT_KEYS = ["viewRecheck", "recheckAfterFix", "viewRepair", "fix", "tellUs", "backToProject"];
+// viewRecheckProgress · handOff: PR #572 검증 [10]·[2] (test/visual-check-receipt-review-fixes).
+const NEXT_KEYS = ["viewRecheck", "viewRecheckProgress", "recheckAfterFix", "handOff", "viewRepair", "fix", "tellUs", "backToProject"];
 const NOT_SEEN_KEYS = ["loginBehind", "notReached", "otherPaths"];
 
 function receiptStrings(r) {
@@ -322,6 +325,7 @@ describe("⑦ 뷰·글로 복사에 점수가 없다 (기존 가드 assertNoNume
       // 고친 내용 섹션 안에는 다시 확인 판정 문구가 없다 — 섹션 경계로 자른다.
       const fixPart = text.slice(text.indexOf(r.fixTitle), text.indexOf(r.recheckTitle));
       assert.ok(!fixPart.includes(t.visualChecks.worksNoProblems), `${loc}: verdict leaked into the fix section`);
+      assert.ok(!fixPart.includes(r.status.noProblemFound), `${loc}: the receipt's verdict label leaked into the fix section`);
     });
   }
 

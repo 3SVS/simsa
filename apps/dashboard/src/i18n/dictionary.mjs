@@ -2674,6 +2674,9 @@ const EN = {
       intent: "What the app should do",
       checkedAt: "Checked at",
       resultLabel: "Simsa's result",
+      // PR #572 검증 [6]: a result sent in from a check run elsewhere (executor local) — its verdict
+      // was set by whoever sent it, so the receipt says so instead of printing it as Simsa's own.
+      uploadedNote: "Simsa did not open the app for this result — it is a record sent in from a check run elsewhere.",
       yourAnswer: "Your own answer",
       yourAnswerNone: "Not given yet",
       sourceNote: "This check repeated an earlier one against the same yardstick.",
@@ -2693,7 +2696,9 @@ const EN = {
         otherPaths: "Screens and features outside the flows followed this time.",
       },
       fixTitle: "What was fixed",
-      fixBy: "These are the changes Simsa's fixer made. Whether they work is judged separately, by checking the app again.",
+      // PR #572 검증 [9]: true for every state (in progress, not finished, note only) — it no longer
+      // says changes were made; the line below says what actually happened.
+      fixBy: "This is the fixer's own record. Whether it works is judged separately, by checking the app again.",
       fixActive: "The fix is still in progress.",
       fixFailed: "The fix did not finish.",
       fixAutoFix: "The code was changed.",
@@ -2701,10 +2706,22 @@ const EN = {
       changedFiles: "Files changed: {count}",
       buildPassed: "The changed files passed the basic check (no syntax errors).",
       buildUnverified: "We couldn't confirm that the fixed code actually builds.",
+      // PR #572 검증 [13]: printed and copied too — "the code was changed" must not read as "the live app changed".
+      fixPendingLive: "The changed code is kept separately — your live app stays as it was until the change is approved and put live.",
       openChanges: "Open the changes",
       recheckTitle: "Evidence from checking again",
-      recheckBy: "This verdict comes from a separate check that reopened the live app — not from whoever made the fix.",
+      // PR #572 검증 [3]·[11]: the wording follows how the check is linked. "after the fix" only for the
+      // check that ran after the fix went in (linked to the fix); a check that merely repeated this one
+      // says who judged it without claiming the fix was in the live app; with no fix, no fix is mentioned.
+      recheckBy: "This verdict comes from a separate check that reopened the live app after the fix — not from whoever made the fix.",
+      recheckBySource:
+        "This verdict comes from a separate check that reopened the live app against the same yardstick — not from whoever made the fix. This record alone can't show what was in the live app at the time.",
+      recheckBySourceNoFix: "This verdict comes from a separate check that reopened the live app against the same yardstick.",
+      recheckTitleNoFix: "Checking again against the same yardstick",
       recheckNone: "Not checked again yet. Whether a fix works in the live app is only known after checking again.",
+      recheckNoneNoFix: "Not checked again yet. Whether it works after a fix is only known by checking again.",
+      // PR #572 검증 [5]: the list holds only the most recent checks — never deny what may lie beyond it.
+      recheckUnknown: "Many checks have run since this one, so this page couldn't tell whether it was checked again.",
       recheckActive: "Checking again right now.",
       recheckFailed: "Checking again did not finish.",
       recheckResult: "Result of checking again",
@@ -2717,7 +2734,11 @@ const EN = {
       nextTitle: "What to do next",
       next: {
         viewRecheck: "See the result of checking again",
+        // PR #572 검증 [10]: checking again is still running — there is no result to see yet.
+        viewRecheckProgress: "See how checking again is going",
         recheckAfterFix: "Check again after the fix",
+        // PR #572 검증 [2]·[4]: a fix note only — nothing changed in the app, so checking again would loop.
+        handOff: "Hand over the fix note to keep fixing",
         viewRepair: "See how the fix is going",
         fix: "Fix it from the result page",
         tellUs: "Tell us how it went for you",
@@ -2725,7 +2746,9 @@ const EN = {
       },
       nextWhy: {
         viewRecheck: "The newer check shows what changed.",
+        viewRecheckProgress: "Once checking again finishes, you can see what changed.",
         recheckAfterFix: "Only checking again, once the fix is in your live app, shows whether it works.",
+        handOff: "The code hasn't changed yet. Give the fix note to whoever builds your app — a person or a tool — and check again once it's fixed.",
         viewRepair: "The fix is still being prepared.",
         fix: "Something here still needs fixing.",
         tellUs: "Only you can tell whether it works the way you meant.",
@@ -5599,6 +5622,9 @@ const KO = {
       intent: "확인한 의도",
       checkedAt: "확인한 시각",
       resultLabel: "Simsa 확인 결과",
+      // PR #572 검증 [6]: 따로 돌린 확인이 올린 기록(executor local) — 판정은 올린 쪽이 정한 값이라,
+      // Simsa가 연 확인처럼 인쇄하지 않고 그렇다고 적는다.
+      uploadedNote: "이 결과는 Simsa가 앱을 직접 연 확인이 아니라, 따로 돌린 확인이 올려 준 기록이에요.",
       yourAnswer: "직접 써 보신 결과",
       yourAnswerNone: "아직 남기지 않으셨어요",
       sourceNote: "이 확인은 이전 확인을 같은 기준으로 다시 한 거예요.",
@@ -5618,7 +5644,9 @@ const KO = {
         otherPaths: "이번에 따라가 본 흐름 밖의 화면과 기능",
       },
       fixTitle: "고친 내용",
-      fixBy: "Simsa의 고치기가 만든 변경이에요. 작동하는지는 앱을 다시 확인해서 따로 판정해요.",
+      // PR #572 검증 [9]: 진행 중·못 마침·지시서만 올림에도 맞는 말 — '만든 변경'이 있다고 단정하지 않는다.
+      // 실제로 무엇을 했는지는 바로 아래 줄이 말한다.
+      fixBy: "고치기 쪽이 남긴 기록이에요. 작동하는지는 앱을 다시 확인해서 따로 판정해요.",
       fixActive: "아직 고치는 중이에요.",
       fixFailed: "고치기를 마치지 못했어요.",
       fixAutoFix: "코드를 바꿨어요.",
@@ -5626,10 +5654,22 @@ const KO = {
       changedFiles: "바뀐 파일 {count}개",
       buildPassed: "바뀐 파일이 기본 점검(문법 오류 확인)을 통과했어요.",
       buildUnverified: "고친 코드가 실제로 빌드되는지는 확인하지 못했어요.",
+      // PR #572 검증 [13]: 인쇄·복사본에도 남는다 — '코드를 바꿨어요'가 '실제 앱이 바뀌었다'로 읽히지 않게.
+      fixPendingLive: "바뀐 코드는 따로 보관돼 있어요. 승인하고 실제 앱에 반영하기 전까지 실제 앱은 그대로예요.",
       openChanges: "고친 내용 열어 보기",
       recheckTitle: "다시 확인한 증거",
+      // PR #572 검증 [3]·[11]: 이어진 방식대로 말한다. '고친 뒤'는 고친 내용이 들어간 뒤 그 수리에 이어져
+      // 돌아간 확인만. 이 확인을 같은 기준으로 다시 해 본 것은 판정 주체만 말하고 '고친 뒤'라고 단정하지
+      // 않는다(고친 내용이 실제 앱에 들어가기 전에도 누를 수 있다). 수리가 없으면 수리를 말하지 않는다.
       recheckBy: "이 판정은 고친 쪽이 아니라, 고친 뒤 실제 앱을 다시 연 별도의 확인이 내린 거예요.",
+      recheckBySource:
+        "이 판정은 고친 쪽이 아니라, 같은 기준으로 실제 앱을 다시 연 별도의 확인이 내린 거예요. 그때 실제 앱에 무엇이 반영돼 있었는지는 이 기록만으로는 알 수 없어요.",
+      recheckBySourceNoFix: "이 판정은 같은 기준으로 실제 앱을 다시 연 별도의 확인이 내린 거예요.",
+      recheckTitleNoFix: "같은 기준으로 다시 한 확인",
       recheckNone: "아직 다시 확인하지 않았어요. 고친 내용이 실제 앱에서 작동하는지는 다시 확인해야 알 수 있어요.",
+      recheckNoneNoFix: "아직 다시 확인하지 않았어요. 고친 다음 다시 확인해야 작동하는지 알 수 있어요.",
+      // PR #572 검증 [5]: 목록은 최근 확인만 담는다 — 그 밖에 있을 수 있는 기록을 '없다'고 하지 않는다.
+      recheckUnknown: "이 확인 뒤로 확인 기록이 많이 쌓여서, 다시 확인한 기록이 있는지 이 화면에서는 알 수 없어요.",
       recheckActive: "지금 다시 확인하고 있어요.",
       recheckFailed: "다시 확인이 끝나지 못했어요.",
       recheckResult: "다시 확인한 결과",
@@ -5642,7 +5682,11 @@ const KO = {
       nextTitle: "다음 할 일",
       next: {
         viewRecheck: "다시 확인한 결과 보기",
+        // PR #572 검증 [10]: 다시 확인이 아직 진행 중 — 볼 결과가 아직 없다.
+        viewRecheckProgress: "다시 확인하는 상황 보기",
         recheckAfterFix: "고친 뒤 다시 확인하기",
+        // PR #572 검증 [2]·[4]: 고침 지시서만 올렸다 — 앱에 반영할 수정이 없어 다시 확인은 도돌이다.
+        handOff: "고침 지시서 넘겨 이어서 고치기",
         viewRepair: "고치는 상황 보기",
         fix: "결과 화면에서 고치기",
         tellUs: "직접 써 본 결과 알려 주기",
@@ -5650,7 +5694,9 @@ const KO = {
       },
       nextWhy: {
         viewRecheck: "더 최근 확인에서 무엇이 달라졌는지 볼 수 있어요.",
+        viewRecheckProgress: "다시 확인이 끝나면 무엇이 달라졌는지 볼 수 있어요.",
         recheckAfterFix: "고친 내용이 실제 앱에 반영된 뒤 다시 확인해야 작동하는지 알 수 있어요.",
+        handOff: "코드는 아직 바뀌지 않았어요. 고침 지시서를 앱을 만드는 분이나 도구에 넘겨 고친 다음, 다시 확인해 주세요.",
         viewRepair: "아직 고칠 내용을 준비하고 있어요.",
         fix: "아직 고칠 것이 남아 있어요.",
         tellUs: "생각한 대로 움직이는지는 직접 써 보신 분만 알 수 있어요.",
