@@ -86,7 +86,9 @@ test("playwright version pinned identically in builder base image, builder packa
 });
 
 test("Dockerfile installs the T1 toolchain (pnpm · wrangler · git · gh) and copies the runner scripts", () => {
-  assert.match(dockerfile, /npm install -g pnpm@\d+ wrangler@\d+/, "must install pinned-major pnpm + wrangler");
+  // B-5b-3: pnpm은 템플릿 packageManager와 같은 정확한 버전(pnpm@10.34.5) — 메이저만 고정하던 종전 모양도 받는다.
+  assert.match(dockerfile, /npm install -g pnpm@\d+(?:\.\d+\.\d+)? wrangler@\d+/, "must install pinned pnpm + pinned-major wrangler");
+  assert.match(dockerfile, /COPY\s+apps\/central-plane\/builder-container\/builder-work\.mjs/, "must COPY builder-work.mjs (B-5b-2 — builder-run.mjs imports it)");
   assert.match(dockerfile, /apt-get install -y --no-install-recommends git/, "must install git");
   assert.match(dockerfile, /apt-get install -y --no-install-recommends gh/, "must install gh");
   assert.match(dockerfile, /COPY\s+apps\/central-plane\/builder-container\/server\.mjs/, "must COPY server.mjs");

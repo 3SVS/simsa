@@ -22,6 +22,8 @@
  *
  * PRIVACY: jobToken은 로그에 쓰지 않는다 — 로그 줄에는 jobId만. B-5b S1부터 페이로드에 운영 토큰·전역 콜백 토큰·
  * LLM 키·userKey가 없다(오면 validateBuildPayload가 거절). 콜백 Bearer = 이 잡의 jobToken.
+ * B-5b-2: 이 서버는 root로 돌고 jobToken은 이 프로세스 메모리에만 있다. 생성 코드는 샌드박스 사용자(SIMSA_SANDBOX_UID)로
+ * 돈다(builder-work.mjs) — 이 프로세스의 메모리·환경을 읽을 수 없다. 빌드 잡은 인스턴스당 하나(두 번째는 409 builder_busy).
  */
 import { createServer } from "node:http";
 import {
@@ -83,6 +85,12 @@ const server = createServer(async (req, res) => {
     const vb = validateBuildPayload(payload);
     if (!vb.ok) {
       json(res, 400, { error: `invalid build payload: ${vb.errors.join(", ")}` });
+      return;
+    }
+    // B-5b-2: 인스턴스 하나 = 빌드 잡 하나(DO 이름 `build-<jobId>`). 두 번째 빌드는 정당한 경로가 없다 — 생성 코드(같은 컨테이너,
+    // 샌드박스 사용자)가 localhost:8080으로 같은 jobId를 다시 넣어 작업 폴더를 지우거나 드레인 목록을 덮어쓰지 못하게 409.
+    if (inFlightJobs.has(payload.jobId) || [...inFlightJobs.values()].some((e) => e.payload.kind === "build")) {
+      json(res, 409, { error: "builder_busy" });
       return;
     }
   }

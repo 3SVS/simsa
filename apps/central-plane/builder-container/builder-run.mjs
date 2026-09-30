@@ -15,10 +15,15 @@
  *            주면 그 WBS에서 멈추고(지금까지 만든 것은 커밋) failed(<단계>, budget_exhausted). 원가·원장은 프록시가 쓰므로
  *            콜백 본문에 usage[]·spentUsd를 싣지 않는다(이중 계상 금지 — 종전 usage 우편함은 빌드 잡에서 제거).
  *            자식 프로세스 env는 허용 목록(childEnv — agent-worker filterEnv와 같은 키)만: jobToken은 env에 없다.
+ *   B-5b-2   implementing — deps.implementWbs 기본값 = WBS별 agent-worker runBuildLoop(프록시 클라이언트 · 작업 폴더 실행기 —
+ *            builder-work.mjs createDefaultImplementWbs). WBS마다 로컬 커밋("feat(WBS-001): …") + progress(implementing,
+ *            wbs_done, meta{wbsId}). 끝내 done이 아니면 WBS_FAILURE_POLICY: must면 멈춤, 아니면 기록·되돌리고 계속.
+ *   B-5b-3   빌드 게이트(D-4) — 보호 파일 복원 → pnpm install --frozen-lockfile --offline → pnpm run build → pnpm test.
+ *            빨간불 → 로그 끝부분으로 수리 라운드(최대 GATE_LIMITS.repairRounds) → 그래도 빨간불이면 failed(building|testing).
+ *            초록불이어도 push·배포는 Worker 몫(S3)이라 `builder_stage_not_implemented:pushed`로 정직하게 멈춘다.
+ *            생성 코드는 샌드박스 사용자(SIMSA_SANDBOX_UID)로 돈다 — 서버(root) 메모리의 jobToken에 닿지 않는다.
  *
- * 다음 스테이지가 이 모듈을 채운다(계획 §5.2 Train B):
- *   B-5b-2 implement — deps.implementWbs 기본값 = WBS별 runBuildLoop(client = buildLlmConfig로 만든 프록시 클라이언트)
- *   B-5b-3 build/test — pnpm build · pnpm test · playwright, green 아니면 failed(building|testing)
+ * 다음 스테이지(계획 §5.2 Train B):
  *   B-5b-4 deploy     — Worker가 Workers for Platforms 업로드 + 프로젝트 D1 마이그레이션 + deployedUrl
  *   B-5b-5 push/done  — Worker가 저장소 push · done · 자동 T2 검수
  *
@@ -29,13 +34,35 @@
  *  - 콜백 계약은 Worker가 정한다(routes/workspace-build-jobs.ts): progress는 진행 상태만(최종 상태 400),
  *    최종 본문의 실패 단계 키는 `failedStage`.
  */
-import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  CHILD_ENV_KEYS,
+  GATE_COMMANDS,
+  GATE_LIMITS,
+  WBS_TIME_LIMIT_MS,
+  checkSandbox,
+  childEnv,
+  chownTree,
+  createDefaultImplementWbs,
+  decideWbsFailure,
+  installArgs,
+  redactSecrets,
+  restoreProtected,
+  sandboxExec,
+  sandboxFromEnv,
+  snapshotProtected,
+  stripAnsi,
+  tailText,
+  workEnv,
+} from "./builder-work.mjs";
+
+// 테스트·server.mjs가 builder-run.mjs 하나에서 가져가도록 다시 내보낸다(자식 env는 B-5b S1 계약).
+export { CHILD_ENV_KEYS, childEnv };
 
 /** 이미지 롤아웃 확인용 마커(인스펙터 RUNNER_REV와 같은 용도 — 옛 이미지가 서빙 중인지 판별). */
-export const RUNNER_REV = "b5bS1-builder-6";
+export const RUNNER_REV = "b5bS2-builder-7";
 
 /**
  * D-4 잡 상태 머신 — **D1 build_jobs.status와 같은 목록·같은 순서**(build-job-db.ts BUILD_JOB_STATUSES).
@@ -54,8 +81,11 @@ export const BUILD_STAGES = Object.freeze([
   "failed",
 ]);
 
-/** 이 이미지가 **실제로** 수행하는 단계. 나머지는 `builder_stage_not_implemented:<단계>`로 실패한다. */
-export const IMPLEMENTED_BUILD_STAGES = Object.freeze(["scaffolding"]);
+/**
+ * 이 이미지가 **실제로** 수행하는 단계. 나머지(pushed·deploying — Worker 몫, S3)는 `builder_stage_not_implemented:<단계>`로
+ * 실패한다. 빌드 게이트가 초록불이어도 done을 주장하지 않는다(done은 Worker만 — PR #569 S1 결함 2).
+ */
+export const IMPLEMENTED_BUILD_STAGES = Object.freeze(["scaffolding", "implementing", "building", "testing"]);
 
 /** Worker가 progress 콜백으로 받는 상태(최종 상태 done·failed는 build-done으로만). */
 const PROGRESS_STATUSES = new Set(BUILD_STAGES.filter((s) => s !== "done" && s !== "failed"));
@@ -163,42 +193,13 @@ export function parseVersion(stdout) {
 }
 
 /**
- * 자식 프로세스에 넘기는 환경변수 키 — **허용 목록만**(B-5b S1). packages/agent-worker build-policy.ts
- * ALLOWED_ENV_KEYS와 같은 목록이다(테스트가 실제 dist와 비교해 고정). 이 이미지의 process.env에는 비밀이 없지만
- * (SimsaBuilder envVars = NODE_ENV·WORK_ROOT), 생성 코드가 도는 자식에게는 필요한 것만 준다. jobToken은 env에 **없다**
- * (페이로드 메모리에만 — 콜백·LLM 설정에서만 쓴다).
+ * 기본 실행기 — builder-work.mjs sandboxExec(spawn · 프로세스 그룹 · 시간·출력 상한 · 샌드박스 uid). 테스트는 이걸 갈아끼운다.
+ * `signal`(잡 마감·SIGTERM·WBS 시간 상한)이 끊기면 자식 **그룹**을 죽인다 — 마감 뒤에 설치·빌드가 계속 돌지 않게.
+ * env는 호출자가 준 것(runBuild는 workEnv() — 허용 목록 + HOME·NO_COLOR) — 없으면 childEnv(process.env).
+ * process.env를 통째로 넘기지 않는다. 출력은 1M자 안에서 앞·끝만(넘쳐도 자식을 죽이지 않는다).
  */
-export const CHILD_ENV_KEYS = Object.freeze([
-  "PATH", "HOME", "LANG", "LC_ALL", "TZ", "TMPDIR", "TEMP", "TMP", "SHELL",
-  "NODE_ENV", "NODE_OPTIONS", "CI", "PNPM_HOME", "npm_config_registry", "COREPACK_ENABLE_STRICT",
-  "PLAYWRIGHT_BROWSERS_PATH",
-]);
-const CHILD_ENV_KEY_SET = new Set(CHILD_ENV_KEYS);
-
-/** base env(보통 process.env)에서 허용 키만. 값이 문자열인 것만. */
-export function childEnv(base = process.env) {
-  const out = {};
-  for (const [k, v] of Object.entries(base ?? {})) if (CHILD_ENV_KEY_SET.has(k) && typeof v === "string") out[k] = v;
-  return out;
-}
-
-/**
- * 기본 실행기 — child_process.execFile, 타임아웃 포함. 테스트는 이걸 갈아끼운다.
- * `signal`(잡 마감·SIGTERM)이 끊기면 자식 프로세스를 죽인다 — 마감 뒤에 설치·빌드가 계속 돌지 않게.
- * env는 호출자가 준 것(runBuild는 childEnv()) — 없으면 childEnv(process.env). process.env를 통째로 넘기지 않는다.
- */
-export function defaultExec(cmd, args, { timeoutMs = 15_000, cwd, signal, env } = {}) {
-  return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: timeoutMs, cwd, env: env ?? childEnv(process.env), maxBuffer: 1024 * 1024, ...(signal ? { signal } : {}) }, (err, stdout, stderr) => {
-      resolve({
-        ok: !err,
-        code: err ? (typeof err.code === "number" ? err.code : -1) : 0,
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        error: err ? String(err.message ?? err).slice(0, 200) : null,
-      });
-    });
-  });
+export function defaultExec(cmd, args, opts = {}) {
+  return sandboxExec(cmd, args, { maxOutputBytes: 1024 * 1024, ...opts });
 }
 
 /** 작업 디렉터리가 실제로 쓰기 가능한지(권한·디스크). */
@@ -216,7 +217,8 @@ export async function checkWorkRoot(workRoot, fsImpl = fs) {
 
 /**
  * 자가점검. 각 도구를 한 번씩 실행해 버전과 소요 시간을 돌려준다.
- * ok = 모든 필수 도구가 있고 + 금지 CLI가 없고 + 작업 디렉터리가 쓰기 가능 + agent-worker import 가능 + 템플릿 있음.
+ * ok = 모든 필수 도구가 있고 + 금지 CLI가 없고 + 작업 디렉터리가 쓰기 가능 + agent-worker import 가능 + 템플릿 있음
+ *      + 샌드박스(B-5b-2): 설정돼 있으면 실제로 쓸 수 있어야 한다(root · 사용자 집 폴더 소유). 설정이 없으면(개발 PC) enabled:false.
  */
 export async function selfCheck({
   exec = defaultExec,
@@ -227,6 +229,9 @@ export async function selfCheck({
   agentWorkerEntry = AGENT_WORKER_ENTRY,
   templateDir = TEMPLATE_DIR,
   templateFs = fs,
+  sandboxEnv = process.env,
+  getuid,
+  sandboxFs = fs,
 } = {}) {
   const t0 = Date.now();
   const tools = [];
@@ -243,8 +248,9 @@ export async function selfCheck({
   const workRootCheck = await checkWorkRoot(workRoot, fsImpl);
   const agentWorker = await checkAgentWorker({ entry: agentWorkerEntry, loadAgentWorker });
   const template = await checkTemplate(templateDir, templateFs);
-  const ok = tools.every((t) => t.ok) && forbidden.length === 0 && workRootCheck.ok && agentWorker.ok && template.ok;
-  return { ok, runnerRev: RUNNER_REV, tools, forbiddenPresent: forbidden, workRoot: workRootCheck, agentWorker, template, totalMs: Date.now() - t0 };
+  const sandbox = await checkSandbox({ env: sandboxEnv, ...(getuid ? { getuid } : {}), fsImpl: sandboxFs });
+  const ok = tools.every((t) => t.ok) && forbidden.length === 0 && workRootCheck.ok && agentWorker.ok && template.ok && sandbox.ok;
+  return { ok, runnerRev: RUNNER_REV, tools, forbiddenPresent: forbidden, workRoot: workRootCheck, agentWorker, template, sandbox, totalMs: Date.now() - t0 };
 }
 
 // ─── B-5b-1: 빌드 페이로드 검증 (외부 경계 — 명시 가드) ─────────────────────────────────────────────
@@ -350,7 +356,8 @@ export function validateBuildPayload(payload) {
         typeof w === "object" && w !== null &&
         isStr(w.id, 40) && isStr(w.title, 300) &&
         typeof w.order === "number" && Number.isFinite(w.order) &&
-        isStrArray(w.acceptanceIds) && isStrArray(w.dependsOn),
+        isStrArray(w.acceptanceIds) && isStrArray(w.dependsOn) &&
+        (w.must === undefined || typeof w.must === "boolean"),
     );
   if (!wbsOk) errors.push("spec.wbs");
 
@@ -374,7 +381,8 @@ export function validateBuildPayload(payload) {
       model: llm.model,
       openaiModel: typeof llm.openaiModel === "string" ? llm.openaiModel : null,
       preferFallback: llm.preferFallback,
-      wbs: wbsRaw.map((w) => ({ id: w.id, title: w.title, order: w.order, acceptanceIds: [...w.acceptanceIds], dependsOn: [...w.dependsOn] })),
+      // must가 없으면(옛 Worker) must로 — 확인 못 한 항목을 선택 사항으로 낮추지 않는다(WBS_FAILURE_POLICY 보수 쪽).
+      wbs: wbsRaw.map((w) => ({ id: w.id, title: w.title, order: w.order, acceptanceIds: [...w.acceptanceIds], dependsOn: [...w.dependsOn], must: w.must !== false })),
     },
   };
 }
@@ -444,8 +452,12 @@ export function progressBody(job, status, { message = "", meta = {}, wbsDone = 0
   return { jobId: job.jobId, status, message, meta, wbsDone, wbsTotal: job.wbs.length };
 }
 
-/** /internal/build-done 실패 본문. 실패 단계 키는 Worker가 읽는 `failedStage`. */
-export function failureBody(jobId, { failedStage, error, wbsDone = 0 }) {
+/**
+ * /internal/build-done 실패 본문. 실패 단계 키는 Worker가 읽는 `failedStage`.
+ * buildExitCode·testExitCode(빌드 게이트 실패 때만)는 참고용이다 — Worker는 컨테이너의 종료 코드 주장을 저장하지 않는다
+ * (build_exit_code는 Worker 소유 — PR #569 S1 결함 1). 사람이 읽을 코드는 error(`build_failed:exit_2`)와 진행 이벤트 logTail에.
+ */
+export function failureBody(jobId, { failedStage, error, wbsDone = 0, buildExitCode, testExitCode }) {
   return {
     jobId,
     ok: false,
@@ -453,6 +465,8 @@ export function failureBody(jobId, { failedStage, error, wbsDone = 0 }) {
     failedStage: String(failedStage ?? "unknown").slice(0, 40),
     error: String(error ?? "unknown_error").slice(0, 500),
     wbsDone,
+    ...(Number.isInteger(buildExitCode) ? { buildExitCode } : {}),
+    ...(Number.isInteger(testExitCode) ? { testExitCode } : {}),
   };
 }
 
@@ -566,8 +580,11 @@ export async function scaffoldTemplate({ templateDir = TEMPLATE_DIR, appDir, slu
   return { files, templateVersion: typeof pkg?.version === "string" ? pkg.version : null };
 }
 
-/** 스캐폴드 커밋 작성자 — 저장소에 남는다(push는 B-5b-5). 서명·전역 설정에 기대지 않는다. */
-const GIT_IDENTITY = ["-c", "user.name=Simsa Builder", "-c", "user.email=builder@simsa.page", "-c", "commit.gpgsign=false"];
+/**
+ * 스캐폴드 커밋 작성자 — 저장소에 남는다(push는 B-5b-5). 서명·전역 설정에 기대지 않는다.
+ * core.hooksPath=/dev/null(B-5b-2): 생성 코드가 .git/hooks에 무엇을 심어도 우리 git이 실행하지 않는다.
+ */
+const GIT_IDENTITY = ["-c", "user.name=Simsa Builder", "-c", "user.email=builder@simsa.page", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"];
 
 /**
  * 로컬 저장소 초기화 + 스캐폴드 커밋. 커밋 sha를 돌려준다. 실패는 `git_<단계>_failed`로 던진다.
@@ -609,30 +626,180 @@ export async function commitWork({ appDir, exec, signal = null, message, env }) 
   return head.stdout.trim();
 }
 
+/**
+ * 마지막 커밋으로 되돌린다(B-5b-2 — 계속 가는 실패 WBS의 반쯤 쓴 코드가 뒤 WBS·게이트를 막지 않게).
+ * `clean -fd`는 무시 파일(node_modules·dist)을 남긴다(-x 없음). 실패는 `git_<단계>_failed`로 던진다.
+ */
+export async function revertWork({ appDir, exec, signal = null, env }) {
+  const steps = [
+    ["reset", [...GIT_IDENTITY, "reset", "-q", "--hard", "HEAD"]],
+    ["clean", [...GIT_IDENTITY, "clean", "-q", "-f", "-d"]],
+  ];
+  for (const [name, args] of steps) {
+    if (signal?.aborted) throw new Error("job_aborted");
+    const r = await exec("git", args, { cwd: appDir, timeoutMs: 60_000, signal, env });
+    if (!r.ok) throw new Error(`git_${name}_failed:${String(r.error ?? r.stderr ?? "").slice(0, 120)}`);
+  }
+}
+
+// ─── B-5b-2 · B-5b-3: 설치 · 시간 상한 · 게이트 ─────────────────────────────────────────────────────
+
+function exitLabel(r) {
+  return r?.timedOut ? "timeout" : `exit_${typeof r?.code === "number" ? r.code : -1}`;
+}
+
+/**
+ * 스캐폴드 직후 의존성 설치(lockfile 고정). 먼저 **오프라인**(이미지가 샌드박스 저장소에 미리 받아 둔 것) — 저장소가 비었으면
+ * (개발 환경·옛 이미지) 한 번만 레지스트리로(`--prefer-offline`). 네트워크는 이 설치 단계에서만 쓴다. mode로 어느 쪽이었는지 남긴다.
+ */
+async function installDeps({ appDir, exec, env, signal, sandbox }) {
+  const opts = { cwd: appDir, env, timeoutMs: GATE_LIMITS.installMs, signal, maxOutputBytes: GATE_LIMITS.maxOutputBytes };
+  const t0 = Date.now();
+  const offline = await exec("pnpm", installArgs({ storeDir: sandbox?.storeDir ?? null, offline: true }), opts);
+  if (offline.ok || offline.aborted || signal?.aborted) return { ok: offline.ok, mode: "offline", result: offline, ms: Date.now() - t0 };
+  const online = await exec("pnpm", installArgs({ storeDir: sandbox?.storeDir ?? null, offline: false }), opts);
+  return { ok: online.ok, mode: "network", result: online, ms: Date.now() - t0 };
+}
+
+/**
+ * fn(signal)을 ms 안에서. 부모 신호(잡 마감·SIGTERM)도 잇는다. 던지면 llm_error 모양 결과로.
+ * 반환 { outcome, timedOut } — 시간이 넘었으면 결과가 무엇이든 limit_time으로 분류한다(호출자).
+ */
+async function runTimed(ms, parentSignal, fn) {
+  const ac = new AbortController();
+  const onParent = () => ac.abort(parentSignal.reason);
+  if (parentSignal?.aborted) ac.abort(parentSignal.reason);
+  else parentSignal?.addEventListener?.("abort", onParent, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ac.abort(new Error("wbs_time_limit"));
+  }, Math.max(1, ms));
+  try {
+    let outcome;
+    try {
+      outcome = await fn(ac.signal);
+    } catch (err) {
+      outcome = { status: "llm_error", summary: String(err?.message ?? err).slice(0, 300), error: err };
+    }
+    return { outcome, timedOut };
+  } finally {
+    clearTimeout(timer);
+    parentSignal?.removeEventListener?.("abort", onParent);
+  }
+}
+
+/**
+ * 빌드 게이트(D-4). 반환 { ok:true, rounds } | { ok:false, failedStage, error, buildExitCode?, testExitCode? }.
+ *   반복: 보호 파일 복원 → install(frozen·offline, 실패는 수리 없음 — 의존성은 고정) → build → (처음이면 testing 진입) → test.
+ *   build/test 빨간불 → 진행 이벤트(끝부분 로그, 비밀 가림) → 라운드가 남았으면 repair() 후 처음부터, 아니면 실패.
+ * 진행 상태는 뒤로 가지 않는다(Worker STAGE_ORDER): testing에 들어간 뒤의 빌드 실패도 이벤트 상태는 testing이고,
+ * 최종 failedStage는 **빨간 명령의 단계**(빌드면 building, 테스트면 testing)다.
+ */
+async function runGate({ appDir, exec, env, offlineEnv, sandbox, signal, fsImpl, snapshot, progress, onStage, repair, literals, limits = GATE_LIMITS, wbsFailed = [] }) {
+  let rounds = 0;
+  let testing = false;
+  const status = () => (testing ? "testing" : "building");
+  const clean = (r) => redactSecrets(stripAnsi(`${r?.stdout ?? ""}\n${r?.stderr ?? ""}`), literals).trim();
+  const stop = (failedStage, error, extra = {}) => ({ ok: false, failedStage, error, ...extra });
+  const cmdOpts = (cmdEnv, timeoutMs) => ({ cwd: appDir, env: cmdEnv, timeoutMs, signal, maxOutputBytes: limits.maxOutputBytes });
+  const aborted = (r) => r?.aborted === true || signal?.aborted === true;
+
+  const s0 = await progress("building", "gate_started", { wbsFailed, repairRounds: limits.repairRounds });
+  if (s0) return stop("building", s0);
+  for (;;) {
+    if (signal?.aborted) return stop(status(), "job_aborted");
+    let restored;
+    try {
+      restored = await restoreProtected(appDir, snapshot, { sandbox, fsImpl });
+    } catch (err) {
+      return stop(status(), `restore_failed:${String(err?.message ?? err).slice(0, 120)}`);
+    }
+    if (restored.length > 0) {
+      const s = await progress(status(), "protected_restored", { files: restored });
+      if (s) return stop(status(), s);
+    }
+
+    const inst = await exec("pnpm", installArgs({ storeDir: sandbox?.storeDir ?? null, offline: true }), cmdOpts(env, limits.installMs));
+    if (aborted(inst)) return stop(status(), "job_aborted");
+    if (!inst.ok) {
+      await progress(status(), "install_failed", { exit: exitLabel(inst), logTail: tailText(clean(inst), limits.eventLogTailChars) });
+      return stop("building", `install_failed:${exitLabel(inst)}`);
+    }
+
+    const [bCmd, bArgs] = GATE_COMMANDS.build;
+    const t0 = Date.now();
+    const b = await exec(bCmd, [...bArgs], cmdOpts(offlineEnv, limits.buildMs));
+    if (aborted(b)) return stop(status(), "job_aborted");
+    if (!b.ok) {
+      const tail = clean(b);
+      const final = rounds >= limits.repairRounds;
+      const s = await progress(status(), "build_failed", { exit: exitLabel(b), round: rounds, final, logTail: tailText(tail, limits.eventLogTailChars) });
+      if (final) return stop("building", `build_failed:${exitLabel(b)}`, { buildExitCode: b.code });
+      if (s) return stop(status(), s);
+      rounds += 1;
+      const rep = await repair({ stage: "building", status: status(), round: rounds, maxRounds: limits.repairRounds, command: `${bCmd} ${bArgs.join(" ")}`, exitLabel: exitLabel(b), logTail: tailText(tail, limits.logTailChars) });
+      if (rep.stop) return stop("building", rep.stop);
+      continue;
+    }
+    const buildMs = Date.now() - t0;
+    if (!testing) {
+      testing = true;
+      onStage("testing");
+      const s = await progress("testing", "test_started", { buildMs, round: rounds });
+      if (s) return stop("testing", s);
+    }
+
+    const [tCmd, tArgs] = GATE_COMMANDS.test;
+    const t = await exec(tCmd, [...tArgs], cmdOpts(offlineEnv, limits.testMs));
+    if (aborted(t)) return stop("testing", "job_aborted");
+    if (!t.ok) {
+      const tail = clean(t);
+      const final = rounds >= limits.repairRounds;
+      const s = await progress("testing", "test_failed", { exit: exitLabel(t), round: rounds, final, logTail: tailText(tail, limits.eventLogTailChars) });
+      if (final) return stop("testing", `test_failed:${exitLabel(t)}`, { buildExitCode: 0, testExitCode: t.code });
+      if (s) return stop("testing", s);
+      rounds += 1;
+      const rep = await repair({ stage: "testing", status: "testing", round: rounds, maxRounds: limits.repairRounds, command: `${tCmd} ${tArgs.join(" ")}`, exitLabel: exitLabel(t), logTail: tailText(tail, limits.logTailChars) });
+      if (rep.stop) return stop("testing", rep.stop);
+      continue;
+    }
+    const s = await progress("testing", "gate_passed", { rounds, buildExit: 0, testExit: 0 });
+    if (s) return stop("testing", s);
+    return { ok: true, rounds };
+  }
+}
+
 // ─── B-5b-1: kind "build" 실행 ─────────────────────────────────────────────────────────────────
 
 /**
  * 빌드 잡(kind "build"). 반환값은 server.mjs가 callbackUrl(/internal/build-done)로 보내는 본문.
- * 이 이미지에서는 **항상 ok:false** — scaffolding까지만 실제로 하고 implementing에서 정직하게 멈춘다
- * (deps.implementWbs가 없을 때. B-5b-2가 기본값을 runBuildLoop로 채운다).
+ * 이 이미지에서는 **항상 ok:false** — 초록불 게이트까지 가도 push·배포는 Worker 몫(S3)이라 `builder_stage_not_implemented:pushed`.
  *
  * 진행 콜백 응답 처리(비용 방어):
  *   - 기록됨(2xx + Worker JSON `{ok:true}`)인데 transitioned:false → Worker가 이 잡을 활성으로 보지 않는다(스턱 스윕·
- *     디스패치 실패로 이미 failed) → 즉시 멈춘다(`job_not_active`). 기록되지 않는 빌드에 돈을 쓰지 않는다.
+ *     디스패치 실패·킬스위치로 이미 failed) → 즉시 멈춘다(`job_not_active`). 기록되지 않는 빌드에 돈을 쓰지 않는다.
  *   - 2xx라도 Worker 응답이 아니면 기록되지 않은 것 — 5xx처럼 계속 간다(PR #569 검증 결함 2).
  *   - 4xx → 계약 파손·토큰 불일치(다른 잡의 토큰 403 포함) → 멈춘다(`progress_rejected:<status>`).
  *   - 5xx·네트워크(재시도 후) → 기록 한 번 실패로 잡을 버리지 않는다.
  *
- * implementing(deps.implementWbs가 있을 때 — B-5b S1 seam, B-5b-2가 runBuildLoop로 채운다):
- *   WBS 순서대로 `implementWbs({ item, job, appDir, llm, exec, signal, env })` → runBuildLoop 결과 모양.
- *   - 프록시 402 budget_exhausted(던지거나 결과 summary에) → **그 WBS에서 멈춘다**: 지금까지 만든 것을 커밋하고
- *     failed(implementing, budget_exhausted). 다음 WBS도 다음 LLM 호출도 없다(B-6 — 판정은 서버가 한다).
- *   - status가 done이 아니면 failed(implementing, wbs_failed:<id>:<status>). done이면 커밋 + wbsDone + 진행 콜백.
- *   - WBS를 다 끝내도 building은 아직 없다 → failed(building, builder_stage_not_implemented:building).
+ * scaffolding: 템플릿 복사 → (샌드박스면) 소유자 = 샌드박스 사용자 → 보호 파일 스냅샷 → 스캐폴드 커밋 → 의존성 설치(오프라인 먼저).
+ *
+ * implementing(B-5b-2): WBS를 order 순서로 `implementWbs({ item, job, appDir, llm, exec, signal, env, plan })`.
+ *   기본값 = createDefaultImplementWbs(agent-worker runBuildLoop · 프록시 클라이언트). agent-worker를 못 불러오면 정직하게
+ *   failed(implementing, agent_worker_unavailable:…). WBS 하나의 벽시계 상한 WBS_TIME_LIMIT_MS(넘으면 limit_time).
+ *   - 프록시 402 budget_exhausted → **그 WBS에서 멈춘다**: 지금까지 만든 것을 커밋하고 failed(implementing, budget_exhausted).
+ *   - done → 커밋 + wbsDone + progress(wbs_done, {wbsId, commit}).
+ *   - 그 밖 → progress(wbs_failed) → WBS_FAILURE_POLICY: must면 failed(implementing, wbs_failed:<id>:<상태>),
+ *     아니면 그 WBS 변경을 되돌리고 계속. 실패·건너뛴 WBS에 기대는 WBS는 건너뛴다(must면 wbs_blocked:<id>:<선행>).
+ *
+ * building·testing(B-5b-3): runGate — 초록불이 아니면 failed(building|testing). 수리 라운드는 같은 implementWbs에
+ *   `repair`(단계·명령·종료 코드·로그 끝부분)를 실어 부른다.
  *
  * 마감·중단(`deps.signal`, startJob이 넘긴다): 끊기면 다음 진행 콜백을 보내지 않고 다음 exec를 시작하지 않는다(실행 중인
- * exec는 defaultExec가 죽인다). 그때의 반환 본문은 쓰이지 않는다 — 최종 본문은 startJob이 정한다(결함 6).
- * 자식 프로세스 env = childEnv(deps.baseEnv ?? process.env) — 허용 키만, jobToken 없음.
+ * exec는 defaultExec가 그룹째 죽인다). 그때의 반환 본문은 쓰이지 않는다 — 최종 본문은 startJob이 정한다(결함 6).
+ * 자식 프로세스: env = workEnv(deps.baseEnv ?? process.env) — 허용 키 + HOME·NO_COLOR, jobToken 없음. uid = 샌드박스 사용자
+ * (deps.sandbox, 없으면 SIMSA_SANDBOX_* 환경 — 설정됐는데 쓸 수 없으면 failed(scaffolding, sandbox_unavailable:…)).
  */
 export async function runBuild(payload, deps = {}) {
   const v = validateBuildPayload(payload);
@@ -642,19 +809,31 @@ export async function runBuild(payload, deps = {}) {
 
   const workRoot = deps.workRoot ?? "/var/lib/simsa-build";
   const templateDir = deps.templateDir ?? TEMPLATE_DIR;
-  const exec = deps.exec ?? defaultExec;
+  const baseExec = deps.exec ?? defaultExec;
   const fsImpl = deps.fsImpl ?? fs;
   const post = deps.postCallback ?? ((url, token, body) => postCallback(url, token, body));
   const onStage = deps.onStage ?? (() => {});
-  const log = deps.log ?? ((line) => console.log(`[job ${job.jobId}] ${line}`));
-  const implementWbs = typeof deps.implementWbs === "function" ? deps.implementWbs : null;
+  const token = payload.jobToken;
+  const literals = [token];
+  const rawLog = deps.log ?? ((line) => console.log(`[job ${job.jobId}] ${line}`));
+  const log = (line) => rawLog(redactSecrets(String(line), literals));
   const signal = deps.signal ?? null;
   const aborted = () => signal?.aborted === true;
-  const env = childEnv(deps.baseEnv ?? process.env);
+  const gateLimits = { ...GATE_LIMITS, ...(deps.gateLimits ?? {}) };
+  const wbsTimeLimitMs = Number.isFinite(deps.wbsTimeLimitMs) && deps.wbsTimeLimitMs > 0 ? deps.wbsTimeLimitMs : WBS_TIME_LIMIT_MS;
+
+  // 샌드박스 사용자 — 테스트는 deps.sandbox(null 또는 {uid,gid,home,storeDir})로 정한다.
+  const sandboxCheck = deps.sandbox !== undefined ? { ok: true, sandbox: deps.sandbox, reason: null } : sandboxFromEnv(deps.sandboxEnv ?? process.env);
+  const sandbox = sandboxCheck.ok ? sandboxCheck.sandbox : null;
+  const exec = sandbox ? (cmd, args, opts = {}) => baseExec(cmd, args, { ...opts, uid: sandbox.uid, gid: sandbox.gid }) : baseExec;
+  const baseEnv = deps.baseEnv ?? process.env;
+  /** git·설치. */
+  const env = workEnv(baseEnv, { sandbox });
+  /** 모델 명령·빌드·테스트 — pnpm이 레지스트리에 닿지 않는다. */
+  const offlineEnv = workEnv(baseEnv, { sandbox, offline: true });
 
   const workDir = path.join(workRoot, job.jobId);
   const appDir = path.join(workDir, "app");
-  const token = payload.jobToken;
   let wbsDone = 0;
 
   /** 진행 콜백 하나. 멈춰야 하면 사유 문자열, 계속이면 null. */
@@ -667,68 +846,154 @@ export async function runBuild(payload, deps = {}) {
     log(`progress ${status}/${message} not recorded (${r.status ? `http ${r.status}${r.ok ? " — not a Worker response" : ""}` : "network"}) — continuing`);
     return null;
   };
-  const fail = (failedStage, error) => failureBody(job.jobId, { failedStage, error, wbsDone });
+  const fail = (failedStage, error, extra = {}) => failureBody(job.jobId, { failedStage, error, wbsDone, ...extra });
 
   try {
     // ── scaffolding ──
     onStage("scaffolding");
     const stop1 = await progress("scaffolding", "scaffold_started", { template: TEMPLATE_NAME });
     if (stop1) return fail("scaffolding", stop1);
+    // 샌드박스가 설정돼 있는데 쓸 수 없으면 생성 코드를 root로 돌리지 않는다(fail closed).
+    if (!sandboxCheck.ok) return fail("scaffolding", `sandbox_unavailable:${sandboxCheck.reason}`);
     let scaffold;
     let baseCommit;
+    let snapshot;
     try {
       await fsImpl.rm(workDir, { recursive: true, force: true });
       if (aborted()) throw new Error("job_aborted");
       scaffold = await scaffoldTemplate({ templateDir, appDir, slug: job.slug, d1Id: job.d1Id, fsImpl });
+      if (sandbox) await chownTree(workDir, sandbox.uid, sandbox.gid, fsImpl);
+      snapshot = await snapshotProtected(appDir, fsImpl);
       baseCommit = await commitScaffold({ appDir, exec, signal, env });
     } catch (err) {
       return fail("scaffolding", `scaffold_failed:${String(err?.message ?? err).slice(0, 200)}`);
+    }
+    if (aborted()) return fail("scaffolding", "job_aborted");
+    const install = await installDeps({ appDir, exec, env, signal, sandbox });
+    if (aborted()) return fail("scaffolding", "job_aborted");
+    if (!install.ok) {
+      log(`deps install failed (${exitLabel(install.result)}): ${tailText(stripAnsi(`${install.result?.stdout ?? ""}\n${install.result?.stderr ?? ""}`), 400)}`);
+      return fail("scaffolding", `deps_install_failed:${exitLabel(install.result)}`);
     }
     const stop2 = await progress("scaffolding", "scaffold_ready", {
       template: TEMPLATE_NAME,
       templateVersion: scaffold.templateVersion,
       files: scaffold.files,
       baseCommit: baseCommit.slice(0, 12),
+      installMode: install.mode,
+      installMs: install.ms,
+      sandbox: sandbox ? { uid: sandbox.uid } : null,
     });
     if (stop2) return fail("scaffolding", stop2);
 
-    // ── implementing: B-5b-2가 implementWbs 기본값(runBuildLoop)을 채운다. 없으면 정직하게 실패(D-4 · 증거 규칙). ──
-    if (!implementWbs) return fail("implementing", "builder_stage_not_implemented:implementing");
+    // ── implementing (B-5b-2) ──
     onStage("implementing");
+    let implementWbs = typeof deps.implementWbs === "function" ? deps.implementWbs : null;
+    if (!implementWbs) {
+      try {
+        const agentWorker = await (deps.loadAgentWorker ? deps.loadAgentWorker() : defaultLoadAgentWorker());
+        implementWbs = createDefaultImplementWbs({ agentWorker, fetchImpl: deps.fetchImpl ?? globalThis.fetch, sandbox, log, fsImpl, retryOptions: deps.llmRetryOptions ?? {} });
+      } catch (err) {
+        // 정직하게 실패 — 예시 구현·조용한 성공 없음(D-4 · 증거 규칙).
+        return fail("implementing", `agent_worker_unavailable:${String(err?.message ?? err).slice(0, 120)}`);
+      }
+    }
     const llm = buildLlmConfig(job, token);
-    for (const item of job.wbs) {
+    const items = [...job.wbs].sort((a, b) => a.order - b.order);
+    const state = new Map(items.map((w) => [w.id, "pending"]));
+    const plan = () => items.map((w) => ({ id: w.id, title: w.title, must: w.must, state: state.get(w.id) }));
+    const wbsFailed = [];
+    /** 예산 정지: 지금까지 만든 것을 커밋하고 멈춘다(B-6 — 판정은 서버). */
+    const budgetStop = async (label, stage) => {
+      log(`${BUDGET_EXHAUSTED} at ${label} — committing the work so far and stopping`);
+      await commitWork({ appDir, exec, signal, env, message: `wip(${label}): stopped — build budget exhausted` }).catch((err) =>
+        log(`budget_stop_commit_failed:${String(err?.message ?? err).slice(0, 120)}`),
+      );
+      return fail(stage, BUDGET_EXHAUSTED);
+    };
+
+    for (const item of items) {
       if (aborted()) return fail("implementing", "job_aborted");
+      const blocker = item.dependsOn.find((d) => state.get(d) === "failed" || state.get(d) === "skipped");
+      if (blocker) {
+        state.set(item.id, "skipped");
+        const s = await progress("implementing", "wbs_skipped", { wbsId: item.id, dependsOn: blocker, must: item.must });
+        if (item.must !== false) return fail("implementing", `wbs_blocked:${item.id}:${blocker}`);
+        if (s) return fail("implementing", s);
+        wbsFailed.push(item.id);
+        continue;
+      }
       const stopW = await progress("implementing", "wbs_started", { wbsId: item.id });
       if (stopW) return fail("implementing", stopW);
-      let outcome;
-      try {
-        outcome = await implementWbs({ item, job, appDir, llm, exec, signal, env });
-      } catch (err) {
-        outcome = { status: "llm_error", summary: String(err?.message ?? err).slice(0, 300), error: err };
-      }
-      if (isBudgetExhausted(outcome) || isBudgetExhausted(outcome?.error)) {
-        // B-6: 서버(프록시)가 이 잡의 예산이 끝났다고 했다 — 여기서 멈추고 지금까지 만든 것은 남긴다.
-        log(`${BUDGET_EXHAUSTED} at ${item.id} — committing the work so far and stopping`);
-        await commitWork({ appDir, exec, signal, env, message: `wip(${item.id}): stopped — build budget exhausted` }).catch((err) =>
-          log(`budget_stop_commit_failed:${String(err?.message ?? err).slice(0, 120)}`),
-        );
-        return fail("implementing", BUDGET_EXHAUSTED);
-      }
+      const run = await runTimed(wbsTimeLimitMs, signal, (wbsSignal) => implementWbs({ item, job, appDir, llm, exec, signal: wbsSignal, env: offlineEnv, plan: plan() }));
+      const outcome = run.outcome;
+      if (isBudgetExhausted(outcome) || isBudgetExhausted(outcome?.error)) return budgetStop(item.id, "implementing");
       if (aborted()) return fail("implementing", "job_aborted");
-      if (outcome?.status !== "done") return fail("implementing", `wbs_failed:${item.id}:${String(outcome?.status ?? "unknown").slice(0, 40)}`);
-      let sha;
-      try {
-        sha = await commitWork({ appDir, exec, signal, env, message: typeof outcome.commitMessage === "string" && outcome.commitMessage ? outcome.commitMessage : `feat(${item.id}): implement` });
-      } catch (err) {
-        return fail("implementing", `commit_failed:${item.id}:${String(err?.message ?? err).slice(0, 120)}`);
+      const status = run.timedOut ? "limit_time" : String(outcome?.status ?? "unknown").slice(0, 40);
+      if (status === "done") {
+        let sha;
+        try {
+          sha = await commitWork({ appDir, exec, signal, env, message: typeof outcome.commitMessage === "string" && outcome.commitMessage ? outcome.commitMessage : `feat(${item.id}): ${item.title}` });
+        } catch (err) {
+          return fail("implementing", `commit_failed:${item.id}:${String(err?.message ?? err).slice(0, 120)}`);
+        }
+        state.set(item.id, "done");
+        wbsDone += 1;
+        const stopD = await progress("implementing", "wbs_done", { wbsId: item.id, commit: sha.slice(0, 12) });
+        if (stopD) return fail("implementing", stopD);
+        continue;
       }
-      wbsDone += 1;
-      const stopD = await progress("implementing", "wbs_done", { wbsId: item.id, commit: sha.slice(0, 12) });
-      if (stopD) return fail("implementing", stopD);
+      // 끝내 done이 아니다 — 정책대로 멈추거나, 기록하고 되돌린 뒤 계속.
+      state.set(item.id, "failed");
+      const decision = decideWbsFailure(item, status);
+      const summary = redactSecrets(stripAnsi(String(outcome?.summary ?? "")), literals).slice(0, 300);
+      const s = await progress("implementing", "wbs_failed", { wbsId: item.id, status, must: item.must, decision, summary });
+      if (decision === "stop") return fail("implementing", `wbs_failed:${item.id}:${status}`);
+      if (s) return fail("implementing", s);
+      try {
+        await revertWork({ appDir, exec, signal, env });
+      } catch (err) {
+        return fail("implementing", `revert_failed:${item.id}:${String(err?.message ?? err).slice(0, 120)}`);
+      }
+      wbsFailed.push(item.id);
     }
 
-    // ── building 이후: B-5b-3~5 ──
-    return fail("building", "builder_stage_not_implemented:building");
+    // ── building · testing (B-5b-3): 초록불이 아니면 절대 다음 단계로 가지 않는다(D-4) ──
+    onStage("building");
+    const repair = async ({ stage, status, round, maxRounds, command, exitLabel: exit, logTail }) => {
+      const label = `REPAIR-${round}`;
+      const s = await progress(status, "repair_started", { round, stage });
+      if (s) return { stop: s };
+      const item = { id: label, title: `Fix the failing ${stage === "testing" ? "tests" : "build"} (${command})`, order: 0, acceptanceIds: [], dependsOn: [], must: true };
+      const run = await runTimed(gateLimits.repairTimeMs, signal, (sig) =>
+        implementWbs({ item, job, appDir, llm, exec, signal: sig, env: offlineEnv, plan: plan(), repair: { stage, round, maxRounds, command, exitLabel: exit, logTail } }),
+      );
+      if (isBudgetExhausted(run.outcome) || isBudgetExhausted(run.outcome?.error)) {
+        const b = await budgetStop(label, stage);
+        return { stop: b.error };
+      }
+      if (aborted()) return { stop: "job_aborted" };
+      const repairStatus = run.timedOut ? "limit_time" : String(run.outcome?.status ?? "unknown").slice(0, 40);
+      let sha;
+      try {
+        sha = await commitWork({ appDir, exec, signal, env, message: `fix(gate): repair ${stage} — round ${round}` });
+      } catch (err) {
+        return { stop: `commit_failed:${label}:${String(err?.message ?? err).slice(0, 120)}` };
+      }
+      const s2 = await progress(status, "repair_done", { round, status: repairStatus, commit: sha.slice(0, 12) });
+      if (s2) return { stop: s2 };
+      return {};
+    };
+    const gate = await runGate({ appDir, exec, env, offlineEnv, sandbox, signal, fsImpl, snapshot, progress, onStage, repair, literals, limits: gateLimits, wbsFailed });
+    if (!gate.ok) {
+      const extra = {};
+      if (Number.isInteger(gate.buildExitCode)) extra.buildExitCode = gate.buildExitCode;
+      if (Number.isInteger(gate.testExitCode)) extra.testExitCode = gate.testExitCode;
+      return fail(gate.failedStage, gate.error, extra);
+    }
+
+    // ── pushed 이후(B-5b-4·5): 저장소 push·배포·done은 Worker가 한다(S3 — 컨테이너에는 자격이 없다). 정직하게 여기서 멈춘다. ──
+    return fail("pushed", "builder_stage_not_implemented:pushed");
   } finally {
     // 작업 폴더에는 유저 지시서로 만든 코드가 있다 — 잡이 끝나면 인스턴스에 남기지 않는다.
     await fsImpl.rm(workDir, { recursive: true, force: true }).catch(() => {});
@@ -738,7 +1003,7 @@ export async function runBuild(payload, deps = {}) {
 /**
  * 잡 실행 진입점.
  *   kind "selfcheck" → 자가점검 결과
- *   kind "build"     → runBuild (scaffolding까지, 이후 정직한 실패)
+ *   kind "build"     → runBuild (scaffolding → implementing → 빌드 게이트, push·배포 앞에서 정직한 실패)
  *   그 밖            → builder_stage_not_implemented (던짐)
  * 반환값은 그대로 콜백 본문이 된다(jobId 포함).
  */

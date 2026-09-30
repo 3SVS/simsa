@@ -275,8 +275,10 @@ describe("B-5b-1 · 상태 머신 계약", () => {
     assert.deepEqual([...run.BUILD_STAGES], [...BUILD_JOB_STATUSES]);
   });
 
-  it("이 이미지가 실제로 수행하는 단계는 scaffolding뿐 — 나머지는 정직하게 미구현", () => {
-    assert.deepEqual([...run.IMPLEMENTED_BUILD_STAGES], ["scaffolding"]);
+  it("이 이미지가 실제로 수행하는 단계는 scaffolding~testing — push·배포는 정직하게 미구현(Worker 몫)", () => {
+    // [의도된 변경 · B-5b-2·3] implementing(WBS 루프)·building·testing(빌드 게이트)까지 이 이미지가 한다.
+    // pushed·deploying·done은 Worker 몫(S3) — 이 목록에 없다.
+    assert.deepEqual([...run.IMPLEMENTED_BUILD_STAGES], ["scaffolding", "implementing", "building", "testing"]);
   });
 
   it("progressBody: 진행 상태만(최종·미지 상태는 Worker가 400이므로 만들지 않는다) · spentUsd·usage 없음(B-5b S1 — 프록시가 계량)", () => {
@@ -398,12 +400,14 @@ describe("B-5b-1 · 스캐폴드", () => {
 });
 
 describe("B-5b-1 · runBuildJob kind=build", () => {
-  it("scaffolding까지 실제로 하고, 진행 콜백 2개 → implementing에서 정직하게 실패. 작업 폴더는 지운다", async () => {
+  it("scaffolding까지 실제로 하고, 진행 콜백 2개 → agent-worker가 없는 곳(이미지 밖)에서는 implementing에서 정직하게 실패. 작업 폴더는 지운다", async () => {
     const workRoot = await tmpDir("wr");
     const git = gitExec();
     const poster = recordingPoster();
     const stages = [];
-    const r = await run.runBuildJob(buildPayload(), { workRoot, templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, onStage: (s) => stages.push(s) });
+    // [의도된 변경 · B-5b-2] implementWbs 기본값 = 이미지 안 agent-worker runBuildLoop. 이미지 밖(이 테스트)에서는 그 import가
+    // 실패하므로 implementing에서 `agent_worker_unavailable`로 정직하게 멈춘다(종전: builder_stage_not_implemented:implementing).
+    const r = await run.runBuildJob(buildPayload(), { workRoot, templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, onStage: (s) => stages.push(s), loadAgentWorker: async () => { throw new Error("Cannot find module '/builder/ws/packages/agent-worker/dist/index.js'"); } });
 
     assert.deepEqual(poster.calls.map((c) => [c.url, c.body.status, c.body.message]), [
       ["https://cp.example/internal/build-progress", "scaffolding", "scaffold_started"],
@@ -418,14 +422,22 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
     assert.equal(ready.wbsTotal, 2);
     assert.ok(!("usage" in ready) && !("spentUsd" in ready), "B-5b S1: 원가는 LLM 프록시가 계량 — 콜백 본문에 usage·spentUsd 없음");
 
-    assert.deepEqual(r, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "implementing", error: "builder_stage_not_implemented:implementing", wbsDone: 0 });
-    assert.deepEqual(stages, ["scaffolding"]);
+    assert.equal(r.ok, false);
+    assert.equal(r.failedStage, "implementing");
+    assert.match(r.error, /^agent_worker_unavailable:/);
+    assert.equal(r.wbsDone, 0);
+    assert.deepEqual(stages, ["scaffolding", "implementing"]);
 
-    // git: 스캐폴드 커밋(로컬) — push는 범위 밖
-    const verbs = git.calls.map((c) => c.args.find((a) => ["init", "add", "commit", "rev-parse", "push"].includes(a)));
+    // git: 스캐폴드 커밋(로컬) — push는 범위 밖. B-5b-3: 그 뒤 의존성 설치(lockfile 고정 · 오프라인) 한 번.
+    const gitCalls = git.calls.filter((c) => c.cmd === "git");
+    const verbs = gitCalls.map((c) => c.args.find((a) => ["init", "add", "commit", "rev-parse", "push"].includes(a)));
     assert.deepEqual(verbs, ["init", "add", "commit", "rev-parse"]);
+    assert.deepEqual(git.calls.filter((c) => c.cmd !== "git").map((c) => [c.cmd, ...c.args]), [["pnpm", "install", "--frozen-lockfile", "--offline"]]);
     assert.ok(git.calls.every((c) => c.cwd === path.join(workRoot, "bj_0a1b2c3d4e", "app")));
-    assert.ok(git.calls.find((c) => c.args.includes("commit")).args.includes("commit.gpgsign=false"));
+    const commitArgs = gitCalls.find((c) => c.args.includes("commit")).args;
+    assert.ok(commitArgs.includes("commit.gpgsign=false"));
+    assert.ok(commitArgs.includes("core.hooksPath=/dev/null"), "B-5b-2: our git never runs hooks planted by generated code");
+    assert.equal(ready.meta.installMode, "offline");
 
     // 비밀은 콜백·exec 어디에도
     const leaked = JSON.stringify({ calls: poster.calls.map((c) => c.body), git: git.calls, r });
@@ -483,17 +495,40 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
 });
 
 describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => {
-  it("runBuildJob의 진행·최종 본문을 실제 라우트에 넣으면: scaffolding 전이 + 이벤트 2개 → failed(implementing)", async () => {
+  it("runBuildJob의 진행·최종 본문을 실제 라우트에 넣으면: scaffolding → implementing → building → testing(수리 1회) 전이가 하나도 버려지지 않고 → failed(pushed)", async () => {
+    // [의도된 변경 · B-5b-2·3] 종전: scaffolding 이벤트 2개 → failed(implementing). 이제 WBS·게이트까지 가므로, 컨테이너가 보내는
+    // 모든 진행 본문을 실제 라우트에 넣어 **역행 전이(transitioned:false → 컨테이너가 job_not_active로 멈춤)가 없는지**를 본다 —
+    // 특히 testing에 들어간 뒤의 수리 라운드가 building으로 되돌아가지 않아야 한다(Worker STAGE_ORDER).
     const db = makeDb();
     const env = workerEnv(db);
     const job = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-3f9a1c2b", wbsTotal: 2 });
     const app = createApp();
     const poster = posterIntoWorker(app, env);
+    const replies = [];
+    const post = async (url, token, body) => { const r = await poster.post(url, token, body); replies.push(r); return r; };
     // B-5b S1: Worker가 이 잡에 발급한 jobToken — 컨테이너의 모든 콜백 Bearer.
     const payload = buildPayload({ jobId: job.id, jobToken: await mintJobToken(env, job.id) });
-    const result = await run.runBuildJob(payload, { workRoot: await tmpDir("wr8"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post });
-    assert.equal((await getBuildJobById(env, job.id)).status, "scaffolding");
-    assert.deepEqual(db._events.filter((e) => e.job_id === job.id).map((e) => [e.stage, e.message]), [["scaffolding", "scaffold_started"], ["scaffolding", "scaffold_ready"]]);
+    let testRuns = 0;
+    const exec = async (cmd, args) => {
+      if (cmd === "git" && args.includes("rev-parse")) return { ok: true, code: 0, stdout: "0123456789abcdef0123456789abcdef01234567\n", stderr: "", error: null };
+      if (cmd === "pnpm" && args[0] === "test") {
+        testRuns += 1;
+        if (testRuns === 1) return { ok: false, code: 1, stdout: "✖ 예약하기 버튼이 없다", stderr: "", error: "exit 1" };
+      }
+      return { ok: true, code: 0, stdout: "", stderr: "", error: null };
+    };
+    const implementWbs = async ({ item }) => ({ status: "done", commitMessage: `feat(${item.id}): ${item.title}` });
+    const result = await run.runBuildJob(payload, { workRoot: await tmpDir("wr8"), templateDir: REPO_TEMPLATE, exec, postCallback: post, implementWbs, sandbox: null, log: () => {} });
+
+    assert.ok(replies.every((r) => r.status === 200 && r.json?.transitioned === true), `every progress transitioned: ${JSON.stringify(replies.map((r) => r.json))}`);
+    assert.equal((await getBuildJobById(env, job.id)).status, "testing");
+    assert.deepEqual(db._events.filter((e) => e.job_id === job.id).map((e) => [e.stage, e.message]), [
+      ["scaffolding", "scaffold_started"], ["scaffolding", "scaffold_ready"],
+      ["implementing", "wbs_started"], ["implementing", "wbs_done"], ["implementing", "wbs_started"], ["implementing", "wbs_done"],
+      ["building", "gate_started"], ["testing", "test_started"], ["testing", "test_failed"],
+      ["testing", "repair_started"], ["testing", "repair_done"], ["testing", "gate_passed"],
+    ]);
+    assert.equal((await getBuildJobById(env, job.id)).wbsDone, 2);
 
     // server.mjs가 하는 일: 최종 본문을 callbackUrl(build-done)로 — 같은 jobToken
     const done = await poster.post(payload.callbackUrl, payload.jobToken, result);
@@ -501,9 +536,9 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
     assert.equal(done.json.accepted, true);
     const final = await getBuildJobById(env, job.id);
     assert.equal(final.status, "failed");
-    assert.equal(final.failedStage, "implementing");
-    assert.equal(final.error, "builder_stage_not_implemented:implementing");
-    assert.equal(final.deployedUrl, null, "조용한 성공 없음");
+    assert.equal(final.failedStage, "pushed");
+    assert.equal(final.error, "builder_stage_not_implemented:pushed");
+    assert.equal(final.deployedUrl, null, "조용한 성공 없음 — done은 Worker만(S3)");
   });
 
   it("server.mjs의 예외 경로 본문(failureCallbackBody)은 Worker가 읽는 failedStage 키를 쓴다 — 종전 failedAt은 'unknown'으로 기록됐다", async () => {
@@ -641,10 +676,11 @@ describe("결함 2 · postCallback 재시도·중단 분기(fetch seam) + '기�
 
   it("runBuild: 2xx여도 Worker 응답({ok:true})이 아니면 '기록됨'이 아니다 — transitioned 없음을 '잡 끝남'으로 읽지 않고 계속 간다", async () => {
     const poster = recordingPoster([{ ok: true, status: 200, json: null }, { ok: true, status: 200, json: { transitioned: false } }]);
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrH"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, log: () => {} });
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrH"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, log: () => {}, loadAgentWorker: async () => { throw new Error("no agent-worker outside the image"); } });
     assert.deepEqual(poster.calls.map((c) => c.body.message), ["scaffold_started", "scaffold_ready"], "a non-Worker 2xx is not a reason to stop (like 5xx: continue)");
     assert.equal(r.failedStage, "implementing");
-    assert.equal(r.error, "builder_stage_not_implemented:implementing", "json without ok:true is not a recorded 'transitioned:false'");
+    // [B-5b-2] implementing까지 갔다는 것이 요점(종전 문구 builder_stage_not_implemented:implementing → 이미지 밖의 정직한 실패).
+    assert.match(r.error, /^agent_worker_unavailable:/, "json without ok:true is not a recorded 'transitioned:false'");
   });
 });
 

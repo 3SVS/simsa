@@ -69,6 +69,12 @@ export interface BuildLoopOptions {
   executor: BuildToolExecutor;
   model: string;
   gate?: EfficiencyGate;
+  /**
+   * B-5b-2: gate가 없을 때 만드는 로컬 EfficiencyGate의 상한(USD). 없으면 core 기본(PR당 $0.50)이다 — 빌드 WBS 하나는
+   * 대화가 길어 그 상한을 쉽게 넘는다(BudgetExceededError → llm_error로 끝나 버린다). 빌더는 잡 예산 이상을 준다.
+   * 예산의 **권위는 서버**(Worker 빌드 LLM 프록시 402 budget_exhausted)이고 이것은 로컬 폭주 방지선일 뿐이다.
+   */
+  budgetUsd?: number;
   maxTokens?: number;
   limits?: Partial<typeof BUILD_LIMITS>;
   /** 자식 프로세스 env의 원천(보통 process.env). filterEnv로 걸러진다. */
@@ -108,7 +114,8 @@ function taskPrompt(task: BuildTask): string {
 
 export async function runBuildLoop(task: BuildTask, opts: BuildLoopOptions): Promise<BuildLoopOutcome> {
   const limits = { ...BUILD_LIMITS, ...(opts.limits ?? {}) };
-  const gate = opts.gate ?? new EfficiencyGate();
+  const localCap = typeof opts.budgetUsd === "number" && Number.isFinite(opts.budgetUsd) && opts.budgetUsd > 0 ? opts.budgetUsd : undefined;
+  const gate = opts.gate ?? new EfficiencyGate(localCap !== undefined ? { perPrUsd: localCap } : {});
   const maxTokens = opts.maxTokens ?? 8_192;
   const env = filterEnv(opts.baseEnv ?? {});
   const log = opts.onEvent ?? (() => {});

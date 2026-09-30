@@ -34,12 +34,16 @@ export function summarizeSelfCheck(body: unknown, elapsedMs: number): {
   workRootOk: boolean | null;
   agentWorker: { ok: boolean; missing: string[] } | null;
   template: { ok: boolean; version: string | null; error: string | null } | null;
+  sandbox: { ok: boolean; enabled: boolean; uid: number | null; storeReady: boolean; reason: string | null } | null;
   containerMs: number | null;
   elapsedMs: number;
 } {
   const b = asRecord(body) ?? {};
   const aw = asRecord(b["agentWorker"]);
   const tpl = asRecord(b["template"]);
+  // B-5b-2: 생성 코드를 돌리는 샌드박스 사용자(서버와 다른 uid)가 실제로 쓰일 수 있나 + 템플릿 의존성 저장소가 미리 받아져 있나.
+  // 옛 이미지는 항목이 없으므로 null.
+  const sb = asRecord(b["sandbox"]);
   const toolsRaw = Array.isArray(b["tools"]) ? b["tools"] : [];
   const tools = toolsRaw
     .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
@@ -68,6 +72,15 @@ export function summarizeSelfCheck(body: unknown, elapsedMs: number): {
           ok: tpl["ok"] === true,
           version: typeof tpl["version"] === "string" ? tpl["version"].slice(0, 40) : null,
           error: typeof tpl["error"] === "string" ? tpl["error"].slice(0, 120) : null,
+        }
+      : null,
+    sandbox: sb
+      ? {
+          ok: sb["ok"] === true,
+          enabled: sb["enabled"] === true,
+          uid: typeof sb["uid"] === "number" && Number.isInteger(sb["uid"]) ? sb["uid"] : null,
+          storeReady: sb["storeReady"] === true,
+          reason: typeof sb["reason"] === "string" ? sb["reason"].slice(0, 80) : null,
         }
       : null,
     containerMs: typeof b["totalMs"] === "number" ? b["totalMs"] : null,

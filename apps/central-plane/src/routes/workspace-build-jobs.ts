@@ -57,13 +57,27 @@ const MAX_ERROR_CHARS = 500;
 /** 컨테이너가 done(ok:true)을 주장했을 때의 오류 코드 — 배포는 Worker만 한다(PR #569 S1 검증 결함 2). */
 export const DONE_NOT_WORKER_OWNED = "done_not_worker_owned";
 
-/** 컨테이너가 받는 WBS 항목(지시서에서 순서대로). */
-export type BuildWbsItem = { id: string; title: string; order: number; acceptanceIds: string[]; dependsOn: string[] };
+/**
+ * 컨테이너가 받는 WBS 항목(지시서에서 순서대로).
+ * B-5b-2: `must` — 이 항목의 완료 조건 중 하나라도 must 기능(features[].priority)에 속하면 true. 컨테이너의 WBS 실패 정책
+ * (builder-work.mjs WBS_FAILURE_POLICY)이 이것으로 "멈춤(must) / 기록 후 계속(should·could)"을 가른다. 모르는 완료 조건·
+ * 모르는 기능이 섞이면 must로 본다(보수 쪽 — 확인 못 한 것을 선택 사항으로 낮추지 않는다).
+ */
+export type BuildWbsItem = { id: string; title: string; order: number; acceptanceIds: string[]; dependsOn: string[]; must: boolean };
 
 export function wbsFromDevSpec(spec: DevSpec): BuildWbsItem[] {
+  const mustFeatures = new Set(spec.features.filter((f) => f.priority === "must").map((f) => f.id));
+  const knownFeatures = new Set(spec.features.map((f) => f.id));
+  const featureOfAc = new Map(spec.acceptance.map((a) => [a.id, a.featureId] as const));
+  const isMust = (acceptanceIds: readonly string[]): boolean =>
+    acceptanceIds.length === 0 ||
+    acceptanceIds.some((id) => {
+      const f = featureOfAc.get(id);
+      return f === undefined || !knownFeatures.has(f) || mustFeatures.has(f);
+    });
   return [...spec.workBreakdown]
     .sort((a, b) => a.order - b.order)
-    .map((w) => ({ id: w.id, title: w.title, order: w.order, acceptanceIds: [...w.acceptanceIds], dependsOn: [...w.dependsOn] }));
+    .map((w) => ({ id: w.id, title: w.title, order: w.order, acceptanceIds: [...w.acceptanceIds], dependsOn: [...w.dependsOn], must: isMust(w.acceptanceIds) }));
 }
 
 /** 컨테이너가 모델에게 줄 지시서 마크다운(요구사항·화면·데이터·API·작업·테스트 — 렌더러와 동일 문서). */
