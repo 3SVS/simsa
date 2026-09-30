@@ -8,6 +8,7 @@
 
 import { isExampleProject } from "./mock-data";
 import { readStoredLocale } from "@/i18n/dictionary.mjs";
+import { capacityFromResponse, type GenerationCapacityError } from "./generation-capacity.mjs";
 
 const CENTRAL_PLANE_URL =
   process.env.NEXT_PUBLIC_CENTRAL_PLANE_URL ??
@@ -89,6 +90,9 @@ export type ApiError =
   | { ok: false; error: "plan"; message: string }
   | { ok: false; error: "network" | "server"; message: string };
 
+/** 비용 권고 ③ — the AI generation calls (check · unstick · fix) can also say "today's capacity is full". */
+export type GenerationApiError = ApiError | GenerationCapacityError;
+
 // ─── save / load project ──────────────────────────────────────────────────────
 
 export async function saveProjectToDb(payload: {
@@ -163,7 +167,7 @@ export type CheckDraftInput = {
 
 export async function callCheckDraftApi(
   input: CheckDraftInput,
-): Promise<CheckDraftResponse | ApiError> {
+): Promise<CheckDraftResponse | GenerationApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/check-draft`, {
       method: "POST",
@@ -188,6 +192,9 @@ export async function callCheckDraftApi(
       } catch { /* ignore */ }
       return { ok: false, error: "rate_limited", message: msg, retryAfterSeconds };
     }
+    // 비용 권고 ③ — today's AI capacity is full (503, no AI call): its own sentence.
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     // RC-4: 402 = 플랜 부족, 503 council_not_ready = 준비 중 — 서버 메시지를
     // 그대로 보여준다 (일반 서버 오류로 뭉개지 않는다).
     if (resp.status === 402 || resp.status === 503) {
@@ -231,7 +238,7 @@ export async function callUnstickApi(input: {
   userKey?: string;
   productName?: string;
   buildTool?: string;
-}): Promise<UnstickResponse | ApiError> {
+}): Promise<UnstickResponse | GenerationApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/unstick`, {
       method: "POST",
@@ -248,6 +255,9 @@ export async function callUnstickApi(input: {
       } catch { /* default */ }
       return { ok: false, error: "rate_limited", message: msg };
     }
+    // 비용 권고 ③ — today's AI capacity is full.
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     const data = (await resp.json()) as UnstickResponse;
     if (!data.ok || typeof data.whatHappened !== "string" || !Array.isArray(data.nextSteps)) {
@@ -436,7 +446,7 @@ export type FixSuggestionInput = {
 
 export async function callFixSuggestionApi(
   input: FixSuggestionInput,
-): Promise<FixSuggestionResponse | ApiError> {
+): Promise<FixSuggestionResponse | GenerationApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/fix-suggestion`, {
       method: "POST",
@@ -455,6 +465,9 @@ export async function callFixSuggestionApi(
       } catch { /* ignore */ }
       return { ok: false, error: "rate_limited", message: msg };
     }
+    // 비용 권고 ③ — today's AI capacity is full.
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     return (await resp.json()) as FixSuggestionResponse;
   } catch (err) {

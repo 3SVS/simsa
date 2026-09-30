@@ -9,6 +9,7 @@ import { getProject, isExampleProject } from "@/lib/mock-data";
 import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData, markProjectSyncFailed, applyReviewResultsToLocalProject } from "@/lib/workflow-store";
 import { callWorkspaceApi } from "@/lib/workspace-api";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import {
   fetchProjectRepo,
@@ -116,6 +117,11 @@ export default function GitHubPage() {
     const res = await callWorkspaceApi({ idea: quickIdea.trim() });
     if (!res.ok && res.error === "rate_limited") {
       setGenError(t.common.rateLimited);
+      setGenPhase("idle");
+      return;
+    }
+    if (!res.ok && res.error === "generation_capacity") {
+      setGenError(generationCapacityText(t, res.resetAt));
       setGenPhase("idle");
       return;
     }

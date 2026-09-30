@@ -282,6 +282,8 @@ const EN = {
   // via errorText(t, code); unknown codes fall back to `generic`.
   errors: {
     llmUnavailable: "The AI connection is having trouble right now. Please try again in a moment — your input is still here.",
+    generationCapacity: "We've paused AI requests for now because there have been too many today. Please try again later.",
+    generationCapacityAt: "We've paused AI requests for now because there have been too many today. Please try again {when}.",
     generic: "Something went wrong. Please try again.",
     network: "Couldn't reach the server. Check your connection and try again.",
     timeout: "This is taking longer than expected. Please try again.",
@@ -2858,6 +2860,7 @@ const EN = {
         rate_limited: "Too many draft requests in a short time. Please try again in about {minutes} min.",
         llm_unavailable: "The AI connection is having trouble right now. Please try again in a moment — your document is still here.",
         evidence_storage_unconfigured: "Document storage is not available right now. Please try again later.",
+        generation_capacity: "We've paused AI requests for now because there have been too many today. Please try again later.",
         generic: "Something went wrong while drafting. Please try again.",
       },
     },
@@ -3153,6 +3156,8 @@ const KO = {
   },
   errors: {
     llmUnavailable: "지금 AI 연결이 원활하지 않아요. 잠시 후 다시 시도해주세요 — 입력하신 내용은 그대로 남아 있어요.",
+    generationCapacity: "지금은 오늘 AI 요청이 많아 잠시 멈췄어요. 나중에 다시 시도해 주세요.",
+    generationCapacityAt: "지금은 오늘 AI 요청이 많아 잠시 멈췄어요. {when} 다시 시도해 주세요.",
     generic: "문제가 발생했어요. 잠시 후 다시 시도해주세요.",
     network: "서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.",
     timeout: "시간이 조금 오래 걸리고 있어요. 다시 시도해주세요.",
@@ -5703,6 +5708,7 @@ const KO = {
         rate_limited: "짧은 시간에 초안 요청이 몰렸어요. 약 {minutes}분 후 다시 시도해주세요.",
         llm_unavailable: "지금 AI 연결이 원활하지 않아요. 잠시 후 다시 시도해주세요 — 올리신 문서는 그대로 있어요.",
         evidence_storage_unconfigured: "지금은 문서 저장소를 사용할 수 없어요. 잠시 후 다시 시도해주세요.",
+        generation_capacity: "지금은 오늘 AI 요청이 많아 잠시 멈췄어요. 나중에 다시 시도해 주세요.",
         generic: "초안을 만드는 중 문제가 발생했어요. 다시 시도해주세요.",
       },
     },

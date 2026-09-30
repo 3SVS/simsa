@@ -12,6 +12,7 @@
 import type { IdeaToSpecDraftResponse } from "./workspace-types";
 import { getUserKey } from "./workflow-store";
 import { readStoredLocale } from "@/i18n/dictionary.mjs";
+import { capacityFromResponse, type GenerationCapacityError } from "./generation-capacity.mjs";
 
 /** G14: 서버가 EN을 지원하는 호출에 활성 UI 언어를 전달 (미설정=ko). */
 const activeLocale = () =>
@@ -60,6 +61,7 @@ export type FallbackResult = {
 export type WorkspaceApiResult =
   | { ok: true; data: IdeaToSpecDraftResponse }
   | RateLimitedResult
+  | GenerationCapacityError
   | FallbackResult;
 
 export async function callWorkspaceApi(
@@ -108,6 +110,11 @@ export async function callWorkspaceApi(
     return { ok: false, error: "rate_limited", message, retryAfterSeconds };
   }
 
+  // ── 503 generation_capacity (비용 권고 ③) — today's AI capacity is full. NOT a
+  //    connection problem and NOT a mock-draft case: say it plainly with the reset time.
+  const capacity = await capacityFromResponse(resp);
+  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
+
   // ── Other non-2xx ─────────────────────────────────────────────────────────
   if (!resp.ok) {
     console.warn("[workspace-api] server error", resp.status, "using mock fallback");
@@ -151,6 +158,7 @@ export type RecommendAnswerInput = {
 export type RecommendAnswerResult =
   | { ok: true; recommendation: string; reason: string; options: string[] }
   | { ok: false; error: "rate_limited"; message: string; retryAfterSeconds?: number }
+  | GenerationCapacityError
   | { ok: false; error: "llm_unavailable" };
 
 export async function recommendAnswer(
@@ -190,6 +198,10 @@ export async function recommendAnswer(
     } catch { /* use default */ }
     return { ok: false, error: "rate_limited", message, retryAfterSeconds };
   }
+
+  // 비용 권고 ③ — today's AI capacity is full (a different sentence from "try again soon").
+  const capacity = await capacityFromResponse(resp);
+  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
 
   if (!resp.ok) {
     // 503 llm_unavailable or any other server error → honest, no fabrication.
