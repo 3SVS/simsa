@@ -15,17 +15,31 @@
 import { Hono } from "hono";
 import type { Env } from "../env.js";
 
-/** 프로브 응답 정규화 — 컨테이너 JSON을 그대로 신뢰하지 않고 필요한 필드만 뽑는다(순수, 테스트 대상). */
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+/**
+ * 프로브 응답 정규화 — 컨테이너 JSON을 그대로 신뢰하지 않고 필요한 필드만 뽑는다(순수, 테스트 대상).
+ *
+ * B-5b-0: `agentWorker`(이미지 안에서 빌드한 packages/agent-worker를 실제로 import했나 + 빠진 export)와
+ * `template`(S 템플릿이 이미지에 있나 + 버전)을 그대로 전달한다 — 이것이 "빌드 실행체가 #551 폴백·B4 정책에
+ * 닿는다"의 **라이브 증거 경로**다(ops-probe builder-selfcheck). 옛 이미지는 항목이 없으므로 null(있다고 꾸미지 않는다).
+ */
 export function summarizeSelfCheck(body: unknown, elapsedMs: number): {
   ok: boolean;
   runnerRev: string | null;
   tools: Array<{ name: string; ok: boolean; version: string | null; ms: number }>;
   forbiddenPresent: string[];
   workRootOk: boolean | null;
+  agentWorker: { ok: boolean; missing: string[] } | null;
+  template: { ok: boolean; version: string | null } | null;
   containerMs: number | null;
   elapsedMs: number;
 } {
-  const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
+  const b = asRecord(body) ?? {};
+  const aw = asRecord(b["agentWorker"]);
+  const tpl = asRecord(b["template"]);
   const toolsRaw = Array.isArray(b["tools"]) ? b["tools"] : [];
   const tools = toolsRaw
     .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
@@ -42,6 +56,13 @@ export function summarizeSelfCheck(body: unknown, elapsedMs: number): {
     tools,
     forbiddenPresent: Array.isArray(b["forbiddenPresent"]) ? b["forbiddenPresent"].filter((x): x is string => typeof x === "string") : [],
     workRootOk: workRoot ? workRoot["ok"] === true : null,
+    agentWorker: aw
+      ? {
+          ok: aw["ok"] === true,
+          missing: (Array.isArray(aw["missing"]) ? aw["missing"] : []).filter((x): x is string => typeof x === "string").map((x) => x.slice(0, 60)).slice(0, 20),
+        }
+      : null,
+    template: tpl ? { ok: tpl["ok"] === true, version: typeof tpl["version"] === "string" ? tpl["version"].slice(0, 40) : null } : null,
     containerMs: typeof b["totalMs"] === "number" ? b["totalMs"] : null,
     elapsedMs,
   };
@@ -69,7 +90,7 @@ export function createBuilderProbeRoutes(): Hono<{ Bindings: Env }> {
       const r = await stub.fetch("http://builder/selfcheck", { method: "GET", signal: AbortSignal.timeout(SELFCHECK_TIMEOUT_MS) });
       const body: unknown = await r.json().catch(() => null);
       const summary = summarizeSelfCheck(body, Date.now() - t0);
-      console.log(JSON.stringify({ event: "builder_selfcheck", ok: summary.ok, status: r.status, runnerRev: summary.runnerRev, elapsedMs: summary.elapsedMs }));
+      console.log(JSON.stringify({ event: "builder_selfcheck", ok: summary.ok, status: r.status, runnerRev: summary.runnerRev, agentWorkerOk: summary.agentWorker?.ok ?? null, templateOk: summary.template?.ok ?? null, elapsedMs: summary.elapsedMs }));
       return c.json({ ...summary, containerStatus: r.status }, summary.ok ? 200 : 503);
     } catch (err) {
       const message = String((err as Error)?.message ?? err).slice(0, 300);

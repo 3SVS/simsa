@@ -1,15 +1,26 @@
 /**
  * SI 티어 Train B — B1: builder-run.mjs 순수 로직 + summarizeSelfCheck(Worker 쪽 정규화).
  * exec·fs를 주입해 프로세스·네트워크 없이 돈다(seam).
+ * B-5b-0 이후 자가점검은 agent-worker·템플릿 항목도 보므로 imageDeps()로 둘을 주입한다.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 const {
-  BUILD_STAGES, REQUIRED_FIELDS, RUNNER_REV, TOOLCHAIN, FORBIDDEN_DEPLOY_CLIS,
+  BUILD_STAGES, REQUIRED_FIELDS, RUNNER_REV, TOOLCHAIN, FORBIDDEN_DEPLOY_CLIS, REQUIRED_AGENT_WORKER_EXPORTS,
   validateJobPayload, parseVersion, checkWorkRoot, selfCheck, runBuildJob,
 } = await import("../builder-container/builder-run.mjs");
 const { summarizeSelfCheck } = await import("../dist/routes/builder-probe.js");
+
+/** B-5b-0: 자가점검은 이미지 안의 agent-worker·템플릿도 본다 — 여기선 가짜 모듈 + 레포 템플릿. */
+const REPO_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../templates/simsa-hosted-app");
+const imageDeps = () => ({
+  loadAgentWorker: async () => Object.fromEntries(REQUIRED_AGENT_WORKER_EXPORTS.map((n) => [n, () => {}])),
+  templateDir: REPO_TEMPLATE,
+});
 
 const okExec = (versions = {}) => async (cmd) => {
   if (FORBIDDEN_DEPLOY_CLIS.includes(cmd)) return { ok: false, code: 127, stdout: "", stderr: "not found", error: "ENOENT" };
@@ -43,8 +54,10 @@ describe("payload · constants", () => {
 
 describe("selfCheck", () => {
   it("툴체인 5종 + 금지 CLI 부재 + 작업 디렉터리 쓰기 가능 → ok", async () => {
-    const r = await selfCheck({ exec: okExec({ pnpm: "10.4.1\n", node: "v22.1.0\n" }), workRoot: "/tmp/w", fsImpl: fakeFs() });
+    const r = await selfCheck({ exec: okExec({ pnpm: "10.4.1\n", node: "v22.1.0\n" }), workRoot: "/tmp/w", fsImpl: fakeFs(), ...imageDeps() });
     assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(r.agentWorker.ok, true);
+    assert.equal(r.template.ok, true);
     assert.equal(r.runnerRev, RUNNER_REV);
     assert.deepEqual(r.tools.map((t) => t.name), TOOLCHAIN.map((t) => t.name));
     assert.equal(r.tools.find((t) => t.name === "pnpm").version, "10.4.1");
@@ -54,7 +67,7 @@ describe("selfCheck", () => {
   });
   it("도구 하나가 없으면 ok=false, 어느 것인지 이름·오류가 남는다", async () => {
     const exec = async (cmd, args, o) => (cmd === "gh" ? { ok: false, code: 127, stdout: "", stderr: "", error: "spawn gh ENOENT" } : okExec()(cmd, args, o));
-    const r = await selfCheck({ exec, workRoot: "/tmp/w", fsImpl: fakeFs() });
+    const r = await selfCheck({ exec, workRoot: "/tmp/w", fsImpl: fakeFs(), ...imageDeps() });
     assert.equal(r.ok, false);
     const gh = r.tools.find((t) => t.name === "gh");
     assert.equal(gh.ok, false);
@@ -63,12 +76,12 @@ describe("selfCheck", () => {
   });
   it("D-6: vercel/netlify가 이미지에 있으면 ok=false + forbiddenPresent에 이름", async () => {
     const exec = async (cmd, args, o) => (cmd === "vercel" ? { ok: true, code: 0, stdout: "Vercel CLI 39.0.0", stderr: "", error: null } : okExec()(cmd, args, o));
-    const r = await selfCheck({ exec, workRoot: "/tmp/w", fsImpl: fakeFs() });
+    const r = await selfCheck({ exec, workRoot: "/tmp/w", fsImpl: fakeFs(), ...imageDeps() });
     assert.equal(r.ok, false);
     assert.deepEqual(r.forbiddenPresent, ["vercel"]);
   });
   it("작업 디렉터리가 읽기 전용이면 ok=false + workRoot.error", async () => {
-    const r = await selfCheck({ exec: okExec(), workRoot: "/ro", fsImpl: fakeFs(true) });
+    const r = await selfCheck({ exec: okExec(), workRoot: "/ro", fsImpl: fakeFs(true), ...imageDeps() });
     assert.equal(r.ok, false);
     assert.equal(r.workRoot.ok, false);
     assert.match(r.workRoot.error, /EROFS/);
@@ -82,14 +95,14 @@ describe("selfCheck", () => {
 describe("runBuildJob", () => {
   const base = { jobId: "bj_1", projectId: "p", userKey: "u", baseUrl: "http://w", callbackUrl: "http://w/cb", callbackToken: "t" };
   it("kind=selfcheck → 콜백 본문(jobId·ok·stage=done·result)", async () => {
-    const r = await runBuildJob({ ...base, kind: "selfcheck" }, { exec: okExec(), workRoot: "/w", fsImpl: fakeFs() });
+    const r = await runBuildJob({ ...base, kind: "selfcheck" }, { exec: okExec(), workRoot: "/w", fsImpl: fakeFs(), ...imageDeps() });
     assert.equal(r.jobId, "bj_1");
     assert.equal(r.ok, true);
     assert.equal(r.stage, "done");
     assert.equal(r.result.runnerRev, RUNNER_REV);
   });
   it("selfcheck 실패는 stage=failed", async () => {
-    const r = await runBuildJob({ ...base, kind: "selfcheck" }, { exec: okExec(), workRoot: "/w", fsImpl: fakeFs(true) });
+    const r = await runBuildJob({ ...base, kind: "selfcheck" }, { exec: okExec(), workRoot: "/w", fsImpl: fakeFs(true), ...imageDeps() });
     assert.equal(r.ok, false);
     assert.equal(r.stage, "failed");
   });

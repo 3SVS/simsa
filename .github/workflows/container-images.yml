@@ -6,6 +6,10 @@
 #
 # 대상: builder-container · inspector-container (가벼움). autofix sandbox(container/)는
 # 모노레포 전체 빌드라 무거워 제외 — 바뀔 때만 수동 dispatch로.
+#
+# B-5b-0: 빌더 이미지는 packages/core·packages/agent-worker·templates/simsa-hosted-app·pnpm-lock.yaml을
+# 이미지 안에서 빌드·복사한다 → 그 경로가 바뀌어도 여기서 다시 빌드한다. 스모크는 /selfcheck의
+# agentWorker.ok(이미지 안에서 runBuildLoop를 실제로 import)·template.ok를 **명시적으로** 확인한다.
 name: container-images
 
 on:
@@ -16,6 +20,10 @@ on:
       - 'apps/central-plane/src/visual-flow-plan.ts'
       - 'apps/central-plane/src/nondev-report.ts'
       - 'apps/central-plane/src/signup-plan.ts'
+      - 'packages/core/**'
+      - 'packages/agent-worker/**'
+      - 'templates/simsa-hosted-app/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/container-images.yml'
   workflow_dispatch:
 
@@ -26,7 +34,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -53,9 +61,13 @@ jobs:
         run: |
           set -euo pipefail
           cid=$(docker run -d -p 18080:8080 simsa-builder:pr)
+          trap 'docker logs "$cid" | tail -40 || true; docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:18080/health && break || sleep 1; done
           echo
           curl -sf http://127.0.0.1:18080/health | jq .
-          curl -s http://127.0.0.1:18080/selfcheck | tee /tmp/selfcheck.json | jq '{ok, runnerRev, totalMs, forbiddenPresent, workRoot, tools: (.tools|map({name, ok, version, ms}))}'
-          jq -e '.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::builder selfcheck failed"; docker logs "$cid"; exit 1; }
-          docker rm -f "$cid" >/dev/null
+
+          # ── /selfcheck: 툴체인 + agentWorker(B-5b-0) + template ──
+          curl -s http://127.0.0.1:18080/selfcheck | tee /tmp/selfcheck.json | jq '{ok, runnerRev, totalMs, forbiddenPresent, workRoot, agentWorker, template, tools: (.tools|map({name, ok, version, ms}))}'
+          jq -e '.agentWorker.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::agent-worker is not importable inside the builder image"; exit 1; }
+          jq -e '.template.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::S template missing from the builder image"; exit 1; }
+          jq -e '.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::builder selfcheck failed"; exit 1; }
