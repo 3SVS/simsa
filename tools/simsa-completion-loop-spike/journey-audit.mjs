@@ -14,6 +14,14 @@
  * 측정 원칙: 스크립트는 사실만 기록한다(카운트·존재 여부·스크린샷). "좋다/나쁘다"는
  * findings 규칙(결정론)과 사람의 판독으로 분리한다.
  *
+ * C-J1 (Train C, 2026-09-30): 판정 규칙을 lib의 순수 함수로 옮겼다(브라우저 없이
+ * 시험 가능 — J1이 P2로만 남던 공백이 아무 테스트에도 안 걸렸던 이유).
+ *   - 초보자 기준: lib/beginner-terms.mjs `beginnerFindings` — J0·J1·J2·J6·J7 P0
+ *     (기존 앱 문에서만 GitHub = 선택 단계로 허용 → P2, D-17 amend)
+ *   - 화면 구조: lib/journey-checks.mjs `stepStructure`·`structureFindings` —
+ *     막다른 길 P0(2026-09-28 Bae 신고: PR 0개 화면에서 여정 정지) · 같은 라벨·다른
+ *     목적지 P1
+ *
  * Usage:
  *   node journey-audit.mjs            → KO+EN 전체 (기본)
  *   node journey-audit.mjs --ko-only  → KO만 (빠른 재감사)
@@ -21,7 +29,8 @@
  * 배포 게이트 절차: ./JOURNEY-AUDIT.md
  */
 import { chromium } from "playwright";
-import { devTermHits, accountCtaLabels, isDefaultFlowJourney, firstVisitLocaleMismatch } from "./lib/beginner-terms.mjs";
+import { devTermHits, accountCtaLabels, beginnerFindings, firstVisitLocaleMismatch } from "./lib/beginner-terms.mjs";
+import { stepStructure, structureFindings } from "./lib/journey-checks.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const BASE = "https://app.trysimsa.com";
@@ -57,7 +66,8 @@ async function newUserPage(locale = "ko") {
  * 스텝 사실 수집 + 결정론 채점 신호. 모든 값은 측정이며 판정이 아니다.
  *  - primaryCtaCount: 화면의 primary 버튼 수 (#5 기준: 정확히 1이 이상적)
  *  - hasExit: 뒤로/← 링크·버튼 또는 사이드바 내비 존재 (UX Basics ①)
- *  - deadEnd: 전진 가능한 액션 요소가 0 (UX Basics ⑤)
+ *  - deadEnd/deadEndKind/structure: main 안에 앞으로 가는 것이 0개, 또는 빈 상태만
+ *    있고 주 버튼이 없음 (UX Basics ⑤, C-J1 — lib/journey-checks.mjs)
  *  - disabledCount: 비활성 버튼 수 — 이유 표시는 스크린샷으로 사람이 확인 (③)
  *  - errorish/guidanceish: 오류·안내 카피 신호 (④)
  *  - koLeakChars: (EN 주행에서만 의미) 본문의 한글 문자 수 — EN 커버리지 누수
@@ -89,8 +99,9 @@ async function settleForNextAction(page, ms = 8000) {
     .catch(() => {}); // 끝내 안 나오면 그대로 잰다 — 그때는 진짜 0이다.
 }
 
-async function facts(page, label, note = "") {
-  const f = await page.evaluate(() => {
+/** Raw page facts (browser side). Internal `_` fields are consumed in Node and dropped. */
+function collectFacts(page) {
+  return page.evaluate(() => {
     const vis = (el) => el.offsetParent !== null;
     const texts = (sel) => [...document.querySelectorAll(sel)].filter(vis).map((e) => (e.innerText || "").trim().replace(/\s+/g, " ")).filter(Boolean);
     const buttons = texts("button, a.btn, [role=button]");
@@ -101,13 +112,39 @@ async function facts(page, label, note = "") {
     const exits = [...document.querySelectorAll("a, button")].filter(vis).filter((e) => /←|뒤로|돌아가|back/i.test((e.innerText || "").trim()));
     const sidebarNav = document.querySelector("nav, aside") !== null;
     const disabled = [...document.querySelectorAll("button[disabled], [aria-disabled='true']")].filter((e) => e.offsetParent !== null).map((e) => (e.innerText || "").trim().replace(/\s+/g, " ").slice(0, 40));
+    // C-J1 — raw material for the structure checks (rules live in lib/journey-checks.mjs).
+    // <main> of the root layout wraps the page AND the "다음 한 걸음" bar, but not the sidebar:
+    // the sidebar is always there, so counting it made the old deadEnd never true.
+    const mainEl = document.querySelector("main");
+    const label = (e) => (e.innerText || e.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+    const isExternal = (e) => {
+      if (e.tagName !== "A") return false;
+      try {
+        const u = new URL(e.href, location.href);
+        return (u.protocol === "http:" || u.protocol === "https:") && u.origin !== location.origin;
+      } catch {
+        return true;
+      }
+    };
+    const mainActions = mainEl
+      ? [...mainEl.querySelectorAll("a[href], button, [role=button]")].filter(vis).slice(0, 120).map((e) => ({
+          text: label(e),
+          href: e.tagName === "A" ? (e.getAttribute("href") === "#" ? "#" : e.href) : null,
+          external: isExternal(e),
+          disabled: e.disabled === true || e.getAttribute("aria-disabled") === "true",
+          primary: e.matches(".btn-primary, button[class*='primary']"),
+        }))
+      : [];
+    const hasEditable = mainEl
+      ? [...mainEl.querySelectorAll("input:not([type=hidden]), textarea, select")].some((e) => vis(e) && !e.disabled && !e.readOnly)
+      : false;
+    const links = [...document.querySelectorAll("a[href]")].filter(vis).slice(0, 300).map((e) => ({ text: label(e), href: e.href }));
     return {
       h1: texts("h1").slice(0, 2),
       buttons: buttons.slice(0, 24),
       primaryCta: primaries.slice(0, 6),
       primaryCtaCount: mainPrimaries.length || primaries.length,
       hasExit: exits.length > 0 || sidebarNav,
-      deadEnd: buttons.length === 0,
       disabledCount: disabled.length,
       disabledLabels: disabled.slice(0, 5),
       bodyLen: body.length,
@@ -125,8 +162,27 @@ async function facts(page, label, note = "") {
       _mainText: (document.querySelector("main")?.innerText || "").replace(/\s+/g, " ").slice(0, 30000),
       _shellText: [...document.querySelectorAll("aside, nav, header, footer")].filter(vis).map((e) => (e.innerText || "")).join(" ").replace(/\s+/g, " ").slice(0, 30000),
       _actionTexts: texts("a, button, [role=button]").slice(0, 200),
+      _mainActions: mainActions,
+      _hasEditable: hasEditable,
+      _links: links,
     };
   });
+}
+
+function structureOf(f) {
+  return stepStructure({ mainActions: f._mainActions, mainText: f._mainText, hasEditableField: f._hasEditable, links: f._links });
+}
+
+async function facts(page, label, note = "") {
+  let f = await collectFacts(page);
+  let structure = structureOf(f);
+  if (structure.deadEnd.deadEnd) {
+    // 막다른 길로 세기 전에 한 번 더 본다 — 로딩 창을 결함으로 세지 않는다
+    // (settleForNextAction과 같은 원칙: 기다리고도 0이면 그건 진짜 결함이다).
+    await page.waitForTimeout(4000);
+    f = await collectFacts(page);
+    structure = structureOf(f);
+  }
   // Beginner standard (D-17 / §8): which developer words and which external-
   // account buttons this screen shows — with the text, never just a count.
   const devTerms = [
@@ -137,11 +193,25 @@ async function facts(page, label, note = "") {
   delete f._mainText;
   delete f._shellText;
   delete f._actionTexts;
-  const row = { label, note, locale: page._simsaLocale ?? "ko", url: page.url(), ...f, devTerms, accountCtas };
+  delete f._mainActions;
+  delete f._hasEditable;
+  delete f._links;
+  const row = {
+    label,
+    note,
+    locale: page._simsaLocale ?? "ko",
+    url: page.url(),
+    ...f,
+    deadEnd: structure.deadEnd.deadEnd,
+    deadEndKind: structure.deadEnd.kind,
+    structure,
+    devTerms,
+    accountCtas,
+  };
   audit.journeys.at(-1).steps.push(row);
   const shotName = `${audit.journeys.length}-${audit.journeys.at(-1).steps.length}-${(page._simsaLocale ?? "ko")}-${label.replace(/[^\w가-힣-]/g, "_").slice(0, 40)}.png`;
   await page.screenshot({ path: `${SHOTS}/${shotName}` }).catch(() => {});
-  console.log(`  [${row.locale}|${label}] cta=${f.primaryCtaCount} exit=${f.hasExit} dis=${f.disabledCount} err=${f.errorish} ko=${f.koLeakChars} dev=${devTerms.length} acct=${accountCtas.length}`);
+  console.log(`  [${row.locale}|${label}] cta=${f.primaryCtaCount} exit=${f.hasExit} dis=${f.disabledCount} err=${f.errorish} ko=${f.koLeakChars} dev=${devTerms.length} acct=${accountCtas.length} dead=${structure.deadEnd.kind ?? "-"} same=${structure.sameLabel.length}`);
   return row;
 }
 
@@ -232,6 +302,23 @@ async function runRepoOnlyJourney(locale) {
     await page.waitForURL(/projects\/(?!new)/, { timeout: 120000 }).catch(() => {});
     await page.waitForTimeout(4000);
     await facts(page, "★저장소만 있을 때 개요 — 비활성 버튼으로 보내지 않는가");
+    await page.context().close();
+  } catch (err) {
+    audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
+  }
+}
+
+/**
+ * J1c (C-N7, 2026-09-30) — 세 번째 문 "만들었는데 생각과 달라요"의 입구. 기존 앱
+ * 갈래로 들어가되(?door=differs) 첫 화면이 그 문의 말로 묻는지 본다. 프로젝트는
+ * 만들지 않는다 — 제출 이후는 J1과 같은 길이다(의도 확인 카드만 문구가 다르다).
+ */
+async function runDiffersDoorEntry(locale) {
+  try {
+    journey("J1c 생각과 달라요 문 입구: 갈래 선택 → 기존 앱 첫 화면", locale);
+    const page = await newUserPage(locale);
+    await page.goto(`${BASE}/projects/new?path=code&door=differs`, { waitUntil: "networkidle", timeout: 45000 });
+    await facts(page, "differs 문 스텝1 — 무엇을 묻는가");
     await page.context().close();
   } catch (err) {
     audit.journeys.at(-1).failure = String(err?.message ?? err).slice(0, 200);
@@ -370,6 +457,7 @@ await runFirstVisitLocale("ko-KR");
 await runIdeaEntry("ko");
 await runCodeJourney("ko");
 await runRepoOnlyJourney("ko");
+await runDiffersDoorEntry("ko");
 await runSpecJourney("ko");
 await runConnectJourney("ko");
 await runSeededResultJourney("ko");
@@ -379,6 +467,7 @@ if (!KO_ONLY) {
   await runIdeaEntry("en");
   await runCodeJourney("en");
   await runRepoOnlyJourney("en");
+  await runDiffersDoorEntry("en");
   // spec/connect의 EN은 code 여정이 셸·생성·랜딩을 이미 커버 — 입구만 본다.
   try {
     journey("J2e 기획서 갈래 입구(EN)", "en");
@@ -397,6 +486,8 @@ if (!KO_ONLY) {
 //   P1: 액션 스텝인데 primary 0 · 한 화면 primary ≥3(#5 위계 위반 후보)
 //       · EN 주행에서 한글 누수 큼(>80자: 셸 잔재 이상의 본문 누수)
 //   P2: 비활성 버튼 존재(이유 표시는 스크린샷 확인 필요) · 막힘 스텝인데 안내 신호 0
+//   + lib 규칙(C-J1): 초보자 기준(beginnerFindings) · 막다른 길 P0 / 같은 라벨·다른 목적지 P1
+//     (structureFindings)
 for (const j of audit.journeys) {
   if (j.failure) {
     audit.findings.push({ sev: "P0", journey: j.name, locale: j.locale, step: "(journey)", what: `여정 실패: ${j.failure}` });
@@ -424,17 +515,15 @@ for (const j of audit.journeys) {
     if (isBlockedStep && s.guidanceish === 0) {
       audit.findings.push({ sev: "P2", journey: j.name, locale: s.locale, step: s.label, what: "막힘 스텝인데 안내 카피 신호 0" });
     }
-    // ★초보자 기준 (Train N6, D-17 / §8): 기본 흐름(J0·J2·J7)에서 개발 용어·외부
-    // 계정 버튼은 P0. 기존 앱·개발자 화면(J1·J3·J5)은 같은 신호를 P2로만 남긴다 —
-    // 거기서는 GitHub이 사용자 자신의 말이다. 문구를 같이 남긴다(개수만 세지 않는다).
-    const beginnerSev = isDefaultFlowJourney(j.name) ? "P0" : "P2";
-    if ((s.devTerms ?? []).length > 0) {
-      const list = s.devTerms.map((h) => `[${h.where}] ${h.term}: "${h.snippet}"`).join(" ⟂ ");
-      const mainCount = s.devTerms.filter((h) => h.where === "본문").length;
-      audit.findings.push({ sev: beginnerSev, journey: j.name, locale: s.locale, step: s.label, what: `개발 용어 노출 ${s.devTerms.length}건(본문 ${mainCount}) — ${list}` });
+    // ★초보자 기준 (Train N6 → C-J1, D-17 amend): 기본 흐름(J0·J1·J2·J6·J7)에서 개발
+    // 용어·외부 계정 버튼은 P0 — 단 기존 앱 문(J1)의 GitHub은 선택 단계로 허용(P2).
+    // 개발자·시드 화면(J3·J5)은 P2로만. 규칙은 lib에 있다(테스트됨). 문구를 같이 남긴다.
+    for (const b of beginnerFindings({ journeyName: j.name, devTerms: s.devTerms, accountCtas: s.accountCtas })) {
+      audit.findings.push({ sev: b.sev, journey: j.name, locale: s.locale, step: s.label, what: b.what });
     }
-    if ((s.accountCtas ?? []).length > 0) {
-      audit.findings.push({ sev: beginnerSev, journey: j.name, locale: s.locale, step: s.label, what: `외부 계정 CTA ${s.accountCtas.length}개 — ${s.accountCtas.join(" / ")}` });
+    // ★화면 구조 (C-J1): 막다른 길 P0 · 같은 라벨·다른 목적지 P1.
+    for (const x of structureFindings(s)) {
+      audit.findings.push({ sev: x.sev, journey: j.name, locale: s.locale, step: s.label, what: x.what });
     }
   }
 }
