@@ -29,6 +29,7 @@
 3. **한 브라우저** — 6건 모두 같은 브라우저(같은 userKey)에서 한다. 시크릿 창·다른 기기에서 만든 프로젝트는 다른 userKey에 묶여 지표 도구가 한 번에 못 읽는다(서버는 userKey 소유권으로만 프로젝트를 연다 — `apps/central-plane/src/routes/workspace.ts:466-486`).
 4. **하루 한도** — 검수 10회·수리 5회 / userKey / UTC 하루 [PILOT] (`apps/central-plane/src/workspace/beta-limits.ts:66,68`). UTC 자정 = 한국 오전 9시. 건당 최소 2회(첫 확인 + 다시 확인)라 **하루 3건 이하**로 잡는다. 한도에 걸리면 화면이 "오늘 확인 횟수를 다 썼어요"를 띄운다 — 기다렸다가 이어 한다(시트 메모에 적는다).
 5. **[미확인] #564 배포 여부** — 고칠 것이 없는 결과에서 고침 카드를 숨기는 수정(#564, `2956eb7`)은 main에 있지만 이 문서를 쓸 때 대시보드 배포 여부를 확인하지 않았다(HANDOFF 09-29 §3엔 "승인 대기"). 배포 전이면 "문제를 찾지 못했어요" 결과에도 고침 카드가 보일 수 있다 — 그때는 붙여넣지 않는다(§2 4-b).
+6. **화면 문구 재확인 (파일럿 시작 직전, 매 라운드)** — main에서 `node --test tools/simsa-completion-loop-spike/test/pilot-metrics.test.mjs`를 돌려 드리프트 가드가 통과하는지 본다. 이 테스트는 CI에 걸려 있지 않다(§8). 특히 계획 §5.2의 C-N7(첫 화면 문 3개 카피)이 배포되면 §2의 1·2단계 문구가 바뀐다 — 가드가 실패하면 **§2(절차)만** 라이브 화면에 맞게 고친다. 고정되는 것은 §4·§5뿐이다.
 
 ## 2. 건별 절차 — (b)(c) (P-4)
 
@@ -42,7 +43,7 @@
    - 첫 확인이 안 걸렸으면: 프로젝트 개요에 「실제 앱 확인하기」가 보이면 그것을, 주소가 안 붙었으면 「앱 주소 추가하기」 칸에 주소를 넣고 「확인 시작」(주소 위치는 「주소를 어디서 찾나요?」).
    - 시작 시각을 시트 메모에 적는다.
 2. **의도 확인** — 개요의 「저희가 읽은 이 앱은 이렇습니다」 카드에서 「이 앱이 하는 일」 한 줄을 읽는다. 정답지의 '원래 의도'와 다르면 **실사용자처럼** 고친 뒤 「네, 맞아요」. 고쳤는지 여부를 시트 메모에 적는다.
-   - 이 한 줄은 다시 확인의 기준이 되고(`apps/dashboard/src/app/projects/[id]/visual-checks/[runId]/page.tsx:359-377` confirmedIntent), 프로젝트에 저장돼 topic 분류의 입력이 된다(`components/IntentConfirmCard.tsx:102-142` → `lib/project-mirror.ts` → 서버 `classifyTopics`).
+   - 이 한 줄은 다시 확인의 기준이 되고, 프로젝트에 저장돼 topic 분류의 입력이 된다(`components/IntentConfirmCard.tsx:102-142` → `lib/project-mirror.ts` → 서버 `classifyTopics`). 다시 확인은 원 런의 의도가 서버 기본 문장일 때(주소만 넣고 시작한 첫 런이 그렇다)만 이 확정 한 줄을 보낸다(`apps/dashboard/src/lib/visual-check-recheck.mjs:62-74`, 호출 `app/projects/[id]/visual-checks/[runId]/page.tsx:359-377`). 실제로 어떤 문장이 갔는지는 `pilot-metrics` JSON의 런별 `intent`로 확인한다.
 3. **결과 확인** — 「진행 상황 보기」 → 끝나면 「검수 결과 보기」(또는 사이드바 「앱 확인하기」 → 「리포트 열기」). 보통 1~4분(대시보드 진행 문구의 실측 범위). 판정 한 줄과 「발견한 내용」을 읽는다.
    - 결과 화면 맨 아래 「이번 결과, 어떠셨어요?」에 **지금 앱을 직접 써 본 상태 그대로** 답한다(첫 런의 답도 런별 일치율 표본이다 — §4.3).
 4. **고침**
@@ -203,7 +204,7 @@ node tools/simsa-completion-loop-spike/pilot-metrics.mjs \
 - region은 프로젝트 생성 시점 값이다(§4.2).
 - topic은 한국어 한 줄에서 키워드가 얼마나 잡히는지 [미검증].
 - (a) 빌드 지표(빌드 결과·spent_usd)는 수기다 — 빌드 실행체가 아직 없다(계획 §5.1 186행: kind=build → builder_stage_not_implemented).
-- 지표 도구 테스트는 CI에 걸려 있지 않다(`tools/`는 pnpm 워크스페이스 밖 — `pnpm-workspace.yaml`). 로컬에서 `node --test tools/simsa-completion-loop-spike/test/pilot-metrics.test.mjs`.
+- 지표 도구 테스트(화면 문구 드리프트 가드 포함)는 CI에 걸려 있지 않다(`tools/`는 pnpm 워크스페이스 밖 — `pnpm-workspace.yaml`). 그래서 대시보드 문구가 바뀌어도 PR이 빨개지지 않는다 — §1-6처럼 사람이 돌린다. 로컬에서 `node --test tools/simsa-completion-loop-spike/test/pilot-metrics.test.mjs`.
 - #564 배포 여부 [미확인](§1-5).
 
 ## 정정 기록
