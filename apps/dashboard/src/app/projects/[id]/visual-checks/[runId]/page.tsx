@@ -63,6 +63,7 @@ import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { buildRecheckBody } from "@/lib/visual-check-recheck.mjs";
 import {
   canRepair,
+  hasSomethingToFix,
   repairEntryMode,
   isRepairActive,
   repairFailureKind,
@@ -1173,7 +1174,11 @@ export default function VisualCheckDetailPage() {
               builder (Lovable/Bolt/v0/Replit/Base44 in built_with) sees the
               paste-into-chat block by default; everyone else sees the CLI agent
               prompt as before. When the run carries both, a text toggle flips.
-              Old runs without builderPrompt render exactly the pre-Train-C UI. */}
+              Old runs without builderPrompt render exactly the pre-Train-C UI.
+              2026-09-29: only when there is something to fix — a "no problem
+              found" result with informational items only shows no fix card
+              (hasSomethingToFix, same rule as the server's next steps). */}
+          {hasSomethingToFix(check) && (
           <section className="card p-5">
             <h3 className="section-title">{t.visualChecks.fixTitle}</h3>
             {activePrompt ? (
@@ -1204,6 +1209,7 @@ export default function VisualCheckDetailPage() {
               <p className="section-desc">{t.visualChecks.noPrompt}</p>
             )}
           </section>
+          )}
 
           {/* Next steps */}
           {nextSteps.length > 0 && (
