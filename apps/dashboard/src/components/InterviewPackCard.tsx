@@ -25,6 +25,7 @@ import {
 } from "@/lib/workflow-store";
 import { fetchInterviewPack, parseInterviewAnswerApi, type InterviewAnswerOk, type InterviewApiError } from "@/lib/interview-pack-api";
 import { applyInterviewAnswer } from "@/lib/interview-apply.mjs";
+import { effectiveConfirmedItemIds } from "@/lib/confirmed-items.mjs";
 import { mirrorThenBuildIntentRuler } from "@/lib/intent-ruler";
 
 type PackState = "idle" | "loading" | "ready" | "error";
@@ -48,7 +49,9 @@ export function InterviewPackCard({ projectId }: { projectId: string }) {
   async function loadPack() {
     setPackState("loading");
     const ext = loadExtendedProjectData(projectId);
-    const r = await fetchInterviewPack(projectId, getUserKey(), loc, ext?.intentConfirmedItemIds ?? []);
+    // 확인 목록 필드가 없는 옛 프로젝트는 지금 항목 전부가 확인된 것(confirmed-items.mjs 레거시 폴백).
+    const reqIds = (getLocalProject(projectId)?.requirements ?? []).map((q) => q.id);
+    const r = await fetchInterviewPack(projectId, getUserKey(), loc, effectiveConfirmedItemIds(ext?.intentConfirmedItemIds, reqIds));
     if (r.ok) {
       setPrompt(r.prompt);
       setPackState("ready");
@@ -94,7 +97,8 @@ export function InterviewPackCard({ projectId }: { projectId: string }) {
         oneLine: ext?.productSpec?.oneLine ?? proj.description ?? "",
         requirements: proj.requirements.map((q) => ({ id: q.id, title: q.title })),
         productSpec: (ext?.productSpec ?? {}) as Record<string, unknown>,
-        confirmedItemIds: ext?.intentConfirmedItemIds ?? [],
+        // 반영의 바탕 — 옛 프로젝트를 빈 목록으로 읽으면 기존 확인 항목이 반영 한 번에 사라진다.
+        confirmedItemIds: effectiveConfirmedItemIds(ext?.intentConfirmedItemIds, proj.requirements.map((q) => q.id)),
       },
       locale: loc,
     });

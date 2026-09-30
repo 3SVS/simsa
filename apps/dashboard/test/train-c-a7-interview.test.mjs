@@ -93,8 +93,9 @@ test("I-3: 카드 배선 — 기존 앱 문 개요에 인라인, 모달 없음, 
   assert.match(card, /onChange=\{\(e\) => setAnswerText\(e\.target\.value\)\}/);
   // 못 읽은 부분은 정직하게
   assert.match(card, /c\.unreadLead/);
-  // 질문 묶음은 확인 id와 함께 요청한다(역추론 지시서가 아직 없을 때의 요약 재료)
-  assert.match(card, /fetchInterviewPack\(projectId, getUserKey\(\), loc, ext\?\.intentConfirmedItemIds \?\? \[\]\)/);
+  // 질문 묶음은 확인 id와 함께 요청한다(역추론 지시서가 아직 없을 때의 요약 재료).
+  // 옛 저장은 레거시 폴백으로 읽는다 — train-c-a7-confirmed-items CI-3.
+  assert.match(card, /fetchInterviewPack\(projectId, getUserKey\(\), loc, effectiveConfirmedItemIds\(ext\?\.intentConfirmedItemIds, reqIds\)\)/);
 });
 
 function keyShape(o) {

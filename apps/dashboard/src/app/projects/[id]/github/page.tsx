@@ -25,6 +25,7 @@ import {
   type CreditEnforcementResult,
 } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled } from "@/lib/repo-settle.mjs";
+import { withUserAuthoredItems } from "@/lib/confirmed-items.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
 import { githubPullsView, liveAppCheckHref, screenAppView, sourceFacts } from "@/lib/project-steps.mjs";
 import { useAppPresence } from "@/lib/use-app-presence";
@@ -140,9 +141,18 @@ export default function GitHubPage() {
         priority: "must" as const,
       })),
     });
+    const prevExt = loadExtendedProjectData(id);
     saveExtendedProjectData(id, {
       productSpec: generated.productSpec,
       itemCriteria: Object.fromEntries(generated.items.map((i) => [i.id, i.criteria ?? []])),
+      // C-A7 (D-2 amend): 유저가 직접 쓴 문장에서 만든 항목 — 앱에서 읽어낸 추론이 아니므로 확인된 것
+      // (그렇지 않으면 기존 앱 문의 지시서가 이 항목들을 should로 강등한다, PR #577 리뷰 P2-2).
+      intentConfirmedItemIds: withUserAuthoredItems({
+        confirmedItemIds: prevExt?.intentConfirmedItemIds,
+        before: project.requirements.map((r) => r.id),
+        after: generated.items.map((i) => i.id),
+        authored: generated.items.map((i) => i.id),
+      }),
     });
     // builtWith / entryPath intentionally omitted — the server upsert keeps the
     // stored capture-once values (sticky), so this save can't wipe them.

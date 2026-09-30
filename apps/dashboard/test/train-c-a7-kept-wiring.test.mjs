@@ -55,6 +55,6 @@ test("K-4: API 클라이언트는 confirmedItemIds가 있을 때만 싣는다(�
   assert.match(api, /\.\.\.\(opts\.confirmedItemIds \? \{ confirmedItemIds: \[\.\.\.opts\.confirmedItemIds\]\.slice\(0, 60\) \} : \{\}\)/);
 });
 
-test("K-5: 지시서 화면의 재생성도 확인 id를 보낸다", () => {
-  assert.match(devSpecPage, /confirmedItemIds: ext\?\.intentConfirmedItemIds/);
+test("K-5: 지시서 화면의 재생성도 확인 id를 보낸다(옛 저장은 레거시 폴백 — train-c-a7-confirmed-items CI-3)", () => {
+  assert.match(devSpecPage, /confirmedItemIds: effectiveConfirmedItemIds\(ext\?\.intentConfirmedItemIds,/);
 });
