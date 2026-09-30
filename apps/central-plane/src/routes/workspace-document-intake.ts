@@ -37,6 +37,7 @@ import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { ipRateLimitKey } from "../workspace/rate-limit-key.js";
+import { generationCapacityResponse, takeGenerationSlot } from "../workspace/generation-capacity.js";
 
 const DEFAULT_LIMIT_PER_HOUR = 20;
 
@@ -166,6 +167,10 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
       );
     }
 
+    // ── Service-wide daily capacity (비용 권고 ③) — same bucket as idea-to-spec-draft
+    const slot = await takeGenerationSlot(c.env, "generation");
+    if (slot.limited) return generationCapacityResponse(slot);
+
     // ── Generate via the SAME path as idea-to-spec-draft ────────────────────
     // generateIdeaToSpecDraft keeps the keyless dev mock, but an LLM FAILURE
     // now surfaces as 503 llm_unavailable (honest-failures policy).
@@ -181,6 +186,7 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
       result = await generateIdeaToSpecDraft({ idea: input, locale }, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), usage.sink);
     } catch (err) {
       console.error("[workspace/document-intake] unexpected generate error:", err);
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
       return c.json({ ok: false, error: "internal_error" }, 500);
     } finally {
       if (usage.events.length > 0) {
@@ -192,6 +198,8 @@ export function createWorkspaceDocumentIntakeRoutes(): Hono<{ Bindings: Env }> {
 
     // Honest failure: never hand a fabricated draft for a real document.
     if (result.ok === false) {
+      // 비용 권고 ③: unbilled failure → slot back; billed (answer did not parse) → kept.
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
       return c.json({ ok: false, error: "llm_unavailable" }, 503);
     }
 

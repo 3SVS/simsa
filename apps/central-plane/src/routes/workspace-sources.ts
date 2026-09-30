@@ -28,6 +28,7 @@ import {
 } from "../workspace/source-evidence.js";
 import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
+import { GENERATION_CAPACITY_ERROR, takeGenerationSlot } from "../workspace/generation-capacity.js";
 import {
   insertProjectSource,
   listProjectSources,
@@ -221,19 +222,42 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       });
     }
 
+    // 비용 권고 ③ — service-wide daily capacity ("generation" bucket, the same as
+    // idea-to-spec-draft), right before the LLM. Full → this route's own convention:
+    // 200 with inferred:null and a reason, so the card says it plainly (no LLM call).
+    const slot = await takeGenerationSlot(c.env, "generation");
+    if (slot.limited) {
+      return c.json({
+        ok: true,
+        inferred: null,
+        reason: GENERATION_CAPACITY_ERROR,
+        resetAt: slot.resetAt,
+        readSources: evidence.readSources,
+        stack: evidence.stack,
+      });
+    }
+
     // L-3 (Train L): 원장 기록(job_kind generate). 소유 확인된 projectId·userKey만.
     const usage = createUsageCollector();
-    const draft = await generateIdeaToSpecDraft(
-      { idea, locale },
-      c.env.ANTHROPIC_API_KEY,
-      c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
-      vendorFallback(c.env),
-      usage.sink,
-    );
+    let draft: Awaited<ReturnType<typeof generateIdeaToSpecDraft>>;
+    try {
+      draft = await generateIdeaToSpecDraft(
+        { idea, locale },
+        c.env.ANTHROPIC_API_KEY,
+        c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+        vendorFallback(c.env),
+        usage.sink,
+      );
+    } catch (err) {
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
+      throw err;
+    }
     if (usage.events.length > 0) {
       await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "generate", jobId: newLlmJobId("inf"), projectId, userKey }));
     }
     if ("ok" in draft && draft.ok === false) {
+      // unbilled failure → slot back; billed (answer did not parse) → kept.
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
       return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack });
     }
 

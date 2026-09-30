@@ -342,6 +342,13 @@ export interface Env {
    */
   REPAIR_JOB_BUDGET_USD?: string;
   /**
+   * 비용 권고 ③ (2026-09-30, D-7 amend [PILOT]) — 생성 계열(아이디어 초안·스펙 검수·추천 답변·막힘 풀기·
+   * 수정 제안·문서 초안·의도 추론)과 개발 지시서 생성의 **서비스 전체** 일일 상한 override.
+   * 기본 생성 계열 500/일 · 지시서 200/일(workspace/beta-limits.ts). 양의 정수만, 그 외 = 기본값.
+   */
+  BETA_GENERATION_DAILY_LIMIT_GLOBAL?: string;
+  BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL?: string;
+  /**
    * In-app feedback (workspace-feedback.ts) admin notification targets.
    * ADMIN_TELEGRAM_CHAT_ID: numeric chat id to DM new feedback to (uses the
    * existing TELEGRAM_BOT_TOKEN). ADMIN_FEEDBACK_EMAIL: fallback recipient

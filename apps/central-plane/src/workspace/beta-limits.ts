@@ -81,6 +81,14 @@ export const BETA_LIMITS = {
    * highest price, never $0) and stops before the next call once the sum reaches this.
    */
   repairJobBudgetUsd: 2,
+  /**
+   * 비용 권고 ③ (2026-09-30) [PILOT]: service-wide LLM generations per UTC day — the
+   * idea/spec family (idea-to-spec-draft · check-draft · recommend-answer · unstick ·
+   * fix-suggestion · document spec-draft · infer-intent). ~$0.10 each → ~$50/day ceiling.
+   */
+  generationsPerDayGlobal: 500,
+  /** 비용 권고 ③ [PILOT]: service-wide dev-spec generations per UTC day (~$0.22 each → ~$44/day). */
+  devSpecsPerDayGlobal: 200,
 } as const;
 
 /** Daily-bucket names (workspace_rate_limit key prefix). */
@@ -92,6 +100,9 @@ export const INSPECTION_DAILY_IP_BUCKET = "inspection-daily-ip";
 export const REPAIR_DAILY_IP_BUCKET = "repair-daily-ip";
 export const INSPECTION_DAILY_GLOBAL_BUCKET = "inspection-daily-global";
 export const REPAIR_DAILY_GLOBAL_BUCKET = "repair-daily-global";
+/** 비용 권고 ③ — service-wide buckets for the LLM generation paths (generation-capacity.ts). */
+export const GENERATION_DAILY_GLOBAL_BUCKET = "generation-daily-global";
+export const DEV_SPEC_DAILY_GLOBAL_BUCKET = "dev-spec-daily-global";
 /** The one key of a service-wide bucket. */
 export const SERVICE_BUCKET_KEY = "all";
 
@@ -144,6 +155,16 @@ export function repairDailyLimitPerIp(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_PE
 /** Service-wide daily repair cap (default 20 — was 50 before the 2026-09-30 cost review). */
 export function repairDailyLimitGlobal(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_GLOBAL">): number {
   return dailyLimitFromEnv(env.BETA_REPAIR_DAILY_LIMIT_GLOBAL, BETA_LIMITS.repairsPerDayGlobal);
+}
+
+/** Service-wide daily cap of the idea/spec generation family (비용 권고 ③, default 500). */
+export function generationDailyLimitGlobal(env: Pick<Env, "BETA_GENERATION_DAILY_LIMIT_GLOBAL">): number {
+  return dailyLimitFromEnv(env.BETA_GENERATION_DAILY_LIMIT_GLOBAL, BETA_LIMITS.generationsPerDayGlobal);
+}
+
+/** Service-wide daily cap of dev-spec generation (비용 권고 ③, default 200). */
+export function devSpecDailyLimitGlobal(env: Pick<Env, "BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL">): number {
+  return dailyLimitFromEnv(env.BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL, BETA_LIMITS.devSpecsPerDayGlobal);
 }
 
 /**

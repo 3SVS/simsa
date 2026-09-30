@@ -7,6 +7,8 @@
  *   POST /workspace/projects/:id/dev-spec/generate — { userKey, locale? } 브리프+항목에서 다단계
  *                                                    생성(D-3) → 무결성 통과본만 저장·반환.
  *                                                    실패는 503 llm_unavailable / 422 dev_spec_invalid.
+ *                                                    비용 권고 ③: 서비스 전체 일 200(기본) 초과 →
+ *                                                    503 generation_capacity(LLM 0회).
  *
  * 소유권 = 기존 owned-project 게이트(getOwnedProject). 응답은 "missing"과 "not owned"를
  * 구분하지 않는다(프로젝트 id 탐색 방지, workspace-ext와 동일 규율).
@@ -23,6 +25,7 @@ import { betaProjectCreateDailyLimit } from "../workspace/beta-limits.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
+import { generationCapacityResponse, takeGenerationSlot } from "../workspace/generation-capacity.js";
 
 /** 베타 일일 상한 버킷 — 지시서 생성은 프로젝트 생성과 같은 한도(기본 20/day)를 따로 센다. */
 export const BETA_DEV_SPEC_DAILY_BUCKET = "beta-dev-spec-daily";
@@ -109,8 +112,16 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
       return json(headers, 503, { ok: false, error: "llm_unavailable" });
     }
 
+    // 비용 권고 ③ — service-wide daily capacity of dev-spec generation (default 200/day).
+    // Taken BEFORE the user's own daily slot: a request refused for capacity must not use
+    // up the user's quota (that slot has no refund); a user-capped request hands the
+    // service slot back below.
+    const slot = await takeGenerationSlot(c.env, "dev_spec");
+    if (slot.limited) return generationCapacityResponse(slot, headers);
+
     const daily = await consumeUserDailyLimit(c.env, BETA_DEV_SPEC_DAILY_BUCKET, userKey, betaProjectCreateDailyLimit(c.env));
     if (daily.limited) {
+      await slot.settle({ failed: true, billedCalls: 0 });
       return new Response(
         JSON.stringify({ ok: false, error: "rate_limited", scope: "beta_daily", retryAfterSeconds: daily.retryAfterSeconds }),
         { status: 429, headers: { "content-type": "application/json", "retry-after": String(daily.retryAfterSeconds), ...headers } },
@@ -120,10 +131,16 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     // L-3 (Train L): 패스·재시도 호출마다 원장 1행(job_kind dev_spec, 한 job_id). 422·503이어도 기록 — 비용은 났다.
     const usage = createUsageCollector();
     const call = makeDevSpecLlmCaller(c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), c.env.DEV_SPEC_MODEL || undefined, usage.sink);
-    const result = await generateDevSpec(
-      { brief: owned.productSpec, items: owned.items, idea: owned.idea, locale, source: "generated" },
-      call,
-    );
+    let result: Awaited<ReturnType<typeof generateDevSpec>>;
+    try {
+      result = await generateDevSpec(
+        { brief: owned.productSpec, items: owned.items, idea: owned.idea, locale, source: "generated" },
+        call,
+      );
+    } catch (err) {
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
+      throw err;
+    }
     if (usage.events.length > 0) {
       await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "dev_spec", jobId: newLlmJobId("dsp"), projectId, userKey }));
     }
@@ -148,7 +165,12 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     await insertUsageEvent(c.env, { userKey, eventType: "workspace_dev_spec_generated", metadata: { ok: result.ok, passes: result.passes.length } }).catch(() => undefined);
 
     if (!result.ok) {
-      if (result.error === "llm_unavailable") return json(headers, 503, { ok: false, error: "llm_unavailable" });
+      if (result.error === "llm_unavailable") {
+        // 비용 권고 ③: unbilled failure → slot back; billed passes (then gave up) → kept.
+        await slot.settle({ failed: true, billedCalls: usage.events.length });
+        return json(headers, 503, { ok: false, error: "llm_unavailable" });
+      }
+      // 422: the passes ran and were billed — the slot stays spent.
       return json(headers, 422, { ok: false, error: "dev_spec_invalid", stage: result.stage, issues: result.issues });
     }
 
