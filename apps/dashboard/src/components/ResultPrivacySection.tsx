@@ -3,16 +3,20 @@
 // Train K — 계약 5 (동의 계획 §4): 완료된 확인 결과 화면 맨 아래, '이번 결과, 어떠셨어요?' 다음.
 //
 //  ⓑ 학습 데이터 카드(TrainingConsentCard) — 서버가 "아직 정하지 않음"이라고 말하고, 이 브라우저에서
-//     결정 없이 카드를 본 결과가 상한 미만일 때만(첫 완료 결과 + 다음 완료 결과 1회).
+//     결정 없이 카드를 본 결과가 상한 미만일 때만(첫 완료 결과 + 다음 완료 결과 1회). 판단은
+//     lib/privacy-prefs.mjs cardVisibleFromPrefs.
 //  ⓐ 운영 정보 한 줄 — 회색 1줄 고지 + 끄기/켜기 + 자세히. 설정 화면 토글과 같은 API.
+//  ⓑ' 허용한 사람에게는 운영 정보 줄 옆에 '학습 데이터 제공 중 · 철회' 1클릭(#573 검증 3 — 철회는 동의와
+//     같은 화면·같은 클릭 수). 카드와 같은 API(POST training-consent {consented:false}), 확인 창 없음.
 //
-// 서버를 모르면(옛 서버·네트워크 — fetchPrivacyPrefs가 null) 둘 다 그리지 않는다: 틀릴 수 있는 사실
-// 문장("기록됩니다"/"기록하지 않고 있어요")을 추측으로 쓰지 않고, 삭제를 약속하는 카드도 띄우지 않는다.
+// 서버를 모르면(옛 서버·네트워크 — fetchPrivacyPrefs가 null) 셋 다 그리지 않는다: 틀릴 수 있는 사실
+// 문장("기록됩니다"/"기록하지 않고 있어요"/"제공 중")을 추측으로 쓰지 않고, 삭제를 약속하는 카드도 띄우지 않는다.
 // 모두 인라인 — 모달·오버레이·팝업 없음.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchPrivacyPrefs, savePrivacyPrefs } from "@/lib/workspace-privacy-prefs-api";
+import { saveTrainingConsent } from "@/lib/workspace-training-consent-api";
 import {
   TRAINING_CARD_STORAGE_KEY,
   cardVisibleFromPrefs,
@@ -20,6 +24,8 @@ import {
   opsInfoLineVariant,
   parseSeenRuns,
   rememberTrainingCardSeen,
+  trainingSaveOutcome,
+  trainingWithdrawLineVisible,
   type OpsMeta,
   type PrivacyPrefs,
 } from "@/lib/privacy-prefs.mjs";
@@ -48,6 +54,8 @@ function writeSeenRuns(next: string[]) {
   }
 }
 
+type Phase = "idle" | "saving" | "done" | "error";
+
 export function ResultPrivacySection({
   runId,
   resultDone,
@@ -61,12 +69,14 @@ export function ResultPrivacySection({
 }) {
   const [prefs, setPrefs] = useState<PrivacyPrefs | null>(null);
   const [showCard, setShowCard] = useState(false);
-  const [opsPhase, setOpsPhase] = useState<"idle" | "saving" | "error">("idle");
+  const [opsPhase, setOpsPhase] = useState<Phase>("idle");
+  const [withdrawPhase, setWithdrawPhase] = useState<Phase>("idle");
 
   useEffect(() => {
     let cancelled = false;
     setShowCard(false);
     setOpsPhase("idle");
+    setWithdrawPhase("idle");
     if (!resultDone || !userKey) return;
     void (async () => {
       const loaded = await fetchPrivacyPrefs(userKey);
@@ -95,8 +105,22 @@ export function ResultPrivacySection({
     }
   }
 
+  async function withdrawTraining() {
+    if (withdrawPhase === "saving") return;
+    setWithdrawPhase("saving");
+    const res = await saveTrainingConsent(userKey, false);
+    if (trainingSaveOutcome(false, res) === "declined") {
+      setPrefs((prev) => (prev ? { ...prev, training: { ...prev.training, state: "declined" } } : prev));
+      setWithdrawPhase("done");
+    } else {
+      setWithdrawPhase("error");
+    }
+  }
+
   const p = t.privacyPrefs;
+  const s = t.trainingConsent;
   const line = opsInfoLineCopy(opsInfoLineVariant(prefs), p);
+  const showWithdrawLine = trainingWithdrawLineVisible(prefs, showCard);
 
   return (
     <>
@@ -126,6 +150,30 @@ export function ResultPrivacySection({
             {p.learnMore}
           </Link>
           {opsPhase === "error" && <span className="ml-2 text-red-600">{p.saveError}</span>}
+        </p>
+      )}
+      {showWithdrawLine && (
+        <p className="text-xs leading-relaxed text-gray-500">
+          {s.lineSharing}
+          {" · "}
+          <button
+            type="button"
+            onClick={() => void withdrawTraining()}
+            disabled={withdrawPhase === "saving"}
+            className="underline hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {s.lineWithdraw}
+          </button>
+          {" · "}
+          <Link href="/legal/privacy#training-data" className="underline hover:text-gray-700">
+            {s.learnMore}
+          </Link>
+          {withdrawPhase === "error" && <span className="ml-2 text-red-600">{s.saveError}</span>}
+        </p>
+      )}
+      {withdrawPhase === "done" && (
+        <p role="status" className="text-xs leading-relaxed text-gray-500">
+          {s.savedOffDeletes}
         </p>
       )}
     </>

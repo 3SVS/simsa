@@ -41,6 +41,15 @@ export function trainingSaveOutcome(
   requested: boolean,
   res: { ok: boolean; active: boolean },
 ): "consented" | "declined" | "error";
+export type TrainingCardChoice = "ask" | "consented" | "declined" | "withdrawn";
+/** Card state after a save: withdraw from "consented" → "withdrawn"; a save that did not stick → "error". */
+export function trainingCardNextChoice(
+  prev: TrainingCardChoice,
+  allow: boolean,
+  res: { ok: boolean; active: boolean },
+): Exclude<TrainingCardChoice, "ask"> | "error";
+/** Result-screen "sharing training data · withdraw" line: consented per server, and the card is not showing. */
+export function trainingWithdrawLineVisible(prefs: PrivacyPrefs | null | undefined, cardShown: boolean): boolean;
 export type OpsInfoLineVariant = "recording" | "off_default" | "off_user";
 export function opsInfoLineVariant(prefs: PrivacyPrefs | null): OpsInfoLineVariant | null;
 export function opsInfoLineCopy(

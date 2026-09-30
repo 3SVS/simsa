@@ -1168,6 +1168,9 @@ export type Dictionary = {
     ageNote: string;
     allow: string;
     decline: string;
+    withdraw: string;
+    lineSharing: string;
+    lineWithdraw: string;
     learnMore: string;
     saving: string;
     savedAllowed: string;

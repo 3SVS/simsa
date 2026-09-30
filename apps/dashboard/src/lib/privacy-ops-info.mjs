@@ -216,7 +216,7 @@ export const TRAINING_DATA_PURPOSE =
 export const TRAINING_DATA_BASIS = "동의(개인정보 보호법 제15조 제1항 제1호). 정당한 이익으로 대신하지 않습니다.";
 
 export const TRAINING_DATA_CHOICE =
-  "허용 여부와 관계없이 모든 기능을 똑같이 쓰실 수 있습니다. 만 14세 이상만 허용하실 수 있습니다. 처음 완료된 확인 결과 화면에서 묻고, 각 프로젝트의 설정 화면에서 언제든 바꾸실 수 있습니다.";
+  "허용 여부와 관계없이 모든 기능을 똑같이 쓰실 수 있습니다. 만 14세 이상만 허용하실 수 있습니다. 처음 완료된 확인 결과 화면에서 묻고, 각 프로젝트의 설정 화면에서 언제든 바꾸실 수 있습니다. 허용하신 뒤에는 확인 결과 화면에서도 한 번에 철회하실 수 있습니다.";
 
 export const OPS_INFO_RETENTION = `서비스 운영 기간 동안 보관합니다. 프로젝트를 삭제하시면 서버 데이터베이스에 있는 그 프로젝트의 확인 기록과 함께 삭제됩니다. ${TRAINING_COPY_NOTE} ${RATE_LIMIT_RETENTION_NOTE}`;
 

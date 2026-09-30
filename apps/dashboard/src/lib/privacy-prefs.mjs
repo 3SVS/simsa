@@ -162,6 +162,35 @@ export function trainingSaveOutcome(requested, res) {
 }
 
 /**
+ * 카드의 다음 상태 (#573 검증 3 — 철회는 동의와 같은 화면·같은 클릭 수). 허용으로 저장된 카드에도 같은
+ * 클래스의 [허용 철회] 버튼이 남고, 누르면 같은 API(POST training-consent {consented:false})를 부른다.
+ *   "ask"        → 허용하기 → "consented" / 허용하지 않기 → "declined"
+ *   "consented"  → 허용 철회 → "withdrawn"
+ *   저장이 요청대로 되지 않으면 "error"(상태는 그대로 두고 오류만 보인다).
+ * @param {"ask" | "consented" | "declined" | "withdrawn"} prev
+ * @param {boolean} allow
+ * @param {{ ok: boolean, active: boolean }} res
+ * @returns {"consented" | "declined" | "withdrawn" | "error"}
+ */
+export function trainingCardNextChoice(prev, allow, res) {
+  const outcome = trainingSaveOutcome(allow, res);
+  if (outcome === "error") return "error";
+  if (outcome === "declined" && prev === "consented") return "withdrawn";
+  return outcome;
+}
+
+/**
+ * 결과 화면의 '학습 데이터 제공 중 · 철회' 한 줄 — 서버가 "허용함"이라고 말하고, 카드가 떠 있지 않을 때만
+ * (카드가 떠 있으면 카드의 [허용 철회]가 같은 일을 한다). 서버를 모르면(null) 그리지 않는다.
+ * @param {ReturnType<typeof normalizePrivacyPrefs> | null | undefined} prefs
+ * @param {boolean} cardShown
+ */
+export function trainingWithdrawLineVisible(prefs, cardShown) {
+  if (cardShown) return false;
+  return Boolean(prefs && prefs.training && prefs.training.state === "consented");
+}
+
+/**
  * 결과 화면의 운영 정보 한 줄 — 어느 문구를 쓸지.
  *   "recording"   — 기록 중(기본 on 또는 직접 켬) → "…기록됩니다 · 기록 끄기 · 자세히"
  *   "off_default" — 기본 off(접속 나라 규칙 EU/EEA·영국·스위스, 또는 접속 나라를 모름 — 서버 #574

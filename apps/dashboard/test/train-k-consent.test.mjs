@@ -194,15 +194,21 @@ describe("옛 서버 방어 — 응답 경계 검사와 화면 상태", () => {
 
 // ─── 3. 동등 버튼 · 인라인 · 사전 선택 없음 ──────────────────────────────────
 describe("학습 카드 — 동등 버튼 2개, 사전 선택·닫기·오버레이 없음 (결함 ③)", () => {
-  it("버튼은 정확히 2개이고, 둘 다 같은 클래스 상수 하나를 쓴다", () => {
+  it("묻는 동안 버튼은 정확히 2개, 카드의 모든 버튼(철회 포함)은 같은 클래스 상수 하나를 쓴다", () => {
     assert.ok(cardSrc, "TrainingConsentCard.tsx exists");
     // 여는 태그 안에 화살표 함수(`=>`)가 있어 `[^>]*`로는 못 자른다 — `<button`부터 `</button>`까지를 본다.
     const buttons = cardSrc.split("<button").slice(1).map((c) => c.slice(0, c.indexOf("</button>")));
-    assert.equal(buttons.length, 2, buttons.join("\n---\n"));
+    // 허용하지 않기·허용하기 + 허용 저장 뒤의 허용 철회(#573 검증 3) = 3
+    assert.equal(buttons.length, 3, buttons.join("\n---\n"));
     for (const b of buttons) {
       const classes = [...b.matchAll(/className=(\{[^}]+\}|"[^"]*")/g)].map((m) => m[1]);
       assert.deepEqual(classes, ["{CONSENT_CHOICE_CLASS}"], b);
     }
+    const askStart = cardSrc.indexOf('{choice === "ask" && (');
+    assert.ok(askStart > 0, "ask block");
+    const askRest = cardSrc.slice(askStart + 1);
+    const askBlock = askRest.slice(0, askRest.search(/\{\(?choice === /));
+    assert.equal(askBlock.split("<button").length - 1, 2, askBlock);
   });
 
   it("그 클래스에는 강조가 없다 (primary·색 배경·색 글자 없음)", () => {
@@ -770,6 +776,83 @@ describe("#573 검증 6 — cardVisibleFromPrefs(prefs, seen, runId, resultDone)
     assert.match(resultSectionSrc, /cardVisibleFromPrefs\(loaded, seen, runId, resultDone\)/);
     assert.ok(!/trainingState:/.test(resultSectionSrc), "component re-derives trainingState inline");
     assert.ok(!/\?\?\s*"undecided"/.test(resultSectionSrc + read(path.join(SRC, "lib/privacy-prefs.mjs"))), "no guessed 'undecided'");
+  });
+});
+
+// ─── 15. PR #573 검증 3 — 철회는 동의와 같은 화면·같은 클릭 수 (계획 §4 · GDPR 7(3)) ─────────────────
+// 옛 카드는 허용으로 저장되면 버튼이 사라지고 "프로젝트 설정에서 철회"만 남았다 — 동의는 결과 화면 1클릭,
+// 철회는 다른 화면으로 이동 + 토글. 이제: 같은 카드에 같은 클래스의 [허용 철회](1클릭, 같은 API), 그 뒤의
+// 결과 화면에서도 허용한 사람에게 '학습 데이터 제공 중 · 철회' 1클릭.
+const buttonChunks = (src) => src.split("<button").slice(1).map((c) => c.slice(0, c.indexOf("</button>")));
+
+describe("#573 검증 3 — 철회 = 동의와 같은 화면·같은 클릭 수", () => {
+  it("카드: 허용으로 저장된 상태에도 같은 클래스(CONSENT_CHOICE_CLASS)의 [허용 철회] 버튼이 있고, 같은 저장 함수(choose(false))를 부른다", () => {
+    const withdraw = buttonChunks(cardSrc).find((b) => b.includes("{s.withdraw}"));
+    assert.ok(withdraw, "no withdraw button in the card");
+    assert.match(withdraw, /onClick=\{\(\) => void choose\(false\)\}/);
+    assert.match(withdraw, /className=\{CONSENT_CHOICE_CLASS\}/);
+    // 허용 저장 상태 블록(`{choice === "consented" && (` … 다음 `{(choice ===` 또는 `{choice ===` 전) 안에 있다.
+    const start = cardSrc.indexOf('{choice === "consented" && (');
+    assert.ok(start > 0, "consented block");
+    const rest = cardSrc.slice(start + 1);
+    const next = rest.search(/\{\(?choice === /);
+    const consentedBlock = next >= 0 ? rest.slice(0, next) : rest;
+    assert.ok(consentedBlock.includes("{s.withdraw}"), `withdraw sits inside the consented block: ${consentedBlock}`);
+    assert.ok(consentedBlock.includes("{s.savedAllowed}"), "the saved-allowed status is in the same block");
+  });
+
+  it("카드 상태 전이 표 (trainingCardNextChoice) — 허용 뒤 철회는 'withdrawn', 저장 실패는 'error'", () => {
+    assert.equal(typeof K.trainingCardNextChoice, "function");
+    const ok = (active) => ({ ok: true, active });
+    assert.equal(K.trainingCardNextChoice("ask", true, ok(true)), "consented");
+    assert.equal(K.trainingCardNextChoice("ask", false, ok(false)), "declined");
+    assert.equal(K.trainingCardNextChoice("consented", false, ok(false)), "withdrawn");
+    assert.equal(K.trainingCardNextChoice("consented", false, ok(true)), "error");
+    assert.equal(K.trainingCardNextChoice("ask", true, { ok: false, active: false }), "error");
+    assert.equal(K.trainingCardNextChoice("consented", false, { ok: false, active: false }), "error");
+  });
+
+  it("결과 화면 줄 노출 (trainingWithdrawLineVisible) — 허용한 사람에게만, 카드가 떠 있으면 카드 버튼으로", () => {
+    assert.equal(typeof K.trainingWithdrawLineVisible, "function");
+    const P = (state) => K.normalizePrivacyPrefs({ ...VALID, training: { state, version: "v", decidedAt: "t" } });
+    assert.equal(K.trainingWithdrawLineVisible(null, false), false, "unknown server → no claim");
+    assert.equal(K.trainingWithdrawLineVisible(P("consented"), false), true);
+    assert.equal(K.trainingWithdrawLineVisible(P("consented"), true), false, "card already offers withdraw");
+    assert.equal(K.trainingWithdrawLineVisible(P("declined"), false), false);
+    assert.equal(K.trainingWithdrawLineVisible(P("undecided"), false), false);
+  });
+
+  it("결과 화면: '학습 데이터 제공 중 · 철회'는 1클릭(확인 창 없음)이고, 카드와 같은 API(saveTrainingConsent(userKey, false))", () => {
+    assert.match(resultSectionSrc, /trainingWithdrawLineVisible\(prefs, showCard\)/);
+    assert.match(resultSectionSrc, /\{s\.lineSharing\}/);
+    const btn = buttonChunks(resultSectionSrc).find((b) => b.includes("{s.lineWithdraw}"));
+    assert.ok(btn, "withdraw button on the result line");
+    assert.match(btn, /onClick=\{\(\) => void withdrawTraining\(\)\}/);
+    assert.match(resultSectionSrc, /saveTrainingConsent\(userKey, false\)/);
+    assert.match(cardSrc, /saveTrainingConsent\(userKey, allow\)/);
+    assert.ok(!/confirm\(|window\.confirm/.test(resultSectionSrc + cardSrc), "no extra confirmation step");
+    assert.match(resultSectionSrc, /\{s\.savedOffDeletes\}/, "after withdrawal, say what happened");
+  });
+
+  it("사전: 철회 문구 KO/EN — 허용 저장 안내는 '여기서' 철회할 수 있다고, 카드 '바꾸기'는 한 번에 철회를 말한다", () => {
+    const ko = DICTIONARIES.ko.trainingConsent;
+    const en = DICTIONARIES.en.trainingConsent;
+    assert.equal(ko.withdraw, "허용 철회");
+    assert.equal(ko.lineSharing, "학습 데이터 제공 중");
+    assert.equal(ko.lineWithdraw, "철회");
+    assert.match(ko.savedAllowed, /여기서/);
+    assert.match(en.savedAllowed, /here/);
+    assert.match(ko.pointControl, /한 번에 철회/);
+    assert.match(en.pointControl, /one click/);
+    // 철회 뒤 안내는 0071 이전 사본 예외를 숨기지 않는다(결과 화면에서도 옛 동의자가 철회할 수 있다).
+    assert.match(ko.savedOffDeletes, /자동으로 지워지지 않을 수 있어요/);
+    assert.match(en.savedOffDeletes, /may not be removed automatically/);
+  });
+
+  it("방침: 철회는 설정 화면이나 확인 결과 화면에서 (§6 · 학습 데이터 '선택')", () => {
+    const s6 = privacyPageSrc.slice(privacyPageSrc.indexOf("6. 이용자의 권리"), privacyPageSrc.indexOf("7. 개인정보 보호책임자"));
+    assert.match(s6, /학습 데이터 제공 동의는[^.]*확인 결과 화면에서[^.]*철회/, s6);
+    assert.match(ops.TRAINING_DATA_CHOICE ?? "", /확인 결과 화면에서도 한 번에 철회/);
   });
 });
 
