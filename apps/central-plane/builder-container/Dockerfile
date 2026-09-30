@@ -73,8 +73,10 @@ COPY apps/central-plane/builder-container/package.json ./package.json
 RUN npm install --no-package-lock --loglevel=error
 
 # S 모드 템플릿(D-5) — kind=build의 scaffolding 단계가 잡마다 작업 폴더로 복사한다.
-# 템플릿은 pnpm 워크스페이스 밖이라 CI·배포 체크아웃에는 설치물이 없다. 로컬에서 설치해 둔 node_modules·dist가
-# 섞여 들어와도 스캐폴드 복사(builder-run.mjs isScaffoldExcluded)가 한 번 더 거른다.
+# 템플릿은 pnpm 워크스페이스 밖이라 CI·배포 체크아웃에는 설치물이 없다. 로컬 작업 트리(`pnpm ship`)의
+# node_modules·dist·.wrangler와 비밀 파일(.dev.vars·.env*·.npmrc·.envrc·키)은 루트 .dockerignore가 빌드 컨텍스트에서
+# 빼고(wrangler는 Dockerfile을 stdin으로 넘겨 Dockerfile 옆 ignore 파일을 쓰지 않는다), 스캐폴드 복사
+# (builder-run.mjs isScaffoldExcluded — dotfile 기본 거부)가 한 번 더 거른다. container-images.yml이 미끼로 확인.
 COPY templates/simsa-hosted-app /builder/templates/simsa-hosted-app
 
 COPY apps/central-plane/builder-container/server.mjs ./server.mjs

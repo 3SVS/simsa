@@ -12,18 +12,21 @@
  *   POST /run        — 잡 페이로드(validateJobPayload, kind=build면 validateBuildPayload까지) → 202 →
  *                      runBuildJob(진행은 progressUrl로) → 최종 본문을 callbackUrl(/internal/build-done)로.
  *
- * 실패 본문은 builder-run.mjs failureCallbackBody 하나로 만든다 — Worker가 읽는 키는 `failedStage`다
+ * 잡 하나의 수명은 builder-run.mjs **startJob**이 쥔다: 45분 마감이면 러너를 멈추고(AbortSignal) 지금까지의
+ * spentUsd·usage를 실은 실패 본문, SIGTERM 드레인은 job.abort()의 같은 모양 본문, 러너 예외도 단계·지출을 싣는다
+ * (PR #569 검증 결함 6 — 종전 withTimeout은 경쟁만 해서 러너가 뒤에서 계속 돌았고 본문에 지출이 없었다).
+ * 실패 본문은 failureCallbackBody 하나로 만든다 — Worker가 읽는 키는 `failedStage`다
  * (B-5b-1 이전에는 다른 키 이름으로 보내서 Worker가 무시했고, 모든 실패가 'unknown' 단계로 기록됐다).
+ * 최종 콜백은 잡마다 **한 번**(entry.reported) — 드레인이 먼저 보냈으면 runJob은 보내지 않는다.
  *
  * PRIVACY: userKey·callbackToken·운영 토큰은 로그에 쓰지 않는다 — 로그 줄에는 jobId만.
  */
 import { createServer } from "node:http";
 import {
   RUNNER_REV,
-  failureCallbackBody,
   postCallback,
-  runBuildJob,
   selfCheck,
+  startJob,
   validateBuildPayload,
   validateJobPayload,
 } from "./builder-run.mjs";
@@ -33,7 +36,7 @@ const WORK_ROOT = process.env.WORK_ROOT ?? "/var/lib/simsa-build";
 /** D-4 [PILOT] 잡 전체 45분 상한 — 단계별 예산은 B-5b-2~5에서 더 잘게 나눈다. */
 const JOB_TIMEOUT_MS = 45 * 60 * 1000;
 
-/** jobId → { payload, stage } — stage는 runBuildJob의 onStage로 갱신(드레인·타임아웃 본문의 failedStage). */
+/** jobId → { payload, job(startJob — 단계·지출·abort), reported(최종 콜백을 보냈나) }. */
 const inFlightJobs = new Map();
 
 const server = createServer(async (req, res) => {
@@ -84,9 +87,11 @@ const server = createServer(async (req, res) => {
 
   json(res, 202, { jobId: payload.jobId, status: "accepted", runnerRev: RUNNER_REV });
 
-  const entry = { payload, stage: "queued" };
+  const entry = { payload, job: null, reported: false };
   inFlightJobs.set(payload.jobId, entry);
-  runJob(entry).finally(() => inFlightJobs.delete(payload.jobId));
+  runJob(entry)
+    .catch((err) => console.error(`[job ${payload.jobId}] runner crashed: ${String(err?.message ?? err).slice(0, 200)}`))
+    .finally(() => inFlightJobs.delete(payload.jobId));
 });
 
 server.listen(PORT, () => {
@@ -98,8 +103,12 @@ async function gracefulShutdown(sig) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`received ${sig} — draining ${inFlightJobs.size} in-flight job(s)`);
-  const drains = Array.from(inFlightJobs.values()).map(async ({ payload: p, stage }) => {
-    const bodyOut = failureCallbackBody(p.jobId, new Error(`builder container was killed by ${sig} mid-job (deploy rollout or sleepAfter)`), stage);
+  const pending = Array.from(inFlightJobs.values()).filter((entry) => entry.job && !entry.reported);
+  const drains = pending.map(async (entry) => {
+    entry.reported = true;
+    const p = entry.payload;
+    // job.abort: 러너를 멈추고 지금까지의 spentUsd·usage를 실은 본문(runJob의 done도 같은 본문 — 두 번 보내지 않는다).
+    const bodyOut = entry.job.abort(new Error(`builder container was killed by ${sig} mid-job (deploy rollout or sleepAfter)`));
     const r = await postCallback(p.callbackUrl, p.callbackToken, bodyOut, { retries: 0 });
     if (!r.ok) console.error(`[shutdown] callback failed for ${p.jobId}: ${r.error}`);
   });
@@ -116,31 +125,21 @@ async function runJob(entry) {
   const { jobId, callbackUrl, callbackToken } = entry.payload;
   const start = Date.now();
   console.log(`[job ${jobId}] start kind=${String(entry.payload.kind).slice(0, 20)}`);
-  let result;
-  try {
-    result = await withTimeout(
-      runBuildJob(entry.payload, { workRoot: WORK_ROOT, onStage: (s) => { entry.stage = s; } }),
-      JOB_TIMEOUT_MS,
-      `build job timed out after ${Math.round(JOB_TIMEOUT_MS / 60000)} min`,
-    );
-  } catch (err) {
-    console.error(`[job ${jobId}] failed at ${entry.stage}:`, err?.message ?? err);
-    result = failureCallbackBody(jobId, err, entry.stage);
-  }
+  entry.job = startJob(entry.payload, {
+    deps: { workRoot: WORK_ROOT },
+    timeoutMs: JOB_TIMEOUT_MS,
+    timeoutMessage: `build job timed out after ${Math.round(JOB_TIMEOUT_MS / 60000)} min`,
+  });
+  const result = await entry.job.done;
+  if (entry.reported) return; // SIGTERM 드레인이 이미 최종 본문을 보냈다
+  entry.reported = true;
   const r = await postCallback(callbackUrl, callbackToken, result);
   if (!r.ok) console.error(`[job ${jobId}] final callback failed: ${r.error}`);
-  console.log(`[job ${jobId}] ${result.stage}${result.failedStage ? `(${result.failedStage})` : ""} (${Date.now() - start}ms)`);
+  const failure = result.failedStage ? `(${result.failedStage}: ${String(result.error ?? "").slice(0, 120)})` : "";
+  console.log(`[job ${jobId}] ${result.stage}${failure} (${Date.now() - start}ms)`);
 }
 
 function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
-}
-
-function withTimeout(promise, ms, message) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }

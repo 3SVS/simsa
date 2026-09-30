@@ -11,6 +11,7 @@
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -221,7 +222,7 @@ describe("B-5b-0 · 이미지 안의 agent-worker", () => {
   });
 
   it("container-images CI: 이미지에 들어가는 소스가 바뀌면 PR에서 빌드·스모크하고, agentWorker·template을 명시적으로 확인한다", () => {
-    for (const p of ["packages/core/**", "packages/agent-worker/**", "templates/simsa-hosted-app/**", "pnpm-lock.yaml"]) {
+    for (const p of ["packages/core/**", "packages/agent-worker/**", "templates/simsa-hosted-app/**", "pnpm-lock.yaml", "package.json", "pnpm-workspace.yaml", "tsconfig.base.json", ".dockerignore"]) {
       assert.ok(imagesYml.includes(`'${p}'`), `container-images.yml paths must include ${p}`);
     }
     assert.match(imagesYml, /\.agentWorker\.ok == true/, "smoke must assert agentWorker.ok");
@@ -234,7 +235,10 @@ describe("B-5b-0 · 이미지 안의 agent-worker", () => {
       agentWorker: { ok: false, missing: ["runBuildLoop", 7], ms: 12, error: "x" }, template: { ok: true, version: "0.1.0", ms: 1 },
     }, 10);
     assert.deepEqual(s.agentWorker, { ok: false, missing: ["runBuildLoop"] });
-    assert.deepEqual(s.template, { ok: true, version: "0.1.0" });
+    assert.deepEqual(s.template, { ok: true, version: "0.1.0", error: null });
+    // 결함 1: 빨간 template이 **어느 자리 표시자** 때문인지 ops-probe 결과에서 바로 보인다.
+    const red = summarizeSelfCheck({ ok: false, template: { ok: false, version: null, error: "template_placeholder_missing:name" } }, 1);
+    assert.deepEqual(red.template, { ok: false, version: null, error: "template_placeholder_missing:name" });
     const old = summarizeSelfCheck({ ok: true, runnerRev: "b1-builder-1", tools: [] }, 1);
     assert.equal(old.agentWorker, null, "옛 이미지(항목 없음)는 null — '있다'고 꾸미지 않는다");
     assert.equal(old.template, null);
@@ -490,14 +494,16 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
     assert.equal((await getBuildJobById(env, job.id)).failedStage, "scaffolding");
 
     assert.doesNotMatch(serverMjs, /failedAt/, "server.mjs must not send the key the Worker ignores");
-    assert.match(serverMjs, /failureCallbackBody\(/, "server.mjs uses the shared failure body");
+    // 예외·마감·드레인 본문은 전부 startJob(→ failureCallbackBody + 지출)에서 나온다 — 아래 '결함 6' 블록이 행동으로 확인.
+    assert.match(serverMjs, /startJob\(/, "server.mjs builds every failure body through startJob (shared failureCallbackBody)");
   });
 
   it("server.mjs: kind=build 페이로드는 202 전에 validateBuildPayload로 거른다(디스패치가 즉시 failed(queued)를 기록하도록)", () => {
     const i202 = serverMjs.indexOf("json(res, 202,");
     const iVal = serverMjs.indexOf("validateBuildPayload(");
     assert.ok(iVal > 0 && iVal < i202, "validateBuildPayload must run before the 202 ack");
-    assert.match(serverMjs, /onStage/, "server tracks the current stage for the SIGTERM drain body");
+    // 현재 단계 추적(드레인·마감 본문의 failedStage)은 startJob이 onStage로 한다 — '결함 6' 블록이 행동으로 확인.
+    assert.match(serverMjs, /startJob\(/, "server runs each job through startJob (stage tracking · deadline · abort)");
   });
 });
 
@@ -542,5 +548,390 @@ describe("B-5b-1 · usage 델타 우편함 (#562 규약 — B-5b-2가 runBuildLo
     assert.ok(!("usage" in run.progressBody(job, "implementing", { message: "m", usage: box.pending() })));
     box.record(rec(1), { taskId: "WBS-001" });
     assert.equal(run.progressBody(job, "implementing", { message: "m", usage: box.pending() }).usage.length, 1);
+  });
+});
+
+// ══ PR #569 검증 결함 수정 ═══════════════════════════════════════════════════════════════════════
+// 각 블록의 첫 테스트는 수정 전 head(084a7a2)에서 실패한다. "[행동 보존]" 표시는 옛 코드에서도 통과하는 가드.
+
+const usageRec = (costUsd, n = 1) => ({ vendor: "openai", modelRequested: "claude-sonnet-4-6", modelActual: "gpt-5.4", inputTokens: 100 * n, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 10 * n, latencyMs: 900 + n, costUsd, unpriced: false });
+
+/** usage를 미리 채운 우편함 — B-5b-2의 runBuildLoop onUsage 대역. */
+function filledOutbox(nonce, count, costUsd = 0.01) {
+  const box = run.createUsageOutbox({ nonce });
+  for (let i = 0; i < count; i++) box.record(usageRec(costUsd), { taskId: "WBS-001" });
+  return box;
+}
+
+const callIdsOf = (body) => (Array.isArray(body?.usage) ? body.usage.map((u) => u.callId) : []);
+
+describe("결함 1 · 자가점검 template.ok = 스캐폴드가 실제로 채울 수 있는 템플릿", () => {
+  async function templateWithToml(tag, mutate) {
+    const dir = await tmpDir(tag);
+    await fs.cp(REPO_TEMPLATE, dir, { recursive: true });
+    const tomlPath = path.join(dir, "wrangler.toml");
+    await fs.writeFile(tomlPath, mutate(await fs.readFile(tomlPath, "utf8")));
+    return dir;
+  }
+  const scaffoldInto = async (templateDir) =>
+    run.scaffoldTemplate({ templateDir, appDir: path.join(await tmpDir("app-ph"), "app"), slug: "app-3f9a1c2b", d1Id: D1_UUID });
+
+  it("재현: name·database_name을 바꾸고 id 자리 표시자만 남긴 템플릿 → ok=false (옛 코드는 ok=true인데 스캐폴드는 던졌다)", async () => {
+    const dir = await templateWithToml("tpl-ph1", (t) =>
+      t.replace(/^name = "simsa-hosted-app"$/m, 'name = "simsa-app"').replace('database_name = "simsa-hosted-app"', 'database_name = "simsa-app-db"'));
+    const r = await run.checkTemplate(dir);
+    assert.equal(r.ok, false, JSON.stringify(r));
+    assert.equal(r.error, "template_placeholder_missing:database_name");
+    await assert.rejects(scaffoldInto(dir), /template_placeholder_missing:database_name/, "자가점검과 스캐폴드가 같은 판정");
+  });
+
+  it("name만 바뀌어도 ok=false + 어느 자리 표시자인지", async () => {
+    const dir = await templateWithToml("tpl-ph2", (t) => t.replace(/^name = "simsa-hosted-app"$/m, 'name = "simsa-app"'));
+    const r = await run.checkTemplate(dir);
+    assert.equal(r.ok, false, JSON.stringify(r));
+    assert.equal(r.error, "template_placeholder_missing:name");
+    await assert.rejects(scaffoldInto(dir), /template_placeholder_missing:name/);
+  });
+
+  it("[행동 보존] 실제 템플릿은 ok · database_id 자리 표시자가 없으면 ok=false(database_id)", async () => {
+    assert.equal((await run.checkTemplate(REPO_TEMPLATE)).ok, true);
+    const dir = await templateWithToml("tpl-ph3", (t) => t.replace(run.TEMPLATE_D1_PLACEHOLDER, D1_UUID));
+    const r = await run.checkTemplate(dir);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "template_placeholder_missing:database_id");
+  });
+});
+
+describe("결함 2 · postCallback 재시도·중단 분기(fetch seam) + '기록됨'의 정의", () => {
+  const PROGRESS_URL = "https://cp.example/internal/build-progress";
+  /** 응답 대본대로 답하는 fetch. Error 항목은 네트워크 오류로 던진다. */
+  function scriptedFetch(script) {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, method: init.method, auth: init.headers.authorization, body: JSON.parse(init.body) });
+      const step = script.shift();
+      if (!step) throw new Error("unexpected extra call");
+      if (step instanceof Error) throw step;
+      return new Response(step.body ?? "", { status: step.status, headers: { "content-type": step.type ?? "application/json" } });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("[행동 보존] 5xx → 한 번 더 → 성공(같은 본문·Bearer·POST)", async () => {
+    const f = scriptedFetch([{ status: 503, body: "busy" }, { status: 200, body: '{"ok":true,"transitioned":true}' }]);
+    const r = await run.postCallback(PROGRESS_URL, TOKEN, { jobId: "bj_1" }, { fetchImpl: f.fetchImpl, backoffMs: 0 });
+    assert.deepEqual(r, { ok: true, status: 200, json: { ok: true, transitioned: true }, error: null });
+    assert.equal(f.calls.length, 2);
+    assert.ok(f.calls.every((c) => c.url === PROGRESS_URL && c.method === "POST" && c.auth === `Bearer ${TOKEN}` && c.body.jobId === "bj_1"));
+  });
+
+  it("[행동 보존] 4xx(계약 파손·토큰 불일치) → 재시도 없이 1회", async () => {
+    const f = scriptedFetch([{ status: 401, body: '{"ok":false,"error":"unauthorized"}' }]);
+    const r = await run.postCallback(PROGRESS_URL, TOKEN, {}, { fetchImpl: f.fetchImpl, backoffMs: 0 });
+    assert.equal(f.calls.length, 1);
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 401);
+    assert.match(r.error, /^http_401:/);
+  });
+
+  it("[행동 보존] 네트워크 오류 2회 → ok:false · 2회 호출 · 오류 문구", async () => {
+    const f = scriptedFetch([new TypeError("fetch failed"), new TypeError("fetch failed")]);
+    const r = await run.postCallback(PROGRESS_URL, TOKEN, {}, { fetchImpl: f.fetchImpl, backoffMs: 0 });
+    assert.equal(f.calls.length, 2);
+    assert.deepEqual(r, { ok: false, status: 0, json: null, error: "fetch failed" });
+  });
+
+  it("[행동 보존] retries:0(SIGTERM 드레인) → 5xx여도 1회", async () => {
+    const f = scriptedFetch([{ status: 502, body: "bad gateway" }]);
+    const r = await run.postCallback(PROGRESS_URL, TOKEN, {}, { fetchImpl: f.fetchImpl, retries: 0, backoffMs: 0 });
+    assert.equal(f.calls.length, 1);
+    assert.equal(r.status, 502);
+  });
+
+  it("[행동 보존] 2xx인데 JSON이 아니면 ok:true · json:null — '기록됨' 판단은 호출자 몫", async () => {
+    const f = scriptedFetch([{ status: 200, body: "<html>captive portal</html>", type: "text/html" }]);
+    const r = await run.postCallback(PROGRESS_URL, TOKEN, {}, { fetchImpl: f.fetchImpl, backoffMs: 0 });
+    assert.deepEqual(r, { ok: true, status: 200, json: null, error: null });
+  });
+
+  it("runBuild: 2xx여도 Worker 응답({ok:true})이 아니면 usage를 ack하지 않는다 — 다음 콜백에 같은 callId로 다시(옛 코드는 ack해서 원장에서 빠졌다)", async () => {
+    const box = filledOutbox("nH", 2);
+    const poster = recordingPoster([{ ok: true, status: 200, json: null }]);
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrH"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, usageOutbox: box, log: () => {} });
+    assert.deepEqual(poster.calls.map((c) => c.body.message), ["scaffold_started", "scaffold_ready"], "a non-Worker 2xx is not a reason to stop (like 5xx: continue)");
+    assert.deepEqual(callIdsOf(poster.calls[0].body), ["nH:WBS-001:0", "nH:WBS-001:1"]);
+    assert.deepEqual(callIdsOf(poster.calls[1].body), ["nH:WBS-001:0", "nH:WBS-001:1"], "unrecorded usage is re-sent with the same callIds");
+    assert.equal(r.failedStage, "implementing");
+    assert.ok(!("usage" in r), "the second callback was recorded, so nothing is left for build-done");
+  });
+});
+
+describe("결함 3·7 · container-images PR 경로 필터가 Dockerfile의 COPY 원본을 전부 덮는다", () => {
+  function pullRequestPaths(yml) {
+    const m = /pull_request:\s*\n\s+paths:\s*\n((?:\s+- '[^']+'[^\n]*\n)+)/.exec(yml);
+    assert.ok(m, "on.pull_request.paths block");
+    return [...m[1].matchAll(/- '([^']+)'/g)].map((x) => x[1]);
+  }
+  /** GitHub Actions 경로 필터 glob: `**`는 `/` 포함 아무거나, `*`는 `/` 제외. */
+  function actionsGlobRe(p) {
+    let re = "";
+    for (let i = 0; i < p.length; i++) {
+      const ch = p[i];
+      if (ch === "*" && p[i + 1] === "*") { re += ".*"; i++; }
+      else if (ch === "*") re += "[^/]*";
+      else re += ch.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+    }
+    return new RegExp(`^${re}$`);
+  }
+  /** Dockerfile COPY의 원본 경로(플래그·목적지 제외). 줄 잇기(\) 처리. */
+  function copySources(text) {
+    return text.replace(/\\\r?\n/g, " ").split(/\r?\n/).filter((l) => /^COPY\s/.test(l)).flatMap((l) => {
+      const toks = l.trim().split(/\s+/).slice(1).filter((t) => !t.startsWith("--"));
+      return toks.slice(0, -1);
+    });
+  }
+
+  it("builder·inspector Dockerfile의 COPY 원본 → 전부 paths에 걸린다(옛 필터는 package.json·pnpm-workspace.yaml·tsconfig.base.json을 놓쳤다)", () => {
+    const res = pullRequestPaths(imagesYml).map(actionsGlobRe);
+    const covered = (src) => res.some((re) => re.test(src) || re.test(`${src}/x`));
+    const inspector = readFileSync(path.join(ROOT, "inspector-container/Dockerfile"), "utf8");
+    const missing = [];
+    for (const [name, text] of [["builder", dockerfile], ["inspector", inspector]]) {
+      const srcs = copySources(text);
+      assert.ok(srcs.length >= 5, `${name}: parsed ${srcs.length} COPY sources`);
+      for (const s of srcs) if (!covered(s)) missing.push(`${name}:${s}`);
+    }
+    assert.deepEqual(missing, [], "a PR touching only these files would skip the image build/selfcheck gate");
+  });
+
+  it(".dockerignore도 경로 필터에 있다 — 빌드 컨텍스트(이미지에 들어가는 것)를 바꾸므로", () => {
+    assert.ok(pullRequestPaths(imagesYml).includes(".dockerignore"));
+  });
+});
+
+describe("결함 4 · 템플릿 폴더의 로컬 비밀 파일은 이미지에도 스캐폴드에도 들어가지 않는다", () => {
+  const T = "templates/simsa-hosted-app";
+  /** 더러운 로컬 트리에만 있을 법한 것(템플릿 .gitignore가 무시하거나 아예 모르는 것). */
+  const SECRET_OR_ARTIFACT = [
+    ".npmrc", ".envrc", ".yarnrc", ".yarnrc.yml", ".dev.vars", ".env", ".env.local", ".env.production",
+    "src/.dev.vars", "src/.npmrc", ".wrangler/state/v3/d1/db.sqlite", "node_modules/hono/index.js", "dist/client/index.html",
+    "server.pem", "deploy.key", "cert.p12",
+  ];
+  /** 비밀은 아니지만 사용자 앱에 따라가면 안 되는 로컬 잡동사니(스캐폴드만 거른다). */
+  const LOCAL_JUNK = [".DS_Store", ".vscode/settings.json", ".turbo/cache.json"];
+
+  const gitLsFiles = (...args) =>
+    execFileSync("git", ["ls-files", "-z", ...args], { cwd: REPO, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 }).split("\0").filter(Boolean);
+
+  it("scaffoldTemplate: 추적되지 않은 dotfile·키 파일은 복사하지 않는다(옛 코드는 .npmrc·.envrc·.yarnrc·키 파일을 복사해 스캐폴드 커밋에 넣었다)", async () => {
+    const tpl = await tmpDir("tpl-decoy");
+    await fs.cp(REPO_TEMPLATE, tpl, { recursive: true });
+    for (const d of [...SECRET_OR_ARTIFACT, ...LOCAL_JUNK]) {
+      await fs.mkdir(path.dirname(path.join(tpl, d)), { recursive: true });
+      await fs.writeFile(path.join(tpl, d), "//registry.npmjs.org/:_authToken=npm_FAKE_NOT_A_SECRET\n");
+    }
+    await fs.writeFile(path.join(tpl, ".env.example"), "API_BASE=\n");
+    const appDir = path.join(await tmpDir("app-decoy"), "app");
+    await run.scaffoldTemplate({ templateDir: tpl, appDir, slug: "app-3f9a1c2b", d1Id: D1_UUID });
+    const leaked = [];
+    for (const d of [...SECRET_OR_ARTIFACT, ...LOCAL_JUNK]) if (await exists(path.join(appDir, d))) leaked.push(d);
+    assert.deepEqual(leaked, [], "nothing untracked reaches the user's app (so never the scaffold commit / simsa-hosted repo)");
+    assert.ok(await exists(path.join(appDir, ".env.example")), ".env.example is kept");
+    assert.ok(await exists(path.join(appDir, ".gitignore")), ".gitignore is kept");
+  });
+
+  it("[행동 보존] git이 추적하는 템플릿 파일은 하나도 빠지지 않는다 — 허용 목록이 템플릿을 깎지 않게", async () => {
+    const tracked = gitLsFiles(T);
+    assert.ok(tracked.length >= 10, `tracked=${tracked.length}`);
+    const cut = tracked.filter((f) => path.posix.relative(T, f).split("/").some((seg) => run.isScaffoldExcluded(seg)));
+    assert.deepEqual(cut, [], "a tracked template file would be dropped by the scaffold filter — allow it explicitly");
+    const appDir = path.join(await tmpDir("app-tracked"), "app");
+    await run.scaffoldTemplate({ templateDir: REPO_TEMPLATE, appDir, slug: "app-3f9a1c2b", d1Id: D1_UUID });
+    for (const f of tracked) assert.ok(await exists(path.join(appDir, path.posix.relative(T, f))), `${f} must be scaffolded`);
+  });
+
+  /** .dockerignore 판정(moby patternmatcher 근사): 규칙을 순서대로 보고, 경로나 그 상위 폴더가 맞으면 제외(!는 되살림) — 마지막 규칙이 이긴다. */
+  function dockerignoreExcludes(text) {
+    const rules = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#")).map((l) => {
+      const neg = l.startsWith("!");
+      const pat = (neg ? l.slice(1) : l).replace(/^\/+/, "").replace(/\/+$/, "");
+      let re = "";
+      for (let i = 0; i < pat.length; i++) {
+        const ch = pat[i];
+        if (ch === "*" && pat[i + 1] === "*") {
+          if (pat[i + 2] === "/") { re += "(?:.*/)?"; i += 2; } else { re += ".*"; i += 1; }
+        } else if (ch === "*") re += "[^/]*";
+        else if (ch === "?") re += "[^/]";
+        else re += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      }
+      return { neg, re: new RegExp(`^${re}$`) };
+    });
+    return (file) => {
+      const parts = file.split("/");
+      let excluded = false;
+      for (const r of rules) {
+        for (let k = 1; k <= parts.length; k++) {
+          if (r.re.test(parts.slice(0, k).join("/"))) { excluded = !r.neg; break; }
+        }
+      }
+      return excluded;
+    };
+  }
+
+  it(".dockerignore(빌드 컨텍스트 루트): 템플릿의 비밀·설치물·로컬 상태는 컨텍스트에서 빠지고, 추적 파일은 하나도 빠지지 않는다", () => {
+    // wrangler는 Dockerfile을 stdin(`-f -`)으로 넘긴다 → Dockerfile 옆 `Dockerfile.dockerignore`는 배포 빌드에서 안 쓰인다. 루트여야 한다.
+    const excluded = dockerignoreExcludes(readFileSync(path.join(REPO, ".dockerignore"), "utf8"));
+    const leaked = SECRET_OR_ARTIFACT.filter((d) => !excluded(`${T}/${d}`));
+    assert.deepEqual(leaked, [], "these must never enter the builder image layer");
+    assert.equal(excluded(`${T}/.env.example`), false, ".env.example stays");
+    const dropped = gitLsFiles().filter((f) => excluded(f));
+    assert.deepEqual(dropped, [], "a clean checkout (CI deploy) must build the same images — .dockerignore may only drop untracked local files");
+  });
+
+  it("container-images CI: 미끼 파일을 심고 빌드한 이미지 안에 없는지 확인한다(이미지 레이어 증거)", () => {
+    const iPlant = imagesYml.indexOf("CI_DECOY_NOT_A_SECRET");
+    const iBuild = imagesYml.indexOf("docker/build-push-action");
+    assert.ok(iPlant > 0 && iPlant < iBuild, "decoys are planted before the image build");
+    assert.match(imagesYml, /grep -rl CI_DECOY_NOT_A_SECRET \/builder/, "smoke greps the built image for decoys");
+  });
+});
+
+describe("결함 5 · 최종 본문 전에 200개를 넘는 usage는 진행 콜백으로 나눠 보낸다", () => {
+  it("250건 · 진행 콜백 5xx 두 번 뒤 Worker 복구 → 250건 전부 기록 경로로(옛 코드는 build-done 200건에서 잘려 50건이 원장에서 빠졌다)", async () => {
+    const box = filledOutbox("n250", 250, 0.01);
+    const poster = recordingPoster([{ ok: false, status: 503, json: null }, { ok: false, status: 503, json: null }]);
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr250"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, usageOutbox: box, log: () => {} });
+    assert.equal(r.failedStage, "implementing");
+    assert.equal(r.spentUsd, 2.5);
+    assert.ok(callIdsOf(r).length <= run.USAGE_CALLBACK_MAX, "build-done carries at most 200 (the Worker truncates beyond)");
+    const flushes = poster.calls.slice(2);
+    const recorded = new Set([...flushes.flatMap((c) => callIdsOf(c.body)), ...callIdsOf(r)]);
+    assert.equal(recorded.size, 250, "every usage row reaches a callback the Worker records");
+    assert.ok(flushes.length >= 1);
+    for (const c of flushes) {
+      assert.equal(c.body.status, "scaffolding", "flush reports the stage actually reached — never 'implementing'");
+      assert.equal(c.body.message, "", "flush writes no event row");
+      assert.ok(!("wbsTotal" in c.body), "flush never overwrites wbs_total");
+      assert.ok(c.body.usage.length <= run.USAGE_CALLBACK_MAX);
+    }
+  });
+
+  it("비우기 콜백이 기록되지 않으면 한 번에서 멈춘다(무한 재시도 없음) — 못 보낸 수는 로그에", async () => {
+    const box = filledOutbox("n450", 450, 0.001);
+    const calls = [];
+    const post = async (_url, _token, body) => { calls.push(JSON.parse(JSON.stringify(body))); return { ok: false, status: 503, json: null, error: "http_503" }; };
+    const logs = [];
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr450"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: post, usageOutbox: box, log: (l) => logs.push(l) });
+    assert.equal(calls.length, 3, "scaffold_started · scaffold_ready · one flush attempt");
+    assert.equal(callIdsOf(r).length, 200);
+    assert.ok(logs.some((l) => /usage_overflow_unsent:250\b/.test(l)), JSON.stringify(logs));
+  });
+});
+
+describe("결함 6 · 45분 마감·SIGTERM — 지금까지의 지출을 싣고, 러너를 멈춘다", () => {
+  /** 문(gate)을 열 때까지 멈춰 있는 git exec — 마감·중단이 스캐폴드 도중에 온다. 받은 signal도 기록. */
+  function gatedGit() {
+    let open;
+    const gate = new Promise((r) => { open = r; });
+    const calls = [];
+    const exec = async (_cmd, args, opts = {}) => {
+      calls.push({ args: [...args], signal: opts.signal ?? null });
+      await gate;
+      if (args.includes("rev-parse")) return { ok: true, code: 0, stdout: "0123456789abcdef0123456789abcdef01234567\n", stderr: "", error: null };
+      return { ok: true, code: 0, stdout: "", stderr: "", error: null };
+    };
+    return { exec, calls, open: () => open() };
+  }
+
+  it("startJob: 마감이 먼저 오면 본문에 spentUsd·usage — 그 뒤 진행 콜백 0건(옛 server.mjs의 withTimeout은 경쟁만 해서 러너가 계속 돌며 progress를 또 보냈다)", async () => {
+    const box = filledOutbox("nT", 3, 0.2);
+    const git = gatedGit();
+    const poster = recordingPoster([{ ok: false, status: 503, json: null }]); // scaffold_started가 기록되지 않아 usage 3건이 남는다
+    const job = run.startJob(buildPayload(), {
+      timeoutMs: 200,
+      timeoutMessage: "build job timed out after 45 min",
+      deps: { workRoot: await tmpDir("wrT"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, usageOutbox: box, log: () => {} },
+    });
+    const body = await job.done;
+    assert.equal(body.ok, false);
+    assert.equal(body.stage, "failed");
+    assert.equal(body.failedStage, "scaffolding");
+    assert.equal(body.error, "build job timed out after 45 min");
+    assert.equal(body.spentUsd, 0.6);
+    assert.deepEqual(callIdsOf(body), ["nT:WBS-001:0", "nT:WBS-001:1", "nT:WBS-001:2"]);
+    const atDeadline = poster.calls.length;
+    git.open();
+    assert.strictEqual(await job.finished, body, "the runner's late body never becomes a second final body");
+    assert.equal(poster.calls.length, atDeadline, "no progress callback after the deadline body");
+    assert.ok(git.calls.every((c) => c.signal === job.signal && c.signal.aborted), "exec received the job signal (defaultExec kills the child on abort)");
+  });
+
+  it("runBuild: signal이 끊기면 다음 진행 콜백을 보내지 않고, 모든 exec에 signal을 넘긴다(옛 코드는 signal을 몰라 scaffold_ready를 보냈다)", async () => {
+    const ac = new AbortController();
+    const calls = [];
+    const exec = async (_cmd, args, opts = {}) => {
+      calls.push({ args: [...args], signal: opts.signal });
+      if (args.includes("commit")) ac.abort(new Error("deadline"));
+      if (args.includes("rev-parse")) return { ok: true, code: 0, stdout: "0123456789abcdef0123456789abcdef01234567\n", stderr: "", error: null };
+      return { ok: true, code: 0, stdout: "", stderr: "", error: null };
+    };
+    const poster = recordingPoster();
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrS"), templateDir: REPO_TEMPLATE, exec, postCallback: poster.post, signal: ac.signal, log: () => {} });
+    assert.deepEqual(poster.calls.map((c) => c.body.message), ["scaffold_started"]);
+    assert.equal(r.ok, false);
+    assert.equal(r.failedStage, "scaffolding");
+    assert.match(r.error, /job_aborted/);
+    assert.ok(calls.length >= 1 && calls.every((c) => c.signal === ac.signal), "every git call carries the job signal");
+  });
+
+  it("마감 본문 전에도 200개 초과분은 진행 콜백으로 비운다(결함 5와 같은 규칙) — 본문에는 나머지", async () => {
+    const box = filledOutbox("nTT", 230, 0.001);
+    const git = gatedGit();
+    const poster = recordingPoster([{ ok: false, status: 503, json: null }]);
+    const job = run.startJob(buildPayload(), {
+      timeoutMs: 200,
+      timeoutMessage: "deadline",
+      deps: { workRoot: await tmpDir("wrTT"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, usageOutbox: box, log: () => {} },
+    });
+    const body = await job.done;
+    const flushes = poster.calls.slice(1);
+    assert.equal(flushes.length, 1, JSON.stringify(poster.calls.map((c) => [c.body.status, c.body.message, callIdsOf(c.body).length])));
+    assert.equal(flushes[0].body.status, "scaffolding");
+    assert.equal(flushes[0].body.message, "");
+    assert.equal(callIdsOf(flushes[0].body).length, 200);
+    assert.equal(callIdsOf(body).length, 30);
+    git.open();
+    await job.finished;
+    assert.equal(poster.calls.length, 2, "nothing after the deadline body");
+  });
+
+  it("SIGTERM 드레인(abort): 지금까지의 spentUsd·usage를 실은 본문 하나 — done도 같은 본문(최종 콜백이 두 번 가지 않게)", async () => {
+    const box = filledOutbox("nK", 2, 0.25);
+    const git = gatedGit();
+    const poster = recordingPoster([{ ok: false, status: 503, json: null }]);
+    const job = run.startJob(buildPayload(), { timeoutMs: 0, deps: { workRoot: await tmpDir("wrK"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, usageOutbox: box, log: () => {} } });
+    for (let i = 0; i < 400 && poster.calls.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    const body = job.abort(new Error("builder container was killed by SIGTERM mid-job (deploy rollout or sleepAfter)"));
+    assert.equal(body.failedStage, "scaffolding");
+    assert.match(body.error, /SIGTERM/);
+    assert.equal(body.spentUsd, 0.5);
+    assert.deepEqual(callIdsOf(body), ["nK:WBS-001:0", "nK:WBS-001:1"]);
+    assert.strictEqual(await job.done, body);
+    assert.strictEqual(job.abort(new Error("again")), body, "abort is idempotent");
+    git.open();
+    await job.finished;
+    assert.equal(poster.calls.length, 1, "no progress after the drain body");
+  });
+
+  it("러너가 던지면(모르는 kind) 본문에 단계·지출 — 종전처럼 builder_stage_not_implemented", async () => {
+    const job = run.startJob({ ...buildPayload(), kind: "deploy" }, { timeoutMs: 0, deps: { log: () => {} } });
+    assert.deepEqual(await job.done, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "queued", error: "builder_stage_not_implemented:deploy", spentUsd: 0 });
+  });
+
+  it("server.mjs: 잡은 startJob으로 — 마감은 러너를 멈추는 startJob 안에서, 드레인은 job.abort 본문을 한 번만", () => {
+    assert.match(serverMjs, /startJob\(/);
+    assert.doesNotMatch(serverMjs, /function withTimeout/, "no race-only timeout that leaves the runner running");
+    assert.match(serverMjs, /\.abort\(/, "SIGTERM drain uses job.abort (spend + usage + stops the runner)");
+    assert.match(serverMjs, /\.reported\b/, "the final callback is sent once (drain vs runJob)");
   });
 });

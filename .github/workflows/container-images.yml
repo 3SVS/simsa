@@ -7,9 +7,12 @@
 # 대상: builder-container · inspector-container (가벼움). autofix sandbox(container/)는
 # 모노레포 전체 빌드라 무거워 제외 — 바뀔 때만 수동 dispatch로.
 #
-# B-5b-0: 빌더 이미지는 packages/core·packages/agent-worker·templates/simsa-hosted-app·pnpm-lock.yaml을
-# 이미지 안에서 빌드·복사한다 → 그 경로가 바뀌어도 여기서 다시 빌드한다. 스모크는 /selfcheck의
+# B-5b-0: 빌더 이미지는 packages/core·packages/agent-worker·templates/simsa-hosted-app과 루트의
+# package.json·pnpm-lock.yaml·pnpm-workspace.yaml·tsconfig.base.json을 이미지 안에서 빌드·복사한다 → 그 경로가
+# 바뀌어도 여기서 다시 빌드한다(Dockerfile의 COPY 원본이 전부 paths에 있는지 train-b-b5b-executor 테스트가 확인).
+# .dockerignore는 빌드 컨텍스트 자체를 바꾸므로 함께. 스모크는 /selfcheck의
 # agentWorker.ok(이미지 안에서 runBuildLoop를 실제로 import)·template.ok를 **명시적으로** 확인한다.
+# 결함 4: 빌드 전에 템플릿 폴더에 미끼 비밀 파일을 심고, 빌드한 이미지 안에 하나도 없는지 확인한다(.dockerignore 증거).
 # B-5b-1: kind=build 잡 하나를 실제 이미지에 넣어 scaffolding(템플릿 복사·wrangler.toml·git 커밋)이
 # 돌고 implementing에서 정직하게 실패하는지, 진행·최종 콜백 본문을 로컬 수신기로 받아 확인한다.
 # 가짜 토큰·가짜 D1 id만 쓰고 Cloudflare·GitHub·LLM에는 닿지 않는다.
@@ -26,7 +29,11 @@ on:
       - 'packages/core/**'
       - 'packages/agent-worker/**'
       - 'templates/simsa-hosted-app/**'
+      - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - '.dockerignore'
       - '.github/workflows/container-images.yml'
   workflow_dispatch:
 
@@ -48,6 +55,17 @@ jobs:
             dockerfile: apps/central-plane/inspector-container/Dockerfile
     steps:
       - uses: actions/checkout@v5
+      - name: Plant decoy secrets in the S template (builder only — .dockerignore must keep them out of the image)
+        if: matrix.image.name == 'builder'
+        run: |
+          set -euo pipefail
+          # 더러운 로컬 트리(`pnpm ship`)를 흉내 낸다. 값은 명백한 가짜 표식 — 이미지 안에서 이 표식을 찾는다.
+          t=templates/simsa-hosted-app
+          for f in .npmrc .envrc .yarnrc.yml .dev.vars .env .env.local src/.dev.vars server.pem deploy.key \
+                   node_modules/decoy/index.js dist/decoy.js .wrangler/state/decoy.sqlite; do
+            mkdir -p "$(dirname "$t/$f")"
+            echo "CI_DECOY_NOT_A_SECRET" > "$t/$f"
+          done
       - uses: docker/setup-buildx-action@v3
       - name: Build ${{ matrix.image.name }} image (no push)
         uses: docker/build-push-action@v6
@@ -81,6 +99,12 @@ jobs:
           EOF
           node /tmp/receiver.mjs &
           recv=$!
+
+          # ── 결함 4: 템플릿에 심은 미끼(.npmrc·.dev.vars·.env*·키·node_modules·dist·.wrangler)가 이미지에 없다 ──
+          leaked=$(docker run --rm --entrypoint sh simsa-builder:pr -c 'grep -rl CI_DECOY_NOT_A_SECRET /builder 2>/dev/null || true')
+          if [ -n "$leaked" ]; then echo "::error::decoy secret files leaked into the builder image: $leaked"; exit 1; fi
+          docker run --rm --entrypoint sh simsa-builder:pr -c 'test -f /builder/templates/simsa-hosted-app/.gitignore && test -f /builder/templates/simsa-hosted-app/wrangler.toml' \
+            || { echo "::error::tracked template files are missing from the image"; exit 1; }
 
           cid=$(docker run -d -p 18080:8080 --add-host=host.docker.internal:host-gateway simsa-builder:pr)
           trap 'docker logs "$cid" | tail -40 || true; docker rm -f "$cid" >/dev/null 2>&1 || true; kill "$recv" 2>/dev/null || true' EXIT

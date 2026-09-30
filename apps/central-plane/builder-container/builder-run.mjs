@@ -4,7 +4,7 @@
  * server.mjs가 HTTP를 받고, 실제 일은 여기서 한다.
  *   B1       자가점검(selfcheck) — node·pnpm·git·gh·wrangler + 작업 디렉터리 쓰기 가능 + 시간
  *   B-5b-0   자가점검에 **agentWorker**(이미지 안에서 빌드한 packages/agent-worker를 실제로 import) ·
- *            **template**(S 템플릿이 이미지에 있고 D1 자리 표시자가 살아 있음) 항목
+ *            **template**(S 템플릿이 이미지에 있고 스캐폴드가 채울 자리 표시자가 전부 살아 있음) 항목
  *   B-5b-1   kind "build" — D-4 상태 머신 중 **scaffolding까지** 실제로 한다:
  *            페이로드 검증 → progress(scaffolding, scaffold_started) → 템플릿을 작업 폴더로 복사·wrangler.toml
  *            채움·로컬 스캐폴드 커밋 → progress(scaffolding, scaffold_ready) → implementing은 아직 없으므로
@@ -29,7 +29,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** 이미지 롤아웃 확인용 마커(인스펙터 RUNNER_REV와 같은 용도 — 옛 이미지가 서빙 중인지 판별). */
-export const RUNNER_REV = "b5b1-builder-3";
+export const RUNNER_REV = "b5b1-builder-4";
 
 /**
  * D-4 잡 상태 머신 — **D1 build_jobs.status와 같은 목록·같은 순서**(build-job-db.ts BUILD_JOB_STATUSES).
@@ -108,14 +108,24 @@ export async function checkAgentWorker({ entry = AGENT_WORKER_ENTRY, loadAgentWo
   }
 }
 
-/** 템플릿이 있고(package.json·wrangler.toml) D1 자리 표시자가 살아 있는지. 던지지 않는다. */
+/** 자가점검이 스캐폴드와 **같은 함수**로 wrangler.toml을 채워 볼 때 쓰는 가짜 값(배포되지 않는다). */
+const SELFCHECK_PROBE = Object.freeze({ slug: "selfcheck-probe", d1Id: "00000000-0000-4000-8000-00000000c0de" });
+
+/**
+ * 템플릿이 있고(package.json·wrangler.toml) 스캐폴드가 **실제로** 채울 수 있는지. 던지지 않는다.
+ * wrangler.toml은 scaffoldTemplate과 같은 patchWranglerToml로 채워 본다 — 자리 표시자(database_id·database_name·name)
+ * 중 하나라도 없으면 ok=false + 어느 것인지(`template_placeholder_missing:<이름>`). 자가점검이 초록인데 모든 빌드가
+ * scaffolding에서 실패하는 일(PR #569 검증 결함 1)을 막는다.
+ */
 export async function checkTemplate(templateDir = TEMPLATE_DIR, fsImpl = fs) {
   const t0 = Date.now();
   try {
     const pkg = JSON.parse(await fsImpl.readFile(path.join(templateDir, "package.json"), "utf8"));
     const toml = await fsImpl.readFile(path.join(templateDir, "wrangler.toml"), "utf8");
-    if (!toml.includes(TEMPLATE_D1_PLACEHOLDER)) {
-      return { ok: false, version: null, ms: Date.now() - t0, error: "template_placeholder_missing:database_id" };
+    try {
+      patchWranglerToml(toml, SELFCHECK_PROBE);
+    } catch (err) {
+      return { ok: false, version: null, ms: Date.now() - t0, error: String(err?.message ?? err).slice(0, 200) };
     }
     return { ok: true, version: typeof pkg?.version === "string" ? pkg.version : null, ms: Date.now() - t0, error: null };
   } catch (err) {
@@ -143,10 +153,13 @@ export function parseVersion(stdout) {
   return m ? m[1] : String(stdout ?? "").trim().split("\n")[0].slice(0, 40);
 }
 
-/** 기본 실행기 — child_process.execFile, 타임아웃 포함. 테스트는 이걸 갈아끼운다. */
-export function defaultExec(cmd, args, { timeoutMs = 15_000, cwd } = {}) {
+/**
+ * 기본 실행기 — child_process.execFile, 타임아웃 포함. 테스트는 이걸 갈아끼운다.
+ * `signal`(잡 마감·SIGTERM)이 끊기면 자식 프로세스를 죽인다 — 마감 뒤에 설치·빌드가 계속 돌지 않게.
+ */
+export function defaultExec(cmd, args, { timeoutMs = 15_000, cwd, signal } = {}) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: timeoutMs, cwd, env: process.env, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { timeout: timeoutMs, cwd, env: process.env, maxBuffer: 1024 * 1024, ...(signal ? { signal } : {}) }, (err, stdout, stderr) => {
       resolve({
         ok: !err,
         code: err ? (typeof err.code === "number" ? err.code : -1) : 0,
@@ -322,12 +335,28 @@ export function failureBody(jobId, { failedStage, error, spentUsd = 0, wbsDone =
 }
 
 /**
- * server.mjs 예외 경로(runBuildJob이 던짐 · 45분 타임아웃 · SIGTERM 드레인)의 본문.
+ * 예외 경로(runBuildJob이 던짐 · 45분 마감 · SIGTERM 드레인)의 본문 — startJob이 만든다.
  * 종전 server.mjs는 다른 키 이름(failed + At)을 보냈고 Worker는 `failedStage`만 읽어서 **모든 실패가 'unknown'으로** 기록됐다.
+ * `spend`(우편함의 누적 비용·아직 안 보낸 usage)를 주면 싣는다 — 마감·드레인 본문에 지출이 없으면 build_jobs.spent_usd가
+ * 0으로 남고 usage 행이 원장에서 빠진다(PR #569 검증 결함 6).
  */
-export function failureCallbackBody(jobId, err, fallbackStage = "unknown") {
+export function failureCallbackBody(jobId, err, fallbackStage = "unknown", spend = null) {
   const stage = typeof err?.stage === "string" && err.stage ? err.stage : fallbackStage;
-  return { jobId, ok: false, stage: "failed", failedStage: stage.slice(0, 40), error: String(err?.message ?? err).slice(0, 500) };
+  const body = { jobId, ok: false, stage: "failed", failedStage: stage.slice(0, 40), error: String(err?.message ?? err).slice(0, 500) };
+  if (spend) {
+    body.spentUsd = typeof spend.spentUsd === "number" && Number.isFinite(spend.spentUsd) ? spend.spentUsd : 0;
+    if (Array.isArray(spend.usage) && spend.usage.length > 0) body.usage = spend.usage;
+  }
+  return body;
+}
+
+/**
+ * 콜백이 Worker에 **기록됐는가**. 2xx만으로는 아니다 — Worker 콜백 라우트는 성공하면 언제나 `{ ok: true, ... }` JSON을 준다.
+ * 2xx인데 JSON이 아니거나 ok가 true가 아니면(프록시·캡티브 페이지 등) 기록되지 않은 것으로 보고 usage를 ack하지 않는다 —
+ * ack하면 그 usage는 다시 실리지 않아 원장에서 조용히 빠진다(PR #569 검증 결함 2).
+ */
+function isCallbackRecorded(r) {
+  return Boolean(r?.ok) && typeof r.json === "object" && r.json !== null && r.json.ok === true;
 }
 
 /**
@@ -379,8 +408,8 @@ function runNonce() {
 /**
  * runBuildLoop `onUsage`(턴별 LlmUsageRecord)를 받아 콜백 usage[]로 내보내는 우편함.
  *   - callId = `<실행 nonce>:<태스크 id>:<턴>` — runBuildLoop는 태스크마다 턴을 0부터 세므로 태스크 id가 필요하다.
- *   - pending() = 아직 보내지 않은 것(최대 200). 콜백이 성공했을 때만 ack(callIds) — 실패하면 다음 콜백에
- *     **같은 callId**로 다시 실린다(Worker가 행 id로 중복 제거).
+ *   - pending() = 아직 보내지 않은 것(최대 200). 콜백이 **기록됐을 때만** ack(callIds) — 아니면 다음 콜백에
+ *     **같은 callId**로 다시 실린다(Worker가 행 id로 중복 제거). pendingCount() = 안 보낸 전체 수(200 초과 포함).
  *   - spentUsd() = 누적 비용(보냄 여부와 무관) — 진행 본문 spentUsd·예산 정지(B-6)의 원천.
  *   - outcome.usage(누적 전체)는 **싣지 않는다**(델타 규약).
  */
@@ -420,6 +449,9 @@ export function createUsageOutbox({ nonce = runNonce() } = {}) {
     pending() {
       return pendingItems.slice(0, USAGE_CALLBACK_MAX).map((i) => ({ ...i }));
     },
+    pendingCount() {
+      return pendingItems.length;
+    },
     ack(callIds) {
       const sent = new Set(callIds);
       for (let i = pendingItems.length - 1; i >= 0; i--) {
@@ -430,6 +462,35 @@ export function createUsageOutbox({ nonce = runNonce() } = {}) {
       return Math.round(spent * 1_000_000) / 1_000_000;
     },
   };
+}
+
+/** 비우기용 진행 본문 — usage만 나른다. message 없음(이벤트 행을 만들지 않는다) · wbs 필드 없음(행 값을 덮지 않는다). */
+export function usageFlushBody(jobId, status, { spentUsd = 0, usage = [] } = {}) {
+  if (!PROGRESS_STATUSES.has(status)) throw new Error(`progress_status_invalid:${String(status).slice(0, 40)}`);
+  return { jobId, status, message: "", meta: {}, spentUsd, usage };
+}
+
+/**
+ * 최종 본문 전에 200개를 넘는 usage를 진행 콜백으로 나눠 보낸다(PR #569 검증 결함 5).
+ * Worker는 콜백 하나에서 200개만 원장에 쓰고(llm-usage.ts CALLBACK_USAGE_MAX) build-done 뒤에는 보낼 콜백이 없다 —
+ * 넘친 것을 최종 본문에 실으면 201번째부터 조용히 사라진다.
+ *   - `send(usage)` → 기록됐으면 true. Worker는 잡이 이미 끝났어도(transitioned:false) usage는 기록하므로 ack하고 계속.
+ *   - 기록되지 않으면 **그 자리에서 멈춘다**(무한 재시도 없음 — 재시도는 postCallback 안의 한 번뿐). 남은 것은 최종 본문에 200개까지.
+ * 반환: 최종 본문에도 못 싣는(200 초과) 남은 수 — 호출자가 로그에 남긴다.
+ */
+export async function flushUsageOverflow({ outbox, send, maxRounds = 100 }) {
+  for (let round = 0; round < maxRounds && outbox.pendingCount() > USAGE_CALLBACK_MAX; round++) {
+    const usage = outbox.pending();
+    let recorded = false;
+    try {
+      recorded = await send(usage);
+    } catch {
+      recorded = false;
+    }
+    if (!recorded) break;
+    outbox.ack(usage.map((u) => u.callId));
+  }
+  return Math.max(0, outbox.pendingCount() - USAGE_CALLBACK_MAX);
 }
 
 // ─── B-5b-1: 스캐폴드 ───────────────────────────────────────────────────────────────────────────
@@ -453,12 +514,24 @@ export function patchWranglerToml(src, { slug, d1Id }) {
     .replace(nameRe, `name = "${slug}"`);
 }
 
-/** 템플릿에서 따라오면 안 되는 것(설치물·산출물·로컬 상태·비밀 파일). `.env.example`은 남긴다. */
+/** 템플릿이 추적하는 dotfile 중 사용자 앱으로 따라가야 하는 것 — 이 목록 밖의 dotfile은 전부 거른다. */
+const SCAFFOLD_ALLOWED_DOTFILES = new Set([".gitignore", ".env.example"]);
+/** 설치물·산출물(이름이 dotfile이 아닌 것). */
+const SCAFFOLD_EXCLUDED_NAMES = new Set(["node_modules", "dist"]);
+/** 키·인증서 묶음 — 템플릿에 있을 이유가 없다. */
+const SCAFFOLD_SECRET_FILE_RE = /\.(pem|key|p12|pfx)$/i;
+
+/**
+ * 템플릿에서 사용자 앱으로 따라오면 안 되는 이름(경로 조각 하나 — fs.cp filter가 폴더·파일마다 부른다).
+ * **dotfile은 기본 거부**(허용 목록 `.gitignore`·`.env.example`만): `.npmrc`·`.envrc`·`.yarnrc*`·`.dev.vars`·`.env*`·
+ * `.wrangler`·`.git`·`.turbo`·`.DS_Store`·`.vscode`… 종전 제외 목록 방식은 `.npmrc`·`.envrc`를 놓쳐 스캐폴드 커밋(→ B-5b-5가
+ * simsa-hosted 저장소로 push)에 넣었다(PR #569 검증 결함 4). 템플릿이 새 dotfile을 추적하면 테스트
+ * ('git이 추적하는 템플릿 파일은 하나도 빠지지 않는다')가 깨진다 — 그때 허용 목록에 명시적으로 넣는다.
+ */
 export function isScaffoldExcluded(name) {
-  if (["node_modules", "dist", ".wrangler", ".git", ".dev.vars", ".turbo"].includes(name)) return true;
-  if (name === ".env") return true;
-  if (name.startsWith(".env.") && name !== ".env.example") return true;
-  return false;
+  if (SCAFFOLD_EXCLUDED_NAMES.has(name)) return true;
+  if (name.startsWith(".")) return !SCAFFOLD_ALLOWED_DOTFILES.has(name);
+  return SCAFFOLD_SECRET_FILE_RE.test(name);
 }
 
 /** 템플릿 → appDir 복사 + wrangler.toml 채움. { files, templateVersion }. 실패는 던진다(호출자가 failed(scaffolding)). */
@@ -469,7 +542,8 @@ export async function scaffoldTemplate({ templateDir = TEMPLATE_DIR, appDir, slu
   await fsImpl.mkdir(path.dirname(appDir), { recursive: true });
   await fsImpl.cp(templateDir, appDir, {
     recursive: true,
-    filter: (src) => !isScaffoldExcluded(path.basename(src)),
+    // 템플릿 폴더 자체(rel "")는 이름과 무관하게 통과 — 그 아래 폴더·파일만 이름으로 거른다(거른 폴더 안으로는 내려가지 않는다).
+    filter: (src) => path.relative(templateDir, src) === "" || !isScaffoldExcluded(path.basename(src)),
   });
   const tomlPath = path.join(appDir, "wrangler.toml");
   await fsImpl.writeFile(tomlPath, patchWranglerToml(await fsImpl.readFile(tomlPath, "utf8"), { slug, d1Id }));
@@ -482,18 +556,23 @@ export async function scaffoldTemplate({ templateDir = TEMPLATE_DIR, appDir, slu
 /** 스캐폴드 커밋 작성자 — 저장소에 남는다(push는 B-5b-5). 서명·전역 설정에 기대지 않는다. */
 const GIT_IDENTITY = ["-c", "user.name=Simsa Builder", "-c", "user.email=builder@simsa.page", "-c", "commit.gpgsign=false"];
 
-/** 로컬 저장소 초기화 + 스캐폴드 커밋. 커밋 sha를 돌려준다. 실패는 `git_<단계>_failed`로 던진다. */
-export async function commitScaffold({ appDir, exec }) {
+/**
+ * 로컬 저장소 초기화 + 스캐폴드 커밋. 커밋 sha를 돌려준다. 실패는 `git_<단계>_failed`로 던진다.
+ * `signal`(마감·SIGTERM)이 끊기면 다음 git을 시작하지 않고 `job_aborted`로 던진다 — 실행 중인 것은 exec가 죽인다.
+ */
+export async function commitScaffold({ appDir, exec, signal = null }) {
   const steps = [
     ["init", ["init", "-q", "-b", "main"]],
     ["add", ["add", "-A"]],
     ["commit", [...GIT_IDENTITY, "commit", "-q", "-m", `chore: scaffold ${TEMPLATE_NAME} template`]],
   ];
   for (const [name, args] of steps) {
-    const r = await exec("git", args, { cwd: appDir, timeoutMs: 60_000 });
+    if (signal?.aborted) throw new Error("job_aborted");
+    const r = await exec("git", args, { cwd: appDir, timeoutMs: 60_000, signal });
     if (!r.ok) throw new Error(`git_${name}_failed:${String(r.error ?? r.stderr ?? "").slice(0, 120)}`);
   }
-  const head = await exec("git", ["rev-parse", "HEAD"], { cwd: appDir, timeoutMs: 15_000 });
+  if (signal?.aborted) throw new Error("job_aborted");
+  const head = await exec("git", ["rev-parse", "HEAD"], { cwd: appDir, timeoutMs: 15_000, signal });
   if (!head.ok) throw new Error(`git_rev-parse_failed:${String(head.error ?? "").slice(0, 120)}`);
   return head.stdout.trim();
 }
@@ -505,10 +584,16 @@ export async function commitScaffold({ appDir, exec }) {
  * 이 이미지에서는 **항상 ok:false** — scaffolding까지만 실제로 하고 implementing에서 정직하게 멈춘다.
  *
  * 진행 콜백 응답 처리(비용 방어):
- *   - 2xx인데 transitioned:false → Worker가 이 잡을 활성으로 보지 않는다(스턱 스윕·디스패치 실패로 이미 failed) →
+ *   - **기록됨**(2xx + Worker JSON `{ok:true}`)일 때만 usage를 ack한다. 2xx라도 Worker 응답이 아니면 기록되지 않은 것 —
+ *     5xx처럼 계속 가고, usage는 다음 콜백에 **같은 callId**로 다시 실린다(PR #569 검증 결함 2).
+ *   - 기록됨인데 transitioned:false → Worker가 이 잡을 활성으로 보지 않는다(스턱 스윕·디스패치 실패로 이미 failed) →
  *     즉시 멈춘다(`job_not_active`). 기록되지 않는 빌드에 돈을 쓰지 않는다.
  *   - 4xx → 계약 파손·토큰 불일치 → 멈춘다(`progress_rejected:<status>`).
- *   - 5xx·네트워크(재시도 후) → 기록 한 번 실패로 잡을 버리지 않는다. usage는 ack되지 않아 다음 콜백에 다시 실린다.
+ *   - 5xx·네트워크(재시도 후) → 기록 한 번 실패로 잡을 버리지 않는다.
+ *
+ * 마감·중단(`deps.signal`, startJob이 넘긴다): 끊기면 다음 진행 콜백을 보내지 않고 다음 exec를 시작하지 않는다(실행 중인
+ * exec는 defaultExec가 죽인다). 그때의 반환 본문은 쓰이지 않는다 — 최종 본문은 startJob이 정한다(결함 6).
+ * 최종 본문 전에는 200개를 넘는 usage를 진행 콜백으로 비운다(결함 5).
  */
 export async function runBuild(payload, deps = {}) {
   const v = validateBuildPayload(payload);
@@ -524,42 +609,61 @@ export async function runBuild(payload, deps = {}) {
   const onStage = deps.onStage ?? (() => {});
   const log = deps.log ?? ((line) => console.log(`[job ${job.jobId}] ${line}`));
   const outbox = deps.usageOutbox ?? createUsageOutbox();
+  const signal = deps.signal ?? null;
+  const aborted = () => signal?.aborted === true;
 
   const workDir = path.join(workRoot, job.jobId);
   const appDir = path.join(workDir, "app");
   const token = payload.callbackToken;
   let wbsDone = 0;
+  /** 실제로 들어간 단계 — 비우기 콜백의 status(실패 단계 implementing과 다를 수 있다: 거기까지 가지 않았다). */
+  let reached = "queued";
+  const enter = (stage) => {
+    reached = stage;
+    onStage(stage);
+  };
 
   /** 진행 콜백 하나. 멈춰야 하면 사유 문자열, 계속이면 null. */
   const progress = async (status, message, meta = {}) => {
+    if (aborted()) return "job_aborted";
     const usage = outbox.pending();
     const body = progressBody(job, status, { message, meta: { runnerRev: RUNNER_REV, ...meta }, wbsDone, spentUsd: outbox.spentUsd(), usage });
     const r = await post(job.progressUrl, token, body);
-    if (r.ok) {
+    if (isCallbackRecorded(r)) {
       outbox.ack(usage.map((u) => u.callId));
-      if (r.json && typeof r.json === "object" && r.json.transitioned === false) return "job_not_active";
+      if (r.json.transitioned === false) return "job_not_active";
       return null;
     }
-    if (r.status >= 400 && r.status < 500) return `progress_rejected:${r.status}`;
-    log(`progress ${status}/${message} not recorded (${r.status || "network"}) — continuing`);
+    if (!r.ok && r.status >= 400 && r.status < 500) return `progress_rejected:${r.status}`;
+    log(`progress ${status}/${message} not recorded (${r.status ? `http ${r.status}${r.ok ? " — not a Worker response" : ""}` : "network"}) — continuing`);
     return null;
   };
-  const fail = (failedStage, error) =>
-    failureBody(job.jobId, { failedStage, error, spentUsd: outbox.spentUsd(), wbsDone, usage: outbox.pending() });
+  const fail = async (failedStage, error) => {
+    if (!aborted()) {
+      const left = await flushUsageOverflow({
+        outbox,
+        send: async (usage) =>
+          isCallbackRecorded(await post(job.progressUrl, token, usageFlushBody(job.jobId, reached, { spentUsd: outbox.spentUsd(), usage }))),
+      });
+      if (left > 0) log(`usage_overflow_unsent:${left} — flush callback not recorded; build-done carries the first ${USAGE_CALLBACK_MAX}`);
+    }
+    return failureBody(job.jobId, { failedStage, error, spentUsd: outbox.spentUsd(), wbsDone, usage: outbox.pending() });
+  };
 
   try {
     // ── scaffolding ──
-    onStage("scaffolding");
+    enter("scaffolding");
     const stop1 = await progress("scaffolding", "scaffold_started", { template: TEMPLATE_NAME });
-    if (stop1) return fail("scaffolding", stop1);
+    if (stop1) return await fail("scaffolding", stop1);
     let scaffold;
     let baseCommit;
     try {
       await fsImpl.rm(workDir, { recursive: true, force: true });
+      if (aborted()) throw new Error("job_aborted");
       scaffold = await scaffoldTemplate({ templateDir, appDir, slug: job.slug, d1Id: job.d1Id, fsImpl });
-      baseCommit = await commitScaffold({ appDir, exec });
+      baseCommit = await commitScaffold({ appDir, exec, signal });
     } catch (err) {
-      return fail("scaffolding", `scaffold_failed:${String(err?.message ?? err).slice(0, 200)}`);
+      return await fail("scaffolding", `scaffold_failed:${String(err?.message ?? err).slice(0, 200)}`);
     }
     const stop2 = await progress("scaffolding", "scaffold_ready", {
       template: TEMPLATE_NAME,
@@ -567,11 +671,12 @@ export async function runBuild(payload, deps = {}) {
       files: scaffold.files,
       baseCommit: baseCommit.slice(0, 12),
     });
-    if (stop2) return fail("scaffolding", stop2);
+    if (stop2) return await fail("scaffolding", stop2);
 
     // ── implementing 이후: B-5b-2~5 ──
-    // 여기서 WBS별 runBuildLoop가 돈다(B-5b-2). 그 전까지는 정직하게 실패 — "완성"을 꾸미지 않는다(D-4 · 증거 규칙).
-    return fail("implementing", "builder_stage_not_implemented:implementing");
+    // 여기서 WBS별 runBuildLoop가 돈다(B-5b-2 — onUsage는 outbox.record, 턴 사이에 signal 확인·LLM 호출에 signal 전달).
+    // 그 전까지는 정직하게 실패 — "완성"을 꾸미지 않는다(D-4 · 증거 규칙).
+    return await fail("implementing", "builder_stage_not_implemented:implementing");
   } finally {
     // 작업 폴더에는 유저 지시서로 만든 코드가 있다 — 잡이 끝나면 인스턴스에 남기지 않는다.
     await fsImpl.rm(workDir, { recursive: true, force: true }).catch(() => {});
@@ -596,4 +701,106 @@ export async function runBuildJob(payload, deps = {}) {
   const err = new Error(`builder_stage_not_implemented:${String(kind).slice(0, 40)}`);
   err.stage = "queued";
   throw err;
+}
+
+// ─── 잡 하나의 수명: 마감·중단·예외 본문 (server.mjs가 쓴다) ─────────────────────────────────────────
+
+/**
+ * server.mjs의 잡 하나를 감싼다(PR #569 검증 결함 6).
+ *   - 러너(runBuildJob)에 우편함·AbortSignal·onStage를 넘긴다 → 바깥에서도 지금까지의 지출·단계를 안다.
+ *   - 마감(timeoutMs)이 먼저 오면: 러너를 **멈추고**(abort — 다음 진행 콜백·exec를 막고 실행 중인 exec는 죽인다),
+ *     200개를 넘는 usage를 진행 콜백으로 비운 뒤(결함 5와 같은 규칙) spentUsd·usage를 실은 실패 본문으로 끝낸다.
+ *     종전 server.mjs의 withTimeout은 경쟁만 해서 러너가 뒤에서 계속 돌며 progress를 보냈고, 본문에 지출이 없어
+ *     build_jobs.spent_usd가 0으로 남았다(Worker의 markBuildJobFailed는 본문 값을 쓴다).
+ *   - abort(err)(SIGTERM 드레인): **동기로** 같은 모양의 본문을 돌려준다 — 5초 안에 보내야 하므로 비우기는 하지 않고
+ *     200을 넘는 수만 로그에 남긴다.
+ *   - 러너가 던지면: 단계·지출을 실은 실패 본문.
+ *   - 최종 본문은 **하나** — 먼저 정해진 것이 done·finished·abort()의 값이다. 마감·중단 뒤 러너의 늦은 본문은 버린다.
+ * 반환: { done(최종 본문이 정해지는 순간), finished(러너가 실제로 끝난 뒤 — 값은 같은 최종 본문), abort, stage, signal, outbox }
+ */
+export function startJob(payload, { deps = {}, timeoutMs = 0, timeoutMessage = "build job timed out", runJob = runBuildJob } = {}) {
+  const controller = new AbortController();
+  const outbox = deps.usageOutbox ?? createUsageOutbox();
+  const jobId = typeof payload?.jobId === "string" ? payload.jobId.slice(0, 64) : "unknown";
+  const log = deps.log ?? ((line) => console.log(`[job ${jobId}] ${line}`));
+  const post = deps.postCallback ?? ((url, token, body) => postCallback(url, token, body));
+  // 비우기 콜백은 검증된 kind=build 페이로드의 progressUrl로만(같은 출처 확인 포함) — selfcheck에는 usage가 없다.
+  const flushTarget = payload?.kind === "build" && validateBuildPayload(payload).ok ? { url: payload.progressUrl, token: payload.callbackToken } : null;
+
+  let stage = "queued";
+  let finalBody = null;
+  let settle = () => {};
+  const done = new Promise((resolve) => {
+    settle = resolve;
+  });
+  const finish = (body) => {
+    if (finalBody === null) {
+      finalBody = body;
+      settle(body);
+    }
+    return finalBody;
+  };
+  const spend = () => ({ spentUsd: outbox.spentUsd(), usage: outbox.pending() });
+  const abort = (err) => {
+    if (finalBody !== null) return finalBody;
+    if (!controller.signal.aborted) controller.abort(err);
+    const left = Math.max(0, outbox.pendingCount() - USAGE_CALLBACK_MAX);
+    if (left > 0) log(`usage_overflow_unsent:${left} — job ended before a flush callback (${String(err?.message ?? err).slice(0, 80)})`);
+    return finish(failureCallbackBody(jobId, err, stage, spend()));
+  };
+
+  let timer = null;
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    timer = setTimeout(() => {
+      void (async () => {
+        if (finalBody !== null) return;
+        const err = new Error(timeoutMessage);
+        controller.abort(err);
+        const flushStage = stage;
+        if (flushTarget && PROGRESS_STATUSES.has(flushStage)) {
+          await flushUsageOverflow({
+            outbox,
+            send: async (usage) =>
+              isCallbackRecorded(await post(flushTarget.url, flushTarget.token, usageFlushBody(jobId, flushStage, { spentUsd: outbox.spentUsd(), usage }))),
+          });
+        }
+        abort(err);
+      })();
+    }, timeoutMs);
+  }
+
+  const finished = (async () => {
+    try {
+      const result = await runJob(payload, {
+        ...deps,
+        usageOutbox: outbox,
+        signal: controller.signal,
+        onStage: (s) => {
+          stage = s;
+          deps.onStage?.(s);
+        },
+      });
+      // 마감·중단이 먼저였다면 최종 본문은 그쪽이 정한다(비우기가 끝날 때까지 기다린다).
+      if (controller.signal.aborted) return await done;
+      return finish(result);
+    } catch (err) {
+      if (controller.signal.aborted) return await done;
+      return finish(failureCallbackBody(jobId, err, stage, spend()));
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  })();
+
+  return {
+    done,
+    finished,
+    abort,
+    outbox,
+    get stage() {
+      return stage;
+    },
+    get signal() {
+      return controller.signal;
+    },
+  };
 }

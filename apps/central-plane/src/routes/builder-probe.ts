@@ -23,7 +23,7 @@ function asRecord(v: unknown): Record<string, unknown> | null {
  * 프로브 응답 정규화 — 컨테이너 JSON을 그대로 신뢰하지 않고 필요한 필드만 뽑는다(순수, 테스트 대상).
  *
  * B-5b-0: `agentWorker`(이미지 안에서 빌드한 packages/agent-worker를 실제로 import했나 + 빠진 export)와
- * `template`(S 템플릿이 이미지에 있나 + 버전)을 그대로 전달한다 — 이것이 "빌드 실행체가 #551 폴백·B4 정책에
+ * `template`(S 템플릿이 이미지에 있고 스캐폴드가 실제로 채울 수 있나 + 버전 + 아니면 어느 자리 표시자)을 그대로 전달한다 — 이것이 "빌드 실행체가 #551 폴백·B4 정책에
  * 닿는다"의 **라이브 증거 경로**다(ops-probe builder-selfcheck). 옛 이미지는 항목이 없으므로 null(있다고 꾸미지 않는다).
  */
 export function summarizeSelfCheck(body: unknown, elapsedMs: number): {
@@ -33,7 +33,7 @@ export function summarizeSelfCheck(body: unknown, elapsedMs: number): {
   forbiddenPresent: string[];
   workRootOk: boolean | null;
   agentWorker: { ok: boolean; missing: string[] } | null;
-  template: { ok: boolean; version: string | null } | null;
+  template: { ok: boolean; version: string | null; error: string | null } | null;
   containerMs: number | null;
   elapsedMs: number;
 } {
@@ -62,7 +62,14 @@ export function summarizeSelfCheck(body: unknown, elapsedMs: number): {
           missing: (Array.isArray(aw["missing"]) ? aw["missing"] : []).filter((x): x is string => typeof x === "string").map((x) => x.slice(0, 60)).slice(0, 20),
         }
       : null,
-    template: tpl ? { ok: tpl["ok"] === true, version: typeof tpl["version"] === "string" ? tpl["version"].slice(0, 40) : null } : null,
+    // error: 빨간 template이 어느 자리 표시자 때문인지(`template_placeholder_missing:<이름>`) — 자가점검 문구, 비밀 없음.
+    template: tpl
+      ? {
+          ok: tpl["ok"] === true,
+          version: typeof tpl["version"] === "string" ? tpl["version"].slice(0, 40) : null,
+          error: typeof tpl["error"] === "string" ? tpl["error"].slice(0, 120) : null,
+        }
+      : null,
     containerMs: typeof b["totalMs"] === "number" ? b["totalMs"] : null,
     elapsedMs,
   };
