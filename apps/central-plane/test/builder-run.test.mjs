@@ -2,6 +2,7 @@
  * SI 티어 Train B — B1: builder-run.mjs 순수 로직 + summarizeSelfCheck(Worker 쪽 정규화).
  * exec·fs를 주입해 프로세스·네트워크 없이 돈다(seam).
  * B-5b-0 이후 자가점검은 agent-worker·템플릿 항목도 보므로 imageDeps()로 둘을 주입한다.
+ * kind=build·스캐폴드·콜백 계약은 train-b-b5b-executor.test.mjs.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -33,8 +34,8 @@ const fakeFs = (fail = false) => ({
 });
 
 describe("payload · constants", () => {
-  it("D-4 상태 머신 순서", () => {
-    assert.deepEqual([...BUILD_STAGES], ["queued", "scaffolding", "implementing", "building", "testing", "pushed", "done", "failed"]);
+  it("D-4 상태 머신 순서 (D1 build_jobs와 같다 — pushed 다음 deploying, B-5b-1)", () => {
+    assert.deepEqual([...BUILD_STAGES], ["queued", "scaffolding", "implementing", "building", "testing", "pushed", "deploying", "done", "failed"]);
   });
   it("validateJobPayload: 필수 7필드 전부 비어 있지 않은 문자열", () => {
     const full = Object.fromEntries(REQUIRED_FIELDS.map((f) => [f, "x"]));
