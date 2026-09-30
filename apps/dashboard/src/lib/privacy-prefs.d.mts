@@ -29,6 +29,13 @@ export function trainingCardVisible(input: {
   seenRuns: readonly string[];
   runId: string;
 }): boolean;
+/** Result-screen entry point: card visibility straight from the (possibly null = unknown) prefs. */
+export function cardVisibleFromPrefs(
+  prefs: PrivacyPrefs | null | undefined,
+  seenRuns: readonly string[],
+  runId: string,
+  resultDone: boolean,
+): boolean;
 export function rememberTrainingCardSeen(seenRuns: readonly string[], runId: string): string[];
 export function trainingSaveOutcome(
   requested: boolean,

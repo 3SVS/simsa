@@ -318,7 +318,7 @@ describe("배선 — 결과 화면(인라인)·설정 화면(두 토글)", () =>
 
   it("결과 화면 섹션은 서버 상태로만 카드를 띄우고, 운영 정보 '자세히'는 #ops-info", () => {
     assert.match(resultSectionSrc, /fetchPrivacyPrefs\(userKey\)/);
-    assert.match(resultSectionSrc, /trainingCardVisible\(/);
+    assert.match(resultSectionSrc, /cardVisibleFromPrefs\(/); // → trainingCardVisible (#573 검증 6)
     assert.match(resultSectionSrc, /rememberTrainingCardSeen\(/);
     assert.match(resultSectionSrc, /opsInfoLineCopy\(opsInfoLineVariant\(prefs\), p\)/);
     assert.match(resultSectionSrc, /href="\/legal\/privacy#ops-info"/);
@@ -740,6 +740,36 @@ describe("#573 검증 5 — 학습 사본 '담기는 것' = 서버 기록 칸", 
     assert.match(ops.TRAINING_DATA_SCOPE ?? "", /운영 정보 기록을 켜 두셨으면 접속 국가 코드/);
     assert.match(DICTIONARIES.ko.trainingConsent.pointWhat, /운영 정보 기록이 켜져 있으면 접속 국가 코드/);
     assert.match(DICTIONARIES.en.trainingConsent.pointWhat, /country code if operating info recording is on/);
+  });
+});
+
+// ─── 14. PR #573 검증 6 — 옛 서버 방어 배선: 카드 노출은 prefs(null 포함)에서 곧바로 ───────────────
+// 옛 배선(ResultPrivacySection `trainingState: loaded?.training.state ?? null`)은 `?? "undecided"`로 바뀌어도
+// 테스트가 통과했다 — 옛 서버(prefs=null)에서 카드가 뜨는 회귀를 못 잡았다. 판단을 순수 함수로 옮기고
+// prefs=null 행을 표에 넣는다.
+describe("#573 검증 6 — cardVisibleFromPrefs(prefs, seen, runId, resultDone) 표", () => {
+  const P = (state) => K.normalizePrivacyPrefs({ ...VALID, training: { state, version: "v", decidedAt: null } });
+  const rows = [
+    // [이유, prefs, seen, runId, resultDone, 기대]
+    ["옛 서버·네트워크(prefs=null) → 숨김 (추측으로 '아직 정하지 않음'이라 보지 않는다)", null, [], "r1", true, false],
+    ["계약 밖 모양(training 없음) → 숨김", { opsMeta: "on" }, [], "r1", true, false],
+    ["아직 정하지 않음 + 첫 완료 결과 → 보임", P("undecided"), [], "r1", true, true],
+    ["아직 정하지 않음 + 진행 중 결과 → 숨김", P("undecided"), [], "r1", false, false],
+    ["아직 정하지 않음 + 이미 두 결과에서 봄 → 숨김", P("undecided"), ["r1", "r2"], "r3", true, false],
+    ["허용함 → 숨김", P("consented"), [], "r1", true, false],
+    ["거절함 → 숨김", P("declined"), [], "r1", true, false],
+  ];
+  for (const [why, prefs, seen, runId, resultDone, want] of rows) {
+    it(`${why} → ${want}`, () => {
+      assert.equal(typeof K.cardVisibleFromPrefs, "function", "cardVisibleFromPrefs exported");
+      assert.equal(K.cardVisibleFromPrefs(prefs, seen, runId, resultDone), want);
+    });
+  }
+
+  it("결과 화면은 그 함수 하나로 판단한다 — 컴포넌트가 training.state를 직접 풀지 않는다", () => {
+    assert.match(resultSectionSrc, /cardVisibleFromPrefs\(loaded, seen, runId, resultDone\)/);
+    assert.ok(!/trainingState:/.test(resultSectionSrc), "component re-derives trainingState inline");
+    assert.ok(!/\?\?\s*"undecided"/.test(resultSectionSrc + read(path.join(SRC, "lib/privacy-prefs.mjs"))), "no guessed 'undecided'");
   });
 });
 

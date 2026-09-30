@@ -15,11 +15,11 @@ import Link from "next/link";
 import { fetchPrivacyPrefs, savePrivacyPrefs } from "@/lib/workspace-privacy-prefs-api";
 import {
   TRAINING_CARD_STORAGE_KEY,
+  cardVisibleFromPrefs,
   opsInfoLineCopy,
   opsInfoLineVariant,
   parseSeenRuns,
   rememberTrainingCardSeen,
-  trainingCardVisible,
   type OpsMeta,
   type PrivacyPrefs,
 } from "@/lib/privacy-prefs.mjs";
@@ -73,7 +73,7 @@ export function ResultPrivacySection({
       if (cancelled) return;
       setPrefs(loaded);
       const seen = readSeenRuns();
-      if (trainingCardVisible({ resultDone, trainingState: loaded?.training.state ?? null, seenRuns: seen, runId })) {
+      if (cardVisibleFromPrefs(loaded, seen, runId, resultDone)) {
         writeSeenRuns(rememberTrainingCardSeen(seen, runId));
         setShowCard(true);
       }

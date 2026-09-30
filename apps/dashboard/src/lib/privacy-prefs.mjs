@@ -124,6 +124,20 @@ export function trainingCardVisible(input) {
 }
 
 /**
+ * 결과 화면이 쓰는 입구 — 서버 응답(정규화된 prefs, 모르면 null)에서 곧바로 카드 노출을 정한다.
+ * prefs가 null(옛 서버·네트워크·계약 밖)이면 **숨김** — "아직 정하지 않음"으로 추측하지 않는다(#573 검증 6:
+ * 컴포넌트 안의 null 기본값이 undecided 기본값으로 바뀌어도 잡히도록 판단을 여기로 옮기고 표로 고정했다).
+ * @param {ReturnType<typeof normalizePrivacyPrefs> | null | undefined} prefs
+ * @param {readonly string[]} seenRuns
+ * @param {string} runId
+ * @param {boolean} resultDone
+ */
+export function cardVisibleFromPrefs(prefs, seenRuns, runId, resultDone) {
+  const state = prefs && prefs.training && typeof prefs.training === "object" ? prefs.training.state : null;
+  return trainingCardVisible({ resultDone, trainingState: state, seenRuns, runId });
+}
+
+/**
  * 카드를 보여 줬을 때 목록에 더한다(이미 있으면 그대로, 상한이면 그대로).
  * @param {readonly string[]} seenRuns
  * @param {string} runId
