@@ -35,14 +35,14 @@
 |---|---|---|---|---|---|---|
 | IM01 | `/intent-mismatch/booking-no-date` | 손님이 원하는 날짜를 골라 미용실 예약을 잡을 수 있어야 한다 | 날짜를 고르는 칸이 없고, 예약은 항상 '오늘'로 접수된다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (then_not_observed: 고른·날짜·내역·함께) | 예약하기 뒤 확인 문구에 날짜가 없다 |
 | IM02 | `/intent-mismatch/price-in-dollars` | 꽃다발 가격과 합계가 원화(원)로 보여야 한다 | 가격과 합계가 달러($)로 나온다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (금액·원화·단위) | 담기 뒤 합계가 `$12.00`, 화면에 '원'이 없다 |
-| IM03 | `/intent-mismatch/sort-reversed` | 가장 최근 공지가 맨 위에 보여야 한다 | 오래된 공지부터 나와 최신이 맨 아래 | **FN(예상 미탐)** · 작동해요/문제 못 찾음 | 없음 | 휴리스틱은 내용어 **존재**만 본다 — 순서를 못 본다 |
-| IM04 | `/intent-mismatch/required-field-missing` | 체험 신청을 받을 때 전화번호를 꼭 함께 받아야 한다 | 이름만 받고 전화번호 칸이 없다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (내역·전화번호·함께) | 완료 문구에 전화번호가 없다(칸 자체가 없다) |
-| IM05 | `/intent-mismatch/button-wrong-page` | '장바구니 보기'를 누르면 담은 상품이 보이는 장바구니 화면이 나와야 한다 | 고객센터 화면으로 간다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (장바구니·담·무선·이어폰) | 도착한 고객센터 화면에 장바구니·상품이 없다 |
-| IM06 | `/intent-mismatch/english-copy` | 화면의 안내 문구가 모두 한국어로 보여야 한다 | 저장 안내가 영어(`Saved! Your place was added.`) | **TP** · 작동해요 아님 | `ac_not_confirmed` (맛집·저장했어요·문구) | 한국어 완료 문구가 없다(저장은 새로고침 뒤에도 남는다) |
-| IM07 | `/intent-mismatch/not-persisted` | 기록한 책 목록이 새로고침한 뒤에도 남아 있어야 한다 | 새로고침하면 전부 사라진다 | **TP(핵심 흐름으로)** · 안 돼요 | `step_failed` — 새로고침하니 사라짐. AC-001 자체는 no_problem 예상 | AC 시나리오는 새로고침을 안 한다 — 잡는 것은 핵심 흐름의 지속성 확인(F6 경로) |
-| IM08 | `/intent-mismatch/search-exact-only` | 카페 이름 일부만 입력해도 검색되어야 한다 | 이름을 정확히 다 적어야만 검색된다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (서울숲·로스터리·목록·뜬) | '서울'로 검색하면 '검색 결과가 없어요' |
-| IM09 | `/intent-mismatch/delete-no-confirm` | 메모를 지울 때는 정말 지울지 한 번 더 물어봐야 한다 | 묻지 않고 바로 지운다 | **no_call** · 무엇이든 | 판정 없음 — AC-001이 not_confirmed여도 우연 | 안전 레일이 '삭제'를 절대 누르지 않는다 → 사람 확인(user_verdict) 몫 |
-| IM10 | `/intent-mismatch/mobile-button-hidden` | 휴대폰에서도 예약 요청 버튼을 누를 수 있어야 한다 | 좁은 화면에서는 '예약 요청' 버튼이 사라진다 | **FN(예상 미탐)** · 작동해요/문제 못 찾음 | 없음 | 검수 브라우저가 1280×800 데스크톱뿐 |
+| IM03 | `/intent-mismatch/sort-reversed` | 가장 최근 공지가 맨 위에 보여야 한다 | 공지가 오래된 것부터 나와 최신 공지가 맨 아래에 있다 | **FN(예상 미탐)** · 작동해요/문제 못 찾음 | 없음 | 휴리스틱은 내용어 **존재**만 본다 — 순서를 못 본다 |
+| IM04 | `/intent-mismatch/required-field-missing` | 체험 신청을 받을 때 전화번호를 꼭 함께 받아야 한다 | 이름만 받고 전화번호를 적는 칸이 없다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (내역·전화번호·함께) | 완료 문구에 전화번호가 없다(칸 자체가 없다) |
+| IM05 | `/intent-mismatch/button-wrong-page` | '장바구니 보기'를 누르면 담은 상품이 보이는 장바구니 화면이 나와야 한다 | '장바구니 보기'를 누르면 고객센터 화면으로 간다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (장바구니·담·무선·이어폰) | 도착한 고객센터 화면에 장바구니·상품이 없다 |
+| IM06 | `/intent-mismatch/english-copy` | 화면의 안내 문구가 모두 한국어로 보여야 한다 | 저장하면 'Saved! Your place was added.'라는 영어 안내가 나온다 | **TP** · 작동해요 아님 | `ac_not_confirmed` (맛집·저장했어요·문구) | 한국어 완료 문구가 없다(저장은 새로고침 뒤에도 남는다) |
+| IM07 | `/intent-mismatch/not-persisted` | 기록한 책 목록이 새로고침한 뒤에도 남아 있어야 한다 | 추가하면 목록에 보이지만 새로고침하면 전부 사라진다 | **TP(핵심 흐름으로)** · 안 돼요 | `step_failed` — 새로고침하니 사라짐. AC-001 자체는 no_problem 예상 | AC 시나리오는 새로고침을 안 한다 — 잡는 것은 핵심 흐름의 지속성 확인(F6 경로) |
+| IM08 | `/intent-mismatch/search-exact-only` | 카페 이름 일부만 입력해도 검색되어야 한다 | 카페 이름을 정확히 다 적어야만 검색된다('서울'로는 '서울숲 로스터리'가 안 나온다) | **TP** · 작동해요 아님 | `ac_not_confirmed` (서울숲·로스터리·목록·뜬) | '서울'로 검색하면 '검색 결과가 없어요' |
+| IM09 | `/intent-mismatch/delete-no-confirm` | 메모를 지울 때는 정말 지울지 한 번 더 물어봐야 한다 | 삭제 버튼을 누르면 묻지 않고 바로 지워진다 | **no_call** · 무엇이든 | 판정 없음 — AC-001이 not_confirmed여도 우연 | 안전 레일이 '삭제'를 절대 누르지 않는다 → 사람 확인(user_verdict) 몫 |
+| IM10 | `/intent-mismatch/mobile-button-hidden` | 휴대폰에서도 예약 요청 버튼을 누를 수 있어야 한다 | 휴대폰처럼 좁은 화면에서는 '예약 요청' 버튼이 사라진다 | **FN(예상 미탐)** · 작동해요/문제 못 찾음 | 없음 | 검수 브라우저가 1280×800 데스크톱뿐 |
 
 control AC 10개는 전부 **TN** 예상(FP 0).
 
