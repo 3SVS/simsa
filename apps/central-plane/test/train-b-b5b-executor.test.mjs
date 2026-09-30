@@ -26,25 +26,29 @@ const REPO_AGENT_WORKER_DIST = path.join(REPO, "packages/agent-worker/dist/index
 const run = await import("../builder-container/builder-run.mjs");
 const { BUILD_JOB_STATUSES, insertQueuedBuildJob, getBuildJobById } = await import("../dist/workspace/build-job-db.js");
 const { createApp } = await import("../dist/router.js");
-const { parseCallbackUsage } = await import("../dist/workspace/llm-usage.js");
 const { summarizeSelfCheck } = await import("../dist/routes/builder-probe.js");
+const { mintBuildJobToken } = await import("../dist/workspace/build-job-token.js");
+const { dailyCapsRun } = await import("./_daily-caps-fake.mjs");
 
 const dockerfile = readFileSync(path.join(ROOT, "builder-container/Dockerfile"), "utf8");
 const serverMjs = readFileSync(path.join(ROOT, "builder-container/server.mjs"), "utf8");
 const imagesYml = readFileSync(path.join(REPO, ".github/workflows/container-images.yml"), "utf8");
 
+/** Worker의 전역 콜백 토큰(가짜). B-5b S1부터 컨테이너는 이것을 받지 않는다 — 콜백 Bearer는 잡 범위 jobToken. */
 const TOKEN = "tok_internal_FAKE";
+/** 모양만 맞는 가짜 jobToken(bj_0a1b2c3d4e용). Worker 라우트에 넣는 테스트는 mintBuildJobToken으로 진짜를 만든다. */
+const JOB_TOKEN = `bjt1.bj_0a1b2c3d4e.${"cd".repeat(32)}`;
 const USER = "uk_owner";
 const PROJECT = "wsp_b5b1";
 const D1_UUID = "5f0c8a4e-1b2d-4c3e-9f10-2a3b4c5d6e7f";
 const PRODUCT = "동네 빵집 소금빵 예약 (주)빵굽는집";
 
-/** Worker가 디스패치하는 페이로드 모양(workspace-build-jobs.ts BuildDispatchPayload). 비밀은 명백한 가짜. */
+/** Worker가 디스패치하는 페이로드 모양(workspace-build-jobs.ts BuildDispatchPayload — B-5b S1: 비밀 없음, jobToken 하나). */
 function buildPayload(overrides = {}) {
   return {
-    jobId: "bj_0a1b2c3d4e", projectId: PROJECT, userKey: USER, kind: "build", slug: "app-3f9a1c2b", locale: "ko",
+    jobId: "bj_0a1b2c3d4e", kind: "build", slug: "app-3f9a1c2b", locale: "ko",
     baseUrl: "https://cp.example", callbackUrl: "https://cp.example/internal/build-done", progressUrl: "https://cp.example/internal/build-progress",
-    callbackToken: TOKEN, budgetUsd: 10,
+    jobToken: JOB_TOKEN, budgetUsd: 10,
     spec: {
       markdown: `# ${PRODUCT}\n\n## 작업\n- WBS-001 예약 저장\n- WBS-002 예약 화면`,
       wbs: [
@@ -53,9 +57,8 @@ function buildPayload(overrides = {}) {
       ],
       productName: PRODUCT,
     },
-    hosting: { cfApiToken: "cf-ops-FAKE-SECRET", cfAccountId: "acc1", namespace: "simsa-hosted", hostRoot: "simsa.page", d1Id: D1_UUID },
-    repo: { token: "ghs_FAKE-SECRET-repo", org: "simsa-hosted", name: "app-3f9a1c2b" },
-    llm: { anthropicApiKey: "sk-ant-FAKE-SECRET", anthropicBaseUrl: null, openaiApiKey: "sk-oa-FAKE-SECRET", model: "claude-sonnet-4-6", preferFallback: true },
+    hosting: { d1Id: D1_UUID },
+    llm: { model: "claude-sonnet-4-6", openaiModel: "gpt-5.4", preferFallback: true },
     ...overrides,
   };
 }
@@ -99,12 +102,15 @@ function recordingPoster(responses = []) {
 
 // ── 가짜 D1 (workspace-build-jobs.test.mjs와 같은 모양, 필요한 문장만) ────────────────────────────
 function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
+  const rate = new Map(); // B-5b S1 일일 빌드 상한(consumeDailyCaps)
   return {
     _jobs: jobs, _events: events,
     prepare(sql) {
       function handler(args) {
         return {
           async run() {
+            const capped = dailyCapsRun(rate, sql, args);
+            if (capped) return capped;
             if (sql.includes("INSERT INTO build_jobs")) {
               const [id, project_id, user_key, slug, wbs_total, budget_usd, d1_id, repo_full_name, locale, created_at, updated_at] = args;
               jobs.push({ id, project_id, user_key, slug, status: "queued", failed_stage: null, error: null, wbs_done: 0, wbs_total, budget_usd, spent_usd: 0, d1_id, repo_full_name, commit_sha: null, deployed_url: null, build_exit_code: null, locale, created_at, updated_at });
@@ -256,10 +262,10 @@ describe("B-5b-1 · 상태 머신 계약", () => {
     assert.deepEqual([...run.IMPLEMENTED_BUILD_STAGES], ["scaffolding"]);
   });
 
-  it("progressBody: 진행 상태만(최종·미지 상태는 Worker가 400이므로 만들지 않는다)", () => {
+  it("progressBody: 진행 상태만(최종·미지 상태는 Worker가 400이므로 만들지 않는다) · spentUsd·usage 없음(B-5b S1 — 프록시가 계량)", () => {
     const job = run.validateBuildPayload(buildPayload()).job;
     const b = run.progressBody(job, "scaffolding", { message: "scaffold_started", meta: { a: 1 } });
-    assert.deepEqual(Object.keys(b).sort(), ["jobId", "message", "meta", "spentUsd", "status", "wbsDone", "wbsTotal"].sort());
+    assert.deepEqual(Object.keys(b).sort(), ["jobId", "message", "meta", "status", "wbsDone", "wbsTotal"].sort());
     assert.equal(b.status, "scaffolding");
     assert.equal(b.wbsTotal, 2);
     assert.equal(b.wbsDone, 0);
@@ -289,7 +295,7 @@ describe("B-5b-1 · validateBuildPayload (외부 경계 — 명시 가드)", () 
     const builder = { idFromName: (n) => ({ n }), get: () => ({ fetch: async (_u, init) => { payloads.push(JSON.parse(init.body)); return new Response("{}", { status: 202 }); } }) };
     const env = workerEnv(db, {
       BUILDER: builder, HOSTING_CF_API_TOKEN: "cf-ops-FAKE-SECRET", HOSTING_CF_ACCOUNT_ID: "acc1", HOSTING_ROOT_DOMAIN: "simsa.page",
-      ANTHROPIC_API_KEY: "sk-ant-FAKE-SECRET", OPENAI_API_KEY: "sk-oa-FAKE-SECRET", HOSTING_GH_APP_ID: "1", HOSTING_GH_APP_PRIVATE_KEY: "",
+      ANTHROPIC_API_KEY: "anthropic-key-FAKE-SECRET", OPENAI_API_KEY: "openai-key-FAKE-SECRET", HOSTING_GH_APP_ID: "1", HOSTING_GH_APP_PRIVATE_KEY: "",
     });
     const origFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
@@ -315,6 +321,8 @@ describe("B-5b-1 · validateBuildPayload (외부 경계 — 명시 가드)", () 
     const s = JSON.stringify(v.job);
     assert.ok(!s.includes("SECRET"), "정규화된 잡에는 운영 토큰·LLM 키·저장소 토큰이 없다");
     assert.ok(!s.includes(TOKEN), "콜백 토큰도 없다");
+    assert.ok(!s.includes(payloads[0].jobToken), "jobToken도 정규화 잡에는 없다(콜백·LLM 설정에서만 원 페이로드로)");
+    assert.ok(!JSON.stringify(payloads[0]).includes("SECRET"), "B-5b S1: 디스패치 본문 자체에 비밀이 없다");
   });
 
   it("경로 탈출 jobId · 한글/대문자 slug · TOML 주입 d1Id · 빈 WBS · 다른 출처 progressUrl · 모르는 locale → 거부(필드 이름만)", () => {
@@ -384,16 +392,16 @@ describe("B-5b-1 · runBuildJob kind=build", () => {
       ["https://cp.example/internal/build-progress", "scaffolding", "scaffold_started"],
       ["https://cp.example/internal/build-progress", "scaffolding", "scaffold_ready"],
     ]);
-    assert.ok(poster.calls.every((c) => c.token === TOKEN), "Bearer = payload callbackToken");
+    assert.ok(poster.calls.every((c) => c.token === JOB_TOKEN), "Bearer = the job-scoped jobToken (B-5b S1)");
     const ready = poster.calls[1].body;
     assert.equal(ready.meta.templateVersion, "0.1.0");
     assert.ok(ready.meta.files >= 10);
     assert.equal(ready.meta.baseCommit, "0123456789ab");
     assert.equal(ready.meta.runnerRev, run.RUNNER_REV);
     assert.equal(ready.wbsTotal, 2);
-    assert.ok(!("usage" in ready), "LLM 호출이 없으면 usage[]를 싣지 않는다(빈 델타)");
+    assert.ok(!("usage" in ready) && !("spentUsd" in ready), "B-5b S1: 원가는 LLM 프록시가 계량 — 콜백 본문에 usage·spentUsd 없음");
 
-    assert.deepEqual(r, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "implementing", error: "builder_stage_not_implemented:implementing", spentUsd: 0, wbsDone: 0 });
+    assert.deepEqual(r, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "implementing", error: "builder_stage_not_implemented:implementing", wbsDone: 0 });
     assert.deepEqual(stages, ["scaffolding"]);
 
     // git: 스캐폴드 커밋(로컬) — push는 범위 밖
@@ -464,13 +472,14 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
     const job = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-3f9a1c2b", wbsTotal: 2 });
     const app = createApp();
     const poster = posterIntoWorker(app, env);
-    const payload = buildPayload({ jobId: job.id });
+    // B-5b S1: Worker가 이 잡에 발급한 jobToken — 컨테이너의 모든 콜백 Bearer.
+    const payload = buildPayload({ jobId: job.id, jobToken: await mintBuildJobToken(env, job.id) });
     const result = await run.runBuildJob(payload, { workRoot: await tmpDir("wr8"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post });
     assert.equal((await getBuildJobById(env, job.id)).status, "scaffolding");
     assert.deepEqual(db._events.filter((e) => e.job_id === job.id).map((e) => [e.stage, e.message]), [["scaffolding", "scaffold_started"], ["scaffolding", "scaffold_ready"]]);
 
-    // server.mjs가 하는 일: 최종 본문을 callbackUrl(build-done)로
-    const done = await poster.post(payload.callbackUrl, TOKEN, result);
+    // server.mjs가 하는 일: 최종 본문을 callbackUrl(build-done)로 — 같은 jobToken
+    const done = await poster.post(payload.callbackUrl, payload.jobToken, result);
     assert.equal(done.status, 200);
     assert.equal(done.json.accepted, true);
     const final = await getBuildJobById(env, job.id);
@@ -490,11 +499,11 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
     const env = workerEnv(db);
     const job = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-y", wbsTotal: 1 });
     const poster = posterIntoWorker(createApp(), env);
-    await poster.post("https://cp.example/internal/build-done", TOKEN, run.failureCallbackBody(job.id, err));
+    await poster.post("https://cp.example/internal/build-done", await mintBuildJobToken(env, job.id), run.failureCallbackBody(job.id, err));
     assert.equal((await getBuildJobById(env, job.id)).failedStage, "scaffolding");
 
     assert.doesNotMatch(serverMjs, /failedAt/, "server.mjs must not send the key the Worker ignores");
-    // 예외·마감·드레인 본문은 전부 startJob(→ failureCallbackBody + 지출)에서 나온다 — 아래 '결함 6' 블록이 행동으로 확인.
+    // 예외·마감·드레인 본문은 전부 startJob(→ failureCallbackBody)에서 나온다 — 아래 '결함 6' 블록이 행동으로 확인.
     assert.match(serverMjs, /startJob\(/, "server.mjs builds every failure body through startJob (shared failureCallbackBody)");
   });
 
@@ -507,63 +516,22 @@ describe("B-5b-1 · 컨테이너 → Worker 콜백 계약 (#548 + #562)", () => 
   });
 });
 
-describe("B-5b-1 · usage 델타 우편함 (#562 규약 — B-5b-2가 runBuildLoop onUsage에 연결)", () => {
-  const rec = (n) => ({ vendor: "openai", modelRequested: "claude-sonnet-4-6", modelActual: "gpt-5.4", inputTokens: 100 * n, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 10 * n, latencyMs: 900 + n, costUsd: 0.01 * n, unpriced: false });
-
-  it("callId = <nonce>:<태스크 id>:<턴> — 태스크마다 턴을 0부터, 재전송에 불변", () => {
-    const box = run.createUsageOutbox({ nonce: "n1" });
-    box.record(rec(1), { taskId: "WBS-001" });
-    box.record(rec(2), { taskId: "WBS-001" });
-    box.record(rec(3), { taskId: "WBS-002" });
-    const first = box.pending();
-    assert.deepEqual(first.map((u) => u.callId), ["n1:WBS-001:0", "n1:WBS-001:1", "n1:WBS-002:0"]);
-    // 콜백 실패 → ack 안 함 → 다음 콜백에 **같은 callId**로 다시
-    assert.deepEqual(box.pending().map((u) => u.callId), first.map((u) => u.callId));
-    box.ack(first.slice(0, 2).map((u) => u.callId));
-    assert.deepEqual(box.pending().map((u) => u.callId), ["n1:WBS-002:0"], "델타: 보낸 것은 다시 싣지 않는다");
-    assert.equal(Math.round(box.spentUsd() * 100) / 100, 0.06, "spentUsd는 누적(보냄 여부와 무관)");
-  });
-
-  it("항목은 Worker 스키마를 그대로 통과한다(dropped 0 · rowKey=call:<callId>)", () => {
-    const box = run.createUsageOutbox({ nonce: "n2" });
-    box.record(rec(1), { taskId: "WBS-001" });
-    box.record({ ...rec(2), vendor: "", modelActual: "", modelRequested: "" }, { taskId: "WBS-001" }); // 모델을 전혀 모르면 버린다
-    const parsed = parseCallbackUsage(box.pending());
-    assert.equal(parsed.dropped, 0);
-    assert.deepEqual(parsed.items.map((i) => i.rowKey), ["call:n2:WBS-001:0"]);
-  });
-
-  it("한 콜백에 200개까지 — 나머지는 다음 콜백으로", () => {
-    const box = run.createUsageOutbox({ nonce: "n3" });
-    for (let i = 0; i < 205; i++) box.record(rec(1), { taskId: "WBS-001" });
-    const p = box.pending();
-    assert.equal(p.length, 200);
-    box.ack(p.map((u) => u.callId));
-    assert.equal(box.pending().length, 5);
-  });
-
-  it("progressBody는 비어 있지 않은 usage만 싣는다", () => {
+describe("B-5b S1 · 빌드 잡의 usage 우편함 제거 (원장은 LLM 프록시 한 곳 — 이중 계상 금지)", () => {
+  it("우편함·비우기 export가 없다 — 콜백 usage[] 경로는 수리 컨테이너(repair-done)에만 남는다", () => {
+    for (const gone of ["createUsageOutbox", "usageFlushBody", "flushUsageOverflow", "USAGE_CALLBACK_MAX"]) assert.equal(run[gone], undefined, `${gone} is gone from the builder`);
     const job = run.validateBuildPayload(buildPayload()).job;
-    const box = run.createUsageOutbox({ nonce: "n4" });
-    assert.ok(!("usage" in run.progressBody(job, "implementing", { message: "m", usage: box.pending() })));
-    box.record(rec(1), { taskId: "WBS-001" });
-    assert.equal(run.progressBody(job, "implementing", { message: "m", usage: box.pending() }).usage.length, 1);
+    const b = run.progressBody(job, "implementing", { message: "m", usage: [{ callId: "x" }], spentUsd: 3 });
+    assert.ok(!("usage" in b) && !("spentUsd" in b), "extra options are ignored — nothing to double-count");
+    const f = run.failureBody("bj_1", { failedStage: "implementing", error: "e", usage: [{ callId: "x" }], spentUsd: 3 });
+    assert.ok(!("usage" in f) && !("spentUsd" in f));
   });
 });
 
 // ══ PR #569 검증 결함 수정 ═══════════════════════════════════════════════════════════════════════
 // 각 블록의 첫 테스트는 수정 전 head(084a7a2)에서 실패한다. "[행동 보존]" 표시는 옛 코드에서도 통과하는 가드.
-
-const usageRec = (costUsd, n = 1) => ({ vendor: "openai", modelRequested: "claude-sonnet-4-6", modelActual: "gpt-5.4", inputTokens: 100 * n, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 10 * n, latencyMs: 900 + n, costUsd, unpriced: false });
-
-/** usage를 미리 채운 우편함 — B-5b-2의 runBuildLoop onUsage 대역. */
-function filledOutbox(nonce, count, costUsd = 0.01) {
-  const box = run.createUsageOutbox({ nonce });
-  for (let i = 0; i < count; i++) box.record(usageRec(costUsd), { taskId: "WBS-001" });
-  return box;
-}
-
-const callIdsOf = (body) => (Array.isArray(body?.usage) ? body.usage.map((u) => u.callId) : []);
+// B-5b S1: 결함 2·5·6의 usage 우편함 부분(usage ack · 200 초과 비우기 · 마감 본문의 지출)은 우편함이 빌드 잡에서
+// 제거되며 함께 사라졌다 — 원가는 Worker의 LLM 프록시가 서버에서 계량한다(train-b-b5b-s1-secrets-budget.test.mjs ③④).
+// 남는 계약(기록됨의 정의 · 마감이 러너를 멈춤 · 드레인 본문 하나)은 아래에서 그대로 확인한다.
 
 describe("결함 1 · 자가점검 template.ok = 스캐폴드가 실제로 채울 수 있는 템플릿", () => {
   async function templateWithToml(tag, mutate) {
@@ -654,15 +622,12 @@ describe("결함 2 · postCallback 재시도·중단 분기(fetch seam) + '기�
     assert.deepEqual(r, { ok: true, status: 200, json: null, error: null });
   });
 
-  it("runBuild: 2xx여도 Worker 응답({ok:true})이 아니면 usage를 ack하지 않는다 — 다음 콜백에 같은 callId로 다시(옛 코드는 ack해서 원장에서 빠졌다)", async () => {
-    const box = filledOutbox("nH", 2);
-    const poster = recordingPoster([{ ok: true, status: 200, json: null }]);
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrH"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, usageOutbox: box, log: () => {} });
+  it("runBuild: 2xx여도 Worker 응답({ok:true})이 아니면 '기록됨'이 아니다 — transitioned 없음을 '잡 끝남'으로 읽지 않고 계속 간다", async () => {
+    const poster = recordingPoster([{ ok: true, status: 200, json: null }, { ok: true, status: 200, json: { transitioned: false } }]);
+    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wrH"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, log: () => {} });
     assert.deepEqual(poster.calls.map((c) => c.body.message), ["scaffold_started", "scaffold_ready"], "a non-Worker 2xx is not a reason to stop (like 5xx: continue)");
-    assert.deepEqual(callIdsOf(poster.calls[0].body), ["nH:WBS-001:0", "nH:WBS-001:1"]);
-    assert.deepEqual(callIdsOf(poster.calls[1].body), ["nH:WBS-001:0", "nH:WBS-001:1"], "unrecorded usage is re-sent with the same callIds");
     assert.equal(r.failedStage, "implementing");
-    assert.ok(!("usage" in r), "the second callback was recorded, so nothing is left for build-done");
+    assert.equal(r.error, "builder_stage_not_implemented:implementing", "json without ok:true is not a recorded 'transitioned:false'");
   });
 });
 
@@ -796,39 +761,7 @@ describe("결함 4 · 템플릿 폴더의 로컬 비밀 파일은 이미지에�
   });
 });
 
-describe("결함 5 · 최종 본문 전에 200개를 넘는 usage는 진행 콜백으로 나눠 보낸다", () => {
-  it("250건 · 진행 콜백 5xx 두 번 뒤 Worker 복구 → 250건 전부 기록 경로로(옛 코드는 build-done 200건에서 잘려 50건이 원장에서 빠졌다)", async () => {
-    const box = filledOutbox("n250", 250, 0.01);
-    const poster = recordingPoster([{ ok: false, status: 503, json: null }, { ok: false, status: 503, json: null }]);
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr250"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: poster.post, usageOutbox: box, log: () => {} });
-    assert.equal(r.failedStage, "implementing");
-    assert.equal(r.spentUsd, 2.5);
-    assert.ok(callIdsOf(r).length <= run.USAGE_CALLBACK_MAX, "build-done carries at most 200 (the Worker truncates beyond)");
-    const flushes = poster.calls.slice(2);
-    const recorded = new Set([...flushes.flatMap((c) => callIdsOf(c.body)), ...callIdsOf(r)]);
-    assert.equal(recorded.size, 250, "every usage row reaches a callback the Worker records");
-    assert.ok(flushes.length >= 1);
-    for (const c of flushes) {
-      assert.equal(c.body.status, "scaffolding", "flush reports the stage actually reached — never 'implementing'");
-      assert.equal(c.body.message, "", "flush writes no event row");
-      assert.ok(!("wbsTotal" in c.body), "flush never overwrites wbs_total");
-      assert.ok(c.body.usage.length <= run.USAGE_CALLBACK_MAX);
-    }
-  });
-
-  it("비우기 콜백이 기록되지 않으면 한 번에서 멈춘다(무한 재시도 없음) — 못 보낸 수는 로그에", async () => {
-    const box = filledOutbox("n450", 450, 0.001);
-    const calls = [];
-    const post = async (_url, _token, body) => { calls.push(JSON.parse(JSON.stringify(body))); return { ok: false, status: 503, json: null, error: "http_503" }; };
-    const logs = [];
-    const r = await run.runBuildJob(buildPayload(), { workRoot: await tmpDir("wr450"), templateDir: REPO_TEMPLATE, exec: gitExec().exec, postCallback: post, usageOutbox: box, log: (l) => logs.push(l) });
-    assert.equal(calls.length, 3, "scaffold_started · scaffold_ready · one flush attempt");
-    assert.equal(callIdsOf(r).length, 200);
-    assert.ok(logs.some((l) => /usage_overflow_unsent:250\b/.test(l)), JSON.stringify(logs));
-  });
-});
-
-describe("결함 6 · 45분 마감·SIGTERM — 지금까지의 지출을 싣고, 러너를 멈춘다", () => {
+describe("결함 6 · 45분 마감·SIGTERM — 러너를 멈추고 최종 본문은 하나(지출은 B-5b S1부터 프록시가 서버에서 계량)", () => {
   /** 문(gate)을 열 때까지 멈춰 있는 git exec — 마감·중단이 스캐폴드 도중에 온다. 받은 signal도 기록. */
   function gatedGit() {
     let open;
@@ -843,22 +776,16 @@ describe("결함 6 · 45분 마감·SIGTERM — 지금까지의 지출을 싣고
     return { exec, calls, open: () => open() };
   }
 
-  it("startJob: 마감이 먼저 오면 본문에 spentUsd·usage — 그 뒤 진행 콜백 0건(옛 server.mjs의 withTimeout은 경쟁만 해서 러너가 계속 돌며 progress를 또 보냈다)", async () => {
-    const box = filledOutbox("nT", 3, 0.2);
+  it("startJob: 마감이 먼저 오면 그 단계의 실패 본문 — 그 뒤 진행 콜백 0건(옛 server.mjs의 withTimeout은 경쟁만 해서 러너가 계속 돌며 progress를 또 보냈다)", async () => {
     const git = gatedGit();
-    const poster = recordingPoster([{ ok: false, status: 503, json: null }]); // scaffold_started가 기록되지 않아 usage 3건이 남는다
+    const poster = recordingPoster([{ ok: false, status: 503, json: null }]);
     const job = run.startJob(buildPayload(), {
       timeoutMs: 200,
       timeoutMessage: "build job timed out after 45 min",
-      deps: { workRoot: await tmpDir("wrT"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, usageOutbox: box, log: () => {} },
+      deps: { workRoot: await tmpDir("wrT"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, log: () => {} },
     });
     const body = await job.done;
-    assert.equal(body.ok, false);
-    assert.equal(body.stage, "failed");
-    assert.equal(body.failedStage, "scaffolding");
-    assert.equal(body.error, "build job timed out after 45 min");
-    assert.equal(body.spentUsd, 0.6);
-    assert.deepEqual(callIdsOf(body), ["nT:WBS-001:0", "nT:WBS-001:1", "nT:WBS-001:2"]);
+    assert.deepEqual(body, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "scaffolding", error: "build job timed out after 45 min" });
     const atDeadline = poster.calls.length;
     git.open();
     assert.strictEqual(await job.finished, body, "the runner's late body never becomes a second final body");
@@ -884,38 +811,15 @@ describe("결함 6 · 45분 마감·SIGTERM — 지금까지의 지출을 싣고
     assert.ok(calls.length >= 1 && calls.every((c) => c.signal === ac.signal), "every git call carries the job signal");
   });
 
-  it("마감 본문 전에도 200개 초과분은 진행 콜백으로 비운다(결함 5와 같은 규칙) — 본문에는 나머지", async () => {
-    const box = filledOutbox("nTT", 230, 0.001);
+  it("SIGTERM 드레인(abort): 그 단계의 본문 하나 — done도 같은 본문(최종 콜백이 두 번 가지 않게)", async () => {
     const git = gatedGit();
     const poster = recordingPoster([{ ok: false, status: 503, json: null }]);
-    const job = run.startJob(buildPayload(), {
-      timeoutMs: 200,
-      timeoutMessage: "deadline",
-      deps: { workRoot: await tmpDir("wrTT"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, usageOutbox: box, log: () => {} },
-    });
-    const body = await job.done;
-    const flushes = poster.calls.slice(1);
-    assert.equal(flushes.length, 1, JSON.stringify(poster.calls.map((c) => [c.body.status, c.body.message, callIdsOf(c.body).length])));
-    assert.equal(flushes[0].body.status, "scaffolding");
-    assert.equal(flushes[0].body.message, "");
-    assert.equal(callIdsOf(flushes[0].body).length, 200);
-    assert.equal(callIdsOf(body).length, 30);
-    git.open();
-    await job.finished;
-    assert.equal(poster.calls.length, 2, "nothing after the deadline body");
-  });
-
-  it("SIGTERM 드레인(abort): 지금까지의 spentUsd·usage를 실은 본문 하나 — done도 같은 본문(최종 콜백이 두 번 가지 않게)", async () => {
-    const box = filledOutbox("nK", 2, 0.25);
-    const git = gatedGit();
-    const poster = recordingPoster([{ ok: false, status: 503, json: null }]);
-    const job = run.startJob(buildPayload(), { timeoutMs: 0, deps: { workRoot: await tmpDir("wrK"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, usageOutbox: box, log: () => {} } });
+    const job = run.startJob(buildPayload(), { timeoutMs: 0, deps: { workRoot: await tmpDir("wrK"), templateDir: REPO_TEMPLATE, exec: git.exec, postCallback: poster.post, log: () => {} } });
     for (let i = 0; i < 400 && poster.calls.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
     const body = job.abort(new Error("builder container was killed by SIGTERM mid-job (deploy rollout or sleepAfter)"));
     assert.equal(body.failedStage, "scaffolding");
     assert.match(body.error, /SIGTERM/);
-    assert.equal(body.spentUsd, 0.5);
-    assert.deepEqual(callIdsOf(body), ["nK:WBS-001:0", "nK:WBS-001:1"]);
+    assert.ok(!("spentUsd" in body) && !("usage" in body), "spend is metered server-side by the LLM proxy");
     assert.strictEqual(await job.done, body);
     assert.strictEqual(job.abort(new Error("again")), body, "abort is idempotent");
     git.open();
@@ -923,15 +827,15 @@ describe("결함 6 · 45분 마감·SIGTERM — 지금까지의 지출을 싣고
     assert.equal(poster.calls.length, 1, "no progress after the drain body");
   });
 
-  it("러너가 던지면(모르는 kind) 본문에 단계·지출 — 종전처럼 builder_stage_not_implemented", async () => {
+  it("러너가 던지면(모르는 kind) 본문에 단계 — 종전처럼 builder_stage_not_implemented", async () => {
     const job = run.startJob({ ...buildPayload(), kind: "deploy" }, { timeoutMs: 0, deps: { log: () => {} } });
-    assert.deepEqual(await job.done, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "queued", error: "builder_stage_not_implemented:deploy", spentUsd: 0 });
+    assert.deepEqual(await job.done, { jobId: "bj_0a1b2c3d4e", ok: false, stage: "failed", failedStage: "queued", error: "builder_stage_not_implemented:deploy" });
   });
 
   it("server.mjs: 잡은 startJob으로 — 마감은 러너를 멈추는 startJob 안에서, 드레인은 job.abort 본문을 한 번만", () => {
     assert.match(serverMjs, /startJob\(/);
     assert.doesNotMatch(serverMjs, /function withTimeout/, "no race-only timeout that leaves the runner running");
-    assert.match(serverMjs, /\.abort\(/, "SIGTERM drain uses job.abort (spend + usage + stops the runner)");
+    assert.match(serverMjs, /\.abort\(/, "SIGTERM drain uses job.abort (stage body + stops the runner)");
     assert.match(serverMjs, /\.reported\b/, "the final callback is sent once (drain vs runJob)");
   });
 });

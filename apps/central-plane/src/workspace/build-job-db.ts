@@ -106,6 +106,9 @@ export async function findActiveBuildJobForProject(env: Env, projectId: string):
 /**
  * 진행 전이(컨테이너 progress 콜백). 현재 상태가 활성이고 **뒤로 가지 않을 때만** 갱신.
  * wbsDone·spentUsd·d1Id·repo·commit은 있으면 함께 갱신(단조 증가/마지막 값).
+ *
+ * B-5b S1: spent_usd는 SQL 안에서 `MAX(spent_usd, ?)` — 읽은 값으로 덮어쓰지 않는다. LLM 프록시가 같은 행을
+ * `spent_usd + 비용`으로 올리는 사이에 이 전이가 끼어도(읽기 → 쓰기 사이) 올린 몫을 지우지 않게(잃어버린 갱신 방지).
  */
 export async function advanceBuildJob(
   env: Env,
@@ -117,7 +120,7 @@ export async function advanceBuildJob(
   if (STAGE_ORDER[input.status] < STAGE_ORDER[current.status]) return false;
   const res = await env.DB.prepare(
     `UPDATE build_jobs
-        SET status = ?, wbs_done = ?, wbs_total = ?, spent_usd = ?, commit_sha = COALESCE(?, commit_sha),
+        SET status = ?, wbs_done = ?, wbs_total = ?, spent_usd = MAX(spent_usd, ?), commit_sha = COALESCE(?, commit_sha),
             repo_full_name = COALESCE(?, repo_full_name), build_exit_code = COALESCE(?, build_exit_code), updated_at = ?
       WHERE id = ? AND status IN ('queued','scaffolding','implementing','building','testing','pushed','deploying')`,
   )
@@ -125,7 +128,7 @@ export async function advanceBuildJob(
       input.status,
       Math.max(current.wbsDone, input.wbsDone ?? 0),
       input.wbsTotal ?? current.wbsTotal,
-      Math.max(current.spentUsd, input.spentUsd ?? 0),
+      input.spentUsd ?? 0,
       input.commitSha ?? null,
       input.repoFullName ?? null,
       input.buildExitCode ?? null,
@@ -136,7 +139,10 @@ export async function advanceBuildJob(
   return (res.meta?.changes ?? 0) > 0;
 }
 
-/** 최종 성공. D-4: build_exit_code가 0이 아니면 done으로 못 간다 — 호출자가 걸러도 여기서 한 번 더 막는다. */
+/**
+ * 최종 성공. D-4: build_exit_code가 0이 아니면 done으로 못 간다 — 호출자가 걸러도 여기서 한 번 더 막는다.
+ * spent_usd는 `MAX(spent_usd, ?)` — 프록시가 계량한 값보다 내려가지 않는다(B-5b S1).
+ */
 export async function markBuildJobDone(
   env: Env,
   id: string,
@@ -145,7 +151,7 @@ export async function markBuildJobDone(
   if (input.buildExitCode !== 0) return { ok: false, reason: "build_not_green" };
   const res = await env.DB.prepare(
     `UPDATE build_jobs
-        SET status = 'done', deployed_url = ?, commit_sha = COALESCE(?, commit_sha), spent_usd = ?, build_exit_code = 0, wbs_done = ?, updated_at = ?
+        SET status = 'done', deployed_url = ?, commit_sha = COALESCE(?, commit_sha), spent_usd = MAX(spent_usd, ?), build_exit_code = 0, wbs_done = ?, updated_at = ?
       WHERE id = ? AND status IN ('queued','scaffolding','implementing','building','testing','pushed','deploying')`,
   )
     .bind(input.deployedUrl, input.commitSha, input.spentUsd, input.wbsDone, new Date().toISOString(), id)
@@ -162,6 +168,20 @@ export async function markBuildJobFailed(env: Env, id: string, input: { failedSt
     .bind(input.failedStage.slice(0, 40), input.error.slice(0, 500), input.spentUsd ?? 0, input.buildExitCode ?? null, new Date().toISOString(), id)
     .run();
   return (res.meta?.changes ?? 0) > 0;
+}
+
+/**
+ * B-5b S1 (B-6 서버 권위 예산): LLM 프록시가 계량한 호출 한 번의 비용을 **원자적으로 더한다**.
+ * spent_usd의 유일한 증가 경로다(컨테이너가 본문에 적어 보내는 spentUsd는 라우트가 쓰지 않는다).
+ * 상태와 무관하게 더한다 — 잡이 그 사이 failed가 됐어도 이미 쓴 돈이다. updated_at도 올린다
+ * (LLM 호출 = 진행 중 — 스턱 스윕이 일하는 잡을 치우지 않게). 반환: 변경된 행 수(0 = 모르는 잡).
+ */
+export async function addBuildJobSpend(env: Env, id: string, deltaUsd: number): Promise<number> {
+  const delta = Number.isFinite(deltaUsd) && deltaUsd > 0 ? deltaUsd : 0;
+  const res = await env.DB.prepare(`UPDATE build_jobs SET spent_usd = spent_usd + ?, updated_at = ? WHERE id = ?`)
+    .bind(delta, new Date().toISOString(), id)
+    .run();
+  return Number(res.meta?.changes ?? 0);
 }
 
 export async function appendBuildJobEvent(env: Env, jobId: string, stage: string, message: string, meta: Record<string, unknown> = {}): Promise<void> {

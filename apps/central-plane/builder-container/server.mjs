@@ -12,14 +12,16 @@
  *   POST /run        — 잡 페이로드(validateJobPayload, kind=build면 validateBuildPayload까지) → 202 →
  *                      runBuildJob(진행은 progressUrl로) → 최종 본문을 callbackUrl(/internal/build-done)로.
  *
- * 잡 하나의 수명은 builder-run.mjs **startJob**이 쥔다: 45분 마감이면 러너를 멈추고(AbortSignal) 지금까지의
- * spentUsd·usage를 실은 실패 본문, SIGTERM 드레인은 job.abort()의 같은 모양 본문, 러너 예외도 단계·지출을 싣는다
- * (PR #569 검증 결함 6 — 종전 withTimeout은 경쟁만 해서 러너가 뒤에서 계속 돌았고 본문에 지출이 없었다).
+ * 잡 하나의 수명은 builder-run.mjs **startJob**이 쥔다: 45분 마감이면 러너를 멈추고(AbortSignal) 그 단계의
+ * 실패 본문, SIGTERM 드레인은 job.abort()의 같은 모양 본문, 러너 예외도 단계를 싣는다
+ * (PR #569 검증 결함 6 — 종전 withTimeout은 경쟁만 해서 러너가 뒤에서 계속 돌았다). 지출은 Worker의 LLM 프록시가
+ * 서버에서 계량한다(B-5b S1) — 본문에 싣지 않는다.
  * 실패 본문은 failureCallbackBody 하나로 만든다 — Worker가 읽는 키는 `failedStage`다
  * (B-5b-1 이전에는 다른 키 이름으로 보내서 Worker가 무시했고, 모든 실패가 'unknown' 단계로 기록됐다).
  * 최종 콜백은 잡마다 **한 번**(entry.reported) — 드레인이 먼저 보냈으면 runJob은 보내지 않는다.
  *
- * PRIVACY: userKey·callbackToken·운영 토큰은 로그에 쓰지 않는다 — 로그 줄에는 jobId만.
+ * PRIVACY: jobToken은 로그에 쓰지 않는다 — 로그 줄에는 jobId만. B-5b S1부터 페이로드에 운영 토큰·전역 콜백 토큰·
+ * LLM 키·userKey가 없다(오면 validateBuildPayload가 거절). 콜백 Bearer = 이 잡의 jobToken.
  */
 import { createServer } from "node:http";
 import {
@@ -107,9 +109,9 @@ async function gracefulShutdown(sig) {
   const drains = pending.map(async (entry) => {
     entry.reported = true;
     const p = entry.payload;
-    // job.abort: 러너를 멈추고 지금까지의 spentUsd·usage를 실은 본문(runJob의 done도 같은 본문 — 두 번 보내지 않는다).
+    // job.abort: 러너를 멈추고 그 단계의 실패 본문(runJob의 done도 같은 본문 — 두 번 보내지 않는다).
     const bodyOut = entry.job.abort(new Error(`builder container was killed by ${sig} mid-job (deploy rollout or sleepAfter)`));
-    const r = await postCallback(p.callbackUrl, p.callbackToken, bodyOut, { retries: 0 });
+    const r = await postCallback(p.callbackUrl, p.jobToken, bodyOut, { retries: 0 });
     if (!r.ok) console.error(`[shutdown] callback failed for ${p.jobId}: ${r.error}`);
   });
   await Promise.race([Promise.all(drains), new Promise((r) => setTimeout(r, 5000))]);
@@ -122,7 +124,7 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
 // --- Job runner -------------------------------------------------------------
 
 async function runJob(entry) {
-  const { jobId, callbackUrl, callbackToken } = entry.payload;
+  const { jobId, callbackUrl, jobToken } = entry.payload;
   const start = Date.now();
   console.log(`[job ${jobId}] start kind=${String(entry.payload.kind).slice(0, 20)}`);
   entry.job = startJob(entry.payload, {
@@ -133,7 +135,7 @@ async function runJob(entry) {
   const result = await entry.job.done;
   if (entry.reported) return; // SIGTERM 드레인이 이미 최종 본문을 보냈다
   entry.reported = true;
-  const r = await postCallback(callbackUrl, callbackToken, result);
+  const r = await postCallback(callbackUrl, jobToken, result);
   if (!r.ok) console.error(`[job ${jobId}] final callback failed: ${r.error}`);
   const failure = result.failedStage ? `(${result.failedStage}: ${String(result.error ?? "").slice(0, 120)})` : "";
   console.log(`[job ${jobId}] ${result.stage}${failure} (${Date.now() - start}ms)`);

@@ -1,10 +1,12 @@
 /**
  * SI 티어 Train B — B5(a): 빌드 잡 상태 머신 + 라우트. 가짜 D1·BUILDER 스텁·주입 fetch(호스팅 API). 네트워크 0.
- * 핵심 고정: 지시서 없으면 409 · 프로비저닝 실패면 잡 없음 · 페이로드에 비밀이 실리되 D1 행엔 없음 ·
+ * 핵심 고정: 지시서 없으면 409 · 프로비저닝 실패면 잡 없음 · 페이로드에도 D1 행에도 비밀 없음(B-5b S1 — jobToken만) ·
  * 상태 역행 거부 · done인데 빌드 exit≠0이면 거부(D-4) · 콜백 토큰 게이트.
+ * (B-5b S1의 토큰·프록시·일일 상한 전용 검증은 train-b-b5b-s1-secrets-budget.test.mjs.)
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { dailyCapsRun } from "./_daily-caps-fake.mjs";
 
 const { createApp } = await import("../dist/router.js");
 const { advanceBuildJob, markBuildJobDone, markBuildJobFailed, insertQueuedBuildJob, getBuildJobById } = await import("../dist/workspace/build-job-db.js");
@@ -26,12 +28,16 @@ const DEV_SPEC = {
 };
 
 function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
+  const rate = new Map(); // B-5b S1: 일일 빌드 상한(consumeDailyCaps) — 가짜가 "가득"으로 오판하지 않게 실제 문장을 모형화
   return {
     _jobs: jobs, _events: events,
     prepare(sql) {
+      const maxSpent = sql.includes("MAX(spent_usd, ?)"); // SQL 문구대로(MAX면 MAX, 아니면 덮어쓰기)
       function handler(args) {
         return {
           async run() {
+            const capped = dailyCapsRun(rate, sql, args);
+            if (capped) return capped;
             if (sql.includes("INSERT INTO build_jobs")) {
               const [id, project_id, user_key, slug, wbs_total, budget_usd, d1_id, repo_full_name, locale, created_at, updated_at] = args;
               jobs.push({ id, project_id, user_key, slug, status: "queued", failed_stage: null, error: null, wbs_done: 0, wbs_total, budget_usd, spent_usd: 0, d1_id, repo_full_name, commit_sha: null, deployed_url: null, build_exit_code: null, locale, created_at, updated_at });
@@ -41,13 +47,13 @@ function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
             if (sql.includes("UPDATE build_jobs") && sql.includes("SET status = ?")) {
               const [status, wbs_done, wbs_total, spent_usd, commit_sha, repo_full_name, build_exit_code, updated_at, id] = args;
               const row = jobs.find((r) => r.id === id && !["done", "failed"].includes(r.status));
-              if (row) Object.assign(row, { status, wbs_done, wbs_total, spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code, updated_at });
+              if (row) Object.assign(row, { status, wbs_done, wbs_total, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, commit_sha: commit_sha ?? row.commit_sha, repo_full_name: repo_full_name ?? row.repo_full_name, build_exit_code: build_exit_code ?? row.build_exit_code, updated_at });
               return { meta: { changes: row ? 1 : 0 } };
             }
             if (sql.includes("SET status = 'done'")) {
               const [deployed_url, commit_sha, spent_usd, wbs_done, updated_at, id] = args;
               const row = jobs.find((r) => r.id === id && !["done", "failed"].includes(r.status));
-              if (row) Object.assign(row, { status: "done", deployed_url, commit_sha: commit_sha ?? row.commit_sha, spent_usd, build_exit_code: 0, wbs_done, updated_at });
+              if (row) Object.assign(row, { status: "done", deployed_url, commit_sha: commit_sha ?? row.commit_sha, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, build_exit_code: 0, wbs_done, updated_at });
               return { meta: { changes: row ? 1 : 0 } };
             }
             if (sql.includes("SET status = 'failed'")) {
@@ -110,7 +116,7 @@ function envFor({ db, builder = makeBuilder(), hosting = true, llm = true, token
   return {
     DB: db, BUILDER: builder, INTERNAL_CALLBACK_TOKEN: token, PUBLIC_BASE_URL: "https://cp.example",
     ...(hosting ? { HOSTING_CF_API_TOKEN: "cf-ops-SECRET", HOSTING_CF_ACCOUNT_ID: "acc1", HOSTING_ROOT_DOMAIN: "simsa.page" } : {}),
-    ...(llm ? { ANTHROPIC_API_KEY: "sk-ant-SECRET", OPENAI_API_KEY: "sk-oa-SECRET", CF_AI_GATEWAY_ANTHROPIC_URL: "https://gw.example/anthropic" } : {}),
+    ...(llm ? { ANTHROPIC_API_KEY: "anthropic-key-SECRET", OPENAI_API_KEY: "openai-key-SECRET", CF_AI_GATEWAY_ANTHROPIC_URL: "https://gw.example/anthropic" } : {}),
     HOSTING_GH_APP_ID: "1", HOSTING_GH_APP_PRIVATE_KEY: "", // 호스팅 App 미설정 → 저장소 없이 진행
     __fetch: fetchImpl,
   };
@@ -124,7 +130,7 @@ async function post(app, env, path, body, headers = {}) {
   return { status: res.status, body: await res.json() };
 }
 
-test("POST /build: 지시서 → 프로비저닝(namespace 멱등·D1) → queued 행 + 디스패치 202. 페이로드에 비밀·WBS 순서·지시서 md, D1 행엔 비밀 0", async () => {
+test("POST /build: 지시서 → 프로비저닝(namespace 멱등·D1) → queued 행 + 디스패치 202. 페이로드엔 jobToken·WBS 순서·지시서 md(비밀 0 — B-5b S1), D1 행엔 비밀 0", async () => {
   const db = makeDb({ projects: new Map([[PROJECT, projectRow()]]) });
   const builder = makeBuilder();
   const fx = makeFetch();
@@ -140,13 +146,15 @@ test("POST /build: 지시서 → 프로비저닝(namespace 멱등·D1) → queue
   assert.equal(r.body.job.repoFullName, null);
   const p = builder.payloads[0];
   assert.equal(p.kind, "build");
-  assert.equal(p.hosting.cfApiToken, "cf-ops-SECRET");
   assert.equal(p.hosting.d1Id, "d1-uuid-1");
-  assert.equal(p.llm.anthropicApiKey, "sk-ant-SECRET");
-  assert.equal(p.llm.anthropicBaseUrl, "https://gw.example/anthropic");
+  // B-5b S1: 운영 CF 토큰·LLM 키·전역 콜백 토큰·저장소 토큰은 컨테이너로 가지 않는다 — LLM은 Worker 프록시로.
+  assert.ok(!JSON.stringify(p).includes("SECRET"), "no operator/LLM secret in the container payload");
+  assert.ok(!JSON.stringify(p).includes(TOKEN), "no global callback token either");
+  assert.equal(p.repo, undefined);
+  assert.match(p.jobToken, new RegExp(`^bjt1\\.${db._jobs[0].id}\\.[0-9a-f]{64}$`));
+  assert.deepEqual(p.llm, { model: "claude-sonnet-4-6", openaiModel: "gpt-5.4", preferFallback: false });
   assert.deepEqual(p.spec.wbs.map((w) => w.id), ["WBS-001", "WBS-002"]); // order 정렬
   assert.match(p.spec.markdown, /WBS-001/);
-  assert.equal(p.repo, null);
   assert.equal(p.callbackUrl, "https://cp.example/internal/build-done");
   // D1 행에는 비밀이 없다
   assert.ok(!JSON.stringify(db._jobs).includes("SECRET"));
@@ -220,7 +228,8 @@ test("done 콜백: D-4 — 빌드 exit≠0이면 done을 거부하고 failed(bui
   const s2 = await getBuildJobById(env, j2.id);
   assert.equal(s2.status, "done");
   assert.equal(s2.deployedUrl, "https://b.simsa.page");
-  assert.equal(s2.spentUsd, 3.5);
+  // B-5b S1: 지출은 서버 권위(LLM 프록시가 계량) — 컨테이너 본문의 spentUsd 3.5는 쓰지 않는다.
+  assert.equal(s2.spentUsd, 0);
   // 최종 상태 뒤 전이 불가
   assert.equal(await advanceBuildJob(env, j2.id, { status: "building" }), false);
   assert.equal(await markBuildJobFailed(env, j2.id, { failedStage: "x", error: "late" }), false);

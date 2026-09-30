@@ -37,12 +37,13 @@ describe("payload · constants", () => {
   it("D-4 상태 머신 순서 (D1 build_jobs와 같다 — pushed 다음 deploying, B-5b-1)", () => {
     assert.deepEqual([...BUILD_STAGES], ["queued", "scaffolding", "implementing", "building", "testing", "pushed", "deploying", "done", "failed"]);
   });
-  it("validateJobPayload: 필수 7필드 전부 비어 있지 않은 문자열", () => {
+  it("validateJobPayload: 필수 5필드(B-5b S1 — 콜백 인증은 jobToken, userKey·전역 콜백 토큰 없음) 전부 비어 있지 않은 문자열", () => {
+    assert.deepEqual([...REQUIRED_FIELDS], ["jobId", "kind", "baseUrl", "callbackUrl", "jobToken"]);
     const full = Object.fromEntries(REQUIRED_FIELDS.map((f) => [f, "x"]));
     assert.deepEqual(validateJobPayload(full), { ok: true });
-    const r = validateJobPayload({ ...full, callbackToken: "", kind: 3 });
+    const r = validateJobPayload({ ...full, jobToken: "", kind: 3 });
     assert.equal(r.ok, false);
-    assert.deepEqual(r.missing, ["kind", "callbackToken"]);
+    assert.deepEqual(r.missing, ["kind", "jobToken"]);
     assert.equal(validateJobPayload(null).ok, false);
   });
   it("parseVersion: v접두·산문·이모지 출력에서 숫자만", () => {
@@ -94,7 +95,7 @@ describe("selfCheck", () => {
 });
 
 describe("runBuildJob", () => {
-  const base = { jobId: "bj_1", projectId: "p", userKey: "u", baseUrl: "http://w", callbackUrl: "http://w/cb", callbackToken: "t" };
+  const base = { jobId: "bj_1", baseUrl: "http://w", callbackUrl: "http://w/cb", jobToken: "t" };
   it("kind=selfcheck → 콜백 본문(jobId·ok·stage=done·result)", async () => {
     const r = await runBuildJob({ ...base, kind: "selfcheck" }, { exec: okExec(), workRoot: "/w", fsImpl: fakeFs(), ...imageDeps() });
     assert.equal(r.jobId, "bj_1");

@@ -15,6 +15,8 @@
 # 결함 4: 빌드 전에 템플릿 폴더에 미끼 비밀 파일을 심고, 빌드한 이미지 안에 하나도 없는지 확인한다(.dockerignore 증거).
 # B-5b-1: kind=build 잡 하나를 실제 이미지에 넣어 scaffolding(템플릿 복사·wrangler.toml·git 커밋)이
 # 돌고 implementing에서 정직하게 실패하는지, 진행·최종 콜백 본문을 로컬 수신기로 받아 확인한다.
+# B-5b S1: 페이로드는 비밀 없는 새 모양(jobToken 하나) — 콜백 Bearer가 그 jobToken인지, 본문에 usage·spentUsd가
+# 없는지, 옛 모양(운영 토큰·LLM 키·전역 콜백 토큰 포함)은 202 전에 400으로 거절되는지 확인한다.
 # 가짜 토큰·가짜 D1 id만 쓰고 Cloudflare·GitHub·LLM에는 닿지 않는다.
 name: container-images
 
@@ -92,6 +94,7 @@ jobs:
             req.on("end", () => {
               const name = req.url === "/internal/build-progress" ? "progress" : req.url === "/internal/build-done" ? "done" : "other";
               appendFileSync(`/tmp/cb-${name}.jsonl`, b.replace(/\n/g, " ") + "\n");
+              appendFileSync(`/tmp/cb-auth.txt`, String(req.headers.authorization ?? "") + "\n");
               res.writeHead(200, { "content-type": "application/json" });
               res.end(JSON.stringify({ ok: true, transitioned: true, accepted: true }));
             });
@@ -118,18 +121,35 @@ jobs:
           jq -e '.template.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::S template missing from the builder image"; exit 1; }
           jq -e '.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::builder selfcheck failed"; exit 1; }
 
-          # ── kind=build: scaffolding까지 실제로, implementing에서 정직한 실패(B-5b-1) ──
-          # Rule 6: 제품명·WBS 제목은 한글. 토큰·D1 id는 명백한 가짜.
-          cat > /tmp/payload.json <<'EOF'
-          {"jobId":"bj_ci_smoke01","projectId":"wsp_ci_smoke","userKey":"uk_ci_smoke","kind":"build","slug":"ci-smoke-app","locale":"ko",
+          # ── B-5b S1: 옛 모양(비밀 포함) 페이로드는 202 전에 400 — 옛 Worker와 섞여도 비밀을 받아 두지 않는다 ──
+          cat > /tmp/payload-old.json <<'EOF'
+          {"jobId":"bj_ci_smoke00","projectId":"wsp_ci_smoke","userKey":"uk_ci_smoke","kind":"build","slug":"ci-smoke-app","locale":"ko",
            "baseUrl":"http://host.docker.internal:18099",
            "callbackUrl":"http://host.docker.internal:18099/internal/build-done",
            "progressUrl":"http://host.docker.internal:18099/internal/build-progress",
-           "callbackToken":"ci-fake-token","budgetUsd":0,
+           "callbackToken":"ci-fake-token","jobToken":"bjt1.bj_ci_smoke00.0000000000000000000000000000000000000000000000000000000000000000","budgetUsd":0,
+           "spec":{"markdown":"# 동네 빵집","wbs":[{"id":"WBS-001","title":"예약 저장","order":1,"acceptanceIds":[],"dependsOn":[]}],"productName":"동네 빵집"},
+           "hosting":{"cfApiToken":"ci-fake","d1Id":"00000000-0000-4000-8000-000000000001"},
+           "llm":{"anthropicApiKey":"ci-fake","openaiApiKey":"ci-fake","model":"ci-none","preferFallback":true}}
+          EOF
+          old=$(curl -s -o /tmp/run-old.json -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @/tmp/payload-old.json http://127.0.0.1:18080/run)
+          cat /tmp/run-old.json; echo
+          [ "$old" = "400" ] || { echo "::error::old-shape payload with secrets must be refused (got $old)"; exit 1; }
+          grep -q 'forbidden:hosting.cfApiToken' /tmp/run-old.json || { echo "::error::refusal must name the secret path"; exit 1; }
+          if grep -q 'ci-fake' /tmp/run-old.json; then echo "::error::refusal echoed a secret value"; exit 1; fi
+
+          # ── kind=build: scaffolding까지 실제로, implementing에서 정직한 실패(B-5b-1) · 비밀 없는 페이로드(B-5b S1) ──
+          # Rule 6: 제품명·WBS 제목은 한글. jobToken·D1 id는 명백한 가짜(모양만 bjt1.<jobId>.<64hex>).
+          JOB_TOKEN="bjt1.bj_ci_smoke01.$(printf 'c1%.0s' $(seq 1 32))"
+          cat > /tmp/payload.json <<EOF
+          {"jobId":"bj_ci_smoke01","kind":"build","slug":"ci-smoke-app","locale":"ko",
+           "baseUrl":"http://host.docker.internal:18099",
+           "callbackUrl":"http://host.docker.internal:18099/internal/build-done",
+           "progressUrl":"http://host.docker.internal:18099/internal/build-progress",
+           "jobToken":"${JOB_TOKEN}","budgetUsd":0,
            "spec":{"markdown":"# 동네 빵집 소금빵 예약 (주)빵굽는집\n- WBS-001 예약 저장","wbs":[{"id":"WBS-001","title":"예약 저장 — 한글 버튼 '예약하기'","order":1,"acceptanceIds":["AC-001"],"dependsOn":[]}],"productName":"동네 빵집 소금빵 예약 (주)빵굽는집"},
-           "hosting":{"cfApiToken":"ci-fake","cfAccountId":"ci-fake","namespace":"simsa-hosted","hostRoot":"simsa.page","d1Id":"00000000-0000-4000-8000-000000000001"},
-           "repo":null,
-           "llm":{"anthropicApiKey":null,"anthropicBaseUrl":null,"openaiApiKey":null,"model":"ci-none","preferFallback":true}}
+           "hosting":{"d1Id":"00000000-0000-4000-8000-000000000001"},
+           "llm":{"model":"ci-none","openaiModel":"gpt-5.4","preferFallback":true}}
           EOF
           code=$(curl -s -o /tmp/run.json -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @/tmp/payload.json http://127.0.0.1:18080/run)
           cat /tmp/run.json; echo
@@ -141,5 +161,10 @@ jobs:
           jq -s -e 'map(.status) == ["scaffolding","scaffolding"] and map(.message) == ["scaffold_started","scaffold_ready"]' /tmp/cb-progress.jsonl >/dev/null || { echo "::error::progress callbacks are not [scaffold_started, scaffold_ready]"; exit 1; }
           jq -s -e '.[1].meta.files >= 10 and (.[1].meta.baseCommit | length) == 12' /tmp/cb-progress.jsonl >/dev/null || { echo "::error::scaffold_ready meta missing files/baseCommit"; exit 1; }
           jq -e '.ok == false and .failedStage == "implementing" and .error == "builder_stage_not_implemented:implementing"' /tmp/cb-done.jsonl >/dev/null || { echo "::error::build job must fail honestly at implementing"; exit 1; }
-          if grep -q "ci-fake-token\|ci-fake\"" /tmp/cb-progress.jsonl /tmp/cb-done.jsonl; then echo "::error::payload secret leaked into a callback body"; exit 1; fi
-          echo "✅ builder image: agent-worker importable · template present · kind=build scaffolding → honest failure at implementing"
+          jq -s -e 'all(.[]; (has("usage") | not) and (has("spentUsd") | not))' /tmp/cb-progress.jsonl /tmp/cb-done.jsonl >/dev/null || { echo "::error::callbacks must not carry usage/spentUsd (the Worker LLM proxy meters spend)"; exit 1; }
+          # 모든 콜백의 Bearer = 이 잡의 jobToken(전역 콜백 토큰 아님)
+          sort -u /tmp/cb-auth.txt
+          [ "$(sort -u /tmp/cb-auth.txt)" = "Bearer ${JOB_TOKEN}" ] || { echo "::error::every callback must authenticate with the job token"; exit 1; }
+          if grep -q "${JOB_TOKEN}" /tmp/cb-progress.jsonl /tmp/cb-done.jsonl; then echo "::error::the job token leaked into a callback body"; exit 1; fi
+          if docker logs "$cid" 2>&1 | grep -q "${JOB_TOKEN}"; then echo "::error::the job token leaked into container logs"; exit 1; fi
+          echo "✅ builder image: agent-worker importable · template present · secret-bearing payload refused · kind=build scaffolding (job-token callbacks) → honest failure at implementing"

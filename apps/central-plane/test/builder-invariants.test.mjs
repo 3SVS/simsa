@@ -103,5 +103,5 @@ test("D-6: the builder image never installs user-deploy CLIs (vercel · netlify)
 test("server.mjs keeps the inspector-style rails: 202 ack, SIGTERM drain, no secret logging", () => {
   assert.match(serverMjs, /json\(res, 202,/, "POST /run must ack with 202 before running");
   assert.match(serverMjs, /for \(const sig of \["SIGTERM", "SIGINT"\]\)/, "must drain on SIGTERM/SIGINT");
-  assert.doesNotMatch(serverMjs, /console\.(log|error)\([^)]*(callbackToken|userKey)/, "never log callbackToken/userKey");
+  assert.doesNotMatch(serverMjs, /console\.(log|error)\([^)]*(callbackToken|jobToken|userKey)/, "never log the job token (or the old callbackToken/userKey)");
 });
