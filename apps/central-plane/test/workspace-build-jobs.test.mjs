@@ -279,3 +279,118 @@ test("스턱 스윕: 60분 무진행 활성 잡은 failed(그 단계), 살아 �
   assert.equal(jobs[0].failed_stage, "implementing");
   assert.equal(jobs[1].status, "building");
 });
+
+// ─── PR #578 검증 결함 (B-8) — 서버 쪽 수정 ──────────────────────────────────────
+//
+// 결함 3: 같은 프로젝트의 두 번째 POST /build([다시 시도])가 D1을 또 만들려다 이름 충돌 → 502 hosting_d1_failed.
+//   slug는 toHostedSlug(title, id)라 늘 같고, createProjectD1은 ensureNamespace와 달리 "이미 있음"을 성공으로
+//   치지 않았다 — 멈춤 화면의 [다시 시도]가 구조적으로 막다른 길이었다.
+// 결함 2: 대시보드가 [만들기]를 "라우트가 있다"만 보고 내밀었다 — 서버가 "끝까지 된다"고 알려 주는 값이 없었다.
+// 결함 5: done을 주장했지만 빌드가 green이 아니라 거절된 경우, 주장된 주소가 어디에도 남지 않았다.
+
+/** 이름이 겹치는 D1 생성을 거부하고(Cloudflare D1의 이름 중복 거부), 이름으로 찾기(GET ?name=)에 답하는 가짜. */
+function makeCfWithDupes({ preexisting = [] } = {}) {
+  const calls = [];
+  const dbs = [...preexisting];
+  let n = 0;
+  return {
+    calls,
+    dbs,
+    f: async (url, init = {}) => {
+      const u = new URL(url);
+      const method = init.method ?? "GET";
+      calls.push(`${method} ${u.pathname}`);
+      if (u.pathname.endsWith("/workers/dispatch/namespaces")) return new Response(JSON.stringify({ success: false, errors: [{ code: 100120, message: "Invalid dispatch namespace name. Ensure it does not already exist" }] }), { status: 400 });
+      if (u.pathname.endsWith("/d1/database") && method === "POST") {
+        const { name } = JSON.parse(init.body);
+        if (dbs.some((d) => d.name === name)) return new Response(JSON.stringify({ success: false, errors: [{ code: 7502, message: "A database with that name already exists" }] }), { status: 400 });
+        n += 1;
+        dbs.push({ uuid: `d1-uuid-${n}`, name });
+        return new Response(JSON.stringify({ success: true, result: { uuid: `d1-uuid-${n}`, name } }), { status: 200 });
+      }
+      if (u.pathname.endsWith("/d1/database") && method === "GET") {
+        const q = u.searchParams.get("name") ?? "";
+        return new Response(JSON.stringify({ success: true, result: dbs.filter((d) => d.name.includes(q)) }), { status: 200 });
+      }
+      if (u.pathname.includes("/orgs/") && u.pathname.endsWith("/installation")) return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
+      return new Response(JSON.stringify({ success: false, errors: [{ code: 0, message: `unrouted ${u.pathname}` }] }), { status: 500 });
+    },
+  };
+}
+
+test("★결함 3: 멈춘 잡 뒤 [다시 시도](같은 프로젝트 두 번째 POST /build)는 202 — 전 잡의 D1을 그대로 쓴다(D-12 프로젝트당 D1 하나)", async () => {
+  const db = makeDb({ projects: new Map([[PROJECT, projectRow({ title: "(주)트루픽셀 예약 앱" })]]) });
+  const builder = makeBuilder();
+  const cf = makeCfWithDupes();
+  const app = createApp();
+  const first = await withFetch(cf.f, () => post(app, envFor({ db, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER, locale: "ko" }));
+  assert.equal(first.status, 202, JSON.stringify(first.body));
+  // 실행체가 아직 kind=build를 못 해서 정직하게 멈췄다(지금 프로덕션의 유일한 실패).
+  await markBuildJobFailed(envFor({ db }), first.body.job.id, { failedStage: "unknown", error: "builder_stage_not_implemented:build" });
+
+  const retry = await withFetch(cf.f, () => post(app, envFor({ db, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER, locale: "ko" }));
+  assert.equal(retry.status, 202, `다시 시도가 막다른 길 — ${JSON.stringify(retry.body)}`);
+  assert.equal(retry.body.job.slug, first.body.job.slug);
+  assert.notEqual(retry.body.job.id, first.body.job.id);
+  // D1은 한 번만 만들었고, 두 번째 잡도 같은 D1을 쓴다.
+  assert.equal(cf.calls.filter((c) => c === "POST /client/v4/accounts/acc1/d1/database").length, 1, cf.calls.join(" | "));
+  assert.equal(cf.dbs.length, 1);
+  assert.equal(builder.payloads[1].hosting.d1Id, builder.payloads[0].hosting.d1Id);
+  assert.equal(db._jobs[1].d1_id, db._jobs[0].d1_id);
+  assert.ok(db._events.some((e) => e.job_id === retry.body.job.id && JSON.parse(e.meta_json).d1Reused === true));
+});
+
+test("★결함 3: 지난 시도가 D1만 만들고 잡 행을 못 남겼어도(고아 D1) 다시 시도는 이름으로 찾아 쓴다 — 502로 영영 막히지 않는다", async () => {
+  const db = makeDb({ projects: new Map([[PROJECT, projectRow({ title: "(주)트루픽셀 예약 앱" })]]) });
+  const { toHostedSlug } = await import("../dist/workspace/hosting-provision.js");
+  const { RESERVED_SLUGS_FOR_HOSTING } = await import("../dist/workspace/hosting-reserved.js");
+  const slug = toHostedSlug("(주)트루픽셀 예약 앱", PROJECT, RESERVED_SLUGS_FOR_HOSTING);
+  const cf = makeCfWithDupes({ preexisting: [{ uuid: "d1-orphan", name: `simsa-hosted-${slug}` }] });
+  const builder = makeBuilder();
+  const r = await withFetch(cf.f, () => post(createApp(), envFor({ db, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER }));
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  assert.equal(builder.payloads[0].hosting.d1Id, "d1-orphan");
+});
+
+test("★결함 2: GET /workspace/build-availability — BUILD_OPEN이 정확히 \"on\"이고 설정이 다 있을 때만 buildEnabled", async () => {
+  const app = createApp();
+  const get = async (env) => {
+    const res = await app.fetch(new Request("https://cp.example/workspace/build-availability", { headers: { origin: "https://app.trysimsa.com" } }), env);
+    return { status: res.status, body: await res.json(), acao: res.headers.get("access-control-allow-origin") };
+  };
+  const db = makeDb();
+  // 설정은 다 있지만 스위치가 없다 — 지금 프로덕션(실행체가 kind=build를 끝까지 못 함). 닫힘.
+  const closed = await get(envFor({ db }));
+  assert.equal(closed.status, 200);
+  assert.deepEqual(closed.body, { ok: true, buildEnabled: false, reason: "not_open" });
+  assert.equal(closed.acao, "https://app.trysimsa.com", "대시보드가 교차 출처로 읽을 수 있어야 한다");
+  // fail-closed: "on"만 연다(오타·대문자·빈 값은 닫힘).
+  for (const v of ["ON", "true", "1", "", "yes", "off"]) {
+    assert.equal((await get({ ...envFor({ db }), BUILD_OPEN: v })).body.buildEnabled, false, JSON.stringify(v));
+  }
+  assert.deepEqual((await get({ ...envFor({ db }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: true, reason: "open" });
+  // 스위치가 켜져도 POST /build가 503으로 막을 설정이 빠지면 닫힘 — 누르면 막힐 버튼을 내밀지 않는다.
+  assert.deepEqual((await get({ ...envFor({ db, hosting: false }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "hosting_not_configured" });
+  assert.deepEqual((await get({ ...envFor({ db, llm: false }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "llm_not_configured" });
+  assert.deepEqual((await get({ ...envFor({ db, token: "" }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "callback_token_missing" });
+  assert.deepEqual((await get({ ...envFor({ db, builder: null }), BUILD_OPEN: "on" })).body, { ok: true, buildEnabled: false, reason: "builder_unavailable" });
+});
+
+test("결함 2 [행동 보존 가드]: POST /build 자체는 스위치를 보지 않는다(B-5b 실행체 검증이 스위치 없이 잡을 돌릴 수 있게)", async () => {
+  const db = makeDb({ projects: new Map([[PROJECT, projectRow()]]) });
+  const r = await withFetch(makeFetch().f, () => post(createApp(), envFor({ db }), `/workspace/projects/${PROJECT}/build`, { userKey: USER }));
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+});
+
+test("★결함 5: done을 주장했지만 빌드가 green이 아니라 거절하면, 주장된 주소를 이벤트 meta(claimedUrl)에 남긴다", async () => {
+  const db = makeDb();
+  const env = envFor({ db });
+  const job = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "app-7x9k2m1q", wbsTotal: 1 });
+  const r = await post(createApp(), env, "/internal/build-done", { jobId: job.id, ok: true, deployedUrl: "https://app-7x9k2m1q.simsa.page", buildExitCode: 2 }, { authorization: `Bearer ${TOKEN}` });
+  assert.deepEqual(r.body, { ok: true, accepted: false, reason: "build_not_green" });
+  const ev = db._events.find((e) => e.job_id === job.id && e.message === "build_not_green_rejected");
+  assert.ok(ev, "rejection event");
+  assert.deepEqual(JSON.parse(ev.meta_json), { buildExitCode: 2, claimedUrl: "https://app-7x9k2m1q.simsa.page" });
+  // 잡에는 여전히 주소를 저장하지 않는다(확인되지 않은 앱을 '내 앱'으로 보이지 않게).
+  assert.equal((await getBuildJobById(env, job.id)).deployedUrl, null);
+});

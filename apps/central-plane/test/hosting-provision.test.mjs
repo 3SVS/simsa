@@ -110,6 +110,32 @@ describe("createProjectD1 (D-12)", () => {
   });
 });
 
+describe("createProjectD1 — 이미 있는 이름 (#578 검증 결함 3: 다시 시도가 막다른 길)", () => {
+  it("★만들기가 거부되면 이름으로 찾아 **정확히 같은 이름**의 D1을 쓴다(응답 코드에 기대지 않는다)", async () => {
+    const { f, calls } = mockFetch((url, init) => {
+      if ((init.method ?? "GET") === "POST") return { status: 400, body: { success: false, errors: [{ code: 7502, message: "A database with that name already exists" }] } };
+      return { body: { success: true, result: [{ uuid: "d1-longer", name: "simsa-hosted-app-abcd" }, { uuid: "d1-orphan", name: "simsa-hosted-app-abc" }] } };
+    });
+    const r = await createProjectD1(ENV, "app-abc", f);
+    assert.deepEqual(r, { ok: true, value: { id: "d1-orphan", name: "simsa-hosted-app-abc" } });
+    assert.equal(calls[1].url, "https://api.cloudflare.com/client/v4/accounts/acc1/d1/database?name=simsa-hosted-app-abc&per_page=100");
+    assert.equal(calls[1].init.method, "GET");
+    assert.ok(!JSON.stringify(r).includes("SECRET"));
+  });
+  it("찾아도 정확히 같은 이름이 없으면 처음 오류를 그대로 돌려준다(다른 D1을 쓰지 않는다)", async () => {
+    const { f } = mockFetch((url, init) =>
+      (init.method ?? "GET") === "POST"
+        ? { status: 403, body: { success: false, errors: [{ code: 10000, message: "Authentication error" }] } }
+        : { body: { success: true, result: [{ uuid: "d1-longer", name: "simsa-hosted-app-abcd" }] } },
+    );
+    const r = await createProjectD1(ENV, "app-abc", f);
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "cf_error");
+    assert.equal(r.status, 403);
+    assert.ok(!JSON.stringify(r).includes("SECRET"));
+  });
+});
+
 describe("uploadUserWorker", () => {
   it("buildUploadMetadata: main_module · compatibility_date · d1 DB 바인딩 · plain_text vars · 태그", () => {
     assert.deepEqual(buildUploadMetadata({ mainModule: "index.mjs", compatibilityDate: "2026-09-01", d1Id: "u1", vars: { APP_NAME: "빵집" } }), {

@@ -136,6 +136,14 @@ export interface Env {
   /** B5 [PILOT]: T1 구현 모델. 기본 claude-sonnet-4-6(워커 기본과 동일). 킬스위치 시 폴백. */
   BUILD_MODEL?: string;
   /**
+   * B-8 (PR #578 검증 결함 2) — 문 (a) "만들기" **공개 스위치**. 정확히 "on"일 때만 열린다(fail-closed —
+   * 킬스위치(INSPECTION_ENABLED 등)와 반대 규칙: 키가 빠지거나 오타 난 배포가 **미완성 기능을 여는 것**이 사고다).
+   * 대시보드는 GET /workspace/build-availability가 buildEnabled:true일 때만 [만들기]를 보인다.
+   * 켜는 때 = 실행체 이미지가 kind=build를 끝까지(빌드 확인·올리기) 하는 것이 라이브로 확인된 뒤(B-5b).
+   * POST /build 자체는 이 스위치를 보지 않는다(실행체 검증 경로 보존). [vars]. 미설정 = 닫힘.
+   */
+  BUILD_OPEN?: string;
+  /**
    * Stage 261 — R2 bucket `simsa-evidence`: visual-check evidence
    * (screenshots/video under checks/{userKey}/{projectId}/{runId}/) and
    * uploaded project documents (PRD/md under docs/{userKey}/{projectId}/).
