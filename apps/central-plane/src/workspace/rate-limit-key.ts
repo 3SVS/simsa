@@ -51,6 +51,26 @@
  *   paths are dev-only; if one ever runs it logs one JSON line per isolate.
  *
  * Service buckets (a fixed key like "all") hold nothing personal: `v1:` + sha256.
+ *
+ * The network, not the address (2026-10-01): an IP bucket counts per NETWORK —
+ * ipRateLimitKey passes the IP through networkPrefix() before hashing:
+ *   - IPv4: the address itself, byte for byte (so every IPv4 counter written
+ *     before this change is still the same row — no reset).
+ *   - IPv6: the first 64 bits, "a:b:c:d::/64". A subscriber or a device is
+ *     normally handed a whole /64 and may pick any address inside it, so the
+ *     full address let one caller rotate through 2^64 fresh counters: measured
+ *     on 3a1ca07, 60 inspections from one /64 with rotating addresses were all
+ *     accepted against a network cap of 30, and 50 repairs from one /64 drained
+ *     the whole service's daily repair bucket (everyone else got "full").
+ *   - IPv4-mapped IPv6 (::ffff:a.b.c.d) is the IPv4 address — the same row as
+ *     the plain dotted form.
+ *   - Anything that is not an IP ("", "unknown", an already-tagged network like
+ *     "v6:…/64") is passed through unchanged, so a caller that normalizes on its
+ *     own keeps its keys.
+ * The label and the "v1:" marker stay as they were: IPv4 rows continue, and the
+ * old per-address IPv6 rows simply stop being read (their window ends — at most
+ * the current hour / UTC day restarts once for an IPv6 caller — and the 48h
+ * window purge in rate-limit-retention.ts removes them like any other row).
  */
 import type { Env } from "../env.js";
 
@@ -142,9 +162,102 @@ function kekOf(env: Pick<Env, "CONCLAVE_TOKEN_KEK">): string | null {
 }
 
 /**
+ * The longest textual IPv6 address (eight groups with an embedded IPv4 tail)
+ * is 45 characters; a zone id ("%eth0") adds a few. Anything longer is not an
+ * address this parser reads — it is passed through as it is.
+ */
+const MAX_IP_TEXT_LENGTH = 64;
+
+const HEX_GROUP = /^[0-9a-f]{1,4}$/;
+const DEC_OCTET = /^[0-9]{1,3}$/;
+
+/** "a.b.c.d" → four bytes, or null. Only used for an IPv6 address's dotted tail. */
+function parseDottedIpv4(s: string): [number, number, number, number] | null {
+  const parts = s.split(".");
+  if (parts.length !== 4) return null;
+  const bytes: number[] = [];
+  for (const part of parts) {
+    if (!DEC_OCTET.test(part)) return null;
+    const n = Number(part);
+    if (n > 255) return null;
+    bytes.push(n);
+  }
+  const [a = 0, b = 0, c = 0, d = 0] = bytes;
+  return [a, b, c, d];
+}
+
+/**
+ * Lower-case IPv6 text (zone id already dropped) → its eight 16-bit groups, or
+ * null when it is not a valid address. Handles "::" compression and a dotted
+ * IPv4 tail ("::ffff:198.51.100.7"). No backtracking regex: split + a fixed
+ * group pattern, on an input already capped at MAX_IP_TEXT_LENGTH.
+ */
+function parseIpv6Groups(text: string): number[] | null {
+  let s = text;
+  const lastColon = s.lastIndexOf(":");
+  if (lastColon === -1) return null;
+  const tail = s.slice(lastColon + 1);
+  if (tail.includes(".")) {
+    const v4 = parseDottedIpv4(tail);
+    if (!v4) return null;
+    s = `${s.slice(0, lastColon + 1)}${((v4[0] << 8) | v4[1]).toString(16)}:${((v4[2] << 8) | v4[3]).toString(16)}`;
+  }
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(":") : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  let groups: string[];
+  if (halves.length === 1) {
+    groups = left;
+  } else {
+    // "::" stands for one or more zero groups (RFC 4291 §2.2).
+    const fill = 8 - left.length - right.length;
+    if (fill < 1) return null;
+    groups = [...left, ...Array<string>(fill).fill("0"), ...right];
+  }
+  if (groups.length !== 8) return null;
+  const out: number[] = [];
+  for (const g of groups) {
+    if (!HEX_GROUP.test(g)) return null;
+    out.push(Number.parseInt(g, 16));
+  }
+  return out;
+}
+
+/**
+ * The network a client IP belongs to — the unit every IP-keyed limit counts.
+ *
+ *   IPv4                    → unchanged ("198.51.100.7")
+ *   IPv6                    → first 64 bits, "2001:db8:abcd:12::/64" (lower-case,
+ *                             no leading zeros — "2001:0DB8:ABCD:0012::1" is the same network)
+ *   IPv4-mapped (::ffff:…)  → the dotted IPv4 ("::ffff:198.51.100.7" → "198.51.100.7")
+ *   not an IP               → unchanged ("", "unknown", "v6:2001:db8::/64", …)
+ *
+ * Idempotent: networkPrefix(networkPrefix(x)) === networkPrefix(x). The /64
+ * text matches PR #575's hosting reporterNetwork() without its "v6:" tag.
+ */
+export function networkPrefix(ip: string): string {
+  if (typeof ip !== "string" || ip.length === 0 || ip.length > MAX_IP_TEXT_LENGTH) return ip;
+  if (!ip.includes(":")) return ip; // IPv4 (or not an IP): the address itself, never rewritten.
+  let text = ip.trim().toLowerCase();
+  const zone = text.indexOf("%");
+  if (zone !== -1) text = text.slice(0, zone);
+  const g = parseIpv6Groups(text);
+  if (!g) return ip;
+  const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = g;
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
+    return `${g6 >> 8}.${g6 & 0xff}.${g7 >> 8}.${g7 & 0xff}`;
+  }
+  return `${g0.toString(16)}:${g1.toString(16)}:${g2.toString(16)}:${g3.toString(16)}::/64`;
+}
+
+/**
  * The value to store in `ip_hash` for an IP-keyed limit bucket.
  * `ip` is whatever the caller extracted (cf-connecting-ip, an x-forwarded-for
- * hop, "unknown"); it never reaches storage or logs.
+ * hop, "unknown"); it never reaches storage or logs. It is counted per network
+ * (networkPrefix): every IP-keyed limit — the hourly workspace routes, the
+ * document intake, the demo and the daily network caps — goes through here, so
+ * no caller has to normalize on its own.
  */
 export async function ipRateLimitKey(
   env: Pick<Env, "CONCLAVE_TOKEN_KEK">,
@@ -156,7 +269,10 @@ export async function ipRateLimitKey(
     warnNoKek("ip");
     return RATE_LIMIT_KEY_PREFIX + (await sha256Hex(`${bucket}::${RATE_LIMIT_NO_KEY}`));
   }
-  return RATE_LIMIT_KEY_PREFIX + (await hmacHex(await subkeyFor(kek, RATE_LIMIT_IP_KEY_LABEL), `${bucket}::${ip}`));
+  return (
+    RATE_LIMIT_KEY_PREFIX +
+    (await hmacHex(await subkeyFor(kek, RATE_LIMIT_IP_KEY_LABEL), `${bucket}::${networkPrefix(ip)}`))
+  );
 }
 
 /**

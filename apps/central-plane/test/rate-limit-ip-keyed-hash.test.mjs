@@ -93,7 +93,8 @@ test("① 같은 IP·같은 버킷·같은 KEK → 같은 저장값 = \"v1:\" + 
   assert.equal(a1, a2, "deterministic — the counter must find its own row again");
   assert.match(a1, /^v1:[0-9a-f]{64}$/);
   assert.equal(a1, keyed(KEK, "workspace", IP_A), "subkey = HMAC(KEK, label); stored = HMAC(subkey, bucket::ip)");
-  assert.equal(await ipRateLimitKey(env, "workspace", IP_V6), keyed(KEK, "workspace", IP_V6), "IPv6 too");
+  // IPv6 is keyed by its /64 network (2026-10-01, rate-limit-ipv6-network.test.mjs) — "2001:db8::1" → "2001:db8:0:0::/64".
+  assert.equal(await ipRateLimitKey(env, "workspace", IP_V6), keyed(KEK, "workspace", "2001:db8:0:0::/64"), "IPv6 too (per /64)");
 });
 
 test("① 저장값에 IP가 없고, 옛 방식 sha256(bucket::ip) · 데모 옛 솔트와 다르다", async () => {
