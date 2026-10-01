@@ -49,6 +49,7 @@ import { createWorkspaceVisualChecksRoutes } from "./routes/workspace-visual-che
 import { createWorkspaceVisualCheckRunRoutes } from "./routes/workspace-visual-check-runs.js";
 import { createBuilderProbeRoutes } from "./routes/builder-probe.js";
 import { createWorkspaceBuildJobRoutes } from "./routes/workspace-build-jobs.js";
+import { createBuildLlmProxyRoutes } from "./routes/build-llm-proxy.js";
 import { createLlmProbeRoutes } from "./routes/llm-probe.js";
 import { createProbeMailRoutes } from "./routes/probe-mail.js";
 import { createWorkspaceRepairJobRoutes } from "./routes/workspace-repair-jobs.js";
@@ -87,7 +88,9 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // 관측 도구: 벤더별 LLM 도달성(내부 토큰 필요) — 2026-08-22 403 진단에서 신설.
   app.route("/", createLlmProbeRoutes());
   app.route("/", createBuilderProbeRoutes());
-  app.route("/", createWorkspaceBuildJobRoutes());
+  app.route("/", createWorkspaceBuildJobRoutes(fetchImpl));
+  // Train B · B-5b S1: 빌드 전용 LLM 프록시(잡 범위 토큰 · 서버 키 · 서버 권위 예산 · 원장 단일 경로).
+  app.route("/", createBuildLlmProxyRoutes(fetchImpl));
   app.route("/", createProbeMailRoutes());
   app.route("/", registerRoutes);
   app.route("/", episodicRoutes);

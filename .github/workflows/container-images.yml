@@ -6,6 +6,31 @@
 #
 # 대상: builder-container · inspector-container (가벼움). autofix sandbox(container/)는
 # 모노레포 전체 빌드라 무거워 제외 — 바뀔 때만 수동 dispatch로.
+#
+# B-5b-0: 빌더 이미지는 packages/core·packages/agent-worker·templates/simsa-hosted-app과 루트의
+# package.json·pnpm-lock.yaml·pnpm-workspace.yaml·tsconfig.base.json을 이미지 안에서 빌드·복사한다 → 그 경로가
+# 바뀌어도 여기서 다시 빌드한다(Dockerfile의 COPY 원본이 전부 paths에 있는지 train-b-b5b-executor 테스트가 확인).
+# .dockerignore는 빌드 컨텍스트 자체를 바꾸므로 함께. 스모크는 /selfcheck의
+# agentWorker.ok(이미지 안에서 runBuildLoop를 실제로 import)·template.ok를 **명시적으로** 확인한다.
+# 결함 4: 빌드 전에 템플릿 폴더에 미끼 비밀 파일을 심고, 빌드한 이미지 안에 하나도 없는지 확인한다(.dockerignore 증거).
+# B-5b-1: kind=build 잡 하나를 실제 이미지에 넣어 scaffolding(템플릿 복사·wrangler.toml·git 커밋)이
+# 돌고 implementing에서 정직하게 실패하는지, 진행·최종 콜백 본문을 로컬 수신기로 받아 확인한다.
+# B-5b S1: 페이로드는 비밀 없는 새 모양(jobToken 하나) — 콜백 Bearer가 그 jobToken인지, 본문에 usage·spentUsd가
+# 없는지, 옛 모양(운영 토큰·LLM 키·전역 콜백 토큰 포함)은 202 전에 400으로 거절되는지 확인한다.
+# B-5b-2·3 [정정 2026-10-01 — 위 B-5b-1의 "implementing에서 정직하게 실패"는 대체됨]: 로컬 수신기가 **빌드 LLM 프록시**도
+# 흉내 낸다(정해진 tool_use 응답). 실제 이미지에서 WBS 1개 → 설치(오프라인)·빌드·테스트 게이트 통과 → push 앞에서 정직한 실패,
+# 그리고 고의로 깨진 코드 → 수리 2회 → failed(building)(테스트·push·배포 단계 미도달). 모델의 run_command가 샌드박스 사용자
+# (uid 10001)로 돌며 서버의 /proc/<pid>/environ·mem을 못 읽고 /builder에 못 쓰는지 탐침으로 확인한다.
+# 가짜 토큰·가짜 D1 id만 쓰고 Cloudflare·GitHub·LLM에는 닿지 않는다(템플릿 의존성은 이미지 빌드 때 npm 레지스트리에서 받는다).
+# PR #569 S2 검증 결함: ① 탐침이 샌드박스 자식의 그룹도 본다(groups=10001만 · /proc/self/status 보조 그룹에 root 그룹 없음 — Node가
+# setgroups(0)로 비운다는 것의 실측) ② 샌드박스 ENV가 빠진 컨테이너는 자가점검 빨간불 + 빌드를 받지 않는다(fail closed)
+# ④ 빌드가 도는 동안 실제 서버에 두 번째 POST /run(같은 jobId·다른 jobId·같은 jobId의 selfcheck)을 넣으면 전부 409 builder_busy.
+# B-5b S3 [정정 2026-10-01 — 위 "push 앞에서 정직한 실패"는 대체됨]: 초록불 잡은 실제 이미지에서 **산출물**을 만든다 — 샌드박스 사용자의
+# `wrangler deploy --dry-run --outdir`(토큰 없이 번들만) + 수집기(artifact-collect.mjs) → 로컬 수신기가 흉내 내는 Worker
+# /internal/build-artifact로. 수신기는 본문을 저장하고 done이라고 답한다(실제 push·배포는 Worker 몫 — 여기서는 Cloudflare·GitHub에
+# 닿지 않는다). 산출물이 실제 wrangler 번들(worker.js에 /api/health)·vite 자산(index.html의 script src가 가리키는 파일)·
+# 마이그레이션(0001_init.sql)·소스(한글 App.tsx · node_modules·dist·dotfile 없음)인지, 본문에 jobToken이 없는지 확인한다.
+# PR #569 S3 검증 결함 4: 본문이 ASCII JSON인지(비ASCII는 \u 이스케이프 — Worker가 날것 한글 본문을 400으로 거절한다)도 확인한다.
 name: container-images
 
 on:
@@ -16,6 +41,14 @@ on:
       - 'apps/central-plane/src/visual-flow-plan.ts'
       - 'apps/central-plane/src/nondev-report.ts'
       - 'apps/central-plane/src/signup-plan.ts'
+      - 'packages/core/**'
+      - 'packages/agent-worker/**'
+      - 'templates/simsa-hosted-app/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - '.dockerignore'
       - '.github/workflows/container-images.yml'
   workflow_dispatch:
 
@@ -26,7 +59,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +70,17 @@ jobs:
             dockerfile: apps/central-plane/inspector-container/Dockerfile
     steps:
       - uses: actions/checkout@v5
+      - name: Plant decoy secrets in the S template (builder only — .dockerignore must keep them out of the image)
+        if: matrix.image.name == 'builder'
+        run: |
+          set -euo pipefail
+          # 더러운 로컬 트리(`pnpm ship`)를 흉내 낸다. 값은 명백한 가짜 표식 — 이미지 안에서 이 표식을 찾는다.
+          t=templates/simsa-hosted-app
+          for f in .npmrc .envrc .yarnrc.yml .dev.vars .env .env.local src/.dev.vars server.pem deploy.key \
+                   node_modules/decoy/index.js dist/decoy.js .wrangler/state/decoy.sqlite; do
+            mkdir -p "$(dirname "$t/$f")"
+            echo "CI_DECOY_NOT_A_SECRET" > "$t/$f"
+          done
       - uses: docker/setup-buildx-action@v3
       - name: Build ${{ matrix.image.name }} image (no push)
         uses: docker/build-push-action@v6
@@ -48,14 +92,238 @@ jobs:
           tags: simsa-${{ matrix.image.name }}:pr
           cache-from: type=gha,scope=${{ matrix.image.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
-      - name: Smoke the image (builder only — /health + /selfcheck)
+      - name: Smoke the image (builder only — /health + /selfcheck + kind=build WBS → gate, fake LLM proxy)
         if: matrix.image.name == 'builder'
         run: |
           set -euo pipefail
-          cid=$(docker run -d -p 18080:8080 simsa-builder:pr)
+
+          # 로컬 수신기 = Worker 대역: 진행·최종 콜백을 잡별로 적고(transitioned:true), **빌드 LLM 프록시**
+          # (/internal/build-llm/anthropic/v1/messages)를 흉내 내 정해진 tool_use 응답을 돌려준다(실제 LLM 없음).
+          #   bj_ci_green01  WBS-001: 샌드박스 탐침 파일 → 실행 → 한글 App.tsx → finish(done)            ⇒ 게이트 초록불 → 산출물 → done 보고
+          # /internal/build-artifact(B-5b S3): 본문을 /tmp/artifact-body-<jobId>.json에 저장하고 { ok, accepted, status:"done" }로 답한다.
+          #   bj_ci_broken1  WBS-001: 고의로 깨진 src/worker.ts(타입 오류) → finish(done), REPAIR-*: gave_up ⇒ failed(building)
+          # 모델에게 돌아가는 도구 결과(tool_result)는 /tmp/llm-toolresults.txt에 — 샌드박스 탐침 출력의 증거.
+          cat > /tmp/receiver.mjs <<'EOF'
+          import { createServer } from "node:http";
+          import { appendFileSync, writeFileSync } from "node:fs";
+          const PROBE = [
+            'import { readFileSync, readdirSync, writeFileSync } from "node:fs";',
+            'let pid = "1";',
+            'for (const d of readdirSync("/proc")) { if (!/^\\d+$/.test(d)) continue; try { if (readFileSync("/proc/" + d + "/cmdline", "utf8").includes("/builder/server.mjs")) { pid = d; break; } } catch {} }',
+            'const r = (p) => { try { readFileSync(p); return "readable"; } catch (e) { return e.code; } };',
+            'const w = (p) => { try { writeFileSync(p, "x"); return "writable"; } catch (e) { return e.code; } };',
+            'const supp = ((readFileSync("/proc/self/status", "utf8").match(/^Groups:(.*)$/m) || [])[1] || "?").trim().split(/\\s+/).filter(Boolean).join(",");',
+            'console.log("uid=" + process.getuid() + " serverPid=" + pid + " environ=" + r("/proc/" + pid + "/environ") + " mem=" + r("/proc/" + pid + "/mem") + " builderWrite=" + w("/builder/sandbox-probe.txt") + " jobTokenInEnv=" + JSON.stringify(process.env).includes("bjt1.") + " groups=" + process.getgroups().join(",") + " suppGroups=[" + supp + "] end");',
+          ].join("\n");
+          const APP = 'export function App() {\n  return (\n    <main>\n      <h1>동네 빵집 소금빵 예약 (주)빵굽는집</h1>\n      <button type="button">예약하기</button>\n    </main>\n  );\n}\n';
+          const BROKEN = 'import { Hono } from "hono";\nconst app = new Hono();\nconst 예약수: number = "여러 개";\napp.get("/api/health", (c) => c.json({ ok: true, n: 예약수 }));\nexport default app;\n';
+          const tu = (name, input, i) => ({ type: "tool_use", id: `tu_${name}_${i}`, name, input });
+          function script(job, task, turn) {
+            if (job === "bj_ci_green01" && task === "WBS-001") {
+              if (turn === 0) return [tu("create_file", { path: "scripts/sandbox-probe.mjs", content: PROBE }, 1), tu("run_command", { cmd: "node", args: ["scripts/sandbox-probe.mjs"] }, 2)];
+              if (turn === 1) return [tu("create_file", { path: "src/client/App.tsx", content: APP }, 3)];
+              return [tu("finish", { status: "done", summary: "예약 화면(한글 버튼)", commitMessage: "feat: 예약 화면 — 한글 버튼" }, 4)];
+            }
+            if (job === "bj_ci_broken1" && task === "WBS-001") {
+              if (turn === 0) return [tu("create_file", { path: "src/worker.ts", content: BROKEN }, 5)];
+              return [tu("finish", { status: "done", summary: "예약 수(깨진 코드 픽스처)", commitMessage: "feat: 예약 수" }, 6)];
+            }
+            return [tu("finish", { status: "gave_up", summary: "수리하지 않음(CI 픽스처)" }, 7)];
+          }
+          const json = (res, status, body) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
+          createServer((req, res) => {
+            let b = "";
+            req.setEncoding("utf8");
+            req.on("data", (c) => (b += c));
+            req.on("end", () => {
+              const url = req.url ?? "";
+              if (url === "/internal/build-llm/anthropic/v1/messages") {
+                const key = String(req.headers["x-api-key"] ?? "");
+                const job = /^bjt1\.([A-Za-z0-9_-]+)\./.exec(key)?.[1] ?? "?";
+                const body = JSON.parse(b);
+                const first = body.messages.find((m) => m.role === "user" && typeof m.content === "string")?.content ?? "";
+                const task = /# Work item (\S+?):/.exec(first)?.[1] ?? "?";
+                const turn = body.messages.filter((m) => m.role === "assistant").length;
+                appendFileSync("/tmp/llm-calls.jsonl", JSON.stringify({ job, task, turn, key, version: req.headers["anthropic-version"] ?? null, model: body.model }) + "\n");
+                const last = body.messages[body.messages.length - 1];
+                if (last && Array.isArray(last.content)) for (const blk of last.content) if (blk.type === "tool_result") appendFileSync("/tmp/llm-toolresults.txt", `[${job} ${task}] ${String(blk.content).replace(/\n/g, " ")}\n`);
+                if (task.startsWith("REPAIR")) appendFileSync("/tmp/llm-repair-prompts.txt", `[${job} ${task}] ${first.replace(/\n/g, " ")}\n`);
+                return json(res, 200, { id: `msg_${Date.now()}`, type: "message", role: "assistant", model: "claude-sonnet-4-6", content: script(job, task, turn), stop_reason: "tool_use", usage: { input_tokens: 1000, output_tokens: 200 } });
+              }
+              if (url === "/internal/build-artifact") {
+                let jobId = "unknown";
+                try { jobId = JSON.parse(b).jobId ?? "unknown"; } catch {}
+                writeFileSync(`/tmp/artifact-body-${jobId}.json`, b);
+                appendFileSync(`/tmp/cb-auth-${jobId}.txt`, String(req.headers.authorization ?? "") + "\n");
+                return json(res, 200, { ok: true, accepted: true, status: "done" });
+              }
+              const name = url === "/internal/build-progress" ? "progress" : url === "/internal/build-done" ? "done" : "other";
+              let jobId = "unknown";
+              try { jobId = JSON.parse(b).jobId ?? "unknown"; } catch {}
+              appendFileSync(`/tmp/cb-${name}-${jobId}.jsonl`, b.replace(/\n/g, " ") + "\n");
+              appendFileSync(`/tmp/cb-auth-${jobId}.txt`, String(req.headers.authorization ?? "") + "\n");
+              json(res, 200, { ok: true, transitioned: true, accepted: true });
+            });
+          }).listen(18099, "0.0.0.0");
+          EOF
+          node /tmp/receiver.mjs &
+          recv=$!
+
+          # ── 결함 4: 템플릿에 심은 미끼(.npmrc·.dev.vars·.env*·키·node_modules·dist·.wrangler)가 이미지에 없다 ──
+          leaked=$(docker run --rm --entrypoint sh simsa-builder:pr -c 'grep -rl CI_DECOY_NOT_A_SECRET /builder 2>/dev/null || true')
+          if [ -n "$leaked" ]; then echo "::error::decoy secret files leaked into the builder image: $leaked"; exit 1; fi
+          docker run --rm --entrypoint sh simsa-builder:pr -c 'test -f /builder/templates/simsa-hosted-app/.gitignore && test -f /builder/templates/simsa-hosted-app/wrangler.toml && test -f /builder/templates/simsa-hosted-app/test/smoke.test.mjs' \
+            || { echo "::error::tracked template files are missing from the image"; exit 1; }
+
+          nosb=""
+          cid=$(docker run -d -p 18080:8080 --add-host=host.docker.internal:host-gateway simsa-builder:pr)
+          trap 'docker logs "$cid" | tail -60 || true; docker rm -f "$cid" >/dev/null 2>&1 || true; if [ -n "$nosb" ]; then docker rm -f "$nosb" >/dev/null 2>&1 || true; fi; kill "$recv" 2>/dev/null || true' EXIT
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:18080/health && break || sleep 1; done
           echo
           curl -sf http://127.0.0.1:18080/health | jq .
-          curl -s http://127.0.0.1:18080/selfcheck | tee /tmp/selfcheck.json | jq '{ok, runnerRev, totalMs, forbiddenPresent, workRoot, tools: (.tools|map({name, ok, version, ms}))}'
-          jq -e '.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::builder selfcheck failed"; docker logs "$cid"; exit 1; }
-          docker rm -f "$cid" >/dev/null
+
+          # ── /selfcheck: 툴체인 + agentWorker(B-5b-0) + template + sandbox(B-5b-2) ──
+          curl -s http://127.0.0.1:18080/selfcheck | tee /tmp/selfcheck.json | jq '{ok, runnerRev, totalMs, forbiddenPresent, workRoot, agentWorker, template, sandbox, tools: (.tools|map({name, ok, version, ms}))}'
+          jq -e '.agentWorker.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::agent-worker is not importable inside the builder image"; exit 1; }
+          jq -e '.template.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::S template missing from the builder image"; exit 1; }
+          jq -e '.sandbox.enabled == true and .sandbox.ok == true and .sandbox.uid == 10001 and .sandbox.storeReady == true' /tmp/selfcheck.json >/dev/null || { echo "::error::sandbox user / prefetched pnpm store not usable in the image"; exit 1; }
+          jq -e '.ok == true' /tmp/selfcheck.json >/dev/null || { echo "::error::builder selfcheck failed"; exit 1; }
+
+          # ── B-5b S1: 옛 모양(비밀 포함) 페이로드는 202 전에 400 — 옛 Worker와 섞여도 비밀을 받아 두지 않는다 ──
+          cat > /tmp/payload-old.json <<'EOF'
+          {"jobId":"bj_ci_smoke00","projectId":"wsp_ci_smoke","userKey":"uk_ci_smoke","kind":"build","slug":"ci-smoke-app","locale":"ko",
+           "baseUrl":"http://host.docker.internal:18099",
+           "callbackUrl":"http://host.docker.internal:18099/internal/build-done",
+           "progressUrl":"http://host.docker.internal:18099/internal/build-progress",
+           "callbackToken":"ci-fake-token","jobToken":"bjt1.bj_ci_smoke00.0000000000000000000000000000000000000000000000000000000000000000","budgetUsd":0,
+           "spec":{"markdown":"# 동네 빵집","wbs":[{"id":"WBS-001","title":"예약 저장","order":1,"acceptanceIds":[],"dependsOn":[]}],"productName":"동네 빵집"},
+           "hosting":{"cfApiToken":"ci-fake","d1Id":"00000000-0000-4000-8000-000000000001"},
+           "llm":{"anthropicApiKey":"ci-fake","openaiApiKey":"ci-fake","model":"ci-none","preferFallback":true}}
+          EOF
+          old=$(curl -s -o /tmp/run-old.json -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @/tmp/payload-old.json http://127.0.0.1:18080/run)
+          cat /tmp/run-old.json; echo
+          [ "$old" = "400" ] || { echo "::error::old-shape payload with secrets must be refused (got $old)"; exit 1; }
+          grep -q 'forbidden:hosting.cfApiToken' /tmp/run-old.json || { echo "::error::refusal must name the secret path"; exit 1; }
+          if grep -q 'ci-fake' /tmp/run-old.json; then echo "::error::refusal echoed a secret value"; exit 1; fi
+
+          # ── kind=build 두 건(B-5b-2·3) · 비밀 없는 페이로드(B-5b S1) ──
+          # Rule 6: 제품명·WBS 제목은 한글·공백·특수문자. jobToken·D1 id는 명백한 가짜(모양만 bjt1.<jobId>.<64hex>).
+          write_payload() { # $1=jobId $2=token → /tmp/payload-$1.json
+            cat > "/tmp/payload-$1.json" <<EOF
+          {"jobId":"$1","kind":"build","slug":"ci-smoke-app","locale":"ko",
+           "baseUrl":"http://host.docker.internal:18099",
+           "callbackUrl":"http://host.docker.internal:18099/internal/build-done",
+           "progressUrl":"http://host.docker.internal:18099/internal/build-progress",
+           "jobToken":"$2","budgetUsd":10,
+           "spec":{"markdown":"# 동네 빵집 소금빵 예약 (주)빵굽는집\\n- WBS-001 예약 화면 — 한글 버튼 '예약하기'","wbs":[{"id":"WBS-001","title":"예약 화면 — 한글 버튼 '예약하기'","order":1,"acceptanceIds":["AC-001"],"dependsOn":[],"must":true}],"productName":"동네 빵집 소금빵 예약 (주)빵굽는집"},
+           "hosting":{"d1Id":"00000000-0000-4000-8000-000000000001"},
+           "llm":{"model":"claude-sonnet-4-6","openaiModel":"gpt-5.4","preferFallback":false}}
+          EOF
+          }
+          start_job() { # $1=jobId $2=token [$3=호스트 포트, 기본 18080] → 202
+            write_payload "$1" "$2"
+            code=$(curl -s -o "/tmp/run-$1.json" -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @"/tmp/payload-$1.json" "http://127.0.0.1:${3:-18080}/run")
+            cat "/tmp/run-$1.json"; echo
+            [ "$code" = "202" ] || { echo "::error::POST /run for $1 returned $code"; exit 1; }
+          }
+          wait_job() { # $1=jobId → /tmp/cb-done-$1.jsonl 이 생길 때까지(최대 300초)
+            for i in $(seq 1 300); do [ -s "/tmp/cb-done-$1.jsonl" ] && break || sleep 1; done
+            [ -s "/tmp/cb-done-$1.jsonl" ] || { echo "::error::no build-done callback for $1 within 300s"; exit 1; }
+            echo "progress ($1):"; jq -c '{status, message, meta: (.meta | del(.runnerRev))}' "/tmp/cb-progress-$1.jsonl"
+            echo "done ($1):"; jq -c . "/tmp/cb-done-$1.jsonl"
+          }
+          run_job() { start_job "$1" "$2"; wait_job "$1"; }
+          expect_busy() { # $1=설명 $2=본문 파일 — 빌드가 도는 동안의 두 번째 POST /run은 409 builder_busy
+            code=$(curl -s -o /tmp/busy.json -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary @"$2" http://127.0.0.1:18080/run)
+            echo "busy check ($1): $code $(cat /tmp/busy.json)"
+            if [ "$code" != "409" ] || ! jq -e '.error == "builder_busy"' /tmp/busy.json >/dev/null; then echo "::error::$1 while a build runs must be 409 builder_busy (got $code)"; exit 1; fi
+          }
+
+          GREEN_TOKEN="bjt1.bj_ci_green01.$(printf 'a1%.0s' $(seq 1 32))"
+          BROKEN_TOKEN="bjt1.bj_ci_broken1.$(printf 'b2%.0s' $(seq 1 32))"
+          OTHER_TOKEN="bjt1.bj_ci_other01.$(printf 'c3%.0s' $(seq 1 32))"
+
+          # (1) 초록불: WBS 1개 → 설치(오프라인)·빌드·테스트 통과 → 산출물(실제 wrangler dry-run + 수집기, 샌드박스 사용자) → Worker 대역 done
+          start_job bj_ci_green01 "$GREEN_TOKEN"
+          # ── S2-4: 그 빌드가 도는 동안 실제 서버에 두 번째 POST /run — 같은 jobId(빌드) · 다른 jobId(빌드) · 같은 jobId(selfcheck) 전부 409 ──
+          # (생성 코드가 localhost:8080으로 진행 중인 잡을 덮거나 드레인 목록에서 빼지 못한다.)
+          write_payload bj_ci_other01 "$OTHER_TOKEN"
+          printf '%s' '{"jobId":"bj_ci_green01","kind":"selfcheck","baseUrl":"http://host.docker.internal:18099","callbackUrl":"http://host.docker.internal:18099/internal/build-done","jobToken":"not-a-real-token"}' > /tmp/payload-sc-same.json
+          expect_busy "same jobId build" /tmp/payload-bj_ci_green01.json
+          expect_busy "another jobId build" /tmp/payload-bj_ci_other01.json
+          expect_busy "same jobId selfcheck" /tmp/payload-sc-same.json
+          wait_job bj_ci_green01
+          [ ! -e /tmp/cb-done-bj_ci_other01.jsonl ] && [ ! -e /tmp/cb-progress-bj_ci_other01.jsonl ] || { echo "::error::a refused build must not run"; exit 1; }
+          [ "$(wc -l < /tmp/cb-done-bj_ci_green01.jsonl)" = "1" ] || { echo "::error::the green job must report exactly one final body (the selfcheck must not have replaced it)"; exit 1; }
+          P=/tmp/cb-progress-bj_ci_green01.jsonl
+          jq -s -e 'map(.message) == ["scaffold_started","scaffold_ready","wbs_started","wbs_done","gate_started","test_started","gate_passed","artifact_started","artifact_ready"]' "$P" >/dev/null || { echo "::error::green job progress is not scaffold → WBS → gate_passed → artifact"; exit 1; }
+          jq -s -e '.[1].meta.installMode == "offline" and .[1].meta.sandbox.uid == 10001 and .[1].meta.files >= 10' "$P" >/dev/null || { echo "::error::scaffold_ready must show an offline install as the sandbox user"; exit 1; }
+          jq -s -e 'all(.[]; .status != "pushed" and .status != "deploying")' "$P" >/dev/null || { echo "::error::the container must not claim push/deploy"; exit 1; }
+          # ── B-5b S3: 실제 이미지가 만든 산출물(샌드박스 사용자의 wrangler dry-run + 수집기) → Worker 대역 ──
+          A=/tmp/artifact-body-bj_ci_green01.json
+          [ -s "$A" ] || { echo "::error::the green job did not upload an artifact"; exit 1; }
+          # PR #569 S3 검증 결함 4: Worker는 ASCII JSON 본문만 받는다(한글 경로는 \u 이스케이프 — Worker 메모리 절반).
+          if LC_ALL=C grep -qP '[^\x00-\x7F]' "$A"; then echo "::error::the artifact body must be ASCII JSON (non-ASCII escaped as \\uXXXX)"; exit 1; fi
+          jq -c '{mainModule: .worker.mainModule, modules: (.worker.modules|map(.name)), assets: (.assets|map(.path)), migrations: (.migrations|map(.name)), source: (.source|length), summary}' "$A"
+          jq -e '.worker.mainModule == "worker.js" and .worker.modules[0].name == "worker.js" and all(.worker.modules[]; (.name | endswith(".map") | not) and .name != "README.md")' "$A" >/dev/null || { echo "::error::the bundle must be wrangler's worker.js (no README/source map)"; exit 1; }
+          # 디코드는 파일로 먼저(파이프 + grep -q는 pipefail에서 SIGPIPE로 거짓 실패할 수 있다).
+          jq -r '.worker.modules[0].base64' "$A" | base64 -d > /tmp/art-worker.js
+          grep -q '/api/health' /tmp/art-worker.js || { echo "::error::worker.js must be the real bundle of src/worker.ts"; exit 1; }
+          jq -e '(.assets|map(.path)|index("/index.html")) != null' "$A" >/dev/null || { echo "::error::the vite client (dist/client/index.html) must be in the assets"; exit 1; }
+          jq -r '.assets[] | select(.path=="/index.html") | .base64' "$A" | base64 -d > /tmp/art-index.html
+          script=$(grep -oE 'src="/[^"]+"' /tmp/art-index.html | head -1 | sed -E 's/src="([^"]+)"/\1/' || true)
+          [ -n "$script" ] && jq -e --arg p "$script" '(.assets|map(.path)|index($p)) != null' "$A" >/dev/null || { echo "::error::index.html's script ($script) must be among the assets"; exit 1; }
+          jq -e '.migrations|map(.name) == ["0001_init.sql"]' "$A" >/dev/null || { echo "::error::migrations/0001_init.sql must be in the artifact"; exit 1; }
+          jq -e '(.source|map(.path)) as $s | ($s|index("src/worker.ts")) != null and ($s|index("src/client/App.tsx")) != null and ($s|index("package.json")) != null and ($s|index("migrations/0001_init.sql")) != null' "$A" >/dev/null || { echo "::error::the source tree is incomplete"; exit 1; }
+          jq -e 'all(.source[].path; (startswith("node_modules/") or startswith("dist/") or test("(^|/)\\.(env|dev\\.vars|npmrc|git/|wrangler/)")) | not)' "$A" >/dev/null || { echo "::error::the source tree must exclude node_modules/dist/dotfiles"; exit 1; }
+          jq -r '.source[] | select(.path=="src/client/App.tsx") | .base64' "$A" | base64 -d > /tmp/art-App.tsx
+          grep -q '예약하기' /tmp/art-App.tsx || { echo "::error::the source must carry the model's Korean App.tsx (Rule 6)"; exit 1; }
+          jq -e '.summary.wbsDone == 1 and .summary.commits >= 2 and .summary.gateRounds == 0' "$A" >/dev/null || { echo "::error::artifact summary must report the WBS and commits"; exit 1; }
+          jq -e '.ok == true and .stage == "done" and .wbsDone == 1 and .artifact.uploaded == true and (has("deployedUrl") | not)' /tmp/cb-done-bj_ci_green01.jsonl >/dev/null || { echo "::error::green job must report done only after the Worker accepted the artifact — and never carry a URL"; exit 1; }
+          # 생성 코드(모델의 run_command)는 샌드박스 사용자로: 서버의 환경·메모리를 못 읽고 /builder에 못 쓰고 env에 토큰이 없다
+          cat /tmp/llm-toolresults.txt
+          grep -q 'uid=10001 ' /tmp/llm-toolresults.txt || { echo "::error::model commands must run as the sandbox user (uid=10001)"; exit 1; }
+          grep -q 'environ=EACCES' /tmp/llm-toolresults.txt || { echo "::error::sandboxed code could read the server's /proc/<pid>/environ"; exit 1; }
+          grep -q 'mem=EACCES' /tmp/llm-toolresults.txt || { echo "::error::sandboxed code could open the server's /proc/<pid>/mem"; exit 1; }
+          grep -q 'builderWrite=EACCES' /tmp/llm-toolresults.txt || { echo "::error::sandboxed code could write under /builder"; exit 1; }
+          grep -q 'jobTokenInEnv=false' /tmp/llm-toolresults.txt || { echo "::error::the job token leaked into the child env"; exit 1; }
+          # S2-1: 보조 그룹 — Node(libuv)가 uid/gid 전환 전에 setgroups(0)로 비운다. 자식에 root의 gid 0 등이 남지 않는다.
+          grep -q 'groups=10001 ' /tmp/llm-toolresults.txt || { echo "::error::the sandboxed child must be in group 10001 only (process.getgroups)"; exit 1; }
+          grep -qE 'suppGroups=\[(10001)?\]' /tmp/llm-toolresults.txt || { echo "::error::the sandboxed child kept supplementary groups (/proc/self/status Groups)"; exit 1; }
+
+          # (2) ★D-4: 고의로 깨진 코드 → 수리 2회(가짜 LLM은 포기) → failed(building) · 테스트·push·배포 단계에 닿지 않는다
+          run_job bj_ci_broken1 "$BROKEN_TOKEN"
+          P=/tmp/cb-progress-bj_ci_broken1.jsonl
+          jq -e '.ok == false and .failedStage == "building" and (.error | startswith("build_failed:")) and .buildExitCode != 0' /tmp/cb-done-bj_ci_broken1.jsonl >/dev/null || { echo "::error::broken code must end as failed(building) build_failed:*"; exit 1; }
+          jq -s -e 'all(.[]; .status != "testing" and .status != "pushed" and .status != "deploying")' "$P" >/dev/null || { echo "::error::a red build must never reach testing/push/deploy"; exit 1; }
+          jq -s -e '[.[] | select(.message == "build_failed")] | length == 3 and (.[-1].meta.final == true) and (.[0].meta.logTail | test("TS2322"))' "$P" >/dev/null || { echo "::error::expected 3 build_failed events (2 repair rounds) with the tsc error in the log tail"; exit 1; }
+          grep -c '"job":"bj_ci_broken1","task":"REPAIR-' /tmp/llm-calls.jsonl | grep -qx 2 || { echo "::error::expected exactly 2 repair rounds"; exit 1; }
+          grep -q 'TS2322' /tmp/llm-repair-prompts.txt || { echo "::error::the repair prompt must carry the failing log tail"; exit 1; }
+
+          # (3) ★S2-2: 샌드박스 ENV가 빠진 이미지(리팩터 사고 흉내 — `-e SIMSA_SANDBOX_UID= `)는 자가점검이 빨간불이고, 빌드를 받아도
+          #     명령 하나 돌리지 않고 failed(scaffolding, sandbox_unavailable:not_configured) — LLM이 만든 코드를 root로 돌리지 않는다.
+          nosb=$(docker run -d -p 18081:8080 -e SIMSA_SANDBOX_UID= --add-host=host.docker.internal:host-gateway simsa-builder:pr)
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:18081/health >/dev/null && break || sleep 1; done
+          sc=$(curl -s -o /tmp/selfcheck-nosb.json -w '%{http_code}' http://127.0.0.1:18081/selfcheck)
+          jq -c '{ok, sandbox}' /tmp/selfcheck-nosb.json
+          if [ "$sc" != "503" ] || ! jq -e '.ok == false and .sandbox.ok == false and .sandbox.reason == "not_configured"' /tmp/selfcheck-nosb.json >/dev/null; then echo "::error::an image without the sandbox ENV must fail its selfcheck (got $sc)"; exit 1; fi
+          NOSB_TOKEN="bjt1.bj_ci_nosbx01.$(printf 'd4%.0s' $(seq 1 32))"
+          start_job bj_ci_nosbx01 "$NOSB_TOKEN" 18081
+          wait_job bj_ci_nosbx01
+          jq -e '.ok == false and .failedStage == "scaffolding" and .error == "sandbox_unavailable:not_configured" and .wbsDone == 0' /tmp/cb-done-bj_ci_nosbx01.jsonl >/dev/null || { echo "::error::without the sandbox ENV a build must fail closed (sandbox_unavailable:not_configured)"; exit 1; }
+          jq -s -e 'map(.message) == ["scaffold_started"]' /tmp/cb-progress-bj_ci_nosbx01.jsonl >/dev/null || { echo "::error::nothing may run after scaffold_started without a sandbox"; exit 1; }
+          if grep -q '"job":"bj_ci_nosbx01"' /tmp/llm-calls.jsonl; then echo "::error::no LLM call may happen without a sandbox"; exit 1; fi
+          if docker logs "$nosb" 2>&1 | grep -q "$NOSB_TOKEN"; then echo "::error::a job token leaked into container logs"; exit 1; fi
+          docker rm -f "$nosb" >/dev/null 2>&1 || true
+          nosb=""
+
+          # ── 모든 LLM 호출은 프록시 경로로, 그 잡의 jobToken(x-api-key)으로 · 콜백 Bearer도 jobToken ──
+          jq -s -e --arg g "$GREEN_TOKEN" --arg b "$BROKEN_TOKEN" 'all(.[]; (.job == "bj_ci_green01" and .key == $g) or (.job == "bj_ci_broken1" and .key == $b)) and all(.[]; .version == "2023-06-01" and .model == "claude-sonnet-4-6")' /tmp/llm-calls.jsonl >/dev/null || { echo "::error::LLM calls must use the job's own token against the proxy"; exit 1; }
+          [ "$(sort -u /tmp/cb-auth-bj_ci_green01.txt)" = "Bearer ${GREEN_TOKEN}" ] || { echo "::error::green callbacks must authenticate with its job token"; exit 1; }
+          [ "$(sort -u /tmp/cb-auth-bj_ci_broken1.txt)" = "Bearer ${BROKEN_TOKEN}" ] || { echo "::error::broken callbacks must authenticate with its job token"; exit 1; }
+          jq -s -e 'all(.[]; (has("usage") | not) and (has("spentUsd") | not))' /tmp/cb-progress-*.jsonl /tmp/cb-done-*.jsonl >/dev/null || { echo "::error::callbacks must not carry usage/spentUsd (the Worker LLM proxy meters spend)"; exit 1; }
+          for t in "$GREEN_TOKEN" "$BROKEN_TOKEN"; do
+            if grep -q "$t" /tmp/cb-progress-*.jsonl /tmp/cb-done-*.jsonl /tmp/llm-toolresults.txt /tmp/llm-repair-prompts.txt /tmp/artifact-body-*.json; then echo "::error::a job token leaked into a callback body, an LLM prompt or the artifact"; exit 1; fi
+            if docker logs "$cid" 2>&1 | grep -q "$t"; then echo "::error::a job token leaked into container logs"; exit 1; fi
+          done
+          echo "✅ builder image: agent-worker · template · sandbox(uid 10001, groups 10001 only, offline store) · secret-bearing payload refused · WBS via the LLM proxy → gate green → artifact (real wrangler dry-run bundle · vite assets · D1 migration · Korean source) → Worker stand-in done · second POST /run while building → 409 · broken code → failed(building) after 2 repairs · no sandbox ENV → selfcheck red + build refused"
