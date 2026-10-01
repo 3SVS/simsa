@@ -18,23 +18,34 @@
  */
 import { z } from "zod";
 
-/** [PILOT] 산출물 상한. 컨테이너 수집기 ARTIFACT_LIMITS와 같은 값(test/train-b-b5b-s3-deploy.test.mjs가 비교). */
+/**
+ * [PILOT] 산출물 상한. 컨테이너 수집기 ARTIFACT_LIMITS와 같은 값(test/train-b-b5b-s3-deploy.test.mjs가 비교).
+ *
+ * PR #569 S3 검증 결함 4 — **Worker isolate 메모리(128MB, 같은 isolate의 다른 요청과 함께 쓴다)가 기준**이다. 종전 상한(본문 26MiB ·
+ * 구역 합계 18.5MiB)에서는 본문 텍스트 · 파싱본 · 저장용 재직렬화본(한글 경로면 2바이트 문자열)이 동시에 살아 요청 하나가
+ * ≈124MiB를 붙잡았다(실측). 이제 ① 본문은 **ASCII JSON**(비ASCII는 \u 이스케이프 — 한 바이트 문자열) ② R2에는 받은 바이트를
+ * 그대로(재직렬화 없음) ③ 파싱 뒤 텍스트를 놓는다 → 최악 ≈ 본문 × 2~3. 본문 상한 13MiB → 최악 ≈ 40MiB 아래(메모리 회귀 테스트).
+ * 생성 앱(Hono Worker + Vite 클라이언트)의 실측 크기는 번들 수백 KB · 자산 1MB 안팎 · 소스(잠금 파일 64KB 포함) 수백 KB다.
+ */
 export const BUILD_ARTIFACT_LIMITS = Object.freeze({
-  /** 요청 본문(JSON, base64 포함) — 아래 합계 18.5 MiB × 4/3 + 틀. */
-  maxBodyBytes: 26 * 1024 * 1024,
+  /** 요청 본문(ASCII JSON, base64 포함) — 아래 합계 8.25 MiB × 4/3 ≈ 11 MiB + 틀(이스케이프된 한글 경로 포함). */
+  maxBodyBytes: 13 * 1024 * 1024,
   maxModules: 20,
   /** Worker 모듈 합계(디코드 바이트). WfP 스크립트 상한보다 작게. */
-  maxModuleBytes: 6 * 1024 * 1024,
+  maxModuleBytes: 3 * 1024 * 1024,
   maxAssets: 300,
-  maxAssetBytes: 8 * 1024 * 1024,
-  maxAssetFileBytes: 4 * 1024 * 1024,
+  maxAssetBytes: 3 * 1024 * 1024,
+  maxAssetFileBytes: 2 * 1024 * 1024,
   maxMigrations: 50,
-  maxMigrationBytes: 512 * 1024,
+  maxMigrationBytes: 256 * 1024,
   /** 소스 파일 수 — Git Data API push가 파일마다 blob 요청 하나(Worker 서브요청 상한 안에서). */
   maxSourceFiles: 300,
-  maxSourceBytes: 4 * 1024 * 1024,
-  maxSourceFileBytes: 512 * 1024,
+  maxSourceBytes: 2 * 1024 * 1024,
+  maxSourceFileBytes: 256 * 1024,
 });
+
+/** R2에 둔 산출물의 형식 표지(customMetadata.format) — 받은 본문 바이트 그대로. 읽는 쪽은 parseBuildArtifactBytes로 다시 검증·정규화한다. */
+export const BUILD_ARTIFACT_STORAGE_FORMAT = "artifact-body-v1";
 
 /** 컨테이너 수집기 MIGRATION_NAME_RE와 같다 — 이름이 d1_migrations 기록 SQL에 따옴표로 들어간다(따옴표·공백 불가). */
 export const MIGRATION_NAME_RE = /^[0-9]{4}_[A-Za-z0-9_-]{1,80}\.sql$/;
@@ -289,17 +300,61 @@ export function buildArtifactR2Prefix(jobId: string): string {
   return `builds/${jobId}/`;
 }
 
-/** R2에 두는 모양(버전 1) — 재배포·B-9(내 GitHub로 가져가기·zip)가 이것만으로 다시 만들 수 있게 원본 경로와 base64를 그대로. */
-export function serializeArtifactForStorage(a: BuildArtifact, storedAt: string): string {
-  return JSON.stringify({
-    version: 1,
-    jobId: a.jobId,
-    storedAt,
-    worker: { mainModule: a.worker.mainModule, modules: a.worker.modules.map((m) => ({ name: m.name, base64: m.base64 })) },
-    assets: a.assets.map((x) => ({ path: x.path, base64: x.base64 })),
-    migrations: a.migrations.map((x) => ({ name: x.name, base64: x.base64 })),
-    source: a.source.map((x) => ({ path: x.path, base64: x.base64, executable: x.executable })),
-    summary: a.summary,
-    stats: a.stats,
-  });
+/**
+ * 요청 본문을 **바이트로** 읽는다(스트림을 세며 — content-length를 믿지 않는다). 선언된 길이가 상한 안이면 그 크기 버퍼 하나에
+ * 바로 채운다(조각 목록 + 이어 붙인 사본이 동시에 살지 않게 — 결함 4). 선언이 없거나 틀리면 조각을 모아 한 번 잇는다.
+ */
+export async function readCappedBytes(req: Request, max: number): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: "too_large" | "unreadable" }> {
+  const declared = Number(req.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > max) return { ok: false, reason: "too_large" };
+  if (!req.body) return { ok: true, bytes: new Uint8Array(0) };
+  const reader = req.body.getReader();
+  let buf: Uint8Array | null = Number.isFinite(declared) && declared > 0 ? new Uint8Array(declared) : null;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) return { ok: false, reason: "unreadable" };
+      if (total + value.byteLength > max) {
+        await reader.cancel().catch(() => undefined);
+        return { ok: false, reason: "too_large" };
+      }
+      if (buf && total + value.byteLength <= buf.byteLength) {
+        buf.set(value, total);
+      } else {
+        // 선언보다 길다 — 지금까지 채운 것을 조각으로 옮기고 모으기로 바꾼다.
+        if (buf) {
+          chunks.push(buf.subarray(0, total));
+          buf = null;
+        }
+        chunks.push(value);
+      }
+      total += value.byteLength;
+    }
+  } catch {
+    return { ok: false, reason: "unreadable" };
+  }
+  if (buf) return { ok: true, bytes: total === buf.byteLength ? buf : buf.subarray(0, total) };
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength;
+  }
+  return { ok: true, bytes: out };
+}
+
+/**
+ * 바이트 본문 → 검증된 산출물(결함 4). 본문은 **ASCII JSON**이어야 한다(비ASCII 문자는 `\uXXXX` 이스케이프 — 컨테이너
+ * builder-run.mjs asciiJson). 한 바이트라도 0x80 이상이면 400 artifact_invalid:non_ascii_body: 한글 경로가 날것으로 오면 본문
+ * 텍스트 전체가 2바이트 문자열이 되어 메모리가 두 배가 된다. 이스케이프된 한글은 JSON.parse가 원본 그대로 되살린다(Rule 6).
+ * 텍스트는 이 함수 안에서만 산다 — 반환값은 텍스트를 붙잡지 않는다(호출자가 따로 들고 있지 않는 한).
+ */
+export function parseBuildArtifactBytes(bytes: Uint8Array, limits: typeof BUILD_ARTIFACT_LIMITS = BUILD_ARTIFACT_LIMITS): ParseArtifactResult {
+  for (let i = 0; i < bytes.length; i += 1) {
+    if ((bytes[i] ?? 0) >= 0x80) return { ok: false, status: 400, error: "artifact_invalid:non_ascii_body", jobId: null };
+  }
+  return parseBuildArtifact(new TextDecoder().decode(bytes), limits);
 }

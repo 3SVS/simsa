@@ -340,10 +340,29 @@ export async function uploadUserWorkerAssets(
 export async function deleteUserWorker(env: ProvisionEnv, slug: string, fetchImpl: FetchLike = fetch): Promise<ProvisionResult<{ slug: string; existed: boolean }>> {
   const c = creds(env);
   if (!c) return { ok: false, error: "not_configured" };
+  // slug는 URL 경로에 들어간다 — 규칙 밖이면 요청하지 않는다(프로젝트 삭제 정리가 D1 행의 값을 넘긴다).
+  if (!SLUG_RE.test(slug)) return { ok: false, error: "cf_error", message: "invalid_slug" };
   const r = await call(fetchImpl, `${API}/accounts/${c.account}/workers/dispatch/namespaces/${HOSTING_NAMESPACE}/scripts/${slug}`, {
     method: "DELETE",
     headers: { authorization: `Bearer ${c.token}` },
   }, () => ({ slug, existed: true }));
   if (!r.ok && r.status === 404) return { ok: true, value: { slug, existed: false } };
+  return r;
+}
+
+/**
+ * 프로젝트 D1 삭제(프로젝트 삭제 — PR #569 S3 검증 결함 2: 앱 최종 사용자의 행이 쌓이는 곳). DELETE
+ * /accounts/:id/d1/database/:d1Id. 없으면(404) 성공 취급(멱등). d1Id는 잡 행의 값 — 모양을 다시 확인한다(URL 경로).
+ * 운영 자격은 Worker secret만. 토큰은 오류에 싣지 않는다.
+ */
+export async function deleteProjectD1(env: ProvisionEnv, d1Id: string, fetchImpl: FetchLike = fetch): Promise<ProvisionResult<{ d1Id: string; existed: boolean }>> {
+  const c = creds(env);
+  if (!c) return { ok: false, error: "not_configured" };
+  if (!D1_ID_RE.test(d1Id)) return { ok: false, error: "cf_error", message: "invalid_d1_id" };
+  const r = await call(fetchImpl, `${API}/accounts/${c.account}/d1/database/${d1Id}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${c.token}` },
+  }, () => ({ d1Id, existed: true }));
+  if (!r.ok && r.status === 404) return { ok: true, value: { d1Id, existed: false } };
   return r;
 }

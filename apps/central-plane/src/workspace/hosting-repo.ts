@@ -113,6 +113,22 @@ const REPO_SCOPED_ALLOWED = new Map<string, ReadonlySet<string>>([
 ]);
 
 /**
+ * PR #569 S3 검증 결함 2: 프로젝트 삭제 때 그 저장소 **하나만** 지우는 토큰 — administration 쓰기(저장소 삭제에 필요) +
+ * metadata 읽기. contents는 없다(삭제에 필요 없다). 조직 설치 토큰(조직 전체)을 쓰지 않는다.
+ */
+export const REPO_DELETE_TOKEN_PERMISSIONS = Object.freeze({ administration: "write" } as const);
+const REPO_DELETE_ALLOWED = new Map<string, ReadonlySet<string>>([
+  ["administration", new Set(["write"])],
+  ["metadata", new Set(["read"])],
+]);
+
+type ScopedTokenKind = { wanted: Readonly<Record<string, string>>; allowed: ReadonlyMap<string, ReadonlySet<string>>; required: [string, string] };
+const SCOPED_KINDS: Readonly<Record<"push" | "delete", ScopedTokenKind>> = {
+  push: { wanted: REPO_SCOPED_TOKEN_PERMISSIONS, allowed: REPO_SCOPED_ALLOWED, required: ["contents", "write"] },
+  delete: { wanted: REPO_DELETE_TOKEN_PERMISSIONS, allowed: REPO_DELETE_ALLOWED, required: ["administration", "write"] },
+};
+
+/**
  * B-5b-5: **저장소 하나로 좁힌** 설치 토큰(빌드 산출물 push 전용). 조직 설치 토큰(getOrgInstallationToken — 조직의 모든 저장소 ·
  * Administration write)을 쓰지 않는다:
  *   App JWT → GET /orgs/{org}/installation → POST /app/installations/{id}/access_tokens
@@ -125,7 +141,9 @@ export async function getRepoScopedInstallationToken(
   env: Env,
   repoName: string,
   fetchImpl: FetchLike = fetch,
+  purpose: "push" | "delete" = "push",
 ): Promise<RepoResult<{ token: string; org: string; name: string; expiresAt: string | null }>> {
+  const kind = SCOPED_KINDS[purpose];
   if (!REPO_NAME_RE.test(repoName)) return { ok: false, error: "gh_error", message: "invalid_repo_name" };
   const appEnv = hostingAppEnv(env);
   if (!appEnv) return { ok: false, error: "not_configured" };
@@ -152,7 +170,7 @@ export async function getRepoScopedInstallationToken(
     tr = await fetchImpl(`${GITHUB_API}/app/installations/${installationId}/access_tokens`, {
       method: "POST",
       headers: headers(jwt, { "content-type": "application/json" }),
-      body: JSON.stringify({ repositories: [repoName], permissions: REPO_SCOPED_TOKEN_PERMISSIONS }),
+      body: JSON.stringify({ repositories: [repoName], permissions: kind.wanted }),
     });
   } catch (err) {
     return { ok: false, error: "network", message: String((err as Error)?.message ?? err).slice(0, 200) };
@@ -162,7 +180,7 @@ export async function getRepoScopedInstallationToken(
   const token = typeof tb["token"] === "string" ? tb["token"] : "";
   if (!token) return { ok: false, error: "gh_error", status: tr.status, message: "token missing" };
   const perms = typeof tb["permissions"] === "object" && tb["permissions"] !== null ? (tb["permissions"] as Record<string, unknown>) : {};
-  const permsOk = Object.entries(perms).every(([k, v]) => typeof v === "string" && (REPO_SCOPED_ALLOWED.get(k)?.has(v) ?? false)) && perms["contents"] === "write";
+  const permsOk = Object.entries(perms).every(([k, v]) => typeof v === "string" && (kind.allowed.get(k)?.has(v) ?? false)) && perms[kind.required[0]] === kind.required[1];
   const repos = Array.isArray(tb["repositories"]) ? tb["repositories"] : null;
   const reposOk =
     repos === null ||
@@ -181,6 +199,56 @@ export async function revokeInstallationToken(token: string, fetchImpl: FetchLik
     return r.status === 204;
   } catch {
     return false;
+  }
+}
+
+/**
+ * PR #569 S3 검증 결함 2: 프로젝트 삭제 → 호스팅 조직의 그 저장소 삭제(`<호스팅 조직>/<repoName>`). 토큰은 **그 저장소 하나 ·
+ * administration 쓰기만**으로 새로 발급하고(getRepoScopedInstallationToken(…, "delete")) 쓰고 나서 폐기한다. 없으면(404)
+ * 성공 취급(멱등 — 재시도 크론이 다시 불러도 된다). 되돌릴 수 없다 — 호출자(hosted-app-teardown)는 프로젝트 행이 이미 지워졌고
+ * 삭제 표시가 있는 잡에서만 부른다. 토큰은 로그·오류에 싣지 않는다.
+ */
+export async function deleteHostedRepo(env: Env, repoName: string, fetchImpl: FetchLike = fetch): Promise<RepoResult<{ fullName: string; existed: boolean }>> {
+  const tok = await getRepoScopedInstallationToken(env, repoName, fetchImpl, "delete");
+  if (!tok.ok) {
+    // 저장소가 이미 없으면 저장소 하나로 좁힌 토큰 발급이 422로 거절된다 — 그 경우만 "없음"으로 본다(조직의 저장소 목록으로 확인).
+    if (tok.error === "gh_error" && tok.status === 422) {
+      const gone = await repoIsAbsent(env, repoName, fetchImpl);
+      if (gone === true) return { ok: true, value: { fullName: `${hostingOrg(env)}/${repoName}`, existed: false } };
+    }
+    return tok;
+  }
+  const fullName = `${tok.value.org}/${tok.value.name}`;
+  try {
+    let res: Response;
+    try {
+      res = await fetchImpl(`${GITHUB_API}/repos/${tok.value.org}/${tok.value.name}`, { method: "DELETE", headers: headers(tok.value.token) });
+    } catch (err) {
+      return { ok: false, error: "network", message: String((err as Error)?.message ?? err).slice(0, 200) };
+    }
+    if (res.status === 204) return { ok: true, value: { fullName, existed: true } };
+    if (res.status === 404) return { ok: true, value: { fullName, existed: false } };
+    return ghErr(res, await readJson(res));
+  } finally {
+    await revokeInstallationToken(tok.value.token, fetchImpl);
+  }
+}
+
+/**
+ * 저장소가 조직에 없나 — App JWT로 설치를 찾고 조직 설치 토큰 없이 확인할 방법이 없으므로, 저장소 범위 토큰 발급이 422(그 이름의
+ * 저장소가 설치에 없다)일 때만 쓴다: GET /repos/{org}/{name}을 App JWT로 부를 수 없어 조직 설치 토큰(읽기만 쓰고 즉시 폐기)으로
+ * 확인한다. true = 404로 확인, false = 있다, null = 확인 못 함.
+ */
+async function repoIsAbsent(env: Env, repoName: string, fetchImpl: FetchLike): Promise<boolean | null> {
+  const auth = await getOrgInstallationToken(env, fetchImpl);
+  if (!auth.ok) return null;
+  try {
+    const r = await fetchImpl(`${GITHUB_API}/repos/${auth.value.org}/${repoName}`, { headers: headers(auth.value.token) }).catch(() => null);
+    if (!r) return null;
+    if (r.status === 404) return true;
+    return r.ok ? false : null;
+  } finally {
+    await revokeInstallationToken(auth.value.token, fetchImpl);
   }
 }
 

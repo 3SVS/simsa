@@ -67,7 +67,9 @@ function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
             }
             if (sql.includes("SET status = 'done'")) {
               const [deployed_url, commit_sha, spent_usd, wbs_done, updated_at, id] = args;
-              const row = jobs.find((r) => r.id === id && !["done", "failed"].includes(r.status));
+              // PR #569 S3 검증 결함 6: WHERE `AND build_exit_code = 0`(산출물 수령 행만)을 그대로 흉내 낸다.
+              const needsClaim = sql.includes("AND build_exit_code = 0");
+              const row = jobs.find((r) => r.id === id && !["done", "failed"].includes(r.status) && (!needsClaim || r.build_exit_code === 0));
               if (row) Object.assign(row, { status: "done", deployed_url, commit_sha: commit_sha ?? row.commit_sha, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, build_exit_code: 0, wbs_done, updated_at });
               return { meta: { changes: row ? 1 : 0 } };
             }
@@ -249,6 +251,9 @@ test("done 콜백: 컨테이너의 done 주장은 받지 않는다(PR #569 S1 �
   assert.equal(s2.spentUsd, 0, "지출은 서버 권위 — 본문 spentUsd를 쓰지 않는다");
   // done은 Worker 경로(markBuildJobDone — S3)로만. 최종 상태 뒤 전이 불가.
   const j4 = await insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: "d", wbsTotal: 1 });
+  // 산출물을 받지 않은 행은 done으로 못 간다(S3 검증 결함 6 — DB 조건). Worker가 산출물을 받은(claim) 뒤에만.
+  assert.deepEqual(await markBuildJobDone(env, j4.id, { deployedUrl: "https://d.simsa.page", commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 1 }), { ok: false, reason: "build_not_green" });
+  db._jobs.find((r) => r.id === j4.id).build_exit_code = 0;
   assert.deepEqual(await markBuildJobDone(env, j4.id, { deployedUrl: "https://d.simsa.page", commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 1 }), { ok: true });
   assert.equal(await advanceBuildJob(env, j4.id, { status: "building" }), false);
   assert.equal(await markBuildJobFailed(env, j4.id, { failedStage: "x", error: "late" }), false);

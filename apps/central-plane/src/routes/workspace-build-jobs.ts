@@ -18,6 +18,10 @@
  *   - 잡당 한 번(claimBuildArtifact — status='testing'이고 build_exit_code가 NULL일 때 원자적으로 0): 중복·재시도는 409.
  *   - 받은 산출물은 R2 `builds/<jobId>/artifact.json`(ASCII 키 — Rule 6)에 먼저 저장하고, 배포 설정·주소·d1 id·push 대상은
  *     전부 Worker 값(잡 행·상수)으로 정한다. deployed_url은 Worker가 자기 배포와 내용 확인 뒤에만 쓴다(컨테이너 URL 무시).
+ *   - PR #569 S3 검증 결함(2026-10-01): ① 삭제된 프로젝트의 산출물은 받지 않는다(저장 뒤 다시 보고 사본도 지운다) — 프로젝트
+ *     삭제는 활성 빌드를 먼저 멈추고 호스팅 자원(공개 Worker·D1·저장소)까지 정리한다(hosted-app-teardown.ts) ② 배포 파이프라인은
+ *     바깥에 쓰기 직전마다 잡·스위치·프로젝트·정지 목록을 다시 보고, 8분 마감 안에 끝난다 ③ 본문은 ASCII JSON 바이트로 받아
+ *     그대로 저장(메모리 ≈ 본문 × 2.5, 상한 13 MiB) ④ 산출물을 받은 잡은 Worker 소유 — 컨테이너의 실패 보고는 기록만.
  *
  * ★B-5b S1 (2026-10-01) — 컨테이너 비밀 최소화 + B-6 예산 정지:
  *   - 컨테이너 페이로드에 **비밀이 없다**: 운영 CF 토큰·전역 콜백 토큰·조직 설치 토큰·LLM 키·userKey를 싣지 않는다.
@@ -45,18 +49,21 @@
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
-import { getOwnedProject } from "../workspace/db.js";
+import { getOwnedProject, projectExists } from "../workspace/db.js";
 import { validateDevSpec, type DevSpec } from "../workspace/dev-spec.js";
 import { renderDevSpecFiles } from "../workspace/render-dev-spec.js";
 import { createProjectD1, ensureNamespace, toHostedSlug } from "../workspace/hosting-provision.js";
 import { ensureHostedRepo } from "../workspace/hosting-repo.js";
 import {
-  advanceBuildJob, appendBuildJobEvent, claimBuildArtifact, findActiveBuildJobForProject, getBuildJobById, insertQueuedBuildJob,
-  listBuildJobEvents, listBuildJobsForProject, markBuildJobFailed, stopActiveBuildJob, BUILD_JOB_ACTIVE, BUILD_JOB_STATUSES, DEFAULT_BUILD_BUDGET_USD,
-  type BuildJobStatus,
+  advanceBuildJob, appendBuildJobEvent, buildJobDeleteBatchStatements, claimBuildArtifact, findActiveBuildJobForProject, getBuildJobById,
+  insertQueuedBuildJob, isWorkerOwnedBuildJob, listBuildJobEvents, listBuildJobsForProject, markBuildJobFailed, stopActiveBuildJob,
+  BUILD_JOB_ACTIVE, BUILD_JOB_STATUSES, DEFAULT_BUILD_BUDGET_USD, PROJECT_DELETED,
+  type BuildJobStatus, type DbBuildJob,
 } from "../workspace/build-job-db.js";
-import { BUILD_ARTIFACT_LIMITS, buildArtifactR2Key, parseBuildArtifact, serializeArtifactForStorage } from "../workspace/build-artifact.js";
-import { runBuildDeploy, type BuildDeployDeps } from "../workspace/build-deploy.js";
+import {
+  BUILD_ARTIFACT_LIMITS, BUILD_ARTIFACT_STORAGE_FORMAT, buildArtifactR2Key, parseBuildArtifactBytes, readCappedBytes,
+} from "../workspace/build-artifact.js";
+import { defaultSuspensionCheck, runBuildDeploy, suspensionState, SUSPENSION_CHECK_FAILED, type BuildDeployDeps } from "../workspace/build-deploy.js";
 import type { FetchLike } from "../github.js";
 import { RESERVED_SLUGS_FOR_HOSTING } from "../workspace/hosting-reserved.js";
 import { BUILD_DISABLED, buildEnabled } from "../workspace/service-switches.js";
@@ -65,7 +72,7 @@ import { buildDailyCapRejection, buildDailyCapsFor } from "../workspace/build-da
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
 import { clientNetworkKey } from "../workspace/beta-limits.js";
 import { OPENAI_FALLBACK_MODEL } from "../workspace/anthropic-fetch.js";
-import { DEFAULT_BUILD_MODEL, readCappedBody } from "./build-llm-proxy.js";
+import { DEFAULT_BUILD_MODEL } from "./build-llm-proxy.js";
 
 const MAX_ERROR_CHARS = 500;
 /** 컨테이너가 done(ok:true)을 주장했을 때의 오류 코드 — 배포는 Worker만 한다(PR #569 S1 검증 결함 2). */
@@ -73,8 +80,11 @@ export const DONE_NOT_WORKER_OWNED = "done_not_worker_owned";
 /** 컨테이너 builder-run.mjs BUILD_ARTIFACT_PATH와 같다(테스트가 비교). */
 export const BUILD_ARTIFACT_PATH = "/internal/build-artifact";
 
-/** 테스트 seam — 배포 파이프라인의 대기(sleep)·정지 조회·내용 확인 설정. 운영은 기본값. */
-export type BuildJobRouteOptions = Partial<Pick<BuildDeployDeps, "sleep" | "isSuspended" | "contentCheck">>;
+/** 테스트 seam — 배포 파이프라인의 대기(sleep)·정지 조회·내용 확인 설정·마감. 운영은 기본값. */
+export type BuildJobRouteOptions = Partial<Pick<BuildDeployDeps, "sleep" | "isSuspended" | "contentCheck" | "deadlineMs">>;
+
+/** 컨테이너가 Worker 소유 잡(산출물 수령 뒤)의 실패를 보고했을 때 — 기록만(PR #569 S3 검증 결함 7). */
+export const WORKER_OWNS_DEPLOY = "worker_owns_deploy";
 
 /**
  * 컨테이너가 받는 WBS 항목(지시서에서 순서대로).
@@ -168,6 +178,13 @@ export function createWorkspaceBuildJobRoutes(
     if (!c.env.HOSTING_CF_API_TOKEN || !c.env.HOSTING_CF_ACCOUNT_ID || !hostRoot) return c.json({ ok: false, error: "hosting_not_configured" }, 503);
     if (!c.env.ANTHROPIC_API_KEY && !c.env.OPENAI_API_KEY) return c.json({ ok: false, error: "llm_not_configured" }, 503);
 
+    // 1b) 정지 목록(B-7) — LLM에 한 푼도 쓰기 전에(PR #569 S3 검증 결함 5). 남용으로 정지된 slug의 새 빌드는 받지 않는다.
+    //     조회 오류는 한 번 다시, 그래도 안 되면 fail-closed(503 — 사용자 슬롯은 쓰지 않는다).
+    const slug = toHostedSlug(project.title, project.id, RESERVED_SLUGS_FOR_HOSTING);
+    const suspension = await suspensionState(options.isSuspended ?? defaultSuspensionCheck(c.env), slug);
+    if (suspension === "suspended") return c.json({ ok: false, error: "slug_suspended" }, 403);
+    if (suspension === "error") return c.json({ ok: false, error: SUSPENSION_CHECK_FAILED }, 503);
+
     // 2) 일일 상한(B-5b S1) — 소유권·지시서·활성 잡·설정을 다 통과한 뒤, 무엇이든 만들기 전에. 원자 문장 하나씩(#561).
     const caps = await consumeDailyCaps(c.env, buildDailyCapsFor(c.env, userKey, clientNetworkKey(c.req.raw)));
     if (caps.limited) {
@@ -178,7 +195,6 @@ export function createWorkspaceBuildJobRoutes(
     const refundSlot = caps.refund;
 
     // 3) 호스팅 프로비저닝 — 실패면 잡을 만들지 않고 슬롯을 돌려준다(우리 실패는 사용자의 시도가 아니다).
-    const slug = toHostedSlug(project.title, project.id, RESERVED_SLUGS_FOR_HOSTING);
     const ns = await ensureNamespace(c.env);
     if (!ns.ok) {
       await refundSlot();
@@ -206,6 +222,14 @@ export function createWorkspaceBuildJobRoutes(
       console.error(JSON.stringify({ event: "build_job_insert_failed", project: projectId, reason: String((err as Error)?.message ?? err).slice(0, 200) }));
       await refundSlot();
       return c.json({ ok: false, error: "save_failed" }, 500);
+    }
+    // PR #569 S3 검증 결함 1·2: 프로비저닝하는 사이 프로젝트가 지워졌으면(삭제 정리는 이 행을 몰랐다) 디스패치하지 않고, 행을
+    // 삭제 표시(user_key '')로 남겨 호스팅 정리 크론이 방금 만든 D1·저장소를 지우게 한다.
+    if (!(await projectExists(c.env, projectId).catch(() => true))) {
+      await markBuildJobFailed(c.env, job.id, { failedStage: "queued", error: PROJECT_DELETED });
+      await c.env.DB.batch(buildJobDeleteBatchStatements(c.env, projectId, new Date().toISOString())).catch(() => undefined);
+      await refundSlot();
+      return c.json({ ok: false, error: "not_found" }, 404);
     }
     await appendBuildJobEvent(c.env, job.id, "queued", repoFullName ? "repo_ready" : `repo_skipped:${repoNote ?? "unknown"}`, { slug, d1Id: d1.value.id });
 
@@ -290,11 +314,13 @@ export function createWorkspaceBuildJobRoutes(
 
   // ── POST /internal/build-artifact (B-5b-4·5, S3) ────────────────────────────
   // 게이트 초록불 뒤 컨테이너가 산출물을 올린다. 받으면(잡당 한 번) R2에 저장하고 **이 요청 안에서** push → 배포 → 내용 확인 →
-  // done → 자동 확인까지 하고 결과를 돌려준다(컨테이너는 최대 10분 기다린다 — 그사이 마감이면 컨테이너의 실패 보고가 잡을 닫는다).
+  // done → 자동 확인까지 하고 결과를 돌려준다. 받은 뒤 잡은 **Worker 소유**다(결함 7): 컨테이너가 기다리다 포기해도(10분) 그 실패
+  // 보고는 잡을 닫지 않고, Worker 파이프라인은 그보다 짧은 마감(8분) 안에 스스로 끝낸다.
   // 답 모양은 builder-run.mjs interpretArtifactReply가 읽는다:
   //   받음   → 200 { ok:true, accepted:true, status:"done"|"failed", failedStage?, error?, autoCheck? }
-  //   안 받음 → 200 { ok:true, accepted:false, reason }(킬스위치·끝난 잡) · 409 artifact_already_received · 409 artifact_before_tests
+  //   안 받음 → 200 { ok:true, accepted:false, reason }(킬스위치·끝난 잡·삭제된 프로젝트) · 409 artifact_already_received · 409 artifact_before_tests
   //   거절   → 401/403(인증 — 상태 변화 없음) · 413 artifact_too_large · 400 artifact_invalid(둘 다 잡을 failed(deploying)로)
+  // 메모리(결함 4): 본문은 바이트로 읽고(ASCII JSON), 파싱 텍스트는 파서 안에서만 살고, R2에는 받은 바이트를 그대로 넣은 뒤 놓는다.
   app.post(BUILD_ARTIFACT_PATH, async (c) => {
     const auth = await authenticateBuildCallback(c.env, c.req.header("authorization"));
     if (!auth.ok) return c.json({ ok: false, error: auth.error }, auth.status);
@@ -304,7 +330,7 @@ export function createWorkspaceBuildJobRoutes(
       const changed = await markBuildJobFailed(c.env, jobId, { failedStage: "deploying", error: error.slice(0, MAX_ERROR_CHARS) });
       if (changed) await appendBuildJobEvent(c.env, jobId, "failed", error.slice(0, MAX_ERROR_CHARS), { failedStage: "deploying" });
     };
-    const read = await readCappedBody(c.req.raw, BUILD_ARTIFACT_LIMITS.maxBodyBytes);
+    const read = await readCappedBytes(c.req.raw, BUILD_ARTIFACT_LIMITS.maxBodyBytes);
     if (!read.ok) {
       if (read.reason === "too_large") {
         await failArtifact("artifact_too_large:body");
@@ -313,7 +339,8 @@ export function createWorkspaceBuildJobRoutes(
       await failArtifact("artifact_invalid:unreadable");
       return c.json({ ok: false, error: "artifact_invalid", detail: "artifact_invalid:unreadable" }, 400);
     }
-    const parsed = parseBuildArtifact(read.text);
+    // read.bytes = 받은 본문 바이트 — R2에 그대로 넣은 뒤 놓는다(빈 배열로 바꿔 참조를 끊는다).
+    const parsed = parseBuildArtifactBytes(read.bytes);
     if (!parsed.ok) {
       // 본문이 다른 잡을 말하면(교차 잡) 아무것도 바꾸지 않는다.
       if (parsed.jobId !== null && !checkCallbackJob(auth, parsed.jobId).ok) return c.json({ ok: false, error: "job_token_mismatch" }, 403);
@@ -329,38 +356,62 @@ export function createWorkspaceBuildJobRoutes(
     }
     const job = await getBuildJobById(c.env, jobId);
     if (!job) return c.json({ ok: false, error: "not_found" }, 404);
-    if (!BUILD_JOB_ACTIVE.has(job.status)) return c.json({ ok: true, accepted: false, reason: "job_not_active" });
+    // 끝난 잡(스턱 스윕·킬스위치·프로젝트 삭제)은 받지 않는다 — 사유는 그 잡의 기록 그대로.
+    if (!BUILD_JOB_ACTIVE.has(job.status)) return c.json({ ok: true, accepted: false, reason: job.error ?? "job_not_active" });
     if (job.buildExitCode !== null) return c.json({ ok: false, error: "artifact_already_received" }, 409);
     if (job.status !== "testing") {
       // 테스트 단계(게이트)를 지나지 않은 산출물은 받지 않는다 — D-4.
       await failArtifact(`artifact_before_tests:${job.status}`);
       return c.json({ ok: false, error: "artifact_before_tests", status: job.status }, 409);
     }
-    if (!(await claimBuildArtifact(c.env, jobId))) return c.json({ ok: false, error: "artifact_already_received" }, 409);
+    // PR #569 S3 검증 결함 1: 프로젝트가 지워졌으면(삭제가 잡을 멈추기 전에 끼어든 경우 포함) 받지 않는다 — R2 사본·push·배포 0.
+    if (!(await projectExists(c.env, job.projectId))) {
+      await stopActiveBuildJob(c.env, jobId, PROJECT_DELETED, job);
+      return c.json({ ok: true, accepted: false, reason: PROJECT_DELETED });
+    }
+    if (!(await claimBuildArtifact(c.env, jobId))) {
+      // 그 사이 잡이 끝났으면(프로젝트 삭제가 멈췄다 등) 그 사유로, 아니면 중복 업로드.
+      const now = await getBuildJobById(c.env, jobId);
+      if (!now || !BUILD_JOB_ACTIVE.has(now.status)) return c.json({ ok: true, accepted: false, reason: now?.error ?? "job_not_active" });
+      return c.json({ ok: false, error: "artifact_already_received" }, 409);
+    }
 
-    // R2 — 받은 것을 먼저 남긴다(재배포·B-9의 원본). 키는 ASCII(`builds/<jobId>/artifact.json`).
+    // R2 — 받은 것을 먼저 남긴다(재배포·B-9의 원본). 키는 ASCII(`builds/<jobId>/artifact.json`). 받은 바이트 그대로(결함 4 —
+    // 재직렬화본을 따로 만들지 않는다). 읽는 쪽은 parseBuildArtifactBytes로 다시 검증·정규화한다(customMetadata.format).
     const failedReply = async (error: string) => {
       await failArtifact(error);
       return c.json({ ok: true, accepted: true, status: "failed", failedStage: "deploying", error });
     };
     if (!c.env.EVIDENCE) return failedReply("artifact_storage_unconfigured");
+    const r2Key = buildArtifactR2Key(jobId);
     try {
-      await c.env.EVIDENCE.put(buildArtifactR2Key(jobId), serializeArtifactForStorage(parsed.artifact, new Date().toISOString()), {
+      await c.env.EVIDENCE.put(r2Key, read.bytes, {
         httpMetadata: { contentType: "application/json" },
+        customMetadata: { format: BUILD_ARTIFACT_STORAGE_FORMAT, jobId, storedAt: new Date().toISOString() },
       });
     } catch (err) {
       console.error(JSON.stringify({ event: "build_artifact_store_failed", jobId, reason: String((err as Error)?.message ?? err).slice(0, 120) }));
       return failedReply("artifact_store_failed");
     }
+    read.bytes = new Uint8Array(0);
+    // 결함 1: 저장하는 사이 프로젝트가 지워졌으면(삭제의 R2 청소가 이 사본보다 먼저 끝났을 수 있다) 사본을 지우고 멈춘다.
+    const afterStore = await getBuildJobById(c.env, jobId);
+    if (!afterStore || afterStore.error === PROJECT_DELETED || !(await projectExists(c.env, job.projectId))) {
+      await c.env.EVIDENCE.delete(r2Key).catch(() => undefined);
+      if (afterStore && BUILD_JOB_ACTIVE.has(afterStore.status)) await stopActiveBuildJob(c.env, jobId, PROJECT_DELETED, afterStore);
+      return c.json({ ok: true, accepted: true, status: "failed", failedStage: afterStore?.failedStage ?? "testing", error: PROJECT_DELETED });
+    }
     await appendBuildJobEvent(c.env, jobId, "testing", "artifact_received", { stats: parsed.artifact.stats, summary: parsed.artifact.summary });
 
     const base = (c.env.PUBLIC_BASE_URL ?? new URL(c.req.url).origin).replace(/\/+$/, "");
-    const outcome = await runBuildDeploy(c.env, { ...job, buildExitCode: 0 }, parsed.artifact, {
+    const claimedJob: DbBuildJob = { ...job, buildExitCode: 0 };
+    const outcome = await runBuildDeploy(c.env, claimedJob, parsed.artifact, {
       fetch: fetchImpl,
       publicBaseUrl: base,
       ...(options.sleep ? { sleep: options.sleep } : {}),
       ...(options.isSuspended ? { isSuspended: options.isSuspended } : {}),
       ...(options.contentCheck ? { contentCheck: options.contentCheck } : {}),
+      ...(options.deadlineMs ? { deadlineMs: options.deadlineMs } : {}),
     });
     console.log(JSON.stringify({ event: "build_deploy", jobId, status: outcome.status, ...(outcome.status === "failed" ? { failedStage: outcome.failedStage, error: outcome.error } : { autoCheck: outcome.autoCheck.started ? "started" : outcome.autoCheck.reason }) }));
     if (outcome.status === "done") {
@@ -383,16 +434,25 @@ export function createWorkspaceBuildJobRoutes(
     if (!jobId) return c.json({ ok: false, error: "jobId_required" }, 400);
     const scope = checkCallbackJob(auth, jobId);
     if (!scope.ok) return c.json({ ok: false, error: scope.error }, scope.status);
+    const current = await getBuildJobById(c.env, jobId);
     if (body["ok"] === true) {
-      const current = await getBuildJobById(c.env, jobId);
       if (current && current.status === "done") return c.json({ ok: true, accepted: false, reason: "worker_owned_done" });
-      await stopActiveBuildJob(c.env, jobId, DONE_NOT_WORKER_OWNED, current);
+      // Worker가 배포 중인 잡(산출물 수령 뒤)은 Worker가 끝낸다 — 거짓 성공 주장으로도 닫지 않는다(결함 7).
+      if (!current || !isWorkerOwnedBuildJob(current)) await stopActiveBuildJob(c.env, jobId, DONE_NOT_WORKER_OWNED, current);
       return c.json({ ok: false, error: DONE_NOT_WORKER_OWNED }, 409);
     }
     // 실패 보고는 킬스위치가 꺼져 있어도 받는다(사유를 잃지 않게). spent_usd는 프록시가 계량한 값 그대로 — 본문
     // spentUsd·usage[]는 무시(서버 권위·이중 계상 금지). 빌드 종료 코드도 컨테이너의 주장이라 저장하지 않는다(결함 1).
     const error = typeof body["error"] === "string" ? body["error"] : "unknown_error";
     const failedStage = typeof body["failedStage"] === "string" ? body["failedStage"] : "unknown";
+    // PR #569 S3 검증 결함 7: Worker가 산출물을 받은 잡은 **Worker 파이프라인이 상태를 소유**한다. 컨테이너가 기다리다 포기한
+    // 보고(업로드 시간 초과·잡 마감·드레인)로 닫으면, Worker가 이미 올린 앱이 "실패"인 채 서빙되고 자동 확인도 돌지 않는다.
+    // → 타임라인에 기록만 하고 상태는 그대로(파이프라인은 마감 BUILD_DEPLOY_DEADLINE_MS 안에 스스로 done|failed로 끝낸다.
+    // 그 호출이 중간에 죽었으면 스턱 스윕이 짧은 cutoff로 닫는다 — cleanupStuckBuildJobs).
+    if (current && isWorkerOwnedBuildJob(current)) {
+      await appendBuildJobEvent(c.env, jobId, current.status, `container_reported_failure:${error}`.slice(0, MAX_ERROR_CHARS), { failedStage, workerOwned: true });
+      return c.json({ ok: true, accepted: false, reason: WORKER_OWNS_DEPLOY });
+    }
     const ok = await markBuildJobFailed(c.env, jobId, { failedStage, error: error.slice(0, MAX_ERROR_CHARS) });
     if (ok) await appendBuildJobEvent(c.env, jobId, "failed", error.slice(0, MAX_ERROR_CHARS), { failedStage });
     return c.json({ ok: true, accepted: ok });

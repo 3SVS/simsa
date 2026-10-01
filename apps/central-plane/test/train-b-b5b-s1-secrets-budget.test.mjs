@@ -152,7 +152,9 @@ function makeDb({ projects = new Map([[PROJECT, projectRow()]]), jobs = [] } = {
           }
           if (sql.includes("SET status = 'done'")) {
             const [deployed_url, commit_sha, spent_usd, wbs_done, updated_at, id] = args;
-            const row = jobs.find((r) => r.id === id && active(r));
+            // PR #569 S3 검증 결함 6: WHERE `AND build_exit_code = 0`(산출물 수령 행만)을 그대로 흉내 낸다.
+            const needsClaim = sql.includes("AND build_exit_code = 0");
+            const row = jobs.find((r) => r.id === id && active(r) && (!needsClaim || r.build_exit_code === 0));
             if (row) Object.assign(row, { status: "done", deployed_url, commit_sha: commit_sha ?? row.commit_sha, spent_usd: maxSpent ? Math.max(row.spent_usd, spent_usd) : spent_usd, build_exit_code: 0, wbs_done, updated_at });
             return { meta: { changes: row ? 1 : 0 } };
           }
@@ -664,7 +666,7 @@ describe("④ 원장·spent_usd는 프록시 한 곳에서만", () => {
   });
 
   it("done(Worker 경로, S3)도 지출을 **내리지** 못한다 — markBuildJobDone은 MAX(spent_usd) (컨테이너의 done 주장은 ⑧-2에서 거절)", async () => {
-    const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "deploying", spent_usd: 3.25 })] });
+    const db = makeDb({ jobs: [jobRow({ id: "bj_aaaaaaaaaa", status: "deploying", spent_usd: 3.25, build_exit_code: 0 })] });
     const env = envFor(db);
     const r = await buildDb.markBuildJobDone(env, "bj_aaaaaaaaaa", { deployedUrl: "https://app-3f9a1c2b.simsa.page", commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 2 });
     assert.deepEqual(r, { ok: true });
@@ -1034,7 +1036,10 @@ describe("⑦ 실제 SQLite — spent_usd를 잃지 않는다", { skip: noSqlite
     hooks.afterFirst = () => sqlite.prepare("UPDATE build_jobs SET spent_usd = spent_usd + ? WHERE id = ?").run(1.5, job.id);
     assert.equal(await buildDb.advanceBuildJob(env, job.id, { status: "scaffolding" }), true);
     assert.equal(spentOf(sqlite, job.id), 1.5, "the proxy's increment survives the concurrent progress write");
-    await buildDb.markBuildJobDone(env, job.id, { deployedUrl: "https://app-3f9a1c2b.simsa.page", commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 2 });
+    // done은 산출물을 받은 행만(S3 검증 결함 6 — WHERE build_exit_code = 0): 게이트 → 수령 → done. 이 done이 실제로 일어나야 아래 단언이 뜻을 가진다.
+    assert.equal(await buildDb.advanceBuildJob(env, job.id, { status: "testing" }), true);
+    assert.equal(await buildDb.claimBuildArtifact(env, job.id), true);
+    assert.deepEqual(await buildDb.markBuildJobDone(env, job.id, { deployedUrl: "https://app-3f9a1c2b.simsa.page", commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 2 }), { ok: true });
     assert.equal(spentOf(sqlite, job.id), 1.5, "done never lowers the metered spend");
   });
 

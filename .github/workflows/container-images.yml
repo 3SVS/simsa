@@ -30,6 +30,7 @@
 # /internal/build-artifact로. 수신기는 본문을 저장하고 done이라고 답한다(실제 push·배포는 Worker 몫 — 여기서는 Cloudflare·GitHub에
 # 닿지 않는다). 산출물이 실제 wrangler 번들(worker.js에 /api/health)·vite 자산(index.html의 script src가 가리키는 파일)·
 # 마이그레이션(0001_init.sql)·소스(한글 App.tsx · node_modules·dist·dotfile 없음)인지, 본문에 jobToken이 없는지 확인한다.
+# PR #569 S3 검증 결함 4: 본문이 ASCII JSON인지(비ASCII는 \u 이스케이프 — Worker가 날것 한글 본문을 400으로 거절한다)도 확인한다.
 name: container-images
 
 on:
@@ -261,6 +262,8 @@ jobs:
           # ── B-5b S3: 실제 이미지가 만든 산출물(샌드박스 사용자의 wrangler dry-run + 수집기) → Worker 대역 ──
           A=/tmp/artifact-body-bj_ci_green01.json
           [ -s "$A" ] || { echo "::error::the green job did not upload an artifact"; exit 1; }
+          # PR #569 S3 검증 결함 4: Worker는 ASCII JSON 본문만 받는다(한글 경로는 \u 이스케이프 — Worker 메모리 절반).
+          if LC_ALL=C grep -qP '[^\x00-\x7F]' "$A"; then echo "::error::the artifact body must be ASCII JSON (non-ASCII escaped as \\uXXXX)"; exit 1; fi
           jq -c '{mainModule: .worker.mainModule, modules: (.worker.modules|map(.name)), assets: (.assets|map(.path)), migrations: (.migrations|map(.name)), source: (.source|length), summary}' "$A"
           jq -e '.worker.mainModule == "worker.js" and .worker.modules[0].name == "worker.js" and all(.worker.modules[]; (.name | endswith(".map") | not) and .name != "README.md")' "$A" >/dev/null || { echo "::error::the bundle must be wrangler's worker.js (no README/source map)"; exit 1; }
           # 디코드는 파일로 먼저(파이프 + grep -q는 pipefail에서 SIGPIPE로 거짓 실패할 수 있다).

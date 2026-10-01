@@ -4,7 +4,14 @@
  * 컨테이너(생성 코드가 돈 곳)에는 배포 자격이 없다(B-5b S1 · D-6). 컨테이너가 올린 산출물(build-artifact.ts로 검증)을 받아
  * **Worker가** 한다 — 운영 자격(HOSTING_CF_API_TOKEN · 호스팅 GitHub App 키)은 Worker secret에만 있다:
  *
- *   1) 킬스위치(BUILD_ENABLED) — 꺼져 있으면 그 단계에서 멈춤(stopActiveBuildJob, build_disabled). push 앞·배포 앞에서 두 번 본다.
+ *   1) 관문(checkpoint) — **바깥에 무엇이든 쓰기 직전마다**(push · D1 마이그레이션 · 자산 · Worker 업로드) 다시 본다
+ *      (PR #569 S3 검증 결함 1·3·5·7 — 종전에는 push 앞·배포 앞 두 번만 보고, 그 뒤에는 잡이 실패·정지돼도 끝까지 올렸다):
+ *        · 마감(BUILD_DEPLOY_DEADLINE_MS [PILOT] 8분 < 컨테이너 업로드 대기 10분) — 넘으면 failed(deploying, deploy_timeout).
+ *          파이프라인의 모든 바깥 호출은 마감 신호에 묶인다(걸린 요청도 마감에 끊긴다).
+ *        · 잡이 아직 Worker 소유(활성 + build_exit_code 0)인가 — 누가 닫았으면(스턱 스윕·프로젝트 삭제) 그 기록대로 멈춘다.
+ *        · 킬스위치(BUILD_ENABLED) — 꺼져 있으면 그 단계에서 멈춤(stopActiveBuildJob, build_disabled).
+ *        · 프로젝트가 아직 있나 — 없으면 멈춤(project_deleted). 업로드 **뒤에** 프로젝트가 사라졌으면 방금 올린 Worker를 지운다.
+ *        · push 앞·업로드 앞: 정지 목록(B-7) — 조회 오류는 한 번 다시, 그래도 안 되면 **fail-closed**(suspension_check_failed).
  *   2) 저장소 push(B-5b-5) — 잡 행의 repo_full_name(insert 때 Worker가 정한 값)이 `<호스팅 조직>/<slug>`일 때만. 토큰은 그때
  *      **그 저장소 하나 · contents:write만**으로 좁혀 새로 발급(getRepoScopedInstallationToken)하고 push 뒤 폐기한다. 소스 트리를
  *      한 커밋으로(pushScaffold — Git Data API). 성공 → commit_sha 기록 + pushed.
@@ -12,12 +19,12 @@
  *      정직하게 남긴다(상태는 pushed로 가지 않는다 — testing → deploying). 근거: 문 (a)의 완료 정의는 "<slug>.simsa.page에서
  *      must 항목이 작동"이고 저장소는 그 경로 밖이다. 산출물 원본은 R2(builds/<jobId>/artifact.json)에 남아 다시 올릴 수 있다.
  *      재검토 트리거: B-9(내 GitHub로 가져가기)가 저장소를 전제로 할 때.
- *   3) 배포(B-5b-4) — deploying. 정지된 slug(B-7 정지 목록 KV `suspended:<slug>`, 바인딩이 있을 때만)는 배포하지 않는다 →
- *      D1 마이그레이션(잡 행의 d1_id — 산출물에서 받지 않는다) → 정적 자산 업로드(해시는 Worker가 계산) → 유저 Worker 업로드
+ *   3) 배포(B-5b-4) — deploying. 정지된 slug(B-7 정지 목록 KV `suspended:<slug>`, 바인딩이 있을 때만)는 push도 배포도 하지
+ *      않는다(관문) → D1 마이그레이션(잡 행의 d1_id — 산출물에서 받지 않는다) → 정적 자산 업로드(해시는 Worker가 계산) → 유저 Worker 업로드
  *      (호환 날짜·자산 라우팅 = Worker 상수). 주소 = `https://<slug>.<HOSTING_ROOT_DOMAIN>` — **Worker가 계산**(컨테이너 URL 무시).
  *   4) 내용 확인 — 그 주소에 GET: `/api/health`가 200 + JSON `{ ok: true }` 이고 `/`가 200 + HTML에 `<script … src=` 가 있을 때만
  *      성공(상태 코드만 보지 않는다 — 둘 다 템플릿의 보호된 스모크 테스트가 빌드 전에 보장하는 마커다). 전파 지연을 위해 몇 번 다시.
- *   5) done(markBuildJobDone — build_exit_code 0이 있어야) → 자동 확인(T2): 배포 주소를 지시서의 수용 기준(acceptancePlan)과
+ *   5) done(markBuildJobDone — 행의 build_exit_code가 0이어야: 그 UPDATE의 WHERE 조건) → 자동 확인(T2): 배포 주소를 지시서의 수용 기준(acceptancePlan)과
  *      함께 검수 1회 디스패치. 검수 킬스위치·프로젝트당 활성 검수 1개·**별도 일일 상한**(시스템 시작 검수 — 유저 상한 밖,
  *      verify-sweep과 같은 원칙) 준수. 확인 런 id는 이벤트 meta.checkRunId(B-8 화면·영수증이 잇는다). 건너뛰면 사유를 이벤트에.
  * 실패는 전부 failed(<단계>, <코드>) + 이벤트 — 조용한 성공 없음. 토큰·키는 오류·이벤트·로그에 싣지 않는다.
@@ -26,16 +33,17 @@ import type { Env } from "../env.js";
 import type { FetchLike } from "../github.js";
 import { acceptancePlanFromDevSpec } from "../acceptance-plan.js";
 import { confirmedIntentFromProject, defaultInspectionIntent, dispatchInspection } from "../routes/workspace-visual-check-runs.js";
-import { getProject } from "./db.js";
+import { getProject, projectExists } from "./db.js";
 import { validateDevSpec } from "./dev-spec.js";
 import {
-  advanceBuildJob, appendBuildJobEvent, getBuildJobById, markBuildJobDone, markBuildJobFailed, recordBuildJobCommit, stopActiveBuildJob,
+  PROJECT_DELETED, advanceBuildJob, appendBuildJobEvent, getBuildJobById, isWorkerOwnedBuildJob, markBuildJobDone, markBuildJobFailed,
+  recordBuildJobCommit, stopActiveBuildJob,
   type DbBuildJob,
 } from "./build-job-db.js";
 import type { BuildArtifact } from "./build-artifact.js";
 import { base64ToBytes } from "./build-artifact.js";
 import {
-  HOSTED_ASSETS_CONFIG, HOSTED_COMPATIBILITY_DATE, applyD1Migrations, uploadUserWorker, uploadUserWorkerAssets,
+  HOSTED_ASSETS_CONFIG, HOSTED_COMPATIBILITY_DATE, applyD1Migrations, deleteUserWorker, uploadUserWorker, uploadUserWorkerAssets,
   type ProvisionResult, type UserWorkerModule,
 } from "./hosting-provision.js";
 import { getRepoScopedInstallationToken, hostingOrg, pushScaffold, revokeInstallationToken } from "./hosting-repo.js";
@@ -48,6 +56,18 @@ export const PUSH_FAILURE_POLICY = "continue" as const;
 
 /** [PILOT] 배포 뒤 내용 확인: 시도 횟수 · 시도 사이 대기(전파) · 요청 하나의 시간 상한 · 본문 읽기 상한. */
 export const CONTENT_CHECK = Object.freeze({ attempts: 3, delaysMs: Object.freeze([2_000, 5_000]), timeoutMs: 15_000, maxBodyBytes: 256 * 1024 });
+
+/**
+ * [PILOT] Worker 배포 파이프라인 전체 마감(산출물 수령부터). 컨테이너가 답을 기다리는 시간(builder-run.mjs
+ * ARTIFACT_TIMEOUTS.uploadMs = 10분)보다 **짧아야** 한다 — 컨테이너가 먼저 포기하면 "앱은 올라갔는데 잡은 실패"가 된다
+ * (PR #569 S3 검증 결함 7, 테스트가 두 값을 비교). 넘으면 failed(deploying, deploy_timeout).
+ */
+export const BUILD_DEPLOY_DEADLINE_MS = 8 * 60 * 1000;
+export const DEPLOY_TIMEOUT = "deploy_timeout";
+/** 정지 목록을 두 번 읽지 못하면 배포하지 않는다(fail-closed — 결함 5). */
+export const SUSPENSION_CHECK_FAILED = "suspension_check_failed";
+/** 마감 밖에서 도는 부수 호출(토큰 폐기·삭제된 프로젝트의 Worker 되돌리기)의 시간 상한. */
+const SIDE_CALL_TIMEOUT_MS = 15_000;
 
 /** B-7 정지 목록 KV 키(hosting-duties.ts SUSPENDED_KEY_PREFIX와 같은 규칙 — 그 브랜치가 머지되면 그 함수로 바꾼다). */
 export function suspendedKvKey(slug: string): string {
@@ -79,9 +99,11 @@ export type BuildDeployDeps = {
   /** 자동 확인 디스패치의 콜백 뿌리(검수 컨테이너가 부른다). */
   publicBaseUrl: string;
   sleep?: (ms: number) => Promise<void>;
-  /** B-7 정지 목록 조회(기본: HOSTING_SUSPENDED KV가 있으면 그것, 없으면 항상 false — 머리말 3). */
+  /** B-7 정지 목록 조회(기본: HOSTING_SUSPENDED KV가 있으면 그것, 없으면 항상 false — 머리말 3). 던지면 = 조회 오류. */
   isSuspended?: (slug: string) => Promise<boolean>;
   contentCheck?: { attempts: number; delaysMs: readonly number[]; timeoutMs: number; maxBodyBytes: number };
+  /** 파이프라인 마감(기본 BUILD_DEPLOY_DEADLINE_MS) — 테스트 seam. */
+  deadlineMs?: number;
 };
 
 type KvLike = { get(key: string): Promise<string | null> };
@@ -92,18 +114,41 @@ function isKvLike(v: unknown): v is KvLike {
 /**
  * 기본 정지 조회. B-7(feat/train-b7-hosting-duties)의 `HOSTING_SUSPENDED` KV 바인딩이 **있을 때만** 읽는다 — 아직 Env 타입에
  * 없는 이름이라 모양으로 확인한다(TODO(B-7 머지 뒤): env.HOSTING_SUSPENDED + hosting-duties.ts suspendedKey로). 바인딩이 없으면
- * 건너뛴다(false). 읽기 오류는 false(배포를 막지 않는다 — 정지 여부는 호스팅 라우터가 요청마다 다시 보고 410을 준다).
+ * 건너뛴다(false — 정지 목록 자체가 없다). **읽기 오류는 던진다** — 호출자(suspensionState)가 한 번 다시 읽고, 그래도 안 되면
+ * 배포하지 않는다(PR #569 S3 검증 결함 5: 종전에는 오류를 false로 삼켜 정지된 slug도 재배포됐다).
  */
 export function defaultSuspensionCheck(env: Env): (slug: string) => Promise<boolean> {
   const kv: unknown = Reflect.get(env, "HOSTING_SUSPENDED");
   if (!isKvLike(kv)) return async () => false;
-  return async (slug) => {
+  return async (slug) => (await kv.get(suspendedKvKey(slug))) !== null;
+}
+
+/**
+ * 정지 여부 — 오류면 한 번 다시 읽고, 그래도 안 되면 "error"(호출자는 fail-closed). 결함 5.
+ */
+export async function suspensionState(check: (slug: string) => Promise<boolean>, slug: string): Promise<"clear" | "suspended" | "error"> {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      return (await kv.get(suspendedKvKey(slug))) !== null;
+      return (await check(slug)) ? "suspended" : "clear";
     } catch (err) {
-      console.error(JSON.stringify({ event: "build_deploy_suspension_read_failed", slug, reason: String((err as Error)?.message ?? err).slice(0, 120) }));
-      return false;
+      console.error(JSON.stringify({ event: "build_suspension_read_failed", slug, attempt, reason: String((err as Error)?.message ?? err).slice(0, 120) }));
     }
+  }
+  return "error";
+}
+
+/**
+ * fetch에 신호를 묶는다(요청 자신의 신호 + 파이프라인 마감 + 선택 시간 상한 중 먼저 오는 것). 결함 7: 마감을 넘긴 바깥 호출이
+ * 파이프라인을 붙잡지 못하게.
+ */
+function withSignals(fetchImpl: FetchLike, extra: AbortSignal | null, timeoutMs?: number): FetchLike {
+  return (input, init) => {
+    const signals: AbortSignal[] = [];
+    if (init?.signal) signals.push(init.signal);
+    if (extra) signals.push(extra);
+    if (timeoutMs) signals.push(AbortSignal.timeout(timeoutMs));
+    const signal = signals.length === 0 ? undefined : signals.length === 1 ? signals[0] : AbortSignal.any(signals);
+    return fetchImpl(input, signal ? { ...(init ?? {}), signal } : init);
   };
 }
 
@@ -203,8 +248,11 @@ function commitMessageFor(job: DbBuildJob, artifact: BuildArtifact): string {
   return `Simsa 빌드 ${job.id}: 작업 ${done}개 완료${failed.length ? ` · 못 한 작업: ${failed.slice(0, 10).join(", ")}` : ""}\n\n빌드 게이트(설치 → 빌드 → 테스트) 통과.`;
 }
 
-/** 저장소 push(B-5b-5). 결과만 돌려준다 — 상태 전이·이벤트는 호출자. */
-async function pushSource(env: Env, job: DbBuildJob, artifact: BuildArtifact, fetchImpl: FetchLike): Promise<{ pushed: true; commitSha: string; files: number; repo: string } | { pushed: false; reason: string }> {
+/**
+ * 저장소 push(B-5b-5). 결과만 돌려준다 — 상태 전이·이벤트는 호출자. 토큰 폐기는 마감에 묶이지 않은 revokeFetch로(마감에 걸려
+ * push가 끊겨도 폐기는 한다).
+ */
+async function pushSource(env: Env, job: DbBuildJob, artifact: BuildArtifact, fetchImpl: FetchLike, revokeFetch: FetchLike): Promise<{ pushed: true; commitSha: string; files: number; repo: string } | { pushed: false; reason: string }> {
   if (!job.repoFullName) return { pushed: false, reason: "no_repo" };
   const expected = `${hostingOrg(env)}/${job.slug}`;
   if (job.repoFullName.toLowerCase() !== expected.toLowerCase()) return { pushed: false, reason: "repo_mismatch" };
@@ -225,7 +273,7 @@ async function pushSource(env: Env, job: DbBuildJob, artifact: BuildArtifact, fe
     if (!r.ok) return { pushed: false, reason: `push_${r.error}${r.status ? `_${r.status}` : ""}` };
     return { pushed: true, commitSha: r.value.commitSha, files: r.value.fileCount, repo: expected };
   } finally {
-    await revokeInstallationToken(tok.value.token, fetchImpl);
+    await revokeInstallationToken(tok.value.token, revokeFetch);
   }
 }
 
@@ -280,28 +328,85 @@ export async function startBuildAutoCheck(
 
 /**
  * 산출물을 받은(claimBuildArtifact) 잡 하나의 나머지 전부 — 머리말 1)~5). 던지지 않는다(예외는 failed(현재 단계, deploy_crashed)).
+ * 바깥에 쓰기 직전마다 관문(checkpoint)을 지난다 — 머리말 1). 모든 바깥 호출은 마감 신호에 묶인다.
  */
 export async function runBuildDeploy(env: Env, job: DbBuildJob, artifact: BuildArtifact, deps: BuildDeployDeps): Promise<BuildDeployOutcome> {
-  const fetchImpl = deps.fetch;
+  const deadlineMs = Math.max(1, Math.floor(deps.deadlineMs ?? BUILD_DEPLOY_DEADLINE_MS));
+  const startedAt = Date.now();
+  const deadline = AbortSignal.timeout(deadlineMs);
+  const timedOut = (): boolean => deadline.aborted || Date.now() - startedAt >= deadlineMs;
+  /** 파이프라인의 바깥 호출(GitHub push · D1 · 자산 · Worker 업로드 · 내용 확인) — 마감에 끊긴다. */
+  const fetchImpl = withSignals(deps.fetch, deadline);
+  /** 마감 밖의 부수 호출(토큰 폐기 · 삭제된 프로젝트의 Worker 되돌리기) — 자기 시간 상한만. */
+  const sideFetch = withSignals(deps.fetch, null, SIDE_CALL_TIMEOUT_MS);
+  const isSuspended = deps.isSuspended ?? defaultSuspensionCheck(env);
   let stage: string = job.status;
+
+  /** 잡이 이미 (다른 누군가에 의해) 끝났으면 그 기록 그대로. */
+  const endedAs = (cur: DbBuildJob | null, fallback: string): BuildDeployOutcome => ({
+    status: "failed", failedStage: cur?.failedStage ?? stage, error: cur?.error ?? fallback,
+  });
   const failAt = async (failedStage: string, error: string): Promise<BuildDeployOutcome> => {
     const changed = await markBuildJobFailed(env, job.id, { failedStage, error });
-    if (changed) await appendBuildJobEvent(env, job.id, "failed", error, { failedStage });
-    return { status: "failed", failedStage, error };
+    if (changed) {
+      await appendBuildJobEvent(env, job.id, "failed", error, { failedStage });
+      return { status: "failed", failedStage, error };
+    }
+    return endedAs(await getBuildJobById(env, job.id), error);
   };
-  /** 킬스위치: 꺼졌으면 지금 단계에서 멈춘다(build_disabled). */
-  const switchedOff = async (): Promise<BuildDeployOutcome | null> => {
-    if (buildEnabled(env)) return null;
-    const current = await getBuildJobById(env, job.id);
-    await stopActiveBuildJob(env, job.id, BUILD_DISABLED, current);
-    return { status: "failed", failedStage: current?.status ?? stage, error: BUILD_DISABLED };
+  /**
+   * 관문 — 바깥에 쓰기 직전마다(결함 1·3·5·7). 통과면 null. 순서: 마감 → 잡이 아직 Worker 소유인가 → 킬스위치 → 프로젝트 존재 →
+   * (push 앞·업로드 앞) 정지 목록.
+   */
+  const checkpoint = async (opts: { suspension?: boolean } = {}): Promise<BuildDeployOutcome | null> => {
+    if (timedOut()) return failAt("deploying", DEPLOY_TIMEOUT);
+    const cur = await getBuildJobById(env, job.id);
+    // 행이 없다 = 프로젝트 삭제의 호스팅 정리가 잡 행까지 지웠다(또는 알 수 없는 삭제).
+    if (!cur) return { status: "failed", failedStage: stage, error: (await projectExists(env, job.projectId)) ? "job_not_active" : PROJECT_DELETED };
+    if (!isWorkerOwnedBuildJob(cur)) return endedAs(cur, "job_not_active");
+    if (!buildEnabled(env)) {
+      await stopActiveBuildJob(env, job.id, BUILD_DISABLED, cur);
+      return { status: "failed", failedStage: cur.status, error: BUILD_DISABLED };
+    }
+    if (!(await projectExists(env, job.projectId))) {
+      await stopActiveBuildJob(env, job.id, PROJECT_DELETED, cur);
+      return { status: "failed", failedStage: cur.status, error: PROJECT_DELETED };
+    }
+    if (opts.suspension) {
+      const s = await suspensionState(isSuspended, job.slug);
+      if (s === "suspended") return failAt("deploying", "slug_suspended");
+      if (s === "error") return failAt("deploying", SUSPENSION_CHECK_FAILED);
+    }
+    return null;
   };
+  /**
+   * Worker 업로드 **뒤**(과 done 직전) — 업로드가 도는 사이 프로젝트가 지워졌으면 방금 올린 공개 Worker를 되돌린다(삭제 정리가
+   * 업로드보다 먼저 끝났을 수 있다 — 결함 1). 그 경우 삭제된 프로젝트의 잡에는 타임라인을 더 쓰지 않는다(로그만). 잡이 다른
+   * 이유로 끝났거나 킬스위치가 꺼졌으면 그대로 멈춘다(앱은 올라가 있다 — worker_uploaded 이벤트가 그 사실을 남긴다).
+   */
+  const afterUpload = async (): Promise<BuildDeployOutcome | null> => {
+    const cur = await getBuildJobById(env, job.id);
+    const deleted = cur?.error === PROJECT_DELETED || !(await projectExists(env, job.projectId));
+    if (deleted) {
+      if (cur && isWorkerOwnedBuildJob(cur)) await markBuildJobFailed(env, job.id, { failedStage: cur.status, error: PROJECT_DELETED });
+      const undo = await deleteUserWorker(env, job.slug, sideFetch);
+      console.log(JSON.stringify({ event: "build_deploy_undo_deleted_project", jobId: job.id, slug: job.slug, removed: undo.ok, reason: undo.ok ? null : undo.error }));
+      return { status: "failed", failedStage: stage, error: PROJECT_DELETED };
+    }
+    if (!cur || !isWorkerOwnedBuildJob(cur)) return endedAs(cur, "job_not_active");
+    if (!buildEnabled(env)) {
+      await stopActiveBuildJob(env, job.id, BUILD_DISABLED, cur);
+      return { status: "failed", failedStage: cur.status, error: BUILD_DISABLED };
+    }
+    return null;
+  };
+
   try {
-    const off1 = await switchedOff();
-    if (off1) return off1;
+    const gate1 = await checkpoint({ suspension: true });
+    if (gate1) return gate1;
 
     // ── 2) 저장소 push ──
-    const push = await pushSource(env, job, artifact, fetchImpl);
+    const push = await pushSource(env, job, artifact, fetchImpl, sideFetch);
     let commitSha: string | null = null;
     if (push.pushed) {
       commitSha = push.commitSha;
@@ -312,30 +417,32 @@ export async function runBuildDeploy(env: Env, job: DbBuildJob, artifact: BuildA
       await appendBuildJobEvent(env, job.id, stage, `push_skipped:${push.reason}`.slice(0, 120), { policy: PUSH_FAILURE_POLICY });
     }
 
-    const off2 = await switchedOff();
-    if (off2) return off2;
+    const gate2 = await checkpoint();
+    if (gate2) return gate2;
 
     // ── 3) 배포 ──
-    if (!(await advanceBuildJob(env, job.id, { status: "deploying" }))) {
-      const now = await getBuildJobById(env, job.id);
-      return { status: "failed", failedStage: now?.failedStage ?? stage, error: now?.error ?? "job_not_active" };
-    }
+    if (!(await advanceBuildJob(env, job.id, { status: "deploying" }))) return endedAs(await getBuildJobById(env, job.id), "job_not_active");
     stage = "deploying";
     await appendBuildJobEvent(env, job.id, "deploying", "deploy_started", { modules: artifact.stats.modules.count, assets: artifact.stats.assets.count, migrations: artifact.stats.migrations.count });
     const hostRoot = (env.HOSTING_ROOT_DOMAIN ?? "").trim().replace(/^\.+|\.+$/g, "");
     if (!hostRoot) return failAt("deploying", "hosting_not_configured");
-    const isSuspended = deps.isSuspended ?? defaultSuspensionCheck(env);
-    if (await isSuspended(job.slug)) return failAt("deploying", "slug_suspended");
 
     if (artifact.migrations.length > 0) {
       if (!job.d1Id) return failAt("deploying", "d1_missing");
+      const gateD1 = await checkpoint();
+      if (gateD1) return gateD1;
       const mig = await applyD1Migrations(env, job.d1Id, artifact.migrations, fetchImpl);
-      if (!mig.ok) return failAt("deploying", `d1_migration_failed:${cfTail(mig)}`);
+      if (!mig.ok) return failAt("deploying", timedOut() ? DEPLOY_TIMEOUT : `d1_migration_failed:${cfTail(mig)}`);
       await appendBuildJobEvent(env, job.id, "deploying", "d1_migrated", { applied: mig.value.applied, alreadyApplied: mig.value.alreadyApplied });
     }
 
+    const gateAssets = await checkpoint();
+    if (gateAssets) return gateAssets;
     const assets = await uploadUserWorkerAssets(env, { slug: job.slug, files: artifact.assets }, fetchImpl);
-    if (!assets.ok) return failAt("deploying", `assets_upload_failed:${cfTail(assets)}`);
+    if (!assets.ok) return failAt("deploying", timedOut() ? DEPLOY_TIMEOUT : `assets_upload_failed:${cfTail(assets)}`);
+
+    const gateUpload = await checkpoint({ suspension: true });
+    if (gateUpload) return gateUpload;
     const up = await uploadUserWorker(
       env,
       {
@@ -347,22 +454,25 @@ export async function runBuildDeploy(env: Env, job: DbBuildJob, artifact: BuildA
       },
       fetchImpl,
     );
-    if (!up.ok) return failAt("deploying", `worker_upload_failed:${cfTail(up)}`);
+    if (!up.ok) return failAt("deploying", timedOut() ? DEPLOY_TIMEOUT : `worker_upload_failed:${cfTail(up)}`);
+    const afterUp = await afterUpload();
+    if (afterUp && afterUp.status === "failed" && afterUp.error === PROJECT_DELETED) return afterUp;
     await appendBuildJobEvent(env, job.id, "deploying", "worker_uploaded", { assetsUploaded: assets.value?.uploaded ?? 0, assetsTotal: assets.value?.total ?? 0 });
+    if (afterUp) return afterUp;
 
     // ── 4) 내용 확인 — 주소는 Worker가 계산 ──
     const deployedUrl = `https://${job.slug}.${hostRoot}`;
     const check = await checkDeployedContent(deployedUrl, fetchImpl, { ...(deps.contentCheck ?? {}), ...(deps.sleep ? { sleep: deps.sleep } : {}) });
-    if (!check.ok) return failAt("deploying", `content_check_failed:${check.reason}`);
+    if (!check.ok) return failAt("deploying", timedOut() ? DEPLOY_TIMEOUT : `content_check_failed:${check.reason}`);
+    if (timedOut()) return failAt("deploying", DEPLOY_TIMEOUT);
 
     // ── 5) done → 자동 확인 ──
+    const beforeDone = await afterUpload();
+    if (beforeDone) return beforeDone;
     const fresh = await getBuildJobById(env, job.id);
     const done = await markBuildJobDone(env, job.id, { deployedUrl, commitSha, spentUsd: 0, buildExitCode: 0, wbsDone: fresh?.wbsDone ?? job.wbsDone });
     if (!done.ok) {
-      if (done.reason === "not_active") {
-        const now = await getBuildJobById(env, job.id);
-        return { status: "failed", failedStage: now?.failedStage ?? stage, error: now?.error ?? "job_not_active" };
-      }
+      if (done.reason === "not_active") return endedAs(await getBuildJobById(env, job.id), "job_not_active");
       return failAt("deploying", `done_rejected:${done.reason}`);
     }
     await appendBuildJobEvent(env, job.id, "done", "deployed", { url: deployedUrl, commit: commitSha ? commitSha.slice(0, 12) : null, contentCheckAttempts: check.attempts });

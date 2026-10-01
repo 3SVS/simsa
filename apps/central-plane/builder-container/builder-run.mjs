@@ -64,7 +64,7 @@ import {
 export { CHILD_ENV_KEYS, childEnv };
 
 /** 이미지 롤아웃 확인용 마커(인스펙터 RUNNER_REV와 같은 용도 — 옛 이미지가 서빙 중인지 판별). */
-export const RUNNER_REV = "b5bS3-builder-9";
+export const RUNNER_REV = "b5bS3-builder-10";
 
 /**
  * D-4 잡 상태 머신 — **D1 build_jobs.status와 같은 목록·같은 순서**(build-job-db.ts BUILD_JOB_STATUSES).
@@ -836,10 +836,22 @@ export const BUILD_ARTIFACT_PATH = "/internal/build-artifact";
  * PATH를 타지 않는다).
  */
 export const ARTIFACT_COLLECTOR_ENTRY = fileURLToPath(new URL("./artifact-collect.mjs", import.meta.url));
-/** [PILOT] 번들(wrangler dry-run) · 수집 · 업로드(Worker의 push·배포·내용 확인까지 기다린다) 시간 상한. */
+/**
+ * [PILOT] 번들(wrangler dry-run) · 수집 · 업로드(Worker의 push·배포·내용 확인까지 기다린다) 시간 상한. uploadMs는 Worker 배포
+ * 파이프라인 마감(build-deploy.ts BUILD_DEPLOY_DEADLINE_MS = 8분)보다 **길어야** 한다 — 컨테이너가 먼저 포기하지 않게(테스트가 비교).
+ * 그래도 포기하면 그 실패 보고는 기록만 된다(산출물을 받은 잡은 Worker가 상태를 소유 — PR #569 S3 검증 결함 7).
+ */
 export const ARTIFACT_TIMEOUTS = Object.freeze({ bundleMs: 3 * 60 * 1000, collectMs: 2 * 60 * 1000, uploadMs: 10 * 60 * 1000 });
-/** 수집기 stdout 상한(문자) — base64 JSON(수집기 상한 합 ≈ 18.5 MiB × 4/3). 잘리면 artifact_too_large. */
-export const COLLECTOR_MAX_OUTPUT_CHARS = 40 * 1024 * 1024;
+/** 수집기 stdout 상한(문자) — base64 JSON(수집기 상한 합 ≈ 8.25 MiB × 4/3 + 틀). 잘리면 artifact_too_large. */
+export const COLLECTOR_MAX_OUTPUT_CHARS = 20 * 1024 * 1024;
+
+/**
+ * ASCII JSON — 비ASCII 문자는 전부 `\uXXXX`로(서로게이트 쌍은 두 개로). Worker는 ASCII 본문만 받는다(PR #569 S3 검증 결함 4:
+ * 날것 한글이 섞이면 Worker에서 본문 텍스트 전체가 2바이트 문자열이 되어 메모리가 두 배). JSON.parse는 원본 그대로 되살린다(Rule 6).
+ */
+export function asciiJson(value) {
+  return JSON.stringify(value).replace(/[\u0080-￿]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
 
 /**
  * 토큰 없이 번들만 — `wrangler deploy --dry-run --outdir <dir>`. 실측(템플릿 lockfile의 wrangler 4.141.0, 자격 증명 없음,
@@ -913,7 +925,7 @@ export async function postArtifact(url, token, body, { fetchImpl = globalThis.fe
     const res = await fetchImpl(url, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
+      body: asciiJson(body),
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     const text = await res.text().catch(() => "");
@@ -988,7 +1000,8 @@ export function successBody(jobId, { wbsDone, wbsFailed = [], commits = 0, gateR
  *   가능 — 샌드박스 사용자의 wrangler dry-run·수집기) → progress(testing, artifact_ready, 개수·바이트) → POST build-artifact
  *   (deps.uploadArtifact). 실패는 전부 failed(deploying, <사유>) — 게이트는 통과했고 배포 준비에서 멈췄다는 뜻.
  *   Worker의 답(interpretArtifactReply)이 done이면 successBody, 아니면 그 실패. 업로드 중에는 onStage("deploying") —
- *   마감·드레인 본문이 "배포 중 실패"로 남는다.
+ *   마감·드레인 본문이 "배포 중 실패"로 남는다. 단 Worker가 산출물을 이미 받았으면 그 보고는 타임라인 기록만 된다(상태는
+ *   Worker의 배포 파이프라인이 소유하고 8분 마감 안에 스스로 끝낸다 — PR #569 S3 검증 결함 7). 본문은 asciiJson(결함 4).
  *
  * 마감·중단(`deps.signal`, startJob이 넘긴다): 끊기면 다음 진행 콜백을 보내지 않고 다음 exec를 시작하지 않는다(실행 중인
  * exec는 defaultExec가 그룹째 죽인다). 그때의 반환 본문은 쓰이지 않는다 — 최종 본문은 startJob이 정한다(결함 6).

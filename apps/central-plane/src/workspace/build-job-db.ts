@@ -31,6 +31,11 @@ export type DbBuildJob = {
   repoFullName: string | null;
   commitSha: string | null;
   deployedUrl: string | null;
+  /**
+   * Worker 소유 칸. **0 = 게이트를 지난 산출물을 Worker가 받았다(claimBuildArtifact)** — 배포 성공이 아니다.
+   * 배포 성공은 `status === "done"` + `deployedUrl`뿐이다(B-8 화면 매핑: failed(deploying) 잡도 0을 가질 수 있다 —
+   * "게이트 통과·산출물 수령 뒤 배포에서 실패"라는 뜻). null = 아직 산출물을 받지 않음. PR #569 S3 검증 결함 6.
+   */
   buildExitCode: number | null;
   locale: "ko" | "en" | null;
   createdAt: string;
@@ -149,7 +154,9 @@ export function isStorableDeployedUrl(raw: string): boolean {
 
 /**
  * 최종 성공 — **Worker만 부른다**(S3: 자기 배포가 끝난 뒤). 컨테이너의 done 주장(/internal/build-done ok:true)은 라우트가
- * 거절한다(결함 2). D-4: build_exit_code가 0이 아니면 done으로 못 간다 — 호출자가 걸러도 여기서 한 번 더 막는다.
+ * 거절한다(결함 2). D-4: 게이트를 지난 산출물을 Worker가 받은 잡(build_exit_code = 0, claimBuildArtifact)만 done으로 간다 —
+ * **DB 조건**이다(PR #569 S3 검증 결함 6: 종전에는 입력값만 보고 WHERE에는 조건이 없어, claim을 건너뛰는 호출자가 생기면
+ * 막지 못했다). 입력 buildExitCode도 먼저 본다(호출자가 걸러도 여기서 한 번 더). 행 쪽 조건에 걸리면 build_not_green.
  * deployedUrl은 https만(isStorableDeployedUrl). spent_usd는 `MAX(spent_usd, ?)` — 프록시가 계량한 값보다 내려가지 않는다.
  */
 export async function markBuildJobDone(
@@ -161,12 +168,23 @@ export async function markBuildJobDone(
   if (!isStorableDeployedUrl(input.deployedUrl)) return { ok: false, reason: "invalid_deployed_url" };
   const res = await env.DB.prepare(
     `UPDATE build_jobs
-        SET status = 'done', deployed_url = ?, commit_sha = COALESCE(?, commit_sha), spent_usd = MAX(spent_usd, ?), build_exit_code = 0, wbs_done = ?, updated_at = ?
-      WHERE id = ? AND status IN ('queued','scaffolding','implementing','building','testing','pushed','deploying')`,
+        SET status = 'done', deployed_url = ?, commit_sha = COALESCE(?, commit_sha), spent_usd = MAX(spent_usd, ?), wbs_done = ?, updated_at = ?
+      WHERE id = ? AND status IN ('queued','scaffolding','implementing','building','testing','pushed','deploying') AND build_exit_code = 0`,
   )
     .bind(input.deployedUrl, input.commitSha, input.spentUsd, input.wbsDone, new Date().toISOString(), id)
     .run();
-  return (res.meta?.changes ?? 0) > 0 ? { ok: true } : { ok: false, reason: "not_active" };
+  if ((res.meta?.changes ?? 0) > 0) return { ok: true };
+  const now = await getBuildJobById(env, id);
+  if (now && BUILD_JOB_ACTIVE.has(now.status) && now.buildExitCode !== 0) return { ok: false, reason: "build_not_green" };
+  return { ok: false, reason: "not_active" };
+}
+
+/**
+ * 산출물을 Worker가 받은 활성 잡 — 이제 상태는 **Worker의 배포 파이프라인이 소유**한다(PR #569 S3 검증 결함 7). 컨테이너의
+ * 실패 보고(업로드 시간 초과·마감·드레인)는 이 잡을 닫지 못한다: 닫으면 Worker가 이미 올린 앱이 "실패"인 채 서빙된다.
+ */
+export function isWorkerOwnedBuildJob(job: Pick<DbBuildJob, "status" | "buildExitCode">): boolean {
+  return job.buildExitCode === 0 && BUILD_JOB_ACTIVE.has(job.status);
 }
 
 export async function markBuildJobFailed(env: Env, id: string, input: { failedStage: string; error: string; spentUsd?: number; buildExitCode?: number | null }): Promise<boolean> {
@@ -199,7 +217,8 @@ const ACTIVE_SQL = `('queued','scaffolding','implementing','building','testing',
 /**
  * B-5b-4 (S3): 산출물 **받기**(잡당 한 번, 원자). 조건: status = 'testing'(게이트를 지난 컨테이너만 산출물을 올린다) 이고
  * build_exit_code가 아직 NULL. 받으면 build_exit_code = 0 — "게이트 초록불 뒤의 산출물을 Worker가 받았다"(build_exit_code는
- * Worker 소유 칸, PR #569 S1 결함 1). markBuildJobDone은 이 0 없이는 done으로 못 간다(D-4). 스키마 변경 없음.
+ * Worker 소유 칸, PR #569 S1 결함 1). markBuildJobDone은 이 0 없이는 done으로 못 간다(D-4 — 그 UPDATE의 WHERE 조건
+ * `build_exit_code = 0`, S3 검증 결함 6). 뜻은 "산출물 수령"이지 배포 성공이 아니다(DbBuildJob.buildExitCode). 스키마 변경 없음.
  * 두 번째 업로드(재시도·중복)는 false — 같은 잡을 두 번 배포하지 않는다. 받았나를 돌려준다.
  */
 export async function claimBuildArtifact(env: Env, id: string): Promise<boolean> {
@@ -259,13 +278,16 @@ export async function settleBuildJobSpend(env: Env, id: string, reservedUsd: num
  */
 export const BUILD_JOB_EVENT_CAP = 400;
 
-/** 타임라인 한 줄. 잡당 BUILD_JOB_EVENT_CAP을 넘으면 쓰지 않는다(한 문장 — 세기와 쓰기 사이 경합 없음). 썼나를 돌려준다. */
+/**
+ * 타임라인 한 줄. 잡당 BUILD_JOB_EVENT_CAP을 넘으면 쓰지 않는다(한 문장 — 세기와 쓰기 사이 경합 없음). **잡 행이 있을 때만** 쓴다
+ * (PR #569 S3 검증 결함 1: 프로젝트 삭제가 잡 행·타임라인을 지운 뒤 도는 배포 파이프라인이 삭제된 잡에 흔적을 남기지 않게). 썼나를 돌려준다.
+ */
 export async function appendBuildJobEvent(env: Env, jobId: string, stage: string, message: string, meta: Record<string, unknown> = {}): Promise<boolean> {
   const res = await env.DB.prepare(
     `INSERT INTO build_job_events (id, job_id, at, stage, message, meta_json)
-     SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM build_job_events WHERE job_id = ?) < ?`,
+     SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM build_jobs WHERE id = ?) AND (SELECT COUNT(*) FROM build_job_events WHERE job_id = ?) < ?`,
   )
-    .bind(randId("bje"), jobId, new Date().toISOString(), stage.slice(0, 40), message.slice(0, 500), JSON.stringify(meta).slice(0, 4000), jobId, BUILD_JOB_EVENT_CAP)
+    .bind(randId("bje"), jobId, new Date().toISOString(), stage.slice(0, 40), message.slice(0, 500), JSON.stringify(meta).slice(0, 4000), jobId, jobId, BUILD_JOB_EVENT_CAP)
     .run();
   return Number(res.meta?.changes ?? 0) > 0;
 }
@@ -285,4 +307,92 @@ export async function listStuckBuildJobs(env: Env, cutoffIso: string, limit = 50
     `SELECT id, status FROM build_jobs WHERE status IN ('queued','scaffolding','implementing','building','testing','pushed','deploying') AND updated_at < ? ORDER BY updated_at ASC LIMIT ?`,
   ).bind(cutoffIso, limit).all<{ id: string; status: BuildJobStatus }>();
   return res.results ?? [];
+}
+
+/**
+ * PR #569 S3 검증 결함 7: Worker가 산출물을 받은(build_exit_code = 0) 활성 잡 중 cutoff보다 오래 갱신이 없는 것 — Worker의 배포
+ * 파이프라인은 마감(build-deploy.ts BUILD_DEPLOY_DEADLINE_MS) 안에 끝나므로, 그보다 오래 활성이면 그 호출이 중간에 죽은 것이다
+ * (클라이언트 끊김·isolate 종료). 컨테이너의 실패 보고는 이런 잡을 닫지 않으므로(Worker 소유) 스윕이 짧은 cutoff로 닫는다.
+ */
+export async function listStuckWorkerOwnedBuildJobs(env: Env, cutoffIso: string, limit = 50): Promise<Array<{ id: string; status: BuildJobStatus }>> {
+  const res = await env.DB.prepare(
+    `SELECT id, status FROM build_jobs WHERE status IN ${ACTIVE_SQL} AND build_exit_code = 0 AND updated_at < ? ORDER BY updated_at ASC LIMIT ?`,
+  ).bind(cutoffIso, limit).all<{ id: string; status: BuildJobStatus }>();
+  return res.results ?? [];
+}
+
+// ─── 프로젝트 삭제 ↔ 빌드 잡 (PR #569 S3 검증 결함 1·2) ────────────────────────────────────────────
+
+/** 프로젝트 삭제 사유 — 활성 잡을 멈출 때·배포 파이프라인이 멈출 때 같은 코드. */
+export const PROJECT_DELETED = "project_deleted";
+
+/**
+ * 삭제된 프로젝트의 빌드 잡 표시: user_key = '' (NOT NULL 칸 — 사람과의 연결을 끊는다, 방침 §1). 이 표시가 있는 행만 호스팅
+ * 자원 정리(hosted-app-teardown.ts)와 그 재시도 크론의 대상이 된다 — "프로젝트 행이 없다"는 추론만으로는 지우지 않는다
+ * (되돌릴 수 없는 삭제의 양성 표지).
+ */
+export const BUILD_JOB_UNLINKED_USER_KEY = "";
+
+/**
+ * 프로젝트의 활성 빌드 잡을 전부 지금 단계에서 멈춘다(failed(<단계>, reason)). 프로젝트 삭제가 **맨 먼저** 부른다 — 그 뒤에
+ * 도착하는 산출물·진행 콜백·LLM 호출은 활성 잡이 없어 아무것도 못 한다(결함 1). 멈춘 수를 돌려준다.
+ */
+export async function stopActiveBuildJobsForProject(env: Env, projectId: string, reason: string): Promise<number> {
+  const res = await env.DB.prepare(`SELECT id, status FROM build_jobs WHERE project_id = ? AND status IN ${ACTIVE_SQL}`)
+    .bind(projectId)
+    .all<{ id: string; status: BuildJobStatus }>();
+  let stopped = 0;
+  for (const r of res.results ?? []) {
+    if (await markBuildJobFailed(env, r.id, { failedStage: r.status, error: reason })) stopped += 1;
+  }
+  return stopped;
+}
+
+/**
+ * 프로젝트 삭제 배치(db.ts deleteProject — 한 트랜잭션)에 넣을 문장: 타임라인은 지우고(프로젝트의 기록), 잡 행은 **호스팅 자원의
+ * 포인터**로 남기되 사람과의 연결을 끊는다(user_key = ''). 행은 호스팅 정리가 끝나면 지운다(deleteBuildJobsForProject).
+ */
+export function buildJobDeleteBatchStatements(env: Env, projectId: string, nowIso: string): D1PreparedStatement[] {
+  return [
+    env.DB.prepare(`DELETE FROM build_job_events WHERE job_id IN (SELECT id FROM build_jobs WHERE project_id = ?)`).bind(projectId),
+    env.DB.prepare(`UPDATE build_jobs SET user_key = ?, updated_at = ? WHERE project_id = ?`).bind(BUILD_JOB_UNLINKED_USER_KEY, nowIso, projectId),
+  ];
+}
+
+export type BuildJobHostingRow = { id: string; slug: string; d1Id: string | null; repoFullName: string | null };
+
+/** 프로젝트의 빌드 잡이 만든 호스팅 자원(slug = 유저 Worker·저장소 이름, 프로젝트 D1). */
+export async function listBuildJobHostingForProject(env: Env, projectId: string): Promise<BuildJobHostingRow[]> {
+  const res = await env.DB.prepare(`SELECT id, slug, d1_id, repo_full_name FROM build_jobs WHERE project_id = ?`)
+    .bind(projectId)
+    .all<{ id: string; slug: string; d1_id: string | null; repo_full_name: string | null }>();
+  return (res.results ?? []).map((r) => ({ id: r.id, slug: r.slug, d1Id: r.d1_id ?? null, repoFullName: r.repo_full_name ?? null }));
+}
+
+/** 다른 프로젝트의 잡도 같은 slug/D1을 쓰나(slug 충돌 방어 — 남의 앱을 지우지 않는다). */
+export async function hostingResourceSharedWithOtherProject(env: Env, projectId: string, what: { slug: string } | { d1Id: string }): Promise<boolean> {
+  const row = "slug" in what
+    ? await env.DB.prepare(`SELECT id FROM build_jobs WHERE slug = ? AND project_id != ? LIMIT 1`).bind(what.slug, projectId).first()
+    : await env.DB.prepare(`SELECT id FROM build_jobs WHERE d1_id = ? AND project_id != ? LIMIT 1`).bind(what.d1Id, projectId).first();
+  return row !== null && row !== undefined;
+}
+
+/** 호스팅 정리가 끝난 프로젝트의 잡 행·타임라인을 지운다. */
+export async function deleteBuildJobsForProject(env: Env, projectId: string): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM build_job_events WHERE job_id IN (SELECT id FROM build_jobs WHERE project_id = ?)`).bind(projectId),
+    env.DB.prepare(`DELETE FROM build_jobs WHERE project_id = ?`).bind(projectId),
+  ]);
+}
+
+/**
+ * 호스팅 정리가 남은 삭제된 프로젝트(재시도 크론): 삭제 표시(user_key = '')가 있고 **프로젝트 행도 없는** 것만 — 두 조건 모두.
+ */
+export async function listDeletedProjectsWithBuildJobs(env: Env, limit = 5): Promise<string[]> {
+  const res = await env.DB.prepare(
+    `SELECT DISTINCT b.project_id AS project_id FROM build_jobs b
+      WHERE b.user_key = ? AND NOT EXISTS (SELECT 1 FROM workspace_projects p WHERE p.id = b.project_id)
+      LIMIT ?`,
+  ).bind(BUILD_JOB_UNLINKED_USER_KEY, limit).all<{ project_id: string }>();
+  return (res.results ?? []).map((r) => r.project_id).filter((id) => typeof id === "string" && id.length > 0);
 }

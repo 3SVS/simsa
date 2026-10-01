@@ -14,6 +14,7 @@
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
@@ -38,6 +39,10 @@ const routesMod = await import("../dist/routes/workspace-build-jobs.js");
 const { createApp } = await import("../dist/router.js");
 const tokenMod = await import("../dist/workspace/build-job-token.js");
 const dbMod = await import("../dist/workspace/db.js");
+const buildDb = await import("../dist/workspace/build-job-db.js");
+// PR #569 S3 검증 결함 2 — 새 모듈(옛 코드에는 없다: 해당 테스트가 각자 실패하도록 null).
+const teardownMod = await import("../dist/workspace/hosted-app-teardown.js").catch(() => null);
+const stuckMod = await import("../dist/stuck-cleanup.js");
 
 function need(mod, name, what) {
   assert.ok(mod && mod[name] !== undefined, `${what} export ${name} (B-5b S3)`);
@@ -85,19 +90,45 @@ function jobRow(o = {}) {
 
 const ACTIVE = (r) => !["done", "failed"].includes(r.status);
 
-/** 가짜 D1 — 이 테스트가 지나는 문장만(문구로 가른다). */
-function makeDb({ jobs = [jobRow()], checks = [] } = {}) {
+/**
+ * 가짜 D1 — 이 테스트가 지나는 문장만(문구로 가른다). projects = 살아 있는 프로젝트 id(삭제 배치가 지운다).
+ * batch는 문장을 차례로 실행한다(프로젝트 삭제 — PR #569 S3 검증 결함 1·2).
+ */
+function makeDb({ jobs = [jobRow()], checks = [], projects = [PROJECT] } = {}) {
   const db = {
-    jobs, events: [], checks, rate: new Map(), sqls: [], batches: [],
+    jobs, events: [], checks, rate: new Map(), sqls: [], batches: [], projects: new Set(projects),
     prepare(sql) {
       const handler = (args) => ({
         async run() {
           db.sqls.push(sql);
           const capped = dailyCapsRun(db.rate, sql, args);
           if (capped) return capped;
+          if (sql.startsWith("DELETE FROM workspace_projects WHERE id = ?")) {
+            const had = db.projects.delete(args[0]);
+            return { meta: { changes: had ? 1 : 0 } };
+          }
+          if (sql.startsWith("UPDATE build_jobs SET user_key = ?, updated_at = ? WHERE project_id = ?")) {
+            const [user_key, updated_at, project_id] = args;
+            const rows = jobs.filter((r) => r.project_id === project_id);
+            for (const r of rows) Object.assign(r, { user_key, updated_at });
+            return { meta: { changes: rows.length } };
+          }
+          if (sql.startsWith("DELETE FROM build_job_events WHERE job_id IN (SELECT id FROM build_jobs WHERE project_id = ?)")) {
+            const ids = new Set(jobs.filter((r) => r.project_id === args[0]).map((r) => r.id));
+            const before = db.events.length;
+            db.events = db.events.filter((e) => !ids.has(e.job_id));
+            return { meta: { changes: before - db.events.length } };
+          }
+          if (sql.startsWith("DELETE FROM build_jobs WHERE project_id = ?")) {
+            let n = 0;
+            for (let i = jobs.length - 1; i >= 0; i -= 1) if (jobs[i].project_id === args[0]) { jobs.splice(i, 1); n += 1; }
+            return { meta: { changes: n } };
+          }
           if (sql.includes("INSERT INTO build_job_events")) {
             const [id, job_id, at, stage, message, meta_json] = args;
             if (sql.includes("SELECT COUNT(*)") && db.events.filter((e) => e.job_id === job_id).length >= Number(args[args.length - 1])) return { meta: { changes: 0 } };
+            // 결함 1: 잡 행이 있을 때만(EXISTS 조건이 있는 SQL일 때 흉내 — 옛 SQL에는 없다).
+            if (sql.includes("EXISTS (SELECT 1 FROM build_jobs WHERE id = ?)") && !jobs.some((r) => r.id === job_id)) return { meta: { changes: 0 } };
             db.events.push({ id, job_id, at, stage, message, meta: JSON.parse(meta_json) });
             return { meta: { changes: 1 } };
           }
@@ -121,7 +152,9 @@ function makeDb({ jobs = [jobRow()], checks = [] } = {}) {
           }
           if (sql.includes("SET status = 'done'")) {
             const [deployed_url, commit_sha, spent_usd, wbs_done, updated_at, id] = args;
-            const row = jobs.find((r) => r.id === id && ACTIVE(r));
+            // 결함 6: WHERE에 `AND build_exit_code = 0`이 있으면 그 조건을 그대로 흉내 낸다(옛 SQL에는 없다).
+            const needsClaim = sql.includes("AND build_exit_code = 0");
+            const row = jobs.find((r) => r.id === id && ACTIVE(r) && (!needsClaim || r.build_exit_code === 0));
             if (row) Object.assign(row, { status: "done", deployed_url, commit_sha: commit_sha ?? row.commit_sha, spent_usd: Math.max(row.spent_usd, spent_usd), build_exit_code: 0, wbs_done, updated_at });
             return { meta: { changes: row ? 1 : 0 } };
           }
@@ -146,8 +179,11 @@ function makeDb({ jobs = [jobRow()], checks = [] } = {}) {
         },
         async first() {
           db.sqls.push(sql);
-          if (sql.includes("FROM workspace_projects WHERE id = ?")) return args[0] === PROJECT ? projectRow() : null;
+          if (sql.includes("FROM workspace_projects WHERE id = ?")) return db.projects.has(args[0]) ? { ...projectRow(), id: args[0] } : null;
           if (sql.includes("FROM build_jobs WHERE id = ?")) return jobs.find((r) => r.id === args[0]) ?? null;
+          if (sql.includes("FROM build_jobs WHERE slug = ? AND project_id != ?")) return jobs.find((r) => r.slug === args[0] && r.project_id !== args[1]) ?? null;
+          if (sql.includes("FROM build_jobs WHERE d1_id = ? AND project_id != ?")) return jobs.find((r) => r.d1_id === args[0] && r.project_id !== args[1]) ?? null;
+          if (sql.includes("FROM build_jobs WHERE project_id = ? AND user_key != ?")) return jobs.find((r) => r.project_id === args[0] && r.user_key !== args[1]) ?? null;
           if (sql.includes("FROM workspace_visual_checks") && sql.includes("status IN ('queued', 'running')")) return db.checks.find((r) => r.project_id === args[0] && ["queued", "running"].includes(r.status)) ?? null;
           return null;
         },
@@ -155,6 +191,17 @@ function makeDb({ jobs = [jobRow()], checks = [] } = {}) {
           db.sqls.push(sql);
           if (sql.includes("FROM build_job_events")) return { results: db.events.filter((e) => e.job_id === args[0]).map((e) => ({ ...e, meta_json: JSON.stringify(e.meta) })) };
           if (sql.includes("SELECT id FROM build_jobs WHERE project_id = ?")) return { results: jobs.filter((r) => r.project_id === args[0]).map((r) => ({ id: r.id })) };
+          if (sql.includes("SELECT id, status FROM build_jobs WHERE project_id = ? AND status IN")) return { results: jobs.filter((r) => r.project_id === args[0] && ACTIVE(r)).map((r) => ({ id: r.id, status: r.status })) };
+          if (sql.includes("SELECT id, slug, d1_id, repo_full_name FROM build_jobs WHERE project_id = ?")) return { results: jobs.filter((r) => r.project_id === args[0]).map((r) => ({ id: r.id, slug: r.slug, d1_id: r.d1_id, repo_full_name: r.repo_full_name })) };
+          if (sql.includes("SELECT DISTINCT b.project_id")) {
+            const ids = [...new Set(jobs.filter((r) => r.user_key === args[0] && !db.projects.has(r.project_id)).map((r) => r.project_id))];
+            return { results: ids.slice(0, args[1]).map((project_id) => ({ project_id })) };
+          }
+          if (sql.includes("FROM build_jobs") && sql.includes("updated_at < ?")) {
+            const [cutoff, limit] = args;
+            const exit0 = sql.includes("build_exit_code = 0");
+            return { results: jobs.filter((r) => ACTIVE(r) && r.updated_at < cutoff && (!exit0 || r.build_exit_code === 0)).slice(0, limit).map((r) => ({ id: r.id, status: r.status })) };
+          }
           return { results: [] };
         },
       });
@@ -162,21 +209,25 @@ function makeDb({ jobs = [jobRow()], checks = [] } = {}) {
     },
     async batch(stmts) {
       db.batches.push(stmts.length);
-      return stmts.map(() => ({ meta: { changes: 1 } }));
+      const out = [];
+      for (const s of stmts) out.push(await s.run());
+      return out;
     },
   };
   return db;
 }
 
-/** 가짜 R2 — put·get·list·delete. */
-function makeR2({ failPut = false } = {}) {
+/** 가짜 R2 — put·get·list·delete. 바이트 값(결함 4: 받은 본문 그대로)은 bytes에 그대로, value에는 UTF-8 텍스트로. */
+function makeR2({ failPut = false, onPut = null } = {}) {
   const objects = new Map();
   return {
     objects,
     deleted: [],
     async put(key, value, opts) {
       if (failPut) throw new Error("r2 unavailable (FAKE)");
-      objects.set(key, { value: String(value), opts });
+      if (onPut) await onPut(key);
+      const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+      objects.set(key, { value: bytes.toString("utf8"), bytes, opts });
     },
     async get(key) {
       const o = objects.get(key);
@@ -216,10 +267,12 @@ function envFor(db, extra = {}) {
  */
 function makeWorld(opts = {}) {
   const calls = [];
-  const d1 = { queries: [], applied: [...(opts.alreadyApplied ?? [])] };
+  const d1 = { queries: [], applied: [...(opts.alreadyApplied ?? [])], deleted: [] };
   const assets = { manifests: [], uploads: [] };
   const scripts = [];
-  const gh = { tokenRequests: [], blobs: [], trees: [], commits: [], refs: [], revoked: [] };
+  /** 유저 Worker 스크립트에 일어난 일의 순서(PUT = 업로드 · DELETE = 삭제) — 결함 1·2. */
+  const scriptOps = [];
+  const gh = { tokenRequests: [], blobs: [], trees: [], commits: [], refs: [], revoked: [], repoDeletes: [] };
   const hosted = { gets: [] };
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   const cfOk = (result) => json(200, { success: true, errors: [], result });
@@ -227,10 +280,23 @@ function makeWorld(opts = {}) {
     const u = new URL(String(url));
     const method = init.method ?? "GET";
     const auth = new Headers(init.headers ?? {}).get("authorization") ?? "";
+    // opts.before: 요청을 처리하기 **전에** 끼어드는 일(삭제·실패 보고·킬스위치 — 경합 재현).
+    if (opts.before) await opts.before({ method, host: u.host, path: u.pathname, init });
     calls.push({ method, host: u.host, path: u.pathname, auth });
     if (u.host === "api.cloudflare.com") {
       const p = u.pathname.replace("/client/v4/accounts/acc1", "");
+      if (p === `/d1/database/${D1}` && method === "DELETE") {
+        d1.deleted.push({ id: D1, auth });
+        return cfOk(null);
+      }
       if (p === `/d1/database/${D1}/query`) {
+        if (opts.hangD1) {
+          // 걸린 요청: 신호가 끊을 때까지(없으면 1.5초 뒤 네트워크 오류 — 옛 코드가 영원히 걸리지 않게).
+          await new Promise((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error("hung (FAKE)")), 1500);
+            init.signal?.addEventListener("abort", () => { clearTimeout(t); reject(init.signal.reason ?? new Error("aborted")); });
+          });
+        }
         const sql = JSON.parse(init.body).sql;
         d1.queries.push({ sql, auth });
         if (sql.startsWith("CREATE TABLE IF NOT EXISTS d1_migrations")) return cfOk([{ results: [], success: true }]);
@@ -261,7 +327,13 @@ function makeWorld(opts = {}) {
         for (const [name, value] of form.entries()) if (name !== "metadata") modules.push({ name, type: value.type, text: await value.text() });
         scripts.push({ metadata, modules, auth });
         if (opts.uploadFail) return json(400, { success: false, errors: [{ code: 10021, message: "Uncaught SyntaxError" }] });
+        scriptOps.push("PUT");
         return cfOk({ id: SLUG });
+      }
+      if (p === `/workers/dispatch/namespaces/simsa-hosted/scripts/${SLUG}` && method === "DELETE") {
+        if (opts.scriptDeleteFail) return json(500, { success: false, errors: [{ code: 10013, message: "internal (FAKE)" }] });
+        scriptOps.push("DELETE");
+        return cfOk(null);
       }
       return json(404, { success: false, errors: [{ code: 7003, message: `unrouted ${method} ${p}` }] });
     }
@@ -271,10 +343,14 @@ function makeWorld(opts = {}) {
       if (p === "/app/installations/777/access_tokens" && method === "POST") {
         const body = JSON.parse(init.body);
         gh.tokenRequests.push({ body, auth });
-        return json(201, { token: SCOPED, expires_at: "2030-01-01T00:00:00Z", permissions: opts.scopedPerms ?? { contents: "write", metadata: "read" }, repository_selection: "selected", repositories: [{ name: SLUG }] });
+        return json(201, { token: SCOPED, expires_at: "2030-01-01T00:00:00Z", permissions: opts.scopedPerms ?? { ...body.permissions, metadata: "read" }, repository_selection: "selected", repositories: [{ name: SLUG }] });
       }
       if (p === "/installation/token" && method === "DELETE") { gh.revoked.push(auth); return new Response(null, { status: 204 }); }
       const base = `/repos/${ORG}/${SLUG}`;
+      if (p === base && method === "DELETE") {
+        gh.repoDeletes.push({ repo: `${ORG}/${SLUG}`, auth });
+        return new Response(null, { status: 204 });
+      }
       if (p === `${base}/git/ref/heads/main`) return opts.refOk ? json(200, { object: { sha: "parent0000" } }) : json(404, { message: "Not Found" });
       if (p === `${base}/git/blobs`) { const b = JSON.parse(init.body); gh.blobs.push({ ...b, auth }); return json(201, { sha: `blob${gh.blobs.length}` }); }
       if (p === `${base}/git/trees`) { gh.trees.push({ ...JSON.parse(init.body), auth }); return json(201, { sha: "tree0001" }); }
@@ -294,7 +370,12 @@ function makeWorld(opts = {}) {
     }
     return new Response("unrouted", { status: 599 });
   };
-  return { fetchImpl, calls, d1, assets, scripts, gh, hosted };
+  return { fetchImpl, calls, d1, assets, scripts, scriptOps, gh, hosted };
+}
+
+/** 컨테이너 builder-run.mjs asciiJson과 같은 규칙(테스트가 둘을 비교) — 본문은 ASCII JSON(결함 4). */
+function asciiJson(value) {
+  return JSON.stringify(value).replace(/[\u0080-￿]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
 /** 컨테이너가 보내는 모양의 산출물(한글 이름 포함). */
@@ -332,7 +413,7 @@ async function postArtifactTo(app, env, token, body, headers = {}) {
   const res = await app.fetch(new Request(`${ORIGIN}/internal/build-artifact`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers },
-    body: typeof body === "string" ? body : JSON.stringify(body),
+    body: typeof body === "string" ? body : asciiJson(body),
   }), env);
   return { status: res.status, body: await res.json().catch(() => null) };
 }
@@ -1080,13 +1161,393 @@ describe("④ 컨테이너 — 수집기 · 답 해석 · 끝까지(E2E)", () =>
 
 describe("⑤ 프로젝트 삭제는 빌드 산출물(builds/<jobId>/)도 지운다", () => {
   it("이 프로젝트의 빌드 잡 접두만 — 다른 프로젝트의 산출물은 그대로", async () => {
-    const db = makeDb({ jobs: [jobRow({ id: "bj_s3del00001" }), jobRow({ id: "bj_s3other999", project_id: "wsp_other" })] });
+    const db = makeDb({ jobs: [jobRow({ id: "bj_s3del00001" }), jobRow({ id: "bj_s3other999", project_id: "wsp_other", slug: "other-app-1", d1_id: "other-d1-0001", repo_full_name: `${ORG}/other-app-1` })], projects: [PROJECT, "wsp_other"] });
     const env = envFor(db);
+    const world = makeWorld();
     await env.EVIDENCE.put("builds/bj_s3del00001/artifact.json", "{}");
     await env.EVIDENCE.put("builds/bj_s3other999/artifact.json", "{}");
     await env.EVIDENCE.put(`checks/${USER}/${PROJECT}/vc_1/shot.png`, "x");
-    await dbMod.deleteProject(env, PROJECT, USER);
+    await dbMod.deleteProject(env, PROJECT, USER, { fetch: world.fetchImpl });
     assert.deepEqual([...env.EVIDENCE.objects.keys()], ["builds/bj_s3other999/artifact.json"]);
     assert.ok(env.EVIDENCE.deleted.includes("builds/bj_s3del00001/artifact.json"));
+    assert.deepEqual(db.jobs.map((j) => j.id), ["bj_s3other999"], "the other project's build job is untouched");
+  });
+});
+
+// ══ ⑥ PR #569 S3 검증 결함 1~7 ═══════════════════════════════════════════════════════════════════
+//
+// 삭제 경합(1) · 삭제 → 호스팅 자원 정리(2) · 바깥 쓰기 직전마다 관문(3) · 산출물 라우트 메모리(4) · 정지 목록 먼저 + fail-closed(5) ·
+// done은 산출물 수령 행만 — DB 조건(6) · 산출물 수령 뒤 잡은 Worker 소유 + 파이프라인 마감(7). 전부 가짜 fetch·가짜 D1/R2/KV,
+// 실제 SQLite(0068)는 새 SQL의 모양 확인에만. 옛 코드에서 각자 실패한다(PR 코멘트 표).
+
+const JOB = "bj_s3a0000001";
+/** 조건에 맞는 첫 요청에서 한 번만 끼어든다(경합 재현). */
+const onFirst = (pred, fn) => {
+  let fired = false;
+  return async (c) => {
+    if (fired || !pred(c)) return;
+    fired = true;
+    await fn(c);
+  };
+};
+const isD1Query = (c) => c.host === "api.cloudflare.com" && c.path.endsWith("/query");
+const isScriptPut = (c) => c.host === "api.cloudflare.com" && c.method === "PUT" && c.path.endsWith(`/scripts/${SLUG}`);
+const deleteWith = (env, world) => dbMod.deleteProject(env, PROJECT, USER, { fetch: world.fetchImpl });
+
+let DatabaseSync = null;
+try {
+  ({ DatabaseSync } = await import("node:sqlite"));
+} catch {
+  DatabaseSync = null;
+}
+const noSqlite = DatabaseSync ? false : "node:sqlite 없음(Node < 22.13) — 미측정";
+/** node:sqlite 위의 얇은 D1 어댑터(batch = 트랜잭션). */
+function sqliteD1(sqlite) {
+  const stmt = (sql, args) => ({
+    async run() { const r = sqlite.prepare(sql).run(...args); return { meta: { changes: Number(r.changes) } }; },
+    async first() { return sqlite.prepare(sql).get(...args) ?? null; },
+    async all() { return { results: sqlite.prepare(sql).all(...args) }; },
+  });
+  return {
+    prepare: (sql) => ({ bind: (...a) => stmt(sql, a), run: () => stmt(sql, []).run(), first: () => stmt(sql, []).first(), all: () => stmt(sql, []).all() }),
+    async batch(stmts) {
+      sqlite.exec("BEGIN");
+      try {
+        const out = [];
+        for (const s of stmts) out.push(await s.run());
+        sqlite.exec("COMMIT");
+        return out;
+      } catch (err) {
+        sqlite.exec("ROLLBACK");
+        throw err;
+      }
+    },
+  };
+}
+function freshSqlite() {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(readFileSync(path.join(ROOT, "migrations/0068_build_jobs.sql"), "utf8"));
+  sqlite.exec("CREATE TABLE workspace_projects (id TEXT PRIMARY KEY)");
+  return sqlite;
+}
+
+describe("⑥ PR #569 S3 검증 결함 — 삭제 경합 · 호스팅 정리 · 관문 · 메모리 · 정지 · done 조건 · Worker 소유", () => {
+  // ── 결함 1 ──
+  it("[결함 1] 프로젝트 삭제 뒤 산출물 POST → 받지 않는다: R2 사본 · push · D1 · 업로드 0", async () => {
+    const db = makeDb();
+    const env = envFor(db);
+    const world = makeWorld();
+    const token = await mint(env, JOB);
+    await deleteWith(env, world);
+    const before = { calls: world.calls.length, commits: world.gh.commits.length, scripts: world.scripts.length };
+    const r = await postArtifactTo(routesApp(world), env, token, artifactBody());
+    assert.notEqual(r.body?.status, "done", JSON.stringify(r.body));
+    assert.ok(r.body?.accepted !== true, `not accepted: ${JSON.stringify(r.body)}`);
+    assert.equal(env.EVIDENCE.objects.size, 0, "no R2 copy after the delete");
+    assert.deepEqual({ calls: world.calls.length, commits: world.gh.commits.length, scripts: world.scripts.length }, before, "no GitHub / Cloudflare / hosted-app call after the delete");
+  });
+
+  it("[결함 1] 프로젝트 행이 이미 없는데 잡이 아직 활성(삭제가 잡을 멈추기 전)이면 → accepted:false(project_deleted) · 잡 failed(testing, project_deleted) · 부수 효과 0", async () => {
+    const db = makeDb();
+    const env = envFor(db);
+    const world = makeWorld();
+    db.projects.delete(PROJECT);
+    const r = await postArtifactTo(routesApp(world), env, await mint(env, JOB), artifactBody());
+    assert.deepEqual([r.status, r.body.accepted, r.body.reason], [200, false, "project_deleted"]);
+    assert.deepEqual([db.jobs[0].status, db.jobs[0].failed_stage, db.jobs[0].error, db.jobs[0].build_exit_code], ["failed", "testing", "project_deleted", null]);
+    assert.equal(env.EVIDENCE.objects.size, 0);
+    assert.equal(world.calls.length, 0);
+  });
+
+  it("[결함 1] 배포 도중 삭제(첫 D1 쿼리 시점) → 그 뒤 자산·업로드·내용 확인 0 · done 아님 · R2 사본 없음 · 삭제된 잡에 타임라인 없음", async () => {
+    const db = makeDb();
+    const env = envFor(db);
+    const world = makeWorld({ before: onFirst(isD1Query, () => deleteWith(env, world)) });
+    const r = await postArtifactTo(routesApp(world), env, await mint(env, JOB), artifactBody());
+    assert.deepEqual([r.body.status, r.body.error], ["failed", "project_deleted"], JSON.stringify(r.body));
+    assert.deepEqual(world.scriptOps.filter((o) => o === "PUT"), [], "the app is never uploaded after the delete");
+    assert.equal(world.assets.manifests.length, 0);
+    assert.equal(world.hosted.gets.length, 0);
+    assert.equal(env.INSPECTOR.payloads.length, 0);
+    assert.equal(env.EVIDENCE.objects.size, 0, "the stored artifact was swept by the delete");
+    assert.deepEqual(db.events.filter((e) => e.job_id === JOB), [], "no trace is written for a deleted job");
+  });
+
+  it("[결함 1] Worker 업로드 도중 삭제 → 업로드 뒤 방금 올린 Worker를 지운다(마지막 동작이 DELETE) · done 아님 · 자동 확인 0", async () => {
+    const db = makeDb();
+    const env = envFor(db);
+    const world = makeWorld({ before: onFirst(isScriptPut, () => deleteWith(env, world)) });
+    const r = await postArtifactTo(routesApp(world), env, await mint(env, JOB), artifactBody());
+    assert.deepEqual([r.body.status, r.body.error], ["failed", "project_deleted"], JSON.stringify(r.body));
+    assert.ok(world.scriptOps.includes("PUT"), `ops: ${world.scriptOps.join(",")}`);
+    assert.equal(world.scriptOps.at(-1), "DELETE", `the public Worker must not outlive the project (ops: ${world.scriptOps.join(",")})`);
+    assert.equal(world.hosted.gets.length, 0, "no content check for a deleted project");
+    assert.equal(env.INSPECTOR.payloads.length, 0);
+  });
+
+  // ── 결함 2 ──
+  it("[결함 2] 프로젝트 삭제 → 호스팅 자원 정리: 공개 Worker · 프로젝트 D1 · 조직 저장소(그 저장소 하나 · administration 쓰기만 · 쓰고 폐기) · 잡 행·타임라인 삭제", async () => {
+    const db = makeDb({ jobs: [jobRow({ status: "done", deployed_url: APP_URL, build_exit_code: 0, commit_sha: "c0ffee01" })] });
+    db.events.push({ id: "bje_1", job_id: JOB, at: "2026-10-01T00:00:00Z", stage: "done", message: "deployed", meta: { url: APP_URL } });
+    const env = envFor(db);
+    const world = makeWorld();
+    await deleteWith(env, world);
+    const cf = world.calls.filter((c) => c.host === "api.cloudflare.com");
+    assert.deepEqual(
+      cf.map((c) => `${c.method} ${c.path.replace("/client/v4/accounts/acc1", "")}`).sort(),
+      [`DELETE /d1/database/${D1}`, `DELETE /workers/dispatch/namespaces/simsa-hosted/scripts/${SLUG}`].sort(),
+    );
+    assert.ok(cf.every((c) => c.auth === `Bearer ${CF_OPS}`), "the ops token lives only in the Worker");
+    assert.deepEqual(world.gh.tokenRequests.map((t) => t.body), [{ repositories: [SLUG], permissions: { administration: "write" } }], "a token for that one repository, administration only");
+    assert.deepEqual(world.gh.repoDeletes, [{ repo: `${ORG}/${SLUG}`, auth: `Bearer ${SCOPED}` }]);
+    assert.deepEqual(world.gh.revoked, [`Bearer ${SCOPED}`], "the delete token is revoked after use");
+    assert.deepEqual(db.jobs, [], "build job rows are gone once the hosting is gone");
+    assert.deepEqual(db.events, []);
+    assert.equal(world.hosted.gets.length, 0);
+  });
+
+  it("[결함 2] 정리가 실패하면 잡 행을 삭제 표시(user_key '')로 남기고 5분 크론이 다시 시도해 끝낸다 · 같은 slug를 다른 프로젝트가 쓰면 그 Worker·저장소는 두고 · 프로젝트가 살아 있거나 표시가 없으면 아무것도 지우지 않는다", async () => {
+    const sweep = need(teardownMod, "sweepDeletedProjectHosting", "hosted-app-teardown.ts");
+    const teardown = need(teardownMod, "teardownHostedAppsForProject", "hosted-app-teardown.ts");
+    // ① Worker 삭제 5xx → 행이 남는다(삭제 표시) → 크론이 끝낸다
+    const db = makeDb();
+    const env = envFor(db);
+    await deleteWith(env, makeWorld({ scriptDeleteFail: true }));
+    assert.equal(db.jobs.length, 1, "kept as a pointer to what is still live");
+    assert.equal(db.jobs[0].user_key, "", "unlinked from the person (privacy §1)");
+    const w2 = makeWorld();
+    assert.deepEqual(await sweep(env, w2.fetchImpl), { projects: 1, cleaned: 1, failed: 0 });
+    assert.deepEqual(w2.scriptOps, ["DELETE"]);
+    assert.deepEqual(db.jobs, []);
+    assert.deepEqual(await sweep(env, w2.fetchImpl), { projects: 0, cleaned: 0, failed: 0 }, "nothing left to retry");
+    // ② 같은 slug·다른 프로젝트
+    const db3 = makeDb({ jobs: [jobRow(), jobRow({ id: "bj_s3other999", project_id: "wsp_other", d1_id: "other-d1-0001" })], projects: [PROJECT, "wsp_other"] });
+    const w3 = makeWorld();
+    await dbMod.deleteProject(envFor(db3), PROJECT, USER, { fetch: w3.fetchImpl });
+    assert.deepEqual(w3.scriptOps, [], "a slug another project also uses is not deleted");
+    assert.deepEqual(w3.gh.repoDeletes, []);
+    assert.equal(w3.d1.deleted.length, 1, "this project's own D1 is deleted");
+    assert.deepEqual(db3.jobs.map((j) => j.id), ["bj_s3other999"]);
+    // ③ 프로젝트가 살아 있으면 — 삭제 표시가 있어도 — 아무것도 지우지 않는다
+    const w4 = makeWorld();
+    const r4 = await teardown(envFor(makeDb({ jobs: [jobRow({ user_key: "" })] })), PROJECT, w4.fetchImpl);
+    assert.deepEqual([r4.ok, r4.failures], [false, ["project_exists"]]);
+    assert.equal(w4.calls.length, 0);
+    // ④ 삭제 표시가 없으면(프로젝트 행만 없음) 크론은 건드리지 않는다
+    const w5 = makeWorld();
+    assert.deepEqual(await sweep(envFor(makeDb({ jobs: [jobRow()], projects: [] })), w5.fetchImpl), { projects: 0, cleaned: 0, failed: 0 });
+    assert.equal(w5.calls.length, 0);
+  });
+
+  // ── 결함 3 ──
+  it("[결함 3] 잡이 배포 도중 다른 이유로 닫히면(스턱 스윕) 또는 킬스위치가 꺼지면 → 그 뒤 자산·업로드·내용 확인 0 · 닫은 쪽의 기록이 남는다", async () => {
+    const db = makeDb();
+    const env = envFor(db);
+    const world = makeWorld({ before: onFirst(isD1Query, () => buildDb.markBuildJobFailed(env, JOB, { failedStage: "deploying", error: "stuck_swept (FAKE)" })) });
+    const r = await postArtifactTo(routesApp(world), env, await mint(env, JOB), artifactBody());
+    assert.deepEqual([r.body.status, r.body.error], ["failed", "stuck_swept (FAKE)"]);
+    assert.deepEqual([world.scripts.length, world.assets.manifests.length, world.hosted.gets.length], [0, 0, 0], "a closed job is never uploaded");
+    assert.deepEqual([db.jobs[0].status, db.jobs[0].error, db.jobs[0].deployed_url], ["failed", "stuck_swept (FAKE)", null]);
+    // 킬스위치 — 같은 시점에 BUILD_ENABLED=off
+    const db2 = makeDb();
+    const env2 = envFor(db2);
+    const w2 = makeWorld({ before: onFirst(isD1Query, async () => { env2.BUILD_ENABLED = "off"; }) });
+    const r2 = await postArtifactTo(routesApp(w2), env2, await mint(env2, JOB), artifactBody());
+    assert.deepEqual([r2.body.status, r2.body.error], ["failed", "build_disabled"]);
+    assert.deepEqual([w2.scripts.length, env2.INSPECTOR.payloads.length], [0, 0]);
+    assert.deepEqual([db2.jobs[0].status, db2.jobs[0].failed_stage, db2.jobs[0].error], ["failed", "deploying", "build_disabled"]);
+  });
+
+  // ── 결함 7 ──
+  it("[결함 7] Worker가 배포하는 도중 컨테이너의 실패 보고(job_aborted — 업로드 대기 초과·마감·드레인) → 기록만(worker_owns_deploy) · 거짓 done 주장도 잡을 닫지 않는다 · 잡은 Worker가 끝까지 done · 자동 확인 1회", async () => {
+    const db = makeDb();
+    const env = envFor(db);
+    const token = await mint(env, JOB);
+    const replies = [];
+    const world = makeWorld({
+      before: onFirst(isD1Query, async () => {
+        for (const body of [{ jobId: JOB, ok: false, failedStage: "deploying", error: "job_aborted" }, { jobId: JOB, ok: true, stage: "done" }]) {
+          const res = await createApp({ fetch: world.fetchImpl }).fetch(new Request(`${ORIGIN}/internal/build-done`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(body) }), env);
+          replies.push({ status: res.status, body: await res.json() });
+        }
+      }),
+    });
+    const r = await postArtifactTo(routesApp(world), env, token, artifactBody());
+    assert.deepEqual(replies[0], { status: 200, body: { ok: true, accepted: false, reason: "worker_owns_deploy" } });
+    assert.equal(replies[1].status, 409, "a done claim from the container is still refused");
+    assert.equal(r.body.status, "done", JSON.stringify(r.body));
+    assert.deepEqual([db.jobs[0].status, db.jobs[0].deployed_url], ["done", APP_URL]);
+    assert.equal(env.INSPECTOR.payloads.length, 1);
+    assert.ok(eventsOf(db).some(([, m]) => m === "container_reported_failure:job_aborted"), JSON.stringify(eventsOf(db)));
+  });
+
+  it("[결함 7] 마감: 걸린 바깥 호출은 파이프라인 마감에 끊기고 failed(deploying, deploy_timeout) · 업로드 0 · push 토큰은 그래도 폐기 · Worker 마감 < 컨테이너 업로드 대기", async () => {
+    const deadline = need(deployMod, "BUILD_DEPLOY_DEADLINE_MS", "build-deploy.ts");
+    assert.ok(deadline < run.ARTIFACT_TIMEOUTS.uploadMs, "the Worker must finish before the container gives up waiting");
+    const db = makeDb();
+    const env = envFor(db);
+    const world = makeWorld({ hangD1: true });
+    const t0 = Date.now();
+    const r = await postArtifactTo(routesApp(world, { deadlineMs: 300 }), env, await mint(env, JOB), artifactBody());
+    assert.deepEqual([r.body.status, r.body.failedStage, r.body.error], ["failed", "deploying", "deploy_timeout"], JSON.stringify(r.body));
+    assert.ok(Date.now() - t0 < 1400, "cut by the deadline, not by the hung request");
+    assert.deepEqual([world.scripts.length, world.hosted.gets.length], [0, 0]);
+    assert.deepEqual([db.jobs[0].status, db.jobs[0].error], ["failed", "deploy_timeout"]);
+    assert.deepEqual(world.gh.revoked, [`Bearer ${SCOPED}`], "the push token is revoked outside the deadline");
+  });
+
+  it("[결함 7] Worker 소유 잡(산출물 수령 뒤)이 마감+유예보다 오래 활성이면 스턱 스윕이 닫는다(deploy_interrupted) — 살아 있는 배포·산출물 전 잡은 그대로", async () => {
+    const minsAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
+    const db = makeDb({
+      jobs: [
+        jobRow({ id: "bj_s3dead0001", status: "deploying", build_exit_code: 0, updated_at: minsAgo(11) }),
+        jobRow({ id: "bj_s3live0001", status: "deploying", build_exit_code: 0, updated_at: minsAgo(2) }),
+        jobRow({ id: "bj_s3impl0001", status: "implementing", build_exit_code: null, updated_at: minsAgo(11) }),
+      ],
+    });
+    const r = await stuckMod.cleanupStuckBuildJobs(envFor(db));
+    assert.deepEqual(r, { swept: 1, errors: 0 });
+    assert.deepEqual(db.jobs.map((j) => [j.id, j.status, j.error]), [["bj_s3dead0001", "failed", "deploy_interrupted"], ["bj_s3live0001", "deploying", null], ["bj_s3impl0001", "implementing", null]]);
+  });
+
+  // ── 결함 4 ──
+  it("[결함 4] 메모리: 상한 근처 본문(한글 파일 이름)을 받는 동안 요청 하나가 붙잡는 라이브 메모리 ≤ 본문 × 3 · ≤ 40 MiB (자식 프로세스 --expose-gc, R2 put 순간)", () => {
+    const probe = path.join(HERE, "_b5b-s3-memory-probe.mjs");
+    const out = spawnSync(process.execPath, ["--expose-gc", probe, path.join(ROOT, "dist")], { encoding: "utf8", timeout: 120_000 });
+    const line = String(out.stdout ?? "").trim().split("\n").filter((l) => l.startsWith('{"bodyBytes"')).at(-1);
+    assert.ok(line, `probe output: ${String(out.stdout).slice(-400)} ${String(out.stderr).slice(-400)}`);
+    const m = JSON.parse(line);
+    assert.equal(m.reply?.error, "artifact_store_failed", "the probe stops at the R2 put (no deploy, no network)");
+    assert.ok(m.bodyBytes > 0.8 * artifactMod.BUILD_ARTIFACT_LIMITS.maxBodyBytes, `near the limit (${m.bodyBytes})`);
+    const MiB = 1024 * 1024;
+    const live = `${(m.deltaBytes / MiB).toFixed(1)} MiB for a ${(m.bodyBytes / MiB).toFixed(1)} MiB body`;
+    assert.ok(m.deltaBytes <= 3 * m.bodyBytes, `live ≤ 3 × body: ${live}`);
+    assert.ok(m.deltaBytes <= 40 * MiB, `live ≤ 40 MiB (Worker isolate 128 MB is shared): ${live}`);
+  });
+
+  it("[결함 4] R2에는 받은 본문 바이트 그대로(재직렬화 없음 · 형식 표지) · 날것 비ASCII 본문은 400 artifact_invalid:non_ascii_body · 컨테이너는 ASCII JSON으로 보낸다(한글은 되살아난다) · 상한은 13 MiB 안", async () => {
+    const db = makeDb();
+    const env = envFor(db);
+    const sent = asciiJson(artifactBody());
+    const r = await postArtifactTo(routesApp(makeWorld()), env, await mint(env, JOB), sent);
+    assert.equal(r.body.status, "done", JSON.stringify(r.body));
+    const stored = env.EVIDENCE.objects.get(`builds/${JOB}/artifact.json`);
+    assert.equal(Buffer.compare(stored.bytes, Buffer.from(sent, "utf8")), 0, "stored exactly what was received");
+    assert.equal(stored.opts?.customMetadata?.format, "artifact-body-v1");
+    // 날것 한글 본문 — 거절 + failed(deploying)
+    const db2 = makeDb();
+    const env2 = envFor(db2);
+    const raw = JSON.stringify(artifactBody());
+    assert.ok(/[^\x00-\x7f]/.test(raw), "fixture carries raw Korean");
+    const r2 = await postArtifactTo(routesApp(makeWorld()), env2, await mint(env2, JOB), raw);
+    assert.deepEqual([r2.status, r2.body.detail], [400, "artifact_invalid:non_ascii_body"]);
+    assert.deepEqual([db2.jobs[0].status, db2.jobs[0].failed_stage], ["failed", "deploying"]);
+    // 컨테이너: postArtifact 본문은 ASCII · 한글 경로는 JSON.parse로 그대로
+    assert.equal(typeof run.asciiJson, "function", "builder-run.mjs asciiJson (B-5b S3 결함 4)");
+    assert.equal(run.asciiJson(artifactBody()), sent, "container and test serialize the same way");
+    let captured = null;
+    await run.postArtifact(`${ORIGIN}/internal/build-artifact`, "t", artifactBody(), { fetchImpl: async (_u, init) => { captured = init.body; return new Response("{}", { status: 200 }); } });
+    assert.ok(!/[^\x00-\x7f]/.test(captured), "the container sends ASCII only");
+    assert.ok(JSON.parse(captured).source.some((f) => f.path === "src/client/예약 화면.tsx"), "Korean paths survive (Rule 6)");
+    // 상한: 구역 합계 × 4/3 < 본문 상한 ≤ 13 MiB · 컨테이너와 같다
+    const L = artifactMod.BUILD_ARTIFACT_LIMITS;
+    assert.ok(L.maxBodyBytes <= 13 * 1024 * 1024, `maxBodyBytes ${L.maxBodyBytes}`);
+    assert.ok(((L.maxModuleBytes + L.maxAssetBytes + L.maxMigrationBytes + L.maxSourceBytes) * 4) / 3 < L.maxBodyBytes);
+    assert.deepEqual({ ...collect.ARTIFACT_LIMITS }, { ...L });
+  });
+
+  // ── 결함 5 ──
+  it("[결함 5] 정지는 push보다 먼저 — 정지된 slug면 GitHub 호출 0 · 정지 목록 조회 오류는 한 번 다시 읽고 그래도 안 되면 fail-closed(suspension_check_failed) · 한 번 오류 뒤 성공이면 진행", async () => {
+    const kv = (get) => ({ get });
+    const db = makeDb();
+    const env = envFor(db, { HOSTING_SUSPENDED: kv(async (k) => (k === `suspended:${SLUG}` ? JSON.stringify({ reason: "phishing" }) : null)) });
+    const w = makeWorld();
+    const r = await postArtifactTo(routesApp(w), env, await mint(env, JOB), artifactBody());
+    assert.deepEqual([r.body.status, r.body.error], ["failed", "slug_suspended"]);
+    assert.equal(w.calls.filter((c) => c.host === "api.github.com").length, 0, "no source is committed for a suspended slug");
+    assert.equal(w.scripts.length, 0);
+    // 조회가 계속 실패 → fail-closed
+    let reads = 0;
+    const db2 = makeDb();
+    const env2 = envFor(db2, { HOSTING_SUSPENDED: kv(async () => { reads += 1; throw new Error("kv unavailable (FAKE)"); }) });
+    const w2 = makeWorld();
+    const r2 = await postArtifactTo(routesApp(w2), env2, await mint(env2, JOB), artifactBody());
+    assert.deepEqual([r2.body.status, r2.body.error], ["failed", "suspension_check_failed"]);
+    assert.equal(reads, 2, "read twice before failing closed");
+    assert.deepEqual([w2.calls.length, w2.scripts.length], [0, 0]);
+    // 한 번 실패 뒤 성공 → 진행(done)
+    let n = 0;
+    const env3 = envFor(makeDb(), { HOSTING_SUSPENDED: kv(async () => { n += 1; if (n === 1) throw new Error("blip (FAKE)"); return null; }) });
+    const r3 = await postArtifactTo(routesApp(makeWorld()), env3, await mint(env3, JOB), artifactBody());
+    assert.equal(r3.body.status, "done", JSON.stringify(r3.body));
+  });
+
+  it("[결함 5] 빌드 시작(POST /build)에서도 LLM·프로비저닝 전에 정지 목록을 본다 — 정지면 403 slug_suspended · 조회 실패면 503 · 상한 슬롯·D1·저장소·잡 0", async () => {
+    const realFetch = globalThis.fetch;
+    try {
+      for (const [isSuspended, status, error] of [
+        [async () => true, 403, "slug_suspended"],
+        [async () => { throw new Error("kv down (FAKE)"); }, 503, "suspension_check_failed"],
+      ]) {
+        const db = makeDb({ jobs: [] });
+        const env = envFor(db, { BUILDER: { idFromName: () => ({}), get: () => ({ fetch: async () => new Response("{}", { status: 202 }) }) }, ANTHROPIC_API_KEY: "anthropic-key-FAKE-s3" });
+        const world = makeWorld();
+        // 프로비저닝 함수의 기본 fetch(전역)도 가짜로 — 옛 코드가 실제 Cloudflare에 닿지 않게.
+        globalThis.fetch = world.fetchImpl;
+        const app = routesMod.createWorkspaceBuildJobRoutes(world.fetchImpl, { isSuspended });
+        const res = await app.fetch(new Request(`${ORIGIN}/workspace/projects/${encodeURIComponent(PROJECT)}/build`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userKey: USER, locale: "ko" }) }), env);
+        assert.deepEqual([res.status, (await res.json()).error], [status, error]);
+        assert.equal([...db.rate.values()].reduce((s, v) => s + v, 0), 0, "no daily slot consumed");
+        assert.equal(world.calls.length, 0, "no namespace / D1 / repository provisioning");
+        assert.equal(db.jobs.length, 0);
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  // ── 결함 6 ──
+  it("[결함 6] markBuildJobDone: 산출물을 받지 않은 행(build_exit_code NULL)은 done으로 못 간다 — **DB 조건**(실제 SQLite 0068) · 받은 뒤에는 done", { skip: noSqlite }, async () => {
+    const sqlite = freshSqlite();
+    const env = { DB: sqliteD1(sqlite) };
+    const job = await buildDb.insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: SLUG, wbsTotal: 1 });
+    assert.equal(await buildDb.advanceBuildJob(env, job.id, { status: "testing" }), true);
+    const input = { deployedUrl: APP_URL, commitSha: null, spentUsd: 0, buildExitCode: 0, wbsDone: 1 };
+    assert.deepEqual(await buildDb.markBuildJobDone(env, job.id, input), { ok: false, reason: "build_not_green" }, "claim was skipped — the row says no artifact was received");
+    const mid = await buildDb.getBuildJobById(env, job.id);
+    assert.deepEqual([mid.status, mid.deployedUrl, mid.buildExitCode], ["testing", null, null]);
+    assert.equal(await buildDb.claimBuildArtifact(env, job.id), true);
+    assert.deepEqual(await buildDb.markBuildJobDone(env, job.id, input), { ok: true });
+    assert.equal((await buildDb.getBuildJobById(env, job.id)).status, "done");
+  });
+
+  it("[결함 1·2·7] 새 문장들이 실제 스키마(0068)에서 돈다 — 활성 잡 멈춤 · 삭제 배치(타임라인 삭제 · user_key 끊기) · 정리 대상 · 공유 확인 · 행 삭제 · 삭제된 잡엔 이벤트 없음 · Worker 소유 스턱 목록 · 프로젝트 존재", { skip: noSqlite }, async () => {
+    const sqlite = freshSqlite();
+    const env = { DB: sqliteD1(sqlite) };
+    sqlite.prepare("INSERT INTO workspace_projects (id) VALUES (?), (?)").run(PROJECT, "wsp_other");
+    const a = await buildDb.insertQueuedBuildJob(env, { projectId: PROJECT, userKey: USER, slug: SLUG, wbsTotal: 1, d1Id: D1, repoFullName: `${ORG}/${SLUG}` });
+    const b = await buildDb.insertQueuedBuildJob(env, { projectId: "wsp_other", userKey: "uk_다른 사장님", slug: "other-app-1", wbsTotal: 1, d1Id: "other-d1-0001" });
+    await buildDb.appendBuildJobEvent(env, a.id, "queued", "repo_ready");
+    await buildDb.appendBuildJobEvent(env, b.id, "queued", "repo_ready");
+    assert.equal(await need(buildDb, "stopActiveBuildJobsForProject", "build-job-db.ts")(env, PROJECT, "project_deleted"), 1);
+    assert.deepEqual([(await buildDb.getBuildJobById(env, a.id)).status, (await buildDb.getBuildJobById(env, b.id)).status], ["failed", "queued"]);
+    await env.DB.batch([...need(buildDb, "buildJobDeleteBatchStatements", "build-job-db.ts")(env, PROJECT, "2026-10-01T01:00:00Z"), env.DB.prepare("DELETE FROM workspace_projects WHERE id = ?").bind(PROJECT)]);
+    assert.equal(sqlite.prepare("SELECT user_key FROM build_jobs WHERE id = ?").get(a.id).user_key, "");
+    const events = (id) => sqlite.prepare("SELECT COUNT(*) AS n FROM build_job_events WHERE job_id = ?").get(id).n;
+    assert.deepEqual([events(a.id), events(b.id)], [0, 1]);
+    assert.deepEqual(await buildDb.listDeletedProjectsWithBuildJobs(env, 5), [PROJECT]);
+    assert.deepEqual(await buildDb.listBuildJobHostingForProject(env, PROJECT), [{ id: a.id, slug: SLUG, d1Id: D1, repoFullName: `${ORG}/${SLUG}` }]);
+    assert.equal(await buildDb.hostingResourceSharedWithOtherProject(env, PROJECT, { slug: SLUG }), false);
+    assert.equal(await buildDb.hostingResourceSharedWithOtherProject(env, "wsp_x", { d1Id: D1 }), true);
+    await buildDb.deleteBuildJobsForProject(env, PROJECT);
+    assert.equal(await buildDb.getBuildJobById(env, a.id), null);
+    assert.deepEqual(await buildDb.listDeletedProjectsWithBuildJobs(env, 5), []);
+    assert.equal(await buildDb.appendBuildJobEvent(env, a.id, "deploying", "d1_migrated"), false, "no trace for a deleted job");
+    assert.equal(events(a.id), 0);
+    sqlite.prepare("UPDATE build_jobs SET status = 'deploying', build_exit_code = 0, updated_at = ? WHERE id = ?").run("2026-10-01T00:00:00Z", b.id);
+    assert.deepEqual((await buildDb.listStuckWorkerOwnedBuildJobs(env, "2026-10-01T00:10:00Z")).map((r) => ({ ...r })), [{ id: b.id, status: "deploying" }]);
+    assert.deepEqual(await buildDb.listStuckWorkerOwnedBuildJobs(env, "2026-09-30T23:59:00Z"), []);
+    assert.equal(await dbMod.projectExists(env, "wsp_other"), true);
+    assert.equal(await dbMod.projectExists(env, PROJECT), false);
   });
 });

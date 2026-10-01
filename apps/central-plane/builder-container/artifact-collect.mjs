@@ -31,20 +31,23 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { isScaffoldExcluded } from "./builder-run.mjs";
 
-/** [PILOT] 산출물 상한 — Worker BUILD_ARTIFACT_LIMITS와 같은 값(test/train-b-b5b-s3-deploy.test.mjs가 비교). */
+/**
+ * [PILOT] 산출물 상한 — Worker BUILD_ARTIFACT_LIMITS와 같은 값(test/train-b-b5b-s3-deploy.test.mjs가 비교).
+ * PR #569 S3 검증 결함 4: Worker isolate 메모리(128MB) 기준으로 낮췄다(본문 26 → 13 MiB). 이유는 Worker 쪽 머리말.
+ */
 export const ARTIFACT_LIMITS = Object.freeze({
-  /** Worker가 받는 요청 본문(JSON) 상한 — base64(×4/3)와 JSON 틀을 넉넉히 덮는다. */
-  maxBodyBytes: 26 * 1024 * 1024,
+  /** Worker가 받는 요청 본문(ASCII JSON) 상한 — base64(×4/3)와 JSON 틀(이스케이프된 한글 경로 포함)을 덮는다. */
+  maxBodyBytes: 13 * 1024 * 1024,
   maxModules: 20,
-  maxModuleBytes: 6 * 1024 * 1024,
+  maxModuleBytes: 3 * 1024 * 1024,
   maxAssets: 300,
-  maxAssetBytes: 8 * 1024 * 1024,
-  maxAssetFileBytes: 4 * 1024 * 1024,
+  maxAssetBytes: 3 * 1024 * 1024,
+  maxAssetFileBytes: 2 * 1024 * 1024,
   maxMigrations: 50,
-  maxMigrationBytes: 512 * 1024,
+  maxMigrationBytes: 256 * 1024,
   maxSourceFiles: 300,
-  maxSourceBytes: 4 * 1024 * 1024,
-  maxSourceFileBytes: 512 * 1024,
+  maxSourceBytes: 2 * 1024 * 1024,
+  maxSourceFileBytes: 256 * 1024,
 });
 
 /** 템플릿 wrangler.toml [assets] directory(보호 파일 — 게이트 전에 원본으로 되돌린다). */
