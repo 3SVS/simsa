@@ -56,11 +56,16 @@ import { buildDiffSummary } from "../workspace/github-pr.js";
 import { captureTrainingRecord, computeRecheckOutcome, updateTrainingRecordOutcome } from "../workspace/training-store.js";
 import { captureJourneyEvent } from "../workspace/journey-store.js";
 import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
+import { regionFromRequest } from "../workspace/envelope.js";
+import { opsMetaRecordingAllowed } from "../workspace/privacy-prefs.js";
+import { hasActiveTrainingConsent } from "../workspace/training-consent-db.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { detectContentLang } from "../workspace/topic-tags.js";
 import { getProject, getOwnedProject, listProjectsByUser, EXAMPLE_PROJECT_IDS } from "../workspace/db.js";
 import { consumeUserHourlyLimit, consumeUserDailyLimit, hourlyLimitFromEnv } from "../workspace/rate-limit.js";
-import { betaReviewDailyLimit, BETA_REVIEW_DAILY_BUCKET } from "../workspace/beta-limits.js";
+import { betaReviewDailyLimit, BETA_REVIEW_DAILY_BUCKET, clientNetworkKey } from "../workspace/beta-limits.js";
+import { generationCapacityResponse, takeGenerationSlot } from "../workspace/generation-capacity.js";
+import { createUsageCollector } from "../workspace/llm-usage.js";
 import type { CheckableItem, ProductSpecForCheck } from "../workspace/check.js";
 import { normalizeProductSpec, normalizeCheckableItems } from "../workspace/check.js";
 import { generatePRFixBrief } from "../workspace/pr-fix-brief.js";
@@ -937,6 +942,17 @@ export function createWorkspaceGitHubRoutes(
       console.warn("[workspace/pr-review] credit enforcement failed (non-fatal):", err);
     }
 
+    // 5c. Daily generation capacity (PR #576 review P2-9) — the same "generation" buckets as
+    // the idea/spec family (this network's share, then the service bucket), after every
+    // check above and BEFORE the run row: a refused review leaves no "running" row and
+    // makes no LLM call. Before this, PR review was the one user-callable LLM path outside
+    // the service ceiling (only per-user 30/h · 100/day, credit blocking off). Known
+    // trade-off: the per-user daily review slot above has no refund, so a capacity refusal
+    // still counts as one of that user's 100 daily reviews.
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
+    if (slot.limited) return generationCapacityResponse(slot, corsHeaders(origin));
+    const billing = createUsageCollector();
+
     // 6. Insert run as running (with rerun lineage if applicable)
     const run = await insertReviewRun(c.env, {
       projectId, userKey,
@@ -947,7 +963,10 @@ export function createWorkspaceGitHubRoutes(
       status: "running",
       rerunOfReviewRunId: rerunOfReviewRunId,
     }).catch(() => null);
-    if (!run) return json({ ok: false, error: "run_create_failed" }, 500, origin);
+    if (!run) {
+      await slot.settle({ failed: true, billedCalls: 0 });
+      return json({ ok: false, error: "run_create_failed" }, 500, origin);
+    }
 
     // 7. Fetch PR files
     const [owner, repoName] = repo.repoFullName.split("/");
@@ -959,6 +978,8 @@ export function createWorkspaceGitHubRoutes(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await updateReviewRun(c.env, run.id, { status: "error", errorMessage: `PR 파일 가져오기 실패: ${msg}` });
+      // No LLM call yet → the capacity slots go back.
+      await slot.settle({ failed: true, billedCalls: 0 });
       return json({ ok: false, error: "pr_fetch_failed", details: msg }, 502, origin);
     }
 
@@ -979,11 +1000,14 @@ export function createWorkspaceGitHubRoutes(
         c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
         // 벤더 폴백: Anthropic이 Worker egress에서 차단될 때 OpenAI로.
         vendorFallback(c.env),
+        // Counts vendor answers only — a billed answer that did not parse keeps its slot.
+        billing.sink,
       );
       if (reviewResult.warnings?.length) warnings.push(...reviewResult.warnings);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await updateReviewRun(c.env, run.id, { status: "error", errorMessage: `리뷰 실행 실패: ${msg}` });
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
       return json({ ok: false, error: "review_failed", details: msg }, 500, origin);
     }
 
@@ -1027,7 +1051,10 @@ export function createWorkspaceGitHubRoutes(
     // region from the edge (Cloudflare adds request.cf.country — coarse, not PII);
     // locale from the review request. built_with + entry_path come from the
     // project (STEP 2). Remaining envelope tags land in STEP 3.
-    const cfCountry = (c.req.raw as { cf?: { country?: string } }).cf?.country ?? null;
+    // Train K · K-1 (0071): the copy's country code follows the person's ops-meta choice too — a person
+    // who turned ops-meta recording off (or an EU/UK/CH default) gets region null (key: events/unknown/…).
+    const edgeRegion = regionFromRequest(c.req.raw);
+    const cfCountry = (await opsMetaRecordingAllowed(c.env, userKey, edgeRegion, "training-capture")) ? edgeRegion : null;
     const projForTag = await getProject(c.env, projectId).catch(() => null);
     const projEntryPath =
       projForTag?.entryPath === "idea" || projForTag?.entryPath === "code" || projForTag?.entryPath === "spec"
@@ -1086,7 +1113,9 @@ export function createWorkspaceGitHubRoutes(
     }
     if (rerunOfReviewRunId) {
       const priorRun = await getReviewRunById(c.env, rerunOfReviewRunId).catch(() => null);
-      if (priorRun?.trainingR2Key) {
+      // Train K · K-3: never write to a training copy without ACTIVE consent — after a withdrawal the
+      // copy is being deleted, and a get-then-put here could put it back after the delete.
+      if (priorRun?.trainingR2Key && (await hasActiveTrainingConsent(c.env, userKey))) {
         const priorResults = (() => {
           try { return (JSON.parse(priorRun.resultJson ?? "{}").results ?? []) as Array<{ itemId?: string; status?: string }>; }
           catch { return []; }

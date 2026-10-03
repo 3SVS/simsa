@@ -1,7 +1,8 @@
+import { staffUserKey } from "./lib/staff-key.mjs";
 /** infer-intent 라이브 응답을 직접 본다 — 브라우저 오류의 원인 확인. */
 const B = "https://conclave-ai.seunghunbae.workers.dev";
 const H = { "content-type": "application/json", origin: "https://app.trysimsa.com" };
-const userKey = "uk_infer_" + Math.floor(Math.random() * 1e9).toString(36);
+const userKey = staffUserKey() ?? "uk_infer_" + Math.floor(Math.random() * 1e9).toString(36);
 const projectId = "proj_infer_" + Math.floor(Math.random() * 1e9).toString(36);
 
 async function j(method, path, body) {

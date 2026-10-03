@@ -13,6 +13,7 @@
 // stale-sidebar-after-delete bug fixed in #331. Screenshots go to ./smoke-shots.
 import { chromium } from "playwright";
 import { mkdirSync } from "fs";
+import { seedStaffKey } from "./lib/staff-key.mjs";
 
 const SHOTS = new URL("./smoke-shots", import.meta.url).pathname.replace(/^\/(\w):/, "$1:");
 mkdirSync(SHOTS, { recursive: true });
@@ -22,7 +23,9 @@ const pass = (name, detail = "") => { results.push({ name, ok: true, detail }); 
 const fail = (name, detail = "") => { results.push({ name, ok: false, detail }); console.log(`❌ ${name} ${detail}`); };
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const smokeCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+await seedStaffKey(smokeCtx); // D-24.2 — 장비 키(설정 시)
+const page = await smokeCtx.newPage();
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png` });
 
 try {

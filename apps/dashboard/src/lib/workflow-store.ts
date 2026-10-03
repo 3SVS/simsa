@@ -279,6 +279,14 @@ export type ExtendedProjectData = {
   /** AF-4: 사용자가 추론된 의도를 확인한 시각. 카드가 다시 뜨지 않게 하고,
    *  "누가 이 기준을 정했나"의 답이 된다. */
   intentConfirmedAt?: string;
+  /** C-A7 검증 P2-5: 인터뷰("내 AI에게 물어보기")로 확정 의도 문장(productSpec.oneLine)이 바뀐 시각.
+   *  intentConfirmedAt은 첫 확정 시각이라 그대로 둔다. 원 런보다 이 시각이 뒤면 그 런의 '다시 확인'은
+   *  원 런 intent 대신 확정 의도를 쓴다(visual-check-recheck.mjs confirmedIntentAtOf·buildRecheckBody). */
+  intentRevisedAt?: string;
+  /** C-A7 (D-2 amend): 유저가 "맞나요?" 카드에서 체크를 남긴(kept) 항목 id + 인터뷰 회수의
+   *  MUST 항목 id. 역추론 지시서의 must는 **이 목록에서만** 나온다 — 서버가 userConfirmedAcIds로
+   *  바꿔 저장한다. 없으면(옛 저장) 확인된 must 0. */
+  intentConfirmedItemIds?: string[];
   stackProfile?: {
     hosting?: { id: string; other?: string };
     data?: { id: string; other?: string };

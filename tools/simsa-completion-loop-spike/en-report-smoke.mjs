@@ -1,3 +1,4 @@
+import { staffUserKey } from "./lib/staff-key.mjs";
 /**
  * en-report-smoke.mjs — live proof that an inspection report renders in English.
  *
@@ -22,7 +23,7 @@
 const BASE = process.env.SIMSA_BASE ?? "https://conclave-ai.seunghunbae.workers.dev";
 const TARGET = process.env.SIMSA_SMOKE_TARGET ?? "https://app.trysimsa.com";
 const KEEP = process.argv.includes("--keep");
-const USER_KEY = `uk_smoke_en_${Date.now().toString(36)}`;
+const USER_KEY = staffUserKey() ?? `uk_smoke_en_${Date.now().toString(36)}`;
 const POLL_MS = 10_000;
 const MAX_WAIT_MS = 6 * 60_000;
 

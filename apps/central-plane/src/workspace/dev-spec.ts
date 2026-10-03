@@ -169,6 +169,42 @@ export const TestPlanEntrySchema = z
       .strict(),
   ]);
 
+/**
+ * D-2 amend(재정렬 2026-09-27, `design lock approved`): **출처 구분(A안)**.
+ *
+ * 역추론 지시서(`source: "inferred"`)는 우리가 앱에서 **읽어낸** 것이지 유저가 말한 것이 아니다.
+ * 그래서 "반드시 되어야 할 것(must)"은 유저가 "맞나요?" 카드(또는 인터뷰 회수)에서 **확인한 것만**
+ * 인정한다 — 그 근거가 `userConfirmedAcIds`다.
+ *
+ * 모든 필드는 optional(추가만): 이 키가 없는 옛 저장 JSON도 그대로 파싱된다. 값은 감지된 사실만
+ * 담는다(D-3 정직성) — 모르면 키를 비운다.
+ */
+export const DevSpecProvenanceSchema = z
+  .object({
+    /** 앱을 만든 도구(빌더 호스트 감지 또는 유저가 적은 도구 id). 예: "lovable", "bolt". */
+    builtWith: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9][a-z0-9._-]{0,39}$/, "도구 id는 영문 소문자 식별자")
+      .optional(),
+    /** 들어온 갈래(프로젝트 entry_path). 기존 앱 문은 "code". */
+    entryPath: z.enum(["idea", "code", "spec"]).optional(),
+    /** 결정론 스택 감지 결과(source-evidence.ts StackHint 그대로). */
+    detectedStack: z
+      .object({
+        hosting: z.string().trim().min(1).max(40).optional(),
+        data: z.string().trim().min(1).max(40).optional(),
+        tools: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+      })
+      .strict()
+      .optional(),
+    /** 유저가 확인한 수용 기준 id — inferred에서 must는 이 목록 안의 AC만. */
+    userConfirmedAcIds: z.array(AcceptanceId).max(200).optional(),
+  })
+  .strict();
+
+export type DevSpecProvenance = z.infer<typeof DevSpecProvenanceSchema>;
+
 export const DevSpecMetaSchema = z
   .object({
     version: z.literal(1),
@@ -176,6 +212,8 @@ export const DevSpecMetaSchema = z
     source: z.enum(["generated", "inferred", "manual"]),
     locale: z.enum(["ko", "en"]),
     generatedAt: z.string().datetime(),
+    /** D-2 amend — 추가만(optional). 없으면 옛 지시서. */
+    provenance: DevSpecProvenanceSchema.optional(),
   })
   .strict();
 
@@ -251,7 +289,11 @@ export type IntegrityViolation = {
     | "wbs_dependency_cycle"
     | "acceptance_without_test_plan"
     | "test_plan_unknown_acceptance"
-    | "score_like_key";
+    | "score_like_key"
+    /** D-2 amend: inferred 지시서의 must AC가 userConfirmedAcIds에 없다(확인 안 된 must). */
+    | "inferred_must_unconfirmed"
+    /** D-2 amend: userConfirmedAcIds가 없는 AC를 가리킨다(고아 참조). */
+    | "confirmed_unknown_acceptance";
   /** 기계가 만든 위치 표식(id 또는 경로). 사람이 읽는 문장은 렌더러 몫. */
   where: string;
 };
@@ -341,7 +383,53 @@ export function checkDevSpecIntegrity(spec: DevSpec): IntegrityViolation[] {
 
   for (const p of findScoreLikeKeys(spec)) v.push({ rule: "score_like_key", where: p });
 
+  // D-2 amend(출처 구분): 확인 목록은 존재하는 AC만 가리킨다(어느 source든 — id 그래프 규칙).
+  const confirmedIds = spec.meta.provenance?.userConfirmedAcIds ?? [];
+  for (const id of confirmedIds) {
+    if (!acSet.has(id)) v.push({ rule: "confirmed_unknown_acceptance", where: id });
+  }
+  // inferred면 must는 유저가 확인한 것만. priority는 기능(FR)에 붙고 AC는 그 기능의 우선순위를
+  // 물려받는다(acceptance-plan.ts가 시나리오 priority를 f.priority로 쓰는 것과 같은 규칙) —
+  // 그래서 "must AC" = priority가 must인 기능에 딸린 AC. 확인 안 된 must AC는 위반으로 보고한다.
+  // 이 검사기는 **보고만** 한다(순수·비변형 — 저장 전에 실패, D-2). 강등은 생산자(생성기)가 한다.
+  if (spec.meta.source === "inferred") {
+    const confirmed = new Set(confirmedIds);
+    const priorityOf = new Map(spec.features.map((f) => [f.id, f.priority]));
+    for (const a of spec.acceptance) {
+      if (priorityOf.get(a.featureId) === "must" && !confirmed.has(a.id)) {
+        v.push({ rule: "inferred_must_unconfirmed", where: a.id });
+      }
+    }
+  }
+
   return v;
+}
+
+/**
+ * D-2 amend — 역추론 지시서의 우선순위를 확인 목록에 맞춘다(순수, 생산자용).
+ *
+ * 규칙: 확인된 기능(`confirmedFeatureIds`)은 must, 확인 안 된 must는 should로 **강등**.
+ * 무결성 검사기가 "확인 안 된 must"를 위반으로 보고하므로, 역추론을 만드는 쪽이 저장 전에
+ * 이 함수로 맞춘다. 돌려주는 `userConfirmedAcIds`는 확인된 기능에 딸린 AC 전부(정렬).
+ */
+export function applyInferredConfirmation(
+  sections: { features: Feature[]; acceptance: Acceptance[] },
+  confirmedFeatureIds: ReadonlySet<string>,
+): { features: Feature[]; userConfirmedAcIds: string[]; demoted: string[] } {
+  const demoted: string[] = [];
+  const features = sections.features.map((f) => {
+    if (confirmedFeatureIds.has(f.id)) return f.priority === "must" ? f : { ...f, priority: "must" as const };
+    if (f.priority === "must") {
+      demoted.push(f.id);
+      return { ...f, priority: "should" as const };
+    }
+    return f;
+  });
+  const userConfirmedAcIds = sections.acceptance
+    .filter((a) => confirmedFeatureIds.has(a.featureId))
+    .map((a) => a.id)
+    .sort();
+  return { features, userConfirmedAcIds, demoted };
 }
 
 /** 의존 그래프의 순환에 속한 WBS id(정렬). 순환 없으면 빈 배열. */

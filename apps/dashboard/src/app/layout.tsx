@@ -5,7 +5,6 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 import { ToastProvider } from "@/components/Toast";
 import { AppSidebar } from "@/components/AppSidebar";
 import { GlobalDropZone } from "@/components/GlobalDropZone";
-import { ImproveSimsaPrompt } from "@/components/ImproveSimsaPrompt";
 import { ClientErrorReporter } from "@/components/ClientErrorReporter";
 import { BackspaceNavGuard } from "@/components/BackspaceNavGuard";
 import { LanguageToggle } from "@/components/LanguageToggle";
@@ -39,7 +38,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ToastProvider>
             <GlobalDropZone />
             <BackspaceNavGuard />
-            <ImproveSimsaPrompt />
+            {/* Train K: the floating "Simsa 개선 참여" popup is gone — training consent is an
+                inline card on the first completed check result (+ Settings), never an overlay. */}
             {/* G12 — 전역 오류 수집 (fire-and-forget, 화면 영향 0) */}
             <ClientErrorReporter />
             {/* App shell: slim left sidebar (like an AI-platform workspace) + spacious main */}

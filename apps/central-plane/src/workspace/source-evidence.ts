@@ -139,21 +139,205 @@ const BUILDER_HOSTS: ReadonlyArray<readonly [string, NonNullable<StackHint["host
   ["base44.app", "base44"],
 ];
 
-/** HTML에서 사람이 읽는 텍스트만 성기게 뽑는다. 파서를 들이지 않는다(Worker 예산). */
-export function textFromHtml(html: string): { title?: string; text: string } {
-  const strip = (s: string) =>
-    s
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+// ─── 선형 HTML 훑기 (2026-10-01) ──────────────────────────────────────────────
+//
+// 이 파일은 사용자가 준 **아무 주소**의 HTML(최대 200,000자)을 읽는다 — 그 HTML은 그 주소의
+// 주인이 마음대로 쓴다. 예전에는 정규식 여섯 개로 훑었는데, 닫는 짝이 없는 여는 조각이
+// 반복되면 여는 자리마다 문서 끝까지 다시 훑어 **제곱 시간**이 들었다(3a1ca07 실측:
+// `<h1`×n 200K 15초, `<a`×n 200K 11.6초, `<meta name="description"`×n은 50K에서 57초).
+// 아래는 같은 정규식과 **같은 결과**를 내는 한 방향 훑기다(차등 퍼징 테스트로 대조:
+// test/redos-linear-hardening.test.mjs). 옛 정규식은 각 함수 주석에 적어 둔다.
 
-  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim();
-  const desc = /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i.exec(html)?.[1];
-  const headings = [...html.matchAll(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/gi)]
-    .map((m) => strip(m[1] ?? ""))
+/**
+ * ASCII 글자만 소문자로 — 길이가 그대로라 위치가 원문과 맞는다. 유니코드 플래그 없는
+ * `/i`가 접는 것도 정확히 이것뿐이다(ASCII 밖 글자는 ASCII 글자와 같게 보지 않는다).
+ */
+function asciiLower(s: string): string {
+  return s.replace(/[A-Z]+/g, (m) => m.toLowerCase());
+}
+
+/** `s.replace(/<script[\s\S]*?<\/script>/gi, " ")` (style도 같은 모양). */
+function removeElements(s: string, tag: "script" | "style"): string {
+  const lower = asciiLower(s);
+  const open = `<${tag}`;
+  const close = `</${tag}>`;
+  let out = "";
+  let pos = 0;
+  for (;;) {
+    const start = lower.indexOf(open, pos);
+    if (start === -1) break;
+    // 닫는 짝이 없으면 이후의 어느 여는 조각에도 없다 — 거기서 끝.
+    const end = lower.indexOf(close, start + open.length);
+    if (end === -1) break;
+    out += `${s.slice(pos, start)} `;
+    pos = end + close.length;
+  }
+  return out + s.slice(pos);
+}
+
+/** `s.replace(/<[^>]+>/g, " ")`. `<>`(사이가 빈 것)는 태그가 아니다. */
+function replaceTags(s: string): string {
+  let out = "";
+  let pos = 0;
+  let lt = s.indexOf("<");
+  while (lt !== -1) {
+    const gt = s.indexOf(">", lt + 1);
+    if (gt === -1) break; // 이 뒤의 어느 "<"도 닫히지 않는다.
+    if (gt > lt + 1) {
+      out += `${s.slice(pos, lt)} `;
+      pos = gt + 1;
+      lt = s.indexOf("<", pos);
+    } else {
+      lt = s.indexOf("<", lt + 1);
+    }
+  }
+  return out + s.slice(pos);
+}
+
+function stripHtml(s: string): string {
+  return replaceTags(removeElements(removeElements(s, "script"), "style"))
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * `/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim()`.
+ * 첫 `<title`이 짝을 못 찾으면 뒤의 어느 `<title`도 못 찾으므로 첫 것만 본다.
+ */
+function titleOf(html: string, lower: string): string | undefined {
+  const open = lower.indexOf("<title");
+  if (open === -1) return undefined;
+  const gt = html.indexOf(">", open + 6);
+  if (gt === -1) return undefined;
+  const close = lower.indexOf("</title>", gt + 1);
+  if (close === -1) return undefined;
+  return html.slice(gt + 1, close).trim();
+}
+
+/** `<h1`·`<h2`의 다음 위치. */
+function nextHeadingOpen(lower: string, from: number): number {
+  let i = lower.indexOf("<h", from);
+  while (i !== -1) {
+    const c = lower.charCodeAt(i + 2);
+    if (c === 0x31 || c === 0x32) return i;
+    i = lower.indexOf("<h", i + 1);
+  }
+  return -1;
+}
+
+/** `</h1>`·`</h2>`의 다음 위치. */
+function nextHeadingClose(lower: string, from: number): number {
+  let i = lower.indexOf("</h", from);
+  while (i !== -1) {
+    const c = lower.charCodeAt(i + 3);
+    if ((c === 0x31 || c === 0x32) && lower.charCodeAt(i + 4) === 0x3e) return i;
+    i = lower.indexOf("</h", i + 1);
+  }
+  return -1;
+}
+
+/** `[...html.matchAll(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/gi)].map((m) => m[1])`. */
+function headingTexts(html: string, lower: string): string[] {
+  const out: string[] = [];
+  let from = 0;
+  for (;;) {
+    const open = nextHeadingOpen(lower, from);
+    if (open === -1) break;
+    const gt = html.indexOf(">", open + 3);
+    if (gt === -1) break; // 뒤의 여는 조각도 ">"를 못 찾는다.
+    const close = nextHeadingClose(lower, gt + 1);
+    if (close === -1) break; // 뒤의 여는 조각도 닫는 짝을 못 찾는다.
+    out.push(html.slice(gt + 1, close));
+    from = close + 5;
+  }
+  return out;
+}
+
+const NAME_DESCRIPTION_LEN = 'name="description"'.length; // 18
+const CONTENT_EQ_LEN = "content=".length; // 8
+
+function isQuote(c: string): boolean {
+  return c === '"' || c === "'";
+}
+
+/**
+ * `/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i.exec(html)?.[1]`.
+ *
+ * 그 정규식이 고르는 값을 정확히 따른다:
+ *   - `<meta`부터 첫 `>` 앞까지가 한 구간이다(`[^>]+` 두 개는 `>`를 못 넘는다). 값 자체는 `>`를 넘을 수 있다.
+ *   - 욕심쟁이 `[^>]+` 때문에 값은 구간 안의 **마지막** 유효한 `content=`(따옴표 + 빈칸 아닌 값 + 따옴표)의 값이다.
+ *   - 그 `content=`보다 최소 한 글자 앞에서 끝나는 `name="description"`이 `<meta` 뒤 한 글자 이상 떨어져 있으면 맞는다.
+ *   - 맞는 가장 왼쪽 `<meta`가 답이다.
+ * 구간마다 한 번만 훑고(`<meta`가 한 구간에 여럿이어도), 다음 따옴표 위치는 한 번에 미리 잰다.
+ */
+function metaDescription(html: string, lower: string): string | undefined {
+  let meta = lower.indexOf("<meta");
+  if (meta === -1) return undefined;
+  const n = html.length;
+  // nextQuote[i] = i 이상에서 처음 나오는 따옴표 위치(없으면 n).
+  const nextQuote = new Int32Array(n + 1);
+  nextQuote[n] = n;
+  for (let i = n - 1; i >= 0; i--) nextQuote[i] = isQuote(html.charAt(i)) ? i : (nextQuote[i + 1] ?? n);
+  const validContentValueStart = (c: number): boolean => {
+    if (!isQuote(html.charAt(c + CONTENT_EQ_LEN))) return false;
+    const valueStart = c + CONTENT_EQ_LEN + 1;
+    if (valueStart >= n) return false;
+    const q = nextQuote[valueStart] ?? n;
+    return q < n && q > valueStart;
+  };
+
+  let regionEnd = -1;
+  let names: number[] = [];
+  let nameIdx = 0;
+  let lastContent = -1;
+  while (meta !== -1) {
+    if (meta >= regionEnd) {
+      const gt = html.indexOf(">", meta + 5);
+      regionEnd = gt === -1 ? n : gt;
+      const from = meta + 6;
+      const seg = from < regionEnd ? lower.slice(from, regionEnd) : "";
+      names = [];
+      nameIdx = 0;
+      for (let k = seg.indexOf("name="); k !== -1; k = seg.indexOf("name=", k + 1)) {
+        const p = from + k;
+        if (
+          isQuote(html.charAt(p + 5)) &&
+          lower.startsWith("description", p + 6) &&
+          isQuote(html.charAt(p + 17))
+        ) {
+          names.push(p);
+        }
+      }
+      lastContent = -1;
+      for (let k = seg.lastIndexOf("content="); k !== -1; k = k > 0 ? seg.lastIndexOf("content=", k - 1) : -1) {
+        const c = from + k;
+        if (validContentValueStart(c)) {
+          lastContent = c;
+          break;
+        }
+      }
+    }
+    while (nameIdx < names.length && (names[nameIdx] ?? Infinity) < meta + 6) nameIdx += 1;
+    const p = names[nameIdx];
+    if (p !== undefined && lastContent !== -1 && p + NAME_DESCRIPTION_LEN + 1 <= lastContent) {
+      const valueStart = lastContent + CONTENT_EQ_LEN + 1;
+      return html.slice(valueStart, nextQuote[valueStart] ?? n);
+    }
+    meta = lower.indexOf("<meta", meta + 1);
+  }
+  return undefined;
+}
+
+/** HTML에서 사람이 읽는 텍스트만 성기게 뽑는다. 파서를 들이지 않는다(Worker 예산). 입력 길이에 선형. */
+export function textFromHtml(html: string): { title?: string; text: string } {
+  const strip = stripHtml;
+  const lower = asciiLower(html);
+
+  const title = titleOf(html, lower);
+  const desc = metaDescription(html, lower);
+  const headings = headingTexts(html, lower)
+    .map((m) => strip(m))
     .filter(Boolean)
     .slice(0, 8);
 

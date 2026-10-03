@@ -8,11 +8,15 @@
  * (정직성 규칙: 예시로 대체하지 않는다).
  */
 
+import { capacityFromResponse, type GenerationCapacityError } from "./generation-capacity.mjs";
+
 const CENTRAL_PLANE_URL =
   process.env.NEXT_PUBLIC_CENTRAL_PLANE_URL ?? "https://conclave-ai.seunghunbae.workers.dev";
 
 export type DevSpecApiError =
   | { ok: false; error: "llm_unavailable" }
+  /** 비용 권고 ③ — today's dev-spec capacity (service-wide) is full; no AI call was made. */
+  | GenerationCapacityError
   | { ok: false; error: "dev_spec_invalid"; stage: "schema" | "integrity"; issueCount: number }
   | { ok: false; error: "rate_limited"; retryAfterSeconds: number }
   | { ok: false; error: "not_found" }
@@ -35,15 +39,26 @@ export async function generateDevSpecApi(
   projectId: string,
   userKey: string,
   locale: "ko" | "en",
+  /**
+   * C-A7 (D-2 amend): 기존 앱 문에서 유저가 확인한 항목 id. 서버가 역추론 지시서의
+   * userConfirmedAcIds로 바꾼다 — must는 여기서만 나온다. 없으면 보내지 않는다(서버 = 빈 배열).
+   */
+  opts: { confirmedItemIds?: readonly string[] } = {},
 ): Promise<DevSpecGenerateOk | DevSpecApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/dev-spec/generate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userKey, locale }),
+      body: JSON.stringify({
+        userKey,
+        locale,
+        ...(opts.confirmedItemIds ? { confirmedItemIds: [...opts.confirmedItemIds].slice(0, 60) } : {}),
+      }),
       // 세 패스 × 최대 120초 — 한 번의 생성이 몇 분 걸릴 수 있다.
       signal: AbortSignal.timeout(6 * 60 * 1000),
     });
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     const body = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
     if (resp.ok && body["ok"] === true) return body as unknown as DevSpecGenerateOk;
     if (resp.status === 429) return { ok: false, error: "rate_limited", retryAfterSeconds: Number(body["retryAfterSeconds"] ?? 3600) };

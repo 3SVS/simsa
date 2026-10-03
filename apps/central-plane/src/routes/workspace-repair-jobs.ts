@@ -38,10 +38,17 @@
  *     같은 헬퍼로 행·토큰 조회 전에 묻고 503 `repair_disabled`.
  *   - W-2 일일 상한 수리 5/일(userKey, UTC 일) — 소유권·검증·409 뒤에서 차감, 행 저장 실패·
  *     디스패치 실패 시 환급. 초과 → 429 { error:"daily_limit_reached", kind:"repair", limit, resetAt }.
- *     PR #561 검증 후속: 네트워크 15/일·서비스 전체 50/일 버킷을 같은 차감에(원자적), 진행 중
+ *     PR #561 검증 후속: 네트워크 6/일(#576 검증으로 15→6 — 서비스의 30% 몫)·서비스 전체 20/일(2026-09-30 비용 권고로 50→20) 버킷을 같은 차감에(원자적), 진행 중
  *     1개 가드는 삽입 뒤 rowid 순으로 한 번 더(같은 수리 브랜치를 두 컨테이너가 동시에 밀지 않게).
  *   - W-3 잡 뷰 `buildVerified` — 컨테이너의 사후 검증(node --check)이 바뀐 파일을 전부 덮었는가.
  *     auto_fix만 boolean, brief_only·레거시·판단 불가 = null (repair-job-db.ts, 새 컬럼 없음).
+ *
+ * 비용 권고 ② (2026-09-30, D-7 amend [PILOT]) — 수리 잡당 AI 달러 상한:
+ *   - 디스패치 페이로드 `repairBudgetUsd` = env REPAIR_JOB_BUDGET_USD(기본 $2, beta-limits.ts).
+ *   - 컨테이너(container/coerce-result.mjs createRepairBudget·budgetedWorker)가 호출마다 실응답 모델 단가로
+ *     누적하고(가격표 밖 = 보수 단가), 다음 호출 전에 누적 ≥ 상한이면 부르지 않는다. 멈춘 잡은 기존 정직 폴백
+ *     (지시서 draft PR)으로 마감 + modeReason "budget_exceeded(…)" → 잡 뷰 `stoppedByBudget: true`.
+ *   - 옛 컨테이너 이미지는 필드를 무시한다(집행은 이미지 재빌드 뒤) — 콜백 계약은 그대로라 호환.
  */
 import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
@@ -53,9 +60,10 @@ import { getProjectRepo } from "../workspace/github-db.js";
 import { listProjectSources } from "../workspace/project-sources-db.js";
 import { getAppInstallationToken, resolveRepoAccessToken } from "../workspace/github-app-access.js";
 import { regionFromRequest } from "../workspace/envelope.js";
+import { opsMetaRecordingAllowed } from "../workspace/privacy-prefs.js";
 import { REPAIR_DISABLED, repairEnabled } from "../workspace/service-switches.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
-import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
+import { clientNetworkKey, dailyCapRejection, dailyCapsFor, repairJobBudgetUsd } from "../workspace/beta-limits.js";
 import type { FetchLike } from "../github.js";
 import {
   discardQueuedRepairJob,
@@ -169,6 +177,11 @@ function repairJobView(job: DbRepairJob) {
     // builds". Only an auto_fix job carries a boolean; brief_only / legacy /
     // in-flight / undecidable → null (never a guess).
     buildVerified: job.buildVerified,
+    // 비용 권고 ② (2026-09-30): the container stopped calling the AI because this
+    // job reached its budget, then closed with the fix-brief draft PR. Only a DONE
+    // brief_only job can say true; everything else (auto_fix, failed, in flight,
+    // old containers) → false. The dashboard adds one line to the done card.
+    stoppedByBudget: job.stoppedByBudget,
     error: job.error ?? null,
     // Train C · C2a (0069): the re-inspection verify-sweep dispatched after the
     // PR merged, and its outcome (true/false; null = not verified yet/at all).
@@ -253,6 +266,10 @@ export async function dispatchRepairJob(
     decision: args.decision,
     envCause: args.envCause,
     locale: args.locale,
+    // 비용 권고 ② (2026-09-30): this job's LLM budget in USD. The container adds up
+    // every worker call and stops BEFORE the next one once the sum reaches it (an
+    // image that predates the field ignores it; a payload without it → $2 there).
+    repairBudgetUsd: repairJobBudgetUsd(env),
     callbackUrl: `${base}/internal/repair-done`,
     runningUrl: `${base}/internal/repair-running`,
     callbackToken: env.INTERNAL_CALLBACK_TOKEN,
@@ -424,7 +441,7 @@ export function createWorkspaceRepairJobRoutes(
     }
 
     // Train W · W-2 — daily caps (D-7 amend [PILOT]): this user 5 · this network
-    // 15 · the whole service 50 (beta-limits.ts). Same placement as the
+    // 6 · the whole service 20 (beta-limits.ts). Same placement as the
     // inspection route: after ownership + validation + the one-active-repair
     // guard, one atomic statement per bucket, refunded below if the job never
     // starts.
@@ -441,6 +458,11 @@ export function createWorkspaceRepairJobRoutes(
     const envCause = detectEnvCause(agentPrompt, run.reportJson ?? "");
     const branch = `fix/simsa-${runId}`;
 
+    // Train K · K-1 (0071): the country code is ops meta — NULL when this person's recording is off
+    // (explicit choice, or the EU/EEA·GB·CH default).
+    const edgeRegion = regionFromRequest(c.req.raw);
+    const region = (await opsMetaRecordingAllowed(c.env, userKey, edgeRegion, "repair-job")) ? edgeRegion : null;
+
     let job;
     try {
       job = await insertQueuedRepairJob(c.env, {
@@ -450,8 +472,8 @@ export function createWorkspaceRepairJobRoutes(
         repoFullName,
         branchName: branch,
         envCause,
-        // C4a (0069): country at repair time — the failure map's region axis.
-        region: regionFromRequest(c.req.raw),
+        // C4a (0069): country at repair time — the failure map's region axis (K-1 gate above).
+        region,
       });
     } catch (err) {
       console.error("[repair-jobs POST] insert failed:", err);

@@ -23,6 +23,7 @@
 import { chromium } from "playwright";
 import { devTermHits, accountCtaLabels, isDefaultFlowJourney, firstVisitLocaleMismatch } from "./lib/beginner-terms.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { seedStaffKey } from "./lib/staff-key.mjs";
 
 const BASE = "https://app.trysimsa.com";
 const KO_ONLY = process.argv.includes("--ko-only");
@@ -48,6 +49,7 @@ async function newUserPage(locale = "ko") {
   await ctx.addInitScript((loc) => {
     try { window.localStorage.setItem("conclave:locale", loc); } catch {}
   }, locale);
+  await seedStaffKey(ctx); // D-24.2 — 장비 키(설정 시)
   const page = await ctx.newPage();
   page._simsaLocale = locale;
   return page;
@@ -350,6 +352,7 @@ async function runFirstVisitLocale(browserLocale) {
   try {
     journey("J7 첫 방문 locale — 저장된 선호 없이 브라우저 언어만으로", tag);
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: browserLocale });
+    await seedStaffKey(ctx); // D-24.2 — 장비 키(설정 시)
     const page = await ctx.newPage();
     page._simsaLocale = tag;
     await page.goto(`${BASE}/projects/new`, { waitUntil: "networkidle", timeout: 45000 });
