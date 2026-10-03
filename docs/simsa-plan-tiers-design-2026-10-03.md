@@ -77,7 +77,7 @@ D-24 설계 잠금 ─┬─ D-23 ① amend(같은 잠금에서)
 ```
 
 **놓치기 쉬운 선행 조건**
-1. **감시·검증 장비가 막힌다.** canary(`.github/workflows/canary.yml`), `anonymous-smoke.mjs`, `journey-audit`, `dev-spec-probe` 등은 매 실행마다 새 프로젝트를 만든다. 같은 러너 네트워크에서 하루 1개면 **두 번째 실행부터 전부 빨간불** → 내부 토큰 헤더로만 켜지는 면제(서비스 천장은 그대로)를 T-2와 같은 PR에 넣는다.
+1. **감시·검증 장비가 막힌다.** `anonymous-smoke.mjs`, `journey-audit`, `dev-spec-probe`, `en-report-smoke`, `infer-probe`는 매 실행마다 새 프로젝트를 만든다. 같은 네트워크에서 하루 1개면 **두 번째 실행부터 빨간불** → `staff` 장비 티어(plan_grants로 지정한 키만, 서비스 천장은 그대로) + 도구는 `SIMSA_STAFF_USER_KEY`로 그 키를 쓴다(T-2와 같은 PR #583). [정정 2026-10-03] 초안은 canary도 포함했으나 canary는 생성 API만 부르고 프로젝트를 만들지 않는다(확인).
 2. **파일럿 사용자.** (b)(c) 파일럿 참가자는 하루에 여러 앱을 넣을 수 있다 → 파일럿 개시 전 `plan_grants`로 베이직/프로 부여.
 3. **계정 기준 집계는 로그인 사용자 식별자가 서버에 있어야 한다.** 익명→로그인 승격(claim) 시 그날 익명으로 쓴 횟수를 계정에 합산한다(승격으로 초기화되는 우회 방지).
 4. **방침 고지.** 네트워크 HMAC 기반 집계는 #566에서 이미 고지됨. 계정 기준 횟수 기록은 기존 "요청 횟수 제한 기록" 범위 — 문구 확인만.
@@ -87,7 +87,7 @@ D-24 설계 잠금 ─┬─ D-23 ① amend(같은 잠금에서)
 | 스테이지 | 내용 | 동작 변화 | 승인 |
 |---|---|---|---|
 | T-0 | 이 문서 잠금 ✅ 2026-10-03 · D-23 ① amend 문구는 D-23 잠금 때 반영 | 없음 | `design lock approved` (발효) |
-| T-1 | `entitlements.ts`(티어 표·`resolveTier`), `plan_grants.plan`에 basic/pro 허용, `paid`→pro 매핑, 단위 테스트 | 없음(표의 값이 지금 값과 같게 시작) | `train T start approved` |
+| T-1 | `entitlements.ts`(티어 표·`resolveTier`), `plan_grants.plan`에 basic/pro/staff 허용(**0074** — 0072는 $-1 결제 예약), `paid`→pro 매핑, 단위 테스트 | 없음 | `train T start approved` ✅ 2026-10-03 → PR #583 |
 | T-2 | 새 프로젝트 생성 단일 관문(신규 행일 때만) — 계정+네트워크 병행, 삭제 비환불, 장비 면제, 429 본문 | **무료 1/일 시행** | PR merge + `deploy central-plane approved.` |
 | T-3 | 대시보드: 남은 개수 표시, 429 화면 KO/EN(세 갈래), 업그레이드 안내 | 화면 | PR merge + `deploy dashboard approved.` |
 | T-4 | 검수·수리(월)·지시서 횟수를 표로 이관 | 무료 검수 10→3 등 | PR merge + 배포 |
@@ -108,3 +108,4 @@ D-24 설계 잠금 ─┬─ D-23 ① amend(같은 잠금에서)
 | 게이트 | 문구 | 발효 일시 | 범위 |
 |---|---|---|---|
 | 설계 잠금 | `design lock approved` | 2026-10-03 (Bae) | D-24.1·D-24.2·D-24.3 LOCKED, D-24.4 수치 PILOT, D-24.5·D-24.6 OPEN 유지. D-23·D-6 amend는 범위 밖 |
+| Train T 착수 | `train T start approved` | 2026-10-03 (Bae) | T-1~T-3 코드 작성 → PR #583(머지·0074·배포 별도). T-4·T-5 다음 PR, T-6은 과금 건별 승인 |
