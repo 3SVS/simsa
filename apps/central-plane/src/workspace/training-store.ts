@@ -8,7 +8,19 @@
  * days. Rules train nobody — a fine-tune needs the ORIGINAL {input, label,
  * outcome} triplet. On the SaaS path the server already holds the PR diff and
  * the council verdict at review time, so — and only with explicit, versioned
- * consent — we persist that triplet verbatim to R2 under `training/`.
+ * consent — we persist that triplet verbatim to R2 under `events/{region}/…`
+ * (see trainingRecordKey; the 0054 header's `training/` prefix was never the
+ * real key — corrected 2026-09-30, Train K).
+ *
+ * Train K · K-3 (0071): every copy is indexed in training_records_index
+ * BEFORE it is written (and only while consent is active AND the project still
+ * belongs to the person), so withdrawal and project deletion can find and
+ * delete it. A copy whose index row cannot be written is not stored at all —
+ * an unindexed copy could not be found on withdrawal or project delete (the
+ * key carries no person; only the body's subject_hash does). This is a
+ * deliberate change from the contract's "fail-open" wording — see PR #574.
+ * The outcome rewrite (updateTrainingRecordOutcome) is a conditional put, so a
+ * copy deleted between its get and put is never resurrected.
  *
  * The council's per-item verdict IS the high-value supervised label: three
  * frontier models' judgement, captured at a few cents per PR. That is the raw
@@ -30,6 +42,12 @@ import type { Env } from "../env.js";
 import { redactSecrets } from "@simsa/secret-guard";
 import { sha256Hex } from "../util.js";
 import { TRAINING_CONSENT_VERSION, hasActiveTrainingConsent } from "./training-consent-db.js";
+import {
+  captureReasonForIndex,
+  indexTrainingRecord,
+  settleAfterPut,
+  settleKeyAfterRewrite,
+} from "./training-records-index.js";
 
 // 2.0 — the P1 envelope (region/locale/entry_path/built_with/topic_tags/
 // acquisition/user_context/commercial + reserved P2/P3 slots). All new fields
@@ -352,11 +370,18 @@ export function trainingRecordKey(capturedAt: string, eventId: string, region?: 
 
 export type CaptureResult =
   | { stored: true; key: string }
-  | { stored: false; reason: "no_consent" | "no_bucket" | "error" };
+  | {
+      stored: false;
+      reason: "no_consent" | "no_project" | "no_bucket" | "error" | "index_error" | "deletion_requested";
+    };
 
 /**
  * Consent-gated, best-effort capture. Returns a result for observability but
  * never throws. No consent → no bucket read. No bucket → no-op.
+ * Index first (training_records_index, consent + project ownership re-checked
+ * inside the same statement) → put → re-check (a deletion requested
+ * mid-capture removes the copy at once — reason "deletion_requested").
+ * No index row → no copy ("no_consent" / "no_project" / "index_error").
  */
 export async function captureTrainingRecord(
   env: Env,
@@ -373,9 +398,19 @@ export async function captureTrainingRecord(
     const subjectHash = input.subjectHash ?? (await sha256Hex(input.userKey));
     const record = buildTrainingRecord(input, subjectHash, capturedAt);
     const key = trainingRecordKey(capturedAt, input.reviewRunId, input.envelope?.region);
+    const idx = await indexTrainingRecord(env, {
+      userKey: input.userKey,
+      projectId: input.projectId,
+      r2Key: key,
+      kind: "training",
+      capturedAt,
+      consentVersion: TRAINING_CONSENT_VERSION,
+    });
+    if (!idx.indexed) return { stored: false, reason: captureReasonForIndex(idx.reason) };
     await env.EVIDENCE.put(key, JSON.stringify(record), {
       httpMetadata: { contentType: "application/json" },
     });
+    if (!(await settleAfterPut(env, idx.id, key))) return { stored: false, reason: "deletion_requested" };
     return { stored: true, key };
   } catch (err) {
     console.warn("[training-store] capture failed (non-fatal):", err instanceof Error ? err.message : err);
@@ -412,6 +447,13 @@ export function computeRecheckOutcome(
  * Update a PRIOR training record's outcome in place. Fetches the R2 object by
  * key, rewrites only `outcome`, re-puts. Consent/bucket are already implied
  * (the key only exists because the prior record was stored). Never throws.
+ *
+ * Train K · K-3 (PR #574 #574-4): the re-put is CONDITIONAL on the etag read —
+ * if a withdrawal / project delete removed the copy between the get and the
+ * put, R2 refuses the write (null) instead of resurrecting it (the index row
+ * already says deleted, so no cron would ever retry). After a successful write
+ * the index is re-checked by key: a deletion requested meanwhile removes the
+ * copy at once.
  */
 export async function updateTrainingRecordOutcome(
   env: Env,
@@ -422,11 +464,19 @@ export async function updateTrainingRecordOutcome(
     if (!env.EVIDENCE || !r2Key) return { updated: false };
     const obj = await env.EVIDENCE.get(r2Key);
     if (!obj) return { updated: false };
+    // No etag → no safe conditional write (real R2 always has one) — skip rather than risk a resurrect.
+    if (typeof obj.etag !== "string" || obj.etag === "") return { updated: false };
     const rec = JSON.parse(await obj.text()) as Record<string, unknown>;
     rec["outcome"] = outcome;
-    await env.EVIDENCE.put(r2Key, JSON.stringify(rec), {
+    const written = await env.EVIDENCE.put(r2Key, JSON.stringify(rec), {
       httpMetadata: { contentType: "application/json" },
+      onlyIf: { etagMatches: obj.etag },
     });
+    if (written === null) {
+      console.log(JSON.stringify({ at: "training-store", op: "outcome", note: "copy changed or deleted since read — not rewritten" }));
+      return { updated: false };
+    }
+    if (!(await settleKeyAfterRewrite(env, r2Key))) return { updated: false };
     return { updated: true };
   } catch (err) {
     console.warn("[training-store] outcome update failed (non-fatal):", err instanceof Error ? err.message : err);

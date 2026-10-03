@@ -20,6 +20,7 @@ import { runMcpRegistryMiner } from "./mcp-registry-miner.js";
 import { runShadcnBlockMiner } from "./shadcn-block-miner.js";
 import { runAwesomeListMiner } from "./awesome-list-miner.js";
 import { purgeExpiredRateLimitRows } from "./rate-limit-retention.js";
+import { runTrainingPrivacyCron } from "./workspace/training-records-index.js";
 
 const app = createApp();
 
@@ -66,6 +67,7 @@ export default {
   //   - every day 03:00 UTC → external design references refresh (v0.16.8)
   //   - every 6 hours      → retry pending user_feedback classification (v0.16.9)
   //                          + purge request-limit rows older than 48h and pre-"v1:" legacy rows (rate-limit-retention.ts)
+  //                          + training-copy deletion retries / pre-0071 withdrawals / 30-day tombstones (training-records-index.ts)
   //
   // Each branch logs a structured outcome so `wrangler tail` is the
   // audit trail (the scheduled trigger has no caller to return data to).
@@ -145,6 +147,16 @@ export default {
         console.log(JSON.stringify({ cron: "rate-limit-purge", cronExpression: event.cron, ...purge }));
       } catch (err) {
         console.error(JSON.stringify({ cron: "rate-limit-purge", cronExpression: event.cron, error: String(err).slice(0, 200) }));
+      }
+      // Train K · K-3 (0071): training-copy deletions — retry what a withdrawal / project delete could
+      // not finish, move pre-0071 review copies of people who withdrew before 0071 into the index (and
+      // delete them), and drop deletion tombstones after 30 days (training-records-index.ts). Bounded
+      // (≤ 1,000 deletes per tick) and fail-open like the purge above.
+      try {
+        const training = await runTrainingPrivacyCron(env);
+        console.log(JSON.stringify({ cron: "training-privacy", cronExpression: event.cron, ...training }));
+      } catch (err) {
+        console.error(JSON.stringify({ cron: "training-privacy", cronExpression: event.cron, error: String(err).slice(0, 200) }));
       }
       try {
         const result = await retryPendingFeedback(env, 50);

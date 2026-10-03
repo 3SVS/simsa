@@ -4,6 +4,11 @@
  * so D1 failures never crash the user-facing flow.
  */
 import type { Env } from "../env.js";
+import {
+  TRAINING_INDEX_BACKFILL_LEGACY_FOR_PROJECT_SQL,
+  TRAINING_INDEX_REQUEST_DELETE_FOR_PROJECT_SQL,
+  sweepTrainingDeletions,
+} from "./training-records-index.js";
 
 function randId(prefix: string): string {
   const ts = Date.now().toString(36).slice(-6);
@@ -323,7 +328,19 @@ export async function deleteProject(env: Env, id: string, userKey: string): Prom
   //    retry, no half-state); once it commits, the rows that referenced the R2
   //    objects are already gone, so a failed R2 delete can only orphan storage —
   //    never leave a live row pointing at a deleted object.
+  //
+  //    Train K · K-3 (0071): training copies (R2 events/… · journey/…) of this
+  //    project get a deletion REQUEST inside the same batch — first the pre-0071
+  //    review copies are moved into the index (their keys live only on the
+  //    workspace_pr_review_runs rows this batch deletes, so this runs FIRST),
+  //    then every indexed copy of the project is stamped. The R2 deletes run
+  //    after the commit (step 4); a failed one stays requested and the 6-hour
+  //    cron retries it — so, unlike the evidence above, a failed training delete
+  //    is never silently orphaned.
+  const requestedAt = new Date().toISOString();
   const stmts = [
+    env.DB.prepare(TRAINING_INDEX_BACKFILL_LEGACY_FOR_PROJECT_SQL).bind(requestedAt, id, userKey),
+    env.DB.prepare(TRAINING_INDEX_REQUEST_DELETE_FOR_PROJECT_SQL).bind(requestedAt, id, userKey),
     env.DB.prepare(
       `DELETE FROM workspace_agent_experiment_candidates
        WHERE experiment_id IN (SELECT id FROM workspace_agent_experiments WHERE project_id = ?)`,
@@ -353,6 +370,10 @@ export async function deleteProject(env: Env, id: string, userKey: string): Prom
       ),
     );
   }
+
+  // 4. Train K · K-3: delete this project's requested training copies now
+  //    (never throws; leftovers stay requested for the 6-hour cron).
+  await sweepTrainingDeletions(env, { kind: "project", projectId: id, userKey }, { site: "project-delete", maxPages: 5 });
 }
 
 // ─── Check runs ───────────────────────────────────────────────────────────────
