@@ -26,6 +26,11 @@ LEGACY_AUTO_REVIEW = "off"
 # 끄기 = 값을 "off"로 + deploy-central-plane 1회. 다시 켜기 = "on" + 배포.
 INSPECTION_ENABLED = "on"
 REPAIR_ENABLED = "on"
+# 2026-10-01 hotfix — 빌드(문 a) 킬스위치. 같은 규칙(정확히 "off"만 꺼짐). **지금은 "off"**:
+# POST /workspace/projects/:id/build는 지시서가 있는 누구의 호출에도 프로젝트별 D1과 호스팅 조직
+# 저장소를 만들고 컨테이너에 운영 비밀을 넘긴다. 대시보드는 아직 이 라우트를 쓰지 않는다.
+# 빌드 실행체 묶음(PR #569: 잡 범위 토큰·일일 상한·예산 정지)이 배포된 뒤 "on" + deploy (Bae 승인).
+BUILD_ENABLED = "off"
 # 일일 상한 [PILOT] (코드 기본값, 설정 줄 없음 = 기본값): 검수 유저 10 · 네트워크 30 · 서비스 전체 300,
 # 수리 유저 5 · 네트워크 15 · 서비스 전체 50. 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL]
 # 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
