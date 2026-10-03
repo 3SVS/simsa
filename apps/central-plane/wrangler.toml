@@ -11,6 +11,14 @@ binding = "DB"
 database_name = "conclave-ai"
 database_id = "28be7ec4-9c46-4b78-8d07-11f344021dd0"
 
+# KV spike — short-lived, non-authoritative cache only.
+# Create before enabling:
+#   wrangler kv namespace create CENTRAL_CACHE
+# Then uncomment with the returned id. Do not store source-of-truth data here.
+# [[kv_namespaces]]
+# binding = "CENTRAL_CACHE"
+# id = "REPLACE_WITH_CENTRAL_CACHE_NAMESPACE_ID"
+
 [vars]
 ENVIRONMENT = "production"
 # 2026-07-21 (Bae 결정) — 레거시 Conclave 자동 리뷰 전면 정지(Simsa 집중 기간).

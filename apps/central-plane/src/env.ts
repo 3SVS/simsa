@@ -5,6 +5,12 @@
  */
 export interface Env {
   DB: D1Database;
+  /**
+   * Optional Cloudflare Workers KV namespace for short-lived, non-authoritative
+   * caches and idempotency locks. D1 remains the source of truth; KV entries
+   * must be safe to drop at any time.
+   */
+  CENTRAL_CACHE?: KVNamespace;
   ENVIRONMENT: string;
   /**
    * Git commit SHA this Worker was deployed from. Injected at deploy time by
