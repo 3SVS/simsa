@@ -40,6 +40,22 @@ export function runIdFromAddress(addr: string): string | null {
   return m?.[1] ?? null;
 }
 
+/** 링크 끝에 붙어 온 문장부호 — 괄호·꺾쇠·따옴표·마침표·쉼표·세미콜론. */
+const TRAILING_LINK_PUNCTUATION = new Set([")", "]", ">", '"', "'", ".", ",", ";"]);
+
+/**
+ * `raw.replace(/[)\]>"'.,;]+$/, "")`와 같은 결과를 뒤에서 한 번 훑어 만든다.
+ *
+ * 왜 정규식이 아닌가(2026-10-01): 그 정규식은 문장부호 묶음의 **시작점마다** 끝까지 다시 훑어
+ * 제곱 시간이 든다. 누구나 `probe-xxxxxx@simsa.page`로 보낼 수 있는 수신 메일 한 통
+ * (`href="https://` + `)` × 64K + `x"`)이 7초, 256K면 107초 — Worker CPU 한도를 넘는다.
+ */
+export function trimTrailingLinkPunctuation(raw: string): string {
+  let end = raw.length;
+  while (end > 0 && TRAILING_LINK_PUNCTUATION.has(raw.charAt(end - 1))) end -= 1;
+  return end === raw.length ? raw : raw.slice(0, end);
+}
+
 /**
  * 메일 본문에서 링크를 뽑는다. HTML과 평문 둘 다 훑는다.
  *
@@ -52,7 +68,7 @@ export function extractLinks(body: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   const push = (raw: string) => {
-    const url = raw.replace(/[)\]>"'.,;]+$/, "").replace(/&amp;/g, "&");
+    const url = trimTrailingLinkPunctuation(raw).replace(/&amp;/g, "&");
     if (!/^https?:\/\//i.test(url) || url.length > 2000) return;
     // 누르면 되돌리기 어려운 것은 아예 넘기지 않는다.
     if (/unsubscribe|수신거부|opt[-_]?out|구독\s*취소/i.test(url)) return;
