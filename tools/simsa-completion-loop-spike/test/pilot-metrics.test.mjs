@@ -865,7 +865,8 @@ describe("CLI 인자·seam", () => {
 const RUNBOOK_LABEL_KEYS = Object.freeze({
   "새 프로젝트": "nav.newProject", // components/AppSidebar.tsx
   "무엇부터 시작할까요?": "branch.title",
-  "이미 만든 앱이 있어요": "branch.codeTitle",
+  "만든 앱이 안 돼요": "branch.codeTitle", // PR #571 세 문 (b)
+  "만들었는데 생각과 달라요": "branch.differsTitle", // PR #571 세 문 (c)
   "만드신 앱을 보여주세요": "branch.codeStepTitle",
   "앱 주소 또는 GitHub 저장소": "branch.submitLabel",
   "이 앱을 어떤 도구로 만들었나요? (선택 — 모르면 건너뛰세요)": "builtWith.optionalSummary",
@@ -877,6 +878,10 @@ const RUNBOOK_LABEL_KEYS = Object.freeze({
   "저희가 읽은 이 앱은 이렇습니다": "intentConfirm.title", // components/IntentConfirmCard.tsx
   "이 앱이 하는 일": "intentConfirm.oneLineLabel",
   "네, 맞아요": "intentConfirm.confirm",
+  "원래 만들려던 건 무엇이었나요?": "intentConfirm.differsTitle", // 문 (c) 카드
+  "원래 만들려던 것": "intentConfirm.differsOneLineLabel",
+  "이게 원래 만들려던 거예요": "intentConfirm.differsConfirm",
+  "이 기준으로 다시 확인하기": "intentConfirm.differsRecheckButton",
   "진행 상황 보기": "commandCenter.viewProgress",
   "검수 결과 보기": "commandCenter.viewResults",
   "앱 확인하기": "nav.checkApp",
