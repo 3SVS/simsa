@@ -18,9 +18,9 @@
 /**
  * 방침 시행일(YYYY-MM-DD). ★배포 직전 이 값을 **배포일**로 갱신한다 — 게시 전 날짜를 시행일로
  * 적으면 안 된다(PR 체크리스트 항목). 변경 이력 **마지막(아직 게시 안 된) 줄**의 날짜만 이 값을 쓴다.
- * Train K: 2026-10-01은 **임시값**(서버 PR·0071 적용·배포 승인이 남아 있다) — 배포일로 바꾼다.
+ * Train K: 2026-10-03 = dashboard 배포일(Bae 2026-10-03 `deploy dashboard approved.`, 0071 적용·central 배포 뒤).
  */
-export const PRIVACY_EFFECTIVE_DATE = "2026-10-01";
+export const PRIVACY_EFFECTIVE_DATE = "2026-10-03";
 
 /**
  * 변경 이력 — 이전 시행일과 바뀐 내용을 계속 공개한다(설계 §4 처리방침 변경 목록: "시행일 갱신 +
