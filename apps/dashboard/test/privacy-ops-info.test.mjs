@@ -154,6 +154,8 @@ const NOT_OPS_META = new Map([
   ["decided_at", "학습 데이터 제공을 허용·거절한 시각 — 선택을 다시 묻지 않기 위한 동의 기록(0071)"],
   ["table:privacy_prefs", "운영 정보 기록 켬·끔 선택 — 기록을 멈추기 위해 저장하는 이용자 설정(0071)"],
   ["table:training_records_index", "학습 사본의 저장 위치 색인 — 철회·프로젝트 삭제 때 사본을 찾아 지우기 위한 기록(0071)"],
+  // 0074(D-24): 0060 plan_grants를 CHECK 확장 위해 같은 열 그대로 재생성(→ 이름 바꿔 plan_grants로). 새 항목 없음.
+  ["table:plan_grants_v2", "플랜 부여 기록(0060 plan_grants의 재생성 — 같은 열, 허용 값만 basic·pro·staff 추가) — 통계용 운영 정보가 아니라 이용 자격 기록"],
 ]);
 
 /** 0069 이전에 생겨 프로젝트 행에 저장되는 P1 운영 메타 컬럼(0055·0056). */

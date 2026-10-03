@@ -37,6 +37,7 @@ import {
 } from "../workspace/check.js";
 import { applyVerifyPanel } from "../workspace/verify-panel.js";
 import { runCouncilCheck } from "../workspace/council-review.js";
+import { consumeProjectCreate, projectCreateLimitedBody } from "../workspace/project-quota.js";
 import { resolvePlan } from "../plan.js";
 import { compareCheckRuns, type RunComparison, type ItemStatus } from "../run-comparison.js";
 import { generateUnstickAdvice, type WorkspaceUnstickRequest } from "../workspace/unstick.js";
@@ -388,6 +389,8 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
     if (typeof b["id"] === "string" && EXAMPLE_PROJECT_IDS.has(b["id"])) {
       return new Response(JSON.stringify({ ok: false, error: "example_project_readonly" }), { status: 400, headers: { "content-type": "application/json", ...headers } });
     }
+    // D-24.2: 새 행을 위해 쓴 생성 슬롯 — 저장이 실패하면 돌려준다.
+    let refundProjectSlot: (() => Promise<void>) | null = null;
     try {
       // Overwrite-IDOR guard: a client-supplied id that already exists and
       // belongs to a DIFFERENT user_key must never be overwritten. Same-owner
@@ -399,22 +402,33 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
           return new Response(JSON.stringify({ ok: false, error: "id_conflict" }), { status: 409, headers: { "content-type": "application/json", ...headers } });
         }
       }
-      // beta_limits — TEMPORARY daily cap on NEW project creations (default
-      // 20/day per userKey). Re-saves of an existing owned project (the
-      // dashboard autosaves constantly) do NOT consume the budget. See
-      // workspace/beta-limits.ts; re-tune from cost_meta after open.
+      // D-24.2 [LOCKED] — 새 프로젝트 생성 상한(무료·베이직 하루 1개, 계정+익명 키+네트워크 병행).
+      // 재저장(대시보드 자동 저장)은 세지 않는다. 지워도 돌려주지 않는다. 저장이 실패하면 돌려준다
+      // (우리 실패는 사용자의 시도가 아니다). 킬스위치 PROJECT_CREATE_TIER_GATE="off" → 예전 상한
+      // (userKey당 하루 BETA_PROJECT_CREATE_DAILY_LIMIT, 기본 20)으로 되돌아간다.
       if (!existing) {
-        const daily = await consumeUserDailyLimit(
-          c.env,
-          BETA_PROJECT_CREATE_DAILY_BUCKET,
-          String(b["userKey"]),
-          betaProjectCreateDailyLimit(c.env),
-        );
-        if (daily.limited) {
-          return new Response(
-            JSON.stringify({ ok: false, error: "rate_limited", scope: "beta_daily", retryAfterSeconds: daily.retryAfterSeconds }),
-            { status: 429, headers: { "content-type": "application/json", "retry-after": String(daily.retryAfterSeconds), ...headers } },
+        if (c.env.PROJECT_CREATE_TIER_GATE === "off") {
+          const daily = await consumeUserDailyLimit(
+            c.env,
+            BETA_PROJECT_CREATE_DAILY_BUCKET,
+            String(b["userKey"]),
+            betaProjectCreateDailyLimit(c.env),
           );
+          if (daily.limited) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "rate_limited", scope: "beta_daily", retryAfterSeconds: daily.retryAfterSeconds }),
+              { status: 429, headers: { "content-type": "application/json", "retry-after": String(daily.retryAfterSeconds), ...headers } },
+            );
+          }
+        } else {
+          const { identity, result } = await consumeProjectCreate(c.env, c.req.raw, String(b["userKey"]));
+          if (result.limited) {
+            return new Response(
+              JSON.stringify(projectCreateLimitedBody(identity, result, b["locale"] === "en" ? "en" : "ko")),
+              { status: 429, headers: { "content-type": "application/json", "retry-after": String(result.retryAfterSeconds), ...headers } },
+            );
+          }
+          refundProjectSlot = result.refund;
         }
       }
       const entryPath =
@@ -466,6 +480,7 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       });
       return new Response(JSON.stringify({ ok: true, id }), { status: 200, headers: { "content-type": "application/json", ...headers } });
     } catch (err) {
+      await refundProjectSlot?.().catch(() => undefined);
       console.error("[workspace/projects] save failed:", err);
       return new Response(JSON.stringify({ ok: false, error: "save_failed" }), { status: 500, headers: { "content-type": "application/json", ...headers } });
     }

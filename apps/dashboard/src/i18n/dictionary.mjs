@@ -474,6 +474,19 @@ const EN = {
     specPastePlaceholder: "Paste your plan or requirements here…",
     specGenerate: "Turn it into a checklist",
   },
+  // D-24 — 새 프로젝트 하루 상한(무료·베이직 1개). {n}·{limit}·{tier}·{when} 치환({when}=visualChecks.resetWhen).
+  quota: {
+    remaining: "New projects today: {n} of {limit} left",
+    limitTitle: "You've already started today's new project",
+    limitBody: "On the {tier} plan you can start {limit} new project(s) per day. Your existing projects keep working — you can keep checking and fixing them.",
+    limitBodyNetwork: "Someone on this network already started today's new project. Sign in to get your own daily allowance, or try again later.",
+    resetAt: "You can start a new one {when}.",
+    resetFallback: "You can start a new one tomorrow.",
+    continueExisting: "Go to my projects",
+    signIn: "Sign in",
+    seePlans: "See plans",
+    tierNames: { free: "Free", basic: "Basic", pro: "Pro", staff: "Staff" },
+  },
   overview: {
     detailsTitle: "More about this project",
     detailsHint: "the plan map, your brief, your checklist",
@@ -3518,6 +3531,19 @@ const KO = {
     specStepSub: "형식은 상관없어요 — 문서, 메모, 요구사항 무엇이든. 확인할 항목으로 바꿔드려요.",
     specPastePlaceholder: "기획서나 요구사항을 여기에 붙여넣으세요…",
     specGenerate: "확인 항목으로 바꾸기",
+  },
+  // D-24 — 새 프로젝트 하루 상한(무료·베이직 1개). {n}·{limit}·{tier}·{when} 치환({when}=visualChecks.resetWhen).
+  quota: {
+    remaining: "오늘 새 프로젝트 {limit}개 중 {n}개 남았어요",
+    limitTitle: "오늘 새 프로젝트를 이미 만들었어요",
+    limitBody: "{tier} 플랜은 새 프로젝트를 하루 {limit}개까지 만들 수 있어요. 만든 프로젝트에서는 계속 확인하고 고칠 수 있어요.",
+    limitBodyNetwork: "같은 네트워크에서 오늘 새 프로젝트를 이미 만들었어요. 로그인하면 내 몫이 따로 생겨요. 아니면 나중에 다시 시도해 주세요.",
+    resetAt: "{when} 다시 만들 수 있어요.",
+    resetFallback: "내일 다시 만들 수 있어요.",
+    continueExisting: "내 프로젝트로 가기",
+    signIn: "로그인",
+    seePlans: "플랜 보기",
+    tierNames: { free: "무료", basic: "베이직", pro: "프로", staff: "운영" },
   },
   overview: {
     detailsTitle: "이 프로젝트 자세히",

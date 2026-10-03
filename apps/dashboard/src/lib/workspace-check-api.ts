@@ -85,13 +85,76 @@ export type FixSuggestionResponse = {
   warnings?: string[];
 };
 
+/** D-24.2 새 프로젝트 하루 상한에 닿음 — 화면은 세 갈래(계속하기·다시 만들 시각·플랜)를 그린다. */
+export type ProjectLimit = {
+  ok: false;
+  error: "project_limit";
+  message: string;
+  tier: string;
+  limit: number;
+  resetAt: string;
+  limitedBy: "user" | "network" | "service" | null;
+};
+
 export type ApiError =
+  | ProjectLimit
   | { ok: false; error: "rate_limited"; message: string; retryAfterSeconds?: number }
   | { ok: false; error: "plan"; message: string }
   | { ok: false; error: "network" | "server"; message: string };
 
 /** 비용 권고 ③ — the AI generation calls (check · unstick · fix) can also say "today's capacity is full". */
 export type GenerationApiError = ApiError | GenerationCapacityError;
+
+// ─── D-24 새 프로젝트 하루 상한 ─────────────────────────────────────────────
+
+/** 서버 429 본문 → ProjectLimit. project_daily가 아니면 null(다른 상한은 종전 처리). */
+export function parseProjectLimit(body: Record<string, unknown> | null): ProjectLimit | null {
+  if (!body || body["scope"] !== "project_daily") return null;
+  const limitedBy = body["limitedBy"];
+  return {
+    ok: false,
+    error: "project_limit",
+    message: typeof body["message"] === "string" ? body["message"] : "",
+    tier: typeof body["tier"] === "string" ? body["tier"] : "free",
+    limit: typeof body["limit"] === "number" ? body["limit"] : 1,
+    resetAt: typeof body["resetAt"] === "string" ? body["resetAt"] : "",
+    limitedBy: limitedBy === "user" || limitedBy === "network" || limitedBy === "service" ? limitedBy : null,
+  };
+}
+
+export type ProjectQuota = {
+  tier: string;
+  limit: number;
+  remaining: number;
+  resetAt: string;
+  limitedBy: "user" | "network" | "service" | null;
+};
+
+/**
+ * D-24.3 — 막히기 **전에** 남은 개수를 읽는다(서버는 몫을 쓰지 않는다). 실패하면 null:
+ * 화면은 아무것도 막지 않고 종전대로 진행한다(서버가 최종 집행).
+ */
+export async function fetchProjectQuota(userKey: string): Promise<ProjectQuota | null> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/quota?userKey=${encodeURIComponent(userKey)}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const b = (await resp.json()) as { ok?: boolean; tier?: unknown; projectCreate?: Record<string, unknown> };
+    const pc = b.projectCreate;
+    if (!b.ok || !pc || typeof pc["limit"] !== "number" || typeof pc["remaining"] !== "number") return null;
+    const limitedBy = pc["limitedBy"];
+    return {
+      tier: typeof b.tier === "string" ? b.tier : "free",
+      limit: pc["limit"],
+      remaining: pc["remaining"],
+      resetAt: typeof pc["resetAt"] === "string" ? pc["resetAt"] : "",
+      limitedBy: limitedBy === "user" || limitedBy === "network" || limitedBy === "service" ? limitedBy : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // ─── save / load project ──────────────────────────────────────────────────────
 
@@ -118,7 +181,12 @@ export async function saveProjectToDb(payload: {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10000),
     });
-    if (resp.status === 429) return { ok: false, error: "rate_limited", message: "요청이 너무 많습니다." };
+    if (resp.status === 429) {
+      const body = (await resp.json().catch(() => null)) as Record<string, unknown> | null;
+      const limit = parseProjectLimit(body);
+      if (limit) return limit;
+      return { ok: false, error: "rate_limited", message: "요청이 너무 많습니다." };
+    }
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     return (await resp.json()) as { ok: true; id: string };
   } catch (err) {

@@ -20,6 +20,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { staffUserKey } from "./lib/staff-key.mjs";
 
 const BASE = process.env.CENTRAL_PLANE_URL ?? "https://conclave-ai.seunghunbae.workers.dev";
 const args = process.argv.slice(2);
@@ -32,7 +33,7 @@ const SKIP_EN = flag("skip-en");
 // 로그인 뒤 검수(일회용 계정 가입 + probe 메일 수신)까지 — 대상 앱에 실제 계정이 생긴다. 명시할 때만.
 const SIGNUP = flag("signup");
 const STAMP = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "").slice(0, 12);
-const USER_KEY = opt("key") ?? `probe-devspec-${STAMP}`;
+const USER_KEY = opt("key") ?? staffUserKey() ?? `probe-devspec-${STAMP}`;
 const AC_INTENT_MAX = 1000;
 
 // ── 리얼 기획 3건 — 한글·공백·괄호·가운뎃점·숫자 단위 포함 ──────────────────────────

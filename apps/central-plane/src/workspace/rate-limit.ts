@@ -354,6 +354,39 @@ export async function consumeDailyCaps(
   return { limited: false, dayUtc, resetAt, refund: giveBack };
 }
 
+export type DailyCapsPeek = {
+  /** The smallest headroom across the caps (0 = the next consume is refused). */
+  remaining: number;
+  /** The cap that leaves the least headroom (null when `caps` is empty). */
+  tightest: { scope: DailyCapScope; limit: number } | null;
+  resetAt: string;
+};
+
+/**
+ * Read-only view of what consumeDailyCaps would allow right now — for showing
+ * "N left today" BEFORE the user spends effort (D-24.3). Takes no slot. A D1
+ * read failure counts as 0 used (fail-open, same as the consume path).
+ * `caps` empty → Infinity remaining.
+ */
+export async function peekDailyCaps(
+  env: Env,
+  caps: readonly DailyCap[],
+  now: Date = new Date(),
+): Promise<DailyCapsPeek> {
+  const dayUtc = currentDayUtc(now);
+  let remaining = Number.POSITIVE_INFINITY;
+  let tightest: DailyCapsPeek["tightest"] = null;
+  for (const cap of caps) {
+    const used = await getCount(env.DB, await dailyCapStoredKey(env, cap), dayUtc);
+    const left = Math.max(0, cap.limit - used);
+    if (left < remaining) {
+      remaining = left;
+      tightest = { scope: cap.scope, limit: cap.limit };
+    }
+  }
+  return { remaining, tightest, resetAt: nextDayUtcIso(now) };
+}
+
 /** Parse an hourly-limit env var with a default (invalid/absent → default). */
 export function hourlyLimitFromEnv(raw: string | undefined, fallback: number): number {
   const n = parseInt(raw ?? "", 10);
