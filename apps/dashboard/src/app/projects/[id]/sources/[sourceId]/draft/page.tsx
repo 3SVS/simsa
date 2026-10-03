@@ -39,6 +39,7 @@ import {
   markProjectSyncFailed,
 } from "@/lib/workflow-store";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
+import { withUserAuthoredItems } from "@/lib/confirmed-items.mjs";
 
 type Phase = "loading" | "ready" | "error";
 
@@ -127,6 +128,14 @@ export default function DocumentDraftPage() {
     saveExtendedProjectData(id, {
       productSpec: draft.productSpec,
       itemCriteria: Object.fromEntries(draft.items.map((i) => [i.id, i.criteria ?? []])),
+      // C-A7 (D-2 amend): 유저가 올린 문서에서 나온 항목을 유저가 확정했다 — 앱에서 읽어낸 추론이 아니므로
+      // 확인된 것(그렇지 않으면 기존 앱 문의 지시서가 이 항목들을 should로 강등한다, PR #577 리뷰 P2-2).
+      intentConfirmedItemIds: withUserAuthoredItems({
+        confirmedItemIds: loadExtendedProjectData(id)?.intentConfirmedItemIds,
+        before: (existing?.requirements ?? []).map((r) => r.id),
+        after: draft.items.map((i) => i.id),
+        authored: draft.items.map((i) => i.id),
+      }),
     });
     await saveProjectToDb({
       id,

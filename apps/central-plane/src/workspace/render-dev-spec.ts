@@ -51,6 +51,14 @@ const T = {
     assumptions: "가정",
     open: "아직 결정이 필요한 것",
     yes: "예", no: "아니오",
+    prov: {
+      confirmed: "사용자가 확인한 수용 기준",
+      builtWith: "만든 도구",
+      stack: "감지한 구성",
+      entry: "시작한 곳",
+      // 첫 화면 세 문의 말 그대로(enum 원값 idea·code·spec을 내보내지 않는다).
+      entryv: { idea: "아이디어", code: "이미 만든 앱", spec: "기획서" },
+    },
   },
   en: {
     readme: "Development spec",
@@ -85,11 +93,38 @@ const T = {
     assumptions: "Assumptions",
     open: "Still to decide",
     yes: "yes", no: "no",
+    prov: {
+      confirmed: "Acceptance criteria the user confirmed",
+      builtWith: "Built with",
+      stack: "Detected setup",
+      entry: "Started from",
+      entryv: { idea: "An idea", code: "An app already built", spec: "A plan or spec" },
+    },
   },
 } as const;
 
 const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 const list = (xs: readonly string[], none: string) => (xs.length ? xs.map((x) => `- ${x}`).join("\n") : none);
+
+/** D-2 amend: 출처가 있으면(역추론) 무엇을 근거로 한 지시서인지 README에 밝힌다. 없으면 0줄. */
+function provenanceLines(spec: DevSpec, locale: RenderLocale): string[] {
+  const p = spec.meta.provenance;
+  if (!p) return [];
+  const t = T[locale];
+  const out: string[] = [""];
+  if (spec.meta.source === "inferred" || p.userConfirmedAcIds) {
+    const ids = p.userConfirmedAcIds ?? [];
+    out.push(`- ${t.prov.confirmed}: ${ids.length ? ids.join(", ") : t.none}`);
+  }
+  if (p.builtWith) out.push(`- ${t.prov.builtWith}: ${p.builtWith}`);
+  if (p.entryPath) out.push(`- ${t.prov.entry}: ${t.prov.entryv[p.entryPath]}`);
+  const st = p.detectedStack;
+  if (st) {
+    const parts = [st.hosting, st.data, ...(st.tools ?? [])].filter((x): x is string => typeof x === "string" && x.length > 0);
+    if (parts.length) out.push(`- ${t.prov.stack}: ${parts.join(" · ")}`);
+  }
+  return out.length > 1 ? out : [];
+}
 
 function readme(spec: DevSpec, locale: RenderLocale, files: string[]): string {
   const t = T[locale];
@@ -103,6 +138,7 @@ function readme(spec: DevSpec, locale: RenderLocale, files: string[]): string {
     `**${t.excluded}:** ${s.excluded.length ? s.excluded.join(" · ") : t.none}`,
     "",
     `_${t.source[spec.meta.source]} · ${spec.meta.generatedAt}_`,
+    ...provenanceLines(spec, locale),
     "",
     `## ${t.toc}`,
     "",

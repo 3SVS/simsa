@@ -5,7 +5,12 @@
  *
  * Styled like typical v0/Lovable output (gradient hero, emoji, single page)
  * so the targets resemble what Simsa's real users actually inspect.
+ *
+ * C-A7 (2026-10-01): /intent-mismatch/* — 작동은 하지만 의도와 다른 앱 10변형(문 (c)).
+ * 정답지: docs/pilot-2026-10/intent-mismatch-answer-key.md (먼저 커밋됨).
+ * 정정 A1(러너 실행 전): IM07은 저장을 안 하는 문 (b) 고장이라 무효(문 (b) 대조군), IM11을 더했다.
  */
+import { INTENT_MISMATCH_INDEX, INTENT_MISMATCH_ROUTES } from "./intent-mismatch.mjs";
 
 const SHELL = (title, body, extraHead = "") => `<!doctype html>
 <html lang="ko">
@@ -237,6 +242,10 @@ const INDEX = SHELL(
   <li><a href="/heavy-site">F7 /heavy-site — 무거운 랜딩(작동함, E-corpus-1)</a></li>
   <li><a href="/geo-gated">F8 /geo-gated — 위치권한 게이트(작동함, E-corpus-2)</a></li>
   <li><a href="/login-app">F9 /login-app — 로그인 있는 앱(가입·격리·탈퇴)</a></li>
+</ul>
+<p class="sub">작동은 하지만 의도와 다른 앱 (C-A7)</p>
+<ul>
+${INTENT_MISMATCH_INDEX.map(([id, path, label]) => `  <li><a href="${path}">${id} ${path} — ${label}</a></li>`).join("\n")}
 </ul>`,
 );
 
@@ -336,6 +345,7 @@ const ROUTES = {
   "/heavy-site": HEAVY_SITE,
   "/geo-gated": GEO_GATED,
   "/login-app": LOGIN_APP,
+  ...INTENT_MISMATCH_ROUTES,
 };
 
 export default {

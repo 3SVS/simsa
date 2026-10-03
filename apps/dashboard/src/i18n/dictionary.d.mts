@@ -2621,6 +2621,17 @@ export type Dictionary = {
     emptyNoSource: string; emptyUnreadable: string; emptyNoEvidence: string; emptyLlm: string;
     saveMine: string;
   };
+  /** C-A7 — 문 (c) 인터뷰 질문 묶음 카드. */
+  interviewPack: {
+    title: string; lead: string; open: string; close: string; step1: string; copy: string; copied: string;
+    copyFailed: string; loadingPack: string; packFailed: string; retry: string; step2: string;
+    answerPlaceholder: string; apply: string; applying: string; resultTitle: string; intentLabel: string;
+    mustLabel: string; notNeededLabel: string; differentLabel: string; unreadLead: string;
+    unreadNames: { intent: string; must: string; notNeeded: string; differentNow: string };
+    appliedBuilding: string; appliedBuilt: string; appliedNoMust: string; appliedFailed: string; checkNow: string;
+    errEmpty: string; errPromptPasted: string; errNoFormat: string; errNoContent: string; errTooLong: string;
+    errServer: string;
+  };
   stackCard: { title: string; desc: string; saved: string };
   sources: {
     title: string;
