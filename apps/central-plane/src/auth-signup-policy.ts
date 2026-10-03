@@ -31,7 +31,12 @@ export function resolveSignupMode(env: Partial<Env> | undefined): SignupMode {
  */
 export function isSignupPath(pathname: string): boolean {
   if (typeof pathname !== "string") return false;
-  const p = pathname.split("?")[0]!.replace(/\/+$/, "");
+  const q = pathname.split("?")[0] ?? "";
+  // Trailing slashes off by one backward scan — `/\/+$/` restarts at every "/" of a
+  // run, so "/api/auth/" + "/" × 16K (a legal URL at the edge) cost ~0.2 s per POST.
+  let end = q.length;
+  while (end > 0 && q.charCodeAt(end - 1) === 0x2f /* "/" */) end -= 1;
+  const p = q.slice(0, end);
   return p === "/api/auth/sign-up" || p.startsWith("/api/auth/sign-up/");
 }
 

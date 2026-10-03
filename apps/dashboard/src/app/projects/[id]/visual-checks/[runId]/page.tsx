@@ -72,6 +72,7 @@ import {
   repairErrorTone,
   showBuildUnverified,
   repairDoneKind,
+  repairStoppedByBudget,
   REPAIR_POLL_INTERVAL_MS,
 } from "@/lib/repair-state.mjs";
 import type { RepairErrorKey } from "@/lib/repair-state.mjs";
@@ -79,6 +80,7 @@ import { fetchProjectRepo } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 import { EvidenceChainSection } from "@/components/EvidenceChainSection";
+import { ResultPrivacySection } from "@/components/ResultPrivacySection";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -590,6 +592,10 @@ function RepairSection({
           </p>
           {showBuildUnverified(repair) && (
             <p className="mt-2 text-sm leading-relaxed text-amber-700">{s.buildUnverified}</p>
+          )}
+          {/* 비용 권고 ② — why the brief card has no code change this time (usage limit). */}
+          {repairStoppedByBudget(repair) && (
+            <p className="mt-2 text-sm leading-relaxed text-amber-700">{s.budgetStopped}</p>
           )}
           {isEnvCause(repair) && (
             <div className="callout mt-3 border-amber-200 bg-amber-50 text-amber-700">
@@ -1254,6 +1260,9 @@ export default function VisualCheckDetailPage() {
             initial={initialUserVerdict}
             t={t}
           />
+
+          {/* Train K (계약 5): 학습 데이터 동의 카드(첫 완료 결과 + 1회) + 운영 정보 한 줄 — 인라인. */}
+          <ResultPrivacySection runId={runId} resultDone={check.status === "done"} userKey={userKey} t={t} />
         </>
       )}
     </div>

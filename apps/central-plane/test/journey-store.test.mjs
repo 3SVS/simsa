@@ -25,6 +25,8 @@ function dbWithConsent({ consented, version }) {
             consent_version: version, created_at: "t", updated_at: "t",
           };
         },
+        // Train K (0071): the journey copy's training_records_index row is written first.
+        async run() { return { meta: { changes: consented ? 1 : 0 } }; },
       };
     },
   };

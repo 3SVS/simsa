@@ -439,7 +439,18 @@ export type StartReviewResponse =
       creditDryRun?: CreditEnforcementDryRun;
       warnings?: string[];
     }
-  | { ok: false; error: string; creditEnforcement?: CreditEnforcementResult; message?: string };
+  | {
+      ok: false;
+      error: string;
+      creditEnforcement?: CreditEnforcementResult;
+      message?: string;
+      /**
+       * With error "generation_capacity" (PR #576 review: PR review now draws from the daily
+       * AI capacity): when it returns. Unvalidated wire value — render only through
+       * generationCapacityText (formatResetAt checks it strictly).
+       */
+      resetAt?: string;
+    };
 
 export type GetReviewResponse =
   | { ok: true; run: ReviewRun | null }

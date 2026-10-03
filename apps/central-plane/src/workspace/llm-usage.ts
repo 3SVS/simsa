@@ -34,6 +34,8 @@ export type NotMeteredPath = { callSite: string; source: string; trigger: string
  */
 export const LEDGER_NOT_METERED: readonly NotMeteredPath[] = [
   // Worker 동기 요청 — anthropicMessages 경유(anthropic_usage 로그에는 남는다), 원장 싱크 미배선.
+  // (PR #576 검증 이후 이 네 경로도 onUsage를 받지만, 라우트는 그 이벤트를 **일일 용량 정산(과금된 실패 판정)에만**
+  //  세고 원장에는 적지 않는다 — 원장 배선은 후속.)
   { callSite: "fix", source: "src/workspace/fix.ts", trigger: "Worker 요청(수정 제안)" },
   { callSite: "recommend", source: "src/workspace/recommend.ts", trigger: "Worker 요청(추천 답변)" },
   { callSite: "unstick", source: "src/workspace/unstick.ts", trigger: "Worker 요청(막힘 풀기)" },

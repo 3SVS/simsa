@@ -45,6 +45,12 @@ export interface AnthropicResponse {
     | { type: "tool_use"; id: string; name: string; input: unknown }
   >;
   stop_reason?: string;
+  /**
+   * PR #576 검증 P2-8: the vendor answered but reported no usage (the OpenAI fallback sets this
+   * when the response has no usage block or no token counts). `usage` then holds zeros that are
+   * NOT a measurement — pricing.ts usageRecordFromResponse treats the call as "cost unknown".
+   */
+  usageUnknown?: true;
   usage: {
     input_tokens: number;
     output_tokens: number;
