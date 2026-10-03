@@ -39,6 +39,7 @@ import { useToast } from "@/components/Toast";
 import { BranchGlyph } from "@/components/brand/BranchGlyph";
 import { buildStepper, rotatingWaitLine } from "@/lib/wizard-steps.mjs";
 import { composeCodeIntent } from "@/lib/code-intent.mjs";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -275,6 +276,8 @@ function NewProjectInner() {
       setStep(2);
     } else if (res.error === "rate_limited") {
       setRateLimitMsg(t.common.rateLimited);
+    } else if (res.error === "generation_capacity") {
+      setRateLimitMsg(generationCapacityText(t, res.resetAt));
     } else {
       // Honest failure: no fabricated draft — say it failed, let them retry.
       setRateLimitMsg(t.errors.llmUnavailable);
@@ -306,6 +309,8 @@ function NewProjectInner() {
       setIsFallback(res.data.source === "mock-fallback");
     } else if (res.error === "rate_limited") {
       setRateLimitMsg(t.common.rateLimited);
+    } else if (res.error === "generation_capacity") {
+      setRateLimitMsg(generationCapacityText(t, res.resetAt));
     } else {
       setRateLimitMsg(t.errors.llmUnavailable);
     }
@@ -332,6 +337,8 @@ function NewProjectInner() {
       setStep(4);
     } else if (res.error === "rate_limited") {
       setRateLimitMsg(t.common.rateLimited);
+    } else if (res.error === "generation_capacity") {
+      setRateLimitMsg(generationCapacityText(t, res.resetAt));
     } else {
       setRateLimitMsg(t.errors.llmUnavailable);
     }
@@ -353,6 +360,8 @@ function NewProjectInner() {
       setStep(4);
     } else if (res.error === "rate_limited") {
       setRateLimitMsg(t.common.rateLimited);
+    } else if (res.error === "generation_capacity") {
+      setRateLimitMsg(generationCapacityText(t, res.resetAt));
     } else {
       setRateLimitMsg(t.errors.llmUnavailable);
     }

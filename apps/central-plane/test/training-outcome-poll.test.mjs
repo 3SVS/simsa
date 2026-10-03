@@ -41,14 +41,24 @@ test("updateTrainingRecordOutcome: flips the STORED record's outcome (pending â†
   assert.equal(prior.outcome, "pending");
 
   const store = new Map([["events/KR/2026/07/04/run_prev.json", JSON.stringify(prior)]]);
+  // Real R2 shape (Train K, PR #574 #574-4): get carries an etag; put honours onlyIf.etagMatches and
+  // returns the written object (null when the precondition fails).
   const env = {
     EVIDENCE: {
       async get(key) {
         const v = store.get(key);
-        return v ? { async text() { return v; } } : null;
+        return v ? { key, etag: `etag:${v.length}`, async text() { return v; } } : null;
       },
-      async put(key, value) { store.set(key, value); },
+      async put(key, value, options) {
+        const want = options?.onlyIf?.etagMatches;
+        const cur = store.get(key);
+        if (want !== undefined && (cur === undefined || `etag:${cur.length}` !== want)) return null;
+        store.set(key, value);
+        return { key, etag: `etag:${value.length}` };
+      },
     },
+    // No index row for this key (nothing requested) â€” the post-write re-check finds nothing to delete.
+    DB: { prepare: () => ({ bind: () => ({ async all() { return { results: [] }; }, async first() { return null; } }) }) },
   };
 
   const res = await updateTrainingRecordOutcome(env, "events/KR/2026/07/04/run_prev.json", "resolved");

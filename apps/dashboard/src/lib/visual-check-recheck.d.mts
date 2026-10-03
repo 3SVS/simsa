@@ -18,9 +18,17 @@ export const SERVER_DEFAULT_INTENT: string;
 
 export function isServerDefaultIntent(raw: unknown): boolean;
 
+/**
+ * C-A7 P2-5: when the project's confirmed intent was last set — the later of the
+ * "맞나요?" confirmation and an interview revision. Broken values are ignored; null if neither.
+ */
+export function confirmedIntentAtOf(
+  ext: { intentConfirmedAt?: unknown; intentRevisedAt?: unknown } | null | undefined,
+): string | null;
+
 export function buildRecheckBody(
-  check: { id?: unknown; intent?: unknown } | null | undefined,
+  check: { id?: unknown; intent?: unknown; createdAt?: unknown } | null | undefined,
   userKey: string,
   locale: "ko" | "en",
-  opts?: { confirmedIntent?: unknown },
+  opts?: { confirmedIntent?: unknown; confirmedIntentAt?: unknown },
 ): RecheckBody;

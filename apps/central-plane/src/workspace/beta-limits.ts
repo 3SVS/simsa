@@ -13,17 +13,29 @@
  * start a container on our bill:
  *
  *   - inspections:  10 / day per userKey · 30 / day per network · 300 / day service-wide
- *   - repairs:       5 / day per userKey · 15 / day per network ·  50 / day service-wide
+ *   - repairs:       5 / day per userKey ·  6 / day per network ·  20 / day service-wide
+ *     (service-wide was 50 until the 2026-09-30 cost review — Bae "1번 권고대로". The
+ *      network share followed it down from 15 to 6 (PR #576 review P2-4) to keep the old
+ *      share of the service bucket (15/50 = 30%): at 15/20 one network could use 75% of
+ *      the day and two networks locked everyone out. Trade-off: a shared office/home
+ *      network now gets 6 repairs a day in total, not 3× one user's 5.)
+ *     These are REQUEST-COUNT caps, not a dollar ceiling (PR #576 review P2-7): each job
+ *     is additionally capped at repairJobBudgetUsd, but that check runs BEFORE each call,
+ *     so a job can overshoot by the one call that crossed the line — the day's spend is
+ *     bounded by roughly 20 × ($2 + one worker call), not by "20 × $2". A single worker
+ *     call is priced after the fact at the real model; its pre-call estimate uses chars/4,
+ *     which under-counts Korean text. Measured spend lives in the llm_usage ledger.
  *     (UTC day; POST …/visual-checks/run and POST …/:runId/repair)
  *
  *   Why three buckets (PR #561 review P1): userKey is an anonymous id the client
  *   makes up (workspace.ts: "No auth"), so the per-userKey cap stops an honest
  *   user's runaway retry, not a loop that mints a new key per call — the eval /
  *   corpus scripts already call production exactly that way. The network bucket
- *   (cf-connecting-ip as a keyed HMAC, 3× the user cap so a shared office/home network
- *   is not punished for one person) raises the bar for a single scripted source;
- *   the service bucket is the actual daily cost ceiling. The kill switches
- *   (service-switches.ts) stay the hard stop.
+ *   (cf-connecting-ip as a keyed HMAC; for inspections 3× the user cap so a shared
+ *   office/home network is not punished for one person; always < half of the service
+ *   bucket so one or two networks cannot lock everyone out) raises the bar for a single
+ *   scripted source; the service bucket is the daily request-count ceiling. The kill
+ *   switches (service-switches.ts) stay the hard stop.
  *
  *   Charged only when a job is really dispatched: slots are taken after the
  *   ownership + validation + one-active-run (409) checks, atomically, one
@@ -66,12 +78,49 @@ export const BETA_LIMITS = {
   inspectionsPerDay: 10,
   /** Train W · W-2 [PILOT]: max dispatched repair jobs per userKey per UTC day. */
   repairsPerDay: 5,
-  /** [PILOT]: per network (cf-connecting-ip, keyed HMAC) per UTC day — 3× the user cap. */
+  /**
+   * [PILOT]: per network (cf-connecting-ip, keyed HMAC) per UTC day. Inspections: 3× the
+   * user cap. Repairs: 30% of the service bucket (was 15 while the service bucket was 50 —
+   * PR #576 review P2-4), so no single network can use half the day's repairs.
+   */
   inspectionsPerDayPerIp: 30,
-  repairsPerDayPerIp: 15,
-  /** [PILOT]: service-wide per UTC day — the daily cost ceiling for the container paths. */
+  repairsPerDayPerIp: 6,
+  /**
+   * [PILOT]: service-wide per UTC day — the daily request-count ceiling for the container
+   * paths (not a dollar ceiling; see the header comment).
+   */
   inspectionsPerDayGlobal: 300,
-  repairsPerDayGlobal: 50,
+  repairsPerDayGlobal: 20,
+  /**
+   * 비용 권고 ② (2026-09-30) [PILOT]: USD one repair job may spend on LLM calls. The container
+   * adds up every worker call at the ACTUAL model's price (unknown model → the table's
+   * highest price, never $0) and stops before the next call once the sum reaches this.
+   */
+  repairJobBudgetUsd: 2,
+  /**
+   * 비용 권고 ③ (2026-09-30) [PILOT]: service-wide LLM generation REQUESTS per UTC day — the
+   * idea/spec family (idea-to-spec-draft · check-draft · recommend-answer · unstick ·
+   * fix-suggestion · document spec-draft · infer-intent) and PR review.
+   *
+   * A request-count cap, NOT a dollar ceiling (PR #576 review P2-7). "500 × ~$0.10 ≈ $50"
+   * is a floor estimate, off in three known ways: (1) one slot is one request whatever it
+   * costs — check-draft is a check + a verify panel (2+ calls), council is several vendors ×
+   * rounds, a document draft reads up to 80k chars; (2) the average (~$0.10) comes from the
+   * BM estimate, not from the ledger; (3) the canary (.github/workflows/canary.yml) takes
+   * ~96 of the 500 every day (one idea-to-spec-draft per 15 min). Measured spend lives in
+   * the llm_usage ledger; a dollar stop on that ledger is the next-batch candidate.
+   */
+  generationsPerDayGlobal: 500,
+  /** 비용 권고 ③ [PILOT]: service-wide dev-spec generation requests per UTC day (request cap, see above). */
+  devSpecsPerDayGlobal: 200,
+  /**
+   * PR #576 review P1-1 · P1-3 [PILOT]: one network's share of the generation buckets per
+   * UTC day (cf-connecting-ip, keyed HMAC — the #561 pattern). Without it a single client
+   * could empty the service bucket and lock every user's generation screens until UTC
+   * midnight. 20% of each service bucket, so at least five networks are needed to fill it.
+   */
+  generationsPerDayPerIp: 100,
+  devSpecsPerDayPerIp: 40,
 } as const;
 
 /** Daily-bucket names (workspace_rate_limit key prefix). */
@@ -83,6 +132,12 @@ export const INSPECTION_DAILY_IP_BUCKET = "inspection-daily-ip";
 export const REPAIR_DAILY_IP_BUCKET = "repair-daily-ip";
 export const INSPECTION_DAILY_GLOBAL_BUCKET = "inspection-daily-global";
 export const REPAIR_DAILY_GLOBAL_BUCKET = "repair-daily-global";
+/** 비용 권고 ③ — service-wide buckets for the LLM generation paths (generation-capacity.ts). */
+export const GENERATION_DAILY_GLOBAL_BUCKET = "generation-daily-global";
+export const DEV_SPEC_DAILY_GLOBAL_BUCKET = "dev-spec-daily-global";
+/** PR #576 review P1-1 · P1-3 — per-network shares of those buckets (checked first). */
+export const GENERATION_DAILY_IP_BUCKET = "generation-daily-ip";
+export const DEV_SPEC_DAILY_IP_BUCKET = "dev-spec-daily-ip";
 /** The one key of a service-wide bucket. */
 export const SERVICE_BUCKET_KEY = "all";
 
@@ -127,14 +182,46 @@ export function inspectionDailyLimitGlobal(env: Pick<Env, "BETA_INSPECTION_DAILY
   return dailyLimitFromEnv(env.BETA_INSPECTION_DAILY_LIMIT_GLOBAL, BETA_LIMITS.inspectionsPerDayGlobal);
 }
 
-/** Per-network daily repair cap (default 15). */
+/** Per-network daily repair cap (default 6 — was 15 while the service bucket was 50). */
 export function repairDailyLimitPerIp(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_PER_IP">): number {
   return dailyLimitFromEnv(env.BETA_REPAIR_DAILY_LIMIT_PER_IP, BETA_LIMITS.repairsPerDayPerIp);
 }
 
-/** Service-wide daily repair cap (default 50). */
+/** Service-wide daily repair cap (default 20 — was 50 before the 2026-09-30 cost review). */
 export function repairDailyLimitGlobal(env: Pick<Env, "BETA_REPAIR_DAILY_LIMIT_GLOBAL">): number {
   return dailyLimitFromEnv(env.BETA_REPAIR_DAILY_LIMIT_GLOBAL, BETA_LIMITS.repairsPerDayGlobal);
+}
+
+/** Service-wide daily cap of the idea/spec generation family (비용 권고 ③, default 500). */
+export function generationDailyLimitGlobal(env: Pick<Env, "BETA_GENERATION_DAILY_LIMIT_GLOBAL">): number {
+  return dailyLimitFromEnv(env.BETA_GENERATION_DAILY_LIMIT_GLOBAL, BETA_LIMITS.generationsPerDayGlobal);
+}
+
+/** Service-wide daily cap of dev-spec generation (비용 권고 ③, default 200). */
+export function devSpecDailyLimitGlobal(env: Pick<Env, "BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL">): number {
+  return dailyLimitFromEnv(env.BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL, BETA_LIMITS.devSpecsPerDayGlobal);
+}
+
+/** One network's daily share of the generation bucket (PR #576 review, default 100). */
+export function generationDailyLimitPerIp(env: Pick<Env, "BETA_GENERATION_DAILY_LIMIT_PER_IP">): number {
+  return dailyLimitFromEnv(env.BETA_GENERATION_DAILY_LIMIT_PER_IP, BETA_LIMITS.generationsPerDayPerIp);
+}
+
+/** One network's daily share of the dev-spec bucket (PR #576 review, default 40). */
+export function devSpecDailyLimitPerIp(env: Pick<Env, "BETA_DEV_SPEC_DAILY_LIMIT_PER_IP">): number {
+  return dailyLimitFromEnv(env.BETA_DEV_SPEC_DAILY_LIMIT_PER_IP, BETA_LIMITS.devSpecsPerDayPerIp);
+}
+
+/**
+ * Per-repair-job LLM budget in USD (비용 권고 ②, default $2). Env REPAIR_JOB_BUDGET_USD —
+ * a positive finite number ("0.75", "3.5"); anything else (empty, "0", "-1", "2abc",
+ * "Infinity") → the default. The Worker sends it in the dispatch payload
+ * (`repairBudgetUsd`); a container image that predates the field ignores it.
+ */
+export function repairJobBudgetUsd(env: Pick<Env, "REPAIR_JOB_BUDGET_USD">): number {
+  const raw = (env.REPAIR_JOB_BUDGET_USD ?? "").trim();
+  const n = raw === "" ? Number.NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : BETA_LIMITS.repairJobBudgetUsd;
 }
 
 /**

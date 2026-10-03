@@ -33,6 +33,9 @@ const CODE_TO_KEY = {
   timeout: "timeout",
   timed_out: "timeout",
   invalid_email: "saveFailed",
+  // 비용 권고 ③ + PR #576 review: today's AI capacity is full (PR review screens reach this
+  // through errorText). Callers that have resetAt use generationCapacityText instead.
+  generation_capacity: "generationCapacity",
 };
 
 /**
