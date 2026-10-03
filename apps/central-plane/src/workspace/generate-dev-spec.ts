@@ -29,12 +29,14 @@ import {
   ScreenSchema,
   TestPlanEntrySchema,
   WorkBreakdownSchema,
+  applyInferredConfirmation,
   validateDevSpec,
   type DevSpec,
   type IntegrityViolation,
 } from "./dev-spec.js";
 import { anthropicMessages, anthropicEndpoint, type LlmUsageSink, type VendorFallback } from "./anthropic-fetch.js";
 import type { LlmCallUsage } from "./generate.js";
+import type { BaseProvenance } from "./provenance.js";
 
 // ─── 입출력 타입 ─────────────────────────────────────────────────────────────
 
@@ -50,6 +52,13 @@ export type DevSpecGenInput = {
   locale: DevSpecLocale;
   /** generated=앞에서 생성 / inferred=기존 앱에서 역추론 */
   source: "generated" | "inferred";
+  /**
+   * D-2 amend(inferred 전용): 유저가 "맞나요?" 카드·인터뷰 회수에서 **확인한** 항목의 items[].id.
+   * 없으면 빈 배열 — 확인된 must가 0개(옛 클라이언트). 목록에 없는 id는 무시한다.
+   */
+  confirmedItemIds?: readonly string[];
+  /** D-2 amend(inferred 전용): 출처(builtWith·entryPath·detectedStack). meta.provenance로 들어간다. */
+  provenance?: BaseProvenance;
 };
 
 export type PassName = "requirements" | "surfaces" | "plan";
@@ -155,7 +164,7 @@ export function makeDevSpecLlmCaller(
 // ─── 프롬프트 ────────────────────────────────────────────────────────────────
 
 type Brief = z.infer<typeof BriefSchema>;
-type Item = { title: string; criteria: string[] };
+type Item = { id?: string; title: string; criteria: string[] };
 
 function normalizeItems(items: unknown): Item[] {
   if (!Array.isArray(items)) return [];
@@ -166,9 +175,34 @@ function normalizeItems(items: unknown): Item[] {
     const title = typeof r["title"] === "string" ? r["title"].trim() : "";
     if (!title) continue;
     const criteria = Array.isArray(r["criteria"]) ? r["criteria"].filter((c): c is string => typeof c === "string") : [];
-    out.push({ title: title.slice(0, 200), criteria: criteria.slice(0, 8).map((c) => c.slice(0, 300)) });
+    const id = typeof r["id"] === "string" && r["id"].trim() ? r["id"].trim().slice(0, 64) : undefined;
+    out.push({ ...(id ? { id } : {}), title: title.slice(0, 200), criteria: criteria.slice(0, 8).map((c) => c.slice(0, 300)) });
   }
   return out.slice(0, 30);
+}
+
+/**
+ * D-2 amend — 역추론의 확인 계획. 확인된 항목 k(1부터)는 **고정 id FR-00k**로 must가 되고,
+ * 나머지(앱에서 읽었지만 유저가 확인하지 않은 것)는 FR-101부터 should/could다.
+ * 순수 — 프롬프트와 사후 강제가 같은 계획을 본다.
+ */
+export type InferredPlan = {
+  confirmed: Array<{ featureId: string; item: Item }>;
+  unconfirmed: Item[];
+};
+
+export function planInferredConfirmation(items: readonly Item[], confirmedItemIds: readonly string[] | undefined): InferredPlan {
+  const wanted = new Set((confirmedItemIds ?? []).filter((x) => typeof x === "string"));
+  const confirmed: InferredPlan["confirmed"] = [];
+  const unconfirmed: Item[] = [];
+  for (const it of items) {
+    if (it.id && wanted.has(it.id)) {
+      confirmed.push({ featureId: `FR-${String(confirmed.length + 1).padStart(3, "0")}`, item: it });
+    } else {
+      unconfirmed.push(it);
+    }
+  }
+  return { confirmed, unconfirmed };
 }
 
 const COMMON_RULES = {
@@ -192,8 +226,50 @@ const COMMON_RULES = {
 - Anything listed under excluded must not appear in any section.`,
 } as const;
 
-function briefBlock(locale: DevSpecLocale, brief: Brief, items: Item[], idea: string | undefined): string {
-  const itemLines = items.map((it, i) => `${i + 1}. ${it.title}${it.criteria.length ? ` — ${it.criteria.join(" / ")}` : ""}`).join("\n");
+const itemLine = (it: Item) => `${it.title}${it.criteria.length ? ` — ${it.criteria.join(" / ")}` : ""}`;
+
+/** 역추론: 확인된 항목(고정 FR id)과 확인 안 된 항목을 **나눠서** 보여준다 — 섞으면 전부 must가 된다. */
+function inferredItemsBlock(locale: DevSpecLocale, plan: InferredPlan): string {
+  const conf = plan.confirmed.map((c) => `${c.featureId} = ${itemLine(c.item)}`).join("\n");
+  const rest = plan.unconfirmed.map((it, i) => `${i + 1}. ${itemLine(it)}`).join("\n");
+  return locale === "ko"
+    ? `사용자가 확인한 항목(반드시 되어야 할 것 — 표시된 기능 id를 그대로 쓴다):
+${conf || "(아직 없음)"}
+
+앱에서 읽어냈지만 사용자가 확인하지 않은 항목:
+${rest || "(없음)"}`
+    : `Items the user confirmed (must work — use the feature id shown, verbatim):
+${conf || "(none yet)"}
+
+Items read from the app that the user has NOT confirmed:
+${rest || "(none)"}`;
+}
+
+const INFERRED_RULES = {
+  ko: `역추론 규칙(위의 priority 규칙보다 우선한다):
+- 이 지시서는 이미 만들어진 앱에서 역추론한 것이다. priority "must"는 **사용자가 확인한 항목에만** 쓴다.
+- 사용자가 확인한 항목은 표시된 기능 id(FR-001…)를 **그대로** 쓰고 priority는 must.
+- 그 밖의 기능은 FR-101부터 번호를 매기고 priority는 should 또는 could다(must 금지).`,
+  en: `Inferred-spec rules (these override the priority rule above):
+- This spec was inferred from an app that already exists. Use priority "must" **only for items the user confirmed**.
+- Each confirmed item uses the feature id shown (FR-001…) **verbatim**, with priority must.
+- Any other feature is numbered from FR-101 with priority should or could (never must).`,
+} as const;
+
+function briefBlock(locale: DevSpecLocale, brief: Brief, items: Item[], idea: string | undefined, inferred?: InferredPlan): string {
+  const itemLines = inferred ? inferredItemsBlock(locale, inferred) : items.map((it, i) => `${i + 1}. ${itemLine(it)}`).join("\n");
+  if (inferred) {
+    const head = locale === "ko" ? "제품 브리프(기존 앱에서 역추론):" : "Product brief (inferred from an existing app):";
+    return `${head}
+- ${locale === "ko" ? "이름" : "Name"}: ${brief.productName || (locale === "ko" ? "(미정)" : "(tbd)")}
+- ${locale === "ko" ? "한 줄" : "One line"}: ${brief.oneLine}
+- ${locale === "ko" ? "대상" : "Users"}: ${brief.targetUsers.join(", ") || "unknown"}
+- ${locale === "ko" ? "문제" : "Problem"}: ${brief.problem}
+- ${locale === "ko" ? "제외" : "Excluded"}: ${brief.excluded.join(" · ") || (locale === "ko" ? "(없음)" : "(none)")}
+- ${locale === "ko" ? "결정된 것" : "Decided"}: ${brief.decisions.join(" · ") || (locale === "ko" ? "(없음)" : "(none)")}
+${idea ? `\n${locale === "ko" ? "사용자 원문" : "User's original text"}:\n${idea.slice(0, 6000)}\n` : ""}
+${itemLines}`;
+  }
   if (locale === "ko") {
     return `제품 브리프:
 - 이름: ${brief.productName || "(미정)"}
@@ -231,10 +307,11 @@ function issuesBlock(locale: DevSpecLocale, issues: string[]): string {
 export function buildPassPrompt(
   pass: PassName,
   locale: DevSpecLocale,
-  ctx: { brief: Brief; items: Item[]; idea?: string; p1?: P1; p2?: P2; issues?: string[] },
+  ctx: { brief: Brief; items: Item[]; idea?: string; p1?: P1; p2?: P2; issues?: string[]; inferred?: InferredPlan },
 ): string {
-  const rules = COMMON_RULES[locale];
-  const brief = briefBlock(locale, ctx.brief, ctx.items, ctx.idea);
+  // 역추론이면 공통 규칙 끝에 우선 규칙을 붙인다(세 패스 모두 — must 기능의 표면 규칙이 걸려 있다).
+  const rules = ctx.inferred ? `${COMMON_RULES[locale]}\n${INFERRED_RULES[locale]}` : COMMON_RULES[locale];
+  const brief = briefBlock(locale, ctx.brief, ctx.items, ctx.idea, ctx.inferred);
   const fix = issuesBlock(locale, ctx.issues ?? []);
 
   if (pass === "requirements") {
@@ -373,7 +450,29 @@ function zodIssues(err: z.ZodError): string[] {
 
 // ─── 위반 → 재생성 시작 패스 매핑 (D-3 "해당 섹션만") ────────────────────────
 
-const P1_RULES = new Set<IntegrityViolation["rule"]>(["ac_unknown_feature", "feature_without_ac"]);
+const P1_RULES = new Set<IntegrityViolation["rule"]>([
+  "ac_unknown_feature",
+  "feature_without_ac",
+  // D-2 amend: 확인 목록·must는 요구사항(P1)의 일이다.
+  "inferred_must_unconfirmed",
+  "confirmed_unknown_acceptance",
+]);
+
+/**
+ * 역추론 P1 스키마: 확인된 항목의 고정 FR id가 **전부** 있어야 한다. 빠지면 스키마 재시도로
+ * 돌려보낸다 — 유저가 "반드시"라고 한 것이 지시서에서 조용히 사라지는 것이 가장 나쁜 실패다.
+ */
+function p1SchemaFor(requiredFeatureIds: readonly string[]) {
+  if (requiredFeatureIds.length === 0) return P1Schema;
+  return P1Schema.superRefine((d, ctx) => {
+    const have = new Set(d.features.map((f) => f.id));
+    for (const id of requiredFeatureIds) {
+      if (!have.has(id)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["features"], message: `${id} (user-confirmed item) is missing — use this feature id verbatim` });
+      }
+    }
+  });
+}
 const P2_RULES = new Set<IntegrityViolation["rule"]>(["must_feature_without_surface", "screen_unknown_feature", "api_unknown_feature"]);
 
 /** 어느 패스부터 다시 만들어야 하는가. 앞 패스를 다시 만들면 뒤 패스도 다시 만든다. */
@@ -444,6 +543,10 @@ export async function generateDevSpec(
   const items = normalizeItems(input.items);
   const idea = input.idea?.trim() || undefined;
   const locale = input.locale;
+  // D-2 amend: 역추론이면 확인 계획(확인된 항목 → 고정 FR id). generated는 종전 그대로.
+  const inferred = input.source === "inferred" ? planInferredConfirmation(items, input.confirmedItemIds) : undefined;
+  const confirmedFeatureIds = new Set((inferred?.confirmed ?? []).map((c) => c.featureId));
+  const p1Schema = p1SchemaFor([...confirmedFeatureIds]);
 
   let p1: P1 | undefined;
   let p2: P2 | undefined;
@@ -455,11 +558,13 @@ export async function generateDevSpec(
     for (const pass of order.slice(order.indexOf(start))) {
       const issues = pass === start ? carried : [];
       if (pass === "requirements") {
-        const r = await runPass("requirements", P1Schema, (i) => buildPassPrompt("requirements", locale, { brief, items, idea, issues: [...issues, ...i] }), call, passes, llmUsage);
+        const r = await runPass("requirements", p1Schema, (i) => buildPassPrompt("requirements", locale, { brief, items, idea, inferred, issues: [...issues, ...i] }), call, passes, llmUsage);
         if (!r.ok) return r.error === "llm_unavailable" ? { ok: false, error: "llm_unavailable", passes, llmUsage } : { ok: false, error: "dev_spec_invalid", stage: "schema", issues: r.issues, passes, llmUsage };
-        p1 = r.data;
+        // D-2 amend: 모델이 무엇을 must라고 했든 — 확인된 것만 must(나머지 must는 should로 강등).
+        // P2(표면) **전에** 맞춘다: must 기능은 화면·API에 나와야 하는 규칙이 P2에 걸려 있다.
+        p1 = inferred ? { ...r.data, features: applyInferredConfirmation(r.data, confirmedFeatureIds).features } : r.data;
       } else if (pass === "surfaces") {
-        const r = await runPass("surfaces", P2Schema, (i) => buildPassPrompt("surfaces", locale, { brief, items, idea, p1, issues: [...issues, ...i] }), call, passes, llmUsage);
+        const r = await runPass("surfaces", P2Schema, (i) => buildPassPrompt("surfaces", locale, { brief, items, idea, inferred, p1, issues: [...issues, ...i] }), call, passes, llmUsage);
         if (!r.ok) return r.error === "llm_unavailable" ? { ok: false, error: "llm_unavailable", passes, llmUsage } : { ok: false, error: "dev_spec_invalid", stage: "schema", issues: r.issues, passes, llmUsage };
         p2 = r.data;
       } else {
@@ -472,7 +577,21 @@ export async function generateDevSpec(
   };
 
   const assemble = (): unknown => ({
-    meta: { version: 1, source: input.source, locale, generatedAt: (opts.now ?? (() => new Date()))().toISOString() },
+    meta: {
+      version: 1,
+      source: input.source,
+      locale,
+      generatedAt: (opts.now ?? (() => new Date()))().toISOString(),
+      // D-2 amend: 역추론은 출처 + 확인 목록(확인된 기능에 딸린 AC 전부)을 함께 싣는다.
+      ...(inferred
+        ? {
+            provenance: {
+              ...(input.provenance ?? {}),
+              userConfirmedAcIds: applyInferredConfirmation(p1!, confirmedFeatureIds).userConfirmedAcIds,
+            },
+          }
+        : {}),
+    },
     brief,
     features: p1!.features,
     acceptance: p1!.acceptance,

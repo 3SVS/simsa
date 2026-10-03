@@ -18,6 +18,18 @@ export type StatusKey =
 
 export type StatusEntry = { label: string; desc: string };
 
+/** Train C · C-3 receipt — one entry per next-action kind (visual-check-receipt ReceiptNextAction). */
+export type ReceiptNextCopy = {
+  viewRecheck: string;
+  viewRecheckProgress: string;
+  recheckAfterFix: string;
+  handOff: string;
+  viewRepair: string;
+  fix: string;
+  tellUs: string;
+  backToProject: string;
+};
+
 export type Dictionary = {
   brand: { wordmark: string; tagline: string };
   lang: { label: string; english: string; korean: string };
@@ -214,6 +226,10 @@ export type Dictionary = {
   };
   errors: {
     llmUnavailable: string;
+    /** 비용 권고 ③ — the service-wide daily AI capacity is full (no time known). */
+    generationCapacity: string;
+    /** Same, with "{when}" = the reset in the reader's clock (lib/generation-capacity.mjs). */
+    generationCapacityAt: string;
     generic: string;
     network: string;
     timeout: string;
@@ -376,6 +392,18 @@ export type Dictionary = {
     specStepSub: string;
     specPastePlaceholder: string;
     specGenerate: string;
+  };
+  quota: {
+    remaining: string;
+    limitTitle: string;
+    limitBody: string;
+    limitBodyNetwork: string;
+    resetAt: string;
+    resetFallback: string;
+    continueExisting: string;
+    signIn: string;
+    seePlans: string;
+    tierNames: { free: string; basic: string; pro: string; staff: string };
   };
   overview: {
     detailsTitle: string;
@@ -1165,20 +1193,50 @@ export type Dictionary = {
   };
   trainingConsent: {
     title: string;
-    desc: string;
-    point1: string;
-    point2: string;
-    point3: string;
-    point4: string;
-    betaNote: string;
+    settingsDesc: string;
+    pointWhat: string;
+    pointHow: string;
+    pointControl: string;
+    equalNote: string;
+    ageNote: string;
+    allow: string;
+    decline: string;
+    withdraw: string;
+    lineSharing: string;
+    lineWithdraw: string;
+    learnMore: string;
+    saving: string;
+    savedAllowed: string;
+    savedDeclined: string;
     enable: string;
     storageNote: string;
     savedOn: string;
-    savedOff: string;
+    savedOffDeletes: string;
+    savedOffStops: string;
+    offNoteDeletes: string;
+    offNoteStops: string;
+    unavailable: string;
     saveError: string;
-    joinCta: string;
-    laterCta: string;
-    manageInSettings: string;
+  };
+  privacyPrefs: {
+    sectionTitle: string;
+    sectionDesc: string;
+    opsTitle: string;
+    opsDesc: string;
+    opsToggle: string;
+    opsDefaultOffNote: string;
+    opsKeepNote: string;
+    opsSavedOn: string;
+    opsSavedOff: string;
+    lineRecording: string;
+    lineOffDefault: string;
+    lineOffUser: string;
+    turnOff: string;
+    turnOn: string;
+    turnOnAgain: string;
+    learnMore: string;
+    unavailable: string;
+    saveError: string;
   };
   github: {
     connectTitle: string;
@@ -2400,6 +2458,8 @@ export type Dictionary = {
       doneBodyAutoFix: string;
       /** Train W — W-3 ③ (contract 4): shown only when buildVerified === false. */
       buildUnverified: string;
+      /** 비용 권고 ② (2026-09-30): shown only on a brief card whose job stopped at its usage limit. */
+      budgetStopped: string;
       openPr: string;
       branchLabel: string;
       noPrNote: string;
@@ -2429,6 +2489,79 @@ export type Dictionary = {
         repairDisabled: string;
         generic: string;
       };
+    };
+    /** Train C · C-3 — 확인 영수증. '고친 내용'(fix*)과 '다시 확인한 증거'(recheck*)는 다른 섹션. */
+    receipt: {
+      title: string;
+      subtitle: string;
+      openFromReport: string;
+      backToReport: string;
+      print: string;
+      copy: string;
+      copied: string;
+      loading: string;
+      notReady: string;
+      failed: string;
+      partialLoad: string;
+      sectionChecked: string;
+      address: string;
+      intent: string;
+      checkedAt: string;
+      resultLabel: string;
+      /** A result sent in from a check run elsewhere (executor ≠ container). */
+      uploadedNote: string;
+      yourAnswer: string;
+      yourAnswerNone: string;
+      sourceNote: string;
+      sourceLink: string;
+      itemsTitleAcceptance: string;
+      itemsTitleCoreFlow: string;
+      itemsIntroCoreFlow: string;
+      itemsNoneReached: string;
+      colItem: string;
+      colExpected: string;
+      colResult: string;
+      status: { pass: string; broken: string; notConfirmed: string; noProblemFound: string };
+      notSeenTitle: string;
+      /** notReached carries {items}. */
+      notSeen: { loginBehind: string; notReached: string; otherPaths: string };
+      fixTitle: string;
+      fixBy: string;
+      fixActive: string;
+      fixFailed: string;
+      fixAutoFix: string;
+      fixBriefOnly: string;
+      /** carries {count}. */
+      changedFiles: string;
+      buildPassed: string;
+      buildUnverified: string;
+      /** Code changed, no after-merge re-check linked: the live app may not have it yet. */
+      fixPendingLive: string;
+      openChanges: string;
+      recheckTitle: string;
+      /** Only for the re-check linked to the fix (after it went in). */
+      recheckBy: string;
+      /** A re-check of this run while a fix exists — who judged, without claiming the fix was live. */
+      recheckBySource: string;
+      /** A re-check of this run with no fix at all. */
+      recheckBySourceNoFix: string;
+      recheckTitleNoFix: string;
+      recheckNone: string;
+      recheckNoneNoFix: string;
+      /** The recent-checks list is full — a re-check may lie beyond it. */
+      recheckUnknown: string;
+      recheckActive: string;
+      recheckFailed: string;
+      recheckResult: string;
+      recheckAt: string;
+      recheckLinked: string;
+      recheckLinkedWorks: string;
+      recheckLinkedBroken: string;
+      recheckOpen: string;
+      notAGuarantee: string;
+      nextTitle: string;
+      next: ReceiptNextCopy;
+      nextWhy: ReceiptNextCopy;
     };
     overview: {
       emptyLead: string;
@@ -2509,6 +2642,17 @@ export type Dictionary = {
     /** PR #571 검증 결함 1·9·3 — door (c): read-only as-is line, items hint, re-check offer after confirming. */
     differsReadNowLabel: string; differsItemsHint: string;
     differsRecheckLead: string; differsRecheckButton: string; differsRecheckBusy: string;
+  };
+  /** C-A7 — 문 (c) 인터뷰 질문 묶음 카드. */
+  interviewPack: {
+    title: string; lead: string; open: string; close: string; step1: string; copy: string; copied: string;
+    copyFailed: string; loadingPack: string; packFailed: string; retry: string; step2: string;
+    answerPlaceholder: string; apply: string; applying: string; resultTitle: string; intentLabel: string;
+    mustLabel: string; notNeededLabel: string; differentLabel: string; unreadLead: string;
+    unreadNames: { intent: string; must: string; notNeeded: string; differentNow: string };
+    appliedBuilding: string; appliedBuilt: string; appliedNoMust: string; appliedFailed: string; checkNow: string;
+    errEmpty: string; errPromptPasted: string; errNoFormat: string; errNoContent: string; errTooLong: string;
+    errServer: string;
   };
   stackCard: { title: string; desc: string; saved: string };
   sources: {
@@ -2593,6 +2737,8 @@ export type Dictionary = {
         rate_limited: string;
         llm_unavailable: string;
         evidence_storage_unconfigured: string;
+        /** 비용 권고 ③ — same sentence as errors.generationCapacity (the page adds the time). */
+        generation_capacity: string;
         generic: string;
       };
     };

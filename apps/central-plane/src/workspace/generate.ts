@@ -203,9 +203,16 @@ const SCHEMA_DESCRIPTION_EN = `{
  * Scans idea + extra context + the user's own answers. A multi-user marker
  * ("팀"/"team"/"고객"/"직원"…) VETOES the solo verdict — "혼자 관리하지만 팀이
  * 쓰는" is not solo. Requires an explicit solo phrase; silence ≠ solo.
+ *
+ * Linear on purpose (2026-10-01): the login marker used to read
+ * `로그인\s*(?:은)?\s*(?:필요\s*없|안\s*)` — two `\s*` around an optional "은" split the
+ * same run of spaces every possible way, so "로그인" + 80,000 spaces + "x" took 5.6 s
+ * per call (twice per request, before the LLM call and before the rate-limit counter
+ * moves). `로그인\s*(?:은\s*)?(?:필요\s*없|안)` matches exactly the same texts (the old
+ * trailing `\s*` after "안" never changed a .test() result) with one way to split.
  */
 const SOLO_MARKERS =
-  /혼자|나\s*혼자|나만|내가?\s*쓰|개인용|개인\s*용도|본인만|자기만|로그인\s*(?:은)?\s*(?:필요\s*없|안\s*)|just\s+for\s+me|only\s+me|for\s+myself|personal\s+use|single[-\s]?user|no\s+(?:login|sign[-\s]?up|account)/i;
+  /혼자|나\s*혼자|나만|내가?\s*쓰|개인용|개인\s*용도|본인만|자기만|로그인\s*(?:은\s*)?(?:필요\s*없|안)|just\s+for\s+me|only\s+me|for\s+myself|personal\s+use|single[-\s]?user|no\s+(?:login|sign[-\s]?up|account)/i;
 const MULTIUSER_MARKERS =
   /여러\s*(?:사람|명|사용자)|팀|조직|회사|직원|고객|손님|회원|가입자|멀티|multi[-\s]?user|team|organization|customers?|clients?|members?|employees?|users\s+(?:sign|log)/i;
 
@@ -1019,8 +1026,41 @@ function logShapeFailure(kind: "non_json" | "parse_failed", text: string, err?: 
   }
 }
 
+/**
+ * Interview answers cross the wire from an anonymous client, and unlike `idea`
+ * (80,000 chars at the route) and `context` (4,000) they had no bound at all —
+ * every answer lands in the prompt and in each user-words matcher. A real
+ * answer is a sentence or a paragraph; D17 asks 4~12 questions.
+ */
+export const MAX_IDEA_ANSWERS = 30;
+export const MAX_IDEA_ANSWER_CHARS = 4_000;
+const MAX_QUESTION_ID_CHARS = 200;
+
+/**
+ * The answers the generator actually reads: at most MAX_IDEA_ANSWERS entries
+ * that carry a string `answer`, each cut to MAX_IDEA_ANSWER_CHARS (questionId to
+ * 200). Anything else in the array (null, a number, an object without an
+ * answer) is dropped — it used to reach `.answer.toLowerCase()`-style code as is.
+ */
+export function boundIdeaAnswers(raw: unknown): Array<{ questionId: string; answer: string }> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ questionId: string; answer: string }> = [];
+  for (const entry of raw as unknown[]) {
+    if (out.length >= MAX_IDEA_ANSWERS) break;
+    if (!entry || typeof entry !== "object") continue;
+    const answer = (entry as { answer?: unknown }).answer;
+    if (typeof answer !== "string") continue;
+    const questionId = (entry as { questionId?: unknown }).questionId;
+    out.push({
+      questionId: typeof questionId === "string" ? questionId.slice(0, MAX_QUESTION_ID_CHARS) : "",
+      answer: answer.slice(0, MAX_IDEA_ANSWER_CHARS),
+    });
+  }
+  return out;
+}
+
 export async function generateIdeaToSpecDraft(
-  req: IdeaToSpecDraftRequest,
+  rawReq: IdeaToSpecDraftRequest,
   anthropicApiKey: string | undefined,
   anthropicBaseUrl?: string,
   /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
@@ -1028,6 +1068,9 @@ export async function generateIdeaToSpecDraft(
   /** L-3: 성공한 LLM 호출의 사용량 싱크(라우트가 원장에 기록). 응답 파싱 실패여도 불린다 — 비용은 났다. */
   onUsage?: LlmUsageSink,
 ): Promise<IdeaToSpecDraftResponse | { ok: false; error: "llm_unavailable" }> {
+  // Every path below (prompt, mock, user-words gates) reads the bounded answers.
+  const req: IdeaToSpecDraftRequest =
+    rawReq.answers === undefined ? rawReq : { ...rawReq, answers: boundIdeaAnswers(rawReq.answers) };
   if (!req.idea?.trim()) {
     return { ...buildMockFallback(req), warnings: ["아이디어를 입력해주세요."] };
   }

@@ -2,7 +2,7 @@
 //
 //   (a) 아이디어가 있어요          I have an idea
 //   (b) 만든 앱이 안 돼요           My app doesn't work
-//   (c) 만들었는데 생각과 달라요    It works, but not how I meant
+//   (c) 만들었는데 생각과 달라요    Not exactly what I wanted
 //
 // The doors sit ON the existing branches rather than replacing them (the entry
 // structure stays): (a) → idea, (b) and (c) → the existing-app branch (code).

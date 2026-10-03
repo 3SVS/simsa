@@ -34,6 +34,7 @@ import { decryptToken } from "../crypto.js";
 const GITHUB_API = "https://api.github.com";
 const GITHUB_WEB = "https://github.com";
 const PROBE_TIMEOUT_MS = 6000;
+const GITHUB_REACHABILITY_CACHE_TTL_SECONDS = 5 * 60;
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -47,6 +48,43 @@ export type Reachability =
   | { state: "readable"; visibility: "public" | "private"; via: "anonymous" | "user_token" }
   | { state: "needs_access"; via: "anonymous" | "user_token" }
   | { state: "unknown"; reason: "rate_limited" | "network" | "timeout" };
+
+const encoder = new TextEncoder();
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", encoder.encode(input));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function githubReachabilityCacheKey(repoFullName: string): Promise<string> {
+  return `source-reachability:github:v1:${await sha256Hex(repoFullName.toLowerCase())}`;
+}
+
+// "모름"(레이트리밋·네트워크)은 일시적이라 캐시하지 않는다 — 5분 동안 오진이 고정된다.
+function isCacheableAnonymousReachability(value: Reachability): boolean {
+  return (value.state === "readable" || value.state === "needs_access") && value.via === "anonymous";
+}
+
+async function readGithubReachabilityCache(env: Env, repoFullName: string): Promise<Reachability | null> {
+  if (!env.CENTRAL_CACHE) return null;
+  try {
+    const cached = await env.CENTRAL_CACHE.get<Reachability>(await githubReachabilityCacheKey(repoFullName), "json");
+    return cached ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeGithubReachabilityCache(env: Env, repoFullName: string, value: Reachability): Promise<void> {
+  if (!env.CENTRAL_CACHE || !isCacheableAnonymousReachability(value)) return;
+  try {
+    await env.CENTRAL_CACHE.put(await githubReachabilityCacheKey(repoFullName), JSON.stringify(value), {
+      expirationTtl: GITHUB_REACHABILITY_CACHE_TTL_SECONDS,
+    });
+  } catch {
+    // Reachability is a hint. KV trouble must never break source connection.
+  }
+}
 
 async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T | null> {
   const ctrl = new AbortController();
@@ -88,6 +126,10 @@ export async function probeGithubRepo(
 
   const token = await userToken(env, userKey);
   const via = token ? "user_token" : "anonymous";
+  if (!token) {
+    const cached = await readGithubReachabilityCache(env, repoFullName);
+    if (cached) return cached;
+  }
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
     "user-agent": "simsa-central-plane/1.0",
@@ -99,6 +141,17 @@ export async function probeGithubRepo(
   );
   if (!resp) return { state: "unknown", reason: "timeout" };
 
+  const result = await classifyGithubResponse(resp, repoFullName, via, fetchImpl);
+  if (!token) await writeGithubReachabilityCache(env, repoFullName, result);
+  return result;
+}
+
+async function classifyGithubResponse(
+  resp: Response,
+  repoFullName: string,
+  via: "anonymous" | "user_token",
+  fetchImpl: FetchLike,
+): Promise<Reachability> {
   if (resp.ok) {
     const body = (await resp.json().catch(() => null)) as { private?: boolean } | null;
     return { state: "readable", visibility: body?.private ? "private" : "public", via };

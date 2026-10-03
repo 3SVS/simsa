@@ -14,7 +14,7 @@ const PAGE = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8
 
 const LABELS = {
   ko: ["아이디어가 있어요", "만든 앱이 안 돼요", "만들었는데 생각과 달라요"],
-  en: ["I have an idea", "My app doesn't work", "It works, but not how I meant"],
+  en: ["I have an idea", "My app doesn't work", "Not exactly what I wanted"],
 };
 
 describe("hero — 세 문 1줄씩", () => {

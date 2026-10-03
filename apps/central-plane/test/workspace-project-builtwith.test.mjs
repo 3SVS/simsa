@@ -67,7 +67,9 @@ test("project built_with + entry_path reach the stored R2 record", async () => {
     prepare() {
       return { bind() { return this; }, async first() {
         return { user_key: "uk1", consented: 1, consent_version: TRAINING_CONSENT_VERSION, created_at: "t", updated_at: "t" };
-      } };
+      },
+      // Train K (0071): capture writes its training_records_index row first (1 row = consent active).
+      async run() { return { meta: { changes: 1 } }; } };
     },
   };
   const puts = [];

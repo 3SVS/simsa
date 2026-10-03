@@ -2,7 +2,7 @@
  * entry-doors.test.mjs — C-N7 (Train C, 계획 2026-09-27 §5 · D-17 amend): 첫 화면의 **세 문**.
  *
  *   아이디어가 있어요 / 만든 앱이 안 돼요 / 만들었는데 생각과 달라요
- *   I have an idea / My app doesn't work / It works, but not how I meant
+ *   I have an idea / My app doesn't work / Not exactly what I wanted
  *
  * 진입 구조는 크게 바꾸지 않는다: 세 문은 기존 갈래에 얹힌다 — (a) → idea,
  * (b)(c) → code. 세 번째 문은 기존 앱 갈래로 들어가되 `?door=differs`를 달고,
@@ -92,7 +92,7 @@ describe("세 문 ↔ 기존 갈래 매핑 (순수 함수)", () => {
 describe("사전 — 세 문 카피 KO/EN (Bae 검토 대상)", () => {
   const LABELS = {
     ko: ["아이디어가 있어요", "만든 앱이 안 돼요", "만들었는데 생각과 달라요"],
-    en: ["I have an idea", "My app doesn't work", "It works, but not how I meant"],
+    en: ["I have an idea", "My app doesn't work", "Not exactly what I wanted"],
   };
 
   for (const loc of ["ko", "en"]) {
@@ -181,8 +181,10 @@ describe("배선 — 첫 화면·코드 갈래·확인 카드", () => {
   test("의도 확인 카드는 entryDoor로 문구 세트를 고른다(흐름·저장은 그대로)", () => {
     assert.match(card, /intentCardCopyKeys/);
     assert.match(card, /entryDoor/);
-    // 확정 → D1 미러(C0)는 그대로 — 문구만 바뀐다.
-    assert.match(card, /mirrorLocalProjectToDb\(projectId\)/);
+    // 확정 → D1 미러(C0)는 그대로 — 문구만 바뀐다. #577(C-A7) 이후 미러는
+    // mirrorThenBuildIntentRuler 안에서 먼저 돈다(미러 → 역추론 지시서).
+    assert.match(card, /mirrorThenBuildIntentRuler\(projectId/);
+    assert.match(read("lib/intent-ruler.ts"), /await mirrorLocalProjectToDb\(projectId\)/);
   });
 });
 

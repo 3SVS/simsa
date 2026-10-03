@@ -15,7 +15,7 @@
  * legitimate request on infrastructure trouble) and a write failure only logs.
  */
 import type { Env } from "../env.js";
-import { ipRateLimitKey, serviceRateLimitKey, userRateLimitKey } from "./rate-limit-key.js";
+import { ipRateLimitKey, ipWideRateLimitKey, serviceRateLimitKey, userRateLimitKey } from "./rate-limit-key.js";
 
 /** UTC hour bucket, e.g. "2026-07-03T15" — resets every full UTC hour. */
 function currentHourUtc(): string {
@@ -146,6 +146,51 @@ export async function consumeUserDailyLimit(
 // same consume therefore also takes a slot from a per-network bucket
 // (cf-connecting-ip, stored as a keyed HMAC like the userKey) and a service-wide bucket;
 // whichever is full first answers.
+//
+// An IPv6 network is counted at two widths (PR #580 review P1): its /64 — the
+// network cap's own row and limit — and the /48 around it, a second row with
+// the larger share below. A /64 is one LAN, not one caller's allocation (home
+// prefix delegation /56 or /60, a free tunnel broker's routed /48), so the /64
+// alone let one /48 open 65,536 fresh network counters and, with 16 of them,
+// take all 50 of the service's daily repairs. IPv4 has no second row.
+
+/**
+ * [PILOT] How many /64 caps one IPv6 /48 may take together (before the
+ * service-half limit below). 2 = a site with several LANs (a /56 home, an
+ * office /48) gets twice one LAN's share. The procedure is fixed; the number
+ * may be tuned before the pilot. Raising a network cap (BETA_*_PER_IP) scales
+ * the /48 share with it.
+ */
+export const IPV6_WIDE_NETWORK_MULTIPLIER = 2;
+
+/**
+ * The /48 share of an IPv6 network cap:
+ *
+ *   max(L, min(IPV6_WIDE_NETWORK_MULTIPLIER × L, largest integer below S / 2))
+ *
+ * L = the network cap (per /64), S = the service cap of the same consume (the
+ * smallest, if several; none → no upper bound but the multiplier).
+ *   - Under half of S: one /48 — a /56 home or one free tunnel — can never empty
+ *     the service bucket alone, nor take half of it (PR #576's rule for the
+ *     network share, kept for the wider tier).
+ *   - Never below L: an IPv6 LAN never gets less than one IPv4 address does.
+ *     If L itself is S/2 or more, the /48 share is L (the operator chose that
+ *     network share; the wider tier does not second-guess it).
+ * main: inspection 30/300 → 60 · repair 15/50 → 24. PR #576: repair 6/20 → 9 ·
+ * generation 100/500 → 200 · dev-spec 40/200 → 80. PR #569: build 5/30 → 10.
+ *
+ * What a network cap does NOT do: stop someone holding several networks. It
+ * takes ⌈S / L⌉ IPv4 addresses or ⌈S / share⌉ IPv6 /48s to empty a service
+ * bucket (main: inspection 10 addresses or 5 /48s, repair 4 or 3) — the service
+ * cap and the kill switches are the ceiling for that
+ * (docs/simsa-rate-limit-network-units-2026-10-01.md).
+ */
+export function ipv6WideNetworkLimit(networkLimit: number, serviceLimit: number | null): number {
+  const wide = networkLimit * IPV6_WIDE_NETWORK_MULTIPLIER;
+  if (serviceLimit === null) return wide;
+  const belowHalf = Math.floor((serviceLimit - 1) / 2);
+  return Math.max(networkLimit, Math.min(wide, belowHalf));
+}
 
 /**
  * The single-statement consume. Binds: (hash, dayKey, nowIso, nowIso, limit).
@@ -190,6 +235,27 @@ async function dailyCapStoredKey(env: Pick<Env, "CONCLAVE_TOKEN_KEK">, cap: Dail
   }
 }
 
+/** One row a consume takes a slot from: a cap's own row, or the /48 row of an IPv6 network cap. */
+type DailySlot = { scope: DailyCapScope; limit: number; hash: string };
+
+/**
+ * The rows of `caps`, in order. A network cap whose key is an IPv6 address is
+ * followed by its /48 row (ipWideRateLimitKey, limit ipv6WideNetworkLimit) —
+ * so the /64 answers first and the order stays user → network → service.
+ */
+async function dailySlotsFor(env: Pick<Env, "CONCLAVE_TOKEN_KEK">, caps: readonly DailyCap[]): Promise<DailySlot[]> {
+  const serviceLimits = caps.filter((cap) => cap.scope === "service").map((cap) => cap.limit);
+  const serviceLimit = serviceLimits.length > 0 ? Math.min(...serviceLimits) : null;
+  const slots: DailySlot[] = [];
+  for (const cap of caps) {
+    slots.push({ scope: cap.scope, limit: cap.limit, hash: await dailyCapStoredKey(env, cap) });
+    if (cap.scope !== "network") continue;
+    const wide = await ipWideRateLimitKey(env, cap.bucket, cap.key);
+    if (wide) slots.push({ scope: "network", limit: ipv6WideNetworkLimit(cap.limit, serviceLimit), hash: wide });
+  }
+  return slots;
+}
+
 export type DailyCapsResult =
   | {
       limited: false;
@@ -203,6 +269,7 @@ export type DailyCapsResult =
       limited: true;
       /** The first cap that was full, in the order given. */
       scope: DailyCapScope;
+      /** That row's limit — for an IPv6 network, the /64 cap or the /48 share (ipv6WideNetworkLimit). */
       limit: number;
       dayUtc: string;
       resetAt: string;
@@ -249,7 +316,8 @@ async function returnDailySlot(db: D1Database, hash: string, dayUtc: string): Pr
 }
 
 /**
- * Take one slot from EVERY cap, in order, each with a single atomic statement.
+ * Take one slot from EVERY cap, in order, each with a single atomic statement
+ * (an IPv6 network cap is two rows, its /64 then its /48 — dailySlotsFor).
  * When one is full, the slots already taken are handed back and the full cap is
  * named — so a request stopped by the service bucket costs its user nothing.
  * On success the caller gets `refund()` for when the work never starts (row not
@@ -269,22 +337,54 @@ export async function consumeDailyCaps(
     const hashes = taken.splice(0, taken.length);
     for (const hash of hashes) await returnDailySlot(env.DB, hash, dayUtc);
   };
-  for (const cap of caps) {
-    const hash = await dailyCapStoredKey(env, cap);
-    if (!(await takeDailySlot(env.DB, hash, dayUtc, cap.limit))) {
+  for (const slot of await dailySlotsFor(env, caps)) {
+    if (!(await takeDailySlot(env.DB, slot.hash, dayUtc, slot.limit))) {
       await giveBack();
       return {
         limited: true,
-        scope: cap.scope,
-        limit: cap.limit,
+        scope: slot.scope,
+        limit: slot.limit,
         dayUtc,
         resetAt,
         retryAfterSeconds: secondsUntilNextDayUtc(now),
       };
     }
-    taken.push(hash);
+    taken.push(slot.hash);
   }
   return { limited: false, dayUtc, resetAt, refund: giveBack };
+}
+
+export type DailyCapsPeek = {
+  /** The smallest headroom across the caps (0 = the next consume is refused). */
+  remaining: number;
+  /** The cap that leaves the least headroom (null when `caps` is empty). */
+  tightest: { scope: DailyCapScope; limit: number } | null;
+  resetAt: string;
+};
+
+/**
+ * Read-only view of what consumeDailyCaps would allow right now — for showing
+ * "N left today" BEFORE the user spends effort (D-24.3). Takes no slot. A D1
+ * read failure counts as 0 used (fail-open, same as the consume path).
+ * `caps` empty → Infinity remaining.
+ */
+export async function peekDailyCaps(
+  env: Env,
+  caps: readonly DailyCap[],
+  now: Date = new Date(),
+): Promise<DailyCapsPeek> {
+  const dayUtc = currentDayUtc(now);
+  let remaining = Number.POSITIVE_INFINITY;
+  let tightest: DailyCapsPeek["tightest"] = null;
+  for (const cap of caps) {
+    const used = await getCount(env.DB, await dailyCapStoredKey(env, cap), dayUtc);
+    const left = Math.max(0, cap.limit - used);
+    if (left < remaining) {
+      remaining = left;
+      tightest = { scope: cap.scope, limit: cap.limit };
+    }
+  }
+  return { remaining, tightest, resetAt: nextDayUtcIso(now) };
 }
 
 /** Parse an hourly-limit env var with a default (invalid/absent → default). */

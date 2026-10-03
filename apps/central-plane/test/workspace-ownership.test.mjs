@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 
 const { createApp } = await import("../dist/router.js");
 const { getOwnedProject } = await import("../dist/workspace/db.js");
+const { dailyCapsRun } = await import("./_daily-caps-fake.mjs");
 
 // ─── D1 mock ──────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,9 @@ function makeMockDb() {
               built_with_json, entry_path, topic_tags_json, acquisition_json, created_at, updated_at });
             return { meta: { changes: 1 } };
           }
+          // D-24.2 생성 관문의 조건부 upsert·환불은 실제 의미대로(가득 차면 changes 0).
+          const capped = dailyCapsRun(state.rateLimits, sql, bound);
+          if (capped) return capped;
           if (/INSERT INTO workspace_rate_limit/.test(sql)) {
             const [hash, hour] = bound;
             const key = `${hash}::${hour}`;
@@ -419,20 +423,20 @@ describe("capture-once sticky upsert (built_with / entry_path / acquisition)", (
     assert.deepEqual(got.project.acquisition, { source: "threads" }, "re-save must not reset to direct");
 
     const created = await app.fetch(
-      jsonReq("/workspace/projects", "POST", { id: "wsp_acq2", userKey: "uk_st", title: "P", idea: "i" }),
+      jsonReq("/workspace/projects", "POST", { id: "wsp_acq2", userKey: "uk_st_b", title: "P", idea: "i" }),
       env,
     );
     assert.equal(created.status, 200);
-    const got2 = await (await app.fetch(new Request("http://localhost/workspace/projects/wsp_acq2?userKey=uk_st"), env)).json();
+    const got2 = await (await app.fetch(new Request("http://localhost/workspace/projects/wsp_acq2?userKey=uk_st_b"), env)).json();
     assert.deepEqual(got2.project.acquisition, { source: "direct" }, "create without source defaults to direct");
   });
 });
 
 // ─── beta_limits: daily caps (PR B) ──────────────────────────────────────────
 
-describe("beta daily project-creation cap", () => {
+describe("beta daily project-creation cap (D-24 킬스위치 off = 예전 동작)", () => {
   it("blocks the N+1th NEW project in a UTC day with 429 beta_daily", async () => {
-    const env = makeEnv({ BETA_PROJECT_CREATE_DAILY_LIMIT: "2" });
+    const env = makeEnv({ PROJECT_CREATE_TIER_GATE: "off", BETA_PROJECT_CREATE_DAILY_LIMIT: "2" });
     const app = createApp();
     const create = (title) =>
       app.fetch(jsonReq("/workspace/projects", "POST", { userKey: "uk_cap", title }), env);
@@ -450,7 +454,7 @@ describe("beta daily project-creation cap", () => {
   });
 
   it("re-saving an existing owned project does NOT consume the creation budget", async () => {
-    const env = makeEnv({ BETA_PROJECT_CREATE_DAILY_LIMIT: "1" });
+    const env = makeEnv({ PROJECT_CREATE_TIER_GATE: "off", BETA_PROJECT_CREATE_DAILY_LIMIT: "1" });
     const app = createApp();
     const r1 = await app.fetch(
       jsonReq("/workspace/projects", "POST", { userKey: "uk_cap2", title: "First" }),
@@ -476,7 +480,7 @@ describe("beta daily project-creation cap", () => {
   });
 
   it("cap is per-userKey — another user still creates", async () => {
-    const env = makeEnv({ BETA_PROJECT_CREATE_DAILY_LIMIT: "1" });
+    const env = makeEnv({ PROJECT_CREATE_TIER_GATE: "off", BETA_PROJECT_CREATE_DAILY_LIMIT: "1" });
     const app = createApp();
     const a1 = await app.fetch(jsonReq("/workspace/projects", "POST", { userKey: "uk_a", title: "A" }), env);
     assert.equal(a1.status, 200);

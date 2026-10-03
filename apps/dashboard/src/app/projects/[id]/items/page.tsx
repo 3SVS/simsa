@@ -19,11 +19,13 @@ import {
 } from "@/lib/workflow-store";
 import type { Project } from "@/lib/mock-data";
 import { callWorkspaceApi } from "@/lib/workspace-api";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import { ACCEPTANCE_CRITERIA } from "@/lib/mock-generators";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
+import { withUserAuthoredItems } from "@/lib/confirmed-items.mjs";
 
 type EditDraft = { title: string; criteriaText: string; note: string };
 
@@ -47,12 +49,36 @@ export default function ItemsPage() {
   const noteFor = (reqId: string): string => ext?.itemNotes?.[reqId] ?? "";
   const hasItems = project.requirements.length > 0;
 
-  /** Persist requirements locally + best-effort server sync (sticky-safe). */
-  function persist(nextProject: Project, patch?: { criteria?: Record<string, string[]>; notes?: Record<string, string> }) {
+  /**
+   * Persist requirements locally + best-effort server sync (sticky-safe).
+   *
+   * `authored` = item ids the user just wrote here (add · edit · generate from their own words).
+   * C-A7 (D-2 amend): those are the user's intent, not something read from their app, so they join
+   * the confirmed list — otherwise an existing-app project's spec would demote them to "should"
+   * as "read from the app but never confirmed" (PR #577 review P2-2).
+   */
+  function persist(
+    nextProject: Project,
+    patch?: { criteria?: Record<string, string[]>; notes?: Record<string, string> },
+    authored: readonly string[] = [],
+  ) {
     saveProject(nextProject);
     const nextCriteria = { ...(ext?.itemCriteria ?? {}), ...(patch?.criteria ?? {}) };
     const nextNotes = { ...(ext?.itemNotes ?? {}), ...(patch?.notes ?? {}) };
-    saveExtendedProjectData(id, { itemCriteria: nextCriteria, itemNotes: nextNotes });
+    saveExtendedProjectData(id, {
+      itemCriteria: nextCriteria,
+      itemNotes: nextNotes,
+      ...(authored.length > 0
+        ? {
+            intentConfirmedItemIds: withUserAuthoredItems({
+              confirmedItemIds: ext?.intentConfirmedItemIds,
+              before: project!.requirements.map((r) => r.id),
+              after: nextProject.requirements.map((r) => r.id),
+              authored,
+            }),
+          }
+        : {}),
+    });
     saveProjectToDb({
       id,
       userKey: getUserKey(),
@@ -108,6 +134,7 @@ export default function ItemsPage() {
           ],
         },
         { criteria: { [newId]: criteria }, notes: { [newId]: note } },
+        [newId],
       );
     } else if (editingId) {
       persist(
@@ -116,6 +143,7 @@ export default function ItemsPage() {
           requirements: project.requirements.map((r) => (r.id === editingId ? { ...r, title } : r)),
         },
         { criteria: { [editingId]: criteria }, notes: { [editingId]: note } },
+        [editingId],
       );
     }
     setAdding(false);
@@ -136,6 +164,11 @@ export default function ItemsPage() {
     const res = await callWorkspaceApi({ idea: quickIdea.trim() });
     if (!res.ok && res.error === "rate_limited") {
       setGenError(t.common.rateLimited);
+      setGenPhase("idle");
+      return;
+    }
+    if (!res.ok && res.error === "generation_capacity") {
+      setGenError(generationCapacityText(t, res.resetAt));
       setGenPhase("idle");
       return;
     }
@@ -164,6 +197,7 @@ export default function ItemsPage() {
         })),
       },
       { criteria },
+      generated.items.map((i) => i.id),
     );
     setGenPhase("idle");
   }

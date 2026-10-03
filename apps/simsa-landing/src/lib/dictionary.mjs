@@ -42,7 +42,7 @@ export const LANDING_DICT = {
       // each opens the matching door in the app. Copy pending Bae's review.
       doors: {
         lead: "Where are you starting from?",
-        items: ["I have an idea", "My app doesn't work", "It works, but not how I meant"],
+        items: ["I have an idea", "My app doesn't work", "Not exactly what I wanted"],
       },
     },
     startAnything: {

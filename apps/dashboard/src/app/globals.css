@@ -233,3 +233,20 @@
     opacity: 0.6;
   }
 }
+
+/* Train C · C-3 check receipt: when printing the receipt page, print the receipt only.
+   Scoped with :has() so no other screen's print output changes. The app shell (sidebar,
+   mobile top bar, language toggle) and anything after the receipt (the layout's next-step
+   bar) are hidden; the receipt's own buttons carry data-print-hide. */
+@media print {
+  body:has([data-receipt]) aside,
+  body:has([data-receipt]) .fixed,
+  body:has([data-receipt]) main > .absolute,
+  [data-receipt] ~ *,
+  [data-print-hide] {
+    display: none !important;
+  }
+  body:has([data-receipt]) {
+    background: #fff;
+  }
+}

@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { recommendAnswer, type RecommendAnswerResult } from "@/lib/workspace-api";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 
 type Props = {
@@ -55,6 +56,10 @@ export function OpenQuestionCard({
       setPhase("recommended");
     } else if (res.error === "rate_limited") {
       setRateMsg(res.message);
+      setPhase("rate_limited");
+    } else if (res.error === "generation_capacity") {
+      // 비용 권고 ③ — today's AI capacity is full: same amber notice, the shared sentence.
+      setRateMsg(generationCapacityText(t, res.resetAt));
       setPhase("rate_limited");
     } else {
       setPhase("error");

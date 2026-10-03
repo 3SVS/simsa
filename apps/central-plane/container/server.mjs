@@ -29,16 +29,21 @@ import {
   GIT_CHANGED_FILES_ARGS,
   GIT_LS_FILES_ARGS,
   applyRepairPrLabels,
+  budgetedWorker,
   buildBriefOnlyDiagnosis,
   buildRepairPrContent,
   classifyCloneError,
   coerceResult,
+  createRepairBudget,
   createUsageCollector,
   extractHeaderEnv,
+  isRepairBudgetStop,
+  markBudgetStop,
   parseGitNameList,
   redactSecret,
   repairBuildVerified,
   repairPrLabelPlan,
+  resolveRepairBudgetUsd,
   validateRepairPayload,
   validateRunPayload,
 } from "./coerce-result.mjs";
@@ -451,7 +456,10 @@ async function runJob(payload) {
  *
  * HONEST FALLBACK (Stage 268 semantics preserved): no key, zero parsed
  * findings, worker declines/errors, rewrites all rejected by the sanitizer,
- * or the quick syntax check fails → the working tree is reset to a clean
+ * the quick syntax check fails, or (비용 권고 ②) the job's AI budget
+ * (payload.repairBudgetUsd, default $2) is spent before the next call — the
+ * callback's modeReason then starts "budget_exceeded" and the draft PR says why
+ * → the working tree is reset to a clean
  * state and the job degrades to the brief-only DRAFT PR ("Simsa 수리
  * 시작점: ...", mode "brief_only") — never a broken half-state.
  *
@@ -476,7 +484,14 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
   // Train L — L-3: 워커 LLM 호출별 사용량을 모아 완료 콜백(성공·실패 모두)의 usage[]로 싣는다.
   // 옛 Worker는 이 필드를 무시한다(additive).
   const usage = createUsageCollector();
-  console.log(`[repair ${jobId}] start: ${repo} branch=${branch} envCause=${envCause} keyPresent=${Boolean(anthropicApiKey)}`);
+  // 비용 권고 ② (2026-09-30): 잡당 LLM 달러 상한. 같은 onUsage 레코드(실응답 모델 단가, 가격표 밖 = 보수 단가)를
+  // 예산에도 누적하고, 워커는 호출 전에 예산을 묻는다(budgetedWorker). 옛 Worker(필드 없음) → $2.
+  const budget = createRepairBudget(resolveRepairBudgetUsd(payload.repairBudgetUsd));
+  const onUsage = (u) => {
+    usage.onUsage(u);
+    budget.onUsage(u);
+  };
+  console.log(`[repair ${jobId}] start: ${repo} branch=${branch} envCause=${envCause} keyPresent=${Boolean(anthropicApiKey)} budget=$${budget.capUsd}`);
 
   // Ack running (best effort — the Worker treats queued/running the same for
   // the 409 guard; a lost ack only affects dashboard status granularity).
@@ -522,7 +537,7 @@ async function runRepairJob(payload, anthropicApiKey, anthropicBaseUrl, vendor =
     const diag = { skippedOversize: [], reason: null };
     if (anthropicApiKey) {
       try {
-        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag, vendor, onUsage: usage.onUsage });
+        autoFix = await attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag, vendor, onUsage, budget });
       } catch (err) {
         console.error(
           `[repair ${jobId}] auto-fix crashed (falling back to brief-only):`,
@@ -693,8 +708,14 @@ async function quickSyntaxCheck(workDir, changedFiles) {
  * Returns { changedFiles, prContent } on success, or null when the brief /
  * worker produced nothing applicable — callers reset the tree + fall back
  * to brief-only. Never leaves a dirty tree on the null path.
+ *
+ * `budget` is REQUIRED and must be the one `onUsage` feeds (runRepairJob builds
+ * both). No default on purpose (PR #576 review P2-6): a fresh default budget never
+ * sees a usage record, so a caller that forgot to pass it ran without a cap and
+ * every test still passed. Missing now → budgetedWorker throws → the caller falls
+ * back to brief-only with no LLM call.
  */
-async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null }, vendor = {}, onUsage }) {
+async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBaseUrl, diag = { skippedOversize: [], reason: null }, vendor = {}, onUsage, budget }) {
   const { openaiApiKey, openaiBaseUrl, preferFallback } = vendor;
   const jobId = payload.jobId;
   const deadline = Date.now() + AUTO_FIX_DEADLINE_MS;
@@ -742,15 +763,20 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
   // ★벤더 폴백 (2026-08-26). Anthropic이 Cloudflare egress에서 완전 차단된 뒤에도
   //  이 경로에는 폴백이 없어서, 검수는 문제를 짚어주는데 **"고쳐줘"는 아무 일도
   //  못 하는** 상태였다. 키가 없으면 undefined라 종전과 동일하게 동작한다.
-  const worker = new ClaudeWorker({
-    apiKey: anthropicApiKey,
-    ...(anthropicBaseUrl ? { baseURL: anthropicBaseUrl } : {}),
-    ...(openaiApiKey ? { openaiApiKey } : {}),
-    ...(openaiBaseUrl ? { openaiBaseUrl } : {}),
-    ...(preferFallback ? { preferFallback: true } : {}),
-    // Train L — L-3: 호출마다 실응답 모델·토큰을 수집 → repair-done usage[].
-    ...(onUsage ? { onUsage } : {}),
-  });
+  // 비용 권고 ② — every call asks the job budget first (budgetedWorker): once the
+  // sum of this job's calls reaches the cap, the next call is refused before it is made.
+  const worker = budgetedWorker(
+    new ClaudeWorker({
+      apiKey: anthropicApiKey,
+      ...(anthropicBaseUrl ? { baseURL: anthropicBaseUrl } : {}),
+      ...(openaiApiKey ? { openaiApiKey } : {}),
+      ...(openaiBaseUrl ? { openaiBaseUrl } : {}),
+      ...(preferFallback ? { preferFallback: true } : {}),
+      // Train L — L-3: 호출마다 실응답 모델·토큰을 수집 → repair-done usage[] + 잡 예산 누적.
+      ...(onUsage ? { onUsage } : {}),
+    }),
+    budget,
+  );
 
   for (let iteration = 0; iteration < AUTO_FIX_MAX_ITERATIONS; iteration++) {
     if (Date.now() >= deadline) {
@@ -792,6 +818,13 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
         fileSnapshots,
       });
     } catch (err) {
+      if (isRepairBudgetStop(err)) {
+        // 비용 권고 ②: no call was made. Stop trying — the tree is clean here (a success
+        // returned already; failed attempts were reset), so the job closes brief-only.
+        markBudgetStop(diag, budget);
+        console.log(`[repair ${jobId}] budget reached before iteration ${iteration}: ${diag.reason}`);
+        break;
+      }
       console.error(`[repair ${jobId}] worker call failed (iter ${iteration}):`, err?.message ?? err);
       // 실패 클래스만으론 진단이 안 된다(apply-walmart 실측 — 원인 불명의
       // worker_call_failed). 메시지 앞부분을 싣는다; 토큰류는 runRepairJob이
@@ -865,7 +898,8 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
   // index.html holding the app's only real code). Try the excerpt+exact-edit
   // path before giving up. Engages ONLY here, so every previously-green path
   // is byte-identical to before this rung existed.
-  if (diag.skippedOversize.length > 0 && Date.now() < deadline) {
+  // 비용 권고 ②: a job the budget already stopped does not start another rung.
+  if (diag.skippedOversize.length > 0 && Date.now() < deadline && !diag.budgetExceeded) {
     const editFix = await attemptOversizeEditFix({
       workDir,
       payload,
@@ -876,6 +910,7 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
       repoFiles,
       headSha,
       diag,
+      budget,
     });
     if (editFix) return editFix;
   }
@@ -890,7 +925,7 @@ async function attemptAutoFix({ workDir, payload, anthropicApiKey, anthropicBase
  * once (applyExactEdits) — a bad edit is rejected, never a corrupted file.
  * Returns { changedFiles, prContent } or null (caller resets the tree).
  */
-async function attemptOversizeEditFix({ workDir, payload, brief, parsed, review, worker, repoFiles, headSha, diag }) {
+async function attemptOversizeEditFix({ workDir, payload, brief, parsed, review, worker, repoFiles, headSha, diag, budget }) {
   const jobId = payload.jobId;
 
   // Rank order was preserved when skippedOversize was recorded; dedupe and
@@ -944,6 +979,12 @@ async function attemptOversizeEditFix({ workDir, payload, brief, parsed, review,
       fileExcerpts,
     });
   } catch (err) {
+    if (isRepairBudgetStop(err)) {
+      // 비용 권고 ②: the full-file loop's last call crossed the cap — this rung is refused.
+      markBudgetStop(diag, budget);
+      console.log(`[repair ${jobId}] budget reached before the oversize edit attempt: ${diag.reason}`);
+      return null;
+    }
     console.error(`[repair ${jobId}] edit worker call failed:`, err?.message ?? err);
     diag.reason = `edit_worker_call_failed: ${String(err?.message ?? err).slice(0, 100)}`;
     return null;
