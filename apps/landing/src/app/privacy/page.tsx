@@ -31,7 +31,7 @@ export default function PrivacyPage() {
           What we keep, what we don&rsquo;t.
         </h1>
         <p className="text-ink-mute text-sm font-mono tracking-wider">
-          Effective 2026-05-13
+          Effective 2026-10-04
         </p>
 
         <div className="mt-12 space-y-10 leading-relaxed text-[17px]">

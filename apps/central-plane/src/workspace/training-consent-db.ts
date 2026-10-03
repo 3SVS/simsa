@@ -28,8 +28,13 @@ import {
  * Current training-clause version. Bump when the ToS training language changes.
  * Format is a plain date string so it reads in the DB and in logs. A user's
  * consent only counts while their stored consent_version === this value.
+ *
+ * 2026-10-04 bump (Bae "남은 결정 다 너의 제안대로", Train K): consents given under the old
+ * pressuring popup ("the free beta runs on this participation") no longer count — every
+ * earlier consenter becomes undecided and sees the symmetric inline card once; no training
+ * copy is stored until they answer again.
  */
-export const TRAINING_CONSENT_VERSION = "2026-07-03";
+export const TRAINING_CONSENT_VERSION = "2026-10-04";
 
 export type TrainingConsent = {
   userKey: string;
