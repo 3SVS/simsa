@@ -343,3 +343,70 @@ describe("0074 plan_grants 티어 — 실제 SQLite", async () => {
     assert.equal(db.prepare("SELECT plan FROM plan_grants WHERE user_key = ?").get("uk_old").plan, "basic");
   });
 });
+
+// ─── D-24 T-4 · T-5 표 수치 · 천장 · 월 창 ─────────────────────────────────────
+
+describe("D-24 T-4·T-5 표 (D-24.4 [PILOT])", () => {
+  it("검수 하루 3/10/50 · 수리 월 3/10/30 · 지시서 하루 2/5/20 · 로그인 뒤 검수는 베이직부터", () => {
+    const pick = (t) => {
+      const e = entitlementsFor(t);
+      return [e.inspectionsPerDay, e.repairsPerMonth, e.devSpecsPerDay, e.loginBehindInspection];
+    };
+    assert.deepEqual(pick("free"), [3, 3, 2, false]);
+    assert.deepEqual(pick("basic"), [10, 10, 5, true]);
+    assert.deepEqual(pick("pro"), [50, 30, 20, true]);
+    assert.deepEqual(pick("staff"), [200, 200, 200, true]);
+  });
+
+  it("검수 사용자 상한: 티어 수치 · env는 설정됐을 때만 천장 · 티어 없으면 예전 Train W 값", async () => {
+    const { inspectionUserDailyLimit } = await import("../dist/workspace/beta-limits.js");
+    assert.equal(inspectionUserDailyLimit({}, "free"), 3);
+    assert.equal(inspectionUserDailyLimit({ BETA_INSPECTION_DAILY_LIMIT: "2" }, "pro"), 2);
+    assert.equal(inspectionUserDailyLimit({ BETA_INSPECTION_DAILY_LIMIT: "99" }, "free"), 3, "env never raises a tier");
+    assert.equal(inspectionUserDailyLimit({ BETA_INSPECTION_DAILY_LIMIT: "junk" }, "basic"), 10);
+    assert.equal(inspectionUserDailyLimit({}), 10, "no tier → Train W default");
+  });
+
+  it("수리 상한 목록: 월 몫이 맨 앞(period month) — 티어 없으면 예전 목록 그대로", async () => {
+    const { dailyCapsFor } = await import("../dist/workspace/beta-limits.js");
+    const withTier = dailyCapsFor("repair", {}, "uk_한글", null, "free");
+    assert.deepEqual(withTier.map((c) => [c.scope, c.bucket, c.limit, c.period ?? "day"]), [
+      ["user", "repair-monthly", 3, "month"],
+      ["user", "repair-daily", 5, "day"],
+      ["service", "repair-daily-global", 20, "day"],
+    ]);
+    const legacy = dailyCapsFor("repair", {}, "uk_한글", null);
+    assert.equal(legacy.some((c) => c.period === "month"), false);
+  });
+
+  it("월 창 키·초기화 시각 — 12월은 다음 해 1월 1일", async () => {
+    const { currentMonthUtc, nextMonthUtcIso } = await import("../dist/workspace/rate-limit.js");
+    assert.equal(currentMonthUtc(new Date("2026-10-04T12:00:00Z")), "2026-10");
+    assert.equal(nextMonthUtcIso(new Date("2026-10-31T23:59:59Z")), "2026-11-01T00:00:00.000Z");
+    assert.equal(nextMonthUtcIso(new Date("2026-12-15T00:00:00Z")), "2027-01-01T00:00:00.000Z");
+  });
+
+  it("consumeDailyCaps: 월 슬롯은 월 키로 저장되고, 환불은 각자 가져온 창으로 돌아간다", async () => {
+    const { consumeDailyCaps } = await import("../dist/workspace/rate-limit.js");
+    const rate = new Map();
+    const env = makeEnv();
+    env.DB.state.rate = rate;
+    const caps = [
+      { scope: "user", bucket: "repair-monthly", key: "uk_월", limit: 1, period: "month" },
+      { scope: "user", bucket: "repair-daily", key: "uk_월", limit: 5 },
+    ];
+    const now = new Date("2026-10-04T10:00:00Z");
+    const first = await consumeDailyCaps(env, caps, now);
+    assert.equal(first.limited, false);
+    const windows = [...env.DB.state.rate.keys()].map((k) => k.split("::")[1]).sort();
+    assert.deepEqual(windows, ["2026-10", "2026-10-04"]);
+    // 다음 날에도 이번 달 몫은 찼다 → period month, resetAt 11월 1일
+    const next = await consumeDailyCaps(env, caps, new Date("2026-10-05T10:00:00Z"));
+    assert.equal(next.limited, true);
+    assert.equal(next.period, "month");
+    assert.equal(next.resetAt, "2026-11-01T00:00:00.000Z");
+    // 첫 슬롯 환불 → 월·일 창 모두 0
+    await first.refund();
+    assert.deepEqual([...env.DB.state.rate.values()].every((v) => v === 0), true);
+  });
+});

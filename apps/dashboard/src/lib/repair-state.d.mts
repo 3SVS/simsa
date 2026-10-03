@@ -11,6 +11,8 @@ export type RepairErrorKey =
   | "dailyLimitReached"
   /** Train W — W-2: 503 repair_disabled (REPAIR_ENABLED="off"). */
   | "repairDisabled"
+  /** D-24 T-4: 429 daily_limit_reached with period "month" (수리 월 몫, 다음 UTC 달 초기화). */
+  | "monthlyLimitReached"
   | "generic";
 
 export const REPAIR_POLL_INTERVAL_MS: number;

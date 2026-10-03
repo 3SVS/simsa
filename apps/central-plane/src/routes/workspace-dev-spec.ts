@@ -31,7 +31,10 @@ import { validateDevSpec, summarizeForBeginner, type DevSpecValidation } from ".
 import { generateDevSpec, makeDevSpecLlmCaller } from "../workspace/generate-dev-spec.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
 import { consumeUserDailyLimit } from "../workspace/rate-limit.js";
-import { betaProjectCreateDailyLimit, clientNetworkKey } from "../workspace/beta-limits.js";
+import { clientNetworkKey } from "../workspace/beta-limits.js";
+import { entitlementsFor } from "../workspace/entitlements.js";
+import { resolveTier } from "../workspace/tier-resolve.js";
+import { nextDayUtcIso } from "../workspace/rate-limit.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
@@ -210,11 +213,23 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     const slot = await takeGenerationSlot(c.env, "dev_spec", clientNetworkKey(c.req.raw));
     if (slot.limited) return generationCapacityResponse(slot, headers);
 
-    const daily = await consumeUserDailyLimit(c.env, BETA_DEV_SPEC_DAILY_BUCKET, userKey, betaProjectCreateDailyLimit(c.env));
+    // D-24 T-4 — this user's daily dev-spec quota is the tier's number (free 2 · basic 5 · pro 20).
+    const tier = await resolveTier(c.env, userKey);
+    const devSpecLimit = entitlementsFor(tier).devSpecsPerDay;
+    const daily = await consumeUserDailyLimit(c.env, BETA_DEV_SPEC_DAILY_BUCKET, userKey, devSpecLimit);
     if (daily.limited) {
       await slot.settle({ failed: true, billedCalls: 0 });
       return new Response(
-        JSON.stringify({ ok: false, error: "rate_limited", scope: "beta_daily", retryAfterSeconds: daily.retryAfterSeconds }),
+        JSON.stringify({
+          ok: false,
+          error: "rate_limited",
+          scope: "beta_daily",
+          kind: "dev_spec",
+          tier,
+          limit: devSpecLimit,
+          resetAt: nextDayUtcIso(),
+          retryAfterSeconds: daily.retryAfterSeconds,
+        }),
         { status: 429, headers: { "content-type": "application/json", "retry-after": String(daily.retryAfterSeconds), ...headers } },
       );
     }

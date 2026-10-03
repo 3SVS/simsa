@@ -27,6 +27,20 @@ function currentDayUtc(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * UTC month bucket, e.g. "2026-10" (D-24 T-4 — monthly repair quota). 7 chars, so it can
+ * never collide with a day key (10) or an hour key (13); rate-limit-retention.ts purges a
+ * month row once that month has been over for 48 hours.
+ */
+export function currentMonthUtc(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 7);
+}
+
+/** ISO instant of the first moment of the next UTC month — when a month bucket rolls over. */
+export function nextMonthUtcIso(now: Date = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+}
+
 /** ISO instant of the next UTC midnight after `now` — when a day bucket rolls over. */
 export function nextDayUtcIso(now: Date = new Date()): string {
   const next = new Date(now);
@@ -217,6 +231,12 @@ export type DailyCap = {
    */
   key: string;
   limit: number;
+  /**
+   * D-24 T-4: the window this cap counts in. Absent / "day" = the UTC day (every cap
+   * before T-4). "month" = the UTC month (the monthly repair quota) — its row lives until
+   * the month has been over for 48h (rate-limit-retention.ts).
+   */
+  period?: "day" | "month";
 };
 
 /**
@@ -236,7 +256,7 @@ async function dailyCapStoredKey(env: Pick<Env, "CONCLAVE_TOKEN_KEK">, cap: Dail
 }
 
 /** One row a consume takes a slot from: a cap's own row, or the /48 row of an IPv6 network cap. */
-type DailySlot = { scope: DailyCapScope; limit: number; hash: string };
+type DailySlot = { scope: DailyCapScope; limit: number; hash: string; period: "day" | "month" };
 
 /**
  * The rows of `caps`, in order. A network cap whose key is an IPv6 address is
@@ -248,10 +268,11 @@ async function dailySlotsFor(env: Pick<Env, "CONCLAVE_TOKEN_KEK">, caps: readonl
   const serviceLimit = serviceLimits.length > 0 ? Math.min(...serviceLimits) : null;
   const slots: DailySlot[] = [];
   for (const cap of caps) {
-    slots.push({ scope: cap.scope, limit: cap.limit, hash: await dailyCapStoredKey(env, cap) });
+    const period = cap.period ?? "day";
+    slots.push({ scope: cap.scope, limit: cap.limit, hash: await dailyCapStoredKey(env, cap), period });
     if (cap.scope !== "network") continue;
     const wide = await ipWideRateLimitKey(env, cap.bucket, cap.key);
-    if (wide) slots.push({ scope: "network", limit: ipv6WideNetworkLimit(cap.limit, serviceLimit), hash: wide });
+    if (wide) slots.push({ scope: "network", limit: ipv6WideNetworkLimit(cap.limit, serviceLimit), hash: wide, period });
   }
   return slots;
 }
@@ -274,6 +295,8 @@ export type DailyCapsResult =
       dayUtc: string;
       resetAt: string;
       retryAfterSeconds: number;
+      /** D-24 T-4: which window the full cap counts in ("month" → resetAt = next UTC month). */
+      period: "day" | "month";
     };
 
 /**
@@ -331,25 +354,34 @@ export async function consumeDailyCaps(
   now: Date = new Date(),
 ): Promise<DailyCapsResult> {
   const dayUtc = currentDayUtc(now);
+  const monthUtc = currentMonthUtc(now);
   const resetAt = nextDayUtcIso(now);
-  const taken: string[] = [];
+  // Each taken slot remembers its own window, so a refund after UTC midnight (or month end)
+  // still goes back to the window the slot came from.
+  const taken: Array<{ hash: string; window: string }> = [];
   const giveBack = async () => {
-    const hashes = taken.splice(0, taken.length);
-    for (const hash of hashes) await returnDailySlot(env.DB, hash, dayUtc);
+    const slots = taken.splice(0, taken.length);
+    for (const t of slots) await returnDailySlot(env.DB, t.hash, t.window);
   };
   for (const slot of await dailySlotsFor(env, caps)) {
-    if (!(await takeDailySlot(env.DB, slot.hash, dayUtc, slot.limit))) {
+    const window = slot.period === "month" ? monthUtc : dayUtc;
+    if (!(await takeDailySlot(env.DB, slot.hash, window, slot.limit))) {
       await giveBack();
+      const monthly = slot.period === "month";
+      const reset = monthly ? nextMonthUtcIso(now) : resetAt;
       return {
         limited: true,
         scope: slot.scope,
         limit: slot.limit,
         dayUtc,
-        resetAt,
-        retryAfterSeconds: secondsUntilNextDayUtc(now),
+        resetAt: reset,
+        retryAfterSeconds: monthly
+          ? Math.max(60, Math.floor((new Date(reset).getTime() - now.getTime()) / 1000))
+          : secondsUntilNextDayUtc(now),
+        period: monthly ? "month" : "day",
       };
     }
-    taken.push(slot.hash);
+    taken.push({ hash: slot.hash, window });
   }
   return { limited: false, dayUtc, resetAt, refund: giveBack };
 }
@@ -377,7 +409,8 @@ export async function peekDailyCaps(
   let remaining = Number.POSITIVE_INFINITY;
   let tightest: DailyCapsPeek["tightest"] = null;
   for (const cap of caps) {
-    const used = await getCount(env.DB, await dailyCapStoredKey(env, cap), dayUtc);
+    const window = cap.period === "month" ? currentMonthUtc(now) : dayUtc;
+    const used = await getCount(env.DB, await dailyCapStoredKey(env, cap), window);
     const left = Math.max(0, cap.limit - used);
     if (left < remaining) {
       remaining = left;
