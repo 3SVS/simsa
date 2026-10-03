@@ -5,6 +5,12 @@
  */
 export interface Env {
   DB: D1Database;
+  /**
+   * Optional Cloudflare Workers KV namespace for short-lived, non-authoritative
+   * caches and idempotency locks. D1 remains the source of truth; KV entries
+   * must be safe to drop at any time.
+   */
+  CENTRAL_CACHE?: KVNamespace;
   ENVIRONMENT: string;
   /**
    * Git commit SHA this Worker was deployed from. Injected at deploy time by
@@ -182,6 +188,13 @@ export interface Env {
   INSPECTION_ENABLED?: string;
   /** Train W · W-2 — 수리 킬스위치. INSPECTION_ENABLED와 같은 규칙(503 `repair_disabled`, dispatchRepairJob 내부 게이트). */
   REPAIR_ENABLED?: string;
+  /**
+   * Train B — build route kill switch (hotfix 2026-10-01). Same rule as INSPECTION_ENABLED
+   * (exactly "off" = off). Production [vars] sets "off" until the build executor bundle
+   * (PR #569) ships: while off, POST /workspace/projects/:id/build answers 503
+   * `build_disabled` before any provisioning (no D1, no repository, no container).
+   */
+  BUILD_ENABLED?: string;
   /**
    * 2026-07-09 — Langfuse minimal wiring (Simsa flow observability).
    * All three must be set for traces to be sent; otherwise the workspace

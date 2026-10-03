@@ -80,6 +80,7 @@ import { fetchProjectRepo } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 import { EvidenceChainSection } from "@/components/EvidenceChainSection";
+import { ResultPrivacySection } from "@/components/ResultPrivacySection";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -1249,6 +1250,9 @@ export default function VisualCheckDetailPage() {
             initial={initialUserVerdict}
             t={t}
           />
+
+          {/* Train K (계약 5): 학습 데이터 동의 카드(첫 완료 결과 + 1회) + 운영 정보 한 줄 — 인라인. */}
+          <ResultPrivacySection runId={runId} resultDone={check.status === "done"} userKey={userKey} t={t} />
         </>
       )}
     </div>

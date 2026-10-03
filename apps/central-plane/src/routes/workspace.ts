@@ -29,6 +29,7 @@ import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterRespon
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { classifyTopics } from "../workspace/topic-tags.js";
 import { regionFromRequest } from "../workspace/envelope.js";
+import { opsMetaRecordingAllowed } from "../workspace/privacy-prefs.js";
 import {
   generateCheckDraft,
   normalizeProductSpec,
@@ -436,6 +437,16 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
           : existing
             ? undefined
             : { source: "direct" };
+      // Train K · K-1 (0071): 운영 정보 '끔'(명시 선택, 또는 EU/UK/CH 기본값)이면 국가 코드를 쓰지 않는다.
+      // region_at_create는 capture-once(COALESCE)라 이미 찍힌 프로젝트의 재저장에는 게이트를 묻지 않는다
+      // (autosave마다 D1 읽기를 늘리지 않게) — 그때 넘기는 null은 저장값을 바꾸지 않는다.
+      const region = regionFromRequest(c.req.raw);
+      const regionAtCreate =
+        existing?.regionAtCreate || !region
+          ? null
+          : (await opsMetaRecordingAllowed(c.env, String(b["userKey"]), region, "project-create"))
+            ? region
+            : null;
       const id = await upsertProject(c.env, {
         id: typeof b["id"] === "string" ? b["id"] : undefined,
         userKey: String(b["userKey"]),
@@ -450,8 +461,8 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
         topicTags,
         acquisition,
         // C4a (0069, 재정렬 D-20 amend): 나라별 집계는 첫 건부터 전 지역 — 생성 시점 국가
-        // 코드를 capture-once로 찍는다(재저장은 COALESCE로 원값 유지).
-        regionAtCreate: regionFromRequest(c.req.raw),
+        // 코드를 capture-once로 찍는다(재저장은 COALESCE로 원값 유지). K-1: 위 게이트를 통과한 값만.
+        regionAtCreate,
       });
       return new Response(JSON.stringify({ ok: true, id }), { status: 200, headers: { "content-type": "application/json", ...headers } });
     } catch (err) {

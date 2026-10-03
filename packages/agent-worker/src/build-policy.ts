@@ -75,23 +75,83 @@ export function decidePath(rawPath: string): PathDecision {
   return { allowed: true, path: norm };
 }
 
-/** 비밀로 보이는 문자열. repair-brief.ts의 introduces_secret와 같은 취지(여기선 의존성 0으로 재구현). */
-const SECRET_PATTERNS: ReadonlyArray<RegExp> = [
-  /\bsk-[A-Za-z0-9_-]{16,}/,
-  /\bsk-ant-[A-Za-z0-9_-]{16,}/,
-  /\bAKIA[0-9A-Z]{16}\b/,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
-  /\bcfat_[A-Za-z0-9_-]{20,}\b/,
-  /\bxox[baprs]-[A-Za-z0-9-]{10,}/,
-  /-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----/,
-  /\b(postgres(ql)?|mysql|mongodb(\+srv)?|redis):\/\/[^\s'"]*:[^\s'"@]+@/i,
-  /\b(api[_-]?key|secret|token|password)\s*[:=]\s*["'][A-Za-z0-9_\-/+=]{20,}["']/i,
+/** 비밀 패턴 하나 — 첫 일치의 전체 문자열(정규식의 m[0])을 돌려준다. 없으면 null. */
+type SecretMatcher = (content: string) => string | null;
+
+function regexMatcher(re: RegExp): SecretMatcher {
+  return (content) => {
+    const m = re.exec(content);
+    return m ? m[0] : null;
+  };
+}
+
+const DB_URL_SCHEME = /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\//gi;
+const DB_URL_STOP = /[\s'"]/g;
+
+/**
+ * `/\b(postgres(ql)?|mysql|mongodb(\+srv)?|redis):\/\/[^\s'"]*:[^\s'"@]+@/i.exec(content)?.[0]`와 같은 값.
+ *
+ * 왜 정규식이 아닌가(2026-10-01): `[^\s'"]*`가 `:`와 `@`까지 삼키고 되돌아오며 모든 `:`를 다시 시도해,
+ * 스킴이 여럿 반복되면(`redis://x:` × n, 공백·따옴표·`@` 없음) 세제곱 — 16KB 한 파일에 25초였다.
+ * 빌드 에이전트의 create_file 내용(최대 200KB, 모델이 쓴 것 = 프롬프트로 조종 가능)이 그대로 들어온다.
+ *
+ * 같은 결과를 이렇게 낸다: 스킴 뒤부터 공백·따옴표 전까지가 한 구간이다. 그 안의 `:` 중
+ * "바로 다음 `@`가 한 글자 이상 떨어져 있는" 것이 유효하고, 욕심쟁이 `*` 때문에 **마지막** 유효한 `:`가
+ * 고른 것이 된다(끝 = 그 뒤 첫 `@`). 구간은 한 번만 거꾸로 훑고, 같은 구간의 다음 스킴은 그 결과를 쓴다.
+ */
+function matchDbUrlWithPassword(content: string): string | null {
+  let runStart = -1;
+  let runEnd = -1;
+  let lastColon = -1;
+  let atAfterLastColon = -1;
+  DB_URL_SCHEME.lastIndex = 0;
+  for (let m = DB_URL_SCHEME.exec(content); m; m = DB_URL_SCHEME.exec(content)) {
+    const start = m.index;
+    const bodyStart = start + m[0].length;
+    if (bodyStart >= runEnd) {
+      // 새 구간: bodyStart부터 첫 공백·따옴표 전까지.
+      DB_URL_STOP.lastIndex = bodyStart;
+      const stop = DB_URL_STOP.exec(content);
+      runStart = bodyStart;
+      runEnd = stop ? stop.index : content.length;
+      lastColon = -1;
+      atAfterLastColon = -1;
+      let nextAt = -1;
+      for (let i = runEnd - 1; i >= runStart; i--) {
+        const c = content.charCodeAt(i);
+        if (c === 0x40 /* @ */) nextAt = i;
+        else if (c === 0x3a /* : */ && nextAt !== -1 && nextAt >= i + 2) {
+          lastColon = i;
+          atAfterLastColon = nextAt;
+          break;
+        }
+      }
+    }
+    if (lastColon !== -1 && lastColon >= bodyStart) {
+      DB_URL_SCHEME.lastIndex = 0;
+      return content.slice(start, atAfterLastColon + 1);
+    }
+  }
+  return null;
+}
+
+/** 비밀로 보이는 문자열. repair-brief.ts의 introduces_secret와 같은 취지(여기선 의존성 0으로 재구현). 순서가 곧 우선순위. */
+const SECRET_MATCHERS: ReadonlyArray<SecretMatcher> = [
+  regexMatcher(/\bsk-[A-Za-z0-9_-]{16,}/),
+  regexMatcher(/\bsk-ant-[A-Za-z0-9_-]{16,}/),
+  regexMatcher(/\bAKIA[0-9A-Z]{16}\b/),
+  regexMatcher(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/),
+  regexMatcher(/\bcfat_[A-Za-z0-9_-]{20,}\b/),
+  regexMatcher(/\bxox[baprs]-[A-Za-z0-9-]{10,}/),
+  regexMatcher(/-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----/),
+  matchDbUrlWithPassword,
+  regexMatcher(/\b(api[_-]?key|secret|token|password)\s*[:=]\s*["'][A-Za-z0-9_\-/+=]{20,}["']/i),
 ];
 
 export function findSecretLike(content: string): string | null {
-  for (const re of SECRET_PATTERNS) {
-    const m = re.exec(content);
-    if (m) return m[0].slice(0, 12) + "…";
+  for (const match of SECRET_MATCHERS) {
+    const m = match(content);
+    if (m !== null) return m.slice(0, 12) + "…";
   }
   return null;
 }

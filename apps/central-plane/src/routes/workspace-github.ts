@@ -56,6 +56,9 @@ import { buildDiffSummary } from "../workspace/github-pr.js";
 import { captureTrainingRecord, computeRecheckOutcome, updateTrainingRecordOutcome } from "../workspace/training-store.js";
 import { captureJourneyEvent } from "../workspace/journey-store.js";
 import type { TopicTags, AcquisitionTag } from "../workspace/training-store.js";
+import { regionFromRequest } from "../workspace/envelope.js";
+import { opsMetaRecordingAllowed } from "../workspace/privacy-prefs.js";
+import { hasActiveTrainingConsent } from "../workspace/training-consent-db.js";
 import { normalizeBuiltWith } from "../workspace/built-with.js";
 import { detectContentLang } from "../workspace/topic-tags.js";
 import { getProject, getOwnedProject, listProjectsByUser, EXAMPLE_PROJECT_IDS } from "../workspace/db.js";
@@ -1048,7 +1051,10 @@ export function createWorkspaceGitHubRoutes(
     // region from the edge (Cloudflare adds request.cf.country — coarse, not PII);
     // locale from the review request. built_with + entry_path come from the
     // project (STEP 2). Remaining envelope tags land in STEP 3.
-    const cfCountry = (c.req.raw as { cf?: { country?: string } }).cf?.country ?? null;
+    // Train K · K-1 (0071): the copy's country code follows the person's ops-meta choice too — a person
+    // who turned ops-meta recording off (or an EU/UK/CH default) gets region null (key: events/unknown/…).
+    const edgeRegion = regionFromRequest(c.req.raw);
+    const cfCountry = (await opsMetaRecordingAllowed(c.env, userKey, edgeRegion, "training-capture")) ? edgeRegion : null;
     const projForTag = await getProject(c.env, projectId).catch(() => null);
     const projEntryPath =
       projForTag?.entryPath === "idea" || projForTag?.entryPath === "code" || projForTag?.entryPath === "spec"
@@ -1107,7 +1113,9 @@ export function createWorkspaceGitHubRoutes(
     }
     if (rerunOfReviewRunId) {
       const priorRun = await getReviewRunById(c.env, rerunOfReviewRunId).catch(() => null);
-      if (priorRun?.trainingR2Key) {
+      // Train K · K-3: never write to a training copy without ACTIVE consent — after a withdrawal the
+      // copy is being deleted, and a get-then-put here could put it back after the delete.
+      if (priorRun?.trainingR2Key && (await hasActiveTrainingConsent(c.env, userKey))) {
         const priorResults = (() => {
           try { return (JSON.parse(priorRun.resultJson ?? "{}").results ?? []) as Array<{ itemId?: string; status?: string }>; }
           catch { return []; }
