@@ -359,9 +359,14 @@ export type Dictionary = {
     ideaDesc: string;
     codeTitle: string;
     codeDesc: string;
-    specTitle: string;
-    specDesc: string;
+    /** C-N7 — the third door, "It works, but not how I meant". */
+    differsTitle: string;
+    differsDesc: string;
+    /** C-N7 — pasting a plan: a quiet link under the doors, not a fourth door. */
+    specLink: string;
     codeStepTitle: string;
+    /** C-N7 — door (c)'s step-1 subtitle (the next screen asks for the original intent). */
+    codeStepSubDiffers: string;
     submitLabel: string;
     submitPlaceholder: string;
     submitHint: string;
@@ -2632,6 +2637,11 @@ export type Dictionary = {
     confirm: string; later: string; errorLead: string; retry: string; emptyTitle: string;
     emptyNoSource: string; emptyUnreadable: string; emptyNoEvidence: string; emptyLlm: string;
     saveMine: string;
+    /** C-N7 door (c) — asks for the ORIGINAL intent instead of confirming the app as it is. */
+    differsTitle: string; differsSubtitle: string; differsOneLineLabel: string; differsConfirm: string;
+    /** PR #571 검증 결함 1·9·3 — door (c): read-only as-is line, items hint, re-check offer after confirming. */
+    differsReadNowLabel: string; differsItemsHint: string;
+    differsRecheckLead: string; differsRecheckButton: string; differsRecheckBusy: string;
   };
   /** C-A7 — 문 (c) 인터뷰 질문 묶음 카드. */
   interviewPack: {
