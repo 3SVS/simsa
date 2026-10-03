@@ -773,7 +773,8 @@ export function evaluateRules(cases) {
   const list = cases ?? [];
   const rules = [];
 
-  // R1 — (b)(c) 중 마지막 user_verdict = as_intended 0건 → '고침 경로' 재설계.
+  // R1 — (b)(c) 중 마지막 user_verdict = as_intended ≤ 1건 → '고침 경로' 재설계.
+  // 2026-10-04 Bae "너의 제안대로": 0건 → ≤ 1건(3건 중 2건이 만족 못 하면 이미 재설계 신호).
   const bc = list.filter((c) => c.door === "b" || c.door === "c");
   const bcVerdicts = bc.map((c) => c.axes?.user_verdict?.value ?? null);
   const asIntended = bcVerdicts.filter((v) => v === "as_intended").length;
@@ -781,8 +782,9 @@ export function evaluateRules(cases) {
   rules.push({
     id: "R1",
     measured: bc.length ? `as_intended ${asIntended}/${bc.length}건 (답 없음 ${bcUnlabeled})` : "(b)(c) 건 없음",
-    threshold: "as_intended = 0건",
-    status: bc.length === 0 ? "insufficient" : asIntended > 0 ? "clear" : bcUnlabeled > 0 ? "insufficient" : "triggered",
+    threshold: "as_intended ≤ 1건",
+    // 답 없는 건이 모두 as_intended여도 2건에 못 미치면 이미 넘은 것이다.
+    status: bc.length === 0 ? "insufficient" : asIntended >= 2 ? "clear" : asIntended + bcUnlabeled >= 2 ? "insufficient" : "triggered",
   });
 
   // R2 — 기계 판정과 사람 라벨 불일치 ≥ 2건 → 판정 규칙 재검토. 기계 보류는 불일치가 아니다(§4.3) —
@@ -790,11 +792,22 @@ export function evaluateRules(cases) {
   const dis = list.filter((c) => c.disagreement === true).length;
   const undecided = list.filter((c) => c.disagreement === null).length;
   const l1Abstain = list.filter((c) => c.l1?.sideRelation === "abstain_mismatch").length;
+  // 2026-10-04 Bae "너의 제안대로": ①정반대(작동↔고장) 1건만 나와도 핵심 결함 ②보류는 불일치로 세지
+  // 않으므로 전부 보류면 R2가 영원히 안 걸린다 → 보류 차이 ≥ 2/3도 '판정 불가' 신호로 넘음.
+  const l1Opposite = list.filter((c) => c.l1?.sideRelation === "opposite").length;
+  const abstainHeavy = list.length > 0 && l1Abstain * 3 >= list.length * 2;
   rules.push({
     id: "R2",
-    measured: `불일치 ${dis}건 / 판정 불가 ${undecided}건 / 전체 ${list.length}건 (첫 런 보류 차이 ${l1Abstain}건 — 불일치로 세지 않음)`,
-    threshold: "불일치 ≥ 2건",
-    status: list.length === 0 ? "insufficient" : dis >= 2 ? "triggered" : dis + undecided >= 2 ? "insufficient" : "clear",
+    measured: `불일치 ${dis}건 / 정반대 ${l1Opposite}건 / 판정 불가 ${undecided}건 / 전체 ${list.length}건 (첫 런 보류 차이 ${l1Abstain}건 — 불일치로 세지 않음)`,
+    threshold: "정반대 ≥ 1건 또는 불일치 ≥ 2건 또는 보류 차이 ≥ 2/3",
+    status:
+      list.length === 0
+        ? "insufficient"
+        : l1Opposite >= 1 || dis >= 2 || abstainHeavy
+          ? "triggered"
+          : dis + undecided >= 2
+            ? "insufficient"
+            : "clear",
   });
 
   // R3 — support_minutes 중앙값 > 15분 → 셀프서브 개선 우선. 모든 건이 기입돼야 판정.
@@ -819,7 +832,8 @@ export function evaluateRules(cases) {
     status: mean === null ? "insufficient" : mean < 5 / 6 ? "triggered" : "clear",
   });
 
-  // R5 — (a) 빌드 성공 0/3 → S1 보류. 빌드 결과는 지금 수기(빌드 실행체 B5(b) 전).
+  // R5 — (a) 빌드 성공 ≤ 1/3 → S1 보류. 빌드 결과는 지금 수기(빌드 실행체 B5(b) 전).
+  // 2026-10-04 Bae "너의 제안대로": 0건 → ≤ 1건(works-or-free에서 1/3 성공은 2/3 환불 — 경제성 불성립).
   const a = list.filter((c) => c.door === "a");
   const results = a.map((c) => c.sheet?.buildResult ?? null);
   const success = results.filter((r) => r === "success").length;
@@ -827,8 +841,8 @@ export function evaluateRules(cases) {
   rules.push({
     id: "R5",
     measured: a.length ? `빌드 성공 ${success}/${a.length}건 (미기입 ${unknownBuild})` : "(a) 건 없음 — P-5 뒤",
-    threshold: "성공 0건",
-    status: a.length === 0 ? "insufficient" : success > 0 ? "clear" : unknownBuild > 0 ? "insufficient" : "triggered",
+    threshold: "성공 ≤ 1건",
+    status: a.length === 0 ? "insufficient" : success >= 2 ? "clear" : success + unknownBuild >= 2 ? "insufficient" : "triggered",
   });
   return rules;
 }

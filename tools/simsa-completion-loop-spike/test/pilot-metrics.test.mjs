@@ -522,16 +522,22 @@ function fakeCase({ door = "b", verdict = "as_intended", disagreement = false, f
 describe("판정 규칙 5개 입력 (RUNBOOK §5)", () => {
   const status = (cases, id) => evaluateRules(cases).find((r) => r.id === id).status;
 
-  it("R1 (b)(c) as_intended 0건 → 넘음, 답 없는 건이 있으면 입력 부족", () => {
-    assert.equal(status([fakeCase({ verdict: "still_broken" }), fakeCase({ door: "c", verdict: "works_but_different" })], "R1"), "triggered");
-    assert.equal(status([fakeCase({ verdict: "still_broken" }), fakeCase({ verdict: null })], "R1"), "insufficient");
-    assert.equal(status([fakeCase({}), fakeCase({ verdict: "still_broken" })], "R1"), "clear");
+  it("R1 (b)(c) as_intended ≤ 1건 → 넘음(2026-10-04 문턱), 답 없는 건으로 2건에 닿을 수 있으면 입력 부족", () => {
+    assert.equal(status([fakeCase({ verdict: "still_broken" }), fakeCase({ door: "c", verdict: "works_but_different" }), fakeCase({})], "R1"), "triggered");
+    assert.equal(status([fakeCase({ verdict: "still_broken" }), fakeCase({ verdict: null }), fakeCase({})], "R1"), "insufficient");
+    assert.equal(status([fakeCase({}), fakeCase({}), fakeCase({ verdict: "still_broken" })], "R1"), "clear");
+    assert.equal(status([fakeCase({ verdict: "still_broken" }), fakeCase({ verdict: "still_broken" }), fakeCase({ verdict: null })], "R1"), "triggered", "답 없는 1건이 만족이어도 1건");
   });
 
   it("R2 불일치 ≥ 2건 → 넘음", () => {
     assert.equal(status([fakeCase({ disagreement: true }), fakeCase({ disagreement: true }), fakeCase({})], "R2"), "triggered");
     assert.equal(status([fakeCase({ disagreement: true }), fakeCase({}), fakeCase({})], "R2"), "clear");
     assert.equal(status([fakeCase({ disagreement: true }), fakeCase({ disagreement: null }), fakeCase({})], "R2"), "insufficient");
+    // 2026-10-04: 정반대 1건 · 보류 차이 ≥ 2/3도 넘음
+    assert.equal(status([{ ...fakeCase({}), l1: { sideRelation: "opposite" } }, fakeCase({}), fakeCase({})], "R2"), "triggered");
+    const ab = { ...fakeCase({}), l1: { sideRelation: "abstain_mismatch" } };
+    assert.equal(status([ab, ab, fakeCase({})], "R2"), "triggered");
+    assert.equal(status([ab, fakeCase({}), fakeCase({})], "R2"), "clear");
   });
 
   it("R3 support_minutes 중앙값 > 15분 → 넘음, 미기입이 있으면 입력 부족", () => {
@@ -545,12 +551,13 @@ describe("판정 규칙 5개 입력 (RUNBOOK §5)", () => {
     assert.equal(status([fakeCase({ filledCount: 5 }), fakeCase({ filledCount: 4 })], "R4"), "triggered");
   });
 
-  it("R5 (a) 빌드 성공 0/3 → 넘음, (a) 건 없으면 입력 부족(P-5 뒤)", () => {
+  it("R5 (a) 빌드 성공 ≤ 1/3 → 넘음(2026-10-04 문턱), (a) 건 없으면 입력 부족(P-5 뒤)", () => {
     assert.equal(status([fakeCase({})], "R5"), "insufficient");
     const a = (build) => fakeCase({ door: "a", build });
     assert.equal(status([a("failure"), a("failure"), a("failure")], "R5"), "triggered");
-    assert.equal(status([a("failure"), a("success"), a("failure")], "R5"), "clear");
-    assert.equal(status([a("failure"), a(null), a("failure")], "R5"), "insufficient");
+    assert.equal(status([a("failure"), a("success"), a("failure")], "R5"), "triggered");
+    assert.equal(status([a("success"), a("success"), a("failure")], "R5"), "clear");
+    assert.equal(status([a("success"), a(null), a("failure")], "R5"), "insufficient");
   });
 
   it("빈 입력: 규칙은 전부 입력 부족, 요약·렌더는 던지지 않음", () => {
