@@ -829,6 +829,41 @@ test("repair-done modeReason (2026-07-20): brief_only stores WHY in error; auto_
   assert.equal(env2.DB._jobs[0].error, null);
 });
 
+test("비용 권고 ② repair-done: 잡당 상한으로 멈춘 brief_only → 잡 뷰 stoppedByBudget:true · 그 밖(옛 컨테이너 포함) false", async () => {
+  // 컨테이너 계약: 예산 멈춤은 기존 정직 폴백(지시서 draft PR)으로 마감하고 modeReason이
+  // "budget_exceeded(…)"로 시작한다. 새 컬럼 없음 — done 행의 error(진단 칸)에서 서버가 판정한다.
+  const cases = [
+    { name: "budget stop", body: { ok: true, mode: "brief_only", changedFiles: 0, modeReason: "budget_exceeded(cap=$2.00); last=worker_call_failed: WorkerParseError" }, want: true },
+    { name: "budget stop + oversize", body: { ok: true, mode: "brief_only", changedFiles: 0, modeReason: "budget_exceeded(cap=$2.00); oversize_skipped: index.html(389KB)" }, want: true },
+    { name: "other fallback", body: { ok: true, mode: "brief_only", changedFiles: 0, modeReason: "worker_returned_no_rewrites" }, want: false },
+    { name: "old container (no modeReason)", body: { ok: true, mode: "brief_only", changedFiles: 0 }, want: false },
+    { name: "legacy callback (no mode)", body: { ok: true }, want: false },
+    { name: "auto_fix (reason dropped)", body: { ok: true, mode: "auto_fix", changedFiles: 1, buildVerified: true, modeReason: "budget_exceeded(cap=$2.00)" }, want: false },
+    { name: "failed job", body: { ok: false, error: "budget_exceeded(cap=$2.00)" }, want: false },
+    { name: "look-alike prefix", body: { ok: true, mode: "brief_only", changedFiles: 0, modeReason: "budget_exceededish" }, want: false },
+  ];
+  for (const c of cases) {
+    const env = makeEnv({ sandbox: makeSandbox({ names: [], calls: [] }) });
+    const created = await req(env, "POST", REPAIR_PATH, { userKey: USER });
+    const jobId = created.json.repair.id;
+    const done = await req(env, "POST", "/internal/repair-done", { jobId, prUrl: "https://github.com/acme/golf-now/pull/41", prNumber: 41, ...c.body }, { authorization: `Bearer ${TOKEN}` });
+    assert.equal(done.status, 200, c.name);
+    const view = await req(env, "GET", `${REPAIR_PATH}?userKey=${USER}`);
+    assert.equal(view.json.repair.stoppedByBudget, c.want, c.name);
+  }
+  // In flight: never a guess.
+  const env = makeEnv({ sandbox: makeSandbox({ names: [], calls: [] }) });
+  const created = await req(env, "POST", REPAIR_PATH, { userKey: USER });
+  assert.equal(created.json.repair.stoppedByBudget, false);
+});
+
+test("비용 권고 ② 컨테이너와 Worker의 멈춤 사유 문자열이 같다 (lock-step)", async () => {
+  const { REPAIR_BUDGET_STOP } = await import("../container/coerce-result.mjs");
+  const { REPAIR_BUDGET_STOP_REASON } = await import("../dist/workspace/repair-job-db.js");
+  assert.equal(typeof REPAIR_BUDGET_STOP, "string");
+  assert.equal(REPAIR_BUDGET_STOP, REPAIR_BUDGET_STOP_REASON);
+});
+
 test("buildBriefOnlyDiagnosis (pure): oversize files surface in modeReason + honest PR note; plain reason passes through", async () => {
   const { buildBriefOnlyDiagnosis } = await import("../container/coerce-result.mjs");
   const withSkip = buildBriefOnlyDiagnosis({

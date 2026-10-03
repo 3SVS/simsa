@@ -36,8 +36,10 @@ export {
   normalizeModelId,
   inferVendor,
   usageRecordFromResponse,
+  unknownUsageRecord,
+  hasKnownUsage,
 } from "./pricing.js";
-export type { PricedUsage, LlmUsageRecord } from "./pricing.js";
+export type { PricedUsage, LlmUsageRecord, UnknownUsageEstimate } from "./pricing.js";
 export {
   withOpenAiFallback,
   callOpenAiAsAnthropic,

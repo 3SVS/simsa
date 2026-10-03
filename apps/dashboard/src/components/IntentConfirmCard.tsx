@@ -29,6 +29,7 @@ import {
 } from "@/lib/workflow-store";
 import { CENTRAL_PLANE_URL } from "@/lib/workspace-sources-api";
 import { mirrorThenBuildIntentRuler } from "@/lib/intent-ruler";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 
 type InferredItem = { id: string; title: string; criteria?: string[] };
 type InferResponse = {
@@ -39,6 +40,8 @@ type InferResponse = {
     understood?: unknown;
   } | null;
   reason?: string;
+  /** 비용 권고 ③ — with reason "generation_capacity": when today's AI capacity returns. */
+  resetAt?: string;
   readSources?: string[];
   detectedName?: string;
   stack?: { hosting?: string; data?: string; tools?: string[] };
@@ -180,7 +183,9 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
                   ? c.emptyUnreadable
                   : reason === "llm_unavailable"
                     ? c.emptyLlm
-                    : c.emptyNoEvidence}
+                    : reason === "generation_capacity"
+                      ? generationCapacityText(t, typeof raw?.resetAt === "string" ? raw.resetAt : null)
+                      : c.emptyNoEvidence}
             </p>
             <div className="mt-3">
               <label className="mb-1 block text-xs font-semibold text-gray-600">{c.oneLineLabel}</label>

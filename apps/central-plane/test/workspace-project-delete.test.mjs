@@ -145,6 +145,37 @@ describe("deleteProject — cascade boundary", () => {
     assert.doesNotMatch(joined, /DELETE FROM llm_usage\b/, "cost ledger rows are kept (unlinked), not deleted");
   });
 
+  // Train K · K-3 (0071). Real-SQL proof (actual rows/objects) is train-k-consent-server.test.mjs ③
+  // (node:sqlite); this fake keeps the ORDER contract covered on every Node in the CI matrix.
+  it("training copies: legacy backfill + deletion request ride the D1 batch (before the review-run rows go), R2 delete runs after it", async () => {
+    const TRAINING_KEY = `journey/2026/09/30/${PROJECT}/wprr_1.json`;
+    const { env, batched, sequence, deletedR2 } = makeEnv();
+    const orig = env.DB.prepare.bind(env.DB);
+    env.DB.prepare = (sql) => {
+      const s = orig(sql);
+      if (/FROM training_records_index/.test(sql) && /delete_requested_at IS NOT NULL/.test(sql)) {
+        s.all = async () => ({
+          results:
+            sequence.includes("batch") && !deletedR2.includes(TRAINING_KEY)
+              ? [{ id: "tri_1", r2_key: TRAINING_KEY, kind: "journey" }]
+              : [],
+        });
+      }
+      return s;
+    };
+    await deleteProject(env, PROJECT, USER);
+    const backfillAt = batched.findIndex((q) => /INSERT INTO training_records_index/.test(q) && /FROM workspace_pr_review_runs/.test(q));
+    const requestAt = batched.findIndex((q) => /UPDATE training_records_index\s+SET delete_requested_at/.test(q));
+    const runsDeleteAt = batched.findIndex((q) => /DELETE FROM workspace_pr_review_runs\b/.test(q));
+    assert.ok(backfillAt >= 0, "pre-0071 review copies are moved into the index inside the batch");
+    assert.ok(requestAt >= 0, "indexed copies get a deletion request inside the batch");
+    assert.ok(backfillAt < runsDeleteAt, "legacy keys are read before their review-run rows are deleted");
+    assert.ok(deletedR2.includes(TRAINING_KEY), "the requested training copy is deleted");
+    const r2Positions = sequence.map((e, i) => [e, i]).filter(([e]) => e === "r2").map(([, i]) => i);
+    const trainingDeleteAt = r2Positions[deletedR2.indexOf(TRAINING_KEY)];
+    assert.ok(trainingDeleteAt > sequence.indexOf("batch"), "R2 delete only after the D1 batch commits");
+  });
+
   it("deletes experiment candidates via the experiment_id subquery", async () => {
     const { env, batched } = makeEnv();
     await deleteProject(env, PROJECT, USER);

@@ -14,4 +14,4 @@ export declare function generateButtonState(f: { hasSpec: boolean; hasItems: boo
   labelKey: "make" | "remake" | "making";
   hintKey: null | "needSpec" | "needItems";
 };
-export declare function generateErrorKey(err: { error: string; stage?: string; issueCount?: number; retryAfterSeconds?: number }): "errLlm" | "errInvalid" | "errRateLimited" | "errNotSynced" | "errNetwork" | "errServer";
+export declare function generateErrorKey(err: { error: string; stage?: string; issueCount?: number; retryAfterSeconds?: number }): "errLlm" | "errInvalid" | "errRateLimited" | "errCapacity" | "errNotSynced" | "errNetwork" | "errServer";

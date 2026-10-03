@@ -7,6 +7,8 @@
  *   POST /workspace/projects/:id/dev-spec/generate — { userKey, locale? } 브리프+항목에서 다단계
  *                                                    생성(D-3) → 무결성 통과본만 저장·반환.
  *                                                    실패는 503 llm_unavailable / 422 dev_spec_invalid.
+ *                                                    비용 권고 ③: 서비스 전체 일 200(기본) 초과 →
+ *                                                    503 generation_capacity(LLM 0회).
  *
  *   POST /workspace/projects/:id/interview-pack   — C-A7: { userKey, locale?, confirmedItemIds? } → 유저가 자기
  *                                                    AI 채팅에 붙여넣을 인터뷰 텍스트(역추론 지시서 요약 기반).
@@ -29,10 +31,11 @@ import { validateDevSpec, summarizeForBeginner, type DevSpecValidation } from ".
 import { generateDevSpec, makeDevSpecLlmCaller } from "../workspace/generate-dev-spec.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
 import { consumeUserDailyLimit } from "../workspace/rate-limit.js";
-import { betaProjectCreateDailyLimit } from "../workspace/beta-limits.js";
+import { betaProjectCreateDailyLimit, clientNetworkKey } from "../workspace/beta-limits.js";
 import { insertUsageEvent } from "../workspace/usage-events-db.js";
 import { sendLangfuseGeneration } from "../workspace/langfuse.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
+import { generationCapacityResponse, takeGenerationSlot } from "../workspace/generation-capacity.js";
 
 /** 베타 일일 상한 버킷 — 지시서 생성은 프로젝트 생성과 같은 한도(기본 20/day)를 따로 센다. */
 export const BETA_DEV_SPEC_DAILY_BUCKET = "beta-dev-spec-daily";
@@ -198,8 +201,18 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
       return json(headers, 503, { ok: false, error: "llm_unavailable" });
     }
 
+    // 비용 권고 ③ — daily capacity of dev-spec generation: this network's share (default
+    // 40/day, PR #576 review — userKeys are free to mint, so the per-user 20 alone let one
+    // network use the whole service bucket) then the service bucket (default 200/day).
+    // Taken BEFORE the user's own daily slot: a request refused for capacity must not use
+    // up the user's quota (that slot has no refund); a user-capped request hands both
+    // capacity slots back below.
+    const slot = await takeGenerationSlot(c.env, "dev_spec", clientNetworkKey(c.req.raw));
+    if (slot.limited) return generationCapacityResponse(slot, headers);
+
     const daily = await consumeUserDailyLimit(c.env, BETA_DEV_SPEC_DAILY_BUCKET, userKey, betaProjectCreateDailyLimit(c.env));
     if (daily.limited) {
+      await slot.settle({ failed: true, billedCalls: 0 });
       return new Response(
         JSON.stringify({ ok: false, error: "rate_limited", scope: "beta_daily", retryAfterSeconds: daily.retryAfterSeconds }),
         { status: 429, headers: { "content-type": "application/json", "retry-after": String(daily.retryAfterSeconds), ...headers } },
@@ -211,19 +224,25 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     const call = makeDevSpecLlmCaller(c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), c.env.DEV_SPEC_MODEL || undefined, usage.sink);
     // D-2 amend: 기존 앱 문은 역추론 — 출처(도구·갈래·스택)와 유저 확인 목록이 함께 간다.
     const source = devSpecSourceFor(owned);
-    const provenance =
-      source === "inferred" ? await gatherInferredProvenance(c.env, owned, fetch.bind(globalThis) as FetchLike) : undefined;
-    const result = await generateDevSpec(
-      {
-        brief: owned.productSpec,
-        items: owned.items,
-        idea: owned.idea,
-        locale,
-        source,
-        ...(source === "inferred" ? { confirmedItemIds, ...(provenance ? { provenance } : {}) } : {}),
-      },
-      call,
-    );
+    let result: Awaited<ReturnType<typeof generateDevSpec>>;
+    try {
+      const provenance =
+        source === "inferred" ? await gatherInferredProvenance(c.env, owned, fetch.bind(globalThis) as FetchLike) : undefined;
+      result = await generateDevSpec(
+        {
+          brief: owned.productSpec,
+          items: owned.items,
+          idea: owned.idea,
+          locale,
+          source,
+          ...(source === "inferred" ? { confirmedItemIds, ...(provenance ? { provenance } : {}) } : {}),
+        },
+        call,
+      );
+    } catch (err) {
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
+      throw err;
+    }
     if (usage.events.length > 0) {
       await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "dev_spec", jobId: newLlmJobId("dsp"), projectId, userKey }));
     }
@@ -248,7 +267,12 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     await insertUsageEvent(c.env, { userKey, eventType: "workspace_dev_spec_generated", metadata: { ok: result.ok, passes: result.passes.length, source, confirmedItems: source === "inferred" ? confirmedItemIds.length : 0 } }).catch(() => undefined);
 
     if (!result.ok) {
-      if (result.error === "llm_unavailable") return json(headers, 503, { ok: false, error: "llm_unavailable" });
+      if (result.error === "llm_unavailable") {
+        // 비용 권고 ③: unbilled failure → slot back; billed passes (then gave up) → kept.
+        await slot.settle({ failed: true, billedCalls: usage.events.length });
+        return json(headers, 503, { ok: false, error: "llm_unavailable" });
+      }
+      // 422: the passes ran and were billed — the slot stays spent.
       return json(headers, 422, { ok: false, error: "dev_spec_invalid", stage: result.stage, issues: result.issues });
     }
 

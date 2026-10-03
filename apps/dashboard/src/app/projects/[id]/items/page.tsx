@@ -19,6 +19,7 @@ import {
 } from "@/lib/workflow-store";
 import type { Project } from "@/lib/mock-data";
 import { callWorkspaceApi } from "@/lib/workspace-api";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import { ACCEPTANCE_CRITERIA } from "@/lib/mock-generators";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -163,6 +164,11 @@ export default function ItemsPage() {
     const res = await callWorkspaceApi({ idea: quickIdea.trim() });
     if (!res.ok && res.error === "rate_limited") {
       setGenError(t.common.rateLimited);
+      setGenPhase("idle");
+      return;
+    }
+    if (!res.ok && res.error === "generation_capacity") {
+      setGenError(generationCapacityText(t, res.resetAt));
       setGenPhase("idle");
       return;
     }

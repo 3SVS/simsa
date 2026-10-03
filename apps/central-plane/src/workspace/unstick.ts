@@ -11,7 +11,7 @@
  *      지어낸 해결책은 막힌 비개발자를 더 깊이 막는다.
  *   ③ 영문 스캐폴드 + 한국어 출력 (recommend.ts의 검증된 기법, 2026-07-07 결정)
  */
-import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type LlmUsageSink, type VendorFallback } from "./anthropic-fetch.js";
 
 export type WorkspaceUnstickRequest = {
   /** 붙여넣은 에러 메시지 또는 상황 설명 (서버에서 8000자 컷). */
@@ -72,6 +72,7 @@ async function callAnthropic(
   baseUrl: string | undefined,
   timeoutMs = 20000,
   fallback?: VendorFallback,
+  onUsage?: LlmUsageSink,
 ): Promise<string> {
   const data = (await anthropicMessages(
     apiKey,
@@ -80,7 +81,7 @@ async function callAnthropic(
     undefined,
     anthropicEndpoint(baseUrl),
     "unstick",
-    { fallback },
+    { fallback, onUsage },
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
@@ -103,6 +104,8 @@ export async function generateUnstickAdvice(
   anthropicBaseUrl?: string,
   /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
   fallback?: VendorFallback,
+  /** PR #576 검증 P1-2: 벤더가 답한 호출마다 1건 — 라우트의 "과금된 실패" 판정용(recommend.ts와 같은 계약). */
+  onUsage?: LlmUsageSink,
 ): Promise<WorkspaceUnstickResponse> {
   if (!anthropicApiKey) {
     console.warn("[workspace/unstick] no API key — honest failure");
@@ -111,7 +114,7 @@ export async function generateUnstickAdvice(
 
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, buildUnstickPrompt(req), anthropicBaseUrl, undefined, fallback);
+    rawText = await callAnthropic(anthropicApiKey, buildUnstickPrompt(req), anthropicBaseUrl, undefined, fallback, onUsage);
   } catch (err) {
     console.error("[workspace/unstick] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };

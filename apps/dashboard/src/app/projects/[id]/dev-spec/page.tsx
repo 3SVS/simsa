@@ -16,6 +16,7 @@ import { saveProjectToDb } from "@/lib/workspace-check-api";
 import { generateDevSpecApi, getDevSpecApi, type DevSpecApiError } from "@/lib/dev-spec-api";
 import { devSpecView, generateButtonState, generateErrorKey } from "@/lib/dev-spec-view.mjs";
 import { effectiveConfirmedItemIds } from "@/lib/confirmed-items.mjs";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 
@@ -92,6 +93,8 @@ export default function DevSpecPage() {
 
   const errorText = (e: DevSpecApiError): string => {
     const key = generateErrorKey(e);
+    // 비용 권고 ③ — today's dev-spec capacity is full: the shared sentence with the reset time.
+    if (key === "errCapacity") return generationCapacityText(t, e.error === "generation_capacity" ? e.resetAt : null);
     if (key === "errInvalid" && e.error === "dev_spec_invalid") return d.errInvalid.replace("{n}", String(e.issueCount));
     if (key === "errRateLimited" && e.error === "rate_limited") return d.errRateLimited.replace("{m}", String(Math.max(1, Math.ceil(e.retryAfterSeconds / 60))));
     return d[key];

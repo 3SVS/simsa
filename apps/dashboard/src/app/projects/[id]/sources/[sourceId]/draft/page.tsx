@@ -29,6 +29,7 @@ import {
   formatRateLimitedMessage,
 } from "@/lib/document-draft.mjs";
 import type { DraftErrorKey } from "@/lib/document-draft.mjs";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import {
   getLocalProject,
   getUserKey,
@@ -53,6 +54,8 @@ export default function DocumentDraftPage() {
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
   const [errorKey, setErrorKey] = useState<DraftErrorKey>("generic");
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | undefined>(undefined);
+  // 비용 권고 ③ — when today's AI capacity returns (generation_capacity only).
+  const [resetAt, setResetAt] = useState<string | null>(null);
 
   // Overwrite guard — computed after mount (localStorage is client-only).
   const [overwriteRisk, setOverwriteRisk] = useState(false);
@@ -74,6 +77,7 @@ export default function DocumentDraftPage() {
       const byCode = mapDraftError(res.error);
       setErrorKey(byCode !== "generic" ? byCode : mapDraftError(res.status));
       setRetryAfterSeconds(res.retryAfterSeconds);
+      setResetAt(res.resetAt ?? null);
       setPhase("error");
     }
   }, [id, sourceId, locale]);
@@ -149,7 +153,9 @@ export default function DocumentDraftPage() {
   const errorMessage =
     errorKey === "rate_limited"
       ? formatRateLimitedMessage(t.sources.draft.errors.rate_limited, retryAfterSeconds)
-      : t.sources.draft.errors[errorKey] ?? t.sources.draft.errors.generic;
+      : errorKey === "generation_capacity"
+        ? generationCapacityText(t, resetAt) // 비용 권고 ③ — with the reset in the reader's clock
+        : t.sources.draft.errors[errorKey] ?? t.sources.draft.errors.generic;
 
   const confirmDisabled =
     !draft || !canConfirmDraft(draft) || saving || (overwriteRisk && !overwriteAck);

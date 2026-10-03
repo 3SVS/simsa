@@ -27,9 +27,30 @@ import {
 const RESEND_API_URL = "https://api.resend.com/emails";
 const DEFAULT_FROM = "Simsa <notify@trysimsa.com>";
 
-/** Loose format check: something@something.tld (no RFC 5322 pedantry). */
+/** RFC 5321 path limit (256) minus the angle brackets — no deliverable address is longer. */
+export const MAX_EMAIL_ADDRESS_LENGTH = 254;
+
+const ANY_WHITESPACE = /\s/;
+
+/**
+ * Loose format check: something@something.tld (no RFC 5322 pedantry) — the same
+ * addresses `^[^\s@]+@[^\s@]+\.[^\s@]+$` accepts, up to 254 characters.
+ *
+ * Why not that regex (2026-10-01): its two domain runs overlap at every ".", so
+ * "a@" + "a." × n + "@" backtracks quadratically — 6.6 s for 128 KB, and the
+ * notification-settings route passed the anonymous body's emailAddress in with
+ * no length bound. This is one scan: no whitespace, exactly one "@" with
+ * something before it, and a "." in the domain with at least one character on
+ * each side.
+ */
 export function isValidEmailAddress(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if (typeof email !== "string" || email.length > MAX_EMAIL_ADDRESS_LENGTH) return false;
+  if (ANY_WHITESPACE.test(email)) return false;
+  const at = email.indexOf("@");
+  if (at <= 0 || email.indexOf("@", at + 1) !== -1) return false;
+  const domain = email.slice(at + 1);
+  const dot = domain.indexOf(".", 1);
+  return dot !== -1 && dot < domain.length - 1;
 }
 
 /** "alice@example.com" → "a***@example.com". Never returns the full local part. */

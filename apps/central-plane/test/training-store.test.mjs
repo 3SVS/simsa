@@ -38,6 +38,11 @@ function dbWithConsent({ consented, version }) {
                 updated_at: "t",
               };
         },
+        // Train K (0071): capture writes its training_records_index row BEFORE the R2 put
+        // (the statement itself re-checks consent — 1 row written = consent active).
+        async run() {
+          return { meta: { changes: consented ? 1 : 0 } };
+        },
       };
     },
   };

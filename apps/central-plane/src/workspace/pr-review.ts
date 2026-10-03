@@ -6,7 +6,7 @@
  * LLM failure → heuristic fallback (diff-aware: matching filenames lean toward "통과").
  */
 import type { CheckableItem, ProductSpecForCheck, CheckResultItem } from "./check.js";
-import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type LlmUsageSink, type VendorFallback } from "./anthropic-fetch.js";
 import type { PullRequestMeta, PullRequestFile } from "./github-pr.js";
 import { buildDiffSummary } from "./github-pr.js";
 import type { FetchLike } from "../github.js";
@@ -107,6 +107,7 @@ async function callAnthropic(
   fetchImpl: FetchLike = fetch.bind(globalThis) as FetchLike,
   baseUrl?: string,
   fallback?: VendorFallback,
+  onUsage?: LlmUsageSink,
 ): Promise<{ text: string; tokens: number | null; modelActual: string }> {
   const data = await anthropicMessages(
     apiKey,
@@ -115,7 +116,7 @@ async function callAnthropic(
     fetchImpl,
     anthropicEndpoint(baseUrl),
     "pr-review",
-    { fallback },
+    { fallback, onUsage },
   );
   const text = (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
   const tokens =
@@ -296,6 +297,8 @@ export async function reviewPRAgainstItems(
   anthropicBaseUrl?: string,
   /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
   fallback?: VendorFallback,
+  /** PR #576 검증 P2-9: 벤더가 답한 호출마다 1건 — 라우트가 생성 용량 슬롯을 과금 여부로 정산한다. */
+  onUsage?: LlmUsageSink,
 ): Promise<PRReviewResponse> {
   if (!req.items?.length) {
     return {
@@ -317,7 +320,7 @@ export async function reviewPRAgainstItems(
   let tokensConsumed: number | null = null;
   let modelUsed: string = REVIEW_MODEL;
   try {
-    const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl, anthropicBaseUrl, fallback);
+    const out = await callAnthropic(anthropicApiKey, prompt, 25000, fetchImpl, anthropicBaseUrl, fallback, onUsage);
     rawText = out.text;
     tokensConsumed = out.tokens;
     modelUsed = out.modelActual;
