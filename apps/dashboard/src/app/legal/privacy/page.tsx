@@ -17,6 +17,11 @@ import {
   OPS_INFO_RETENTION,
   OPS_INFO_OPT_OUT,
   TRAINING_COPY_NOTE,
+  TRAINING_DATA_TITLE,
+  TRAINING_DATA_SCOPE,
+  TRAINING_DATA_PURPOSE,
+  TRAINING_DATA_BASIS,
+  TRAINING_DATA_CHOICE,
   RATE_LIMIT_RETENTION_NOTE,
   PRIVACY_CHANGE_LOG,
 } from "@/lib/privacy-ops-info.mjs";
@@ -39,7 +44,8 @@ export default function PrivacyPage() {
         <li><strong>{OPS_INFO_TITLE}</strong> — 아래 문단에 따로 적었습니다.</li>
       </ul>
 
-      <p className="mt-4 font-semibold text-gray-900">{OPS_INFO_TITLE}</p>
+      {/* Train K: 확인 결과 화면의 운영 정보 한 줄 '자세히'가 여기(#ops-info)로 온다. */}
+      <p id="ops-info" className="mt-4 scroll-mt-16 font-semibold text-gray-900">{OPS_INFO_TITLE}</p>
       <p>{OPS_INFO_LEAD}</p>
       <ul>
         {OPS_INFO_ITEMS.map((item) => (
@@ -52,7 +58,7 @@ export default function PrivacyPage() {
         <li><strong>목적</strong> — {OPS_INFO_PURPOSE}</li>
         <li><strong>근거</strong> — {OPS_INFO_BASIS}</li>
         <li><strong>보유 기간</strong> — {OPS_INFO_RETENTION}</li>
-        <li><strong>원하지 않으시면</strong> — {OPS_INFO_OPT_OUT}</li>
+        <li><strong>기록 끄기</strong> — {OPS_INFO_OPT_OUT}</li>
       </ul>
 
       <h2>2. AI 처리 위탁 (중요)</h2>
@@ -62,6 +68,16 @@ export default function PrivacyPage() {
         전송은 처리 목적에 한정되며, 학습 데이터 제공은 별도의 명시적 동의(opt-in) 없이는 이루어지지
         않습니다.
       </p>
+
+      {/* Train K: 확인 결과 화면 학습 데이터 카드의 '자세히'가 여기(#training-data)로 온다. */}
+      <p id="training-data" className="mt-4 scroll-mt-16 font-semibold text-gray-900">{TRAINING_DATA_TITLE}</p>
+      <ul>
+        <li><strong>담기는 것</strong> — {TRAINING_DATA_SCOPE}</li>
+        <li><strong>목적</strong> — {TRAINING_DATA_PURPOSE}</li>
+        <li><strong>근거</strong> — {TRAINING_DATA_BASIS}</li>
+        <li><strong>선택</strong> — {TRAINING_DATA_CHOICE}</li>
+        <li><strong>철회와 삭제</strong> — {TRAINING_COPY_NOTE}</li>
+      </ul>
 
       <h2>3. 보관과 파기</h2>
       <ul>
@@ -87,7 +103,8 @@ export default function PrivacyPage() {
       <ul>
         <li>프로젝트와 그 데이터는 언제든 직접 삭제할 수 있습니다.</li>
         <li>이메일 알림은 설정에서 해제할 수 있고, 복귀 안내 메일은 프로젝트당 최대 1회만 발송됩니다.</li>
-        <li>학습 데이터 제공 동의는 설정에서 철회할 수 있습니다.</li>
+        <li>학습 데이터 제공 동의는 각 프로젝트의 설정 화면이나 확인 결과 화면에서 한 번에 철회할 수 있으며, 철회하시면 색인된 학습 데이터 사본을 지웁니다(2항).</li>
+        <li>운영 정보 기록은 각 프로젝트의 설정 화면이나 확인 결과 화면에서 끌 수 있습니다(1항).</li>
       </ul>
 
       <h2>7. 개인정보 보호책임자</h2>

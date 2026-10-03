@@ -10,14 +10,17 @@
 //  서버에 컬럼·테이블·봉투 필드가 늘었는데 여기 항목이 없으면 테스트가 실패한다(고지 누락 = 버그).
 //  운영 메타가 아닌 추가분은 테스트의 NOT_OPS_META에 이유와 함께 넣는다 — 고지 여부를 결정하게 강제.
 //
-// ★없는 기능을 약속하지 않는다: '기록 끄기' 토글은 아직 없다 → 문의 이메일로 요청 + "준비 중".
+// ★없는 기능을 약속하지 않는다. Train K(계약 2~4): '기록 끄기'(privacy_prefs, 0071)와 학습 사본 색인
+//  삭제(training_records_index, 0071)는 **Train K 서버 PR**이 만든다 — 이 문구는 그 서버가 배포된 뒤에만
+//  게시한다(배포 순서: central → dashboard, PR 체크리스트). 테스트가 0071·서버 소스와 묶는다.
 // ★법적 근거·문구는 Bae 검토 1회 대상(가격·동의 계획 결정 ⑥). KO가 정본(legal/layout.tsx).
 
 /**
  * 방침 시행일(YYYY-MM-DD). ★배포 직전 이 값을 **배포일**로 갱신한다 — 게시 전 날짜를 시행일로
  * 적으면 안 된다(PR 체크리스트 항목). 변경 이력 **마지막(아직 게시 안 된) 줄**의 날짜만 이 값을 쓴다.
+ * Train K: 2026-10-03 = dashboard 배포일(Bae 2026-10-03 `deploy dashboard approved.`, 0071 적용·central 배포 뒤).
  */
-export const PRIVACY_EFFECTIVE_DATE = "2026-09-30";
+export const PRIVACY_EFFECTIVE_DATE = "2026-10-03";
 
 /**
  * 변경 이력 — 이전 시행일과 바뀐 내용을 계속 공개한다(설계 §4 처리방침 변경 목록: "시행일 갱신 +
@@ -28,6 +31,8 @@ export const PRIVACY_EFFECTIVE_DATE = "2026-09-30";
  * 올리는 순간 이미 게시된 줄의 날짜까지 바뀐다(이력 고쳐 쓰기). 상수는 새로 더한 마지막 줄만 쓴다.
  * 2026-09-29 줄: #558·#562 — app.trysimsa.com/legal/privacy에 '시행일: 2026-09-29'로 게시된 것을
  * 2026-09-29에 라이브로 확인(값은 그대로, 상수 참조만 고정 문자열로 바꿨다).
+ * 2026-09-30 줄: #566 — app.trysimsa.com/legal/privacy에 '시행일: 2026-09-30'과 이 줄이 게시된 것을
+ * 2026-09-30에 라이브로 확인(Train K PR에서 고정 문자열로 바꿨다).
  *
  * @type {ReadonlyArray<{ date: string, summary: string }>}
  */
@@ -39,9 +44,14 @@ export const PRIVACY_CHANGE_LOG = [
       "§1에 운영 정보(비식별) 항목(AI 사용량 포함)·목적·근거·보유 기간·요청 방법 추가 · §3에 학습 데이터 사본 예외 추가 · §7 직함을 '대표자'로 정정.",
   },
   {
-    date: PRIVACY_EFFECTIVE_DATE,
+    date: "2026-09-30",
     summary:
       "§1 운영 정보에 '요청 횟수 제한' 항목 추가(접속 IP와 사용자 키는 비밀 키로 되돌릴 수 없게 변환해 기록, 48시간이 지나면 삭제) · §1 보유 기간과 §3에 48시간 삭제를 명시 · 'AI 사용량' 항목에서 이용자를 가리키는 값의 설명을 사실대로 정정.",
+  },
+  {
+    date: PRIVACY_EFFECTIVE_DATE,
+    summary:
+      "§1 운영 정보에 '기록 끄기' 설정 추가(설정·확인 결과 화면, 유럽연합·유럽경제지역·영국·스위스에서 접속하시거나 접속 나라를 알 수 없으면 켜시기 전까지 기록하지 않음)와 꺼도 기록되는 항목 명시 · §2에 학습 데이터 제공(선택)의 범위(사본에 함께 담기는 운영 정보 포함)·목적·근거·만 14세 기준 추가 · §1·§3 학습 데이터 사본: 동의 철회나 프로젝트 삭제 시 색인된 사본을 지우고, 삭제 기능 전에 저장된 일부 사본은 요청 시 처리 · §6 권리 문구 갱신(학습 데이터 동의는 확인 결과 화면에서도 한 번에 철회).",
   },
 ];
 
@@ -62,7 +72,10 @@ export const OPS_INFO_ITEMS = [
   },
   {
     label: "화면 언어",
-    detail: "서비스를 어떤 언어(한국어·영어)로 보셨는지.",
+    // 봉투 사본(envelope_json의 locale)은 '끔'이면 멈추지만, 확인 런 행(0065)·빌드 잡 행(0068)의 locale 칸은
+    // 결과·재검수·빌드 안내를 그 언어로 보여 주는 기능 데이터라 계속 저장된다(OPS_META_OFF_KEEPS, 서버 #574 머리말).
+    detail: "서비스를 어떤 언어(한국어·영어)로 보셨는지. 확인 결과를 그 언어로 보여 드리는 데도 씁니다.",
+    columns: ["locale"],
     envelope: ["locale"],
   },
   {
@@ -163,22 +176,82 @@ export const OPS_INFO_PURPOSE =
 export const OPS_INFO_BASIS = "정당한 이익(개인정보 보호법 제15조 제1항 제6호)";
 
 /**
- * 학습 데이터 사본 예외 — §1 보유와 §3 보관·파기가 같은 문장을 쓴다.
+ * 학습 데이터 사본 — §1 보유와 §3 보관·파기(와 §2 학습 데이터 문단)가 같은 문장을 쓴다.
  * 동의(opt-in) 사용자의 R2 사본(training-store `events/{region}/…`, journey-store `journey/…`)은
- * 국가 코드·만든 도구 같은 값을 담고, 프로젝트 삭제(db.ts deleteProject)는 `checks/`·`docs/`
- * 접두어만 지운다. 유저→R2 키 인덱스가 없어 지금은 지울 수 없다(동의 계획 §4, K-3에서 해소 →
- * 그때 이 문장을 "함께 삭제"로 바꾼다). 철회하면 새 캡처는 멈춘다(hasActiveTrainingConsent 게이트).
+ * 국가 코드·만든 도구 같은 값을 담는다. Train K(계약 3·4, 서버 PR): 캡처할 때 training_records_index
+ * (0071)에 사람·프로젝트별 행을 쓰고, ① 동의→철회 시 그 사람의 색인 행 ② 프로젝트 삭제 시 그 프로젝트의
+ * 색인 행의 R2 사본을 지운다(바로 시도 + 크론 재시도). 색인 행을 못 쓰면 사본을 저장하지 않는다(fail-closed,
+ * training-store captureTrainingRecord) → 0071 이후 사본은 모두 색인된다.
+ * ③ 0071 **이전** 사본(서버 PR #574 검증 #574-2 정정): 검수·여정 사본 본문에는 처음부터 subject_hash=sha256(userKey)와
+ *   project_id가 있어 사람·프로젝트를 찾을 **수는** 있다. 검수 사본은 런 행의 training_r2_key로 찾아 지우고, 여정 사본
+ *   전부와 런 행이 없어진 검수 사본(0071 이전에 삭제된 프로젝트의 사본·0057 이전 캡처·키 기록 실패분)은 일회성 백필
+ *   (central-plane scripts/backfill-training-index.mjs — 실행은 Bae 승인 대기)을 돌려야 자동 삭제 대상이 된다.
+ *   그 전까지는 "자동으로 지우지 못할 수 있다(문의 시 처리)"가 사실이다 → '색인이 없어 못 지운다'고 단정하지 않는다.
+ *   백필이 적용되면 이 예외 문장을 줄인다.
+ * 철회하면 새 캡처는 멈춘다(hasActiveTrainingConsent 게이트).
  */
 export const TRAINING_COPY_NOTE =
-  "다만 학습 데이터 제공에 동의하신 경우 그때 따로 저장된 학습 데이터 사본은 프로젝트를 삭제해도 지워지지 않습니다. 동의를 철회하시면 그 뒤로는 새로 저장되지 않습니다.";
+  "학습 데이터 제공에 동의하신 경우 따로 저장된 학습 데이터 사본은, 동의를 철회하시거나 그 프로젝트를 삭제하시면 색인된 사본을 지웁니다(바로 지우기 시작하고, 실패한 것은 다시 시도합니다). 다만 삭제 기능이 생기기 전에 저장된 일부 사본은 자동으로 지우지 못할 수 있습니다 — 아래 문의 이메일로 요청하시면 찾을 수 있는 범위에서 지워 드립니다. 동의를 철회하시면 그 뒤로는 새로 저장되지 않습니다.";
+
+/** §2 학습 데이터 제공(선택) — 결과 화면 카드의 '자세히'(#training-data)가 가리키는 문단. */
+export const TRAINING_DATA_TITLE = "학습 데이터 제공(선택)";
+
+/**
+ * 담기는 것 — 서버 사실(test/privacy-ops-info.test.mjs가 묶는다):
+ *  - 캡처 호출은 routes/workspace-github.ts(연결한 코드의 변경 확인·고침 지시) 하나뿐 → 주소로 하는
+ *    화면 확인(visual checks)은 담기지 않는다.
+ *  - training-store TrainingRecord: product_spec·acceptance_items·pr_files(변경 내용)·results·
+ *    repo_full_name(저장소 이름)·subject_hash(= sha256(userKey), 비밀 키 없음 → 서비스는 연결 가능).
+ *  - 저장 전 redactSecrets(비밀 키 패턴). 계정 이메일 칸은 없다 — 직접 적은 문장·코드 안의 내용은 남을 수 있다.
+ *  - 그때의 운영 정보(#573 검증 5): pr_number·head_sha·built_with·topic_tags·entry_path·acquisition·locale·
+ *    content_lang·user_context(가진 프로젝트 수)·commercial(요금제)·cost_meta(토큰·모델)·region(운영 정보 기록이
+ *    켜져 있을 때만 — 끄면 서버가 null). 칸 전부와 이 문장을 테스트가 서버 TrainingRecord·JourneyRecord와 대조한다.
+ */
+export const TRAINING_DATA_SCOPE =
+  "허용하신 경우에만, 연결하신 코드의 변경 사항을 확인하실 때 쓰인 제품 설명·확인 항목·확인 결과·변경 내용·저장소 이름·변경 요청 번호·코드 버전 식별값과 진행 기록(단계와 결과 요약)의 사본을 따로 보관합니다. 사본에는 그때의 운영 정보도 함께 담깁니다: 만든 도구·앱 유형·진입 경로·유입 경로·화면 언어·입력 언어·가지고 계신 프로젝트 수·요금제·AI 사용량(처리한 글자 양과 모델)이며, 운영 정보 기록을 켜 두셨으면 접속 국가 코드도 담깁니다. 주소로 하는 화면 확인 결과는 담지 않습니다. 비밀 키처럼 보이는 값은 저장 전에 지우고 계정 이메일은 담지 않지만, 직접 적으신 문장이나 코드에 들어 있는 내용은 그대로 담길 수 있습니다. 이용자는 사용자 키 원문 대신 변환한 값으로 표시하며, 서비스는 이 값을 그 이용자의 다른 기록과 연결할 수 있습니다.";
+
+export const TRAINING_DATA_PURPOSE =
+  "Simsa의 확인·고치기 품질을 높이는 데 쓰며, 이 데이터로 Simsa의 AI 모델을 학습시킬 수 있습니다. 개인 데이터를 팔거나 다른 곳에 넘기지 않습니다.";
+
+export const TRAINING_DATA_BASIS = "동의(개인정보 보호법 제15조 제1항 제1호). 정당한 이익으로 대신하지 않습니다.";
+
+export const TRAINING_DATA_CHOICE =
+  "허용 여부와 관계없이 모든 기능을 똑같이 쓰실 수 있습니다. 만 14세 이상만 허용하실 수 있습니다. 처음 완료된 확인 결과 화면에서 묻고, 각 프로젝트의 설정 화면에서 언제든 바꾸실 수 있습니다. 허용하신 뒤에는 확인 결과 화면에서도 한 번에 철회하실 수 있습니다.";
 
 export const OPS_INFO_RETENTION = `서비스 운영 기간 동안 보관합니다. 프로젝트를 삭제하시면 서버 데이터베이스에 있는 그 프로젝트의 확인 기록과 함께 삭제됩니다. ${TRAINING_COPY_NOTE} ${RATE_LIMIT_RETENTION_NOTE}`;
 
 /**
- * 요청이 **실제로 하는 일**만 적는다. 국가 코드는 생성·검수·수리 요청마다 조건 없이 기록되고
- * (regionFromRequest), 사용자별 제외 플래그는 아직 없다(K-1 `ops_meta_opt_out` + 0071에서 생김) →
- * 요청으로 "앞으로의 기록"을 멈출 수는 없다. 익명 사용자는 화면에서 자기 키를 볼 수 없으므로,
- * 어느 기록인지 찾을 수 있게 프로젝트 화면의 주소(/projects/{id})를 받는다.
+ * '기록 끄기'가 **실제로 멈추는 것**과 **끄셔도 남는 것** — 계약 3(서버 PR의 캡처 게이트)과 같은 표.
+ * 끄기 대상은 0069 '통계용 운영 정보'뿐이다: region(검수·수리)·region_at_create(프로젝트)·envelope_json
+ * (화면 언어·입력 언어·만든 도구·앱 유형·진입 경로 사본)·finding_codes_json(+ 학습 사본의 region).
+ * 기능 데이터(user_verdict·source_check_id·resolved·verify_check_id·locale — 검수 런 0065·빌드 잡 0068의
+ * 화면 언어 칸)와 0055/0056 프로젝트 행 컬럼, AI 사용량(llm_usage)·요청 횟수 제한 기록은 끄기 대상이
+ * 아니다 → 방침이 그대로 적는다. test/train-k-consent.test.mjs가 두 목록을 고지 항목·서버
+ * privacy-prefs.ts 머리말('무엇을 끄는가'·'끄지 않는 것')과 대조한다.
+ */
+export const OPS_META_OFF_STOPS = ["region", "region_at_create", "envelope_json", "finding_codes_json"];
+export const OPS_META_OFF_KEEPS = [
+  "locale",
+  "built_with_json",
+  "entry_path",
+  "topic_tags_json",
+  "acquisition_json",
+  "user_verdict",
+  "user_verdict_at",
+  "source_check_id",
+  "resolved",
+  "verify_check_id",
+  "table:llm_usage",
+  "table:workspace_rate_limit",
+  "table:demo_rate_limit",
+];
+
+/**
+ * 요청이 **실제로 하는 일**만 적는다. Train K 서버(계약 2·3): 설정·확인 결과 화면의 '기록 끄기'가
+ * privacy_prefs(0071)에 저장되고, 끈 사람(명시 off, 또는 EU/EEA·영국·스위스 기본 off이며 켠 적 없음)의
+ * 새 기록에는 OPS_META_OFF_STOPS 칸에 NULL을 쓴다. 이미 쌓인 값을 지우는 자동 기능은 없다 → 문의로 받는다.
+ * 익명 사용자는 화면에서 자기 키를 볼 수 없으므로, 어느 기록인지 찾을 수 있게 프로젝트 화면의
+ * 주소(/projects/{id})를 받는다.
  */
 export const OPS_INFO_OPT_OUT =
-  "아래 문의 이메일로 요청하시면 지금까지 기록된 운영 정보를 지워 드립니다. 어느 기록인지 찾을 수 있게 프로젝트 화면의 주소를 함께 알려 주세요. 앞으로의 기록을 끄는 설정은 준비 중이며, 그 전까지는 새로 하시는 확인·고치기에도 기록됩니다.";
+  "각 프로젝트의 설정 화면이나 확인 결과 화면에서 운영 정보 기록을 끄실 수 있습니다. 끄시면 그 뒤로 하시는 프로젝트 만들기·확인·고치기에 접속 국가 코드와 실패 유형 코드를 기록하지 않고, 확인 기록마다 함께 남기던 화면 언어·입력 언어·만든 도구·앱 유형·진입 경로 사본도 남기지 않습니다(학습 데이터 제공에 동의하셨다면 학습 사본에도 접속 국가 코드를 담지 않습니다). 유럽연합·유럽경제지역·영국·스위스에서 접속하신 경우와 접속하신 나라를 알 수 없는 경우에는 직접 켜시기 전까지 이 항목들을 기록하지 않습니다. 끄셔도 계속 기록되는 것은 확인 결과를 보여 줄 화면 언어, 프로젝트에 함께 저장되는 만든 도구·앱 유형·진입 경로·유입 경로, 결과 판정 선택·다시 확인 연결·해결 여부, AI 사용량, 요청 횟수 제한 기록입니다. 이미 기록된 운영 정보를 지우시려면 아래 문의 이메일로 요청해 주세요. 어느 기록인지 찾을 수 있게 프로젝트 화면의 주소를 함께 알려 주세요.";

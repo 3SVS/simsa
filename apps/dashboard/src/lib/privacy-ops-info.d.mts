@@ -22,8 +22,20 @@ export const OPS_INFO_ITEMS: ReadonlyArray<OpsInfoItem>;
 export const OPS_INFO_PURPOSE: string;
 export const OPS_INFO_BASIS: string;
 export const OPS_INFO_RETENTION: string;
-/** Opt-in training copies are not removed by project deletion (§1 retention + §3 share this sentence). */
+/**
+ * Opt-in training copies: indexed copies are deleted on withdrawal / project deletion; copies saved
+ * before the index existed are an honest exception handled on request (§1 retention + §3 share it).
+ */
 export const TRAINING_COPY_NOTE: string;
+/** §2 "학습 데이터 제공(선택)" paragraph (anchor #training-data). */
+export const TRAINING_DATA_TITLE: string;
+export const TRAINING_DATA_SCOPE: string;
+export const TRAINING_DATA_PURPOSE: string;
+export const TRAINING_DATA_BASIS: string;
+export const TRAINING_DATA_CHOICE: string;
 /** Request-limit records are deleted after 48 hours (§1 retention + §3 share this sentence). */
 export const RATE_LIMIT_RETENTION_NOTE: string;
+/** Columns the "record off" switch stops writing (Train K contract 3) — and the ones it keeps. */
+export const OPS_META_OFF_STOPS: readonly string[];
+export const OPS_META_OFF_KEEPS: readonly string[];
 export const OPS_INFO_OPT_OUT: string;
