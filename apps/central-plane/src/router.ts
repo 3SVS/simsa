@@ -41,6 +41,7 @@ import { createWorkspaceNotificationRoutes } from "./routes/workspace-notificati
 import { createWorkspaceTrainingConsentRoutes } from "./routes/workspace-training-consent.js";
 import { createWorkspacePrivacyPrefsRoutes } from "./routes/workspace-privacy-prefs.js";
 import { createWorkspaceAdminStatsRoutes } from "./routes/workspace-admin-stats.js";
+import { createAdminMoatStatsRoutes } from "./routes/admin-moat-stats.js";
 import { createWorkspaceAdminCreditsRoutes } from "./routes/workspace-admin-credits.js";
 import { createWorkspaceCreditsRoutes } from "./routes/workspace-credits.js";
 import { createWorkspaceBenchmarkRoutes } from "./routes/workspace-benchmark.js";
@@ -182,6 +183,9 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspacePrivacyPrefsRoutes());
   // Stage 18 — Admin usage stats (key-gated, no billing).
   app.route("/", createWorkspaceAdminStatsRoutes());
+  // Train C · C-4b — 봉투 교차 집계(region × built_with × topic × finding_code × user_verdict × resolved),
+  // Bearer INTERNAL_CALLBACK_TOKEN. 개수만 — 식별·내용 컬럼은 SELECT에 없다.
+  app.route("/", createAdminMoatStatsRoutes());
   // Stage 20 — Admin credit ledger (key-gated, manual grant + preview, no debit).
   app.route("/", createWorkspaceAdminCreditsRoutes());
   // Stage 33 — User-facing credit balance + top-up request endpoints.

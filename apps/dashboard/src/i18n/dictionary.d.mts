@@ -18,6 +18,18 @@ export type StatusKey =
 
 export type StatusEntry = { label: string; desc: string };
 
+/** Train C · C-3 receipt — one entry per next-action kind (visual-check-receipt ReceiptNextAction). */
+export type ReceiptNextCopy = {
+  viewRecheck: string;
+  viewRecheckProgress: string;
+  recheckAfterFix: string;
+  handOff: string;
+  viewRepair: string;
+  fix: string;
+  tellUs: string;
+  backToProject: string;
+};
+
 export type Dictionary = {
   brand: { wordmark: string; tagline: string };
   lang: { label: string; english: string; korean: string };
@@ -2460,6 +2472,79 @@ export type Dictionary = {
         repairDisabled: string;
         generic: string;
       };
+    };
+    /** Train C · C-3 — 확인 영수증. '고친 내용'(fix*)과 '다시 확인한 증거'(recheck*)는 다른 섹션. */
+    receipt: {
+      title: string;
+      subtitle: string;
+      openFromReport: string;
+      backToReport: string;
+      print: string;
+      copy: string;
+      copied: string;
+      loading: string;
+      notReady: string;
+      failed: string;
+      partialLoad: string;
+      sectionChecked: string;
+      address: string;
+      intent: string;
+      checkedAt: string;
+      resultLabel: string;
+      /** A result sent in from a check run elsewhere (executor ≠ container). */
+      uploadedNote: string;
+      yourAnswer: string;
+      yourAnswerNone: string;
+      sourceNote: string;
+      sourceLink: string;
+      itemsTitleAcceptance: string;
+      itemsTitleCoreFlow: string;
+      itemsIntroCoreFlow: string;
+      itemsNoneReached: string;
+      colItem: string;
+      colExpected: string;
+      colResult: string;
+      status: { pass: string; broken: string; notConfirmed: string; noProblemFound: string };
+      notSeenTitle: string;
+      /** notReached carries {items}. */
+      notSeen: { loginBehind: string; notReached: string; otherPaths: string };
+      fixTitle: string;
+      fixBy: string;
+      fixActive: string;
+      fixFailed: string;
+      fixAutoFix: string;
+      fixBriefOnly: string;
+      /** carries {count}. */
+      changedFiles: string;
+      buildPassed: string;
+      buildUnverified: string;
+      /** Code changed, no after-merge re-check linked: the live app may not have it yet. */
+      fixPendingLive: string;
+      openChanges: string;
+      recheckTitle: string;
+      /** Only for the re-check linked to the fix (after it went in). */
+      recheckBy: string;
+      /** A re-check of this run while a fix exists — who judged, without claiming the fix was live. */
+      recheckBySource: string;
+      /** A re-check of this run with no fix at all. */
+      recheckBySourceNoFix: string;
+      recheckTitleNoFix: string;
+      recheckNone: string;
+      recheckNoneNoFix: string;
+      /** The recent-checks list is full — a re-check may lie beyond it. */
+      recheckUnknown: string;
+      recheckActive: string;
+      recheckFailed: string;
+      recheckResult: string;
+      recheckAt: string;
+      recheckLinked: string;
+      recheckLinkedWorks: string;
+      recheckLinkedBroken: string;
+      recheckOpen: string;
+      notAGuarantee: string;
+      nextTitle: string;
+      next: ReceiptNextCopy;
+      nextWhy: ReceiptNextCopy;
     };
     overview: {
       emptyLead: string;

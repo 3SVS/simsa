@@ -1053,6 +1053,16 @@ export default function VisualCheckDetailPage() {
                 <dd className="text-gray-500">{formatDateTime(check.createdAt, locale)}</dd>
               </div>
             </dl>
+            {/* Train C · C-3 — the printable/copyable receipt of this check (a text link:
+                the report keeps its own single filled button). */}
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <Link
+                href={`/projects/${id}/visual-checks/${runId}/receipt`}
+                className="text-xs text-brand-700 hover:underline"
+              >
+                {t.visualChecks.receipt.openFromReport} →
+              </Link>
+            </div>
           </section>
 
           {/* Stage 266 — compared with the previous inspection */}
