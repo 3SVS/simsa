@@ -203,6 +203,13 @@ export type RepairJob = {
    * on old servers. Read only through showBuildUnverified().
    */
   buildVerified?: boolean | null;
+  /**
+   * 비용 권고 ② (2026-09-30): the repair stopped calling the AI because it reached the
+   * usage limit set for one repair, then closed with the fix-brief PR. Only a done
+   * brief-only job carries true. Absent on old servers. Read only through
+   * repairStoppedByBudget().
+   */
+  stoppedByBudget?: boolean;
 };
 
 export type RepairRequestResponse =

@@ -13,7 +13,7 @@
  *      product decision would be worse than saying "추천을 못 가져왔어요".
  */
 
-import { anthropicMessages, anthropicEndpoint, type VendorFallback } from "./anthropic-fetch.js";
+import { anthropicMessages, anthropicEndpoint, type LlmUsageSink, type VendorFallback } from "./anthropic-fetch.js";
 
 export type WorkspaceRecommendAnswerRequest = {
   /** The open decision to resolve, verbatim from productSpec.openQuestions. */
@@ -93,6 +93,7 @@ async function callAnthropic(
   baseUrl: string | undefined,
   timeoutMs = 15000,
   fallback?: VendorFallback,
+  onUsage?: LlmUsageSink,
 ): Promise<string> {
   const data = (await anthropicMessages(
     apiKey,
@@ -101,7 +102,7 @@ async function callAnthropic(
     undefined,
     anthropicEndpoint(baseUrl),
     "recommend",
-    { fallback },
+    { fallback, onUsage },
   )) as { content?: Array<{ type: string; text?: string }> };
   return (data.content ?? []).find((b) => b.type === "text")?.text ?? "";
 }
@@ -129,6 +130,11 @@ export async function generateRecommendedAnswer(
   anthropicBaseUrl?: string,
   /** 벤더 폴백(Anthropic 차단 시 OpenAI) — 라우트가 env에서 전달. */
   fallback?: VendorFallback,
+  /**
+   * PR #576 검증 P1-2: 벤더가 답한 호출마다 이벤트 1건(usage 유무와 무관). 라우트는 이것으로 "과금된 실패"
+   * (답은 왔는데 JSON이 아님)를 알아보고 일일 용량 슬롯을 돌려주지 않는다. 원장 기록은 아직 없다(LEDGER_NOT_METERED).
+   */
+  onUsage?: LlmUsageSink,
 ): Promise<WorkspaceRecommendAnswerResponse> {
   if (!anthropicApiKey) {
     console.warn("[workspace/recommend] no API key — honest failure (no silent default)");
@@ -138,7 +144,7 @@ export async function generateRecommendedAnswer(
   const prompt = buildRecommendPrompt(req);
   let rawText = "";
   try {
-    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback);
+    rawText = await callAnthropic(anthropicApiKey, prompt, anthropicBaseUrl, undefined, fallback, onUsage);
   } catch (err) {
     console.error("[workspace/recommend] LLM call failed:", err);
     return { ok: false as const, error: "llm_unavailable" as const };

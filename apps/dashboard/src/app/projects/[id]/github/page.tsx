@@ -9,6 +9,7 @@ import { getProject, isExampleProject } from "@/lib/mock-data";
 import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { getLocalProject, loadExtendedProjectData, getUserKey, saveProject, saveExtendedProjectData, markProjectSyncFailed, applyReviewResultsToLocalProject } from "@/lib/workflow-store";
 import { callWorkspaceApi } from "@/lib/workspace-api";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
 import {
   fetchProjectRepo,
@@ -116,6 +117,11 @@ export default function GitHubPage() {
     const res = await callWorkspaceApi({ idea: quickIdea.trim() });
     if (!res.ok && res.error === "rate_limited") {
       setGenError(t.common.rateLimited);
+      setGenPhase("idle");
+      return;
+    }
+    if (!res.ok && res.error === "generation_capacity") {
+      setGenError(generationCapacityText(t, res.resetAt));
       setGenPhase("idle");
       return;
     }
@@ -338,16 +344,23 @@ export default function GitHubPage() {
     // declaring failure, poll the latest run for up to ~60s — if it lands, show
     // the result instead of a false "review failed". Only poll on transport-ish
     // failures; explicit server verdicts (rate limit, credits…) are final.
+    // generation_capacity (PR #576 review): today's AI capacity is full — no run was created,
+    // so there is nothing to poll for.
     const finalServerCodes = new Set([
       "rate_limited", "insufficient_credits", "no_repo_linked", "not_connected",
       "no_selected_items", "not_found", "invalid_json", "userKey_required",
+      "generation_capacity",
     ]);
     if (!finalServerCodes.has(res.error)) {
       if (await pollRunUntilDone(lp.number, 6)) return;
     }
     // Real failure — show a SPECIFIC message (rate_limited → daily-cap copy,
-    // not the generic "check your PR on GitHub" misdirection).
-    setReviewErrorByPr((prev) => ({ ...prev, [lp.number]: errorText(t, res.error, "generic") }));
+    // not the generic "check your PR on GitHub" misdirection; capacity → the reset time).
+    const reviewError =
+      res.error === "generation_capacity"
+        ? generationCapacityText(t, res.resetAt ?? null)
+        : errorText(t, res.error, "generic");
+    setReviewErrorByPr((prev) => ({ ...prev, [lp.number]: reviewError }));
     setReviewPhase((prev) => ({ ...prev, [lp.number]: "error" }));
   }
 

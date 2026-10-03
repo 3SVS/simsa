@@ -10,6 +10,7 @@
  */
 import { useState } from "react";
 import { callUnstickApi, type UnstickResponse } from "@/lib/workspace-check-api";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { getUserKey } from "@/lib/workflow-store";
 import { useI18n } from "@/i18n/I18nProvider";
 
@@ -41,7 +42,13 @@ export function StuckHelper({
       buildTool,
     });
     if (!res.ok) {
-      setErrMsg(res.error === "rate_limited" ? res.message : t.stuckHelper.failed);
+      setErrMsg(
+        res.error === "rate_limited"
+          ? res.message
+          : res.error === "generation_capacity"
+            ? generationCapacityText(t, res.resetAt) // 비용 권고 ③ — today's AI capacity is full
+            : t.stuckHelper.failed,
+      );
       setPhase("error");
       return;
     }

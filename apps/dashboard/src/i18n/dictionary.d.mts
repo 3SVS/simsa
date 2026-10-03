@@ -214,6 +214,10 @@ export type Dictionary = {
   };
   errors: {
     llmUnavailable: string;
+    /** 비용 권고 ③ — the service-wide daily AI capacity is full (no time known). */
+    generationCapacity: string;
+    /** Same, with "{when}" = the reset in the reader's clock (lib/generation-capacity.mjs). */
+    generationCapacityAt: string;
     generic: string;
     network: string;
     timeout: string;
@@ -2425,6 +2429,8 @@ export type Dictionary = {
       doneBodyAutoFix: string;
       /** Train W — W-3 ③ (contract 4): shown only when buildVerified === false. */
       buildUnverified: string;
+      /** 비용 권고 ② (2026-09-30): shown only on a brief card whose job stopped at its usage limit. */
+      budgetStopped: string;
       openPr: string;
       branchLabel: string;
       noPrNote: string;
@@ -2613,6 +2619,8 @@ export type Dictionary = {
         rate_limited: string;
         llm_unavailable: string;
         evidence_storage_unconfigured: string;
+        /** 비용 권고 ③ — same sentence as errors.generationCapacity (the page adds the time). */
+        generation_capacity: string;
         generic: string;
       };
     };

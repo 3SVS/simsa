@@ -339,14 +339,35 @@ export interface Env {
   BETA_REPAIR_DAILY_LIMIT?: string;
   /**
    * PR #561 review P1 — userKey is anonymous, so the per-user cap is not a cost
-   * ceiling. Per-network (cf-connecting-ip as a keyed HMAC; default 검수 30 · 수리 15) and
-   * service-wide (default 검수 300 · 수리 50) daily caps on the same consume.
+   * ceiling. Per-network (cf-connecting-ip as a keyed HMAC; default 검수 30 · 수리 6 — #576 검증으로 15→6,
+   * 서비스 전체의 30% 몫 유지) and service-wide (default 검수 300 · 수리 20 — 2026-09-30 비용 권고로 50→20)
+   * daily caps on the same consume.
    * Same override rule ([PILOT], positive integers only).
    */
   BETA_INSPECTION_DAILY_LIMIT_PER_IP?: string;
   BETA_INSPECTION_DAILY_LIMIT_GLOBAL?: string;
   BETA_REPAIR_DAILY_LIMIT_PER_IP?: string;
   BETA_REPAIR_DAILY_LIMIT_GLOBAL?: string;
+  /**
+   * 비용 권고 ② (2026-09-30, D-7 amend [PILOT]) — 수리 잡 1건이 쓸 수 있는 LLM 달러 상한(USD).
+   * 기본 2. 양의 유한수만, 그 외 = 기본값(workspace/beta-limits.ts repairJobBudgetUsd). Worker가 읽어
+   * 디스패치 페이로드 `repairBudgetUsd`로 컨테이너에 넘기고, 컨테이너가 호출마다 실응답 모델 단가로
+   * 누적해 다음 호출 전에 멈춘다. 비밀 아님 — [vars].
+   */
+  REPAIR_JOB_BUDGET_USD?: string;
+  /**
+   * 비용 권고 ③ (2026-09-30, D-7 amend [PILOT]) — 생성 계열(아이디어 초안·스펙 검수·추천 답변·막힘 풀기·
+   * 수정 제안·문서 초안·의도 추론·PR 검토)과 개발 지시서 생성의 **서비스 전체** 일일 상한 override(요청 수).
+   * 기본 생성 계열 500/일 · 지시서 200/일(workspace/beta-limits.ts). 양의 정수만, 그 외 = 기본값.
+   */
+  BETA_GENERATION_DAILY_LIMIT_GLOBAL?: string;
+  BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL?: string;
+  /**
+   * PR #576 검증 P1-1·P1-3 [PILOT] — 같은 버킷의 **네트워크 몫**(cf-connecting-ip, keyed HMAC). 서비스 버킷보다
+   * 먼저 차감해 한 클라이언트가 서비스 전체를 잠그지 못하게 한다. 기본 생성 100/일 · 지시서 40/일(각 서비스의 20%).
+   */
+  BETA_GENERATION_DAILY_LIMIT_PER_IP?: string;
+  BETA_DEV_SPEC_DAILY_LIMIT_PER_IP?: string;
   /**
    * In-app feedback (workspace-feedback.ts) admin notification targets.
    * ADMIN_TELEGRAM_CHAT_ID: numeric chat id to DM new feedback to (uses the
