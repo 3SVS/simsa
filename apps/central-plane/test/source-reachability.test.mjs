@@ -20,6 +20,25 @@ const anonEnv = { DB: { prepare: () => ({ bind: () => ({ first: async () => null
 const json = (body, status = 200, headers = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 
+function makeKv(seed = new Map(), opts = {}) {
+  return {
+    gets: [],
+    puts: [],
+    async get(key, type) {
+      this.gets.push({ key, type });
+      if (opts.throwGet) throw new Error("kv get down");
+      const raw = seed.get(key);
+      if (raw === undefined) return null;
+      return type === "json" ? JSON.parse(raw) : raw;
+    },
+    async put(key, value, options) {
+      this.puts.push({ key, value, options });
+      if (opts.throwPut) throw new Error("kv put down");
+      seed.set(key, value);
+    },
+  };
+}
+
 describe("공개 저장소는 계정 없이 읽힌다 (①)", () => {
   it("200 + private:false → readable/public/anonymous", async () => {
     const r = await probeGithubRepo(anonEnv, "uk_none", "3SVS/simsa", async () => json({ private: false }));
@@ -42,6 +61,55 @@ describe("공개 저장소는 계정 없이 읽힌다 (①)", () => {
       return json({ private: false });
     });
     assert.equal(url, "https://api.github.com/repos/some-org/my_app.v2");
+  });
+});
+
+describe("KV 스파이크: 익명 GitHub 도달성은 짧게 캐시한다", () => {
+  it("KV hit이면 GitHub API를 부르지 않는다", async () => {
+    const kv = makeKv(
+      new Map([
+        [
+          "source-reachability:github:v1:d067e0967da526c91417e57d39715ae8f2cde99f5dbafad76ce6a04780aefd76",
+          JSON.stringify({ state: "readable", visibility: "public", via: "anonymous" }),
+        ],
+      ]),
+    );
+    let fetched = false;
+    const r = await probeGithubRepo({ ...anonEnv, CENTRAL_CACHE: kv }, "uk_none", "3SVS/simsa", async () => {
+      fetched = true;
+      return json({ private: false });
+    });
+    assert.deepEqual(r, { state: "readable", visibility: "public", via: "anonymous" });
+    assert.equal(fetched, false);
+    assert.equal(kv.gets[0].type, "json");
+  });
+
+  it("KV miss이면 네트워크 결과를 5분 TTL로 저장한다", async () => {
+    const kv = makeKv();
+    const r = await probeGithubRepo({ ...anonEnv, CENTRAL_CACHE: kv }, "uk_none", "3SVS/simsa", async () =>
+      json({ private: false }),
+    );
+    assert.equal(r.state, "readable");
+    assert.equal(kv.puts.length, 1);
+    assert.equal(kv.puts[0].options.expirationTtl, 300);
+    assert.deepEqual(JSON.parse(kv.puts[0].value), { state: "readable", visibility: "public", via: "anonymous" });
+  });
+
+  it("일시적인 '모름'(네트워크·레이트리밋)은 캐시하지 않는다 — 5분간 오진 고정 방지", async () => {
+    const kv = makeKv();
+    const r = await probeGithubRepo({ ...anonEnv, CENTRAL_CACHE: kv }, "uk_none", "3SVS/simsa", async () =>
+      json({}, 500),
+    );
+    assert.equal(r.state, "unknown");
+    assert.equal(kv.puts.length, 0);
+  });
+
+  it("KV가 실패해도 기존 계측 결과를 반환한다", async () => {
+    const kv = makeKv(new Map(), { throwGet: true, throwPut: true });
+    const r = await probeGithubRepo({ ...anonEnv, CENTRAL_CACHE: kv }, "uk_none", "3SVS/simsa", async () =>
+      json({ private: false }),
+    );
+    assert.deepEqual(r, { state: "readable", visibility: "public", via: "anonymous" });
   });
 });
 

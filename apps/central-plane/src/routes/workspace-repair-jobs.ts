@@ -53,6 +53,7 @@ import { getProjectRepo } from "../workspace/github-db.js";
 import { listProjectSources } from "../workspace/project-sources-db.js";
 import { getAppInstallationToken, resolveRepoAccessToken } from "../workspace/github-app-access.js";
 import { regionFromRequest } from "../workspace/envelope.js";
+import { opsMetaRecordingAllowed } from "../workspace/privacy-prefs.js";
 import { REPAIR_DISABLED, repairEnabled } from "../workspace/service-switches.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
 import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
@@ -441,6 +442,11 @@ export function createWorkspaceRepairJobRoutes(
     const envCause = detectEnvCause(agentPrompt, run.reportJson ?? "");
     const branch = `fix/simsa-${runId}`;
 
+    // Train K · K-1 (0071): the country code is ops meta — NULL when this person's recording is off
+    // (explicit choice, or the EU/EEA·GB·CH default).
+    const edgeRegion = regionFromRequest(c.req.raw);
+    const region = (await opsMetaRecordingAllowed(c.env, userKey, edgeRegion, "repair-job")) ? edgeRegion : null;
+
     let job;
     try {
       job = await insertQueuedRepairJob(c.env, {
@@ -450,8 +456,8 @@ export function createWorkspaceRepairJobRoutes(
         repoFullName,
         branchName: branch,
         envCause,
-        // C4a (0069): country at repair time — the failure map's region axis.
-        region: regionFromRequest(c.req.raw),
+        // C4a (0069): country at repair time — the failure map's region axis (K-1 gate above).
+        region,
       });
     } catch (err) {
       console.error("[repair-jobs POST] insert failed:", err);

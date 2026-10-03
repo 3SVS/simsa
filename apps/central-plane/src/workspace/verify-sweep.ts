@@ -47,6 +47,7 @@ import {
 } from "./visual-check-db.js";
 import { dispatchInspection } from "../routes/workspace-visual-check-runs.js";
 import { inspectionEnabled } from "./service-switches.js";
+import { opsMetaAllowedForRun } from "./privacy-prefs.js";
 
 export const REPAIR_MERGED_EVENT = "workspace_repair_merged";
 /** 파라미터(원칙 아님): 배포 그레이스 / 신호 유효 기간. */
@@ -140,6 +141,11 @@ export async function runVerifySweep(
     const project = await getProject(env, origin.projectId).catch(() => null);
     const acceptancePlan = acceptancePlanFromDevSpec(project?.devSpec);
 
+    // Train K · K-1 (0071): 운영 정보는 이 사람이 지금 '끔'이면 물려받지 않는다(요청이 없으니 명시 선택,
+    // 없으면 원 런에 기록된 국가의 기본값 — opsMetaAllowedForRun; 0071 이전 EU 런의 'DE'도 off).
+    // 계보(source_check_id)는 기능 데이터라 그대로.
+    const opsOn = await opsMetaAllowedForRun(env, origin, "verify-sweep");
+
     let run;
     try {
       run = await insertQueuedVisualCheck(env, {
@@ -149,8 +155,8 @@ export async function runVerifySweep(
         intent: origin.intent,
         locale: origin.locale ?? "ko",
         // 0069: 크론에는 요청이 없다 — 봉투는 원 런에서 물려받고 계보를 남긴다.
-        region: origin.region,
-        envelopeJson: origin.envelopeJson,
+        region: opsOn ? origin.region : null,
+        envelopeJson: opsOn ? origin.envelopeJson : null,
         sourceCheckId: origin.id,
       });
     } catch (err) {

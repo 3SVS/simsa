@@ -166,6 +166,12 @@ test("run: cf.country → region; project builtWith/entryPath/topicTags + locale
 test("run: no cf object (local/dev) → region null; empty project → envelope with nulls (never invented)", async () => {
   const projects = new Map([[PROJECT, projectRow(PROJECT, USER)]]);
   const env = makeEnv({ projects, sources: [websiteSource(PROJECT, USER)] });
+  // Train K (0071, PR #574 #574-5): with no country the ops-meta default is OFF (nothing recorded — pinned in
+  // train-k-consent-server.test.mjs). This person turned recording ON explicitly, so the envelope is still
+  // written and its "never invented" shape is what this test checks; the country stays unknown (null).
+  const prepare = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql) =>
+    sql.includes("FROM privacy_prefs") ? { bind: () => ({ async first() { return { ops_meta: "on" }; } }) } : prepare(sql);
   const r = await send(createApp(), env, RUN_PATH, { body: { userKey: USER } });
   assert.equal(r.status, 202);
   const row = env.DB._checks[0];
@@ -182,8 +188,11 @@ test("internal done: report.findings[].code → finding_codes_json; legacy conta
   const env = makeEnv({ projects, sources: [websiteSource(PROJECT, USER)], inspector: makeDoStub({ names: [], calls: [] }) });
   const app = createApp();
   const auth = { authorization: `Bearer ${TOKEN}` };
+  // Train K (0071, PR #574 #574-5): finding codes are ops meta — recorded only when recording is on. These runs
+  // carry the edge country a real request has (KR = on by default); a request with no country is off.
+  const cf = { country: "KR" };
 
-  const created = await send(app, env, RUN_PATH, { body: { userKey: USER } });
+  const created = await send(app, env, RUN_PATH, { body: { userKey: USER }, cf });
   const runId = created.json.check.id;
   const report = {
     title: "Simsa 검수 리포트", target: "https://golf-now.example.app/", intent: "i", verdict: "작동 안 해요", oneLine: "x", works: false,
@@ -199,14 +208,14 @@ test("internal done: report.findings[].code → finding_codes_json; legacy conta
 
   // Legacy container image (pre-C4a nondev-report.js): findings present, no codes → null, not [].
   env.DB._checks[0].status = "done";
-  const created2 = await send(app, env, RUN_PATH, { body: { userKey: USER } });
-  const legacy = { ...report, findings: report.findings.map(({ code: _c, ...f }) => f) };
+  const created2 = await send(app, env, RUN_PATH, { body: { userKey: USER }, cf });
+  const legacy ={ ...report, findings: report.findings.map(({ code: _c, ...f }) => f) };
   await send(app, env, "/internal/visual-check-done", { body: { runId: created2.json.check.id, ok: true, decision: "Needs Fix", works: false, report: legacy }, headers: auth });
   assert.equal(env.DB._checks[1].finding_codes_json, null);
 
   // No findings at all → [] (measured: nothing found), distinct from "unknown".
   env.DB._checks[1].status = "done";
-  const created3 = await send(app, env, RUN_PATH, { body: { userKey: USER } });
+  const created3 = await send(app, env, RUN_PATH, { body: { userKey: USER }, cf });
   await send(app, env, "/internal/visual-check-done", { body: { runId: created3.json.check.id, ok: true, decision: "Conditionally Ready", works: null, report: { ...report, findings: [] } }, headers: auth });
   assert.equal(env.DB._checks[2].finding_codes_json, "[]");
 });
