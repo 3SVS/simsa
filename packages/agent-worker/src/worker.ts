@@ -17,7 +17,13 @@ import {
 } from "./prompts.js";
 import { parseRewriteToolUse, parseEditToolUse } from "./patch-parser.js";
 import { withOpenAiFallback, type FallbackOptions } from "./openai-fallback.js";
-import { estimateCallCost, usageRecordFromResponse, type LlmUsageRecord } from "./pricing.js";
+import {
+  estimateCallCost,
+  unknownUsageRecord,
+  usageRecordFromResponse,
+  type LlmUsageRecord,
+  type UnknownUsageEstimate,
+} from "./pricing.js";
 import type { WorkerContext, WorkerOutcome, EditWorkerContext, EditWorkerOutcome } from "./types.js";
 
 export interface ClaudeWorkerOptions {
@@ -131,8 +137,21 @@ export class ClaudeWorker {
    * L-2: 응답의 **실제 모델**로 과금한 사용량 레코드를 만들고 싱크로 흘려보낸다.
    * 종전엔 요청 모델(claude-sonnet-4-6)로 과금했지만 프로덕션 응답은 폴백 gpt-5.4였다.
    */
-  private meter(requestedModel: string, response: AnthropicResponse, latencyMs: number): LlmUsageRecord {
-    const record = usageRecordFromResponse(requestedModel, response, latencyMs);
+  private meter(
+    requestedModel: string,
+    response: AnthropicResponse,
+    latencyMs: number,
+    /** PR #576 검증 P2-8: usage를 모를 때 쓸 추정(입력 추정 + max_tokens) — 보수 단가로 매긴다. */
+    unknownUsageEstimate: UnknownUsageEstimate,
+  ): LlmUsageRecord {
+    let record: LlmUsageRecord;
+    try {
+      record = usageRecordFromResponse(requestedModel, response, latencyMs, unknownUsageEstimate);
+    } catch {
+      // 계측이 호출을 깨면 안 되고, 과금된 호출이 계측에서 빠져도 안 된다(종전: usage 없는 응답에서
+      // TypeError → onUsage 미호출 → 예산이 이 호출을 못 봤다). 모르는 비용으로 내보낸다.
+      record = unknownUsageRecord(requestedModel, requestedModel, "unknown", latencyMs, unknownUsageEstimate);
+    }
     try {
       this.onUsage?.(record);
     } catch {
@@ -190,15 +209,16 @@ export class ClaudeWorker {
         };
         const response: AnthropicResponse = await client.messages.create(params);
         const latencyMs = Date.now() - started;
-        // 파싱 전에 계측 — 파싱이 던져도 토큰 비용은 이미 나갔다.
-        const usage = this.meter(model, response, latencyMs);
+        // 파싱 전에 계측 — 파싱이 던져도 토큰 비용은 이미 나갔다. usage가 없어도 던지지 않는다(P2-8).
+        const usage = this.meter(model, response, latencyMs, { inputTokens: inputTokenEstimate, outputTokens: this.maxTokens });
 
         const parsed = parseRewriteToolUse(response);
 
         return {
           result: parsed,
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
+          // The record's counts (0 when the vendor reported none) — never read response.usage directly.
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
           costUsd: usage.costUsd,
           latencyMs,
         };
@@ -252,14 +272,14 @@ export class ClaudeWorker {
         };
         const response: AnthropicResponse = await client.messages.create(params);
         const latencyMs = Date.now() - started;
-        const usage = this.meter(model, response, latencyMs);
+        const usage = this.meter(model, response, latencyMs, { inputTokens: inputTokenEstimate, outputTokens: this.maxTokens });
 
         const parsed = parseEditToolUse(response);
 
         return {
           result: parsed,
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
           costUsd: usage.costUsd,
           latencyMs,
         };

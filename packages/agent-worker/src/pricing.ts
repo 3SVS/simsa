@@ -145,7 +145,57 @@ export type LlmUsageRecord = {
   latencyMs: number;
   costUsd: number;
   unpriced: boolean;
+  /**
+   * PR #576 검증 P2-8: 벤더가 답했는데 사용량(usage)을 알려주지 않았다. 토큰 수는 0으로 두되(지어내지 않는다)
+   * costUsd는 호출자가 준 추정(입력 추정 + 최대 출력)을 보수 단가로 매긴 값이고 unpriced도 true다. 예산 게이트는
+   * 이 표시를 "비용 모름"으로 다뤄야 한다(수리 잡 예산 = 상한 전체). 알 때는 필드가 없다.
+   */
+  usageUnknown?: true;
 };
+
+/** 사용량을 모를 때의 추정 재료 — 입력은 호출 전 추정, 출력은 max_tokens(비관적). */
+export type UnknownUsageEstimate = { inputTokens: number; outputTokens: number };
+
+function isFiniteNumber(n: unknown): n is number {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
+/** usage 블록이 있고 토큰 수를 하나라도 숫자로 말했는가(0도 "말한 것"이다). */
+export function hasKnownUsage(usage: unknown): boolean {
+  if (!usage || typeof usage !== "object") return false;
+  const u = usage as Record<string, unknown>;
+  return isFiniteNumber(u["input_tokens"]) || isFiniteNumber(u["output_tokens"]);
+}
+
+/**
+ * 사용량을 모르는 호출의 레코드. 토큰은 0(모름), 비용은 추정을 **보수 단가(표의 성분별 최대)**로 — 절대 던지지
+ * 않는다. 추정이 없거나 잘못되면 비용 0이지만 unpriced·usageUnknown 표시는 남는다(소비자가 판단).
+ */
+export function unknownUsageRecord(
+  modelRequested: string,
+  modelActual: string,
+  vendor: string,
+  latencyMs: number,
+  estimate?: UnknownUsageEstimate | null,
+): LlmUsageRecord {
+  const input = nonNeg(estimate?.inputTokens);
+  const output = nonNeg(estimate?.outputTokens);
+  const c = CONSERVATIVE_PRICING;
+  const costUsd = (input * c.inputPerMTok + output * c.outputPerMTok) / 1_000_000;
+  return {
+    vendor,
+    modelRequested,
+    modelActual,
+    inputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 0,
+    latencyMs: nonNeg(latencyMs),
+    costUsd: Number.isFinite(costUsd) ? costUsd : 0,
+    unpriced: true,
+    usageUnknown: true,
+  };
+}
 
 /** 응답에 vendor 표시가 없을 때 모델 id로 추정한다(표시가 있으면 그것이 우선). */
 export function inferVendor(model: string): string {
@@ -156,17 +206,29 @@ export function inferVendor(model: string): string {
   return "unknown";
 }
 
-/** 응답(Anthropic 형태, 폴백 포함)에서 사용량 레코드를 만든다 — 과금은 **응답의 실제 모델**로. */
+/**
+ * 응답(Anthropic 형태, 폴백 포함)에서 사용량 레코드를 만든다 — 과금은 **응답의 실제 모델**로. 던지지 않는다.
+ *
+ * PR #576 검증 P2-8: usage 블록이 없거나(Anthropic 형태 — 종전엔 여기서 TypeError), 폴백 변환이 "모름"
+ * (`usageUnknown: true`)이라고 표시했으면(종전엔 0 토큰 → $0) unknownUsageRecord로 — 호출자가 주는
+ * `unknownUsageEstimate`(입력 추정 + 최대 출력)를 보수 단가로 매기고 unpriced·usageUnknown을 붙인다.
+ */
 export function usageRecordFromResponse(
   modelRequested: string,
   response: {
     model?: string;
     vendor?: string;
-    usage: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
+    usageUnknown?: boolean;
+    usage?: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } | null;
   },
   latencyMs: number,
+  unknownUsageEstimate?: UnknownUsageEstimate | null,
 ): LlmUsageRecord {
   const modelActual = typeof response.model === "string" && response.model.trim() ? response.model.trim() : modelRequested;
+  if (response.usageUnknown === true || !response.usage || !hasKnownUsage(response.usage)) {
+    const vendor = typeof response.vendor === "string" && response.vendor ? response.vendor : inferVendor(modelActual);
+    return unknownUsageRecord(modelRequested, modelActual, vendor, latencyMs, unknownUsageEstimate);
+  }
   const inputTokens = nonNeg(response.usage.input_tokens);
   const cacheReadTokens = nonNeg(response.usage.cache_read_input_tokens);
   const cacheWriteTokens = nonNeg(response.usage.cache_creation_input_tokens);

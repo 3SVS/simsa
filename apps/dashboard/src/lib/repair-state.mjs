@@ -243,3 +243,20 @@ export function showBuildUnverified(repair) {
 export function repairDoneKind(repair) {
   return repair && typeof repair === "object" && repair.mode === "auto_fix" ? "autoFix" : "briefOnly";
 }
+
+/**
+ * 비용 권고 ② (2026-09-30): did the repair stop trying because it reached the
+ * AI usage limit set for one repair? The server says so (`stoppedByBudget: true`)
+ * only for a DONE job that closed with the fix-brief PR. The line goes on the
+ * brief card only — never next to "the fix is ready" (auto_fix). Old servers send
+ * no field → false (no line, no guess).
+ *
+ * @param {{ status?: unknown, mode?: unknown, stoppedByBudget?: unknown } | null | undefined} repair
+ * @returns {boolean}
+ */
+export function repairStoppedByBudget(repair) {
+  if (!repair || typeof repair !== "object") return false;
+  if (repair.status !== "done") return false;
+  if (repairDoneKind(repair) !== "briefOnly") return false;
+  return repair.stoppedByBudget === true;
+}

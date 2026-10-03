@@ -28,6 +28,7 @@
 import type { Context } from "hono";
 import type { Env } from "../env.js";
 import { LEDGER_NOT_METERED } from "../workspace/llm-usage.js";
+import { coveredWindow, internalBearerRejection, parseStatsWindow } from "./admin-internal.js";
 
 /** 한 번에 읽는 최대 행 수. 넘으면 truncated: true — 기간을 좁혀 다시 부른다. */
 export const USAGE_STATS_ROW_LIMIT = 50_000;
@@ -134,37 +135,15 @@ export function aggregateUsageStats(rows: readonly UsageRow[]): { totals: UsageT
   return { totals, groups };
 }
 
-/** 길이가 달라도 일찍 끝나지 않는 비교(토큰 비교 타이밍 누설 완화). */
-function sameToken(a: string, b: string): boolean {
-  const len = Math.max(a.length, b.length);
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < len; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  return diff === 0;
-}
-
-function parseInstant(raw: string | undefined): number | null {
-  if (raw === undefined || raw === "") return null;
-  const t = Date.parse(raw);
-  return Number.isFinite(t) ? t : Number.NaN;
-}
-
 /** workspace-admin-stats.ts의 GET /admin/usage-stats가 x-admin-key 없는 요청을 여기로 넘긴다. */
 export async function handleLlmUsageStats(c: Context<{ Bindings: Env }>): Promise<Response> {
-  const m = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "");
-  if (!m || !m[1]) return c.json({ ok: false, error: "unauthorized" }, 401);
-  const expected = c.env.INTERNAL_CALLBACK_TOKEN;
-  if (!expected) return c.json({ ok: false, error: "admin_disabled" }, 503);
-  if (!sameToken(m[1], expected)) return c.json({ ok: false, error: "unauthorized" }, 401);
+  // 인증·기간·상한 규칙은 /admin/moat-stats와 같은 한 곳(admin-internal.ts)에서 온다 — 순서·응답은 그대로.
+  const rejected = internalBearerRejection(c);
+  if (rejected) return rejected;
 
-  const now = Date.now();
-  const untilT = parseInstant(c.req.query("until"));
-  const sinceT = parseInstant(c.req.query("since"));
-  if (Number.isNaN(untilT) || Number.isNaN(sinceT)) return c.json({ ok: false, error: "invalid_range", detail: "since/until must be ISO-8601" }, 400);
-  const until = untilT ?? now;
-  const since = sinceT ?? until - DEFAULT_WINDOW_MS;
-  if (!(since < until)) return c.json({ ok: false, error: "invalid_range", detail: "since must be before until" }, 400);
-  const sinceIso = new Date(since).toISOString();
-  const untilIso = new Date(until).toISOString();
+  const win = parseStatsWindow(c.req.query("since"), c.req.query("until"), DEFAULT_WINDOW_MS);
+  if (!win.ok) return c.json({ ok: false, error: "invalid_range", detail: win.detail }, 400);
+  const { sinceIso, untilIso } = win;
 
   let fetched: UsageRow[];
   try {
@@ -175,7 +154,7 @@ export async function handleLlmUsageStats(c: Context<{ Bindings: Env }>): Promis
     return c.json({ ok: false, error: "ledger_unavailable" }, 503);
   }
 
-  const window = coveredWindow(fetched, sinceIso);
+  const window = coveredWindow(fetched, sinceIso, USAGE_STATS_ROW_LIMIT);
   const { totals, groups } = aggregateUsageStats(window.rows);
   return c.json({
     ok: true,
@@ -188,17 +167,4 @@ export async function handleLlmUsageStats(c: Context<{ Bindings: Env }>): Promis
     groups,
     notMetered: LEDGER_NOT_METERED,
   });
-}
-
-/**
- * 상한에 걸렸으면(최신순으로 읽었으므로 잘린 쪽은 오래된 쪽이다) 가장 오래된 타임스탬프의 행을 버린다 — 같은 ms의
- * 행 일부만 들어왔을 수 있어서다. 남은 행은 [coveredSince, until)의 **모든** 행이다. 잘리지 않았으면 그대로.
- */
-export function coveredWindow(rows: readonly UsageRow[], sinceIso: string): { rows: UsageRow[]; truncated: boolean; coveredSince: string | null } {
-  if (rows.length < USAGE_STATS_ROW_LIMIT) return { rows: [...rows], truncated: false, coveredSince: sinceIso };
-  const stamps = rows.map((r) => (typeof r.created_at === "string" ? r.created_at : ""));
-  const boundary = stamps.reduce((min, s) => (s < min ? s : min), stamps[0] ?? "");
-  const kept = rows.filter((_, i) => (stamps[i] ?? "") > boundary);
-  const coveredSince = kept.length > 0 ? kept.reduce((min, r) => ((r.created_at ?? "") < min ? (r.created_at ?? "") : min), kept[0]?.created_at ?? "") : null;
-  return { rows: kept, truncated: true, coveredSince };
 }

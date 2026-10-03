@@ -43,13 +43,14 @@ simple = { limit = 6000, period = 60 }
 
 # B-7 정지 목록(Workers KV) — **central-plane wrangler.toml과 같은 id**를 적어야 한다(central-plane이 suspended:를
 # 쓰고 이 라우터가 읽는다 · 이 라우터가 strike:를 쓰고 central-plane 크론이 읽어 운영자에게 알린다).
-# 아직 네임스페이스가 없어 주석으로 둔다(가짜 id를 넣으면 배포가 실패한다). 없으면 라우터는 정지 확인 없이
+# 2026-10-04 네임스페이스 생성됨(Bae) — 아래 id는 실제 값(존재하지 않는 id면 배포 실패). 바인딩이 없으면 라우터는 정지 확인 없이
 # 서빙하고(fail-open, 근거는 src/index.ts 헤더) 헬스에 suspensionList "unbound"로 드러난다.
 # 켜는 법(Bae 액션): Cloudflare 대시보드 → Storage & Databases → KV → Create → 이름 `simsa-hosting-suspended`
 #   → 생성된 ID를 아래와 central-plane 양쪽에 적고 주석 해제 → PR·머지 → 두 Worker 배포.
-# [[kv_namespaces]]
-# binding = "HOSTING_SUSPENDED"
-# id = "<simsa-hosting-suspended KV ID>"
+# 2026-10-04 Bae 생성(simsa-hosting-suspended) — 두 Worker가 같은 id.
+[[kv_namespaces]]
+binding = "HOSTING_SUSPENDED"
+id = "573e6cf5c5f84d9a8390f3affe3f0bff"
 
 # 2026-09-25 Bae 결정: 호스팅 도메인 = simsa.page (Cloudflare Registrar 구매, 같은 계정 활성 존).
 # 대시보드 trysimsa.com·랜딩 simsa.dev와 등록 도메인이 달라 쿠키·평판이 격리된다(github.io·vercel.app 방식).

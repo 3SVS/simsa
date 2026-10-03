@@ -12,6 +12,7 @@
 import type { IdeaToSpecDraftResponse } from "./workspace-types";
 import { getUserKey } from "./workflow-store";
 import { readStoredLocale } from "@/i18n/dictionary.mjs";
+import { capacityFromResponse, type GenerationCapacityError } from "./generation-capacity.mjs";
 
 /** G14: 서버가 EN을 지원하는 호출에 활성 UI 언어를 전달 (미설정=ko). */
 const activeLocale = () =>
@@ -60,6 +61,7 @@ export type FallbackResult = {
 export type WorkspaceApiResult =
   | { ok: true; data: IdeaToSpecDraftResponse }
   | RateLimitedResult
+  | GenerationCapacityError
   | FallbackResult;
 
 export async function callWorkspaceApi(
@@ -90,6 +92,12 @@ export async function callWorkspaceApi(
     console.warn("[workspace-api] network error, using mock fallback:", err);
     return { ok: false, error: "network", fallback: buildLocalFallback(input) };
   }
+
+  // ── generation_capacity (비용 권고 ③) — today's AI capacity is full: 503 (service) or
+  //    429 (this network's share, PR #576 review). NOT a connection problem, NOT a mock-draft
+  //    case, and NOT the hourly limit below: say it plainly with the reset time. Read FIRST.
+  const capacity = await capacityFromResponse(resp);
+  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
 
   // ── 429 rate limited — do NOT fall back to mock ───────────────────────────
   if (resp.status === 429) {
@@ -151,6 +159,7 @@ export type RecommendAnswerInput = {
 export type RecommendAnswerResult =
   | { ok: true; recommendation: string; reason: string; options: string[] }
   | { ok: false; error: "rate_limited"; message: string; retryAfterSeconds?: number }
+  | GenerationCapacityError
   | { ok: false; error: "llm_unavailable" };
 
 export async function recommendAnswer(
@@ -179,6 +188,11 @@ export async function recommendAnswer(
     console.warn("[workspace-api] recommend-answer network error:", err);
     return { ok: false, error: "llm_unavailable" };
   }
+
+  // 비용 권고 ③ — today's AI capacity is full (a different sentence from "try again soon").
+  // Before the hourly 429: the network share also answers 429 (PR #576 review).
+  const capacity = await capacityFromResponse(resp);
+  if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
 
   if (resp.status === 429) {
     let retryAfterSeconds: number | undefined;
