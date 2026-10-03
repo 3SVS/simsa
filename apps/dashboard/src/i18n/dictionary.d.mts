@@ -372,6 +372,18 @@ export type Dictionary = {
     specPastePlaceholder: string;
     specGenerate: string;
   };
+  quota: {
+    remaining: string;
+    limitTitle: string;
+    limitBody: string;
+    limitBodyNetwork: string;
+    resetAt: string;
+    resetFallback: string;
+    continueExisting: string;
+    signIn: string;
+    seePlans: string;
+    tierNames: { free: string; basic: string; pro: string; staff: string };
+  };
   overview: {
     detailsTitle: string;
     detailsHint: string;

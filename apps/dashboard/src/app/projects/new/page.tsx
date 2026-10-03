@@ -11,9 +11,12 @@ import {
   saveExtendedProjectData,
   getUserKey,
   markProjectSyncFailed,
+  deleteProject,
 } from "@/lib/workflow-store";
 import { stackProfilePatch } from "@/lib/stack-profile.mjs";
-import { saveProjectToDb } from "@/lib/workspace-check-api";
+import { fetchProjectQuota, saveProjectToDb, type ProjectQuota } from "@/lib/workspace-check-api";
+import { blockedFromQuota, quotaRemainingText, type ProjectLimitInfo } from "@/lib/project-quota.mjs";
+import { ProjectLimitPanel } from "@/components/ProjectLimitPanel";
 import type {
   IdeaToSpecDraftResponse,
   WorkspaceQuestion,
@@ -106,6 +109,31 @@ function NewProjectInner() {
   // (plain /projects/new → chooser), and the visible back button below. Typed
   // input is intentionally kept when returning — only the screen changes.
   const [entryPath, setEntryPath] = useState<"idea" | "code" | "spec" | null>(null);
+  // D-24.3 — 새 프로젝트 하루 상한. 막히기 전에 남은 개수를 보여주고(조회 실패 = 아무것도
+  // 막지 않음, 서버가 최종 집행), 서버가 거절하면 방금 만든 로컬 프로젝트를 되돌린다.
+  const [quota, setQuota] = useState<ProjectQuota | null>(null);
+  const [limitHit, setLimitHit] = useState<ProjectLimitInfo | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void fetchProjectQuota(getUserKey()).then((q) => { if (alive) setQuota(q); });
+    return () => { alive = false; };
+  }, []);
+  const blockedInfo = limitHit ?? blockedFromQuota(quota);
+  const remainingLine = quotaRemainingText(quota, t.quota);
+
+  // 막힌 상태로 갈래 화면에 직접 들어와도(?path=idea) 질문·생성에 시간을 쓰기 전에 선택 화면의
+  // 패널로 돌려보낸다 — 끝까지 답한 뒤 막히는 것이 가장 나쁜 막다른 길이다.
+  const blockedNow = blockedInfo !== null;
+  useEffect(() => {
+    if (blockedNow && entryPath !== null) router.push("/projects/new");
+  }, [blockedNow, entryPath, router]);
+
+  /** 서버가 새 프로젝트를 거절했다 — 로컬에 만든 것을 지우고 선택 화면에서 패널을 보여준다. */
+  function rollBackRefusedProject(id: string, info: ProjectLimitInfo) {
+    deleteProject(id);
+    setLimitHit(info);
+    router.push("/projects/new");
+  }
   // Code branch: skip the idea step entirely (that's the branch's normal path).
   const [appName, setAppName] = useState("");
   const [codeDesc, setCodeDesc] = useState("");
@@ -391,6 +419,11 @@ function NewProjectInner() {
           : undefined,
       entryPath: "code",
     }).catch(() => null);
+    if (saveRes && saveRes.ok === false && saveRes.error === "project_limit") {
+      rollBackRefusedProject(id, saveRes);
+      setIsCreatingCode(false);
+      return;
+    }
     if (!saveRes || saveRes.ok !== true) {
       markProjectSyncFailed(id);
       toast.error(t.interaction.syncFailedSaved);
@@ -494,6 +527,10 @@ function NewProjectInner() {
       // The branch the user chose at the single entry (idea/code/spec).
       entryPath: entryPath ?? "idea",
     }).catch(() => null);
+    if (saveRes && saveRes.ok === false && saveRes.error === "project_limit") {
+      rollBackRefusedProject(id, saveRes);
+      return;
+    }
     if (!saveRes || saveRes.ok !== true) { markProjectSyncFailed(id); toast.error(t.interaction.syncFailedSaved); }
     router.push(`/projects/${id}`);
   }
@@ -528,7 +565,13 @@ function NewProjectInner() {
                 <span aria-hidden>←</span> {t.nav.allProjects}
               </Link>
               <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{t.branch.title}</h1>
-              <p className="mb-8 mt-2 text-sm text-gray-500">{t.branch.subtitle}</p>
+              <p className={`${remainingLine && !blockedInfo ? "mb-2" : "mb-8"} mt-2 text-sm text-gray-500`}>{t.branch.subtitle}</p>
+              {remainingLine && !blockedInfo ? (
+                <p className="mb-6 text-xs text-gray-500" data-testid="project-quota-remaining">{remainingLine}</p>
+              ) : null}
+              {blockedInfo ? (
+                <ProjectLimitPanel info={blockedInfo} />
+              ) : (
               <div className="space-y-3">
                 {([
                   ["idea", t.branch.ideaTitle, t.branch.ideaDesc],
@@ -553,6 +596,7 @@ function NewProjectInner() {
                   </button>
                 ))}
               </div>
+              )}
             </div>
           )}
 

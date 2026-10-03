@@ -146,6 +146,8 @@ const OPS_MIGRATIONS_FROM = 69;
 /** '운영 메타 아님' — 고지 대상이 아닌 새 컬럼/테이블. 넣을 때는 이유를 적는다. */
 const NOT_OPS_META = new Map([
   // 예: ["build_verified", "수리 잡의 빌드 검사 결과 — 사람에 대한 값이 아님"],
+  // 0074(D-24): 0060 plan_grants를 CHECK 확장 위해 같은 열 그대로 재생성(→ 이름 바꿔 plan_grants로). 새 항목 없음.
+  ["table:plan_grants_v2", "플랜 부여 기록(0060 plan_grants의 재생성 — 같은 열, 허용 값만 basic·pro·staff 추가) — 통계용 운영 정보가 아니라 이용 자격 기록"],
 ]);
 
 /** 0069 이전에 생겨 프로젝트 행에 저장되는 P1 운영 메타 컬럼(0055·0056). */

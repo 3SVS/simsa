@@ -331,6 +331,11 @@ export interface Env {
   CF_AI_GATEWAY_GOOGLE_URL?: string;
   BETA_PROJECT_CREATE_DAILY_LIMIT?: string;
   /**
+   * D-24.2 킬스위치. 정확히 "off"면 플랜 티어 생성 상한(무료·베이직 하루 1개, 계정+네트워크)
+   * 대신 예전 userKey당 BETA_PROJECT_CREATE_DAILY_LIMIT(기본 20)으로 돌아간다. 미설정 = 켜짐.
+   */
+  PROJECT_CREATE_TIER_GATE?: string;
+  /**
    * Train W · W-2 (D-7 amend [PILOT]) — 유저(userKey)당 검수·수리 일일 상한 override.
    * 기본 검수 10/일 · 수리 5/일(workspace/beta-limits.ts). 양의 정수만, 그 외 = 기본값.
    * [PILOT]: 수치는 파일럿 전에 조정 가능 — 코드 변경 없이 [vars]로.
