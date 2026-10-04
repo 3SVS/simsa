@@ -45,13 +45,16 @@ function termRegex(term) {
  */
 export function devTermHits(bodyText, opts = {}) {
   const text = String(bodyText ?? "");
+  // 주소 안의 단어는 사용자가 넣은 자기 앱 주소다(my-app.vercel.app) — 화면 문구가 아니다.
+  // 같은 길이의 공백으로 가려 위치를 유지한 채 매칭만 건너뛴다(스니펫은 원문에서 자른다).
+  const scan = text.replace(/https?:\/\/\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:app|dev|com|page|io|net|org|site)\b\S*/gi, (m) => " ".repeat(m.length));
   const terms = opts.terms ?? DEV_TERMS;
   const max = opts.max ?? 8;
   const ctx = opts.context ?? 40;
   const out = [];
   for (const term of terms) {
     const re = termRegex(term);
-    const m = re.exec(text);
+    const m = re.exec(scan);
     if (!m) continue;
     const at = m.index + (m[1] && m[2] ? m[1].length : 0);
     const snippet = text.slice(Math.max(0, at - ctx), Math.min(text.length, at + term.length + ctx)).trim();
@@ -110,8 +113,11 @@ export function isDefaultFlowJourney(journeyName) {
  * @returns {{ terms: string[], providers: string[] }}
  */
 export function beginnerAllowance(journeyName) {
-  const existingAppDoor = /^J1[a-z]?(?![A-Za-z0-9])/.test(String(journeyName ?? ""));
-  return existingAppDoor ? { terms: ["GitHub"], providers: ["GitHub"] } : { terms: [], providers: [] };
+  const name = String(journeyName ?? "");
+  const existingAppDoor = /^J1[a-z]?(?![A-Za-z0-9])/.test(name);
+  // 2026-10-04: J3 = 저장소 연결 여정 — 저장소(GitHub)를 잇는 것이 그 화면의 목적이다.
+  const repoConnect = /^J3[a-z]?(?![A-Za-z0-9])/.test(name);
+  return existingAppDoor || repoConnect ? { terms: ["GitHub"], providers: ["GitHub"] } : { terms: [], providers: [] };
 }
 
 function formatTermList(hits) {
@@ -133,15 +139,25 @@ function ctaFinding(sev, labels, note = "") {
  * gap hid for exactly that reason). Messages always carry the matched text.
  *
  * @param {{ journeyName: string, devTerms?: Array<{ term: string, snippet: string, where?: string }>, accountCtas?: string[] }} input
- * @returns {Array<{ sev: "P0" | "P2", what: string }>}
+ * @returns {Array<{ sev: "P0" | "P2" | "ALLOWED", what: string }>}
  */
 export function beginnerFindings(input) {
   const { journeyName, devTerms = [], accountCtas = [] } = input ?? {};
   const out = [];
   if (!isDefaultFlowJourney(journeyName)) {
-    // Developer / seeded screens: GitHub is the user's own word there — P2 only.
-    if (devTerms.length > 0) out.push(termFinding("P2", devTerms));
-    if (accountCtas.length > 0) out.push(ctaFinding("P2", accountCtas));
+    // Developer / seeded screens: P2 only. In the repo-connect journey (J3) GitHub itself is
+    // the subject of the screen → recorded as ALLOWED (2026-10-04); every other term stays P2.
+    const allowNd = beginnerAllowance(journeyName);
+    const okTerm = (h) => allowNd.terms.includes(h.term);
+    const okCta = (l) => allowNd.providers.length > 0 && ACCOUNT_PROVIDERS.filter((p) => new RegExp(escapeRe(p), "i").test(l)).every((p) => allowNd.providers.includes(p));
+    const p2Terms = devTerms.filter((h) => !okTerm(h));
+    const okTerms = devTerms.filter(okTerm);
+    const p2Ctas = accountCtas.filter((l) => !okCta(l));
+    const okCtas = accountCtas.filter(okCta);
+    if (p2Terms.length > 0) out.push(termFinding("P2", p2Terms));
+    if (p2Ctas.length > 0) out.push(ctaFinding("P2", p2Ctas));
+    if (okTerms.length > 0) out.push(termFinding("ALLOWED", okTerms, " · 저장소 연결 여정"));
+    if (okCtas.length > 0) out.push(ctaFinding("ALLOWED", okCtas, " · 저장소 연결 여정"));
     return out;
   }
   const allow = beginnerAllowance(journeyName);
@@ -159,8 +175,10 @@ export function beginnerFindings(input) {
   const note = " · 기존 앱 문의 선택 단계로 허용(D-17)";
   if (blockedTerms.length > 0) out.push(termFinding("P0", blockedTerms));
   if (blockedCtas.length > 0) out.push(ctaFinding("P0", blockedCtas));
-  if (allowedTerms.length > 0) out.push(termFinding("P2", allowedTerms, note));
-  if (allowedCtas.length > 0) out.push(ctaFinding("P2", allowedCtas, note));
+  // 2026-10-04 (Bae "P2 확인하고 고쳐"): 잠긴 결정으로 허용된 노출은 결함이 아니다 — 문구와 함께
+  // ALLOWED로 기록한다(버리지 않는다). 결함 수(P0~P2)에는 넣지 않는다.
+  if (allowedTerms.length > 0) out.push(termFinding("ALLOWED", allowedTerms, note));
+  if (allowedCtas.length > 0) out.push(ctaFinding("ALLOWED", allowedCtas, note));
   return out;
 }
 

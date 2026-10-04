@@ -433,6 +433,8 @@ export type Dictionary = {
     examplesLabel: string;
     generateSpec: string;
     reading: string;
+    emptyIdea: string;
+    emptySpec: string;
     multiName: string;
     skippedNote: string;
     understood: string;
@@ -714,6 +716,7 @@ export type Dictionary = {
     placeholder: string;
     submit: string;
     loading: string;
+    empty: string;
     failed: string;
     whatHappened: string;
     nextSteps: string;
