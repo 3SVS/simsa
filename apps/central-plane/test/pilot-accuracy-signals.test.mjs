@@ -58,6 +58,40 @@ describe("H1 — 앱이 없는 주소", () => {
   });
 });
 
+describe("Gemini 원인 — 정적 호스트 맨 위 404 = 첫 화면 파일 없음 (2026-10-05)", () => {
+  const netlify = "Page not found Looks like you've followed a broken link or entered a URL that doesn't exist on this site. ← Back to our site If this is your site, and you weren't expecting a 404 for this path, please visit Netlify's \"page not found\" support guide for troubleshooting tips.";
+  it("Netlify 맨 위(/)·폴더(/static-site/)·/index.html 404 → 첫 화면 파일 없음", () => {
+    assert.equal(R.looksLikeMissingIndexFile("https://stellar-mandazi-2a81dc.netlify.app/", 404, netlify), true);
+    assert.equal(R.looksLikeMissingIndexFile("https://x.workers.dev/static-site/", 404, netlify), true);
+    assert.equal(R.looksLikeMissingIndexFile("https://x.netlify.app/index.html", 404, netlify), true);
+    assert.equal(R.looksLikeMissingIndexFile("https://x.github.io/", 404, "404 File not found The site configured at this address does not contain the requested file."), true);
+  });
+  it("하위 페이지 404·배포 자체 없음(DEPLOYMENT_NOT_FOUND)·200은 아니다", () => {
+    assert.equal(R.looksLikeMissingIndexFile("https://x.netlify.app/about", 404, netlify), false);
+    assert.equal(R.looksLikeMissingIndexFile("https://verifiy-sigma.vercel.app", 404, "404: NOT_FOUND Code: DEPLOYMENT_NOT_FOUND"), false);
+    assert.equal(R.looksLikeMissingIndexFile("https://x.netlify.app/", 200, netlify), false);
+  });
+  it("리포트: page_not_found 옆에 missing_index_file — 단정하지 않고 '가장 흔한 원인'", () => {
+    const rep = R.buildNonDevReport({
+      targetUrl: "https://stellar-mandazi-2a81dc.netlify.app/", intentAnchor: "", loadStatus: 404, primaryActionFound: false,
+      interacted: false, routeAfterClick: null, routeChanged: false, consoleErrors: [], networkFailures: [],
+      decision: "Needs Fix", steps: [], missingIndexFile: true,
+    }, "ko");
+    assert.deepEqual(rep.findings.map((f) => f.code), ["page_not_found", "missing_index_file"]);
+    const mi = rep.findings[1];
+    assert.match(mi.what, /첫 화면 파일/);
+    assert.match(mi.why, /index\.html/);
+    assert.match(mi.why, /가장 흔한 원인/);
+    assert.match(mi.how, /index\.html로 바꿔/);
+    assert.ok(R.FINDING_CODES.includes("missing_index_file"));
+  });
+  it("러너가 맨 위 404에서 원인 신호를 리포트로 넘긴다(소스 계약)", () => {
+    const runner = readFileSync(new URL("../inspector-container/inspector-run.mjs", import.meta.url), "utf8");
+    assert.match(runner, /looksLikeMissingIndexFile\(targetUrl, evidence\.loadStatus, firstBody\)/);
+    assert.match(runner, /missingIndexFile \? \{ missingIndexFile: true \}/);
+  });
+});
+
 describe("H2 — 입력 무관 고정 결과(껍데기)", () => {
   const before = "✓ 작동해? AI 서비스 검증 AI로 만든 서비스, 진짜 작동하나요? 서비스 주소 서비스 설명 (선택) 내 서비스 검사하기 →";
   const canned = (u) => `${before} ✓ 검사 완료 · 서비스 건강도 78/100 ${u} · 주요 사용자 흐름을 기준으로 검사했습니다. 사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다. × 기능 오류 로그인 기능이 작동하지 않습니다 △ UI 문제 모바일 화면에서 버튼이 잘립니다`;

@@ -36,6 +36,7 @@ import {
   intentMentionsReview,
   detectOutputLanguageMismatch,
   detectCredentialGate,
+  looksLikeMissingIndexFile,
 } from "./dist/nondev-report.js";
 import { blockerToFinding } from "./dist/signup-plan.js";
 import { classifyActionSafety } from "./safety.mjs";
@@ -232,6 +233,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
   };
   /** 리포트용 상세(판정용 boolean과 분리). */
   const pilotSignals = { cannedResult: null, outputLanguageMismatch: null, needsUserCredential: null };
+  let missingIndexFile = false;
 
   // E-corpus-1 재작성 (2026-07-19, #415): 예산에 도달하면 컨텍스트를 강제 종료해
   // 진행 중이던 Playwright 작업을 "Target closed"로 터뜨린다 → 아래 catch가 지금까지
@@ -286,7 +288,10 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     //  "배포 없음" 안내 페이지면 **앱이 없다**. 그 안내 페이지의 문서·지원 링크를 앱처럼 누르지 않는다(종전엔
     //  v0의 VIEW DOCUMENTATION, Gemini의 Netlify 지원 링크를 눌러 broken_route를 만들었다).
     const statusNotFound = !!evidence.loadStatus && evidence.loadStatus >= 400 && evidence.loadStatus < 500 && !isLoginWallStatus(evidence.loadStatus);
-    const phraseNotFound = !statusNotFound && looksLikeHostNotFoundPage(await page.locator("body").innerText().catch(() => ""));
+    const firstBody = await page.locator("body").innerText().catch(() => "");
+    const phraseNotFound = !statusNotFound && looksLikeHostNotFoundPage(firstBody);
+    // 2026-10-05 (Gemini): 정적 호스트 맨 위 404 → 첫 화면 파일(index.html) 없음이 가장 흔한 원인.
+    missingIndexFile = statusNotFound && looksLikeMissingIndexFile(targetUrl, evidence.loadStatus, firstBody);
     const appMissing = statusNotFound || phraseNotFound;
     if (phraseNotFound) evidence.pageNotFound = true;
     if (appMissing) plog(`notfound:skip-drive status=${evidence.loadStatus} phrase=${phraseNotFound}`);
@@ -647,6 +652,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     ...(acceptanceResults.length ? { acceptanceResults } : {}),
     // 2026-10-04 파일럿 사전 실측 신호 — 있을 때만 싣는다(없으면 종전 리포트와 같다).
     ...(evidence.pageNotFound ? { pageNotFound: true } : {}),
+    ...(missingIndexFile ? { missingIndexFile: true } : {}),
     ...(pilotSignals.cannedResult ? { cannedResult: pilotSignals.cannedResult } : {}),
     ...(pilotSignals.outputLanguageMismatch ? { outputLanguageMismatch: pilotSignals.outputLanguageMismatch } : {}),
     ...(pilotSignals.needsUserCredential ? { needsUserCredential: pilotSignals.needsUserCredential } : {}),

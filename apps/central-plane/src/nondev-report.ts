@@ -62,6 +62,11 @@ export interface VisualCheckInput {
    */
   pageNotFound?: boolean;
   /**
+   * 2026-10-05 (Gemini 앱): 정적 호스트에서 **사이트 맨 위**가 404 — 가장 흔한 원인은 첫 화면 파일(index.html) 없음.
+   * page_not_found 옆에 원인 후보를 하나 더 말한다(단정하지 않는다).
+   */
+  missingIndexFile?: boolean;
+  /**
    * H2: 입력을 바꿔 두 번 돌렸는데 결과가 (거의) 같고 앱이 처리 요청을 하나도 보내지 않았다 — 껍데기 결과.
    * intentMentionsReview: 의도가 "검토/검사/진단" 같은 일을 하라고 적었는가(문구를 의도에 맞춘다, H3).
    */
@@ -124,6 +129,7 @@ export const FINDING_CODES = [
   "canned_result",
   "output_language_mismatch",
   "needs_user_credential",
+  "missing_index_file",
 ] as const;
 
 export type FindingCode = (typeof FINDING_CODES)[number];
@@ -266,6 +272,7 @@ const FIND: Record<ReportLocale, {
   cannedResult: (intentMentionsReview: boolean) => WWH;
   outputLanguage: (found: string) => WWH;
   needsCredential: WWH;
+  missingIndex: WWH;
 }> = {
   ko: {
     dns: {
@@ -335,6 +342,11 @@ const FIND: Record<ReportLocale, {
       why: "화면은 한국어인데, 앱이 만든 결과 글은 다른 언어로 나왔어요. 사용자가 결과를 읽지 못할 수 있어요.",
       how: "결과를 만드는 부분(AI에게 주는 지시 등)에 '항상 한국어로 답하기'를 넣고, 여러 입력으로 다시 확인하세요.",
     }),
+    missingIndex: {
+      what: "첫 화면 파일이 없는 것 같아요.",
+      why: "정적 사이트는 첫 화면 파일 이름이 index.html이어야 열려요. 사이트 맨 위 주소가 '없음'으로 나올 때 가장 흔한 원인은, 올린 HTML 파일 이름이 다르거나 폴더 안에 들어가 있는 경우예요.",
+      how: "올린 HTML 파일 이름을 index.html로 바꿔 맨 위 폴더에 두고 다시 올리세요. 그 뒤 주소가 열리는지 확인하고 다시 검수하세요.",
+    },
     needsCredential: {
       what: "이 앱은 시작하려면 사용자가 직접 API 키를 넣어야 해요 — 비개발자에게는 첫 단계에서 막혀요.",
       why: "핵심 버튼을 누르자 'API 키를 넣어 주세요' 같은 안내가 떴어요. 키를 만들고 넣는 방법을 모르는 사용자는 여기서 더 나아가지 못해요.",
@@ -409,6 +421,11 @@ const FIND: Record<ReportLocale, {
       why: "The screen is in one language but the result text the app produced is in another, so users may not be able to read it.",
       how: "Tell the part that produces the result (e.g. the AI instructions) to always answer in the screen's language, then check again with several inputs.",
     }),
+    missingIndex: {
+      what: "The first-page file seems to be missing.",
+      why: "A static site only opens when its first-page file is named index.html. When the site's top address shows 'not found', the most common cause is that the uploaded HTML file has a different name or sits inside a folder.",
+      how: "Rename the uploaded HTML file to index.html, put it in the top folder, and upload again. Then check the address opens and run the review again.",
+    },
     needsCredential: {
       what: "To start, this app asks users to paste their own API key — non-developers get stuck at the first step.",
       why: "Pressing the main button showed a message like 'enter your API key'. Users who don't know how to get and paste a key can't go any further.",
@@ -431,6 +448,34 @@ export function looksLikeHostNotFoundPage(bodyText: string | null | undefined): 
   const t = (bodyText ?? "").replace(/\s+/g, " ").trim();
   if (!t || t.length > 1200) return false; // 긴 페이지(진짜 앱)가 문서에서 이 문구를 언급하는 경우를 피한다
   return HOST_NOT_FOUND_RE.test(t);
+}
+
+/**
+ * 정적 호스트가 "그 경로에 파일이 없다"고 답하는 404 본문(배포 자체가 없다는 Vercel DEPLOYMENT_NOT_FOUND와 다르다).
+ * Netlify "Page not found" · Vercel "NOT_FOUND"(DEPLOYMENT_NOT_FOUND 제외) · GitHub Pages "File not found".
+ * Cloudflare Pages는 고유 문구가 확인되지 않아 넣지 않았다(추측 패턴 금지).
+ */
+const STATIC_FILE_404_RE =
+  /Page not found\s*Looks like you['’]ve followed a broken link|The site configured at this address does not contain the requested file|\b404: NOT_FOUND\b(?![\s\S]*DEPLOYMENT_NOT_FOUND)/i;
+
+/** 사이트 맨 위로 볼 경로: "/", "/index.html", 또는 끝이 "/"인 폴더 경로. */
+export function isSiteRootPath(targetUrl: string | null | undefined): boolean {
+  let path: string;
+  try {
+    path = new URL(targetUrl ?? "").pathname;
+  } catch {
+    return false;
+  }
+  return path === "/" || path === "" || /\/index\.html?$/i.test(path) || path.endsWith("/");
+}
+
+/** 2026-10-05: 404 + 맨 위 경로 + 정적 호스트의 "파일 없음" 본문 → 첫 화면 파일(index.html) 없음이 가장 흔한 원인. */
+export function looksLikeMissingIndexFile(targetUrl: string | null | undefined, status: number | null | undefined, bodyText: string | null | undefined): boolean {
+  if (status !== 404) return false;
+  if (!isSiteRootPath(targetUrl)) return false;
+  const t = (bodyText ?? "").replace(/\s+/g, " ").trim();
+  if (!t || t.length > 1200) return false;
+  return STATIC_FILE_404_RE.test(t);
 }
 
 /** 비교용 토큰(한글 덩어리·영숫자 2자 이상). 소문자. */
@@ -650,6 +695,9 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
       ...t.pageNotFound(notFoundStatus),
       evidence: notFoundStatus ? `HTTP ${notFoundStatus}` : "host not-found page",
     });
+  }
+  if (input.missingIndexFile) {
+    findings.push({ severity: "high", code: "missing_index_file", ...t.missingIndex, evidence: "static host root 404" });
   }
   if (input.cannedResult) {
     findings.push({
