@@ -86,7 +86,9 @@ test("playwright version pinned identically in builder base image, builder packa
 });
 
 test("Dockerfile installs the T1 toolchain (pnpm · wrangler · git · gh) and copies the runner scripts", () => {
-  assert.match(dockerfile, /npm install -g pnpm@\d+ wrangler@\d+/, "must install pinned-major pnpm + wrangler");
+  // B-5b-3: pnpm은 템플릿 packageManager와 같은 정확한 버전(pnpm@10.34.5) — 메이저만 고정하던 종전 모양도 받는다.
+  assert.match(dockerfile, /npm install -g pnpm@\d+(?:\.\d+\.\d+)? wrangler@\d+/, "must install pinned pnpm + pinned-major wrangler");
+  assert.match(dockerfile, /COPY\s+apps\/central-plane\/builder-container\/builder-work\.mjs/, "must COPY builder-work.mjs (B-5b-2 — builder-run.mjs imports it)");
   assert.match(dockerfile, /apt-get install -y --no-install-recommends git/, "must install git");
   assert.match(dockerfile, /apt-get install -y --no-install-recommends gh/, "must install gh");
   assert.match(dockerfile, /COPY\s+apps\/central-plane\/builder-container\/server\.mjs/, "must COPY server.mjs");
@@ -101,7 +103,8 @@ test("D-6: the builder image never installs user-deploy CLIs (vercel · netlify)
 });
 
 test("server.mjs keeps the inspector-style rails: 202 ack, SIGTERM drain, no secret logging", () => {
-  assert.match(serverMjs, /json\(res, 202,/, "POST /run must ack with 202 before running");
+  // PR #569 S2 결함 4: 입장 판정(400·409·202)은 builder-run.mjs admitRun 하나 — 행동은 train-b-b5b2-gate 테스트가 본다.
+  assert.match(serverMjs, /json\(res, admission\.status, admission\.body\);\n\s+if \(admission\.status !== 202\) return;/, "POST /run must ack (admitRun → 202) before running");
   assert.match(serverMjs, /for \(const sig of \["SIGTERM", "SIGINT"\]\)/, "must drain on SIGTERM/SIGINT");
-  assert.doesNotMatch(serverMjs, /console\.(log|error)\([^)]*(callbackToken|userKey)/, "never log callbackToken/userKey");
+  assert.doesNotMatch(serverMjs, /console\.(log|error)\([^)]*(callbackToken|jobToken|userKey)/, "never log the job token (or the old callbackToken/userKey)");
 });

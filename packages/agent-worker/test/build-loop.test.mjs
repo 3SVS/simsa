@@ -133,3 +133,45 @@ describe("runBuildLoop", () => {
     assert.match(r.summary, /vendor unavailable/);
   });
 });
+
+describe("B-5b-2 · budgetUsd — 로컬 EfficiencyGate 상한(서버 프록시가 권위)", () => {
+  // 턴마다 실제 사용량이 큰 응답(sonnet 100k 입력 + 5k 출력 ≈ $0.375). core 기본 상한(PR당 $0.50)이면 3턴째 예약에서
+  // BudgetExceededError → llm_error로 WBS가 끝나 버린다. 빌더는 잡 예산 이상을 budgetUsd로 준다.
+  function heavyClient(script) {
+    let i = 0;
+    return {
+      messages: {
+        create: async (params) => {
+          const blocks = script[Math.min(i, script.length - 1)];
+          i += 1;
+          return { id: `msg_${i}`, model: params.model, content: blocks, stop_reason: "tool_use", usage: { input_tokens: 100_000, output_tokens: 5_000 } };
+        },
+      },
+    };
+  }
+  const script = () => [
+    [tu("read_file", { path: "src/worker.ts" })],
+    [tu("read_file", { path: "package.json" })],
+    [tu("finish", { status: "done", summary: "예약 저장 끝", commitMessage: "feat: 예약 저장" })],
+  ];
+
+  it("[재현] budgetUsd 없이(= core 기본 $0.50) 긴 WBS는 3턴째에 로컬 상한으로 llm_error", async () => {
+    const r = await runBuildLoop(TASK, { client: heavyClient(script()), executor: fakeExecutor({ "src/worker.ts": "x", "package.json": "{}" }), model: "claude-sonnet-4-6" });
+    assert.equal(r.status, "llm_error");
+    assert.match(r.summary, /budget|exceed/i);
+  });
+
+  it("budgetUsd: 10이면 같은 WBS가 끝까지 간다(done) — 예산 판정은 서버 몫", async () => {
+    const r = await runBuildLoop(TASK, { client: heavyClient(script()), executor: fakeExecutor({ "src/worker.ts": "x", "package.json": "{}" }), model: "claude-sonnet-4-6", budgetUsd: 10 });
+    assert.equal(r.status, "done", r.summary);
+    assert.equal(r.turns, 3);
+    assert.ok(r.costUsd > 0.5, `local tally still counts cost (${r.costUsd})`);
+  });
+
+  it("budgetUsd가 0·음수·NaN이면 무시(core 기본 상한 유지 — 상한을 없애는 길이 아니다)", async () => {
+    for (const bad of [0, -1, Number.NaN]) {
+      const r = await runBuildLoop(TASK, { client: heavyClient(script()), executor: fakeExecutor({ "src/worker.ts": "x", "package.json": "{}" }), model: "claude-sonnet-4-6", budgetUsd: bad });
+      assert.equal(r.status, "llm_error", `budgetUsd=${bad}`);
+    }
+  });
+});

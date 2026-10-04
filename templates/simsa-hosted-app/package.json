@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "build": "vite build && tsc -p tsconfig.worker.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "test": "node --test test/*.test.mjs",
     "deploy": "wrangler deploy"
   },
   "dependencies": {
@@ -23,12 +24,6 @@
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "wrangler": "^4.83.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "workerd"
-    ]
   },
   "packageManager": "pnpm@10.34.5"
 }

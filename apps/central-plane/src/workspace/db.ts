@@ -4,11 +4,23 @@
  * so D1 failures never crash the user-facing flow.
  */
 import type { Env } from "../env.js";
+import type { FetchLike } from "../github.js";
+import { PROJECT_DELETED, buildJobDeleteBatchStatements, stopActiveBuildJobsForProject } from "./build-job-db.js";
+import { teardownHostedAppsForProject } from "./hosted-app-teardown.js";
 import {
   TRAINING_INDEX_BACKFILL_LEGACY_FOR_PROJECT_SQL,
   TRAINING_INDEX_REQUEST_DELETE_FOR_PROJECT_SQL,
   sweepTrainingDeletions,
 } from "./training-records-index.js";
+
+/**
+ * 프로젝트 행이 아직 있나(가벼운 존재 확인 — 지시서 JSON을 읽지 않는다). 빌드 산출물 라우트·배포 파이프라인이 단계마다 부른다
+ * (PR #569 S3 검증 결함 1: 삭제된 프로젝트의 빌드가 push·배포·done까지 가지 않게).
+ */
+export async function projectExists(env: Env, id: string): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT id FROM workspace_projects WHERE id = ?`).bind(id).first();
+  return row !== null && row !== undefined;
+}
 
 function randId(prefix: string): string {
   const ts = Date.now().toString(36).slice(-6);
@@ -283,7 +295,16 @@ async function listKeysByPrefix(bucket: R2Bucket, prefix: string): Promise<strin
   return keys;
 }
 
-export async function deleteProject(env: Env, id: string, userKey: string): Promise<void> {
+export async function deleteProject(env: Env, id: string, userKey: string, opts: { fetch?: FetchLike } = {}): Promise<void> {
+  // 0. PR #569 S3 검증 결함 1: 이 프로젝트의 활성 빌드 잡을 **먼저** 멈춘다(failed(<단계>, project_deleted)). 그 뒤에 오는
+  //    산출물 업로드·진행 콜백·LLM 프록시 호출은 활성 잡이 없어 R2에 쓰지도, push·배포하지도 못한다(산출물 라우트와 Worker 배포
+  //    파이프라인도 단계마다 프로젝트 존재·잡 활성을 다시 본다). 아래 R2 청소보다 먼저여야 청소 뒤에 새 사본이 생기지 않는다.
+  try {
+    await stopActiveBuildJobsForProject(env, id, PROJECT_DELETED);
+  } catch (err) {
+    console.error("[workspace/db deleteProject] build-job stop failed:", err);
+  }
+
   // 1. Collect R2 evidence keys before the rows referencing them are deleted:
   //    uploaded documents (user content — must be removed) + visual-check shots.
   const r2Keys = new Set<string>();
@@ -320,6 +341,24 @@ export async function deleteProject(env: Env, id: string, userKey: string): Prom
       }
     }
   }
+  // B-5b S3: 빌드 산출물(유저 앱의 소스·번들) `builds/<jobId>/` — 키에 프로젝트가 없으니 이 프로젝트의 빌드 잡 id로 접두를
+  // 만든다(잡 행은 D1 cascade 전에 읽는다). 학습 데이터 사본(events/…)은 여전히 이 범위 밖이다(방침 §1·§3의 예외 문장).
+  if (env.EVIDENCE) {
+    try {
+      const jobs = await env.DB.prepare(`SELECT id FROM build_jobs WHERE project_id = ?`).bind(id).all<{ id: string }>();
+      for (const row of jobs.results ?? []) {
+        if (typeof row.id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(row.id)) continue;
+        const prefix = `builds/${row.id}/`;
+        try {
+          for (const k of await listKeysByPrefix(env.EVIDENCE, prefix)) r2Keys.add(k);
+        } catch (err) {
+          console.error(`[workspace/db deleteProject] R2 prefix scan failed (${prefix}):`, err);
+        }
+      }
+    } catch (err) {
+      console.error("[workspace/db deleteProject] build-job scan failed:", err);
+    }
+  }
 
   // 2. Cascade-delete all D1 rows in one transaction FIRST. Experiment
   //    candidates key by experiment_id, so they go first via a subquery (before
@@ -353,6 +392,9 @@ export async function deleteProject(env: Env, id: string, userKey: string): Prom
     env.DB.prepare(
       `UPDATE llm_usage SET project_id = NULL, user_key_hash = NULL, job_id = NULL WHERE project_id = ?`,
     ).bind(id),
+    // B-5b S3 검증 결함 2: 빌드 타임라인은 지우고, 빌드 잡 행은 호스팅 자원(공개 Worker·프로젝트 D1·조직 저장소)의 포인터로
+    // 남기되 사람과의 연결을 끊는다(user_key = '' — 호스팅 정리의 삭제 표시). 행은 아래 5단계가 자원을 다 지운 뒤 지운다.
+    ...buildJobDeleteBatchStatements(env, id, new Date().toISOString()),
     env.DB.prepare(`DELETE FROM workspace_projects WHERE id = ?`).bind(id),
   ];
   await env.DB.batch(stmts);
@@ -374,6 +416,15 @@ export async function deleteProject(env: Env, id: string, userKey: string): Prom
   // 4. Train K · K-3: delete this project's requested training copies now
   //    (never throws; leftovers stay requested for the 6-hour cron).
   await sweepTrainingDeletions(env, { kind: "project", projectId: id, userKey }, { site: "project-delete", maxPages: 5 });
+
+  // 5. B-5b S3 검증 결함 2: 빌드가 만든 호스팅 자원 — 공개 유저 Worker(<slug>.<root>) · 프로젝트 D1(앱 최종 사용자 데이터) ·
+  //    호스팅 조직 저장소. 운영 자격은 Worker에만(hosted-app-teardown.ts). 실패하면 잡 행이 남고 5분 크론이 다시 시도한다
+  //    (프로젝트 삭제 자체는 이미 끝났다 — 사용자에게 실패로 돌려주지 않는다).
+  try {
+    await teardownHostedAppsForProject(env, id, opts.fetch ?? (fetch.bind(globalThis) as FetchLike));
+  } catch (err) {
+    console.error("[workspace/db deleteProject] hosted app teardown failed:", err);
+  }
 }
 
 // ─── Check runs ───────────────────────────────────────────────────────────────
