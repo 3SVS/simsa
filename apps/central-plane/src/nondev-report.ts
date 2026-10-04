@@ -56,6 +56,20 @@ export interface VisualCheckInput {
    * 단계가 끝까지 못 간 것은 `not_confirmed`(확인 못 함)이지 고장이 아니다.
    */
   acceptanceResults?: AcceptanceResult[];
+  /**
+   * 2026-10-04 파일럿 사전 실측(H1): 첫 화면이 앱이 아니라 호스트의 "없음" 페이지였다(4xx 상태 또는 알려진
+   * 배포 없음 문구). 로그인 벽(401/403/407)은 여기 들지 않는다.
+   */
+  pageNotFound?: boolean;
+  /**
+   * H2: 입력을 바꿔 두 번 돌렸는데 결과가 (거의) 같고 앱이 처리 요청을 하나도 보내지 않았다 — 껍데기 결과.
+   * intentMentionsReview: 의도가 "검토/검사/진단" 같은 일을 하라고 적었는가(문구를 의도에 맞춘다, H3).
+   */
+  cannedResult?: { intentMentionsReview: boolean } | null;
+  /** H4: 흐름 뒤 앱이 낸 결과가 화면 언어와 다른 언어로 나왔다(예: 한국어 앱에 중국어 결과). */
+  outputLanguageMismatch?: { found: string; sample: string } | null;
+  /** H5: 핵심 동작을 누르자 "API 키를 넣어 주세요"처럼 사용자 자격 증명을 요구하는 안내가 떴다. */
+  needsUserCredential?: { sample: string } | null;
 }
 
 /** 수용 기준 하나의 시나리오 결과(컨테이너가 만들고 리포트가 그대로 싣는다). */
@@ -105,6 +119,11 @@ export const FINDING_CODES = [
   "ac_broken",
   "ac_not_confirmed",
   "signup_blocker",
+  // 2026-10-04 파일럿 사전 실측(H1·H2·H4·H5)
+  "page_not_found",
+  "canned_result",
+  "output_language_mismatch",
+  "needs_user_credential",
 ] as const;
 
 export type FindingCode = (typeof FINDING_CODES)[number];
@@ -243,6 +262,10 @@ const FIND: Record<ReportLocale, {
   stepFailed: (label: string, note?: string) => WWH;
   acBroken: (featureTitle: string, then: string) => WWH;
   acNotConfirmed: (featureTitle: string, then: string) => WWH;
+  pageNotFound: (status: number | null) => WWH;
+  cannedResult: (intentMentionsReview: boolean) => WWH;
+  outputLanguage: (found: string) => WWH;
+  needsCredential: WWH;
 }> = {
   ko: {
     dns: {
@@ -295,6 +318,28 @@ const FIND: Record<ReportLocale, {
       why: `기대한 결과("${then}")까지 가는 단계를 Simsa가 끝까지 밟지 못했어요. 고장이라는 뜻은 아니에요.`,
       how: "이 항목은 직접 눈으로 확인하시거나, 시작 버튼·입력창을 더 분명히 만든 뒤 다시 검수하세요.",
     }),
+    pageNotFound: (status) => ({
+      what: status ? `주소가 열리지 않아요(HTTP ${status}). 이 주소에는 지금 앱이 없어요.` : "주소가 열리지 않아요. 이 주소에는 지금 앱이 없어요.",
+      why: "앱 대신 호스팅 서비스의 '없음' 안내 페이지가 떴어요. 배포가 지워졌거나, 아직 공개되지 않았거나, 주소가 잘못됐을 때 이렇게 돼요.",
+      how: "앱을 만든 도구에서 '공개(Publish)'나 '배포'를 다시 하고, 새로 나온 주소가 브라우저에서 열리는지 확인한 뒤 그 주소로 다시 검수하세요.",
+    }),
+    cannedResult: (intentMentionsReview) => ({
+      what: intentMentionsReview
+        ? "결과가 입력과 무관해요 — 넣은 내용을 실제로 검토하지 않고, 정해 둔 결과를 보여주는 것 같아요."
+        : "결과가 입력과 무관해요 — 넣은 내용을 실제로 처리하지 않고, 정해 둔 결과를 보여주는 것 같아요.",
+      why: "서로 다른 내용을 넣고 두 번 해 봤는데 같은 결과가 나왔고, 그동안 앱이 처리를 위한 요청을 하나도 보내지 않았어요. 화면만 있고 실제 기능은 아직 연결되지 않은 상태로 보여요.",
+      how: "결과를 만드는 부분이 실제 처리(서버·AI 호출 등)에 연결돼 있는지 확인하세요. 화면에 예시/데모 결과를 넣어 뒀다면 실제 결과로 바꿔야 해요.",
+    }),
+    outputLanguage: (found) => ({
+      what: `결과가 화면과 다른 언어(${found})로 나왔어요.`,
+      why: "화면은 한국어인데, 앱이 만든 결과 글은 다른 언어로 나왔어요. 사용자가 결과를 읽지 못할 수 있어요.",
+      how: "결과를 만드는 부분(AI에게 주는 지시 등)에 '항상 한국어로 답하기'를 넣고, 여러 입력으로 다시 확인하세요.",
+    }),
+    needsCredential: {
+      what: "이 앱은 시작하려면 사용자가 직접 API 키를 넣어야 해요 — 비개발자에게는 첫 단계에서 막혀요.",
+      why: "핵심 버튼을 누르자 'API 키를 넣어 주세요' 같은 안내가 떴어요. 키를 만들고 넣는 방법을 모르는 사용자는 여기서 더 나아가지 못해요.",
+      how: "운영하는 쪽 서버에 키를 두고 사용자는 키 없이 쓰게 하거나, 키가 꼭 필요하다면 키 받는 방법을 단계별로 안내하세요.",
+    },
   },
   en: {
     dns: {
@@ -347,8 +392,129 @@ const FIND: Record<ReportLocale, {
       why: `Simsa could not complete the steps leading to the expected result ("${then}"). That does not mean it is broken.`,
       how: "Confirm this item with your own eyes, or make the starting button/input clearer and run the review again.",
     }),
+    pageNotFound: (status) => ({
+      what: status ? `The address doesn't open (HTTP ${status}). There is no app at this address right now.` : "The address doesn't open. There is no app at this address right now.",
+      why: "Instead of the app, the hosting service's 'not found' page appeared. This happens when the deployment was removed, isn't public yet, or the address is wrong.",
+      how: "Publish or deploy again from the tool you built the app with, check that the new address opens in a browser, then run the review with that address.",
+    }),
+    cannedResult: (intentMentionsReview) => ({
+      what: intentMentionsReview
+        ? "The result doesn't depend on what you enter — it seems to show a preset result instead of actually reviewing anything."
+        : "The result doesn't depend on what you enter — it seems to show a preset result instead of actually processing the input.",
+      why: "We tried twice with different inputs and got the same result, and the app sent no processing request in between. The screen exists but the real function doesn't seem to be connected yet.",
+      how: "Check that the part producing the result is connected to real processing (a server or AI call). If a sample/demo result was put on the screen, replace it with the real one.",
+    }),
+    outputLanguage: (found) => ({
+      what: `The result came out in a different language (${found}) than the screen.`,
+      why: "The screen is in one language but the result text the app produced is in another, so users may not be able to read it.",
+      how: "Tell the part that produces the result (e.g. the AI instructions) to always answer in the screen's language, then check again with several inputs.",
+    }),
+    needsCredential: {
+      what: "To start, this app asks users to paste their own API key — non-developers get stuck at the first step.",
+      why: "Pressing the main button showed a message like 'enter your API key'. Users who don't know how to get and paste a key can't go any further.",
+      how: "Keep the key on your own server so users don't need one, or, if a key is truly required, walk users through getting it step by step.",
+    },
   },
 };
+
+// ─── 2026-10-04 파일럿 사전 실측 — 결정론 신호(컨테이너가 쓰고, 여기서 단위 테스트) ─────────────
+
+/** 401/403/407 = 로그인·권한 벽일 수 있다(앱은 있다). 나머지 4xx는 "앱이 없다". */
+export function isLoginWallStatus(status: number | null | undefined): boolean {
+  return status === 401 || status === 403 || status === 407;
+}
+
+/** 호스트가 앱 대신 내보내는 "배포 없음" 페이지 문구(200으로 오는 경우 대비). 짧은 페이지에서만 본다. */
+const HOST_NOT_FOUND_RE =
+  /DEPLOYMENT_NOT_FOUND|NOT_FOUND\s*Code:|There isn['’]t a GitHub Pages site here|Page not found\s*[·|-]?\s*Netlify|Looks like you['’]ve followed a broken link or entered a URL that doesn['’]t exist on this site|This deployment (?:is|was) (?:paused|deleted|not found)|Site Not Found\s+Why am I seeing this page/i;
+export function looksLikeHostNotFoundPage(bodyText: string | null | undefined): boolean {
+  const t = (bodyText ?? "").replace(/\s+/g, " ").trim();
+  if (!t || t.length > 1200) return false; // 긴 페이지(진짜 앱)가 문서에서 이 문구를 언급하는 경우를 피한다
+  return HOST_NOT_FOUND_RE.test(t);
+}
+
+/** 비교용 토큰(한글 덩어리·영숫자 2자 이상). 소문자. */
+export function textTokens(s: string | null | undefined): string[] {
+  return (s ?? "").toLowerCase().match(/[가-힣]+|[\p{L}\p{N}]{2,}/gu) ?? [];
+}
+
+/** 동작 뒤 화면에 새로 나타난 토큰 — 처음 화면에 있던 것과 내가 넣은 값의 토큰은 뺀다. */
+export function addedTokens(before: string, after: string, typed: string): Set<string> {
+  const b = new Set(textTokens(before));
+  const v = new Set(textTokens(typed));
+  return new Set(textTokens(after).filter((x) => !b.has(x) && !v.has(x)));
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+/** 고정 결과로 볼 최소 결과 크기 — 할 일 앱처럼 "삭제" 한 단어만 붙는 흐름을 껍데기로 오판하지 않게. */
+export const CANNED_MIN_TOKENS = 8;
+export const CANNED_MIN_SIMILARITY = 0.9;
+
+/**
+ * H2: 두 입력의 결과가 (거의) 같고, 두 번 모두 처리 요청이 0이면 껍데기다.
+ * 요청이 하나라도 있었다면(저장·API) 판단하지 않는다 — 진짜 처리일 수 있다(F11·Bolt는 이 이유로 못 잡는다).
+ */
+export function isCannedResult(i: { added1: Set<string>; added2: Set<string>; requests1: number; requests2: number }): boolean {
+  if (i.requests1 > 0 || i.requests2 > 0) return false;
+  if (i.added1.size < CANNED_MIN_TOKENS || i.added2.size < CANNED_MIN_TOKENS) return false;
+  return jaccard(i.added1, i.added2) >= CANNED_MIN_SIMILARITY;
+}
+
+/** 두 번째 시도에 넣을 다른 값 — 같은 종류(주소·숫자·글)로, 결과가 달라질 만큼 다르게. */
+export function variantTypedValue(v: string): string {
+  const t = (v ?? "").trim();
+  if (/^https?:\/\//i.test(t)) return /example\.org/i.test(t) ? "https://example.com/" : "https://example.org/";
+  if (/^-?\d+(\.\d+)?$/.test(t)) return String(Number(t) + 7);
+  if (t === "서울") return "부산";
+  if (t === "Seoul") return "Busan";
+  return `${t} 두번째`;
+}
+
+/** 의도가 "검토·검사·진단·분석·점검" 같은 일을 하라고 하는가(H3 — 껍데기 문구를 의도에 맞춘다). */
+export function intentMentionsReview(intent: string | null | undefined): boolean {
+  return /검토|검사|진단|분석|점검|심사|review|inspect|audit|diagnos|analy[sz]|check/i.test(intent ?? "");
+}
+
+/**
+ * H4: 화면이 한국어인데 결과(동작 뒤 새로 나온 글)가 주로 한자(중국어)나 가나(일본어)면 언어 불일치.
+ * 한국어 글에 섞인 한자 몇 개로는 걸리지 않는다(결과 쪽 한자+가나 ≥ 20 그리고 한글보다 많을 때만).
+ */
+export function detectOutputLanguageMismatch(uiText: string, resultText: string): { found: string; sample: string } | null {
+  const count = (s: string, re: RegExp) => (s.match(re) ?? []).length;
+  const uiHangul = count(uiText ?? "", /[가-힣]/g);
+  const uiLatin = count(uiText ?? "", /[A-Za-z]/g);
+  if (uiHangul < 20 || uiHangul < uiLatin) return null; // 한국어 화면에서만 판단
+  const r = resultText ?? "";
+  const hangul = count(r, /[가-힣]/g);
+  const kana = count(r, /[\u3040-\u30ff]/g);
+  const han = count(r, /[\u4e00-\u9fff]/g);
+  if (han + kana < 20 || han + kana <= hangul) return null;
+  const found = kana > han / 3 ? "일본어" : "중국어";
+  const m = /[\u3040-\u30ff\u4e00-\u9fff][^\n]{0,80}/.exec(r);
+  return { found, sample: (m ? m[0] : r).slice(0, 120) };
+}
+
+/**
+ * H5: 동작 뒤 새로 나온 글이 사용자에게 API 키·토큰·시크릿을 넣으라고 요구하는가. 키 이름과 요구 동사가 함께 있어야 한다
+ * (설명 문구에 "API 키는 저장되지 않아요"만 있는 경우와 가른다).
+ */
+const CREDENTIAL_NOUN_RE = /(API\s*키|API\s*key|액세스\s*토큰|access\s*token|토큰|시크릿\s*키|secret\s*key|개인\s*키|sk-[a-z]{2,})/i;
+const CREDENTIAL_ASK_RE = /(넣어\s*주세요|입력해\s*주세요|입력하세요|넣으세요|등록해\s*주세요|필요합니다|필요해요|먼저\s|please\s+(?:enter|add|provide|paste)|enter\s+your|add\s+your|is\s+required|required\s+to)/i;
+export function detectCredentialGate(addedText: string | null | undefined): { sample: string } | null {
+  const t = (addedText ?? "").replace(/\s+/g, " ").trim();
+  if (!t) return null;
+  // 같은 문장 안(마침표·줄 사이 160자 안쪽)에 키 이름과 요구 동사가 함께 있어야 한다.
+  for (const sentence of t.split(/(?<=[.!?。])\s+|(?<=요\.)\s*/)) {
+    if (CREDENTIAL_NOUN_RE.test(sentence) && CREDENTIAL_ASK_RE.test(sentence)) return { sample: sentence.slice(0, 160) };
+  }
+  return null;
+}
 
 /** Evidence the decision ladder reads (a subset of what the inspector gathers). */
 export interface DecisionEvidence {
@@ -373,6 +539,14 @@ export interface DecisionEvidence {
    *  null/undefined = 측정 불가·비적용(판정 무영향). false = 낙관적 UI만 있고
    *  저장이 없는 앱 — 측정된 false만 신호다. */
   persistedAfterReload?: boolean | null;
+  /** H1 (2026-10-04): 알려진 호스트 "배포 없음" 페이지(상태가 200이어도). */
+  pageNotFound?: boolean | null;
+  /** H2 (2026-10-04): 입력 무관 고정 결과 + 처리 요청 0. 측정된 true만 신호. */
+  cannedResult?: boolean | null;
+  /** H4 (2026-10-04): 결과 언어가 화면 언어와 다르다 — 고장 판정이 아니라 "사람 확인"으로 낮춘다. */
+  outputLanguageMismatch?: boolean | null;
+  /** H5 (2026-10-04): 시작하려면 사용자가 직접 API 키 등을 넣어야 한다 — 고장이 아니라 "사람 확인"(비개발자 막힘). */
+  needsUserCredential?: boolean | null;
 }
 
 /**
@@ -394,8 +568,15 @@ export function decideFromEvidence(
   steps: Array<{ ok: boolean }>,
 ): string {
   if (e.loadStatus && e.loadStatus >= 500) return "Needs Fix";
-  if (e.loadStatus && e.loadStatus >= 400) return "Not Verified";
+  // H1 (2026-10-04 파일럿 v0): 401/403/407만 "로그인 벽일 수 있다"로 판단을 보류한다. 404·410 등 나머지 4xx는
+  // **앱이 없다**는 뜻이다 — 종전엔 전부 Not Verified("확인 못 했어요")였고, 러너는 그 오류 안내 페이지의
+  // 문서 버튼을 앱처럼 눌렀다.
+  if (e.loadStatus && e.loadStatus >= 400) return isLoginWallStatus(e.loadStatus) ? "Not Verified" : "Needs Fix";
+  if (e.pageNotFound === true) return "Needs Fix";
   if (e.networkFailures.length) return "Needs Fix";
+  // H2 (2026-10-04 파일럿 ChatGPT 앱): 입력을 바꿔도 같은 결과 + 처리 요청 0 = 껍데기. 흐름은 "끝까지 됐다"로
+  // 보이고 실패 신호도 없어서 종전엔 "문제를 찾지 못했어요"(정반대 오판)였다.
+  if (e.interacted && e.cannedResult === true) return "Needs Fix";
   if (e.interacted && e.routeAfterClick && /\/undefined|\/null|\/404|not-found|error/i.test(e.routeAfterClick)) return "Needs Fix";
   // D9 (2026-07-17 accuracy eval): an action that visibly changed NOTHING plus a
   // console error is a crashed app (the handler never bound — dead button), not
@@ -410,6 +591,12 @@ export function decideFromEvidence(
   if (e.interacted && e.visibleChangeAfterAction === true && e.persistedAfterReload === false) return "Needs Fix";
   if (steps.some((s) => !s.ok)) return e.interacted ? "User Acceptance Required" : "Needs Clarification";
   if (!e.primaryActionFound) return "Needs Clarification";
+  // H4 (2026-10-04 파일럿 Lovable): 결과가 화면과 다른 언어로 나왔다 — 고장이라 단정하지 않되(입력에 따라
+  // 간헐), "문제를 찾지 못했어요"라고 침묵하지도 않는다.
+  if (e.interacted && e.outputLanguageMismatch === true) return "User Acceptance Required";
+  // H5 (2026-10-04 파일럿 Claude 앱): 시작 버튼이 "API 키를 넣어 주세요"를 띄웠다 — 앱이 고장 난 것은 아니지만
+  // 비개발자는 첫 단계에서 막힌다. "문제를 찾지 못했어요"로 넘기지 않는다.
+  if (e.interacted && e.needsUserCredential === true) return "User Acceptance Required";
   // ★2026-08-26 (Bae 결정 ②) — 여기가 **성공 경로**다: 모든 스텝이 끝까지 갔고,
   //  주요 동작을 찾았고, 실제로 눌러봤고, 위의 어떤 결함 신호에도 걸리지 않았다.
   //
@@ -451,6 +638,44 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
   const netText = input.networkFailures.join(" ");
   const conText = input.consoleErrors.join(" ");
 
+  // H1 (2026-10-04): 앱 대신 호스트의 "없음" 페이지가 떴다 — 다른 무엇보다 먼저, 가장 높게.
+  const notFoundStatus =
+    input.loadStatus && input.loadStatus >= 400 && input.loadStatus < 500 && !isLoginWallStatus(input.loadStatus)
+      ? input.loadStatus
+      : null;
+  if (notFoundStatus !== null || input.pageNotFound === true) {
+    findings.push({
+      severity: "high",
+      code: "page_not_found",
+      ...t.pageNotFound(notFoundStatus),
+      evidence: notFoundStatus ? `HTTP ${notFoundStatus}` : "host not-found page",
+    });
+  }
+  if (input.cannedResult) {
+    findings.push({
+      severity: "high",
+      code: "canned_result",
+      ...t.cannedResult(input.cannedResult.intentMentionsReview),
+      evidence: "same result for two different inputs; 0 processing requests",
+    });
+  }
+  if (input.needsUserCredential) {
+    findings.push({
+      severity: "medium",
+      code: "needs_user_credential",
+      ...t.needsCredential,
+      evidence: input.needsUserCredential.sample,
+    });
+  }
+  if (input.outputLanguageMismatch) {
+    findings.push({
+      severity: "medium",
+      code: "output_language_mismatch",
+      ...t.outputLanguage(input.outputLanguageMismatch.found),
+      evidence: input.outputLanguageMismatch.sample,
+    });
+  }
+
   // C4a: 각 분기는 안정 코드(`code`)를 함께 싣는다 — 문장은 바뀌어도 코드는 남아 집계 축이 된다.
   if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|getaddrinfo/i.test(netText + " " + conText)) {
     findings.push({
@@ -476,7 +701,10 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
   // Console errors are noisy and hard to attribute (third-party scripts throw
   // constantly on healthy sites), so they're INFORMATIONAL only — they never
   // drive the verdict (see decideFromEvidence) and are low severity here.
-  if (input.consoleErrors.length > 0 && !/ERR_NAME_NOT_RESOLVED/i.test(conText)) {
+  // H1: 앱이 없는 주소의 "없음" 페이지에서 난 콘솔 오류(리소스 404 등)와 "무엇을 눌러야 할지"는 앱의 문제가 아니다 —
+  // page_not_found 하나로 말한다.
+  const appMissing = notFoundStatus !== null || input.pageNotFound === true;
+  if (!appMissing && input.consoleErrors.length > 0 && !/ERR_NAME_NOT_RESOLVED/i.test(conText)) {
     findings.push({ severity: "low", code: "console_error", ...t.consoleErr, evidence: input.consoleErrors[0] ?? null });
   }
 
@@ -486,7 +714,7 @@ export function classifyFindings(input: VisualCheckInput, locale: ReportLocale =
     findings.push({ severity: "info", code: "noise_third_party", ...t.noiseInfo, evidence: input.noiseFailures![0] ?? null });
   }
 
-  if (!input.primaryActionFound && !input.interacted) {
+  if (!appMissing && !input.primaryActionFound && !input.interacted) {
     findings.push({ severity: "medium", code: "no_primary_action", ...t.noPrimary, evidence: null });
   }
 

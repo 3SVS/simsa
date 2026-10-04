@@ -70,6 +70,8 @@ const FLOW_LABELS = {
  * when it isn't).
  */
 const DEFAULT_SAMPLE_QUERY = { ko: "서울", en: "Seoul" } as const;
+/** 주소 칸에 넣는 값 — 누구나 열 수 있는 안정된 공개 주소(IANA 예시 도메인). */
+export const URL_SAMPLE_VALUE = "https://example.com/";
 
 const DEFAULT_FORBIDDEN = [
   "pay",
@@ -218,7 +220,14 @@ export function planVisualFlow(input: FlowPlanInput): FlowStep[] {
 
   // D8: a benign value the input actually accepts — "서울" in a number field
   // throws at fill time and poisoned the whole run as "couldn't interact".
-  const typeValue = input0 && input0.type === "number" ? "5" : sampleQuery;
+  // 2026-10-04 파일럿: 주소를 받는 칸(type=url·https 예시 문구)에 "서울"을 넣으면 점검기 앱은 형식 오류로 멈추거나
+  // 엉뚱한 결과를 낸다 — 실제 공개 주소를 넣어야 앱이 진짜 일을 하는지 볼 수 있다.
+  const typeValue =
+    input0 && input0.type === "number"
+      ? "5"
+      : input0 && (input0.type === "url" || /^https?:\/\/|\.com\b|\.app\b|주소|url/i.test(input0.placeholder))
+        ? URL_SAMPLE_VALUE
+        : sampleQuery;
   const typeLabel =
     input0 && (input0.type === "search" || /search|검색|찾기/i.test(input0.placeholder))
       ? L.typeQuery(typeValue)

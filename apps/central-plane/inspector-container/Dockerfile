@@ -60,6 +60,7 @@ COPY apps/central-plane/inspector-container/safety.mjs ./safety.mjs
 COPY apps/central-plane/inspector-container/signup-run.mjs ./signup-run.mjs
 # A5.2: AC then 대조(순수, 의존성 0).
 COPY apps/central-plane/inspector-container/acceptance-observe.mjs ./acceptance-observe.mjs
+COPY apps/central-plane/inspector-container/click-target.mjs ./click-target.mjs
 
 # Writable scratch space for per-run screenshots/video.
 RUN mkdir -p /var/lib/simsa && chmod 770 /var/lib/simsa
