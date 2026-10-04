@@ -396,6 +396,8 @@ export type Dictionary = {
   quota: {
     remaining: string;
     limitTitle: string;
+    limitTitleNetwork: string;
+    capPlanHint: string;
     limitBody: string;
     limitBodyNetwork: string;
     resetAt: string;
@@ -2366,6 +2368,7 @@ export type Dictionary = {
     signupOptIn: string;
     signupOptInHint: string;
     signupUnavailable: string;
+    signupNeedsBasic: string;
     intentPlaceholder: string;
     runButton: string;
     runSubmitting: string;
@@ -2394,6 +2397,8 @@ export type Dictionary = {
       dailyLimitReachedAt: string;
       /** #558 검증 P2-1: the cap notice is still on screen after resetAt passed. */
       dailyLimitCleared: string;
+      /** D-24 T-5: 402 plan_required (login-behind inspection needs Basic). */
+      planRequired: string;
       /** Train W — W-2: 503 INSPECTION_ENABLED="off". */
       inspectionDisabled: string;
       generic: string;
@@ -2485,6 +2490,9 @@ export type Dictionary = {
         dailyLimitReachedAt: string;
         /** #558 검증 P2-1: the cap notice is still on screen after resetAt passed. */
         dailyLimitCleared: string;
+        /** D-24 T-4: monthly repair quota (general / with "{when}"). */
+        monthlyLimitReached: string;
+        monthlyLimitReachedAt: string;
         /** Train W — W-2: 503 REPAIR_ENABLED="off". */
         repairDisabled: string;
         generic: string;

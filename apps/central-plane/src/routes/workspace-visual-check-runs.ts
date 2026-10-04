@@ -66,6 +66,8 @@ import { resolveRepairJobsByVerifyCheck } from "../workspace/repair-job-db.js";
 import { INSPECTION_DISABLED, inspectionEnabled } from "../workspace/service-switches.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
 import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
+import { entitlementsFor } from "../workspace/entitlements.js";
+import { resolveTier } from "../workspace/tier-resolve.js";
 import { buildBuilderFixPrompt } from "../nondev-report.js";
 import {
   USER_VERDICTS,
@@ -478,12 +480,32 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // costs a slot), one atomic statement per bucket (no read-then-increment
     // window), and handed back below when the job never starts (row not saved /
     // lost a concurrent start / container refused).
+    // D-24 T-5 — 로그인 뒤 검수(L2)는 베이직 이상. 상한 슬롯보다 **먼저** 본다(402는 몫을 쓰지 않는다).
+    // 서버가 집행한다 — UI가 체크박스를 숨기는 것만으로 게이팅하지 않는다(RC-4 협의체와 같은 원칙).
+    const tier = await resolveTier(c.env, userKey);
+    if ((body as Record<string, unknown>)["withSignup"] === true && !entitlementsFor(tier).loginBehindInspection) {
+      const en = locale === "en";
+      return c.json(
+        {
+          ok: false,
+          error: "plan_required",
+          feature: "login_behind_inspection",
+          tier,
+          message: en
+            ? "Checking the screens behind sign-in is available on the Basic plan and above. On your current plan you can check the public screens."
+            : "로그인 뒤 화면 확인은 베이직 플랜부터 쓸 수 있어요. 지금 플랜에서는 공개된 화면을 확인할 수 있어요.",
+        },
+        402,
+      );
+    }
+
+    // D-24 T-4 — the user's own daily cap is now the tier's number (free 3 · basic 10 · pro 50).
     const caps = await consumeDailyCaps(
       c.env,
-      dailyCapsFor("inspection", c.env, userKey, clientNetworkKey(c.req.raw)),
+      dailyCapsFor("inspection", c.env, userKey, clientNetworkKey(c.req.raw), tier),
     );
     if (caps.limited) {
-      const rejection = dailyCapRejection("inspection", caps);
+      const rejection = dailyCapRejection("inspection", caps, tier);
       c.header("Retry-After", String(rejection.retryAfterSeconds));
       return c.json(rejection.body, rejection.status);
     }

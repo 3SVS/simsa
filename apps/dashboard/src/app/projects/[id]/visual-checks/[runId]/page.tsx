@@ -57,7 +57,8 @@ import {
 import type { VerdictTone, SeverityTone } from "@/lib/visual-check-view.mjs";
 import { compareVisualChecks, pickPreviousDoneCheck } from "@/lib/visual-check-compare.mjs";
 import type { VisualCheckComparison, ComparedFinding } from "@/lib/visual-check-compare.mjs";
-import { isActiveStatus, runErrorNotice, runErrorTone, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
+import { isActiveStatus, isPlanCapKey, runErrorNotice, runErrorTone, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
+import { PlanCapHint } from "@/components/PlanCapHint";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { buildRecheckBody, confirmedIntentAtOf } from "@/lib/visual-check-recheck.mjs";
@@ -408,6 +409,7 @@ function RecheckNoticeView({ notice, t }: { notice: RecheckNotice | null; t: Dic
   return (
     <div className={`callout mt-2 ${soft ? "callout-info" : "callout-error"}`}>
       {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
+      {isPlanCapKey(notice.errorKey) ? <PlanCapHint /> : null}
     </div>
   );
 }
@@ -689,6 +691,7 @@ function RepairSection({
       {errorNotice !== null && errorNotice.errorKey !== "repoRequired" && errorNotice.errorKey !== "tokenRequired" && (
         <div className={`callout mt-4 ${repairErrorTone(errorNotice.errorKey) === "info" ? "callout-info" : "callout-error"}`}>
           {errorNoticeText(s.errors, errorNotice.errorKey, errorNotice.resetAt, t.visualChecks.resetWhen, { receivedAt: errorNotice.receivedAt })}
+          {isPlanCapKey(errorNotice.errorKey) ? <PlanCapHint /> : null}
         </div>
       )}
 

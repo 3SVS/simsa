@@ -486,6 +486,10 @@ const EN = {
   quota: {
     remaining: "New projects today: {n} of {limit} left",
     limitTitle: "You've already started today's new project",
+    // D-24 T-3 fix (live check 2026-10-03): blocked by someone else on the same network —
+    // this person did NOT start one, so the title must not say "you already started".
+    limitTitleNetwork: "Today's new-project allowance on this network is used up",
+    capPlanHint: "Daily and monthly limits depend on your plan.",
     limitBody: "On the {tier} plan you can start {limit} new project(s) per day. Your existing projects keep working — you can keep checking and fixing them.",
     limitBodyNetwork: "Someone on this network already started today's new project. Sign in to get your own daily allowance, or try again later.",
     resetAt: "You can start a new one {when}.",
@@ -2571,6 +2575,8 @@ const EN = {
     signupOptInHint:
       "We create one throwaway test account in your app, check the logged-in screens, then remove it. We never ask for your password.",
     signupUnavailable: "Not available yet — we are not set up to receive the confirmation email.",
+    // D-24 T-5: free plan — say it before the click, not after a refusal.
+    signupNeedsBasic: "Available on the Basic plan and above.",
     intentPlaceholder: "e.g. Sign-up and the first core action should work end to end",
     runButton: "Run inspection",
     runSubmitting: "Requesting…",
@@ -2615,6 +2621,8 @@ const EN = {
       // #558 검증 P2-1: the notice is still on screen after resetAt passed.
       dailyLimitCleared: "Your daily checks have reset. You can check again now.",
       inspectionDisabled: "Checks are paused for now. We'll reopen them soon.",
+      // D-24 T-5: 402 plan_required (login-behind inspection).
+      planRequired: "Checking the screens behind sign-in is available on the Basic plan and above. You can still check the public screens.",
       generic: "Could not start the inspection. Please try again.",
     },
     // Train W — W-2 "{when}" for the daily cap (#558 검증 P2-11: every word and
@@ -2707,6 +2715,9 @@ const EN = {
         dailyLimitReached: "You've used all of today's fixes. You can try again tomorrow (after midnight UTC).",
         dailyLimitReachedAt: "You've used all of today's fixes. You can try again {when}.",
         dailyLimitCleared: "Your daily fixes have reset. You can try again now.",
+        // D-24 T-4: 429 with period "month" — the monthly fix quota of the plan.
+        monthlyLimitReached: "You've used all of this month's fixes on your plan. You can fix again next month.",
+        monthlyLimitReachedAt: "You've used all of this month's fixes on your plan. You can fix again {when}.",
         repairDisabled: "Fixing is paused for now. We'll reopen it soon.",
         generic: "Could not start the repair. Please try again.",
       },
@@ -3564,6 +3575,10 @@ const KO = {
   quota: {
     remaining: "오늘 새 프로젝트 {limit}개 중 {n}개 남았어요",
     limitTitle: "오늘 새 프로젝트를 이미 만들었어요",
+    // D-24 T-3 수정(2026-10-03 라이브 확인): 같은 네트워크의 다른 사람 때문에 막힘 — 이 사람은 만들지
+    // 않았으므로 "이미 만들었어요"라고 말하지 않는다.
+    limitTitleNetwork: "오늘 이 네트워크의 새 프로젝트 몫을 다 썼어요",
+    capPlanHint: "하루·한 달 횟수는 플랜에 따라 달라요.",
     limitBody: "{tier} 플랜은 새 프로젝트를 하루 {limit}개까지 만들 수 있어요. 만든 프로젝트에서는 계속 확인하고 고칠 수 있어요.",
     limitBodyNetwork: "같은 네트워크에서 오늘 새 프로젝트를 이미 만들었어요. 로그인하면 내 몫이 따로 생겨요. 아니면 나중에 다시 시도해 주세요.",
     resetAt: "{when} 다시 만들 수 있어요.",
@@ -5633,6 +5648,8 @@ const KO = {
     signupOptInHint:
       "저희가 이 앱에 일회용 테스트 계정을 하나 만들어 로그인 뒤 화면을 확인하고, 끝나면 정리해요. 비밀번호는 받지 않습니다.",
     signupUnavailable: "아직 사용할 수 없어요 — 확인 메일을 받을 준비가 되어 있지 않습니다.",
+    // D-24 T-5: 무료 플랜 — 누른 뒤 거절하지 말고 누르기 전에 말한다.
+    signupNeedsBasic: "베이직 플랜부터 쓸 수 있어요.",
     intentPlaceholder: "예: 회원가입과 핵심 기능이 끝까지 작동해야 해요",
     runButton: "지금 검수하기",
     runSubmitting: "요청하는 중이에요…",
@@ -5670,6 +5687,8 @@ const KO = {
       // #558 검증 P2-1: 알림이 떠 있는 채로 resetAt이 지난 경우.
       dailyLimitCleared: "확인 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
       inspectionDisabled: "지금은 확인을 잠시 멈췄어요. 곧 다시 열게요.",
+      // D-24 T-5: 402 plan_required(로그인 뒤 검수).
+      planRequired: "로그인 뒤 화면 확인은 베이직 플랜부터 쓸 수 있어요. 공개된 화면은 지금도 확인할 수 있어요.",
       generic: "검수를 시작하지 못했어요. 다시 시도해주세요.",
     },
     // Train W — W-2 상한의 "{when}" (#558 검증 P2-11: 단어와 어순은 전부 여기 —
@@ -5760,6 +5779,9 @@ const KO = {
         dailyLimitReached: "오늘 고치기 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
         dailyLimitReachedAt: "오늘 고치기 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
         dailyLimitCleared: "고치기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
+        // D-24 T-4: period "month" — 플랜의 한 달 고치기 몫.
+        monthlyLimitReached: "이번 달 고치기 횟수를 다 썼어요. 다음 달에 다시 할 수 있어요.",
+        monthlyLimitReachedAt: "이번 달 고치기 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
         repairDisabled: "지금은 고치기를 잠시 멈췄어요. 곧 다시 열게요.",
         generic: "고치기를 시작하지 못했어요. 다시 시도해주세요.",
       },

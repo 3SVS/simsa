@@ -388,11 +388,11 @@ describe("방침·카드 문구 = 서버가 실제로 하는 일 (계약 4: 색�
     assert.match(ops.TRAINING_DATA_PURPOSE ?? "", /팔거나 다른 곳에 넘기지 않/);
   });
 
-  it("변경 이력 새 줄(시행일 상수, 게시일 2026-09-30 이후): 기록 끄기·학습 데이터·만 14세를 말한다", () => {
-    const last = (ops.PRIVACY_CHANGE_LOG ?? []).at(-1);
+  it("변경 이력 Train K 줄(2026-10-03 게시): 기록 끄기·학습 데이터·만 14세를 말한다", () => {
+    // D-24 T-4 PR이 새 줄을 더해 Train K 줄은 이제 게시된(고정 날짜) 줄이다 — 날짜로 찾는다.
+    const last = (ops.PRIVACY_CHANGE_LOG ?? []).find((l) => l.date === "2026-10-03");
     assert.ok(last, "change log");
-    assert.equal(last.date, ops.PRIVACY_EFFECTIVE_DATE);
-    assert.ok(last.date > "2026-09-30", `new line must be after the published 2026-09-30 line: ${last.date}`);
+    assert.ok(ops.PRIVACY_EFFECTIVE_DATE > "2026-10-03", `the newest line is after the published 2026-10-03 line: ${ops.PRIVACY_EFFECTIVE_DATE}`);
     assert.match(last.summary, /기록 끄기/);
     assert.match(last.summary, /학습 데이터/);
     assert.match(last.summary, /만 14세/);
@@ -702,7 +702,7 @@ describe("#574 수정 반영 — 국가 모름 = 기본 off · 0071 이전 사�
 
   it("방침 끄기 문단: 유럽연합 등 + 접속 나라를 알 수 없는 경우도 켜기 전까지 기록하지 않는다", () => {
     assert.match(ops.OPS_INFO_OPT_OUT ?? "", /유럽연합·유럽경제지역·영국·스위스[^.]*알 수 없는 경우[^.]*켜시기 전까지[^.]*기록하지 않/);
-    assert.match((ops.PRIVACY_CHANGE_LOG ?? []).at(-1)?.summary ?? "", /알 수 없/);
+    assert.match((ops.PRIVACY_CHANGE_LOG ?? []).find((l) => l.date === "2026-10-03")?.summary ?? "", /알 수 없/);
   });
 
   it("TRAINING_COPY_NOTE: 0071 이전 사본은 '지우지 못할 수 있습니다' — '색인이 없어 못 지운다'고 단정하지 않는다", () => {
