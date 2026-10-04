@@ -1,0 +1,70 @@
+# plan-grant — D-24 플랜 수동 부여/회수 (docs/simsa-plan-tiers-design-2026-10-03.md).
+#
+# 결제(T-6) 전까지 베이직·프로·장비(staff) 티어는 운영자가 직접 부여한다. 이 워크플로는
+# POST /admin/plan-grants를 repo secret INTERNAL_CALLBACK_TOKEN으로 부른다 — 토큰이 로컬에
+# 없어도 되고, 실행 기록이 Actions에 남는다(누가·언제).
+#
+# ★userKey는 그 키의 익명 프로젝트에 접근하는 열쇠이기도 하다 → 로그에 찍지 않는다(add-mask).
+# ★입력은 env로만 넘긴다(run 안에 ${{ inputs.* }}를 직접 쓰면 셸 주입 경로가 된다).
+# 운영 데이터 쓰기다 — 실행은 Bae 건별 승인 뒤에만.
+name: plan-grant
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_key:
+        description: '대상 userKey (uk_…). 로그에 가려진다'
+        required: true
+        type: string
+      action:
+        description: 'grant = 부여 · revoke = 회수'
+        required: true
+        type: choice
+        options: [grant, revoke]
+      plan:
+        description: 'grant 전용: 티어'
+        required: false
+        type: choice
+        default: basic
+        options: [basic, pro, staff]
+      note:
+        description: '메모(200자, 개인정보 금지 — 예: "pilot-2026-10 참가자 1", "smoke 장비 키")'
+        required: false
+        type: string
+
+permissions: {}
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      INTERNAL_TOKEN: ${{ secrets.INTERNAL_CALLBACK_TOKEN }}
+      BASE: https://conclave-ai.seunghunbae.workers.dev
+      USER_KEY: ${{ inputs.user_key }}
+      ACTION: ${{ inputs.action }}
+      PLAN: ${{ inputs.plan }}
+      NOTE: ${{ inputs.note }}
+    steps:
+      - name: Grant / revoke
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$USER_KEY"
+          if ! printf '%s' "$USER_KEY" | grep -Eq '^[A-Za-z0-9_-]{4,200}$'; then
+            echo "::error::user_key 형식이 아니다(영숫자·_·- 4~200자)"; exit 1
+          fi
+          if [ "$ACTION" = "grant" ]; then
+            body=$(jq -nc --arg k "$USER_KEY" --arg p "$PLAN" --arg n "$NOTE" '{userKey:$k, action:"grant", plan:$p, note:$n}')
+          else
+            body=$(jq -nc --arg k "$USER_KEY" '{userKey:$k, action:"revoke"}')
+          fi
+          code=$(curl -sS -m 30 -o /tmp/out.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $INTERNAL_TOKEN" -H "content-type: application/json" \
+            --data "$body" "$BASE/admin/plan-grants")
+          echo "HTTP $code · action=$ACTION plan=${PLAN:-}"
+          jq '{ok, action, error}' /tmp/out.json || true
+          # 반영 확인: 공개 /workspace/plan이 기대 티어를 답하는가(키는 마스크됨)
+          tier=$(curl -sS -m 20 --get --data-urlencode "userKey=$USER_KEY" "$BASE/workspace/plan" | jq -r '.tier // "?"')
+          echo "now tier=$tier"
+          [ "$code" = "200" ] || exit 1
+          if [ "$ACTION" = "grant" ] && [ "$tier" != "$PLAN" ]; then echo "::error::부여 뒤 tier=$tier (기대 $PLAN)"; exit 1; fi

@@ -431,20 +431,28 @@ const EN = {
     optionalTag: "optional",
   },
   branch: {
-    title: "What do you have to start with?",
-    subtitle: "Pick whatever fits — you'll end up in the same place: your app, reviewed.",
+    // PR #571 검증 결함 4: the same question the landing page asks above the same
+    // three doors — the answers are situations, not things you have. (KO stays
+    // "무엇부터 시작할까요?" until Bae decides whether to match the landing too.)
+    title: "Where are you starting from?",
+    // C-N7 (D-17 amend 2026-09-27): the three first doors. Copy pending Bae's review.
+    subtitle: "Pick the one closest to where you are — every door ends in the same place: your app, reviewed.",
     backToChooser: "Back to the three choices",
     backToPaste: "Back to your document",
     uploadFile: "Load from file",
     uploadHint: "hwpx · PDF · Word · txt/md/json/csv — or drop a file anywhere on the screen.",
-    ideaTitle: "I just have an idea",
+    ideaTitle: "I have an idea",
     ideaDesc: "Describe what you want to build. We'll turn it into things to check.",
-    codeTitle: "I already built an app",
-    codeDesc: "Connect the code and review it right away.",
-    specTitle: "I have a plan or spec",
-    specDesc: "Paste it in and we'll turn it into things to check.",
+    codeTitle: "My app doesn't work",
+    codeDesc: "Paste its address. We open it, try it, and tell you in plain words what isn't working.",
+    differsTitle: "Not exactly what I wanted",
+    differsDesc: "Tell us what you meant it to do — that becomes what we check your app against.",
+    // Pasting a written plan is a variant of the idea door — a quiet link, not a fourth door.
+    specLink: "Already have a written plan? Paste it in instead",
     codeStepTitle: "Show us your app",
     codeStepSub: "Paste its address or GitHub repository. That is all we need to start.",
+    // Door (c): the confirm card on the next screen asks for the ORIGINAL intent.
+    codeStepSubDiffers: "Paste its address. On the next screen we'll ask what you meant it to do.",
     submitLabel: "App address or GitHub repository",
     submitPlaceholder: "https://my-app.example.com  ·  or a GitHub repository link",
     // Train W — W-3 ②: "no sign-in" covers READING only; fixing needs a connection.
@@ -2931,6 +2939,21 @@ const EN = {
     emptyNoEvidence: "We looked, but found no description of what this app does. Rather than guess, we would rather you tell us.",
     emptyLlm: "We read your app but could not draft a description just now.",
     saveMine: "Save this",
+    // C-N7 door (c) "Not exactly what I wanted": ask for the ORIGINAL intent —
+    // confirming what the app currently IS would lock in the wrong yardstick.
+    differsTitle: "What did you mean it to do?",
+    // PR #571 검증 결함 1·9: the field starts EMPTY (the as-is line is a read-only
+    // reference above it) — so "write", not "change". Copy pending Bae's review.
+    differsSubtitle: "Below is what we read from your app as it is now. Write what you actually meant it to do — that becomes what we check against.",
+    differsOneLineLabel: "What you meant it to do",
+    differsConfirm: "That's what I meant",
+    differsReadNowLabel: "What we read from your app now",
+    differsItemsHint: "These are read from your app as it is now. Uncheck any that aren't what you meant.",
+    // PR #571 검증 결함 3: after confirming on door (c) — the first check ran before
+    // the question, so the result reflects what they meant only after checking again.
+    differsRecheckLead: "Saved. Your results reflect it once you check again against it.",
+    differsRecheckButton: "Check again against this",
+    differsRecheckBusy: "An earlier check is still running. Press this again once it finishes.",
   },
   // C-A7 (door c, "it works but not the way I meant"): the interview pack — the user's own AI
   // chat asks what they originally meant, then answers in a fixed format we read back.
@@ -3501,19 +3524,24 @@ const KO = {
   },
   branch: {
     title: "무엇부터 시작할까요?",
-    subtitle: "지금 갖고 계신 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
+    // C-N7 (D-17 amend 2026-09-27): 첫 화면의 세 문. Bae 검토 대상 카피.
+    subtitle: "지금 상황에 가장 가까운 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
     backToChooser: "처음 선택으로 돌아가기",
     backToPaste: "붙여넣기로 돌아가기",
     uploadFile: "파일에서 불러오기",
     uploadHint: "hwpx · PDF · Word · txt/md/json/csv — 화면 아무 데나 끌어다 놓아도 돼요.",
-    ideaTitle: "아이디어만 있어요",
+    ideaTitle: "아이디어가 있어요",
     ideaDesc: "만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요.",
-    codeTitle: "이미 만든 앱이 있어요",
-    codeDesc: "코드를 연결하면 바로 검수해요.",
-    specTitle: "기획서가 있어요",
-    specDesc: "붙여넣으면 확인할 항목으로 바꿔드려요.",
+    codeTitle: "만든 앱이 안 돼요",
+    codeDesc: "앱 주소를 넣으면 실제로 열어 보고, 어디가 안 되는지 쉬운 말로 알려드려요.",
+    differsTitle: "만들었는데 생각과 달라요",
+    differsDesc: "원래 만들려던 걸 알려주시면, 그걸 기준으로 앱을 확인해요.",
+    // 기획서 붙여넣기는 아이디어 문의 변형 — 네 번째 문이 아니라 조용한 링크로.
+    specLink: "기획서가 이미 있으면 붙여넣어서 시작해요",
     codeStepTitle: "만드신 앱을 보여주세요",
     codeStepSub: "앱 주소나 GitHub 저장소를 붙여넣기만 하면 됩니다.",
+    // 문 (c): 다음 화면의 확인 카드가 '원래 만들려던 것'을 묻는다.
+    codeStepSubDiffers: "앱 주소를 붙여넣어 주세요. 다음 화면에서 원래 만들려던 것을 여쭤볼게요.",
     submitLabel: "앱 주소 또는 GitHub 저장소",
     submitPlaceholder: "https://내앱주소.com  ·  또는 GitHub 저장소 링크",
     // Train W — W-3 ②: "로그인 불필요"는 **읽기**까지만. 고치려면 연결이 필요하다.
@@ -5972,6 +6000,21 @@ const KO = {
     emptyNoEvidence: "찾아봤지만 이 앱이 무엇을 하는지 적힌 설명이 없었어요. 짐작해서 적기보다 직접 알려주시는 편이 정확합니다.",
     emptyLlm: "앱은 읽었는데 지금은 설명을 정리하지 못했어요.",
     saveMine: "저장하기",
+    // C-N7 문 (c) "만들었는데 생각과 달라요": 지금 앱이 무엇인지가 아니라 **원래 의도**를
+    // 묻는다 — 지금 앱을 확정하면 잘못된 자로 재게 된다.
+    differsTitle: "원래 만들려던 건 무엇이었나요?",
+    // PR #571 검증 결함 1·9: 칸은 **비어서** 시작한다(지금 앱 문장은 위에 읽기 전용 참고) —
+    // 그래서 "고쳐"가 아니라 "적어". Bae 검토 대상.
+    differsSubtitle: "아래는 지금 앱에서 읽어낸 내용이에요. 원래 만들려던 것을 직접 적어 주세요 — 적어 주신 내용이 앞으로 검수하는 기준이 됩니다.",
+    differsOneLineLabel: "원래 만들려던 것",
+    differsConfirm: "이게 원래 만들려던 거예요",
+    differsReadNowLabel: "지금 앱에서 읽은 것",
+    differsItemsHint: "지금 앱에서 읽은 항목이에요. 원래 생각과 다른 항목은 체크를 풀어 주세요.",
+    // PR #571 검증 결함 3: 문 (c)에서 확정한 뒤 — 첫 확인은 질문 전에 돌았으므로
+    // 다시 확인해야 원래 의도가 결과에 반영된다.
+    differsRecheckLead: "저장했어요. 이 기준으로 다시 확인해야 결과에 반영돼요.",
+    differsRecheckButton: "이 기준으로 다시 확인하기",
+    differsRecheckBusy: "앞선 확인이 아직 진행 중이에요. 끝나면 이 버튼을 다시 눌러 주세요.",
   },
   // C-A7 (문 c, "만들었는데 생각과 달라요"): 인터뷰 질문 묶음 — 유저가 쓰는 AI 채팅이 원래 의도를
   // 물어보고, 마지막에 정해진 양식으로 정리한 답을 우리가 다시 읽는다.

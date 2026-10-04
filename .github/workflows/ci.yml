@@ -44,3 +44,12 @@ jobs:
       # every PR.
       - name: Run release-scripts tests
         run: node --test scripts/release/*.test.mjs
+
+      # PR #571 검증 결함 5 — the journey-audit rules (dead end · same label /
+      # different destination · beginner severity) live in
+      # tools/simsa-completion-loop-spike, which is NOT a workspace package, so
+      # `pnpm test` never ran them and a weakened rule stayed green. The tests
+      # are pure (no playwright, no install): run them explicitly.
+      # apps/dashboard/test/journey-audit-ci.test.mjs guards this step.
+      - name: Run journey-audit rule tests
+        run: node --test tools/simsa-completion-loop-spike/test/*.test.mjs

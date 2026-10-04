@@ -100,3 +100,28 @@ export function buildRecheckBody(check, userKey, locale, opts = {}) {
   if (typeof check?.id === "string" && check.id) body.sourceCheckId = check.id;
   return body;
 }
+
+/** central-plane MAX_INTENT_CHARS — a longer explicit intent is refused (400 invalid_intent). */
+const MAX_INTENT_CHARS = 1000;
+
+/**
+ * PR #571 검증 결함 3 (문 (c) "만들었는데 생각과 달라요"): the check the intent card
+ * offers right after the user wrote what they MEANT. The line travels as an explicit
+ * intent — the D1 mirror of productSpec is fire-and-forget, so leaning on the
+ * server's "confirmed one-line" fallback could still measure with the generic
+ * sentence if the mirror has not landed yet. No sourceCheckId: this is a new
+ * yardstick, not a re-check of an earlier run's. Cut at the server's limit the
+ * same way the server cuts a confirmed one-line (confirmedIntentFromProject).
+ *
+ * @param {unknown} oneLine the confirmed one-line
+ * @param {string} userKey
+ * @param {"ko" | "en"} locale
+ * @returns {{ userKey: string, locale: "ko" | "en", intent?: string }}
+ */
+export function intentRecheckBody(oneLine, userKey, locale) {
+  /** @type {{ userKey: string, locale: "ko" | "en", intent?: string }} */
+  const body = { userKey, locale };
+  const line = typeof oneLine === "string" ? oneLine.trim() : "";
+  if (line) body.intent = line.slice(0, MAX_INTENT_CHARS);
+  return body;
+}
