@@ -84,6 +84,7 @@ import { EvidenceChainSection } from "@/components/EvidenceChainSection";
 import { ResultPrivacySection } from "@/components/ResultPrivacySection";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
+import { useDeveloperMode } from "@/lib/use-developer-mode";
 
 const TONE_CLASS: Record<VerdictTone, string> = {
   passed: "bg-green-50 text-green-700 border-green-200",
@@ -487,6 +488,7 @@ function RepairSection({
   locale: Locale;
 }) {
   const s = t.visualChecks.repair;
+  const [developerMode] = useDeveloperMode();
   // null = no repair job yet (show the button); otherwise render the job state.
   const [repair, setRepair] = useState<RepairJob | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "submitting">("loading");
@@ -617,7 +619,8 @@ function RepairSection({
             ) : (
               <p className="text-xs text-green-700">{s.noPrNote}</p>
             )}
-            {repair.branchName && (
+            {/* P2 정리(2026-10-04): 브랜치 이름은 개발자용 정보 — 개발자 모드에서만 보인다. */}
+            {developerMode && repair.branchName && (
               <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
                 {s.branchLabel}
                 <code className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-gray-600">
