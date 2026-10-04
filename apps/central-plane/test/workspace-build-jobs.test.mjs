@@ -312,3 +312,138 @@ test("스턱 스윕: 60분 무진행 활성 잡은 failed(그 단계), 살아 �
   assert.equal(jobs[0].failed_stage, "implementing");
   assert.equal(jobs[1].status, "building");
 });
+
+// ─── PR #578 검증 결함 (B-8) — 서버 쪽 수정 ──────────────────────────────────────
+//
+// 결함 3: 같은 프로젝트의 두 번째 POST /build([다시 시도])가 D1을 또 만들려다 이름 충돌 → 502 hosting_d1_failed.
+//   slug는 toHostedSlug(title, id)라 늘 같고, createProjectD1은 ensureNamespace와 달리 "이미 있음"을 성공으로
+//   치지 않았다 — 멈춤 화면의 [다시 시도]가 구조적으로 막다른 길이었다.
+// 결함 2: 대시보드가 [만들기]를 "라우트가 있다"만 보고 내밀었다 — 서버가 "끝까지 된다"고 알려 주는 값이 없었다.
+// 결함 5: done을 주장했지만 빌드가 green이 아니라 거절된 경우, 주장된 주소가 어디에도 남지 않았다. [정정 2026-10-04: #569 이후 컨테이너 done 경로가 없어져 해당 테스트 제거 — 아래 주석]
+
+/** 이름이 겹치는 D1 생성을 거부하고(Cloudflare D1의 이름 중복 거부), 이름으로 찾기(GET ?name=)에 답하는 가짜. */
+function makeCfWithDupes({ preexisting = [] } = {}) {
+  const calls = [];
+  const dbs = [...preexisting];
+  let n = 0;
+  return {
+    calls,
+    dbs,
+    f: async (url, init = {}) => {
+      const u = new URL(url);
+      const method = init.method ?? "GET";
+      calls.push(`${method} ${u.pathname}`);
+      if (u.pathname.endsWith("/workers/dispatch/namespaces")) return new Response(JSON.stringify({ success: false, errors: [{ code: 100120, message: "Invalid dispatch namespace name. Ensure it does not already exist" }] }), { status: 400 });
+      if (u.pathname.endsWith("/d1/database") && method === "POST") {
+        const { name } = JSON.parse(init.body);
+        if (dbs.some((d) => d.name === name)) return new Response(JSON.stringify({ success: false, errors: [{ code: 7502, message: "A database with that name already exists" }] }), { status: 400 });
+        n += 1;
+        dbs.push({ uuid: `d1-uuid-${n}`, name });
+        return new Response(JSON.stringify({ success: true, result: { uuid: `d1-uuid-${n}`, name } }), { status: 200 });
+      }
+      if (u.pathname.endsWith("/d1/database") && method === "GET") {
+        const q = u.searchParams.get("name") ?? "";
+        return new Response(JSON.stringify({ success: true, result: dbs.filter((d) => d.name.includes(q)) }), { status: 200 });
+      }
+      if (u.pathname.includes("/orgs/") && u.pathname.endsWith("/installation")) return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
+      return new Response(JSON.stringify({ success: false, errors: [{ code: 0, message: `unrouted ${u.pathname}` }] }), { status: 500 });
+    },
+  };
+}
+
+test("★결함 3: 멈춘 잡 뒤 [다시 시도](같은 프로젝트 두 번째 POST /build)는 202 — 전 잡의 D1을 그대로 쓴다(D-12 프로젝트당 D1 하나)", async () => {
+  const db = makeDb({ projects: new Map([[PROJECT, projectRow({ title: "(주)트루픽셀 예약 앱" })]]) });
+  const builder = makeBuilder();
+  const cf = makeCfWithDupes();
+  const app = createApp();
+  const first = await withFetch(cf.f, () => post(app, envFor({ db, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER, locale: "ko" }));
+  assert.equal(first.status, 202, JSON.stringify(first.body));
+  // 실행체가 아직 kind=build를 못 해서 정직하게 멈췄다(지금 프로덕션의 유일한 실패).
+  await markBuildJobFailed(envFor({ db }), first.body.job.id, { failedStage: "unknown", error: "builder_stage_not_implemented:build" });
+
+  const retry = await withFetch(cf.f, () => post(app, envFor({ db, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER, locale: "ko" }));
+  assert.equal(retry.status, 202, `다시 시도가 막다른 길 — ${JSON.stringify(retry.body)}`);
+  assert.equal(retry.body.job.slug, first.body.job.slug);
+  assert.notEqual(retry.body.job.id, first.body.job.id);
+  // D1은 한 번만 만들었고, 두 번째 잡도 같은 D1을 쓴다.
+  assert.equal(cf.calls.filter((c) => c === "POST /client/v4/accounts/acc1/d1/database").length, 1, cf.calls.join(" | "));
+  assert.equal(cf.dbs.length, 1);
+  assert.equal(builder.payloads[1].hosting.d1Id, builder.payloads[0].hosting.d1Id);
+  assert.equal(db._jobs[1].d1_id, db._jobs[0].d1_id);
+  assert.ok(db._events.some((e) => e.job_id === retry.body.job.id && JSON.parse(e.meta_json).d1Reused === true));
+});
+
+test("★결함 3: 지난 시도가 D1만 만들고 잡 행을 못 남겼어도(고아 D1) 다시 시도는 이름으로 찾아 쓴다 — 502로 영영 막히지 않는다", async () => {
+  const db = makeDb({ projects: new Map([[PROJECT, projectRow({ title: "(주)트루픽셀 예약 앱" })]]) });
+  const { toHostedSlug } = await import("../dist/workspace/hosting-provision.js");
+  const { RESERVED_SLUGS_FOR_HOSTING } = await import("../dist/workspace/hosting-reserved.js");
+  const slug = toHostedSlug("(주)트루픽셀 예약 앱", PROJECT, RESERVED_SLUGS_FOR_HOSTING);
+  const cf = makeCfWithDupes({ preexisting: [{ uuid: "d1-orphan", name: `simsa-hosted-${slug}` }] });
+  const builder = makeBuilder();
+  const r = await withFetch(cf.f, () => post(createApp(), envFor({ db, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER }));
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  assert.equal(builder.payloads[0].hosting.d1Id, "d1-orphan");
+});
+
+/** GET /workspace/build-availability (대시보드처럼 교차 출처로). */
+async function getAvailability(env) {
+  const res = await createApp().fetch(new Request("https://cp.example/workspace/build-availability", { headers: { origin: "https://app.trysimsa.com" } }), env);
+  return { status: res.status, body: await res.json(), acao: res.headers.get("access-control-allow-origin") };
+}
+
+/** BUILD_ENABLED 값(undefined = 줄 없음) × 설정 누락 조합의 env. */
+function envWithSwitch(v, opts) {
+  const e = envFor(opts);
+  return v === undefined ? e : { ...e, BUILD_ENABLED: v };
+}
+
+/** 설정 누락 조합 — POST /build가 503으로 막는 순서와 같은 이름. */
+const CONFIG_CASES = [
+  { name: "all", opts: {}, reason: "open" },
+  { name: "callback token missing", opts: { token: "" }, reason: "callback_token_missing" },
+  { name: "builder missing", opts: { builder: null }, reason: "builder_unavailable" },
+  { name: "hosting missing", opts: { hosting: false }, reason: "hosting_not_configured" },
+  { name: "llm missing", opts: { llm: false }, reason: "llm_not_configured" },
+];
+
+test("★스위치 단일화: GET /workspace/build-availability는 POST /build와 같은 BUILD_ENABLED를 본다 — off면 닫힘(build_disabled), 미설정·on이면 설정이 다 있을 때만 열림", async () => {
+  const db = makeDb();
+  // 지금 프로덕션: [vars] BUILD_ENABLED = "off" → 설정이 다 있어도 닫힘. reason은 POST 오류 코드와 같은 말.
+  const off = await getAvailability(envWithSwitch("off", { db }));
+  assert.equal(off.status, 200);
+  assert.deepEqual(off.body, { ok: true, buildEnabled: false, reason: "build_disabled" });
+  assert.equal(off.acao, "https://app.trysimsa.com", "대시보드가 교차 출처로 읽을 수 있어야 한다");
+  // off는 설정 누락보다 먼저 답한다(POST도 스위치가 첫 줄).
+  for (const c of CONFIG_CASES) {
+    assert.deepEqual((await getAvailability(envWithSwitch("off", { db, ...c.opts }))).body, { ok: true, buildEnabled: false, reason: "build_disabled" }, c.name);
+  }
+  // 정확히 "off"가 아니면(미설정·"on"·"OFF"·"") 켜짐 — 설정이 다 있으면 열림, 하나라도 빠지면 그 이유로 닫힘.
+  for (const v of [undefined, "on", "OFF", ""]) {
+    for (const c of CONFIG_CASES) {
+      const r = await getAvailability(envWithSwitch(v, { db, ...c.opts }));
+      assert.deepEqual(r.body, { ok: true, buildEnabled: c.reason === "open", reason: c.reason }, `BUILD_ENABLED=${JSON.stringify(v)} · ${c.name}`);
+    }
+  }
+});
+
+test("★스위치 단일화: 화면(가용성)과 라우트(POST /build)는 어떤 조합에서도 어긋나지 않는다 — 열림이면 202, 닫힘이면 503 + 같은 이유", async () => {
+  for (const v of [undefined, "on", "off", "OFF"]) {
+    for (const c of CONFIG_CASES) {
+      const label = `BUILD_ENABLED=${JSON.stringify(v)} · ${c.name}`;
+      const a = (await getAvailability(envWithSwitch(v, { db: makeDb(), ...c.opts }))).body;
+      const db = makeDb({ projects: new Map([[PROJECT, projectRow()]]) });
+      const builder = c.opts.builder === null ? null : makeBuilder();
+      const r = await withFetch(makeFetch().f, () => post(createApp(), envWithSwitch(v, { db, ...c.opts, builder }), `/workspace/projects/${PROJECT}/build`, { userKey: USER }));
+      if (a.buildEnabled) {
+        assert.equal(r.status, 202, `${label}: 화면이 열렸는데 라우트가 막음 — ${JSON.stringify(r.body)}`);
+      } else {
+        assert.equal(r.status, 503, `${label}: 화면이 닫혔는데 라우트가 돎 — ${JSON.stringify(r.body)}`);
+        assert.equal(r.body.error, a.reason, label);
+        assert.equal(db._jobs.length, 0, `${label}: 막힌 시작은 잡 행을 남기지 않는다`);
+      }
+    }
+  }
+});
+
+// [정정 2026-10-04 #578 병합] 결함 5 테스트(컨테이너의 done 주장 → claimedUrl 기록)는 PR #569(S1) 이후 경로가 없다:
+// 컨테이너의 done은 받지 않고 409 done_not_worker_owned로 멈춘다(배포는 Worker만) — train-b-b5b-s1-secrets-budget.test.mjs [결함 2]가 고정한다.

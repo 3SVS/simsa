@@ -41,6 +41,7 @@ import { navLabelKey, nextBarEmphasis, nextStepFromHere, projectHasApp } from "@
 import { loadExtendedProjectData } from "@/lib/workflow-store";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { useAppAddress, useAppPresence } from "@/lib/use-app-presence";
+import { useBuildOpen } from "@/lib/use-build-open";
 
 function projectIdFrom(pathname: string): string | null {
   const seg = pathname.split("/").filter(Boolean);
@@ -87,6 +88,9 @@ export function StepNextButton() {
   // #559 여정 렌즈 결함 4: whether the app's address is connected (sidebar-settled)
   // — the PR screen's bar goes where that screen's own "실제 앱 확인하기" goes.
   const hasDeployUrl = useAppAddress(projectId);
+  // B-8 (PR #578 검증 결함 2): the spec screen's "다음" is 내 앱 only when the server confirmed making
+  // is open (same shared answer as the sidebar); closed → the builder pack as before; unknown → nothing yet.
+  const makeOpen = useBuildOpen();
   const [bar, setBar] = useState<HTMLDivElement | null>(null);
   const screenHasPrimary = useScreenHasPrimary(bar);
   if (!projectId) return null;
@@ -114,6 +118,7 @@ export function StepNextButton() {
     developerMode,
     hasApp,
     hasDeployUrl,
+    makeOpen,
   });
   if (!next) return null;
 

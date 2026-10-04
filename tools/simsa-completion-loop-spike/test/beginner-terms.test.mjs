@@ -65,6 +65,8 @@ describe("beginner-terms: developer vocabulary in the default flow (Train N6)", 
     assert.equal(isDefaultFlowJourney("J1 기존-앱 갈래: 주소 하나로 검수까지 완주 (AF 트레인)"), true);
     assert.equal(isDefaultFlowJourney("J1b 저장소만 연결: 막다른 골목이 없는가 (need_url)"), true);
     assert.equal(isDefaultFlowJourney("J6 빌드 여정: 만들기 → 잡 진행 → 내 앱 카드"), true);
+    // #578 J6 실제 여정 이름(B-8) — 아이디어 문 → 지시서 → 만들기 → 진행 화면은 기본 흐름(S, 계정 0).
+    assert.equal(isDefaultFlowJourney("J6 만들기: 아이디어 → 지시서 → 만들기 → 진행 화면"), true);
   });
 
   // 문자 접미사(J1b·J2e)는 같은 여정의 변형이다. 종전 정규식(`^J2\b`)은 "J2e"에서

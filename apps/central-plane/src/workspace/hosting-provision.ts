@@ -115,13 +115,20 @@ export async function ensureNamespace(env: ProvisionEnv, fetchImpl: FetchLike = 
   return r;
 }
 
-/** 프로젝트당 D1 하나 (D-12). 이름 `simsa-hosted-<slug>`. */
+/**
+ * 프로젝트당 D1 하나 (D-12). 이름 `simsa-hosted-<slug>`.
+ *
+ * 멱등(#578 검증 결함 3): 같은 이름이 이미 있으면(지난 시도가 D1을 만들고 끝났거나 잡 행을 못 남김) 만들기가
+ * 거부된다 — 종전엔 그 거부를 그대로 돌려줘 같은 프로젝트의 [다시 시도]가 매번 502 hosting_d1_failed로 막혔다.
+ * 이제 거부되면 **이름으로 찾아 정확히 같은 이름**의 D1을 쓴다. Cloudflare 오류 코드에 기대지 않는다(코드를
+ * 라이브로 재 본 적이 없다 — 이름이 진실이다). 찾지 못하면 처음 오류를 그대로 돌려준다(다른 D1을 쓰지 않는다).
+ */
 export async function createProjectD1(env: ProvisionEnv, slug: string, fetchImpl: FetchLike = fetch): Promise<ProvisionResult<{ id: string; name: string }>> {
   const c = creds(env);
   if (!c) return { ok: false, error: "not_configured" };
   if (!SLUG_RE.test(slug)) return { ok: false, error: "cf_error", message: "invalid_slug" };
   const name = `${HOSTED_D1_PREFIX}${slug}`;
-  return call(fetchImpl, `${API}/accounts/${c.account}/d1/database`, {
+  const created = await call(fetchImpl, `${API}/accounts/${c.account}/d1/database`, {
     method: "POST",
     headers: { authorization: `Bearer ${c.token}`, "content-type": "application/json" },
     body: JSON.stringify({ name }),
@@ -129,6 +136,25 @@ export async function createProjectD1(env: ProvisionEnv, slug: string, fetchImpl
     const r = (typeof result === "object" && result !== null ? result : {}) as Record<string, unknown>;
     return { id: String(r["uuid"] ?? ""), name };
   });
+  if (created.ok || created.error !== "cf_error") return created;
+  const existing = await findProjectD1ByName(c, name, fetchImpl);
+  return existing ?? created;
+}
+
+/** 이름이 **정확히** 같은 D1 하나(목록 조회 `?name=`은 부분 일치라 여기서 한 번 더 거른다). 없거나 실패면 null. */
+async function findProjectD1ByName(c: { token: string; account: string }, name: string, fetchImpl: FetchLike): Promise<ProvisionResult<{ id: string; name: string }> | null> {
+  const found = await call(fetchImpl, `${API}/accounts/${c.account}/d1/database?name=${encodeURIComponent(name)}&per_page=100`, {
+    method: "GET",
+    headers: { authorization: `Bearer ${c.token}` },
+  }, (result) => {
+    const list = Array.isArray(result) ? result : [];
+    for (const item of list) {
+      const r = (typeof item === "object" && item !== null ? item : {}) as Record<string, unknown>;
+      if (r["name"] === name && typeof r["uuid"] === "string" && r["uuid"]) return r["uuid"];
+    }
+    return null;
+  });
+  return found.ok && found.value ? { ok: true, value: { id: found.value, name } } : null;
 }
 
 /** 정적 자산을 붙일 때(B-5b-4): 업로드 세션의 완료 JWT + 라우팅 설정. wrangler createWorkerUploadForm과 같은 모양. */

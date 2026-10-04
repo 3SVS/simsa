@@ -50,6 +50,7 @@ export type Dictionary = {
     github: string;
     checkApp: string;
     githubDev: string;
+    myApp: string;
     benchmark: string;
     experiment: string;
     visualChecks: string;
@@ -331,6 +332,17 @@ export type Dictionary = {
     viewResultsDesc: string;
     viewProgress: string;
     viewProgressDesc: string;
+    // B-8 (PR #578 fix 1/8): idea/plan doors once making is open.
+    makeApp: string;
+    makeAppDesc: string;
+    makeSpec: string;
+    makeSpecDesc: string;
+    viewBuild: string;
+    viewBuildDesc: string;
+    viewApp: string;
+    viewAppDesc: string;
+    buildStopped: string;
+    buildStoppedDesc: string;
   };
   stepsNav: {
     prepare: string;
@@ -340,6 +352,7 @@ export type Dictionary = {
     lockNeedItems: string;
     lockNeedUrl: string;
     lockNeedBuild: string;
+    lockNeedBuildMake: string;
     next: string;
     whySeeProblems: string;
     whyAfterFix: string;
@@ -420,6 +433,8 @@ export type Dictionary = {
     gsIdeaStep2: string;
     gsIdeaStep2Guide: string;
     gsIdeaStep3: string;
+    gsIdeaStep2Make: string;
+    gsIdeaStep3Make: string;
     sampleBanner: string;
     sampleCta: string;
     gsStep2: string;
@@ -566,6 +581,82 @@ export type Dictionary = {
     secTests: string;
     secAssumptions: string;
     secOpen: string;
+  };
+  /** B-8 — door (a) "Build it" (build-job-view.mjs decides which key; this holds the words). */
+  makeApp: {
+    panelTitle: string;
+    what: string;
+    excluded: string;
+    eta: string;
+    free: string;
+    hosted: string;
+    devPath: string;
+    devPathLink: string;
+    make: string;
+    starting: string;
+    activeLine: string;
+    viewProgress: string;
+    doneLine: string;
+    viewApp: string;
+    pageSubtitle: string;
+    loading: string;
+    loadError: string;
+    needDevSpec: string;
+    needDevSpecLink: string;
+    notForThisProject: string;
+    backToOverview: string;
+    progressTitle: string;
+    stages: Record<"prepare" | "skeleton" | "features" | "verify" | "test" | "publish" | "done", string>;
+    stageHints: Record<"prepare" | "skeleton" | "features" | "verify" | "test" | "publish" | "done", string>;
+    nowTag: string;
+    stoppedTag: string;
+    featuresCount: string;
+    budget: string;
+    leaveOk: string;
+    failedTitle: string;
+    failures: Record<
+      | "notImplemented"
+      | "budget"
+      | "interrupted"
+      | "startFailed"
+      | "buildFailed"
+      | "buildUnverified"
+      | "testFailed"
+      | "publishFailed"
+      | "generic",
+      string
+    >;
+    noCharge: string;
+    retry: string;
+    takeSpec: string;
+    takeSpecWorking: string;
+    takeSpecDone: string;
+    takeSpecError: string;
+    takeSpecErrorLink: string;
+    appTitle: string;
+    address: string;
+    hostedNote: string;
+    openApp: string;
+    lastCheck: string;
+    report: string;
+    download: string;
+    startErrors: Record<
+      | "unavailable"
+      | "notSynced"
+      | "needSpec"
+      | "noWorkItems"
+      | "alreadyActive"
+      | "notReady"
+      | "paused"
+      | "dailyLimitReached"
+      | "dailyLimitReachedAt"
+      | "dailyLimitCleared"
+      | "hostingFailed"
+      | "suspended"
+      | "network"
+      | "generic",
+      string
+    >;
   };
   items: {
     addItem: string;

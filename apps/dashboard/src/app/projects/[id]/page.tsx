@@ -48,6 +48,7 @@ import {
   howItWorksVisible,
   resultsSummaryVisible,
   packCopyKeys,
+  ideaExplainerKeys,
   visualCheckFact,
   visualCheckActiveFact,
   reviewRunFact,
@@ -61,6 +62,11 @@ import { useDeveloperMode } from "@/lib/use-developer-mode";
 import { fetchProjectRepo, listProjectReviewHistory } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { listProjectSources } from "@/lib/workspace-sources-api";
+import { listBuildJobs } from "@/lib/build-job-api";
+import { hostedBuildState, type HostedBuildState } from "@/lib/build-job-view.mjs";
+import { getDevSpecApi } from "@/lib/dev-spec-api";
+import { devSpecView } from "@/lib/dev-spec-view.mjs";
+import { useBuildOpen } from "@/lib/use-build-open";
 
 // Stage 272 — verdict/status chip tones on the overview inspection card
 // (same brand tokens as the visual-checks pages; colors carry meaning only).
@@ -111,6 +117,23 @@ export default function ProjectOverviewPage() {
   // been checked?" requests, so it never appears and then vanishes.
   const [reviewSettled, setReviewSettled] = useState(false);
   const [visualSettled, setVisualSettled] = useState(false);
+  // B-8 (PR #578 검증 결함 1·8): the idea/plan doors' next step depends on making — is it open
+  // (the server confirmed; shared answer), did Simsa already start a build here, is there a spec.
+  // null = still asking (no CTA until then — it would flip).
+  const makeOpen = useBuildOpen();
+  const [buildState, setBuildState] = useState<HostedBuildState | null>(null);
+  const [hasDevSpec, setHasDevSpec] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const uk = getUserKey();
+    listBuildJobs(id, uk)
+      .then((res) => { if (!cancelled) setBuildState(hostedBuildState(res)); })
+      .catch(() => { if (!cancelled) setBuildState("none"); });
+    getDevSpecApi(id, uk)
+      .then((r) => { if (!cancelled) setHasDevSpec(r.ok ? devSpecView(r.devSpec) !== null : false); })
+      .catch(() => { if (!cancelled) setHasDevSpec(false); });
+    return () => { cancelled = true; };
+  }, [id]);
   useEffect(() => {
     let cancelled = false;
     const uk = getUserKey();
@@ -213,6 +236,9 @@ export default function ProjectOverviewPage() {
         hasDeployUrl={hasDeployUrl}
         entryPath={entryPath}
         factsSettled={repoSettled && sourcesSettled}
+        makeOpen={makeOpen}
+        buildState={buildState}
+        hasDevSpec={hasDevSpec}
       />
 
       {/* ★AF-4 (설계 D-3) — "이 앱은 ~로 보입니다. 맞나요?"
@@ -395,6 +421,9 @@ function CommandCenterCard({
   hasDeployUrl,
   entryPath,
   factsSettled,
+  makeOpen,
+  buildState,
+  hasDevSpec,
 }: {
   projectId: string;
   t: Dictionary;
@@ -419,6 +448,11 @@ function CommandCenterCard({
   entryPath: "idea" | "code" | "spec" | null;
   // The repo and sources requests have both finished (whatever the result).
   factsSettled: boolean;
+  // B-8 (#578 결함 1·8): the server confirmed making is open · the latest build Simsa started here ·
+  // a development spec is saved. null = still asking.
+  makeOpen: boolean | null;
+  buildState: HostedBuildState | null;
+  hasDevSpec: boolean | null;
 }) {
   // #559 여정 렌즈 결함 8: the builder-pack card's "already built?" opens the same
   // address box right here. Arriving from "실제 앱 확인하기" elsewhere
@@ -428,16 +462,24 @@ function CommandCenterCard({
     if (window.location.hash === `#${APP_ADDRESS_ANCHOR}`) setFoldOpen(true);
   }, []);
 
-  const facts = { hasItems, hasRepo, hasRepoSource, hasReviewRun, hasVisualCheck, visualCheckActive, hasDeployUrl, entryPath };
+  const facts = { hasItems, hasRepo, hasRepoSource, hasReviewRun, hasVisualCheck, visualCheckActive, hasDeployUrl, entryPath, makeOpen, buildState, hasDevSpec };
   const next = nextProjectAction(facts);
   // #559 여정 렌즈 결함 10: "만들기 안내" in the default view, like the sidebar.
   const pack = packCopyKeys(developerMode);
+  // B-8 (#578 결함 1·8): the "how this works" list tells the [만들기] path once making is open.
+  const ideaSteps = ideaExplainerKeys({ developerMode, makeOpen });
 
   const copy: Record<string, { label: string; desc: string }> = {
     create_items: { label: t.commandCenter.createItems, desc: t.commandCenter.createItemsDesc },
     connect_code: { label: t.commandCenter.connectCode, desc: t.commandCenter.connectCodeDesc },
     add_url: { label: t.commandCenter.addUrl, desc: t.commandCenter.addUrlDesc },
     get_pack: { label: t.commandCenter[pack.label], desc: t.commandCenter.getPackDesc },
+    // B-8 (PR #578 검증 결함 1·8): the idea/plan doors with making — before, during, after and stopped.
+    make_app: { label: t.commandCenter.makeApp, desc: t.commandCenter.makeAppDesc },
+    make_spec: { label: t.commandCenter.makeSpec, desc: t.commandCenter.makeSpecDesc },
+    view_build: { label: t.commandCenter.viewBuild, desc: t.commandCenter.viewBuildDesc },
+    view_app: { label: t.commandCenter.viewApp, desc: t.commandCenter.viewAppDesc },
+    build_stopped: { label: t.commandCenter.buildStopped, desc: t.commandCenter.buildStoppedDesc },
     run_review: { label: t.commandCenter.runReview, desc: t.commandCenter.runReviewDesc },
     view_progress: { label: t.commandCenter.viewProgress, desc: t.commandCenter.viewProgressDesc },
     view_results: { label: t.commandCenter.viewResults, desc: t.commandCenter.viewResultsDesc },
@@ -464,8 +506,9 @@ function CommandCenterCard({
   };
   // …and, for whether it shows at all, on whether the project was already
   // checked (결함 9) — so it waits for those requests too.
-  const explainerReady = view.known && checksSettled;
   const explainer = explainerKind(facts);
+  // …and the idea list also waits for the making answer (its steps 2–3 depend on it — #578 결함 1·8).
+  const explainerReady = view.known && checksSettled && (explainer !== "idea" || makeOpen !== null);
 
   return (
     <div className="card mb-8 p-5">
@@ -546,8 +589,8 @@ function CommandCenterCard({
           {explainer === "idea" ? (
             <>
               <li>1. {t.overview.gsIdeaStep1}</li>
-              <li>2. {t.overview[pack.step2]}</li>
-              <li>3. {t.overview.gsIdeaStep3}</li>
+              <li>2. {t.overview[ideaSteps.step2]}</li>
+              <li>3. {t.overview[ideaSteps.step3]}</li>
             </>
           ) : (
             <>
