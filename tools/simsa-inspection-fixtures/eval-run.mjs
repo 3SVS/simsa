@@ -55,6 +55,9 @@ const TARGETS = [
     intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
   { id: "F12", url: `${FIXTURES}/real-echo-checker`, expected: "working", nullOk: true,
     intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
+  // F14: 정적 호스트 맨 위 404(Gemini 원인 — 파일 이름이 index.html이 아님).
+  { id: "F14", url: `${FIXTURES}/static-site/`, expected: "broken",
+    intent: "방문자가 앱 첫 화면을 열어 서비스를 쓸 수 있어야 한다" },
   // F13: 사용자 API 키가 있어야 시작(Claude 앱). works=true면 오판, 사람 확인(null)은 통과.
   { id: "F13", url: `${FIXTURES}/needs-api-key`, expected: "broken", nullOk: true,
     intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },

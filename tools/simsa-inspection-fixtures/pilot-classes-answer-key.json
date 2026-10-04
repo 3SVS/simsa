@@ -82,6 +82,26 @@
         "finding": "needs_user_credential",
         "clicksRealButton": true
       }
+    },
+    {
+      "id": "F14",
+      "path": "/static-site/",
+      "mirrors": "Gemini app original deploy (Netlify root 404; file not named index.html)",
+      "truth": "broken",
+      "recordedAt": "2026-10-05",
+      "predictedBeforeFix": {
+        "decision": "Not Verified",
+        "works": null,
+        "note": "or Needs Fix + page_not_found on the PR #594 engine — no cause given"
+      },
+      "expectedAfterFix": {
+        "decision": "Needs Fix",
+        "works": false,
+        "findings": [
+          "page_not_found",
+          "missing_index_file"
+        ]
+      }
     }
   ],
   "alsoCovered": [

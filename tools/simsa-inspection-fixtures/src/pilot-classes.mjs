@@ -8,6 +8,7 @@
  *   F10 /canned-result       — 주소를 넣으면 늘 **같은 결과**(78점)를 그린다. 요청 0(ChatGPT 앱).
  *   F11 /self-checklist      — 주소를 넣으면 저장 요청만 하고, "검토"는 사용자가 직접 체크하는 표(Bolt 앱).
  *   F12 /real-echo-checker   — 대조군: 주소를 넣으면 서버가 그 주소를 실제로 열어 보고 결과가 입력마다 다르다.
+ *   F14 /static-site/        — 정적 호스트(Netlify) 사이트 맨 위가 404 — 첫 화면 파일(index.html) 없음(Gemini 앱 원인).
  *   F13 /needs-api-key       — 시작하려면 사용자 API 키가 필요하다(Claude 앱). 제목과 버튼이 같은 글자("점검 시작").
  */
 
@@ -158,8 +159,21 @@ export const PILOT_CLASS_ROUTES = {
  * @param {Request} request
  * @returns {Promise<Response | null>}
  */
+// F14 — 정적 호스트 첫 화면 파일 없음(Gemini 앱: HTML 파일 이름이 index.html이 아니라 Netlify가 "/"에서 404).
+// 픽스처 도메인의 "/"는 목록 화면이라, 사이트 맨 위처럼 끝이 "/"인 폴더 경로에 같은 응답을 둔다.
+export const NETLIFY_ROOT_404_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Page not found</title></head>
+<body><div><h1>Page not found</h1>
+<p>Looks like you've followed a broken link or entered a URL that doesn't exist on this site.</p>
+<a href="/">← Back to our site</a>
+<p>If this is your site, and you weren't expecting a 404 for this path, please visit Netlify's <a href="https://answers.netlify.com/t/support-guide-i-ve-deployed-my-site-but-i-still-see-page-not-found/125">"page not found" support guide</a> for troubleshooting tips.</p>
+</div></body></html>`;
+
 export async function handlePilotClassRequest(request) {
   const url = new URL(request.url);
+  if (url.pathname === "/static-site/") {
+    return new Response(NETLIFY_ROOT_404_HTML, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
+  }
   if (url.pathname === "/http-404") {
     return new Response(HTTP_404_HTML, { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
   }
