@@ -68,6 +68,7 @@
 import type { Env } from "../env.js";
 import type { DailyCap, DailyCapScope } from "./rate-limit.js";
 import { INSPECTION_DISABLED, REPAIR_DISABLED } from "./service-switches.js";
+import { entitlementsFor, type Tier } from "./entitlements.js";
 
 export const BETA_LIMITS = {
   /** Max PR review executions per userKey per UTC day. */
@@ -132,6 +133,8 @@ export const INSPECTION_DAILY_IP_BUCKET = "inspection-daily-ip";
 export const REPAIR_DAILY_IP_BUCKET = "repair-daily-ip";
 export const INSPECTION_DAILY_GLOBAL_BUCKET = "inspection-daily-global";
 export const REPAIR_DAILY_GLOBAL_BUCKET = "repair-daily-global";
+/** D-24 T-4: monthly repair quota per user (window "YYYY-MM"). */
+export const REPAIR_MONTHLY_BUCKET = "repair-monthly";
 /** 비용 권고 ③ — service-wide buckets for the LLM generation paths (generation-capacity.ts). */
 export const GENERATION_DAILY_GLOBAL_BUCKET = "generation-daily-global";
 export const DEV_SPEC_DAILY_GLOBAL_BUCKET = "dev-spec-daily-global";
@@ -165,6 +168,19 @@ export function betaProjectCreateDailyLimit(
 /** Effective daily inspection cap for this deploy (Train W, default 10). */
 export function inspectionDailyLimit(env: Pick<Env, "BETA_INSPECTION_DAILY_LIMIT">): number {
   return dailyLimitFromEnv(env.BETA_INSPECTION_DAILY_LIMIT, BETA_LIMITS.inspectionsPerDay);
+}
+
+/**
+ * D-24 T-4 — the user's daily inspection cap: the tier's number (entitlements.ts). The env
+ * BETA_INSPECTION_DAILY_LIMIT keeps working as an operator CEILING over every tier when it is
+ * set (the lower of the two); unset → the tier number. No tier (callers before T-4) → the
+ * Train W number (inspectionDailyLimit).
+ */
+export function inspectionUserDailyLimit(env: Pick<Env, "BETA_INSPECTION_DAILY_LIMIT">, tier?: Tier): number {
+  if (!tier) return inspectionDailyLimit(env);
+  const byTier = entitlementsFor(tier).inspectionsPerDay;
+  const ceiling = parseInt(env.BETA_INSPECTION_DAILY_LIMIT ?? "", 10);
+  return Number.isFinite(ceiling) && ceiling > 0 ? Math.min(byTier, ceiling) : byTier;
 }
 
 /** Effective daily repair cap for this deploy (Train W, default 5). */
@@ -256,16 +272,21 @@ export function dailyCapsFor(
   env: DailyCapEnv,
   userKey: string,
   networkKey: string | null,
+  tier?: Tier,
 ): DailyCap[] {
   const inspection = kind === "inspection";
-  const caps: DailyCap[] = [
-    {
-      scope: "user",
-      bucket: inspection ? INSPECTION_DAILY_BUCKET : REPAIR_DAILY_BUCKET,
-      key: userKey,
-      limit: inspection ? inspectionDailyLimit(env) : repairDailyLimit(env),
-    },
-  ];
+  const caps: DailyCap[] = [];
+  // D-24 T-4: the monthly repair quota comes first — when both it and today's cap are full,
+  // "this month" is the answer that tells the person how long they really have to wait.
+  if (!inspection && tier) {
+    caps.push({ scope: "user", bucket: REPAIR_MONTHLY_BUCKET, key: userKey, limit: entitlementsFor(tier).repairsPerMonth, period: "month" });
+  }
+  caps.push({
+    scope: "user",
+    bucket: inspection ? INSPECTION_DAILY_BUCKET : REPAIR_DAILY_BUCKET,
+    key: userKey,
+    limit: inspection ? inspectionUserDailyLimit(env, tier) : repairDailyLimit(env),
+  });
   if (networkKey) {
     caps.push({
       scope: "network",
@@ -296,6 +317,7 @@ export function dailyLimitReachedBody(
   limit: number,
   resetAt: string,
   scope: Exclude<DailyCapScope, "service"> = "user",
+  extra: { tier?: Tier; period?: "day" | "month" } = {},
 ): {
   ok: false;
   error: "daily_limit_reached";
@@ -303,8 +325,21 @@ export function dailyLimitReachedBody(
   limit: number;
   resetAt: string;
   scope: Exclude<DailyCapScope, "service">;
+  /** D-24 T-4: the caller's tier (the dashboard names the plan and offers "See plans"). */
+  tier?: Tier;
+  /** D-24 T-4: "month" for the monthly repair quota (resetAt = first moment of next UTC month). */
+  period?: "month";
 } {
-  return { ok: false, error: "daily_limit_reached", kind, limit, resetAt, scope };
+  return {
+    ok: false,
+    error: "daily_limit_reached",
+    kind,
+    limit,
+    resetAt,
+    scope,
+    ...(extra.tier ? { tier: extra.tier } : {}),
+    ...(extra.period === "month" ? { period: "month" as const } : {}),
+  };
 }
 
 export type DailyCapRejection =
@@ -327,7 +362,8 @@ export type DailyCapRejection =
  */
 export function dailyCapRejection(
   kind: DailyLimitKind,
-  full: { scope: DailyCapScope; limit: number; resetAt: string; retryAfterSeconds: number },
+  full: { scope: DailyCapScope; limit: number; resetAt: string; retryAfterSeconds: number; period?: "day" | "month" },
+  tier?: Tier,
 ): DailyCapRejection {
   if (full.scope === "service") {
     return {
@@ -343,7 +379,10 @@ export function dailyCapRejection(
   }
   return {
     status: 429,
-    body: dailyLimitReachedBody(kind, full.limit, full.resetAt, full.scope),
+    body: dailyLimitReachedBody(kind, full.limit, full.resetAt, full.scope, {
+      ...(tier ? { tier } : {}),
+      ...(full.period ? { period: full.period } : {}),
+    }),
     retryAfterSeconds: full.retryAfterSeconds,
   };
 }

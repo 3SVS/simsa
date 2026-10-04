@@ -431,20 +431,28 @@ const EN = {
     optionalTag: "optional",
   },
   branch: {
-    title: "What do you have to start with?",
-    subtitle: "Pick whatever fits — you'll end up in the same place: your app, reviewed.",
+    // PR #571 검증 결함 4: the same question the landing page asks above the same
+    // three doors — the answers are situations, not things you have. (KO stays
+    // "무엇부터 시작할까요?" until Bae decides whether to match the landing too.)
+    title: "Where are you starting from?",
+    // C-N7 (D-17 amend 2026-09-27): the three first doors. Copy pending Bae's review.
+    subtitle: "Pick the one closest to where you are — every door ends in the same place: your app, reviewed.",
     backToChooser: "Back to the three choices",
     backToPaste: "Back to your document",
     uploadFile: "Load from file",
     uploadHint: "hwpx · PDF · Word · txt/md/json/csv — or drop a file anywhere on the screen.",
-    ideaTitle: "I just have an idea",
+    ideaTitle: "I have an idea",
     ideaDesc: "Describe what you want to build. We'll turn it into things to check.",
-    codeTitle: "I already built an app",
-    codeDesc: "Connect the code and review it right away.",
-    specTitle: "I have a plan or spec",
-    specDesc: "Paste it in and we'll turn it into things to check.",
+    codeTitle: "My app doesn't work",
+    codeDesc: "Paste its address. We open it, try it, and tell you in plain words what isn't working.",
+    differsTitle: "Not exactly what I wanted",
+    differsDesc: "Tell us what you meant it to do — that becomes what we check your app against.",
+    // Pasting a written plan is a variant of the idea door — a quiet link, not a fourth door.
+    specLink: "Already have a written plan? Paste it in instead",
     codeStepTitle: "Show us your app",
     codeStepSub: "Paste its address or GitHub repository. That is all we need to start.",
+    // Door (c): the confirm card on the next screen asks for the ORIGINAL intent.
+    codeStepSubDiffers: "Paste its address. On the next screen we'll ask what you meant it to do.",
     submitLabel: "App address or GitHub repository",
     submitPlaceholder: "https://my-app.example.com  ·  or a GitHub repository link",
     // Train W — W-3 ②: "no sign-in" covers READING only; fixing needs a connection.
@@ -478,6 +486,10 @@ const EN = {
   quota: {
     remaining: "New projects today: {n} of {limit} left",
     limitTitle: "You've already started today's new project",
+    // D-24 T-3 fix (live check 2026-10-03): blocked by someone else on the same network —
+    // this person did NOT start one, so the title must not say "you already started".
+    limitTitleNetwork: "Today's new-project allowance on this network is used up",
+    capPlanHint: "Daily and monthly limits depend on your plan.",
     limitBody: "On the {tier} plan you can start {limit} new project(s) per day. Your existing projects keep working — you can keep checking and fixing them.",
     limitBodyNetwork: "Someone on this network already started today's new project. Sign in to get your own daily allowance, or try again later.",
     resetAt: "You can start a new one {when}.",
@@ -2563,6 +2575,8 @@ const EN = {
     signupOptInHint:
       "We create one throwaway test account in your app, check the logged-in screens, then remove it. We never ask for your password.",
     signupUnavailable: "Not available yet — we are not set up to receive the confirmation email.",
+    // D-24 T-5: free plan — say it before the click, not after a refusal.
+    signupNeedsBasic: "Available on the Basic plan and above.",
     intentPlaceholder: "e.g. Sign-up and the first core action should work end to end",
     runButton: "Run inspection",
     runSubmitting: "Requesting…",
@@ -2607,6 +2621,8 @@ const EN = {
       // #558 검증 P2-1: the notice is still on screen after resetAt passed.
       dailyLimitCleared: "Your daily checks have reset. You can check again now.",
       inspectionDisabled: "Checks are paused for now. We'll reopen them soon.",
+      // D-24 T-5: 402 plan_required (login-behind inspection).
+      planRequired: "Checking the screens behind sign-in is available on the Basic plan and above. You can still check the public screens.",
       generic: "Could not start the inspection. Please try again.",
     },
     // Train W — W-2 "{when}" for the daily cap (#558 검증 P2-11: every word and
@@ -2699,6 +2715,9 @@ const EN = {
         dailyLimitReached: "You've used all of today's fixes. You can try again tomorrow (after midnight UTC).",
         dailyLimitReachedAt: "You've used all of today's fixes. You can try again {when}.",
         dailyLimitCleared: "Your daily fixes have reset. You can try again now.",
+        // D-24 T-4: 429 with period "month" — the monthly fix quota of the plan.
+        monthlyLimitReached: "You've used all of this month's fixes on your plan. You can fix again next month.",
+        monthlyLimitReachedAt: "You've used all of this month's fixes on your plan. You can fix again {when}.",
         repairDisabled: "Fixing is paused for now. We'll reopen it soon.",
         generic: "Could not start the repair. Please try again.",
       },
@@ -2920,6 +2939,21 @@ const EN = {
     emptyNoEvidence: "We looked, but found no description of what this app does. Rather than guess, we would rather you tell us.",
     emptyLlm: "We read your app but could not draft a description just now.",
     saveMine: "Save this",
+    // C-N7 door (c) "Not exactly what I wanted": ask for the ORIGINAL intent —
+    // confirming what the app currently IS would lock in the wrong yardstick.
+    differsTitle: "What did you mean it to do?",
+    // PR #571 검증 결함 1·9: the field starts EMPTY (the as-is line is a read-only
+    // reference above it) — so "write", not "change". Copy pending Bae's review.
+    differsSubtitle: "Below is what we read from your app as it is now. Write what you actually meant it to do — that becomes what we check against.",
+    differsOneLineLabel: "What you meant it to do",
+    differsConfirm: "That's what I meant",
+    differsReadNowLabel: "What we read from your app now",
+    differsItemsHint: "These are read from your app as it is now. Uncheck any that aren't what you meant.",
+    // PR #571 검증 결함 3: after confirming on door (c) — the first check ran before
+    // the question, so the result reflects what they meant only after checking again.
+    differsRecheckLead: "Saved. Your results reflect it once you check again against it.",
+    differsRecheckButton: "Check again against this",
+    differsRecheckBusy: "An earlier check is still running. Press this again once it finishes.",
   },
   // C-A7 (door c, "it works but not the way I meant"): the interview pack — the user's own AI
   // chat asks what they originally meant, then answers in a fixed format we read back.
@@ -3490,19 +3524,24 @@ const KO = {
   },
   branch: {
     title: "무엇부터 시작할까요?",
-    subtitle: "지금 갖고 계신 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
+    // C-N7 (D-17 amend 2026-09-27): 첫 화면의 세 문. Bae 검토 대상 카피.
+    subtitle: "지금 상황에 가장 가까운 걸 고르세요 — 어느 쪽이든 결국 '내 앱 검수'로 이어져요.",
     backToChooser: "처음 선택으로 돌아가기",
     backToPaste: "붙여넣기로 돌아가기",
     uploadFile: "파일에서 불러오기",
     uploadHint: "hwpx · PDF · Word · txt/md/json/csv — 화면 아무 데나 끌어다 놓아도 돼요.",
-    ideaTitle: "아이디어만 있어요",
+    ideaTitle: "아이디어가 있어요",
     ideaDesc: "만들고 싶은 걸 말하면 확인할 항목으로 정리해드려요.",
-    codeTitle: "이미 만든 앱이 있어요",
-    codeDesc: "코드를 연결하면 바로 검수해요.",
-    specTitle: "기획서가 있어요",
-    specDesc: "붙여넣으면 확인할 항목으로 바꿔드려요.",
+    codeTitle: "만든 앱이 안 돼요",
+    codeDesc: "앱 주소를 넣으면 실제로 열어 보고, 어디가 안 되는지 쉬운 말로 알려드려요.",
+    differsTitle: "만들었는데 생각과 달라요",
+    differsDesc: "원래 만들려던 걸 알려주시면, 그걸 기준으로 앱을 확인해요.",
+    // 기획서 붙여넣기는 아이디어 문의 변형 — 네 번째 문이 아니라 조용한 링크로.
+    specLink: "기획서가 이미 있으면 붙여넣어서 시작해요",
     codeStepTitle: "만드신 앱을 보여주세요",
     codeStepSub: "앱 주소나 GitHub 저장소를 붙여넣기만 하면 됩니다.",
+    // 문 (c): 다음 화면의 확인 카드가 '원래 만들려던 것'을 묻는다.
+    codeStepSubDiffers: "앱 주소를 붙여넣어 주세요. 다음 화면에서 원래 만들려던 것을 여쭤볼게요.",
     submitLabel: "앱 주소 또는 GitHub 저장소",
     submitPlaceholder: "https://내앱주소.com  ·  또는 GitHub 저장소 링크",
     // Train W — W-3 ②: "로그인 불필요"는 **읽기**까지만. 고치려면 연결이 필요하다.
@@ -3536,6 +3575,10 @@ const KO = {
   quota: {
     remaining: "오늘 새 프로젝트 {limit}개 중 {n}개 남았어요",
     limitTitle: "오늘 새 프로젝트를 이미 만들었어요",
+    // D-24 T-3 수정(2026-10-03 라이브 확인): 같은 네트워크의 다른 사람 때문에 막힘 — 이 사람은 만들지
+    // 않았으므로 "이미 만들었어요"라고 말하지 않는다.
+    limitTitleNetwork: "오늘 이 네트워크의 새 프로젝트 몫을 다 썼어요",
+    capPlanHint: "하루·한 달 횟수는 플랜에 따라 달라요.",
     limitBody: "{tier} 플랜은 새 프로젝트를 하루 {limit}개까지 만들 수 있어요. 만든 프로젝트에서는 계속 확인하고 고칠 수 있어요.",
     limitBodyNetwork: "같은 네트워크에서 오늘 새 프로젝트를 이미 만들었어요. 로그인하면 내 몫이 따로 생겨요. 아니면 나중에 다시 시도해 주세요.",
     resetAt: "{when} 다시 만들 수 있어요.",
@@ -5605,6 +5648,8 @@ const KO = {
     signupOptInHint:
       "저희가 이 앱에 일회용 테스트 계정을 하나 만들어 로그인 뒤 화면을 확인하고, 끝나면 정리해요. 비밀번호는 받지 않습니다.",
     signupUnavailable: "아직 사용할 수 없어요 — 확인 메일을 받을 준비가 되어 있지 않습니다.",
+    // D-24 T-5: 무료 플랜 — 누른 뒤 거절하지 말고 누르기 전에 말한다.
+    signupNeedsBasic: "베이직 플랜부터 쓸 수 있어요.",
     intentPlaceholder: "예: 회원가입과 핵심 기능이 끝까지 작동해야 해요",
     runButton: "지금 검수하기",
     runSubmitting: "요청하는 중이에요…",
@@ -5642,6 +5687,8 @@ const KO = {
       // #558 검증 P2-1: 알림이 떠 있는 채로 resetAt이 지난 경우.
       dailyLimitCleared: "확인 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
       inspectionDisabled: "지금은 확인을 잠시 멈췄어요. 곧 다시 열게요.",
+      // D-24 T-5: 402 plan_required(로그인 뒤 검수).
+      planRequired: "로그인 뒤 화면 확인은 베이직 플랜부터 쓸 수 있어요. 공개된 화면은 지금도 확인할 수 있어요.",
       generic: "검수를 시작하지 못했어요. 다시 시도해주세요.",
     },
     // Train W — W-2 상한의 "{when}" (#558 검증 P2-11: 단어와 어순은 전부 여기 —
@@ -5732,6 +5779,9 @@ const KO = {
         dailyLimitReached: "오늘 고치기 횟수를 다 썼어요. 내일(자정 UTC 이후) 다시 할 수 있어요.",
         dailyLimitReachedAt: "오늘 고치기 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
         dailyLimitCleared: "고치기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
+        // D-24 T-4: period "month" — 플랜의 한 달 고치기 몫.
+        monthlyLimitReached: "이번 달 고치기 횟수를 다 썼어요. 다음 달에 다시 할 수 있어요.",
+        monthlyLimitReachedAt: "이번 달 고치기 횟수를 다 썼어요. {when} 다시 할 수 있어요.",
         repairDisabled: "지금은 고치기를 잠시 멈췄어요. 곧 다시 열게요.",
         generic: "고치기를 시작하지 못했어요. 다시 시도해주세요.",
       },
@@ -5950,6 +6000,21 @@ const KO = {
     emptyNoEvidence: "찾아봤지만 이 앱이 무엇을 하는지 적힌 설명이 없었어요. 짐작해서 적기보다 직접 알려주시는 편이 정확합니다.",
     emptyLlm: "앱은 읽었는데 지금은 설명을 정리하지 못했어요.",
     saveMine: "저장하기",
+    // C-N7 문 (c) "만들었는데 생각과 달라요": 지금 앱이 무엇인지가 아니라 **원래 의도**를
+    // 묻는다 — 지금 앱을 확정하면 잘못된 자로 재게 된다.
+    differsTitle: "원래 만들려던 건 무엇이었나요?",
+    // PR #571 검증 결함 1·9: 칸은 **비어서** 시작한다(지금 앱 문장은 위에 읽기 전용 참고) —
+    // 그래서 "고쳐"가 아니라 "적어". Bae 검토 대상.
+    differsSubtitle: "아래는 지금 앱에서 읽어낸 내용이에요. 원래 만들려던 것을 직접 적어 주세요 — 적어 주신 내용이 앞으로 검수하는 기준이 됩니다.",
+    differsOneLineLabel: "원래 만들려던 것",
+    differsConfirm: "이게 원래 만들려던 거예요",
+    differsReadNowLabel: "지금 앱에서 읽은 것",
+    differsItemsHint: "지금 앱에서 읽은 항목이에요. 원래 생각과 다른 항목은 체크를 풀어 주세요.",
+    // PR #571 검증 결함 3: 문 (c)에서 확정한 뒤 — 첫 확인은 질문 전에 돌았으므로
+    // 다시 확인해야 원래 의도가 결과에 반영된다.
+    differsRecheckLead: "저장했어요. 이 기준으로 다시 확인해야 결과에 반영돼요.",
+    differsRecheckButton: "이 기준으로 다시 확인하기",
+    differsRecheckBusy: "앞선 확인이 아직 진행 중이에요. 끝나면 이 버튼을 다시 눌러 주세요.",
   },
   // C-A7 (문 c, "만들었는데 생각과 달라요"): 인터뷰 질문 묶음 — 유저가 쓰는 AI 채팅이 원래 의도를
   // 물어보고, 마지막에 정해진 양식으로 정리한 답을 우리가 다시 읽는다.

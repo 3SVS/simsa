@@ -78,6 +78,10 @@ function makeDb(state, { delayMs = 0, failInserts = [] } = {}) {
     connections: [],
     events: [],
     rate: new Map(), // `${hash}::${bucketKey}` → count
+    // D-24 T-4: Train W's numbers (inspection 10/day · repair 5/day) are now the BASIC tier's
+    // (inspection 10/day · repair 10/month ≥ 5/day). These tests pin the cap MACHINERY, so
+    // their users are basic by default; tier-specific numbers live in train-t4-t5-tier-limits.
+    planGrant: "basic",
     ...state,
   };
   const pause = () => (delayMs > 0 ? sleep(delayMs) : Promise.resolve());
@@ -174,6 +178,8 @@ function makeDb(state, { delayMs = 0, failInserts = [] } = {}) {
               return count === undefined ? null : { count };
             }
             if (sql.includes("FROM workspace_projects WHERE id = ?")) return s.projects.get(args[0]) ?? null;
+            if (sql.includes("FROM plan_grants")) return s.planGrant ? { plan: s.planGrant } : null;
+            if (sql.includes("FROM ls_subscriptions")) return null;
             if (sql.includes("FROM project_sources") && sql.includes("WHERE id = ?")) {
               return s.sources.find((x) => x.id === args[0]) ?? null;
             }
@@ -1104,4 +1110,161 @@ test("[가드] ⑫ 컨테이너가 잡을 거절(500) → dispatched:false · �
   assert.equal(db2.state.jobs[0].status, "failed");
   assert.equal(totalCharged(db2), 0);
   assert.equal(calls.length, 2, "each container was asked once and said no");
+});
+
+// ─── D-24 T-4 · T-5 — 플랜 티어별 검수·수리 상한, 로그인 뒤 검수 게이트 ─────────────────────
+//
+// (docs/simsa-plan-tiers-design-2026-10-03.md D-24.4 [PILOT]) 무료 검수 3/일 · 베이직 10 · 프로 50 ·
+// 수리 월 3/10/30(UTC 달, 하루 상한과 함께) · 로그인 뒤 검수(L2)는 베이직부터(402, 몫을 쓰지 않음).
+// 위 Train W 테스트는 기본 사용자를 베이직으로 두고 기계 장치를 고정한다 — 여기서는 티어 수치를 고정한다.
+// Rule 6: 값이 키로 흘러가는 사용자·프로젝트는 한글로.
+
+const KO_USER = "uk_한글사용자_무료";
+const KO_PROJECT = "wsp_트루픽셀";
+
+function koDb(extra = {}) {
+  const row = { ...projectRow(KO_PROJECT, KO_USER), title: "(주)트루픽셀 사내 예약앱" };
+  return makeDb({
+    projects: new Map([[KO_PROJECT, row]]),
+    sources: [website(KO_PROJECT, KO_USER)],
+    ...extra,
+  });
+}
+
+function nextUtcMonthIso(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+}
+
+test("T-4 무료 사용자의 4번째 검수 → 429 · limit 3 · tier free (한글 사용자·프로젝트)", async () => {
+  const calls = [];
+  const db = koDb({ planGrant: null });
+  const env = makeEnv({ db, inspector: acceptingNs(calls) });
+  for (let i = 1; i <= 3; i++) {
+    const r = await req(env, "POST", runPath(KO_PROJECT), { userKey: KO_USER });
+    assert.equal(r.status, 202, `run #${i}`);
+    finishAllChecks(db);
+  }
+  const r4 = await expectResetAtAround(() => req(env, "POST", runPath(KO_PROJECT), { userKey: KO_USER }));
+  assert.equal(r4.status, 429);
+  assert.deepEqual(
+    { error: r4.json.error, kind: r4.json.kind, limit: r4.json.limit, tier: r4.json.tier, scope: r4.json.scope },
+    { error: "daily_limit_reached", kind: "inspection", limit: 3, tier: "free", scope: "user" },
+  );
+  assert.equal(r4.json.period, undefined, "a daily cap carries no period");
+  assert.equal(calls.length, 3);
+});
+
+test("T-4 프로는 하루 50회 · env BETA_INSPECTION_DAILY_LIMIT은 모든 티어의 천장(더 낮은 쪽)", async () => {
+  const db = defaultDb({ planGrant: "pro" });
+  const env = makeEnv({ db, inspector: acceptingNs([]) });
+  for (let i = 1; i <= 50; i++) {
+    const r = await req(env, "POST", runPath(PROJECT), { userKey: USER });
+    assert.equal(r.status, 202, `pro run #${i}`);
+    finishAllChecks(db);
+  }
+  const r51 = await req(env, "POST", runPath(PROJECT), { userKey: USER });
+  assert.equal(r51.status, 429);
+  assert.equal(r51.json.limit, 50);
+  assert.equal(r51.json.tier, "pro");
+
+  const db2 = defaultDb({ planGrant: "pro" });
+  const env2 = makeEnv({ db: db2, inspector: acceptingNs([]), vars: { BETA_INSPECTION_DAILY_LIMIT: "2" } });
+  for (let i = 1; i <= 2; i++) {
+    assert.equal((await req(env2, "POST", runPath(PROJECT), { userKey: USER })).status, 202);
+    finishAllChecks(db2);
+  }
+  const capped = await req(env2, "POST", runPath(PROJECT), { userKey: USER });
+  assert.equal(capped.status, 429);
+  assert.equal(capped.json.limit, 2, "operator ceiling wins over the tier number");
+});
+
+test("T-4 무료 사용자의 4번째 수리(이번 달) → 429 · period month · limit 3 · resetAt=다음 UTC 달", async () => {
+  const calls = [];
+  const runs = ["wvc_m1", "wvc_m2", "wvc_m3", "wvc_m4"].map((id) => failedCheck(id));
+  const db = defaultDb({ planGrant: null, checks: runs, repos: [repoRow()], connections: [connectionRow()] });
+  const env = makeEnv({ db, sandbox: acceptingNs(calls) });
+  for (let i = 0; i < 3; i++) {
+    const r = await req(env, "POST", repairPath(PROJECT, runs[i].id), { userKey: USER });
+    assert.equal(r.status, 202, `repair #${i + 1}`);
+    finishAllJobs(db);
+  }
+  const before = nextUtcMonthIso();
+  const r4 = await req(env, "POST", repairPath(PROJECT, runs[3].id), { userKey: USER });
+  const after = nextUtcMonthIso();
+  assert.equal(r4.status, 429);
+  assert.deepEqual(
+    { error: r4.json.error, kind: r4.json.kind, limit: r4.json.limit, tier: r4.json.tier, period: r4.json.period },
+    { error: "daily_limit_reached", kind: "repair", limit: 3, tier: "free", period: "month" },
+  );
+  assert.ok(r4.json.resetAt === before || r4.json.resetAt === after, `resetAt ${r4.json.resetAt}`);
+  assert.ok(Number(r4.headers.get("retry-after")) > 0);
+  assert.equal(db.state.jobs.length, 3, "no job row for the refused repair");
+  assert.equal(calls.length, 3);
+});
+
+test("T-4 수리가 시작되지 않으면(샌드박스 없음) 월 몫도 돌려준다 — 실패 5번 뒤에도 3회가 남아 있다", async () => {
+  const runs = ["wvc_f1", "wvc_f2", "wvc_f3", "wvc_f4", "wvc_f5", "wvc_f6", "wvc_f7", "wvc_f8"].map((id) => failedCheck(id));
+  const db = defaultDb({ planGrant: null, checks: runs, repos: [repoRow()], connections: [connectionRow()] });
+  const noSandbox = makeEnv({ db });
+  for (let i = 0; i < 5; i++) {
+    const r = await req(noSandbox, "POST", repairPath(PROJECT, runs[i].id), { userKey: USER });
+    assert.equal(r.status, 202);
+    assert.equal(r.json.dispatched, false);
+  }
+  const env = makeEnv({ db, sandbox: acceptingNs([]) });
+  for (let i = 5; i < 8; i++) {
+    const r = await req(env, "POST", repairPath(PROJECT, runs[i].id), { userKey: USER });
+    assert.equal(r.status, 202, `real repair ${i - 4}`);
+    assert.equal(r.json.dispatched, true);
+    finishAllJobs(db);
+  }
+});
+
+test("T-4 베이직의 월 몫(10)은 하루 상한(5)보다 크다 — 6번째는 하루 상한으로 막힌다(period 없음)", async () => {
+  const runs = Array.from({ length: 6 }, (_, i) => failedCheck(`wvc_b${i}`));
+  const db = defaultDb({ planGrant: "basic", checks: runs, repos: [repoRow()], connections: [connectionRow()] });
+  const env = makeEnv({ db, sandbox: acceptingNs([]) });
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await req(env, "POST", repairPath(PROJECT, runs[i].id), { userKey: USER })).status, 202);
+    finishAllJobs(db);
+  }
+  const r6 = await req(env, "POST", repairPath(PROJECT, runs[5].id), { userKey: USER });
+  assert.equal(r6.status, 429);
+  assert.equal(r6.json.limit, 5);
+  assert.equal(r6.json.period, undefined);
+  assert.equal(r6.json.tier, "basic");
+});
+
+test("T-5 무료 사용자의 로그인 뒤 검수 → 402 plan_required · 행·몫·컨테이너 0 · 공개 화면 검수는 그대로", async () => {
+  const calls = [];
+  const db = koDb({ planGrant: null });
+  const env = makeEnv({ db, inspector: acceptingNs(calls), vars: { PROBE_MAIL_DOMAIN: "probe.example.dev" } });
+  const r = await req(env, "POST", runPath(KO_PROJECT), { userKey: KO_USER, withSignup: true });
+  assert.equal(r.status, 402);
+  assert.deepEqual(
+    { error: r.json.error, feature: r.json.feature, tier: r.json.tier },
+    { error: "plan_required", feature: "login_behind_inspection", tier: "free" },
+  );
+  assert.match(r.json.message, /베이직/);
+  const en = await req(env, "POST", runPath(KO_PROJECT), { userKey: KO_USER, withSignup: true, locale: "en" });
+  assert.match(en.json.message, /Basic plan/);
+  assert.doesNotMatch(en.json.message, /[가-힣]/);
+  assert.equal(db.state.checks.length, 0);
+  assert.equal(calls.length, 0);
+  // 402는 하루 몫을 쓰지 않았다 — 공개 화면 검수 3회가 모두 된다.
+  for (let i = 1; i <= 3; i++) {
+    assert.equal((await req(env, "POST", runPath(KO_PROJECT), { userKey: KO_USER })).status, 202, `L1 run #${i}`);
+    finishAllChecks(db);
+  }
+});
+
+test("T-5 베이직은 로그인 뒤 검수를 보낸다(컨테이너 페이로드에 가입 정보)", async () => {
+  const calls = [];
+  const db = defaultDb({ planGrant: "basic" });
+  const env = makeEnv({ db, inspector: acceptingNs(calls), vars: { PROBE_MAIL_DOMAIN: "probe.example.dev" } });
+  const r = await req(env, "POST", runPath(PROJECT), { userKey: USER, withSignup: true });
+  assert.equal(r.status, 202);
+  assert.equal(r.json.dispatched, true);
+  assert.equal(calls.length, 1);
+  assert.match(JSON.stringify(calls[0].body), /probe\.example\.dev/);
 });

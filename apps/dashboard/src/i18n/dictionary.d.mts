@@ -359,9 +359,14 @@ export type Dictionary = {
     ideaDesc: string;
     codeTitle: string;
     codeDesc: string;
-    specTitle: string;
-    specDesc: string;
+    /** C-N7 — the third door, "It works, but not how I meant". */
+    differsTitle: string;
+    differsDesc: string;
+    /** C-N7 — pasting a plan: a quiet link under the doors, not a fourth door. */
+    specLink: string;
     codeStepTitle: string;
+    /** C-N7 — door (c)'s step-1 subtitle (the next screen asks for the original intent). */
+    codeStepSubDiffers: string;
     submitLabel: string;
     submitPlaceholder: string;
     submitHint: string;
@@ -391,6 +396,8 @@ export type Dictionary = {
   quota: {
     remaining: string;
     limitTitle: string;
+    limitTitleNetwork: string;
+    capPlanHint: string;
     limitBody: string;
     limitBodyNetwork: string;
     resetAt: string;
@@ -2361,6 +2368,7 @@ export type Dictionary = {
     signupOptIn: string;
     signupOptInHint: string;
     signupUnavailable: string;
+    signupNeedsBasic: string;
     intentPlaceholder: string;
     runButton: string;
     runSubmitting: string;
@@ -2389,6 +2397,8 @@ export type Dictionary = {
       dailyLimitReachedAt: string;
       /** #558 검증 P2-1: the cap notice is still on screen after resetAt passed. */
       dailyLimitCleared: string;
+      /** D-24 T-5: 402 plan_required (login-behind inspection needs Basic). */
+      planRequired: string;
       /** Train W — W-2: 503 INSPECTION_ENABLED="off". */
       inspectionDisabled: string;
       generic: string;
@@ -2480,6 +2490,9 @@ export type Dictionary = {
         dailyLimitReachedAt: string;
         /** #558 검증 P2-1: the cap notice is still on screen after resetAt passed. */
         dailyLimitCleared: string;
+        /** D-24 T-4: monthly repair quota (general / with "{when}"). */
+        monthlyLimitReached: string;
+        monthlyLimitReachedAt: string;
         /** Train W — W-2: 503 REPAIR_ENABLED="off". */
         repairDisabled: string;
         generic: string;
@@ -2632,6 +2645,11 @@ export type Dictionary = {
     confirm: string; later: string; errorLead: string; retry: string; emptyTitle: string;
     emptyNoSource: string; emptyUnreadable: string; emptyNoEvidence: string; emptyLlm: string;
     saveMine: string;
+    /** C-N7 door (c) — asks for the ORIGINAL intent instead of confirming the app as it is. */
+    differsTitle: string; differsSubtitle: string; differsOneLineLabel: string; differsConfirm: string;
+    /** PR #571 검증 결함 1·9·3 — door (c): read-only as-is line, items hint, re-check offer after confirming. */
+    differsReadNowLabel: string; differsItemsHint: string;
+    differsRecheckLead: string; differsRecheckButton: string; differsRecheckBusy: string;
   };
   /** C-A7 — 문 (c) 인터뷰 질문 묶음 카드. */
   interviewPack: {

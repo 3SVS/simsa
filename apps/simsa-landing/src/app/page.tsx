@@ -30,6 +30,15 @@ const FEEDBACK_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
 
 type Lang = "en" | "ko";
 
+// C-N7 (D-17 amend 2026-09-27) — the three first doors open the SAME door in
+// the app (dashboard /projects/new branch URLs; see apps/dashboard/src/lib/
+// entry-doors.mjs doorHref). Order matches t.hero.doors.items.
+const DOOR_PATHS = [
+  "/projects/new?path=idea",
+  "/projects/new?path=code",
+  "/projects/new?path=code&door=differs",
+] as const;
+
 // Inline line-glyphs for the "start from anything" cards (decorative, aria-hidden).
 const GLYPHS = [
   // idea — bulb
@@ -125,6 +134,20 @@ export default function Home() {
           <h1 className="tagline rise rise-1">{t.hero.headline}</h1>
           <p className="subline rise rise-2">{t.hero.subline}</p>
           <p className="lede rise rise-2">{t.hero.lede}</p>
+          {/* C-N7: three equal doors, one line each — secondary links; the
+              single primary stays "Start free" below. */}
+          <nav className="doors rise rise-2" aria-label={t.hero.doors.lead}>
+            <p className="doors-lead">{t.hero.doors.lead}</p>
+            <ul className="doors-list">
+              {t.hero.doors.items.map((label, i) => (
+                <li key={label}>
+                  <a className="door" href={`${APP_URL}${DOOR_PATHS[i] ?? "/projects/new"}`}>
+                    {label} <span aria-hidden>→</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
           <p className="beta-note rise rise-3">{t.hero.betaNote}</p>
           <div className="hero-actions rise rise-3">
             <a className="cta" href={APP_URL}>

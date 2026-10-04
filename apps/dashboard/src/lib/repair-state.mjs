@@ -186,8 +186,12 @@ export function repairErrorKey(codeOrStatus) {
  */
 export function repairErrorNotice(res) {
   const code = res && typeof res === "object" ? /** @type {{ error?: unknown }} */ (res).error : res;
-  const errorKey = repairErrorKey(code);
-  const resetAt = errorKey === "dailyLimitReached" ? (readDailyLimit(res)?.resetAt ?? null) : null;
+  let errorKey = repairErrorKey(code);
+  const cap = errorKey === "dailyLimitReached" ? readDailyLimit(res) : null;
+  // D-24 T-4: the monthly repair quota (period "month") has its own sentence — "this month",
+  // not "today" (resetAt is the first day of next month).
+  if (cap?.period === "month") errorKey = "monthlyLimitReached";
+  const resetAt = cap?.resetAt ?? null;
   return { errorKey, resetAt };
 }
 
@@ -199,7 +203,7 @@ export function repairErrorNotice(res) {
  * @returns {"info" | "error"}
  */
 export function repairErrorTone(key) {
-  return key === "dailyLimitReached" || key === "repairDisabled" ? "info" : "error";
+  return key === "dailyLimitReached" || key === "monthlyLimitReached" || key === "repairDisabled" ? "info" : "error";
 }
 
 /**

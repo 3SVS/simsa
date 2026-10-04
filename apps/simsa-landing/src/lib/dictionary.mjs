@@ -38,6 +38,12 @@ export const LANDING_DICT = {
         "Simsa is in open beta — everything is free while we build it out. You'd be one of the early members, and what you run shapes what it becomes.",
       ctaStart: "Start free — open beta",
       ctaDemo: "View demo",
+      // C-N7 (D-17 amend 2026-09-27): the three first doors, one line each —
+      // each opens the matching door in the app. Copy pending Bae's review.
+      doors: {
+        lead: "Where are you starting from?",
+        items: ["I have an idea", "My app doesn't work", "Not exactly what I wanted"],
+      },
     },
     startAnything: {
       title: "Start from anything",
@@ -88,7 +94,7 @@ export const LANDING_DICT = {
       items: [
         { q: "Is it free?", a: "Yes — Simsa is free during the open beta. No card, no limits beyond a light daily cap." },
         { q: "How is my data handled?", a: "Your work stays in your browser and your account. Reviews are only kept if you opt in, under an anonymized ID — we share patterns, never people." },
-        { q: "Which AI tools does it support?", a: "Anything you built with — Claude Code, Codex, Lovable, v0, Bolt, Cursor, Replit, Windsurf, and more. You can also just paste a plan or connect a GitHub repo." },
+        { q: "Does it work whatever tool I built it with?", a: "Yes. Lovable, v0, Bolt, Replit, Cursor, Claude Code — whatever you used, give us your app's address and Simsa opens it and checks it. Screens behind a sign-in are the limit: we tell you how far we could see. No app yet? Start from your idea or a written plan." },
         { q: "Do I need to know how to code?", a: "No. Simsa is built for non-developers — describe what your app should do in plain language and it checks the result for you." },
         { q: "How do I get in touch?", a: "Use the in-app feedback button (bug, question, or idea) — we read every note." },
       ],
@@ -114,6 +120,12 @@ export const LANDING_DICT = {
         "지금은 오픈 베타예요 — 만들어가는 동안 모든 기능이 무료입니다. 지금 시작하면 초기 멤버가 되고, 여러분이 돌린 확인이 Simsa의 방향을 만들어요.",
       ctaStart: "무료로 시작하기 — 오픈 베타",
       ctaDemo: "데모 보기",
+      // C-N7 (D-17 amend 2026-09-27): 첫 화면 세 문, 1줄씩 — 각각 앱의 같은 문으로 연결.
+      // Bae 검토 대상 카피.
+      doors: {
+        lead: "지금 어디쯤이세요?",
+        items: ["아이디어가 있어요", "만든 앱이 안 돼요", "만들었는데 생각과 달라요"],
+      },
     },
     startAnything: {
       title: "무엇으로든 시작하세요",
@@ -164,7 +176,7 @@ export const LANDING_DICT = {
       items: [
         { q: "무료인가요?", a: "네 — 오픈 베타 기간에는 무료예요. 카드도 필요 없고, 가벼운 하루 사용량 제한 외에는 한도도 없어요." },
         { q: "제 데이터는 어떻게 처리되나요?", a: "작업물은 브라우저와 계정 안에 있어요. 확인 결과는 동의하실 때만 익명 ID로 보관돼요 — 패턴은 공유해도 개인은 절대 아니에요." },
-        { q: "어떤 AI 도구를 지원하나요?", a: "Claude Code, Codex, Lovable, v0, Bolt, Cursor, Replit, Windsurf 등 무엇으로 만드셨든 괜찮아요. 기획서를 붙여넣거나 GitHub 저장소를 연결해도 돼요." },
+        { q: "어떤 도구로 만들었든 되나요?", a: "네. Lovable, v0, Bolt, Replit, Cursor, Claude Code 등 무엇으로 만드셨든 앱 주소만 알려주시면 Simsa가 열어 보고 확인해요. 로그인해야 보이는 화면은 한계가 있어서, 어디까지 봤는지 함께 알려드려요. 아직 앱이 없다면 아이디어나 기획서로 시작하면 돼요." },
         { q: "코드를 몰라도 되나요?", a: "네. Simsa는 비개발자를 위해 만들었어요 — 앱이 무엇을 해야 하는지 말로 알려주시면 결과를 대신 확인해드려요." },
         { q: "문의는 어떻게 하나요?", a: "앱 안의 피드백 버튼(버그·질문·제안)을 눌러주세요 — 모든 메모를 읽어요." },
       ],

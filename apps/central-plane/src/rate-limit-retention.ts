@@ -15,6 +15,10 @@
  * The window column mixes two formats (rate-limit.ts):
  *   hour window  "YYYY-MM-DDTHH"  (13 chars) — hourly limiters
  *   day window   "YYYY-MM-DD"     (10 chars) — daily caps (and the whole demo table)
+ *   month window "YYYY-MM"        (7 chars)  — D-24 T-4 monthly repair quota. A month row is
+ *                                              needed for the whole month, so it goes once the
+ *                                              month has been OVER for 48h (not 48h after it
+ *                                              started) — the policy states this exception.
  * Both are zero-padded ISO prefixes, so within ONE format string order is time
  * order. Across formats a single `< cutoffHour` would also happen to work (a day
  * key sorts just before its own "T00" hour), but we compare each format with
@@ -47,12 +51,17 @@ const PURGE_BATCH = 5_000;
 /** Per table per run: 20 × 5,000 = 100k rows; anything left goes next tick (`more: true`). */
 const PURGE_MAX_BATCHES = 20;
 
-/** Binds: (cutoffHourKey, cutoffDayKey, batchLimit). */
+/**
+ * Binds: (cutoffHourKey, cutoffDayKey, cutoffMonthKey, batchLimit). A month key M goes when
+ * M < month(cutoff): month M ended at the start of M+1, and that start is ≤ cutoff (= now - 48h)
+ * exactly when M+1 ≤ month(cutoff).
+ */
 export const WORKSPACE_RATE_LIMIT_PURGE_SQL = `DELETE FROM workspace_rate_limit
  WHERE rowid IN (
    SELECT rowid FROM workspace_rate_limit
     WHERE (length(hour_utc) = 13 AND hour_utc <= ?)
        OR (length(hour_utc) = 10 AND hour_utc <= ?)
+       OR (length(hour_utc) = 7 AND hour_utc < ?)
     LIMIT ?)`;
 
 /** Binds: (cutoffDayKey, batchLimit). */
@@ -103,9 +112,9 @@ export type RateLimitPurgeResult = {
  * before `now - 48h`: an hour key "H" starts at H:00 ≤ cutoff ⇔ H ≤ hour(cutoff);
  * a day key "D" starts at D 00:00 ≤ cutoff ⇔ D ≤ day(cutoff).
  */
-export function rateLimitPurgeCutoff(now: Date): { cutoffIso: string; hourKey: string; dayKey: string } {
+export function rateLimitPurgeCutoff(now: Date): { cutoffIso: string; hourKey: string; dayKey: string; monthKey: string } {
   const cutoffIso = new Date(now.getTime() - RATE_LIMIT_RETENTION_HOURS * 3_600_000).toISOString();
-  return { cutoffIso, hourKey: cutoffIso.slice(0, 13), dayKey: cutoffIso.slice(0, 10) };
+  return { cutoffIso, hourKey: cutoffIso.slice(0, 13), dayKey: cutoffIso.slice(0, 10), monthKey: cutoffIso.slice(0, 7) };
 }
 
 async function purgeTable(
@@ -144,14 +153,14 @@ export async function purgeExpiredRateLimitRows(
   env: Pick<Env, "DB">,
   now: Date = new Date(),
 ): Promise<RateLimitPurgeResult> {
-  const { cutoffIso, hourKey, dayKey } = rateLimitPurgeCutoff(now);
+  const { cutoffIso, hourKey, dayKey, monthKey } = rateLimitPurgeCutoff(now);
   const marker = [RATE_LIMIT_KEY_PREFIX.length, RATE_LIMIT_KEY_PREFIX] as const;
   // Legacy first: those are the rows the policy sentence depends on.
   const legacy = {
     workspace: await purgeTable(env.DB, WORKSPACE_RATE_LIMIT_LEGACY_PURGE_SQL, marker),
     demo: await purgeTable(env.DB, DEMO_RATE_LIMIT_LEGACY_PURGE_SQL, marker),
   };
-  const workspace = await purgeTable(env.DB, WORKSPACE_RATE_LIMIT_PURGE_SQL, [hourKey, dayKey]);
+  const workspace = await purgeTable(env.DB, WORKSPACE_RATE_LIMIT_PURGE_SQL, [hourKey, dayKey, monthKey]);
   const demo = await purgeTable(env.DB, DEMO_RATE_LIMIT_PURGE_SQL, [dayKey]);
   return { cutoff: cutoffIso, workspace, demo, legacy };
 }

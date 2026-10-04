@@ -57,6 +57,16 @@ describe("막힘 패널 문장", () => {
     assert.equal(x.showSignIn, true);
   });
 
+  it("네트워크 때문에 막힌 사람에게 제목도 '이미 만들었어요'라고 하지 않는다(2026-10-03 라이브 발견) — KO/EN", () => {
+    const k = projectLimitText({ ...info, limitedBy: "network" }, ko.quota, ko.visualChecks.resetWhen, { now: NOW, timeZone: "Asia/Seoul" });
+    assert.equal(k.title, "오늘 이 네트워크의 새 프로젝트 몫을 다 썼어요");
+    assert.doesNotMatch(k.title, /이미 만들었어요/);
+    const e = projectLimitText({ ...info, limitedBy: "network" }, en.quota, en.visualChecks.resetWhen, { now: NOW, timeZone: "Asia/Seoul" });
+    assert.equal(e.title, "Today's new-project allowance on this network is used up");
+    // 본인 몫으로 막힌 경우는 그대로
+    assert.equal(projectLimitText(info, ko.quota, ko.visualChecks.resetWhen, { now: NOW }).title, "오늘 새 프로젝트를 이미 만들었어요");
+  });
+
   it("resetAt이 없거나 이상하면 일반 문장, 모르는 티어는 무료 이름", () => {
     const x = projectLimitText({ ...info, tier: "mystery", resetAt: "" }, ko.quota, ko.visualChecks.resetWhen, { now: NOW });
     assert.equal(x.reset, "내일 다시 만들 수 있어요.");

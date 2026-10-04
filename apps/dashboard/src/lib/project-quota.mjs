@@ -45,7 +45,8 @@ export function projectLimitText(info, tq, resetWords, opts = {}) {
   const byNetwork = info.limitedBy === "network";
   const when = formatResetAt(info.resetAt, resetWords, opts);
   return {
-    title: tq.limitTitle,
+    // 2026-10-03 라이브 확인에서 발견: 네트워크 때문에 막힌 사람에게 "이미 만들었어요" 제목이 떴다.
+    title: byNetwork && typeof tq.limitTitleNetwork === "string" ? tq.limitTitleNetwork : tq.limitTitle,
     body: byNetwork
       ? tq.limitBodyNetwork
       : fill(tq.limitBody, { tier: tierName(info.tier, tq), limit: String(info.limit) }),
