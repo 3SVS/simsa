@@ -2,7 +2,8 @@
   "version": 1,
   "recordedAt": "2026-10-01",
   "design": "docs/pilot-2026-10/intent-mismatch-answer-key.md",
-  "heuristicRev": "a5-acceptance-4",
+  "heuristicRev": "pilot-accuracy-1",
+  "heuristicRevHistory": [{ "rev": "a5-acceptance-4", "until": "amendment A2" }, { "rev": "pilot-accuracy-1", "amendment": "A2", "recordedAt": "2026-10-05", "predictionsChanged": false }],
   "typedValue": "서울",
   "rules": {
     "acClass": "no_problem → missed · broken → detected · not_confirmed + note 'then_not_observed:' → detected · 그 밖의 not_confirmed/not_run/없음 → no_call",

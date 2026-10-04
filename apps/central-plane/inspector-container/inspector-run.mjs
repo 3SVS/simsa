@@ -23,11 +23,26 @@ import { chromium } from "playwright";
 import { mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { planVisualFlow } from "./dist/visual-flow-plan.js";
-import { buildNonDevReport, buildAgentFixPrompt, isNoiseResource, decideFromEvidence } from "./dist/nondev-report.js";
+import {
+  buildNonDevReport,
+  buildAgentFixPrompt,
+  isNoiseResource,
+  decideFromEvidence,
+  isLoginWallStatus,
+  looksLikeHostNotFoundPage,
+  addedTokens,
+  isCannedResult,
+  variantTypedValue,
+  intentMentionsReview,
+  detectOutputLanguageMismatch,
+  detectCredentialGate,
+  looksLikeMissingIndexFile,
+} from "./dist/nondev-report.js";
 import { blockerToFinding } from "./dist/signup-plan.js";
 import { classifyActionSafety } from "./safety.mjs";
 import { attemptSignup } from "./signup-run.mjs";
 import { observeThen } from "./acceptance-observe.mjs";
+import { clickControlByText } from "./click-target.mjs";
 
 /**
  * E-corpus-1 live-debug rev marker. Bump on every runner change — the first
@@ -35,7 +50,7 @@ import { observeThen } from "./acceptance-observe.mjs";
  * whether the container rollout actually picked up the new image (the #412~
  * #418 train could never rule out "old image still serving").
  */
-export const RUNNER_REV = "a5-acceptance-4";
+export const RUNNER_REV = "pilot-accuracy-1";
 
 /** Forbidden action words handed to the planner (mirrors visual-run.mjs). */
 export const FORBIDDEN_ACTIONS = [
@@ -171,6 +186,13 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     recordNet(r.url(), `${r.method()} ${r.url().slice(0, 200)} (${r.failure()?.errorText ?? "failed"})`),
   );
   page.on("response", (r) => r.status() >= 500 && recordNet(r.url(), `HTTP ${r.status()} ${r.url().slice(0, 200)}`));
+  // H2 (2026-10-04): 앱이 **처리를 위해** 보낸 요청 수(데이터 요청·소켓·GET이 아닌 문서 제출). 분석·광고·폰트는 뺀다.
+  let processingRequests = 0;
+  page.on("request", (r) => {
+    const t = r.resourceType();
+    const meaningful = t === "xhr" || t === "fetch" || t === "websocket" || t === "eventsource" || (t === "document" && r.method() !== "GET");
+    if (meaningful && !isNoiseResource(r.url())) processingRequests += 1;
+  });
 
   const evidenceFiles = [];
   const stepOutcomes = [];
@@ -203,7 +225,15 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     signupBlockerMessage: null,
     /** 막힘을 사용자 언어의 "고칠 것"으로 옮긴 것(app_gap만 리포트에 오른다). */
     blockerFindings: null,
+    // 2026-10-04 파일럿 사전 실측 신호(H1·H2·H4·H5). null = 측정 안 함(판정 무영향).
+    pageNotFound: null,
+    cannedResult: null,
+    outputLanguageMismatch: null,
+    needsUserCredential: null,
   };
+  /** 리포트용 상세(판정용 boolean과 분리). */
+  const pilotSignals = { cannedResult: null, outputLanguageMismatch: null, needsUserCredential: null };
+  let missingIndexFile = false;
 
   // E-corpus-1 재작성 (2026-07-19, #415): 예산에 도달하면 컨텍스트를 강제 종료해
   // 진행 중이던 Playwright 작업을 "Target closed"로 터뜨린다 → 아래 catch가 지금까지
@@ -254,12 +284,24 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     plog("snap:initial start");
     await snap("step-00-initial.png");
 
+    // ★H1 (2026-10-04 파일럿 v0·Gemini): 첫 문서가 404 등(로그인 벽 401/403/407 제외)이거나, 200이어도 호스트의
+    //  "배포 없음" 안내 페이지면 **앱이 없다**. 그 안내 페이지의 문서·지원 링크를 앱처럼 누르지 않는다(종전엔
+    //  v0의 VIEW DOCUMENTATION, Gemini의 Netlify 지원 링크를 눌러 broken_route를 만들었다).
+    const statusNotFound = !!evidence.loadStatus && evidence.loadStatus >= 400 && evidence.loadStatus < 500 && !isLoginWallStatus(evidence.loadStatus);
+    const firstBody = await page.locator("body").innerText().catch(() => "");
+    const phraseNotFound = !statusNotFound && looksLikeHostNotFoundPage(firstBody);
+    // 2026-10-05 (Gemini): 정적 호스트 맨 위 404 → 첫 화면 파일(index.html) 없음이 가장 흔한 원인.
+    missingIndexFile = statusNotFound && looksLikeMissingIndexFile(targetUrl, evidence.loadStatus, firstBody);
+    const appMissing = statusNotFound || phraseNotFound;
+    if (phraseNotFound) evidence.pageNotFound = true;
+    if (appMissing) plog(`notfound:skip-drive status=${evidence.loadStatus} phrase=${phraseNotFound}`);
+
     // ★로그인 뒤까지 들어가기 (2026-08-26) — **명시적 동의가 있을 때만.**
     //
     //  남의 앱에 계정을 만드는 일이라 기본은 꺼짐이다. 실패해도 던지지 않는다:
     //  캡차·결제·메일 미도착에서 멈추면 "로그인 뒤는 못 봤습니다"로 돌아갈 뿐이고,
     //  그건 지금도 하는 말이라 나빠지지 않는다. 있던 기능을 잃는 것이 더 나쁘다.
-    if (signup?.enabled) {
+    if (signup?.enabled && !appMissing) {
       plog("signup:start");
       const r = await attemptSignup({
         page,
@@ -285,6 +327,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       await page.waitForTimeout(1500);
     }
 
+    drive: {
+    if (appMissing) break drive;
     plog("collect:ctas start");
     const ctas = await collectCtas(page);
     plog(`collect:ctas done n=${ctas.length}`);
@@ -335,6 +379,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // double-submit (or submit an incomplete form) — press Enter only when
     // typing is the plan's only driver.
     const planHasClick = plan.some((s) => s.action === "click");
+    const requestsAtDriveStart = processingRequests;
 
     let stepIdx = 0;
     for (const step of plan) {
@@ -355,7 +400,8 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
             stepOutcomes.push({ label: step.label, ok: false, note: N.unsafeSkipped(safety.category) });
             continue;
           }
-          await page.getByText(step.targetText, { exact: true }).first().click({ timeout: 8000 });
+          const how = await clickControlByText(page, step.targetText, { timeout: 8000 });
+          plog(`click:by=${how}`);
           evidence.interacted = true;
           await page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {});
           await page.waitForTimeout(1500);
@@ -400,6 +446,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // 형태)을 잡는 최종 시험. 전제가 하나라도 빠지면(검색 플로우, 라우트 이동,
     // 마커 미노출) null 유지 — 측정 안 된 것은 절대 판정에 영향을 주지 않는다.
     const typedStep = plan.find((s) => s.action === "type");
+    let persistenceChecked = false;
     if (
       typedStep &&
       !overBudget() && // E-corpus-1: 지속성 확인은 reload가 필요해 비싸다 — 예산 초과 시 생략(측정 null 유지).
@@ -416,6 +463,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
         //  애초에 "추가"를 하는 앱이 아니므로(계산기·변환기·조회 화면) 저장을
         //  요구하는 것 자체가 틀렸다 — null 유지로 판정에 영향을 주지 않는다.
         if (collectionGrew) {
+          persistenceChecked = true;
           plog("persist:reload start");
           await page.reload({ waitUntil: "domcontentloaded", timeout: 15000 });
           await page.waitForTimeout(1800);
@@ -438,6 +486,62 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
       }
     }
 
+    // ── 2026-10-04 파일럿 사전 실측: 결과 화면 신호(H5 → H4 → H2) ─────────────────────
+    // 핵심 동작을 실제로 눌렀고 무언가 바뀐 흐름에서만 본다. 측정 실패는 null 유지(판정 무영향).
+    if (evidence.interacted && evidence.visibleChangeAfterAction === true && !persistenceChecked && !overBudget()) {
+      try {
+        const typed = typedStep?.value ?? "";
+        const settled1 = await settleBody(page, deadline);
+        const added1 = addedTokens(bodyBefore, settled1, typed);
+        const addedText1 = [...added1].join(" ");
+        const requests1 = processingRequests - requestsAtDriveStart;
+        plog(`signals:run1 added=${added1.size} requests=${requests1}`);
+
+        // H5: 사용자 자격 증명(API 키 등)을 요구하는 안내가 떴는가.
+        const gate = detectCredentialGate(addedText1);
+        if (gate) {
+          evidence.needsUserCredential = true;
+          pilotSignals.needsUserCredential = gate;
+          plog("signals:credential-gate");
+        }
+        // H4: 결과 글이 화면과 다른 언어인가.
+        const lang = detectOutputLanguageMismatch(bodyBefore, addedText1);
+        if (lang) {
+          evidence.outputLanguageMismatch = true;
+          pilotSignals.outputLanguageMismatch = lang;
+          plog(`signals:language-mismatch ${lang.found}`);
+        }
+        // H2: 입력을 바꿔 한 번 더 — 같은 결과 + 처리 요청 0이면 껍데기. 자격 증명 막힘·네트워크 실패면 건너뛴다.
+        if (typedStep && planHasClick && !gate && networkFailures.length === 0 && !overBudget()) {
+          const value2 = variantTypedValue(typed);
+          await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
+          await page.waitForTimeout(1500);
+          const base2 = await bodyTextAt();
+          const reqStart2 = processingRequests;
+          for (const step of plan) {
+            if (step.action === "type") {
+              const field = step.placeholder ? page.getByPlaceholder(step.placeholder).first() : page.locator("input").first();
+              await field.fill(value2, { timeout: 8000 });
+            } else if (step.action === "click") {
+              if (!classifyActionSafety(step.targetText).safe) continue;
+              await clickControlByText(page, step.targetText, { timeout: 8000 });
+              await page.waitForLoadState("domcontentloaded", { timeout: 8000 }).catch(() => {});
+            }
+          }
+          const settled2 = await settleBody(page, deadline);
+          const added2 = addedTokens(base2, settled2, value2);
+          const requests2 = processingRequests - reqStart2;
+          const canned = isCannedResult({ added1, added2, requests1, requests2 });
+          plog(`signals:run2 added=${added2.size} requests=${requests2} canned=${canned}`);
+          evidence.cannedResult = canned;
+          if (canned) pilotSignals.cannedResult = { intentMentionsReview: intentMentionsReview(intent) };
+        }
+      } catch (err) {
+        plog(`signals:failed: ${String(err?.message ?? err).slice(0, 100)}`);
+      }
+    }
+    } // end drive (H1: 앱이 없으면 여기까지 건너뛴다)
+
     // ── SI 티어 A5: 수용 기준 시나리오 ─────────────────────────────────────
     // 지시서가 있으면 AC마다 "무엇을 눌러 무엇이 보여야 하는가"가 적혀 있다. 핵심 흐름을
     // 마친 뒤 남은 예산 안에서 하나씩 돌린다. 어휘는 판정 사다리와 같은 입장:
@@ -448,7 +552,7 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     // 핵심 흐름의 evidence(networkFailures 등)와 섞지 않는다 — 시나리오는 자기 페이지에서
     // 자기 실패만 센다. 다만 broken/not_confirmed는 stepOutcomes에도 실패로 남겨 판정
     // 사다리가 "다 확인했다"고 말하지 못하게 한다.
-    if (Array.isArray(acceptancePlan) && acceptancePlan.length > 0) {
+    if (!appMissing && Array.isArray(acceptancePlan) && acceptancePlan.length > 0) {
       plog(`acceptance:start n=${acceptancePlan.length}`);
       for (const sc of acceptancePlan) {
         if (overBudget()) {
@@ -546,11 +650,36 @@ export async function runInspection({ targetUrl, intent, outDir, sampleQuery, lo
     ...(evidence.blockerFindings?.length ? { blockerFindings: evidence.blockerFindings } : {}),
     // SI 티어 A5: 수용 기준별 결과(없으면 필드 자체가 없다 → 종전 리포트).
     ...(acceptanceResults.length ? { acceptanceResults } : {}),
+    // 2026-10-04 파일럿 사전 실측 신호 — 있을 때만 싣는다(없으면 종전 리포트와 같다).
+    ...(evidence.pageNotFound ? { pageNotFound: true } : {}),
+    ...(missingIndexFile ? { missingIndexFile: true } : {}),
+    ...(pilotSignals.cannedResult ? { cannedResult: pilotSignals.cannedResult } : {}),
+    ...(pilotSignals.outputLanguageMismatch ? { outputLanguageMismatch: pilotSignals.outputLanguageMismatch } : {}),
+    ...(pilotSignals.needsUserCredential ? { needsUserCredential: pilotSignals.needsUserCredential } : {}),
   };
   const report = buildNonDevReport(reportInput, locale);
   const agentPrompt = buildAgentFixPrompt(reportInput, locale);
 
   return { report, agentPrompt, decision, works: report.works, evidenceFiles };
+}
+
+/**
+ * 2026-10-04 (H2·H4·H5): 결과가 다 그려질 때까지 기다린 본문. 1초마다 보고 두 번 연속 같고 "검사 중/분석 중" 같은
+ * 진행 문구가 없으면 멈춘다(최대 12초, 남은 예산 안). 껍데기 검사기는 1~9초 뒤에 결과를 그린다 — 진행 중 화면끼리
+ * 비교하면 진짜 점검기도 "같은 결과"로 보인다.
+ */
+const IN_PROGRESS_RE = /검사\s*중|분석\s*중|진단\s*중|점검\s*중|확인\s*중|불러오는\s*중|로딩|loading|analyzing|checking|processing/i;
+async function settleBody(page, deadline) {
+  const read = async () => (await page.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").trim();
+  const until = Math.min(Date.now() + 12000, deadline === Infinity ? Infinity : deadline - 3000);
+  let prev = await read();
+  while (Date.now() < until) {
+    await page.waitForTimeout(1000);
+    const now = await read();
+    if (now === prev && !IN_PROGRESS_RE.test(now)) return now;
+    prev = now;
+  }
+  return prev;
 }
 
 /**
@@ -633,7 +762,7 @@ async function runAcceptanceScenario({ context, targetUrl, sc, locale, deadline,
         if (step.action === "click") {
           const safety = classifyActionSafety(step.targetText);
           if (!safety.safe) { failedStep = N.unsafeSkipped(safety.category); break; }
-          await page.getByText(step.targetText, { exact: true }).first().click({ timeout: 6000 });
+          await clickControlByText(page, step.targetText, { timeout: 6000 });
           interacted = true;
           await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {});
           await page.waitForTimeout(1200);

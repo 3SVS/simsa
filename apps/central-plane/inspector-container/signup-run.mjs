@@ -17,6 +17,7 @@
  * 계정 준비 실패가 검수 전체를 깨뜨리면, 있던 기능까지 잃는다.
  */
 import { planSignup, rankVerificationLinks, blockerMessage } from "./dist/signup-plan.js";
+import { clickControlByText } from "./click-target.mjs";
 import { classifyActionSafety } from "./safety.mjs";
 
 /** 가입 화면으로 가는 흔한 입구. 앱마다 문구가 다르므로 넓게 잡는다. */
@@ -132,7 +133,7 @@ export async function attemptSignup({
       const safety = classifyActionSafety(entry.text);
       if (!safety.safe) return fail("unsafe_action");
       plog(`signup:entry click "${entry.text.slice(0, 30)}"`);
-      await page.getByText(entry.text, { exact: true }).first().click({ timeout: 8000 }).catch(() => {});
+      await clickControlByText(page, entry.text, { timeout: 8000 }).catch(() => {});
       await page.waitForTimeout(1500);
       onSignup = true;
     }
@@ -170,7 +171,7 @@ export async function attemptSignup({
         const safety = classifyActionSafety(step.targetText);
         if (!safety.safe) return fail("unsafe_action");
         plog(`signup:submit "${step.targetText.slice(0, 30)}"`);
-        await page.getByText(step.targetText, { exact: true }).first().click({ timeout: 8000 }).catch(() => {});
+        await clickControlByText(page, step.targetText, { timeout: 8000 }).catch(() => {});
         await page.waitForTimeout(2500);
       }
     }

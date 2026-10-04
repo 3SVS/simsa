@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-04",
+  "recordedBefore": "inspection engine fix (same PR, earlier commit)",
+  "design": "docs/pilot-2026-10/pilot-classes-answer-key.md",
+  "evidence": "docs/pilot-2026-10/simsa-accuracy-run-2026-10-04.md (PR #593)",
+  "fixtures": [
+    {
+      "id": "F9",
+      "path": "/http-404",
+      "mirrors": "v0 (Vercel DEPLOYMENT_NOT_FOUND)",
+      "truth": "broken",
+      "predictedBeforeFix": {
+        "decision": "Not Verified",
+        "works": null
+      },
+      "expectedAfterFix": {
+        "decision": "Needs Fix",
+        "works": false,
+        "finding": "page_not_found",
+        "clicks": 0
+      }
+    },
+    {
+      "id": "F10",
+      "path": "/canned-result",
+      "mirrors": "ChatGPT app (작동해?)",
+      "truth": "broken",
+      "predictedBeforeFix": {
+        "decision": "Conditionally Ready",
+        "works": null
+      },
+      "expectedAfterFix": {
+        "decision": "Needs Fix",
+        "works": false,
+        "finding": "canned_result"
+      }
+    },
+    {
+      "id": "F11",
+      "path": "/self-checklist",
+      "mirrors": "Bolt app (진단오딧)",
+      "truth": "intent_mismatch",
+      "predictedBeforeFix": {
+        "decision": "Conditionally Ready",
+        "works": null
+      },
+      "expectedAfterFix": {
+        "decision": "Conditionally Ready",
+        "works": null,
+        "knownLimit": "save request present + input echoed -> no canned signal; server-side URL access is unobservable from the browser"
+      }
+    },
+    {
+      "id": "F12",
+      "path": "/real-echo-checker",
+      "mirrors": "control (real checker)",
+      "truth": "working",
+      "predictedBeforeFix": {
+        "decision": "Conditionally Ready",
+        "works": null
+      },
+      "expectedAfterFix": {
+        "decision": "Conditionally Ready",
+        "works": null,
+        "mustNot": "canned_result"
+      }
+    },
+    {
+      "id": "F13",
+      "path": "/needs-api-key",
+      "mirrors": "Claude app (돌아가나)",
+      "truth": "needs_user_credential",
+      "predictedBeforeFix": {
+        "decision": "User Acceptance Required",
+        "works": null,
+        "note": "clicks the heading \"3 점검 시작\" instead of the button -> step_failed no change"
+      },
+      "expectedAfterFix": {
+        "decision": "User Acceptance Required",
+        "works": null,
+        "finding": "needs_user_credential",
+        "clicksRealButton": true
+      }
+    },
+    {
+      "id": "F14",
+      "path": "/static-site/",
+      "mirrors": "Gemini app original deploy (Netlify root 404; file not named index.html)",
+      "truth": "broken",
+      "recordedAt": "2026-10-05",
+      "predictedBeforeFix": {
+        "decision": "Not Verified",
+        "works": null,
+        "note": "or Needs Fix + page_not_found on the PR #594 engine — no cause given"
+      },
+      "expectedAfterFix": {
+        "decision": "Needs Fix",
+        "works": false,
+        "findings": [
+          "page_not_found",
+          "missing_index_file"
+        ]
+      }
+    }
+  ],
+  "alsoCovered": [
+    {
+      "app": "Gemini (https://stellar-mandazi-2a81dc.netlify.app/)",
+      "class": "F9 (HTTP 404, Netlify Page not found)",
+      "before": "Not Verified + broken_route (clicked support link on the 404 page)"
+    }
+  ]
+}

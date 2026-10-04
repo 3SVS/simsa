@@ -147,6 +147,19 @@ IM11은 기록을 저장한다(새로고침해도 남는다). 그래서 핵심 �
 - 문 (b) 대조군 IM07: caught 1 예상
 - 위의 원래 줄 "예상 집계: TP 7 · FN 2 · no_call 1 · FP 0 · TN 10"은 그대로 둔다 — 정정 전 예측도 결과와 함께 적는다.
 
+## 정정 A2 — 러너 실행 전 (2026-10-05 · 검수 러너 rev a5-acceptance-4 → pilot-accuracy-1)
+
+파일럿 사전 실측 수정(fix/inspection-accuracy-pilot)으로 러너가 바뀌었다. **IM 예측은 바꾸지 않는다** — 바뀐 부분이 이 변형들에 닿지 않음을 실행 전에 확인했다:
+
+| 바뀐 것 | IM 변형에 닿는가 | 근거 |
+|---|---|---|
+| 누를 대상을 버튼·링크에서 먼저 찾음(같은 글자의 제목을 누르던 문제) | 아니오 | 모든 변형의 버튼 글자가 화면에 한 번씩만 있다(중복 0) — 같은 요소를 누른다 |
+| 주소 칸(type=url·https 예시)에 실제 주소를 넣음 | 아니오 | 주소 칸이 있는 변형 0 |
+| 입력을 바꿔 한 번 더(껍데기 검사) — **입력 칸 + 버튼이 있는 흐름에서만** | 아니오 | 결과 글이 8토큰 이상 같아질 수 있는 IM03·IM05는 입력 칸이 없어 검사가 돌지 않는다. 나머지는 새로 생기는 글이 0~5토큰(기준 8 미만) |
+| 결과 언어(한자·가나)·API 키 요구 안내 | 아니오 | 해당 글을 내는 변형 0 |
+
+검증 방법: 정답지의 scenarioPreText·afterText로 addedTokens/isCannedResult/detectCredentialGate를 돌린 결과와 픽스처 HTML의 입력·버튼 목록(fix/inspection-accuracy-pilot 커밋 메시지).
+
 ## 실행 (승인 뒤)
 
 1. `deploy simsa-inspection-fixtures approved.` — 픽스처 워커 배포(이 PR은 배포하지 않는다).

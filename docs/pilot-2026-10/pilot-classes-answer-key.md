@@ -1,0 +1,28 @@
+# 파일럿 고장 유형 픽스처 F9~F12 — 정답지 (엔진 수정 전 기록, 2026-10-04)
+
+> 규율: 이 파일과 `tools/simsa-inspection-fixtures/pilot-classes-answer-key.json`은 **엔진 수정 커밋보다 먼저** 커밋한다(같은 PR의 첫 커밋). 실측 뒤에는 "실제" 칸만 채운다.
+> 근거: 2026-10-04 파일럿 앱 사전 실측(`simsa-accuracy-run-2026-10-04.md`, PR #593) — 실제 앱 4개 중 Simsa 정답 0.
+
+| ID | 경로 | 실제 앱 대응 | 정답 | 수정 전 예측(현재 엔진) | 수정 후 기대 |
+|---|---|---|---|---|---|
+| F9 | `/http-404` | v0 결과물(Vercel DEPLOYMENT_NOT_FOUND) | **고장** — 앱이 없다(HTTP 404) | "확인 못 했어요"(4xx → Not Verified), 문서 버튼을 눌러 봄 | "안 돼요" + `page_not_found`("주소가 열리지 않아요(HTTP 404)"), 아무것도 누르지 않음 |
+| F10 | `/canned-result` | ChatGPT 앱(작동해?) | **고장(껍데기)** — 어떤 주소를 넣어도 같은 78점 결과, 요청 0 | "문제를 찾지 못했어요" — **정반대 오판** | "안 돼요" + `canned_result`("결과가 입력과 무관해요") |
+| F11 | `/self-checklist` | Bolt 앱(진단오딧) | **의도와 다름** — 저장 요청만 하고 주소를 검토하지 않음(사용자가 체크) | "문제를 찾지 못했어요" | **알려진 한계 — 여전히 놓칠 것으로 예측.** 저장 요청이 있어 "요청 0" 신호가 없고, 결과가 입력(이름·주소)을 되비추므로 입력 무관 신호도 약하다. 브라우저 밖(서버)에서 주소를 여는지는 관찰할 수 없다 |
+| F12 | `/real-echo-checker` | 대조군(진짜 점검기) | **작동** — 서버가 넣은 주소를 실제로 열고 결과가 입력마다 다름 | "문제를 찾지 못했어요" | "문제를 찾지 못했어요" 유지(**오탐 0** — 껍데기로 오판하면 실패) |
+| F13 | `/needs-api-key` | Claude 앱(돌아가나) | **사람 확인 필요** — 시작하려면 사용자가 직접 Claude API 키를 넣어야 한다(비개발자는 첫 단계에서 막힘). 키 없이 "점검 시작" → "먼저 연결 설정에 API 키를 넣어 주세요" | "확인 못 했어요" + step_failed "아무 변화 없음" — 제목 "3 점검 시작"을 버튼 대신 눌렀기 때문(H5) | 진짜 버튼을 누르고 + `needs_user_credential`("시작하려면 사용자가 직접 API 키를 넣어야 해요"), 판정은 사람 확인 |
+| F14 | `/static-site/` | Gemini 앱 원래 배포(https://stellar-mandazi-2a81dc.netlify.app/) — Bae 확인 원인: 올린 HTML 파일 이름이 index.html이 아니었음(고친 재배포: https://incandescent-sorbet-62ee76.netlify.app) | **고장** — 첫 화면 파일 없음 | "확인 못 했어요"(4xx) + Netlify 지원 링크를 눌러 broken_route | "안 돼요" + `page_not_found` **그리고** `missing_index_file`("첫 화면 파일이 없어요" — 가장 흔한 원인으로 표현, 단정 아님) |
+
+추가(2026-10-04, 코디네이터): **Gemini 앱**(https://stellar-mandazi-2a81dc.netlify.app/)도 루트가 HTTP 404(Netlify "Page not found")였고 Simsa는 그 안내 페이지의 지원 링크를 눌러 broken_route로 오판했다 — F9와 같은 유형(H1). Netlify 문구는 단위 테스트로 고정한다.
+
+판정 기준: eval-run.mjs 규칙 그대로(expected broken → works=false가 정답, null은 부분, F12는 nullOk).
+
+## 실측 (배포 뒤 채움)
+
+| ID | 수정 전 실제 | 수정 후 실제 |
+|---|---|---|
+| F9 | | |
+| F10 | | |
+| F11 | | |
+| F12 | | |
+| F13 | | |
+| F14 | | |
