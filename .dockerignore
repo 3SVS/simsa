@@ -1,0 +1,31 @@
+# 컨테이너 이미지 빌드 컨텍스트 필터 (PR #569 검증 결함 4).
+#
+# 빌드 컨텍스트 = repo 루트: apps/central-plane/wrangler.toml의 세 컨테이너(autofix sandbox · inspector · builder)가
+# 모두 image_build_context = "../.."다. wrangler는 Dockerfile을 stdin(`docker build -f - <context>`)으로 넘기므로
+# Dockerfile 옆 `Dockerfile.dockerignore`는 배포 빌드에서 쓰이지 않는다 — 그래서 루트 파일 하나다.
+#
+# 규칙: **git이 추적하는 파일은 하나도 제외하지 않는다**(apps/central-plane/test/train-b-b5b-executor.test.mjs가
+# `git ls-files` 전체로 확인). 깨끗한 checkout(CI 배포)의 이미지는 이 파일 전후로 같다. 막는 것은 로컬 작업 트리
+# (`pnpm ship` = 로컬 wrangler deploy)에만 있는 비밀·설치물이 이미지 레이어로 새는 것 — 빌더 이미지는
+# templates/simsa-hosted-app을 폴더째 COPY한다. container-images.yml이 미끼 파일을 심고 이미지 안에 없는지 확인한다.
+
+# ── 비밀·로컬 자격 증명(어느 폴더에서든) ──
+**/.env
+**/.env.*
+!**/.env.example
+**/.dev.vars
+**/.dev.vars.*
+**/.npmrc
+**/.envrc
+**/.yarnrc
+**/.yarnrc.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+
+# ── S 템플릿의 설치물·산출물·로컬 상태(빌더 이미지가 폴더째 COPY한다) ──
+templates/**/node_modules
+templates/**/dist
+templates/**/.wrangler
+templates/**/.turbo

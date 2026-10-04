@@ -557,6 +557,8 @@ const EN = {
     examplesLabel: "Start from an example",
     generateSpec: "Create product brief",
     reading: "Simsa is reading…",
+    emptyIdea: "Write at least one line about the app you want to make.",
+    emptySpec: "Paste your plan or upload a file first.",
     understood: "What we understood",
     mainUsers: "Main users",
     mainFlow: "Main flow",
@@ -781,6 +783,8 @@ const EN = {
       dailyLimitCleared: "Your daily builds have reset. You can build again now.",
       // #578 결함 3: trying again may stop at the same place — don't promise it; offer the spec instead.
       hostingFailed: "We couldn't set up a place to put the app online (a problem on our side). You weren't charged. You can take the spec with you now.",
+      // slug_suspended (403, B-7): the app address was stopped under the hosting rules.
+      suspended: "This app's address has been stopped under our hosting rules, so it can't be built right now. Contact us if you think this is a mistake. You can still take the spec with you.",
       network: "Couldn't reach the server. Check your connection and try again.",
       generic: "Couldn't start the build. Please try again.",
     },
@@ -938,6 +942,7 @@ const EN = {
     placeholder: "e.g. When I press Save nothing happens… (or paste the message you saw)",
     submit: "Get help",
     loading: "Reading it…",
+    empty: "Tell us what you saw first — a sentence or the message that appeared.",
     failed: "Couldn't get help right now. Please try again in a moment.",
     whatHappened: "What happened",
     nextSteps: "What to do next",
@@ -2636,7 +2641,7 @@ const EN = {
     videoTitle: "Flow recording",
     fixTitle: "Have it fixed right away",
     fixBody:
-      "Copy the fix instructions below and paste them into your coding agent (Claude Code, Cursor, and similar). The prompt contains everything the agent needs to reproduce and fix what this inspection found.",
+      "Copy the fix instructions below and paste them into the chat of the AI tool you built the app with. They contain everything it needs to reproduce and fix what this inspection found.",
     copyPrompt: "Copy fix instructions",
     copied: "Copied",
     noPrompt: "This run has no agent fix instructions attached.",
@@ -2807,7 +2812,7 @@ const EN = {
       // Contract 4 — only when the server says buildVerified === false.
       buildUnverified: "We couldn't confirm that the fixed code actually builds.",
       budgetStopped: "Automatic fixing stopped because this repair reached its AI usage limit. You can continue from the fix instructions.",
-      openPr: "Open the repair PR on GitHub",
+      openPr: "See what was changed ↗",
       branchLabel: "Branch",
       noPrNote: "The PR address was not returned. Please check the branch on your GitHub repository.",
       envCauseWarning: "The evidence points at an environment or configuration cause, so a code change alone may not fully resolve this.",
@@ -3765,6 +3770,8 @@ const KO = {
     examplesLabel: "예시로 시작하기",
     generateSpec: "제품 설명서 만들기",
     reading: "Simsa가 이해하는 중…",
+    emptyIdea: "어떤 앱을 만들고 싶은지 한 줄이라도 적어 주세요.",
+    emptySpec: "기획서 내용을 붙여넣거나 파일을 올려 주세요.",
     understood: "이해한 내용",
     mainUsers: "주요 사용자",
     mainFlow: "주요 흐름",
@@ -3985,6 +3992,7 @@ const KO = {
       dailyLimitCleared: "만들기 횟수가 다시 채워졌어요. 지금 다시 할 수 있어요.",
       // #578 결함 3: 다시 해도 같은 곳에서 막힐 수 있다 — 약속하지 않고 지시서를 준다.
       hostingFailed: "앱을 올릴 자리를 만들지 못했어요(저희 쪽 문제예요). 비용은 받지 않았어요. 지시서는 지금 받아 갈 수 있어요.",
+      suspended: "이 앱 주소는 호스팅 이용 규칙에 따라 멈춰 있어서 지금은 만들 수 없어요. 잘못 멈췄다고 생각되면 문의해 주세요. 지시서는 지금 받아 갈 수 있어요.",
       network: "서버에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.",
       generic: "만들기를 시작하지 못했어요. 다시 시도해 주세요.",
     },
@@ -4142,6 +4150,7 @@ const KO = {
     placeholder: "예: 저장을 눌러도 아무 일도 안 일어나요… (또는 화면에 뜬 메시지를 그대로)",
     submit: "도움받기",
     loading: "읽고 있어요…",
+    empty: "먼저 무엇을 봤는지 적어 주세요 — 한 줄이나 화면에 뜬 메시지면 돼요.",
     failed: "지금은 도움을 가져오지 못했어요. 잠시 후 다시 시도해주세요.",
     whatHappened: "무슨 일이 난 건지",
     nextSteps: "다음에 할 일",
@@ -5827,7 +5836,7 @@ const KO = {
     videoTitle: "흐름 녹화",
     fixTitle: "바로 고치게 하기",
     fixBody:
-      "아래 고침 지시를 복사해 코딩 에이전트(Claude Code, Cursor 등)에 붙여넣으세요. 이번 검수에서 발견한 내용을 재현하고 고치는 데 필요한 정보가 모두 들어 있어요.",
+      "아래 고침 지시를 복사해, 앱을 만들 때 쓴 AI 도구의 대화창에 붙여넣으세요. 이번 검수에서 발견한 내용을 재현하고 고치는 데 필요한 정보가 모두 들어 있어요.",
     copyPrompt: "고침 지시 복사",
     copied: "복사됨",
     noPrompt: "이 검수에는 에이전트용 고침 지시가 없어요.",
@@ -5986,7 +5995,7 @@ const KO = {
       // 계약 4 — 서버가 buildVerified === false라고 할 때만.
       buildUnverified: "고친 코드가 실제로 빌드되는지는 확인하지 못했어요.",
       budgetStopped: "이번 수리에 쓸 수 있는 AI 사용 한도에 닿아 자동 수정 시도를 멈췄어요. 고침 지시서로 이어서 진행할 수 있어요.",
-      openPr: "GitHub에서 수리 PR 열기",
+      openPr: "고친 내용 보기 ↗",
       branchLabel: "브랜치",
       noPrNote: "PR 주소를 받지 못했어요. GitHub 저장소에서 브랜치를 확인해주세요.",
       envCauseWarning: "원인에 환경설정 문제가 포함돼 있어 코드 수정만으로 완전히 해결되지 않을 수 있어요",

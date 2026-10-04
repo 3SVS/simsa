@@ -12,8 +12,13 @@
 ```
 pnpm install
 pnpm build        # vite build + worker 타입검사
+pnpm test         # 최소 스모크(빌드 산출물 · /api/health) — build 다음에
 pnpm dev          # wrangler dev (로컬 D1)
 ```
+
+Simsa 빌드 잡은 이 순서(`pnpm install --frozen-lockfile` → `pnpm run build` → `pnpm test`)가 전부 통과해야 다음 단계로 갑니다.
+의존성은 lockfile로 고정입니다(빌드 잡이 새 패키지를 받지 않습니다). `test/smoke.test.mjs`·`package.json`·`pnpm-lock.yaml`·
+`pnpm-workspace.yaml`·`wrangler.toml`·`.gitignore`는 플랫폼이 관리하므로 빌드 잡이 템플릿 원본으로 되돌립니다.
 
 ## 이번 버전에서 하지 않는 것
 로그인·결제·이메일 발송. 필요하면 지시서에 "이번 버전 제외"로 기록됩니다.

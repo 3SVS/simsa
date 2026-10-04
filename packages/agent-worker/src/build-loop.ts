@@ -69,12 +69,23 @@ export interface BuildLoopOptions {
   executor: BuildToolExecutor;
   model: string;
   gate?: EfficiencyGate;
+  /**
+   * B-5b-2: gate가 없을 때 만드는 로컬 EfficiencyGate의 상한(USD). 없으면 core 기본(PR당 $0.50)이다 — 빌드 WBS 하나는
+   * 대화가 길어 그 상한을 쉽게 넘는다(BudgetExceededError → llm_error로 끝나 버린다). 빌더는 잡 예산 이상을 준다.
+   * 예산의 **권위는 서버**(Worker 빌드 LLM 프록시 402 budget_exhausted)이고 이것은 로컬 폭주 방지선일 뿐이다.
+   */
+  budgetUsd?: number;
   maxTokens?: number;
   limits?: Partial<typeof BUILD_LIMITS>;
   /** 자식 프로세스 env의 원천(보통 process.env). filterEnv로 걸러진다. */
   baseEnv?: Readonly<Record<string, string | undefined>>;
   onEvent?: (line: string) => void;
-  /** L-3: 턴마다 사용량 레코드를 흘려보낸다(빌더 컨테이너가 build-progress 콜백 usage[]로 싣는다). 던져도 루프는 계속. */
+  /**
+   * L-3: 턴마다 사용량 레코드를 흘려보낸다(로그·로컬 계측용). 던져도 루프는 계속.
+   * 콜백 usage[]로 원장에 싣는 경로는 **수리 컨테이너(repair-done) 전용**이다 — 빌더 컨테이너는 이것을 콜백에 싣지 않는다:
+   * 빌드 원가는 Worker의 /internal/build-llm 프록시가 호출마다 계량하고 build-progress·build-done은 usage[]를 무시한다
+   * (B-5b S1 — 이중 계상 금지).
+   */
   onUsage?: (u: LlmUsageRecord) => void;
 }
 
@@ -103,7 +114,8 @@ function taskPrompt(task: BuildTask): string {
 
 export async function runBuildLoop(task: BuildTask, opts: BuildLoopOptions): Promise<BuildLoopOutcome> {
   const limits = { ...BUILD_LIMITS, ...(opts.limits ?? {}) };
-  const gate = opts.gate ?? new EfficiencyGate();
+  const localCap = typeof opts.budgetUsd === "number" && Number.isFinite(opts.budgetUsd) && opts.budgetUsd > 0 ? opts.budgetUsd : undefined;
+  const gate = opts.gate ?? new EfficiencyGate(localCap !== undefined ? { perPrUsd: localCap } : {});
   const maxTokens = opts.maxTokens ?? 8_192;
   const env = filterEnv(opts.baseEnv ?? {});
   const log = opts.onEvent ?? (() => {});

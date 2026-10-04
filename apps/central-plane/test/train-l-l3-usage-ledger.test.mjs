@@ -7,7 +7,8 @@
  *   ③ recordLlmUsage: userKey는 sha256 해시로만 저장, 비용은 실응답 모델 단가, 미지 모델 unpriced=1,
  *      **fail-open**(기록 실패가 요청을 깨지 않고 console.error 한 줄 JSON)
  *   ④ 콜백 usage[]: Zod 검증 — 잘못된 값은 400이 아니라 **무시하고 본 처리 진행**, 201개는 200개로 자름
- *   ⑤ build-progress·build-done·repair-done이 usage[]를 원장에 기록 — project/user는 **잡 행에서**(콜백 본문 아님)
+ *   ⑤ repair-done이 usage[]를 원장에 기록 — project/user는 **잡 행에서**(콜백 본문 아님).
+ *      build-progress·build-done은 **기록하지 않는다**(B-5b S1 — 빌드 원가는 LLM 프록시 한 곳에서만 계량, 이중 계상 금지)
  *   ⑥ Worker 호출 지점(generate·check+verify-panel·council·dev_spec)이 원장에 기록 — 파싱 실패여도(비용은 났다),
  *      남의 프로젝트 id를 대면 project_id는 기록하지 않는다(교차 테넌트)
  *   ⑦ 수리 컨테이너가 워커 usage를 모아 repair-done 콜백에 싣는다(코드 불변식)
@@ -142,6 +143,12 @@ async function post(app, env, path, body, headers = {}) {
   return { status: res.status, body: json };
 }
 const AUTH = { authorization: `Bearer ${TOKEN}` };
+// 빌드 콜백은 그 잡의 jobToken만 받는다(B-5b S1 — PR #569 S1 검증 결함 8로 전역 토큰 호환도 닫았다). 수리 콜백은 전역 그대로.
+const { mintBuildJobToken } = await import("../dist/workspace/build-job-token.js").catch(() => ({ mintBuildJobToken: null }));
+async function buildAuth(jobId) {
+  assert.equal(typeof mintBuildJobToken, "function", "workspace/build-job-token module (B-5b S1)");
+  return { authorization: `Bearer ${await mintBuildJobToken({ INTERNAL_CALLBACK_TOKEN: TOKEN }, jobId)}` };
+}
 async function quiet(fn) {
   const o = { log: console.log, warn: console.warn, error: console.error };
   console.log = () => {}; console.warn = () => {}; console.error = () => {};
@@ -304,41 +311,34 @@ describe("④ parseCallbackUsage — 무시하고 진행, 200개 상한", () => 
 // ─── ⑤ 컨테이너 콜백 ────────────────────────────────────────────────────────────
 
 describe("⑤ 콜백 usage[] → 원장 (project/user는 잡 행에서)", () => {
-  it("★build-progress: usage[] 2건 → job_kind build 2행, project·user는 D1 잡 행 기준(본문 위조 무시)", async () => {
+  it("★B-5b S1: build-progress의 usage[]는 원장에 쓰지 않는다 — 빌드 원가는 LLM 프록시 한 곳(이중 계상 금지). 상태 전이는 그대로", async () => {
     const db = makeDb({ buildJobs: [buildJobRow()] });
     const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-progress", {
       jobId: "bj_1", status: "implementing", wbsDone: 1, projectId: "wsp_forged", userKey: OTHER_USER,
       usage: [usageItem(), usageItem({ vendor: "anthropic", modelActual: "claude-sonnet-4-6", cacheReadTokens: 0 })],
-    }, AUTH);
+    }, await buildAuth("bj_1"));
     assert.equal(r.status, 200);
     assert.equal(r.body.transitioned, true);
-    assert.equal(db.ledger.length, 2);
-    for (const row of db.ledger) {
-      assert.equal(row.job_kind, "build");
-      assert.equal(row.job_id, "bj_1");
-      assert.equal(row.project_id, PROJECT);
-      assert.equal(row.user_key_hash, sha(USER));
-    }
-    near(db.ledger[0].cost_usd, (1_000 * 2.5 + 800 * 0.25 + 500 * 15) / 1_000_000);
+    assert.equal(db.ledger.length, 0, "the build LLM proxy is the only ledger writer for builds");
   });
 
   it("★잘못된 usage는 400이 아니다 — 무시하고 본 처리(상태 전이) 진행", async () => {
     const db = makeDb({ buildJobs: [buildJobRow()] });
-    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-progress", { jobId: "bj_1", status: "building", usage: "not-an-array" }, AUTH);
+    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-progress", { jobId: "bj_1", status: "building", usage: "not-an-array" }, await buildAuth("bj_1"));
     assert.equal(r.status, 200);
     assert.equal(r.body.transitioned, true);
     assert.equal(db.ledger.length, 0);
   });
 
-  it("build-done: 201건 → 200행, 모르는 잡이면 원장 0행", async () => {
+  it("B-5b S1: build-done의 usage[](201건)도 원장 0행 — 모르는 잡도 0행", async () => {
     const db = makeDb({ buildJobs: [buildJobRow()] });
     const app = createApp();
     const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
-    const r = await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "budget", error: "예산 초과", spentUsd: 10.2, usage: Array.from({ length: 201 }, () => usageItem()) }, AUTH);
+    const r = await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "implementing", error: "budget_exhausted", spentUsd: 10.2, usage: Array.from({ length: 201 }, () => usageItem()) }, await buildAuth("bj_1"));
     assert.equal(r.status, 200);
-    assert.equal(db.ledger.length, 200);
+    assert.equal(db.ledger.length, 0);
     const db2 = makeDb();
-    await post(app, { DB: db2, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-done", { jobId: "bj_ghost", ok: false, error: "x", usage: [usageItem()] }, AUTH);
+    await post(app, { DB: db2, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-done", { jobId: "bj_ghost", ok: false, error: "x", usage: [usageItem()] }, await buildAuth("bj_ghost"));
     assert.equal(db2.ledger.length, 0);
   });
 
@@ -433,28 +433,40 @@ describe("⑧ 콜백 재전송이 원장을 두 배로 만들지 않는다", () 
       assert.equal(db.ledger.find((r) => r.model_actual === "container").container_seconds, 42, "먼저 온 값이 남는다");
     });
 
-    it(`★[${mode.label}] build: progress가 보낸 호출을 done이 누적으로 다시 보내도 한 번 — callId 계약`, async () => {
-      const db = makeDb({ buildJobs: [buildJobRow()], withBatch: mode.withBatch });
-      const app = createApp();
-      const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
+    // B-5b S1: 빌드 콜백은 더 이상 usage[] 원장 경로가 아니다(LLM 프록시 단일 경로). 콜백 여러 번에 걸친 callId·내용 키
+    // 중복 제거 계약은 수리 컨테이너가 계속 쓰므로 recordCallbackUsage에 직접 고정한다(같은 잡의 콜백 3번 흉내).
+    it(`★[${mode.label}] callId 계약: 앞 콜백이 보낸 호출을 뒤 콜백이 누적으로 다시 보내도 한 번`, async () => {
+      const { recordCallbackUsage } = await import("../dist/workspace/llm-usage.js");
+      const db = makeDb({ withBatch: mode.withBatch });
+      const job = { jobKind: "repair", jobId: "wrj_1", projectId: PROJECT, userKey: USER };
       const t1 = usageItem({ callId: "run-a:0", inputTokens: 1_000 });
       const t2 = usageItem({ callId: "run-a:1", inputTokens: 2_000 });
-      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 0, usage: [t1] }, AUTH);
-      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 1, usage: [t2] }, AUTH);
-      await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "build", error: "빌드 실패", spentUsd: 0.01, usage: [t1, t2] }, AUTH);
+      await recordCallbackUsage({ DB: db }, [t1], job);
+      await recordCallbackUsage({ DB: db }, [t2], job);
+      await recordCallbackUsage({ DB: db }, [t1, t2], job);
       assert.equal(db.ledger.length, 2, "턴 2개 = 2행(누적 재전송은 무시)");
       assert.deepEqual(db.ledger.map((r) => r.input_tokens).sort((a, b) => a - b), [1_000, 2_000]);
     });
 
-    it(`★[${mode.label}] build: callId 없는 옛 생산자도 같은 호출의 누적 재전송은 한 번(내용 키)`, async () => {
+    it(`★[${mode.label}] callId 없는 옛 생산자도 같은 호출의 누적 재전송은 한 번(내용 키)`, async () => {
+      const { recordCallbackUsage } = await import("../dist/workspace/llm-usage.js");
+      const db = makeDb({ withBatch: mode.withBatch });
+      const job = { jobKind: "repair", jobId: "wrj_1", projectId: PROJECT, userKey: USER };
+      const a = usageItem({ inputTokens: 1_000, latencyMs: 2_100 });
+      const b = usageItem({ inputTokens: 2_000, latencyMs: 3_400 });
+      await recordCallbackUsage({ DB: db }, [a], job);
+      await recordCallbackUsage({ DB: db }, [a, b], job);
+      assert.equal(db.ledger.length, 2);
+    });
+
+    it(`★[${mode.label}] B-5b S1: 빌드 콜백(progress·done)의 usage[]는 몇 번 와도 원장 0행 — 빌드 원가는 프록시만`, async () => {
       const db = makeDb({ buildJobs: [buildJobRow()], withBatch: mode.withBatch });
       const app = createApp();
       const env = { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN };
-      const a = usageItem({ inputTokens: 1_000, latencyMs: 2_100 });
-      const b = usageItem({ inputTokens: 2_000, latencyMs: 3_400 });
-      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 0, usage: [a] }, AUTH);
-      await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "build", error: "빌드 실패", spentUsd: 0.01, usage: [a, b] }, AUTH);
-      assert.equal(db.ledger.length, 2);
+      const t1 = usageItem({ callId: "run-a:0", inputTokens: 1_000 });
+      await post(app, env, "/internal/build-progress", { jobId: "bj_1", status: "implementing", wbsDone: 0, usage: [t1] }, await buildAuth("bj_1"));
+      await post(app, env, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "building", error: "빌드 실패", spentUsd: 0.01, usage: [t1] }, await buildAuth("bj_1"));
+      assert.equal(db.ledger.length, 0);
     });
 
     it(`[${mode.label}] 행동 보존: 한 콜백 안의 같은 내용 N건은 N행, 다른 잡의 같은 usage는 따로 기록`, async () => {
@@ -474,9 +486,9 @@ describe("⑧ 콜백 재전송이 원장을 두 배로 만들지 않는다", () 
 // ─── ⑨ D1 batch 경로 (#562 결함 9) ────────────────────────────────────────────────
 
 describe("⑨ 프로덕션 D1(batch 있음)에서도 같은 계약", () => {
-  it("build-done 201건 → 200행, batch는 50개씩 4번", async () => {
-    const db = makeDb({ buildJobs: [buildJobRow()], withBatch: true });
-    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/build-done", { jobId: "bj_1", ok: false, failedStage: "budget", error: "예산 초과", spentUsd: 10.2, usage: Array.from({ length: 201 }, (_, i) => usageItem({ latencyMs: 1_000 + i })) }, AUTH);
+  it("repair-done 201건 → 200행, batch는 50개씩 4번 (B-5b S1: 빌드 콜백은 원장 경로가 아니어서 수리 콜백으로 고정)", async () => {
+    const db = makeDb({ repairJobs: [repairJobRow()], withBatch: true });
+    const r = await post(createApp(), { DB: db, INTERNAL_CALLBACK_TOKEN: TOKEN }, "/internal/repair-done", { jobId: "wrj_1", ok: false, error: "예산 초과", usage: Array.from({ length: 201 }, (_, i) => usageItem({ latencyMs: 1_000 + i })) }, AUTH);
     assert.equal(r.status, 200);
     assert.equal(db.ledger.length, 200);
     assert.deepEqual(db.batches, [50, 50, 50, 50]);

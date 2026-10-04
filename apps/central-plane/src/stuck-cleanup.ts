@@ -17,7 +17,8 @@ import { findInstallationByRepoSlug } from "./db/saas.js";
 import { postPrComment } from "./gh-app.js";
 import { listStuckVisualChecks, markVisualCheckFailed } from "./workspace/visual-check-db.js";
 import { listStuckRepairJobs, markRepairJobFailed } from "./workspace/repair-job-db.js";
-import { listStuckBuildJobs, markBuildJobFailed } from "./workspace/build-job-db.js";
+import { listStuckBuildJobs, listStuckWorkerOwnedBuildJobs, markBuildJobFailed } from "./workspace/build-job-db.js";
+import { BUILD_DEPLOY_DEADLINE_MS } from "./workspace/build-deploy.js";
 
 const STUCK_AFTER_MS = 30 * 60 * 1000; // 30 minutes
 const SWEEP_LIMIT = 50; // safety cap; never touch more than 50 rows in a single tick
@@ -179,5 +180,25 @@ export async function cleanupStuckBuildJobs(env: Env): Promise<{ swept: number; 
       console.error(`[stuck-cleanup] build-job ${r.id} failed:`, err);
     }
   }
-  return { swept: rows.length, errors };
+  // PR #569 S3 검증 결함 7: 산출물을 Worker가 받은 잡은 Worker 배포 파이프라인이 상태를 소유하고(컨테이너 실패 보고는 기록만),
+  // 그 파이프라인은 마감(BUILD_DEPLOY_DEADLINE_MS) 안에 끝난다. 마감 + 유예보다 오래 활성이면 그 호출이 중간에 죽은 것 → 닫는다.
+  let workerOwned: Array<{ id: string; status: string }> = [];
+  try {
+    workerOwned = await listStuckWorkerOwnedBuildJobs(env, new Date(Date.now() - BUILD_DEPLOY_DEADLINE_MS - BUILD_DEPLOY_STUCK_GRACE_MS).toISOString(), SWEEP_LIMIT);
+  } catch (err) {
+    errors += 1;
+    console.error("[stuck-cleanup] worker-owned build-job query failed:", err);
+  }
+  for (const r of workerOwned) {
+    try {
+      await markBuildJobFailed(env, r.id, { failedStage: r.status, error: "deploy_interrupted" });
+    } catch (err) {
+      errors += 1;
+      console.error(`[stuck-cleanup] build-job ${r.id} failed:`, err);
+    }
+  }
+  return { swept: rows.length + workerOwned.length, errors };
 }
+
+/** Worker 배포 파이프라인 마감 뒤 유예(D1 쓰기·이벤트 몇 개의 여유). */
+export const BUILD_DEPLOY_STUCK_GRACE_MS = 2 * 60 * 1000;

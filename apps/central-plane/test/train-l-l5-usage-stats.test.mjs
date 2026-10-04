@@ -215,7 +215,8 @@ describe("⑥ notMetered — totals가 모든 LLM 원가가 아님을 응답이 
     const root = join(dirname(fileURLToPath(import.meta.url)), "..");
     const walk = (d) => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : p.endsWith(".ts") ? [p] : []; });
     const CALLS_LLM = /fetch\(\s*["'`]https:\/\/api\.anthropic\.com|[^.\w]anthropicMessages\(|\/chat\/completions|generativelanguage\.googleapis|["']x-anthropic-key["']/;
-    const WIRED = /\bonUsage\b|recordCallbackUsage|recordCollectedUsage/;
+    // recordLlmUsage( — 원장에 직접 쓰는 경로(B-5b S1 빌드 LLM 프록시 routes/build-llm-proxy.ts).
+    const WIRED = /\bonUsage\b|recordCallbackUsage|recordCollectedUsage|recordLlmUsage\(/;
     const listed = new Set(LEDGER_NOT_METERED.map((x) => x.source));
     const unwired = walk(join(root, "src"))
       .map((p) => ({ rel: relative(root, p).replace(/\\/g, "/"), src: readFileSync(p, "utf8") }))

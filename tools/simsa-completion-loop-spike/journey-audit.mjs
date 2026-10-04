@@ -50,7 +50,10 @@ if (LOCAL_BASE !== null && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test
   // 가짜 주입 모드를 라이브 주소에 겨누는 실수를 막는다 — 로컬 주소만 받는다.
   throw new Error(`--local accepts only http://localhost[:port] — got ${LOCAL_BASE}`);
 }
-const BASE = LOCAL_BASE ? LOCAL_BASE.replace(/\/+$/, "") : "https://app.trysimsa.com";
+// 우선순위: --local(가짜 서버) > SIMSA_APP_BASE(PR 빌드 등, 2026-10-04 #587) > 라이브.
+const BASE = LOCAL_BASE
+  ? LOCAL_BASE.replace(/\/+$/, "")
+  : (process.env.SIMSA_APP_BASE || "https://app.trysimsa.com").replace(/\/$/, "");
 const KO_ONLY = process.argv.includes("--ko-only");
 
 /**
@@ -129,7 +132,8 @@ function collectFacts(page) {
     const mainPrimaries = [...document.querySelectorAll("main .btn-primary, main button[class*='primary']")].filter(vis).map((e) => (e.innerText || "").trim().replace(/\s+/g, " ")).filter(Boolean);
     const exits = [...document.querySelectorAll("a, button")].filter(vis).filter((e) => /←|뒤로|돌아가|back/i.test((e.innerText || "").trim()));
     const sidebarNav = document.querySelector("nav, aside") !== null;
-    const disabled = [...document.querySelectorAll("button[disabled], [aria-disabled='true']")].filter((e) => e.offsetParent !== null).map((e) => (e.innerText || "").trim().replace(/\s+/g, " ").slice(0, 40));
+    // 로딩 중 버튼(aria-busy)은 '이유 없는 비활성'이 아니다 — 지금 일하는 중이라는 표시다(2026-10-04 P2 정리).
+    const disabled = [...document.querySelectorAll("button[disabled], [aria-disabled='true']")].filter((e) => e.offsetParent !== null && e.getAttribute("aria-busy") !== "true").map((e) => (e.innerText || "").trim().replace(/\s+/g, " ").slice(0, 40));
     // C-J1 — raw material for the structure checks (rules live in lib/journey-checks.mjs).
     // <main> of the root layout wraps the page AND the "다음 한 걸음" bar, but not the sidebar:
     // the sidebar is always there, so counting it made the old deadEnd never true.
@@ -830,9 +834,11 @@ for (const j of audit.journeys) {
 // 로컬 가짜 모드는 라이브 기준선(journey-audit-result.json)을 덮지 않는다.
 const RESULT_FILE = LOCAL_BASE ? "./journey-audit-local-result.json" : "./journey-audit-result.json";
 writeFileSync(new URL(RESULT_FILE, import.meta.url), JSON.stringify(audit, null, 2));
-const bySev = { P0: 0, P1: 0, P2: 0 };
+const bySev = { P0: 0, P1: 0, P2: 0, ALLOWED: 0 };
 for (const f of audit.findings) bySev[f.sev]++;
-console.log(`\nfindings: P0=${bySev.P0} P1=${bySev.P1} P2=${bySev.P2}`);
+// ALLOWED = 잠긴 결정(D-17 amend)으로 허용된 노출 — 기록은 남기되 결함 수에는 넣지 않는다.
+console.log(`
+findings: P0=${bySev.P0} P1=${bySev.P1} P2=${bySev.P2} (허용 기록 ALLOWED=${bySev.ALLOWED})`);
 if (audit.fakeUnhandled.length) console.log("fake-central unhandled:", JSON.stringify(audit.fakeUnhandled));
 console.log(`saved: ${RESULT_FILE} / shots:`, SHOTS);
 await browser.close();

@@ -35,6 +35,7 @@ export type StartErrorKey =
   | "paused"
   | "dailyLimitReached"
   | "hostingFailed"
+  | "suspended"
   | "network"
   | "generic";
 

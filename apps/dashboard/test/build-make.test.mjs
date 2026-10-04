@@ -149,7 +149,9 @@ describe("B-8 실패 종류 — 서버가 실패를 만드는 모든 자리의 �
   });
 
   it("빌드가 green이 아닌데 done을 주장 → buildUnverified (D-4: 완성으로 치지 않았다 — 올렸는지는 모른다)", () => {
-    assert.match(route, /failedStage: "building", error: `done claimed with build exit/);
+    // PR #569(S1) 이후: 컨테이너의 '완성' 주장은 기록하지 않고 done_not_worker_owned로 멈춘다(배포는 Worker만).
+    assert.match(route, /stopActiveBuildJob\(c\.env, jobId, DONE_NOT_WORKER_OWNED/);
+    assert.equal(view.buildFailureKind({ status: "failed", failedStage: "building", error: "done_not_worker_owned" }), "buildUnverified");
     // ★의도된 변경 (PR #578 검증 결함 5): 종전 buildFailed("올리지 않았어요")는 서버가 모르는 것을 단정했다.
     assert.equal(view.buildFailureKind({ status: "failed", failedStage: "building", error: "done claimed with build exit 1" }), "buildUnverified");
     assert.equal(view.buildFailureKind({ status: "failed", failedStage: "building", error: "tsc exited 2" }), "buildFailed");

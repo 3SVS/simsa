@@ -155,8 +155,9 @@ export function buildFailureKind(job) {
   // 컨테이너가 죽었거나(롤아웃·sleepAfter) 시간 상한에 걸렸거나 보고가 끊긴 경우 — 어느 단계였든 "끊김".
   if (/did not report progress|was killed by|timed out/i.test(error)) return "interrupted";
   if (stage === "queued") return "startFailed";
-  // workspace-build-jobs.ts /internal/build-done: ok:true + deployedUrl이 왔지만 buildExitCode≠0 → 거절(D-4).
-  if (/^done claimed with build exit/.test(error)) return "buildUnverified";
+  // 컨테이너가 스스로 '완성'을 주장한 잡 — 배포는 Worker만 한다(PR #569 S1). 서버가 확인하지 않은 완성은 완성이 아니다(D-4).
+  // 옛 서버 문구(done claimed with build exit N)도 같은 뜻으로 읽는다.
+  if (/^done_not_worker_owned\b|^done claimed with build exit/.test(error)) return "buildUnverified";
   if (stage === "building") return "buildFailed";
   if (stage === "testing") return "testFailed";
   if (stage === "pushed" || stage === "deploying") return "publishFailed";
@@ -277,9 +278,13 @@ export const START_ERROR_CODES = Object.freeze({
   hosting_d1_failed: "hostingFailed",
   daily_limit_reached: "dailyLimitReached",
   build_disabled: "paused",
+  // PR #569(B-7·S3) 이후 POST /build가 더 내는 코드 — 2026-10-04 #578 병합.
+  slug_suspended: "suspended", // 403 — 이 앱 주소가 이용 규칙으로 정지됨
+  suspension_check_failed: "notReady", // 503 — 정지 목록 조회 실패(우리 쪽), 사용자 슬롯 미사용
+  save_failed: "generic", // 500 — 잡 행 저장 실패, 슬롯 환급
 });
 
-/** @typedef {"unavailable" | "notSynced" | "needSpec" | "noWorkItems" | "alreadyActive" | "notReady" | "paused" | "dailyLimitReached" | "hostingFailed" | "network" | "generic"} StartErrorKey */
+/** @typedef {"unavailable" | "notSynced" | "needSpec" | "noWorkItems" | "alreadyActive" | "notReady" | "paused" | "dailyLimitReached" | "hostingFailed" | "suspended" | "network" | "generic"} StartErrorKey */
 
 /**
  * 옛 서버(빌드 라우트가 없음)의 404인가. central-plane의 전역 notFound는
@@ -341,7 +346,7 @@ export function startErrorTone(key) {
  * @param {StartErrorKey} key
  */
 export function startNoticeOffersTakeSpec(key) {
-  return key === "unavailable" || key === "hostingFailed" || key === "notReady" || key === "paused";
+  return key === "unavailable" || key === "hostingFailed" || key === "notReady" || key === "paused" || key === "suspended";
 }
 
 // ─── 응답 경계 파싱 (대시보드에는 zod가 없다 — daily-limit.mjs처럼 필드마다 검사) ───────

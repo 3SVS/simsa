@@ -20,6 +20,7 @@ import { runMcpRegistryMiner } from "./mcp-registry-miner.js";
 import { runShadcnBlockMiner } from "./shadcn-block-miner.js";
 import { runAwesomeListMiner } from "./awesome-list-miner.js";
 import { purgeExpiredRateLimitRows } from "./rate-limit-retention.js";
+import { sweepDeletedProjectHosting } from "./workspace/hosted-app-teardown.js";
 import { purgeExpiredHostingReports, sendReportDigest, sweepHostingRateStrikes } from "./workspace/hosting-duties.js";
 import { runTrainingPrivacyCron } from "./workspace/training-records-index.js";
 
@@ -102,6 +103,13 @@ export default {
         console.log(JSON.stringify({ cron: "stuck-cleanup-build-jobs", cronExpression: event.cron, ...result }));
       } catch (err) {
         console.error("[stuck-cleanup-build-jobs] crashed:", err);
+      }
+      // B-5b S3 검증 결함 2 — 삭제된 프로젝트의 호스팅 자원(공개 Worker·프로젝트 D1·조직 저장소) 정리 재시도.
+      try {
+        const result = await sweepDeletedProjectHosting(env, fetch.bind(globalThis));
+        if (result.projects > 0) console.log(JSON.stringify({ cron: "hosted-app-teardown", cronExpression: event.cron, ...result }));
+      } catch (err) {
+        console.error("[hosted-app-teardown] crashed:", err);
       }
       return;
     }
