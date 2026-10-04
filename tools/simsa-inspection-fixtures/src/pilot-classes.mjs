@@ -8,6 +8,7 @@
  *   F10 /canned-result       — 주소를 넣으면 늘 **같은 결과**(78점)를 그린다. 요청 0(ChatGPT 앱).
  *   F11 /self-checklist      — 주소를 넣으면 저장 요청만 하고, "검토"는 사용자가 직접 체크하는 표(Bolt 앱).
  *   F12 /real-echo-checker   — 대조군: 주소를 넣으면 서버가 그 주소를 실제로 열어 보고 결과가 입력마다 다르다.
+ *   F13 /needs-api-key       — 시작하려면 사용자 API 키가 필요하다(Claude 앱). 제목과 버튼이 같은 글자("점검 시작").
  */
 
 const SHELL = (title, body) => `<!doctype html>
@@ -115,10 +116,41 @@ const REAL_ECHO_CHECKER = SHELL(
 </script>`,
 );
 
+// F13 — 사용자 API 키가 있어야 시작되는 앱(Claude 앱 '돌아가나'). 단계 제목 "3 점검 시작"과 버튼 "점검 시작"이
+// **같은 글자**라, 글자로 누를 대상을 찾으면 제목을 누르고 아무 일도 없다(H5 첫째 원인 재현).
+const NEEDS_API_KEY = SHELL(
+  "돌아가나 — AI로 만든 서비스 점검",
+  `<h1>돌아가나</h1>
+<p class="sub">AI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다</p>
+<a href="#" id="sample">예시 결과 보기</a> · <a href="#" id="settings">연결 설정</a>
+<div id="keybox" style="display:none"><label for="k">Claude API 키</label><input id="k" type="password" placeholder="sk-ant-..."></div>
+<h2 style="font-size:16px;margin-top:18px">1 이 서비스는 원래 무엇을 해야 하나요?</h2>
+<textarea id="intent" rows="2" placeholder="예) 회원가입하고 로그인하면, 내 할 일 목록을 추가·삭제할 수 있어야 해요."></textarea>
+<h2 style="font-size:16px;margin-top:18px">2 점검할 대상을 넣어 주세요</h2>
+<input id="u" type="url" placeholder="https://my-app.vercel.app">
+<h2 style="font-size:16px;margin-top:18px"><span>3</span> <span>점검 시작</span></h2>
+<p class="sub">보통 1~3분 걸립니다.</p>
+<button id="go">점검 시작</button>
+<div id="msg"></div>
+<script>
+  document.getElementById("settings").addEventListener("click", (e) => { e.preventDefault(); document.getElementById("keybox").style.display = "block"; });
+  document.getElementById("go").addEventListener("click", () => {
+    const key = document.getElementById("k").value.trim();
+    const msg = document.getElementById("msg");
+    if (!key) {
+      msg.innerHTML = '<div class="result">먼저 \\'연결 설정\\'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 \\'예시 결과 보기\\'를 눌러 주세요.</div>';
+      return;
+    }
+    msg.innerHTML = '<div class="result">점검 중…</div>';
+  });
+</script>`,
+);
+
 export const PILOT_CLASS_ROUTES = {
   "/canned-result": CANNED_RESULT,
   "/self-checklist": SELF_CHECKLIST,
   "/real-echo-checker": REAL_ECHO_CHECKER,
+  "/needs-api-key": NEEDS_API_KEY,
 };
 
 /**

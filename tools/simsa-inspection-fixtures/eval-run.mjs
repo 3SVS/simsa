@@ -55,6 +55,9 @@ const TARGETS = [
     intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
   { id: "F12", url: `${FIXTURES}/real-echo-checker`, expected: "working", nullOk: true,
     intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
+  // F13: 사용자 API 키가 있어야 시작(Claude 앱). works=true면 오판, 사람 확인(null)은 통과.
+  { id: "F13", url: `${FIXTURES}/needs-api-key`, expected: "broken", nullOk: true,
+    intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
   { id: "R1", url: "https://app.trysimsa.com", expected: "working", nullOk: true,
     intent: "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다" },
   // 실제-타겟 확장 (2026-07-17, Bae "실유저 vibe 앱 재확인"): 빠르게 만들어
