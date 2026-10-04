@@ -282,6 +282,8 @@ export const START_ERROR_CODES = Object.freeze({
   slug_suspended: "suspended", // 403 — 이 앱 주소가 이용 규칙으로 정지됨
   suspension_check_failed: "notReady", // 503 — 정지 목록 조회 실패(우리 쪽), 사용자 슬롯 미사용
   save_failed: "generic", // 500 — 잡 행 저장 실패, 슬롯 환급
+  // 2026-10-04 단계적 열기(BUILD_ENABLED="staff") — 장비 티어만 시작 가능. 사용자에게는 '아직 열리지 않음'과 같다.
+  build_staff_only: "unavailable",
 });
 
 /** @typedef {"unavailable" | "notSynced" | "needSpec" | "noWorkItems" | "alreadyActive" | "notReady" | "paused" | "dailyLimitReached" | "hostingFailed" | "suspended" | "network" | "generic"} StartErrorKey */

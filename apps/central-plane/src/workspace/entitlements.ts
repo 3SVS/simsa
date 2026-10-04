@@ -27,6 +27,11 @@ export type Entitlements = {
    */
   projectCreatesPerDayPerNetworkAnonymous: number | null;
   projectCreatesPerDayPerNetworkAccount: number | null;
+  /**
+   * D-24.4(2026-10-04 배선): 문 (a) 빌드 시작 — 사용자(익명 키) 하루 상한. 빌드는 잡당 최대 $10(D-7)이라 무료 1.
+   * 네트워크·서비스 상한(build-daily-caps.ts)은 원가 천장으로 그대로 함께 적용된다.
+   */
+  buildsPerDay: number;
   /** D-24.4: 협의체 검수(3벤더). RC-4의 `paid` 전용 기능을 프로로 옮긴 것. */
   councilReview: boolean;
   /**
@@ -47,6 +52,7 @@ export type Entitlements = {
 
 export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
   free: {
+    buildsPerDay: 1,
     projectCreatesPerDay: 1,
     // 익명은 네트워크로만 센다(키를 새로 받으면 초기화되므로).
     projectCreatesPerDayPerNetworkAnonymous: 1,
@@ -59,6 +65,7 @@ export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
     loginBehindInspection: false,
   },
   basic: {
+    buildsPerDay: 3,
     projectCreatesPerDay: 1,
     projectCreatesPerDayPerNetworkAnonymous: 1,
     projectCreatesPerDayPerNetworkAccount: 3,
@@ -69,6 +76,7 @@ export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
     loginBehindInspection: true,
   },
   pro: {
+    buildsPerDay: 10,
     projectCreatesPerDay: 10,
     projectCreatesPerDayPerNetworkAnonymous: null,
     projectCreatesPerDayPerNetworkAccount: null,
@@ -79,6 +87,7 @@ export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
     loginBehindInspection: true,
   },
   staff: {
+    buildsPerDay: 50,
     projectCreatesPerDay: 200,
     projectCreatesPerDayPerNetworkAnonymous: null,
     projectCreatesPerDayPerNetworkAccount: null,

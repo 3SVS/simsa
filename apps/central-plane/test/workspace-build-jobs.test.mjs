@@ -33,7 +33,8 @@ const DEV_SPEC = {
   testPlan: [{ kind: "browser", acceptanceId: "AC-001", steps: ["/ 열기"] }], assumptions: [], openQuestions: [],
 };
 
-function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
+/** grants: userKey → plan_grants.plan (D-24 티어 — 빌드 하루 상한, 2026-10-04). 없으면 무료(하루 1). */
+function makeDb({ projects = new Map(), jobs = [], events = [], grants = {} } = {}) {
   const rate = new Map(); // B-5b S1: 일일 빌드 상한(consumeDailyCaps) — 가짜가 "가득"으로 오판하지 않게 실제 문장을 모형화
   return {
     _jobs: jobs, _events: events,
@@ -82,6 +83,7 @@ function makeDb({ projects = new Map(), jobs = [], events = [] } = {}) {
             return { meta: { changes: 0 } };
           },
           async first() {
+            if (sql.includes("FROM plan_grants")) return grants[args[0]] ? { plan: grants[args[0]] } : null;
             if (sql.includes("FROM workspace_projects WHERE id = ?")) return projects.get(args[0]) ?? null;
             if (sql.includes("FROM build_jobs WHERE project_id = ?") && sql.includes("status IN")) return jobs.find((r) => r.project_id === args[0] && !["done", "failed"].includes(r.status)) ?? null;
             if (sql.includes("FROM build_jobs WHERE id = ?")) return jobs.find((r) => r.id === args[0]) ?? null;
@@ -352,7 +354,8 @@ function makeCfWithDupes({ preexisting = [] } = {}) {
 }
 
 test("★결함 3: 멈춘 잡 뒤 [다시 시도](같은 프로젝트 두 번째 POST /build)는 202 — 전 잡의 D1을 그대로 쓴다(D-12 프로젝트당 D1 하나)", async () => {
-  const db = makeDb({ projects: new Map([[PROJECT, projectRow({ title: "(주)트루픽셀 예약 앱" })]]) });
+  // 같은 날 두 번째 빌드 — D-24 무료 하루 1개라 이 시나리오(D1 재사용)는 베이직 사용자로 본다.
+  const db = makeDb({ projects: new Map([[PROJECT, projectRow({ title: "(주)트루픽셀 예약 앱" })]]), grants: { [USER]: "basic" } });
   const builder = makeBuilder();
   const cf = makeCfWithDupes();
   const app = createApp();

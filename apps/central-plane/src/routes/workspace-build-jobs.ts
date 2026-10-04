@@ -67,7 +67,8 @@ import {
 import { defaultSuspensionCheck, runBuildDeploy, suspensionState, SUSPENSION_CHECK_FAILED, type BuildDeployDeps } from "../workspace/build-deploy.js";
 import type { FetchLike } from "../github.js";
 import { RESERVED_SLUGS_FOR_HOSTING } from "../workspace/hosting-reserved.js";
-import { BUILD_DISABLED, buildEnabled } from "../workspace/service-switches.js";
+import { BUILD_DISABLED, BUILD_STAFF_ONLY, buildEnabled, buildMode, buildOpenForTier } from "../workspace/service-switches.js";
+import { resolveTier } from "../workspace/tier-resolve.js";
 import { authenticateBuildCallback, checkCallbackJob, mintBuildJobToken } from "../workspace/build-job-token.js";
 import { buildDailyCapRejection, buildDailyCapsFor } from "../workspace/build-daily-caps.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
@@ -159,11 +160,16 @@ export async function dispatchBuild(env: Env, payload: BuildDispatchPayload): Pr
  * 배포 + B-5b 라이브 확인 뒤 한 줄("on") + deploy — 그때 라우트와 [만들기]가 함께 열린다.
  * reason은 운영 확인용(비밀 없음 — POST 오류 코드와 같은 말).
  */
-export type BuildAvailabilityReason = "open" | typeof BUILD_DISABLED | "callback_token_missing" | "builder_unavailable" | "hosting_not_configured" | "llm_not_configured";
+export type BuildAvailabilityReason = "open" | typeof BUILD_DISABLED | typeof BUILD_STAFF_ONLY | "callback_token_missing" | "builder_unavailable" | "hosting_not_configured" | "llm_not_configured";
 
-export function buildAvailabilityFor(env: Env): { buildEnabled: boolean; reason: BuildAvailabilityReason } {
+/**
+ * `tier` — 2026-10-04 단계적 열기: BUILD_ENABLED="staff"이면 장비 티어만 열림(POST /build와 같은 판정·같은 순서).
+ * 티어를 모르면(userKey 없음) staff 단계는 닫힘으로 답한다(정직 — 열려 있다고 약속하지 않는다).
+ */
+export function buildAvailabilityFor(env: Env, tier?: string): { buildEnabled: boolean; reason: BuildAvailabilityReason } {
   const closed = (reason: BuildAvailabilityReason) => ({ buildEnabled: false, reason });
   if (!buildEnabled(env)) return closed(BUILD_DISABLED);
+  if (!buildOpenForTier(env, tier ?? "free")) return closed(BUILD_STAFF_ONLY);
   if (!env.INTERNAL_CALLBACK_TOKEN) return closed("callback_token_missing");
   if (!env.BUILDER) return closed("builder_unavailable");
   if (!env.HOSTING_CF_API_TOKEN || !env.HOSTING_CF_ACCOUNT_ID || !(env.HOSTING_ROOT_DOMAIN ?? "").trim()) return closed("hosting_not_configured");
@@ -180,8 +186,11 @@ export function createWorkspaceBuildJobRoutes(
 
   // ── GET /workspace/build-availability ───────────────────────────────────────
   // 프로젝트와 무관한 서버 사실(계정·userKey 불필요). 옛 서버는 이 경로가 없어 전역 404 → 대시보드는 닫힘으로 본다.
-  app.get("/workspace/build-availability", (c) => {
-    const a = buildAvailabilityFor(c.env);
+  app.get("/workspace/build-availability", async (c) => {
+    // staff 단계에서만 티어를 조회한다(그 밖엔 종전처럼 userKey 불필요).
+    const uk = (c.req.query("userKey") ?? "").trim();
+    const tier = buildMode(c.env) === "staff" && uk ? await resolveTier(c.env, uk) : undefined;
+    const a = buildAvailabilityFor(c.env, tier);
     return c.json({ ok: true, buildEnabled: a.buildEnabled, reason: a.reason }, 200, { "cache-control": "no-store" });
   });
 
@@ -195,6 +204,15 @@ export function createWorkspaceBuildJobRoutes(
     const userKey = typeof body["userKey"] === "string" ? body["userKey"] : "";
     if (!userKey) return c.json({ ok: false, error: "userKey_required" }, 400);
     const locale: "ko" | "en" = body["locale"] === "en" ? "en" : "ko";
+    // 2026-10-04 단계적 열기 + D-24: 티어 하나로 (1) staff 단계 게이트 (2) 하루 상한 (3) 장비 전용 예산 재정의를 정한다.
+    const tier = await resolveTier(c.env, userKey);
+    if (!buildOpenForTier(c.env, tier)) return c.json({ ok: false, error: BUILD_STAFF_ONLY }, 503);
+    // 라이브 실증(C: 예산 정지)용 — 장비 티어만, $0.1 이상·기본 상한 이하만 받는다. 그 밖의 값·티어는 조용히 기본값.
+    const rawBudget = body["budgetUsd"];
+    const budgetUsd =
+      tier === "staff" && typeof rawBudget === "number" && Number.isFinite(rawBudget) && rawBudget >= 0.1 && rawBudget <= DEFAULT_BUILD_BUDGET_USD
+        ? rawBudget
+        : DEFAULT_BUILD_BUDGET_USD;
 
     const project = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
     if (!project) return c.json({ ok: false, error: "not_found" }, 404);
@@ -221,9 +239,9 @@ export function createWorkspaceBuildJobRoutes(
     if (suspension === "error") return c.json({ ok: false, error: SUSPENSION_CHECK_FAILED }, 503);
 
     // 2) 일일 상한(B-5b S1) — 소유권·지시서·활성 잡·설정을 다 통과한 뒤, 무엇이든 만들기 전에. 원자 문장 하나씩(#561).
-    const caps = await consumeDailyCaps(c.env, buildDailyCapsFor(c.env, userKey, clientNetworkKey(c.req.raw)));
+    const caps = await consumeDailyCaps(c.env, buildDailyCapsFor(c.env, userKey, clientNetworkKey(c.req.raw), tier));
     if (caps.limited) {
-      const rejection = buildDailyCapRejection(caps);
+      const rejection = buildDailyCapRejection(caps, tier);
       c.header("Retry-After", String(rejection.retryAfterSeconds));
       return c.json(rejection.body, rejection.status);
     }
@@ -258,7 +276,7 @@ export function createWorkspaceBuildJobRoutes(
     // 5) 잡 행 + jobToken + 디스패치
     let job;
     try {
-      job = await insertQueuedBuildJob(c.env, { projectId, userKey, slug, wbsTotal: wbs.length, budgetUsd: DEFAULT_BUILD_BUDGET_USD, locale, d1Id: d1.value.id, repoFullName });
+      job = await insertQueuedBuildJob(c.env, { projectId, userKey, slug, wbsTotal: wbs.length, budgetUsd, locale, d1Id: d1.value.id, repoFullName });
     } catch (err) {
       console.error(JSON.stringify({ event: "build_job_insert_failed", project: projectId, reason: String((err as Error)?.message ?? err).slice(0, 200) }));
       await refundSlot();
