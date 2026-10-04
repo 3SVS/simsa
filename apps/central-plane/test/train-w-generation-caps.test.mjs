@@ -363,16 +363,23 @@ describe("③ 차감 위치와 환급", () => {
 
   it("지시서: 사용자 일일 한도(429)에 막히면 서비스 슬롯을 돌려준다 · 422(과금된 실패)는 유지", async () => {
     const db = makeDb();
-    const env = envWith(db, { BETA_PROJECT_CREATE_DAILY_LIMIT: "1" });
+    // D-24 T-4: the user's daily dev-spec quota is the tier's (free 2) — no env knob any more.
+    const env = envWith(db);
     const s = stubFetch(async () => openAiReply("JSON 아님"));
-    const r1 = await call(env, "POST", `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, locale: "ko" }, s.f);
-    assert.equal(r1.status, 422, JSON.stringify(r1.json).slice(0, 200));
-    assert.equal(await serviceCount(db, "dev-spec-daily-global"), 1, "422 = the passes ran and were billed → kept");
+    for (let i = 0; i < 2; i++) {
+      const r = await call(env, "POST", `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, locale: "ko" }, s.f);
+      assert.equal(r.status, 422, JSON.stringify(r.json).slice(0, 200));
+    }
+    assert.equal(await serviceCount(db, "dev-spec-daily-global"), 2, "422 = the passes ran and were billed → kept");
     const calls = s.llmCalls.length;
     const r2 = await call(env, "POST", `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, locale: "ko" }, s.f);
     assert.equal(r2.status, 429);
     assert.equal(r2.json.error, "rate_limited");
-    assert.equal(await serviceCount(db, "dev-spec-daily-global"), 1, "the user-capped request handed its service slot back");
+    assert.equal(r2.json.kind, "dev_spec");
+    assert.equal(r2.json.tier, "free");
+    assert.equal(r2.json.limit, 2);
+    assert.match(r2.json.resetAt, /T00:00:00\.000Z$/);
+    assert.equal(await serviceCount(db, "dev-spec-daily-global"), 2, "the user-capped request handed its service slot back");
     assert.equal(s.llmCalls.length, calls);
   });
 });

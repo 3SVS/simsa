@@ -97,7 +97,10 @@ function isResetWords(w) {
  * isValidIso) — anything else falls back to the general sentence.
  *
  * @param {unknown} body
- * @returns {{ kind: "inspection" | "repair" | null, limit: number | null, resetAt: string | null } | null}
+ * D-24 T-4: the server also says the caller's `tier` and, for the monthly repair quota,
+ * `period: "month"` (resetAt = first moment of the next UTC month). Unknown values → null.
+ *
+ * @returns {{ kind: "inspection" | "repair" | null, limit: number | null, resetAt: string | null, tier?: string, period?: "month" } | null}
  */
 export function readDailyLimit(body) {
   if (!body || typeof body !== "object") return null;
@@ -106,7 +109,11 @@ export function readDailyLimit(body) {
   const kind = b.kind === "inspection" || b.kind === "repair" ? b.kind : null;
   const limit = typeof b.limit === "number" && Number.isInteger(b.limit) && b.limit > 0 ? b.limit : null;
   const resetAt = isValidIso(b.resetAt) ? /** @type {string} */ (b.resetAt) : null;
-  return { kind, limit, resetAt };
+  // D-24 T-4 fields only when the server sent a known value — an older server's answer keeps
+  // exactly the Train W shape { kind, limit, resetAt }.
+  const tier = b.tier === "free" || b.tier === "basic" || b.tier === "pro" || b.tier === "staff" ? b.tier : null;
+  const period = b.period === "month" ? "month" : null;
+  return { kind, limit, resetAt, ...(tier ? { tier } : {}), ...(period ? { period } : {}) };
 }
 
 /**
@@ -217,7 +224,9 @@ export function formatResetAt(resetAt, words, opts = {}) {
  * @returns {string}
  */
 export function errorNoticeText(errors, key, resetAt, words, opts) {
-  if (key === "dailyLimitReached") {
+  // D-24 T-4: the monthly repair quota uses the same rule with its own sentences
+  // (monthlyLimitReached / monthlyLimitReachedAt — "이번 달 …").
+  if (key === "dailyLimitReached" || key === "monthlyLimitReached") {
     if (
       resetPassedSinceReceipt(resetAt, opts?.receivedAt, opts) &&
       typeof errors.dailyLimitCleared === "string" &&
@@ -226,7 +235,7 @@ export function errorNoticeText(errors, key, resetAt, words, opts) {
       return errors.dailyLimitCleared;
     }
     const when = formatResetAt(resetAt, words, opts);
-    const template = errors.dailyLimitReachedAt;
+    const template = errors[`${key}At`];
     if (when && typeof template === "string" && template.includes("{when}")) {
       return template.replace("{when}", when);
     }

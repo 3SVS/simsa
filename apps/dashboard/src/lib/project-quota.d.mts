@@ -16,6 +16,7 @@ export function projectLimitText(
   info: ProjectLimitInfo,
   tq: {
     limitTitle: string;
+    limitTitleNetwork?: string;
     limitBody: string;
     limitBodyNetwork: string;
     resetAt: string;

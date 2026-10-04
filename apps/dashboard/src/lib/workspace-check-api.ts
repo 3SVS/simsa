@@ -487,6 +487,25 @@ export async function callGetShareApi(
 
 // ─── plan (RC-4) ─────────────────────────────────────────────────────────────
 
+/**
+ * D-24 — the user's tier (free · basic · pro · staff) from GET /workspace/plan. Failure or an
+ * old server without `tier` → null: the UI then gates nothing itself and the server's answer
+ * (402 plan_required) is what the reader sees.
+ */
+export async function callGetTierApi(userKey: string): Promise<"free" | "basic" | "pro" | "staff" | null> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/plan?userKey=${encodeURIComponent(userKey)}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!resp.ok) return null;
+    const b = (await resp.json()) as { ok?: boolean; tier?: string };
+    return b.ok && (b.tier === "free" || b.tier === "basic" || b.tier === "pro" || b.tier === "staff") ? b.tier : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Resolve the user's plan for review-mode gating. Failure → "free" (UI keeps B locked). */
 export async function callGetPlanApi(userKey: string): Promise<"free" | "paid"> {
   try {

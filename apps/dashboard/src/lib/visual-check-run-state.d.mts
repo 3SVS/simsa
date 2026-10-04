@@ -10,6 +10,8 @@ export type RunErrorKey =
   | "dailyLimitReached"
   /** Train W — W-2: 503 inspection_disabled (INSPECTION_ENABLED="off"). */
   | "inspectionDisabled"
+  /** D-24 T-5: 402 plan_required (login-behind inspection needs Basic). */
+  | "planRequired"
   | "generic";
 
 export type RunButtonReasonKey = "runAlreadyActive" | "websiteSourceRequired";
@@ -35,6 +37,9 @@ export function runErrorTone(key: RunErrorKey): "info" | "error";
 
 /** Daily cap or kill switch — the automatic first inspection must not swallow these. */
 export function isServiceGateKey(key: unknown): key is "dailyLimitReached" | "inspectionDisabled";
+
+/** D-24: cap or plan-only feature — the callout offers "See plans". Not the kill switch. */
+export function isPlanCapKey(key: unknown): boolean;
 
 /** Duration (ms) of the new-project flow's service-gate info toast (default toast = 3 s). */
 export const SERVICE_GATE_TOAST_MS: number;

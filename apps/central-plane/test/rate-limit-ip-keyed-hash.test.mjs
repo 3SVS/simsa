@@ -572,6 +572,28 @@ test("④ 실제 SQLite(0011·0026): 시작한 지 48시간 지난 시간 창·�
   assert.doesNotThrow(() => JSON.stringify(r));
 });
 
+test("④ D-24 T-4 실제 SQLite: 월 창은 그 달이 끝나고 48시간이 지나야 지운다(이번 달·막 끝난 달은 남김)", async (t) => {
+  const { purgeExpiredRateLimitRows } = await loadRetentionModule();
+  const db = await sqliteWithRateTables(t);
+  if (!db) return;
+  const d1 = { DB: d1FromSqlite(db) };
+  const run = async (iso, months) => {
+    db.exec("DELETE FROM workspace_rate_limit;");
+    for (const m of months) insWs(db, `${V1}m_${m}`, m);
+    await purgeExpiredRateLimitRows(d1, new Date(iso));
+    return left(db, "workspace_rate_limit", "hour_utc");
+  };
+  // 10월 1일 01:00 — 9월이 끝난 지 1시간: 9월(이번 달 수리 횟수가 막 끝남)은 아직 남긴다.
+  assert.deepEqual(await run("2026-10-01T01:00:00.000Z", ["2026-08", "2026-09", "2026-10"]), ["2026-09", "2026-10"]);
+  // 10월 3일 00:00 — 9월이 끝난 지 48시간: 지운다. 이번 달(10월)은 남는다.
+  assert.deepEqual(await run("2026-10-03T00:00:00.000Z", ["2026-09", "2026-10"]), ["2026-10"]);
+  // 어느 시각이든 이번 달 행은 남는다.
+  for (const iso of ["2026-10-01T00:00:00.000Z", "2026-10-31T23:59:59.999Z", "2027-01-01T00:00:00.000Z"]) {
+    const month = iso.slice(0, 7);
+    assert.ok((await run(iso, [month])).includes(month), `${iso}: ${month} must survive`);
+  }
+});
+
 test("④ 어느 시각에 돌아도 지금 쓰이는 창(이번 시간·오늘)과 48시간 안의 창은 지우지 않는다", async (t) => {
   const { purgeExpiredRateLimitRows } = await loadRetentionModule();
   const db = await sqliteWithRateTables(t);
@@ -644,9 +666,11 @@ test("④ (가짜 D1 · 모든 Node) 청소 SQL은 두 형식을 각자의 기�
   assert.match(where(ws.sql), /\(length\(hour_utc\) = 13 AND hour_utc <= \?\) OR \(length\(hour_utc\) = 10 AND hour_utc <= \?\)/);
   assert.match(where(demo.sql), /length\(day_utc\) = 10 AND day_utc <= \?/);
   assert.match(where(ws.sql), /LIMIT \?/, "batched");
-  assert.deepEqual(ws.args.slice(0, 2), ["2026-09-27T15", "2026-09-27"]);
+  assert.deepEqual(ws.args.slice(0, 3), ["2026-09-27T15", "2026-09-27", "2026-09"]);
   assert.deepEqual(demo.args.slice(0, 1), ["2026-09-27"]);
-  assert.ok(Number.isInteger(ws.args[2]) && ws.args[2] > 0, "batch size bind");
+  assert.ok(Number.isInteger(ws.args[3]) && ws.args[3] > 0, "batch size bind");
+  // D-24 T-4: 월 창("YYYY-MM", 7자)은 그 달이 끝나고 48시간 뒤 — month(cutoff)보다 **앞선** 달만.
+  assert.match(where(ws.sql), /\(length\(hour_utc\) = 7 AND hour_utc < \?\)/);
   assert.deepEqual(
     [r.workspace.more, r.demo.more, r.workspace.error, r.demo.error],
     [false, false, undefined, undefined],

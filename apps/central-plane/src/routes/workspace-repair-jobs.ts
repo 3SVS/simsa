@@ -64,6 +64,7 @@ import { opsMetaRecordingAllowed } from "../workspace/privacy-prefs.js";
 import { REPAIR_DISABLED, repairEnabled } from "../workspace/service-switches.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
 import { clientNetworkKey, dailyCapRejection, dailyCapsFor, repairJobBudgetUsd } from "../workspace/beta-limits.js";
+import { resolveTier } from "../workspace/tier-resolve.js";
 import type { FetchLike } from "../github.js";
 import {
   discardQueuedRepairJob,
@@ -445,9 +446,12 @@ export function createWorkspaceRepairJobRoutes(
     // inspection route: after ownership + validation + the one-active-repair
     // guard, one atomic statement per bucket, refunded below if the job never
     // starts.
-    const caps = await consumeDailyCaps(c.env, dailyCapsFor("repair", c.env, userKey, clientNetworkKey(c.req.raw)));
+    // D-24 T-4 — plus this user's MONTHLY quota by tier (free 3 · basic 10 · pro 30), taken in
+    // the same atomic pass and handed back with the daily slots when the job never starts.
+    const tier = await resolveTier(c.env, userKey);
+    const caps = await consumeDailyCaps(c.env, dailyCapsFor("repair", c.env, userKey, clientNetworkKey(c.req.raw), tier));
     if (caps.limited) {
-      const rejection = dailyCapRejection("repair", caps);
+      const rejection = dailyCapRejection("repair", caps, tier);
       c.header("Retry-After", String(rejection.retryAfterSeconds));
       return c.json(rejection.body, rejection.status);
     }

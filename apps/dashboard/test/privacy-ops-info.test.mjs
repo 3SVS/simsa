@@ -478,7 +478,8 @@ describe("요청 횟수 제한 — 방침 = 서버가 실제로 하는 일", () 
     const start = opsSource.indexOf("export const PRIVACY_CHANGE_LOG = [");
     const body = opsSource.slice(start, opsSource.indexOf("];", start));
     const dates = [...body.matchAll(/date:\s*("(\d{4}-\d{2}-\d{2})"|PRIVACY_EFFECTIVE_DATE)/g)].map((m) => m[1]);
-    assert.deepEqual(dates.slice(0, -1), ['"2026-07-19"', '"2026-09-29"', '"2026-09-30"'], `published lines are literal: ${dates.join(", ")}`);
+    // 2026-10-03(#573 Train K)도 그날 dashboard 배포로 게시 → D-24 T-4 PR에서 문자열로 고정.
+    assert.deepEqual(dates.slice(0, -1), ['"2026-07-19"', '"2026-09-29"', '"2026-09-30"', '"2026-10-03"'], `published lines are literal: ${dates.join(", ")}`);
     assert.equal(dates.at(-1), "PRIVACY_EFFECTIVE_DATE", "only the newest (unpublished) line follows the constant");
   });
 });
