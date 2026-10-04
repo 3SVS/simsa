@@ -9,6 +9,7 @@
 // 모듈 상태에 1분 동안 기억하고, 묻는 중인 요청은 함께 기다린다. 저장소(localStorage)는 쓰지 않는다 — 서버 사실이다.
 import { useEffect, useState } from "react";
 import { getBuildAvailability } from "./build-job-api";
+import { getUserKey } from "./workflow-store";
 import { buildOpenFact } from "./build-job-view.mjs";
 
 const TTL_MS = 60_000;
@@ -18,7 +19,7 @@ let inflight: Promise<boolean> | null = null;
 export function loadBuildOpen(now: number = Date.now()): Promise<boolean> {
   if (cached && now - cached.at < TTL_MS) return Promise.resolve(cached.open);
   if (!inflight) {
-    inflight = getBuildAvailability()
+    inflight = getBuildAvailability(getUserKey())
       .then((res) => buildOpenFact(res) === true)
       .catch(() => false)
       .then((open) => {

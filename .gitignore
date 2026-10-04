@@ -64,3 +64,5 @@ tools/paddle-spike/.env.local
 tools/paddle-spike/evidence/
 # Train P · P-2 pilot-metrics raw output (full ids + app URLs; public repo — only the masked .md goes into RESULT.md)
 tools/simsa-completion-loop-spike/pilot-metrics-out/
+# 2026-10-04 문 (a) 라이브 실증 러너 결과(키·프로젝트 id 포함 가능 — 커밋하지 않는다)
+tools/simsa-completion-loop-spike/build-proof-result.json

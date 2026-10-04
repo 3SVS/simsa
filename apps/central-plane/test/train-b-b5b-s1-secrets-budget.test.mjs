@@ -84,7 +84,8 @@ function projectRow(id = PROJECT, userKey = USER) {
 }
 
 /** 가짜 D1 — build_jobs(SQL 문구대로: `MAX(spent_usd, ?)`면 MAX, 아니면 덮어쓰기) · 이벤트 · 원장 · 일일 상한. */
-function makeDb({ projects = new Map([[PROJECT, projectRow()]]), jobs = [] } = {}) {
+/** grants: userKey → plan_grants.plan (D-24 티어, 2026-10-04 빌드 하루 상한·staff 단계). 없으면 무료. */
+function makeDb({ projects = new Map([[PROJECT, projectRow()]]), jobs = [], grants = {} } = {}) {
   const db = {
     jobs, events: [], ledger: [], rate: new Map(), sqls: [],
     prepare(sql) {
@@ -168,6 +169,7 @@ function makeDb({ projects = new Map([[PROJECT, projectRow()]]), jobs = [] } = {
         },
         async first() {
           db.sqls.push(sql);
+          if (sql.includes("FROM plan_grants")) return grants[args[0]] ? { plan: grants[args[0]] } : null;
           if (sql.includes("FROM workspace_projects WHERE id = ?")) return projects.get(args[0]) ?? null;
           if (sql.includes("FROM build_jobs WHERE project_id = ?") && sql.includes("status IN")) return jobs.find((r) => r.project_id === args[0] && !["done", "failed"].includes(r.status)) ?? null;
           if (sql.includes("FROM build_jobs WHERE id = ?")) return jobs.find((r) => r.id === args[0]) ?? null;
@@ -235,12 +237,12 @@ async function withHostingFetch(fn, { d1Ok = true, nsOk = true } = {}) {
   }
 }
 
-async function postBuild(env, { projectId = PROJECT, userKey = USER, ip = "203.0.113.7", d1Ok = true, nsOk = true } = {}) {
+async function postBuild(env, { projectId = PROJECT, userKey = USER, ip = "203.0.113.7", d1Ok = true, nsOk = true, extraBody = {} } = {}) {
   const { result, calls } = await withHostingFetch(async () => {
     const res = await createApp().fetch(new Request(`${ORIGIN}/workspace/projects/${encodeURIComponent(projectId)}/build`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(ip ? { "cf-connecting-ip": ip } : {}) },
-      body: JSON.stringify({ userKey, locale: "ko" }),
+      body: JSON.stringify({ userKey, locale: "ko", ...extraBody }),
     }), env);
     return { status: res.status, body: await res.json(), retryAfter: res.headers.get("retry-after") };
   }, { d1Ok, nsOk });
@@ -887,8 +889,20 @@ describe("⑤ 컨테이너 — 비밀 없는 페이로드 · jobToken · 프록�
 describe("⑥ 빌드 일일 상한 — user 3 · network 5 · service 30 (#561 관례)", () => {
   const projects = (n, owner = (i) => USER) => new Map(Array.from({ length: n }, (_, i) => [`wsp_cap_${i}`, projectRow(`wsp_cap_${i}`, owner(i))]));
 
-  it("★같은 사용자 4번째 빌드 → 429 daily_limit_reached(kind build, scope user, limit 3, resetAt) + Retry-After, 프로비저닝 0", async () => {
-    const db = makeDb({ projects: projects(4) });
+  it("★D-24(2026-10-04): 무료 사용자 2번째 빌드 → 429 limit 1 · tier free (빌드 하루 상한은 티어 표 buildsPerDay)", async () => {
+    const db = makeDb({ projects: projects(2) });
+    const env = envFor(db);
+    assert.equal((await postBuild(env, { projectId: "wsp_cap_0" })).status, 202);
+    const r = await postBuild(env, { projectId: "wsp_cap_1" });
+    assert.equal(r.status, 429, JSON.stringify(r.body));
+    assert.equal(r.body.scope, "user");
+    assert.equal(r.body.limit, 1);
+    assert.equal(r.body.tier, "free");
+    assert.equal(db.jobs.length, 1);
+  });
+
+  it("★베이직 사용자 4번째 빌드 → 429 daily_limit_reached(kind build, scope user, limit 3, tier basic, resetAt) + Retry-After, 프로비저닝 0", async () => {
+    const db = makeDb({ projects: projects(4), grants: { [USER]: "basic" } });
     const env = envFor(db);
     for (let i = 0; i < 3; i++) assert.equal((await postBuild(env, { projectId: `wsp_cap_${i}` })).status, 202, `build ${i + 1}`);
     const r = await postBuild(env, { projectId: "wsp_cap_3" });
@@ -897,6 +911,7 @@ describe("⑥ 빌드 일일 상한 — user 3 · network 5 · service 30 (#561 �
     assert.equal(r.body.kind, "build");
     assert.equal(r.body.scope, "user");
     assert.equal(r.body.limit, 3);
+    assert.equal(r.body.tier, "basic");
     assert.match(r.body.resetAt, /^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/);
     assert.ok(Number(r.retryAfter) > 0);
     assert.deepEqual(r.cfCalls, [], "no D1 / namespace call once capped");
@@ -1352,5 +1367,77 @@ describe("⑧-7 끝난 잡의 토큰은 아무것도 남기지 못한다 · 이�
     assert.deepEqual(results.slice(-5), [false, false, false, false, false]);
     assert.equal(await buildDb.appendBuildJobEvent(env, other.id, "queued", "다른 잡은 따로 센다"), true);
     assert.equal(count(other.id), 1);
+  });
+});
+
+
+// ── 2026-10-04 단계적 열기(BUILD_ENABLED="staff") · 장비 전용 예산 재정의 ─────────────────────────────
+// 문 (a)를 모두에게 열기 전, 프로덕션에서 라이브 실증 3종을 장비 키로만 돌리기 위한 단계.
+// 옛 코드에서: "staff"는 "off"가 아니라 모두에게 열렸다(무료 키 202) · 가능 여부는 티어를 몰랐다 · budgetUsd는 무시됐다.
+describe("⑨ 단계적 열기 — BUILD_ENABLED=\"staff\"면 장비 티어만 새 빌드", () => {
+  const STAFF = "uk_장비_스모크";
+  const availability = async (env, userKey) => {
+    const q = userKey ? `?userKey=${encodeURIComponent(userKey)}` : "";
+    const res = await createApp().fetch(new Request(`${ORIGIN}/workspace/build-availability${q}`), env);
+    return res.json();
+  };
+
+  it("★staff 단계: 무료 키는 503 build_staff_only — 잡·프로비저닝 0", async () => {
+    const db = makeDb({ grants: { [STAFF]: "staff" } });
+    const r = await postBuild(envFor(db, { BUILD_ENABLED: "staff" }));
+    assert.equal(r.status, 503, JSON.stringify(r.body));
+    assert.equal(r.body.error, "build_staff_only");
+    assert.deepEqual(r.cfCalls, []);
+    assert.equal(db.jobs.length, 0);
+  });
+
+  it("★staff 단계: 장비 키는 202", async () => {
+    const db = makeDb({ projects: new Map([[PROJECT, projectRow(PROJECT, STAFF)]]), grants: { [STAFF]: "staff" } });
+    const r = await postBuild(envFor(db, { BUILD_ENABLED: "staff" }), { userKey: STAFF });
+    assert.equal(r.status, 202, JSON.stringify(r.body));
+    assert.equal(db.jobs.length, 1);
+  });
+
+  it("off는 장비 키도 닫는다(503 build_disabled) · on은 무료 키도 연다(종전 그대로)", async () => {
+    const off = makeDb({ projects: new Map([[PROJECT, projectRow(PROJECT, STAFF)]]), grants: { [STAFF]: "staff" } });
+    const r1 = await postBuild(envFor(off, { BUILD_ENABLED: "off" }), { userKey: STAFF });
+    assert.equal(r1.status, 503);
+    assert.equal(r1.body.error, "build_disabled");
+    const on = makeDb();
+    assert.equal((await postBuild(envFor(on, { BUILD_ENABLED: "on" }))).status, 202);
+  });
+
+  it("가능 여부: staff 단계 — 장비 키만 open, 무료·키 없음은 build_staff_only · on이면 키 없이 open", async () => {
+    const db = makeDb({ grants: { [STAFF]: "staff" } });
+    const env = envFor(db, { BUILD_ENABLED: "staff" });
+    assert.deepEqual(await availability(env, STAFF), { ok: true, buildEnabled: true, reason: "open" });
+    assert.deepEqual(await availability(env, USER), { ok: true, buildEnabled: false, reason: "build_staff_only" });
+    assert.deepEqual(await availability(env, null), { ok: true, buildEnabled: false, reason: "build_staff_only" });
+    assert.deepEqual(await availability(envFor(makeDb(), { BUILD_ENABLED: "on" }), null), { ok: true, buildEnabled: true, reason: "open" });
+  });
+
+  it("★예산 재정의(라이브 실증 C)는 장비 티어만 — 무료 키의 budgetUsd는 무시하고 기본값", async () => {
+    const staffDb = makeDb({ projects: new Map([[PROJECT, projectRow(PROJECT, STAFF)]]), grants: { [STAFF]: "staff" } });
+    const a = await postBuild(envFor(staffDb, { BUILD_ENABLED: "staff" }), { userKey: STAFF, extraBody: { budgetUsd: 0.5 } });
+    assert.equal(a.status, 202, JSON.stringify(a.body));
+    assert.equal(a.body.job.budgetUsd, 0.5);
+    const freeDb = makeDb();
+    const b = await postBuild(envFor(freeDb, { BUILD_ENABLED: "on" }), { extraBody: { budgetUsd: 0.5 } });
+    assert.equal(b.status, 202);
+    assert.equal(b.body.job.budgetUsd, 10);
+    // 범위 밖(0.05·50)은 장비 키여도 기본값
+    const outDb = makeDb({ projects: new Map([[PROJECT, projectRow(PROJECT, STAFF)]]), grants: { [STAFF]: "staff" } });
+    const c = await postBuild(envFor(outDb, { BUILD_ENABLED: "staff" }), { userKey: STAFF, extraBody: { budgetUsd: 50 } });
+    assert.equal(c.body.job.budgetUsd, 10);
+  });
+
+  it("이미 시작된 잡의 콜백·프록시는 staff 단계에서도 env 수준으로 열려 있다(buildEnabled)", async () => {
+    const sw = await import("../dist/workspace/service-switches.js");
+    assert.equal(sw.buildEnabled({ BUILD_ENABLED: "staff" }), true);
+    assert.equal(sw.buildMode({ BUILD_ENABLED: "staff" }), "staff");
+    assert.equal(sw.buildMode({ BUILD_ENABLED: "off" }), "off");
+    assert.equal(sw.buildMode({}), "on");
+    assert.equal(sw.buildOpenForTier({ BUILD_ENABLED: "staff" }, "pro"), false);
+    assert.equal(sw.buildOpenForTier({ BUILD_ENABLED: "staff" }, "staff"), true);
   });
 });

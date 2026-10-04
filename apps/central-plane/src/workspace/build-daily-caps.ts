@@ -24,6 +24,7 @@
 import type { Env } from "../env.js";
 import type { DailyCap, DailyCapScope } from "./rate-limit.js";
 import { BUILD_DISABLED } from "./service-switches.js";
+import { entitlementsFor, type Tier } from "./entitlements.js";
 
 export const BUILD_DAILY_LIMITS = {
   /** 사용자(userKey)당 하루 빌드 시작. */
@@ -48,8 +49,16 @@ function limitFromEnv(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export function buildDailyLimit(env: BuildCapEnv): number {
-  return limitFromEnv(env.BETA_BUILD_DAILY_LIMIT, BUILD_DAILY_LIMITS.perUser);
+/**
+ * 사용자 하루 상한. 2026-10-04(D-24 배선): 티어를 주면 entitlements.buildsPerDay(무료 1·베이직 3·프로 10·장비 50)가
+ * 기준이고, BETA_BUILD_DAILY_LIMIT을 **넣었을 때만** 모든 티어의 천장(더 낮은 쪽)이다(#585 검수 상한과 같은 규칙).
+ * 티어를 안 주면 종전 기본(3)·재정의 그대로(옛 호출부 호환).
+ */
+export function buildDailyLimit(env: BuildCapEnv, tier?: Tier): number {
+  if (!tier) return limitFromEnv(env.BETA_BUILD_DAILY_LIMIT, BUILD_DAILY_LIMITS.perUser);
+  const byTier = entitlementsFor(tier).buildsPerDay;
+  const ceiling = parseInt(env.BETA_BUILD_DAILY_LIMIT ?? "", 10);
+  return Number.isFinite(ceiling) && ceiling > 0 ? Math.min(byTier, ceiling) : byTier;
 }
 export function buildDailyLimitPerIp(env: BuildCapEnv): number {
   return limitFromEnv(env.BETA_BUILD_DAILY_LIMIT_PER_IP, BUILD_DAILY_LIMITS.perNetwork);
@@ -59,8 +68,8 @@ export function buildDailyLimitGlobal(env: BuildCapEnv): number {
 }
 
 /** 빌드 한 번이 슬롯을 가져가는 상한들 — 순서 user → network → service(가장 구체적인 답이 먼저). */
-export function buildDailyCapsFor(env: BuildCapEnv, userKey: string, networkKey: string | null): DailyCap[] {
-  const caps: DailyCap[] = [{ scope: "user", bucket: BUILD_DAILY_BUCKET, key: userKey, limit: buildDailyLimit(env) }];
+export function buildDailyCapsFor(env: BuildCapEnv, userKey: string, networkKey: string | null, tier?: Tier): DailyCap[] {
+  const caps: DailyCap[] = [{ scope: "user", bucket: BUILD_DAILY_BUCKET, key: userKey, limit: buildDailyLimit(env, tier) }];
   if (networkKey) caps.push({ scope: "network", bucket: BUILD_DAILY_IP_BUCKET, key: networkKey, limit: buildDailyLimitPerIp(env) });
   caps.push({ scope: "service", bucket: BUILD_DAILY_GLOBAL_BUCKET, key: BUILD_SERVICE_BUCKET_KEY, limit: buildDailyLimitGlobal(env) });
   return caps;
@@ -69,7 +78,7 @@ export function buildDailyCapsFor(env: BuildCapEnv, userKey: string, networkKey:
 export type BuildDailyCapRejection =
   | {
       status: 429;
-      body: { ok: false; error: "daily_limit_reached"; kind: "build"; limit: number; resetAt: string; scope: Exclude<DailyCapScope, "service"> };
+      body: { ok: false; error: "daily_limit_reached"; kind: "build"; limit: number; resetAt: string; scope: Exclude<DailyCapScope, "service">; tier?: Tier };
       retryAfterSeconds: number;
     }
   | {
@@ -78,13 +87,13 @@ export type BuildDailyCapRejection =
       retryAfterSeconds: number;
     };
 
-export function buildDailyCapRejection(full: { scope: DailyCapScope; limit: number; resetAt: string; retryAfterSeconds: number }): BuildDailyCapRejection {
+export function buildDailyCapRejection(full: { scope: DailyCapScope; limit: number; resetAt: string; retryAfterSeconds: number }, tier?: Tier): BuildDailyCapRejection {
   if (full.scope === "service") {
     return { status: 503, body: { ok: false, error: BUILD_DISABLED, reason: "daily_capacity", resetAt: full.resetAt }, retryAfterSeconds: full.retryAfterSeconds };
   }
   return {
     status: 429,
-    body: { ok: false, error: "daily_limit_reached", kind: "build", limit: full.limit, resetAt: full.resetAt, scope: full.scope },
+    body: { ok: false, error: "daily_limit_reached", kind: "build", limit: full.limit, resetAt: full.resetAt, scope: full.scope, ...(tier ? { tier } : {}) },
     retryAfterSeconds: full.retryAfterSeconds,
   };
 }

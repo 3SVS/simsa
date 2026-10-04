@@ -50,3 +50,28 @@ export const BUILD_DISABLED = "build_disabled" as const;
 export function buildEnabled(env: Pick<Env, "BUILD_ENABLED">): boolean {
   return switchIsOn(env.BUILD_ENABLED);
 }
+
+/**
+ * 2026-10-04 — 단계적 열기. BUILD_ENABLED 값 하나로 세 상태(단일 출처):
+ *   "off"   → 모두 닫힘(종전 그대로)
+ *   "staff" → 장비 티어(D-24 staff, plan_grants로 지정한 키)만 **새 빌드를 시작**할 수 있다 — 라이브 실증 3종(문 (a))을
+ *             모두에게 열기 전에 프로덕션에서 돌리기 위한 단계. 이미 시작된 잡의 콜백·LLM 프록시·Worker 배포는 jobToken으로
+ *             인증되므로 env 수준 buildEnabled()(= off가 아님)만 본다.
+ *   그 밖   → 모두 열림(종전 "정확히 off만 꺼짐" 규칙 유지)
+ */
+export type BuildMode = "off" | "staff" | "on";
+
+export function buildMode(env: Pick<Env, "BUILD_ENABLED">): BuildMode {
+  const raw = (env.BUILD_ENABLED ?? "").trim();
+  if (!switchIsOn(env.BUILD_ENABLED)) return "off";
+  return raw === "staff" ? "staff" : "on";
+}
+
+/** staff 단계에서 장비 티어가 아닌 사람의 새 빌드 시작 — 503 코드(대시보드는 '아직 열리지 않음'으로 그린다). */
+export const BUILD_STAFF_ONLY = "build_staff_only" as const;
+
+/** 이 티어가 지금 새 빌드를 시작할 수 있는가(POST /build · 가능 여부 API). */
+export function buildOpenForTier(env: Pick<Env, "BUILD_ENABLED">, tier: string): boolean {
+  const mode = buildMode(env);
+  return mode === "on" || (mode === "staff" && tier === "staff");
+}
