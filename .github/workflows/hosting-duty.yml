@@ -1,0 +1,102 @@
+# hosting-duty — 호스팅 사업자 의무(D-6, B-7)의 운영자 "1클릭": Simsa가 올려 준 앱을 정지·해제·조회한다.
+#
+# 왜 워크플로인가: 관리자 라우트(POST /admin/hosting/:slug/{suspend,unsuspend}, GET /admin/hosting/:slug)는
+# INTERNAL_CALLBACK_TOKEN을 요구하는데, 그 토큰은 repo secret에만 있고 노트북엔 없다(ops-probe와 같은 사정).
+# Actions → hosting-duty → Run workflow → slug·사유 선택 → 실행 = 정지. 휴대폰 GitHub 앱에서도 된다.
+# 신고 알림(Telegram)에 이 워크플로 주소와 slug가 함께 온다.
+#
+# ★이 저장소는 PUBLIC이다 — 로그는 로그인한 누구나 읽는다. 그래서:
+#   - slug·메모는 첫 단계에서 마스킹한다(로그에 *** 로 찍힌다). run-name에도 싣지 않는다.
+#   - 조회(status)는 개수·상태·사유 코드·시각만 찍는다 — 신고 내용·연락처·운영 메모는 출력하지 않는다
+#     (그것들은 Cloudflare 대시보드 → D1 → conclave-ai 콘솔에서 운영자가 직접 본다).
+#   - 입력은 env로만 넘기고 셸에 직접 끼워 넣지 않는다(스크립트 주입 방지). slug는 정규식으로 다시 검사한다.
+#
+# 이 워크플로는 **라이브 상태를 바꾼다**(정지는 곧바로 그 앱 주소를 410으로 만든다). 배포는 하지 않는다.
+name: hosting-duty
+run-name: hosting-duty ${{ inputs.action }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'suspend(정지) · unsuspend(해제) · status(조회)'
+        required: true
+        default: 'status'
+        type: choice
+        options: [status, suspend, unsuspend]
+      slug:
+        description: '앱 주소의 앞부분 (예: bakery-pickup-1 → https://bakery-pickup-1.simsa.page)'
+        required: true
+      reason:
+        description: 'suspend 전용 사유'
+        required: false
+        default: 'phishing'
+        type: choice
+        options: [phishing, spam, adult, malware, illegal, abuse_other]
+      memo:
+        description: '운영 메모(선택, 1000자까지 — 신고자·소유자 개인정보는 적지 않는다)'
+        required: false
+        default: ''
+
+concurrency:
+  group: hosting-duty
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  duty:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # 입력은 env에 두지 않는다 — 스텝 env 값은 로그 머리말에 그대로 찍힌다(마스킹 전). 이벤트 파일에서 읽는다.
+    env:
+      TOKEN: ${{ secrets.INTERNAL_CALLBACK_TOKEN }}
+      BASE: https://conclave-ai.seunghunbae.workers.dev
+    steps:
+      - name: Mask inputs and validate slug
+        run: |
+          set -euo pipefail
+          SLUG=$(jq -r '.inputs.slug // ""' "$GITHUB_EVENT_PATH")
+          MEMO=$(jq -r '.inputs.memo // ""' "$GITHUB_EVENT_PATH" | head -n 1)
+          echo "::add-mask::${SLUG}"
+          if [ -n "${MEMO}" ]; then echo "::add-mask::${MEMO}"; fi
+          # 서버가 다시 검사한다(SLUG_RE + 예약어). 여기서는 경로에 끼워 넣어도 안전한 문자만 통과시킨다.
+          if ! printf '%s' "${SLUG}" | grep -Eq '^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$' || printf '%s' "${SLUG}" | grep -q -- '--'; then
+            echo "::error::slug must be the lowercase app name before .simsa.page (letters, digits, single hyphens)"
+            exit 1
+          fi
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::repo secret INTERNAL_CALLBACK_TOKEN is missing"
+            exit 1
+          fi
+
+      - name: Call admin route
+        run: |
+          set -uo pipefail
+          ACTION=$(jq -r '.inputs.action // ""' "$GITHUB_EVENT_PATH")
+          SLUG=$(jq -r '.inputs.slug // ""' "$GITHUB_EVENT_PATH")
+          REASON=$(jq -r '.inputs.reason // ""' "$GITHUB_EVENT_PATH")
+          MEMO=$(jq -r '.inputs.memo // ""' "$GITHUB_EVENT_PATH" | head -n 1)
+          case "${ACTION}" in
+            suspend)
+              body=$(jq -nc --arg reason "${REASON}" --arg memo "${MEMO}" '{reason: $reason} + (if $memo == "" then {} else {memo: $memo} end)')
+              code=$(curl -sS -m 30 -o /tmp/out.json -w '%{http_code}' -X POST -H "Authorization: Bearer ${TOKEN}" -H 'content-type: application/json' --data-binary "${body}" "${BASE}/admin/hosting/${SLUG}/suspend")
+              filter='{ok, error, applied, appliedRecorded, propagationSeconds, logId}'
+              ;;
+            unsuspend)
+              body=$(jq -nc --arg memo "${MEMO}" 'if $memo == "" then {} else {memo: $memo} end')
+              code=$(curl -sS -m 30 -o /tmp/out.json -w '%{http_code}' -X POST -H "Authorization: Bearer ${TOKEN}" -H 'content-type: application/json' --data-binary "${body}" "${BASE}/admin/hosting/${SLUG}/unsuspend")
+              filter='{ok, error, applied, appliedRecorded, propagationSeconds, logId}'
+              ;;
+            status)
+              code=$(curl -sS -m 30 -o /tmp/out.json -w '%{http_code}' -H "Authorization: Bearer ${TOKEN}" "${BASE}/admin/hosting/${SLUG}")
+              filter='{ok, error, store, suspended, source: .current.source, reason: .current.reason, openReports: ([.reports[]? | select(.status == "open")] | length), recent: ([.log[]?][:5] | map({action, reason, source, applied, created_at}))}'
+              ;;
+            *)
+              echo "::error::unknown action"; exit 1 ;;
+          esac
+          echo "HTTP ${code}"
+          # 신고 내용·연락처·메모는 찍지 않는다(공개 로그). 위 filter에 있는 필드만.
+          jq "${filter}" /tmp/out.json 2>/dev/null || echo "(non-JSON response)"
+          case "${code}" in 200) exit 0 ;; *) echo "::warning::admin route returned ${code}"; exit 1 ;; esac

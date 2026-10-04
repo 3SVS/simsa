@@ -11,6 +11,14 @@ binding = "DB"
 database_name = "conclave-ai"
 database_id = "28be7ec4-9c46-4b78-8d07-11f344021dd0"
 
+# KV spike — short-lived, non-authoritative cache only.
+# Create before enabling:
+#   wrangler kv namespace create CENTRAL_CACHE
+# Then uncomment with the returned id. Do not store source-of-truth data here.
+# [[kv_namespaces]]
+# binding = "CENTRAL_CACHE"
+# id = "REPLACE_WITH_CENTRAL_CACHE_NAMESPACE_ID"
+
 [vars]
 ENVIRONMENT = "production"
 # 2026-07-21 (Bae 결정) — 레거시 Conclave 자동 리뷰 전면 정지(Simsa 집중 기간).
@@ -32,8 +40,16 @@ REPAIR_ENABLED = "on"
 # 빌드 실행체 묶음(PR #569: 잡 범위 토큰·일일 상한·예산 정지)이 배포된 뒤 "on" + deploy (Bae 승인).
 BUILD_ENABLED = "off"
 # 일일 상한 [PILOT] (코드 기본값, 설정 줄 없음 = 기본값): 검수 유저 10 · 네트워크 30 · 서비스 전체 300,
-# 수리 유저 5 · 네트워크 15 · 서비스 전체 50. 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL]
-# 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
+# 수리 유저 5 · 네트워크 6 · 서비스 전체 20(2026-09-30 비용 권고로 50→20, 네트워크는 #576 검증으로 15→6 — 서비스의 30% 몫 유지).
+# 조정 = BETA_{INSPECTION,REPAIR}_DAILY_LIMIT[_PER_IP|_GLOBAL] 를 여기 [vars]에 양의 정수로 + deploy (src/workspace/beta-limits.ts).
+# 전부 요청 수 상한이다 — 달러 천장이 아니다(잡당 $2 상한은 "다음 호출 전" 검사라 잡마다 호출 1회만큼 넘칠 수 있다).
+# 수리 잡당 AI 달러 상한 [PILOT] (2026-09-30 비용 권고 ②, 코드 기본값 $2, 설정 줄 없음 = 기본값):
+# 조정 = REPAIR_JOB_BUDGET_USD = "3" 처럼 양의 수 + deploy. 컨테이너가 호출마다 실응답 모델 단가로 누적해
+# 다음 호출 전에 멈춘다(ConclaveSandbox 이미지가 이 필드를 아는 버전이어야 집행됨).
+# 생성·지시서 일일 상한 [PILOT] (2026-09-30 비용 권고 ③, 코드 기본값): 네트워크 몫 생성 100 · 지시서 40 →
+# 서비스 전체 생성 계열(PR 검토 포함) 500 · 지시서 200. canary가 생성 버킷에서 하루 약 96건을 먼저 쓴다.
+# 조정 = BETA_GENERATION_DAILY_LIMIT_{PER_IP,GLOBAL} / BETA_DEV_SPEC_DAILY_LIMIT_{PER_IP,GLOBAL} 양의 정수 + deploy
+# (src/workspace/generation-capacity.ts — 가득 차면 LLM 0회 + 429(네트워크 몫)/503(서비스) generation_capacity).
 # Stage 271 — public sign-up OPEN (Bae approved 2026-07-02: "env 변경도 저건 승인할게").
 # Was fail-closed (unset → disabled) since Stage 241. Sign-in/session were never gated
 # by this policy; only POST /api/auth/sign-up/* is affected.
@@ -48,6 +64,11 @@ AUTH_SIGNUP_MODE = "open"
 PROBE_MAIL_DOMAIN = "simsa.page"
 # B5 — S 모드 호스팅 앱 주소 루트(hosting-dispatch와 동일). 잡 응답의 hostUrl·배포 주소에 쓴다.
 HOSTING_ROOT_DOMAIN = "simsa.page"
+# B-7 — 호스팅 앱 신고 접수(POST /hosting/report) 스위치. 정확히 "on"일 때만 받는다(미설정·다른 값 = 꺼짐,
+# JSON 503 reports_not_open · 폼 303 error=closed). hosting_reports에 연락처·자유 서술이 들어가므로
+# 개인정보처리방침에 '앱 신고' 항목(수집 항목·목적·보유 180일)을 고지한 **뒤에** 켠다 — hosting-dispatch의 같은
+# 변수와 함께 "on" + 두 Worker 배포.
+HOSTING_REPORTS_ENABLED = "off"
 # Cloudflare AI Gateway (gateway "simsa") — REQUIRED: direct Worker→Anthropic
 # egress is ~90% 403 "Request not allowed" (measured 2026-07-05, retry-6 = 1/10).
 # The gateway path reaches Anthropic with no 403. Gateway must be UNAUTHENTICATED
@@ -119,6 +140,17 @@ ACTUAL_DEBIT_ALLOWED_USER_KEYS = ""
 [[r2_buckets]]
 binding = "EVIDENCE"
 bucket_name = "simsa-evidence"
+
+# SI 티어 Train B — B-7 호스팅 사업자 의무(D-6): 정지 목록 Workers KV. apps/hosting-dispatch/wrangler.toml과
+# **같은 id**여야 한다(이 Worker가 suspended:<slug>를 쓰고 라우터가 읽는다 · 라우터가 strike:를 쓰고 10분 크론이 읽는다).
+# 2026-10-04 네임스페이스 생성됨(Bae) — 아래 id는 실제 값. 존재하지 않는 id를 넣으면 **모든 central-plane 배포가 실패**한다.
+# 없으면: 관리자 정지 503 suspension_store_not_configured(정지된 척하지 않음) · 요청 몰림 플래그 스윕 건너뜀 · 신고 접수는 정상.
+# 켜는 법(Bae 액션): Cloudflare 대시보드 → Storage & Databases → KV → Create → `simsa-hosting-suspended`
+#   → ID를 여기와 hosting-dispatch 양쪽에 적고 주석 해제 → PR·머지 → deploy central-plane · deploy hosting-dispatch.
+# 2026-10-04 Bae 생성(simsa-hosting-suspended) — 두 Worker가 같은 id.
+[[kv_namespaces]]
+binding = "HOSTING_SUSPENDED"
+id = "573e6cf5c5f84d9a8390f3affe3f0bff"
 
 # Observability. Logs retained 3 days on free tier, sufficient for v0.4-alpha.
 [observability]

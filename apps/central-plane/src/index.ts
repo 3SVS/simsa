@@ -21,6 +21,8 @@ import { runShadcnBlockMiner } from "./shadcn-block-miner.js";
 import { runAwesomeListMiner } from "./awesome-list-miner.js";
 import { purgeExpiredRateLimitRows } from "./rate-limit-retention.js";
 import { sweepDeletedProjectHosting } from "./workspace/hosted-app-teardown.js";
+import { purgeExpiredHostingReports, sendReportDigest, sweepHostingRateStrikes } from "./workspace/hosting-duties.js";
+import { runTrainingPrivacyCron } from "./workspace/training-records-index.js";
 
 const app = createApp();
 
@@ -67,6 +69,7 @@ export default {
   //   - every day 03:00 UTC → external design references refresh (v0.16.8)
   //   - every 6 hours      → retry pending user_feedback classification (v0.16.9)
   //                          + purge request-limit rows older than 48h and pre-"v1:" legacy rows (rate-limit-retention.ts)
+  //                          + training-copy deletion retries / pre-0071 withdrawals / 30-day tombstones (training-records-index.ts)
   //
   // Each branch logs a structured outcome so `wrangler tail` is the
   // audit trail (the scheduled trigger has no caller to return data to).
@@ -153,6 +156,23 @@ export default {
         console.log(JSON.stringify({ cron: "rate-limit-purge", cronExpression: event.cron, ...purge }));
       } catch (err) {
         console.error(JSON.stringify({ cron: "rate-limit-purge", cronExpression: event.cron, error: String(err).slice(0, 200) }));
+      }
+      // B-7 — 호스팅 앱 신고(연락처·자유 서술 포함) 보유 기간 180일([PILOT]) 지난 행. 같은 관례(잘게·던지지 않음).
+      try {
+        const reports = await purgeExpiredHostingReports(env);
+        console.log(JSON.stringify({ cron: "hosting-reports-purge", cronExpression: event.cron, ...reports }));
+      } catch (err) {
+        console.error(JSON.stringify({ cron: "hosting-reports-purge", cronExpression: event.cron, error: String(err).slice(0, 200) }));
+      }
+      // Train K · K-3 (0071): training-copy deletions — retry what a withdrawal / project delete could
+      // not finish, move pre-0071 review copies of people who withdrew before 0071 into the index (and
+      // delete them), and drop deletion tombstones after 30 days (training-records-index.ts). Bounded
+      // (≤ 1,000 deletes per tick) and fail-open like the purge above.
+      try {
+        const training = await runTrainingPrivacyCron(env);
+        console.log(JSON.stringify({ cron: "training-privacy", cronExpression: event.cron, ...training }));
+      } catch (err) {
+        console.error(JSON.stringify({ cron: "training-privacy", cronExpression: event.cron, error: String(err).slice(0, 200) }));
       }
       try {
         const result = await retryPendingFeedback(env, 50);
@@ -333,6 +353,21 @@ export default {
       console.log(JSON.stringify({ cron: "verify-sweep", cronExpression: event.cron, ...verify }));
     } catch (err) {
       console.error("[verify-sweep] crashed:", err);
+    }
+    // B-7 (D-6) — 요청 상한 초과가 이어진 호스팅 앱을 운영자에게 알린다(플래그 행 source=auto_flag).
+    // **정지하지 않는다** — 트래픽 양만으로는 남이 몰아넣은 요청과 구분할 수 없다(PR #575 검증 P1).
+    // 정지 목록 KV가 없으면 건너뜀을 보고한다. 이어서 아직 안 알린 신고를 시간당 한 통으로 묶어 보낸다.
+    try {
+      const strikes = await sweepHostingRateStrikes(env);
+      console.log(JSON.stringify({ cron: "hosting-strike-flag", cronExpression: event.cron, ...strikes }));
+    } catch (err) {
+      console.error("[hosting-strike-flag] crashed:", err);
+    }
+    try {
+      const digest = await sendReportDigest(env);
+      console.log(JSON.stringify({ cron: "hosting-report-digest", cronExpression: event.cron, ...digest }));
+    } catch (err) {
+      console.error("[hosting-report-digest] crashed:", err);
     }
   },
 };

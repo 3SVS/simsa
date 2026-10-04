@@ -285,7 +285,10 @@ test("internal done: a container report already sized to the 512KiB cap is NOT r
   const app = createApp();
   const auth = { authorization: `Bearer ${TOKEN}` };
 
-  const created = await send(app, env, `/workspace/projects/${PROJECT}/visual-checks/run`, { body: { userKey: USER, locale: "ko" } });
+  // Train K (0071, PR #574 #574-5): finding codes are ops meta — recorded only when the person's recording is
+  // on. A request with no country is off by default, so this run carries the edge country a real request has
+  // (KR = on by default); the no-country rule itself is pinned in train-k-consent-server.test.mjs.
+  const created = await send(app, env, `/workspace/projects/${PROJECT}/visual-checks/run`, { body: { userKey: USER, locale: "ko" }, cf: { country: "KR" } });
   const runId = created.json.check.id;
   const base = buildNonDevReport(BROKEN, "ko");
   const room = CAP - JSON.stringify({ ...base, padding: "" }).length;

@@ -6,6 +6,10 @@ export type DailyLimitInfo = {
   kind: DailyLimitKind | null;
   limit: number | null;
   resetAt: string | null;
+  /** D-24 T-4: the caller's tier — present only when the server sent a known value. */
+  tier?: "free" | "basic" | "pro" | "staff";
+  /** D-24 T-4: "month" for the monthly repair quota — present only then. */
+  period?: "month";
 };
 
 /** Dictionary words for "when can I try again" (t.visualChecks.resetWhen). */
@@ -48,6 +52,8 @@ export function errorNoticeText(
     generic: string;
     dailyLimitReached?: string;
     dailyLimitReachedAt?: string;
+    monthlyLimitReached?: string;
+    monthlyLimitReachedAt?: string;
     dailyLimitCleared?: string;
   } & Record<string, string>,
   key: string,

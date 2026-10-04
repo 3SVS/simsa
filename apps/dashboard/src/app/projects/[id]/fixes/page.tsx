@@ -20,6 +20,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import type { ItemStatus } from "@/lib/labels";
 import { fixesEntryView } from "@/lib/project-steps.mjs";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary } from "@/i18n/dictionary.mjs";
 
@@ -27,6 +28,8 @@ type FixState = {
   phase: "idle" | "loading" | "done" | "error";
   result?: FixSuggestionResponse;
   expanded: boolean;
+  /** 비용 권고 ③ — a specific sentence for this failure (today's AI capacity is full). */
+  errorText?: string;
 };
 
 export default function FixesPage() {
@@ -88,7 +91,8 @@ export default function FixesPage() {
     });
 
     if (!res.ok) {
-      setFixStates((prev) => ({ ...prev, [item.itemId]: { phase: "error", expanded: false } }));
+      const errorText = res.error === "generation_capacity" ? generationCapacityText(t, res.resetAt) : undefined;
+      setFixStates((prev) => ({ ...prev, [item.itemId]: { phase: "error", expanded: false, ...(errorText ? { errorText } : {}) } }));
       return;
     }
 
@@ -223,7 +227,7 @@ function FixItemCard({
           )}
           {fixState?.phase === "error" && (
             <span className="flex items-center gap-2">
-              <span className="text-xs text-red-600">{t.fixesScreen.generateError}</span>
+              <span className="text-xs text-red-600">{fixState.errorText ?? t.fixesScreen.generateError}</span>
               <button
                 onClick={onFix}
                 className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"

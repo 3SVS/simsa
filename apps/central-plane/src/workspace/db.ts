@@ -7,6 +7,11 @@ import type { Env } from "../env.js";
 import type { FetchLike } from "../github.js";
 import { PROJECT_DELETED, buildJobDeleteBatchStatements, stopActiveBuildJobsForProject } from "./build-job-db.js";
 import { teardownHostedAppsForProject } from "./hosted-app-teardown.js";
+import {
+  TRAINING_INDEX_BACKFILL_LEGACY_FOR_PROJECT_SQL,
+  TRAINING_INDEX_REQUEST_DELETE_FOR_PROJECT_SQL,
+  sweepTrainingDeletions,
+} from "./training-records-index.js";
 
 /**
  * 프로젝트 행이 아직 있나(가벼운 존재 확인 — 지시서 JSON을 읽지 않는다). 빌드 산출물 라우트·배포 파이프라인이 단계마다 부른다
@@ -362,7 +367,19 @@ export async function deleteProject(env: Env, id: string, userKey: string, opts:
   //    retry, no half-state); once it commits, the rows that referenced the R2
   //    objects are already gone, so a failed R2 delete can only orphan storage —
   //    never leave a live row pointing at a deleted object.
+  //
+  //    Train K · K-3 (0071): training copies (R2 events/… · journey/…) of this
+  //    project get a deletion REQUEST inside the same batch — first the pre-0071
+  //    review copies are moved into the index (their keys live only on the
+  //    workspace_pr_review_runs rows this batch deletes, so this runs FIRST),
+  //    then every indexed copy of the project is stamped. The R2 deletes run
+  //    after the commit (step 4); a failed one stays requested and the 6-hour
+  //    cron retries it — so, unlike the evidence above, a failed training delete
+  //    is never silently orphaned.
+  const requestedAt = new Date().toISOString();
   const stmts = [
+    env.DB.prepare(TRAINING_INDEX_BACKFILL_LEGACY_FOR_PROJECT_SQL).bind(requestedAt, id, userKey),
+    env.DB.prepare(TRAINING_INDEX_REQUEST_DELETE_FOR_PROJECT_SQL).bind(requestedAt, id, userKey),
     env.DB.prepare(
       `DELETE FROM workspace_agent_experiment_candidates
        WHERE experiment_id IN (SELECT id FROM workspace_agent_experiments WHERE project_id = ?)`,
@@ -395,6 +412,10 @@ export async function deleteProject(env: Env, id: string, userKey: string, opts:
       ),
     );
   }
+
+  // 4. Train K · K-3: delete this project's requested training copies now
+  //    (never throws; leftovers stay requested for the 6-hour cron).
+  await sweepTrainingDeletions(env, { kind: "project", projectId: id, userKey }, { site: "project-delete", maxPages: 5 });
 
   // 5. B-5b S3 검증 결함 2: 빌드가 만든 호스팅 자원 — 공개 유저 Worker(<slug>.<root>) · 프로젝트 D1(앱 최종 사용자 데이터) ·
   //    호스팅 조직 저장소. 운영 자격은 Worker에만(hosted-app-teardown.ts). 실패하면 잡 행이 남고 5분 크론이 다시 시도한다

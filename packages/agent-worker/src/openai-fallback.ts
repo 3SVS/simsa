@@ -168,12 +168,21 @@ function toAnthropicResponse(json: unknown, model: string): AnthropicResponse {
   const prompt = tokenCount(j.usage?.prompt_tokens);
   const cached = Math.min(tokenCount(j.usage?.prompt_tokens_details?.cached_tokens), prompt);
   const actualModel = typeof j.model === "string" && j.model.trim() ? j.model.trim() : model;
+  // PR #576 검증 P2-8: no usage block (or no token count in it) is NOT "0 tokens" — the call
+  // was billed and we cannot tell for how much. Say so; pricing treats it as cost unknown.
+  const rawUsage: unknown = j.usage;
+  const usageKnown =
+    !!rawUsage &&
+    typeof rawUsage === "object" &&
+    (Number.isFinite((rawUsage as { prompt_tokens?: unknown }).prompt_tokens) ||
+      Number.isFinite((rawUsage as { completion_tokens?: unknown }).completion_tokens));
   return {
     id: j.id ?? "openai_fallback",
     model: actualModel,
     vendor: "openai",
     content,
     ...(choice?.finish_reason === "length" ? { stop_reason: "max_tokens" } : {}),
+    ...(usageKnown ? {} : { usageUnknown: true as const }),
     usage: {
       input_tokens: prompt - cached,
       output_tokens: tokenCount(j.usage?.completion_tokens),

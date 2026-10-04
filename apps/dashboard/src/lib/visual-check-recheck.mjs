@@ -50,13 +50,36 @@ export function isServerDefaultIntent(raw) {
   return typeof raw === "string" && SERVER_DEFAULT_INTENTS.has(raw.trim());
 }
 
+/** ISO 시각 → ms. 모르는 값은 NaN(비교에서 항상 거짓). */
+const msOf = (raw) => (typeof raw === "string" && raw.trim() ? Date.parse(raw) : Number.NaN);
+
 /**
- * @param {{ id?: unknown, intent?: unknown } | null | undefined} check the run being re-checked
+ * C-A7 검증 P2-5: 프로젝트의 확정 의도가 **마지막으로 정해진 시각** — "맞나요?" 확정(intentConfirmedAt)과
+ * 인터뷰로 의도 문장을 고친 시각(intentRevisedAt) 중 늦은 것. 깨진 값은 무시하고, 둘 다 없으면 null.
+ * @param {{ intentConfirmedAt?: unknown, intentRevisedAt?: unknown } | null | undefined} ext
+ * @returns {string | null}
+ */
+export function confirmedIntentAtOf(ext) {
+  let best = null;
+  let bestMs = Number.NEGATIVE_INFINITY;
+  for (const raw of [ext?.intentConfirmedAt, ext?.intentRevisedAt]) {
+    const ms = msOf(raw);
+    if (Number.isFinite(ms) && ms > bestMs) {
+      best = /** @type {string} */ (raw);
+      bestMs = ms;
+    }
+  }
+  return best;
+}
+
+/**
+ * @param {{ id?: unknown, intent?: unknown, createdAt?: unknown } | null | undefined} check the run being re-checked
  * @param {string} userKey
  * @param {"ko" | "en"} locale report prose language (must travel with the run — see VisualCheckRunInput.locale)
- * @param {{ confirmedIntent?: unknown }} [opts] the project's confirmed one-line
- *   ("맞나요?" card → productSpec.oneLine). Used only when the source run has no
- *   intent of its own (blank or the server default sentence).
+ * @param {{ confirmedIntent?: unknown, confirmedIntentAt?: unknown }} [opts] the project's confirmed one-line
+ *   ("맞나요?" card → productSpec.oneLine) and when it was last set (confirmedIntentAtOf). The confirmed
+ *   one-line is used when the source run has no intent of its own (blank or the server default sentence),
+ *   **or** when it was set after the source run (C-A7 P2-5 — the run's intent is then stale).
  * @returns {{ userKey: string, locale: "ko" | "en", intent?: string, sourceCheckId?: string }}
  */
 export function buildRecheckBody(check, userKey, locale, opts = {}) {
@@ -64,11 +87,41 @@ export function buildRecheckBody(check, userKey, locale, opts = {}) {
   const body = { userKey, locale };
   const runIntent = typeof check?.intent === "string" ? check.intent.trim() : "";
   const confirmed = typeof opts?.confirmedIntent === "string" ? opts.confirmedIntent.trim() : "";
-  // 계약 1의 순서를 클라이언트가 안다: 그 런에 사람이 적은 의도 → 프로젝트의 확정 의도 →
-  // (둘 다 없으면 보내지 않는다 — 서버가 원 런/기본 문장으로 이어간다).
-  // 기본 문장은 '적은 의도'가 아니므로 첫 단계에서 걸러진다.
-  if (runIntent && !isServerDefaultIntent(runIntent)) body.intent = runIntent;
+  // C-A7 검증 P2-5: 재검수의 자는 intent + acceptancePlan이고, acceptancePlan은 서버가 **지금의** 지시서에서
+  // 만든다. 원 런 뒤에 확정 의도가 바뀌었으면(인터뷰로 X → Y — 지시서도 Y로 다시 만들어진다) 원 런의
+  // intent는 낡은 자다. 두 시각을 다 알 때만 이렇게 본다 — 모르면 종전 규칙(원 런과 같은 자).
+  const confirmedIsNewer = confirmed !== "" && msOf(opts?.confirmedIntentAt) > msOf(check?.createdAt);
+  // 계약 1의 순서를 클라이언트가 안다: (원 런 뒤에 바뀐 확정 의도) → 그 런에 사람이 적은 의도 →
+  // 프로젝트의 확정 의도 → (다 없으면 보내지 않는다 — 서버가 원 런/기본 문장으로 이어간다).
+  // 기본 문장은 '적은 의도'가 아니므로 둘째 단계에서 걸러진다.
+  if (confirmedIsNewer) body.intent = confirmed;
+  else if (runIntent && !isServerDefaultIntent(runIntent)) body.intent = runIntent;
   else if (confirmed) body.intent = confirmed;
   if (typeof check?.id === "string" && check.id) body.sourceCheckId = check.id;
+  return body;
+}
+
+/** central-plane MAX_INTENT_CHARS — a longer explicit intent is refused (400 invalid_intent). */
+const MAX_INTENT_CHARS = 1000;
+
+/**
+ * PR #571 검증 결함 3 (문 (c) "만들었는데 생각과 달라요"): the check the intent card
+ * offers right after the user wrote what they MEANT. The line travels as an explicit
+ * intent — the D1 mirror of productSpec is fire-and-forget, so leaning on the
+ * server's "confirmed one-line" fallback could still measure with the generic
+ * sentence if the mirror has not landed yet. No sourceCheckId: this is a new
+ * yardstick, not a re-check of an earlier run's. Cut at the server's limit the
+ * same way the server cuts a confirmed one-line (confirmedIntentFromProject).
+ *
+ * @param {unknown} oneLine the confirmed one-line
+ * @param {string} userKey
+ * @param {"ko" | "en"} locale
+ * @returns {{ userKey: string, locale: "ko" | "en", intent?: string }}
+ */
+export function intentRecheckBody(oneLine, userKey, locale) {
+  /** @type {{ userKey: string, locale: "ko" | "en", intent?: string }} */
+  const body = { userKey, locale };
+  const line = typeof oneLine === "string" ? oneLine.trim() : "";
+  if (line) body.intent = line.slice(0, MAX_INTENT_CHARS);
   return body;
 }

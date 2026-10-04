@@ -65,13 +65,15 @@ export function generateButtonState(f) {
 /**
  * 실패를 초보자 말로 — 종류별 문구 키. 예시로 대체하지 않고 이유를 말한다.
  * @param {{ error: string, stage?: string, issueCount?: number, retryAfterSeconds?: number }} err
- * @returns {"errLlm"|"errInvalid"|"errRateLimited"|"errNotSynced"|"errNetwork"|"errServer"}
+ * @returns {"errLlm"|"errInvalid"|"errRateLimited"|"errCapacity"|"errNotSynced"|"errNetwork"|"errServer"}
  */
 export function generateErrorKey(err) {
   switch (err.error) {
     case "llm_unavailable": return "errLlm";
     case "dev_spec_invalid": return "errInvalid";
     case "rate_limited": return "errRateLimited";
+    // 비용 권고 ③: service-wide daily capacity (the page renders generationCapacityText).
+    case "generation_capacity": return "errCapacity";
     case "not_found": return "errNotSynced";
     case "network": return "errNetwork";
     default: return "errServer";

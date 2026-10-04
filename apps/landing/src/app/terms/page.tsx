@@ -31,7 +31,7 @@ export default function TermsPage() {
           The deliberation contract.
         </h1>
         <p className="text-ink-mute text-sm font-mono tracking-wider">
-          Effective 2026-05-13
+          Effective 2026-10-04
         </p>
 
         <div className="mt-12 space-y-10 leading-relaxed text-[17px]">
@@ -144,24 +144,46 @@ export default function TermsPage() {
               produce a result and are not retained for model training unless
               you explicitly opt in.
             </p>
+            {/* Train K (#573 검증 9): same facts as the Simsa privacy policy §2
+                (dashboard lib/privacy-ops-info.mjs TRAINING_DATA_SCOPE ·
+                TRAINING_COPY_NOTE) and the setting's current name — pinned by
+                apps/dashboard/test/train-k-consent.test.mjs. */}
             <p className="mb-3">
-              <strong>Opt-in (off by default).</strong> If you turn on
-              &ldquo;Help improve Simsa&rdquo; in your workspace settings, we
-              retain the reviewed code changes (diff), your acceptance items,
-              and the review result, and may use them &mdash; after
-              anonymization &mdash; to improve review quality, including
-              training our own models. Retained records are keyed to an
-              anonymized identifier; your account handle and email are never
-              included, and we automatically scrub detected secrets (API keys,
-              tokens, <code className="font-mono text-sm">.env</code> values)
-              from the stored code before retention. Anonymized, aggregated
-              insights derived from this data (for example, common failure
-              patterns across tools) may be published or shared; we share
-              patterns, never people &mdash; individual data, code, or projects
-              are never sold or shared, and the anonymized identifier cannot be
-              reversed. You can withdraw consent at any time; new reviews stop
-              being retained from that point (previously retained,
-              already-anonymized records may remain in training sets).
+              <strong>Opt-in (off by default).</strong> Only if you choose
+              &ldquo;Allow&rdquo; under &ldquo;Share training data
+              (optional)&rdquo; (in Korean, &ldquo;학습 데이터 제공(선택)&rdquo;)
+              &mdash; asked on a completed check result and changeable in each
+              project&rsquo;s Settings &mdash; then, when you check changes to
+              code you connected, we keep a copy of the product description,
+              checklist, result, code changes, the repository name, the change
+              request number, the code version ID and a record of the steps,
+              together with operating info from that time: build tool, app
+              type, entry, source, screen and input language, number of
+              projects, plan and AI usage (amount processed and model), plus
+              your country code if operating info recording is on. Checks of an
+              app by its web address are not included. We use these copies to
+              improve checks and fixes, including training our own models.
+            </p>
+            <p className="mb-3">
+              Before storing, we remove values that look like secret keys (API
+              keys, tokens, <code className="font-mono text-sm">.env</code>{" "}
+              values). Copies have no account-email field, but they do include
+              the repository name (which can contain your account name) and
+              anything you wrote in your descriptions or code. Instead of your
+              user key itself, copies carry a transformed value of it, which we
+              can still link to your other records. Aggregated insights (for
+              example, common failure patterns across tools) may be published;
+              individual data, code, or projects are never sold or handed to
+              anyone else.
+            </p>
+            <p className="mb-3">
+              You can withdraw at any time with one click, on a check result or
+              in a project&rsquo;s Settings. When you withdraw or delete the
+              project, we stop keeping new copies and delete the indexed saved
+              copies (deletion starts right away and failed deletions are
+              retried). Some copies saved before deletion was available may not
+              be removed automatically &mdash; contact us and we will delete
+              what we can find.
             </p>
             <p>
               <strong>BYO (CLI) mode.</strong> Your code and diffs stay on your

@@ -66,6 +66,9 @@ export function mapRunError(codeOrStatus) {
       return "dailyLimitReached";
     case "inspection_disabled":
       return "inspectionDisabled";
+    // D-24 T-5: 402 — a feature of a higher plan (login-behind inspection needs Basic).
+    case "plan_required":
+      return "planRequired";
     case "website_source_required":
       return "websiteSourceRequired";
     case "run_already_active":
@@ -108,6 +111,7 @@ export function runErrorNotice(res) {
  */
 export function runErrorTone(key) {
   return key === "dailyLimitReached" ||
+    key === "planRequired" ||
     key === "inspectionDisabled" ||
     key === "runAlreadyActive" ||
     key === "websiteSourceRequired"
@@ -134,4 +138,16 @@ export const SERVICE_GATE_TOAST_MS = 10_000;
  */
 export function isServiceGateKey(key) {
   return key === "dailyLimitReached" || key === "inspectionDisabled";
+}
+
+/**
+ * D-24 — answers whose way forward includes a higher plan: today's / this month's cap
+ * and a plan-only feature. The callout then offers "See plans" (/pricing) — the cap is
+ * not a dead end (D-24.3). A paused service (kill switch) is NOT one: no plan fixes it.
+ *
+ * @param {unknown} key
+ * @returns {boolean}
+ */
+export function isPlanCapKey(key) {
+  return key === "dailyLimitReached" || key === "monthlyLimitReached" || key === "planRequired";
 }

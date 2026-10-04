@@ -39,7 +39,9 @@ import { createWorkspaceDevSpecRoutes } from "./routes/workspace-dev-spec.js";
 import { createWorkspaceGitHubRoutes } from "./routes/workspace-github.js";
 import { createWorkspaceNotificationRoutes } from "./routes/workspace-notifications.js";
 import { createWorkspaceTrainingConsentRoutes } from "./routes/workspace-training-consent.js";
+import { createWorkspacePrivacyPrefsRoutes } from "./routes/workspace-privacy-prefs.js";
 import { createWorkspaceAdminStatsRoutes } from "./routes/workspace-admin-stats.js";
+import { createAdminMoatStatsRoutes } from "./routes/admin-moat-stats.js";
 import { createWorkspaceAdminCreditsRoutes } from "./routes/workspace-admin-credits.js";
 import { createWorkspaceCreditsRoutes } from "./routes/workspace-credits.js";
 import { createWorkspaceBenchmarkRoutes } from "./routes/workspace-benchmark.js";
@@ -50,6 +52,7 @@ import { createWorkspaceVisualCheckRunRoutes } from "./routes/workspace-visual-c
 import { createBuilderProbeRoutes } from "./routes/builder-probe.js";
 import { createWorkspaceBuildJobRoutes } from "./routes/workspace-build-jobs.js";
 import { createBuildLlmProxyRoutes } from "./routes/build-llm-proxy.js";
+import { createHostingDutiesRoutes } from "./routes/hosting-duties.js";
 import { createLlmProbeRoutes } from "./routes/llm-probe.js";
 import { createProbeMailRoutes } from "./routes/probe-mail.js";
 import { createWorkspaceRepairJobRoutes } from "./routes/workspace-repair-jobs.js";
@@ -91,6 +94,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createWorkspaceBuildJobRoutes(fetchImpl));
   // Train B · B-5b S1: 빌드 전용 LLM 프록시(잡 범위 토큰 · 서버 키 · 서버 권위 예산 · 원장 단일 경로).
   app.route("/", createBuildLlmProxyRoutes(fetchImpl));
+  // B-7 호스팅 사업자 의무(D-6): 관리자 정지/해제(/admin/hosting/:slug/*) + 공개 신고(/hosting/report).
+  app.route("/", createHostingDutiesRoutes(opts.fetch));
   app.route("/", createProbeMailRoutes());
   app.route("/", registerRoutes);
   app.route("/", episodicRoutes);
@@ -179,8 +184,14 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   // Training-data consent — opt-in to retaining raw review triplets (diff +
   // council verdict) in the durable training store. Default OFF; version-gated.
   app.route("/", createWorkspaceTrainingConsentRoutes());
+  // Train K (0071) — privacy settings: ops-meta recording on/off (EU/UK/CH default off) +
+  // the training-consent state in one read, for the settings screen and the result-page notice.
+  app.route("/", createWorkspacePrivacyPrefsRoutes());
   // Stage 18 — Admin usage stats (key-gated, no billing).
   app.route("/", createWorkspaceAdminStatsRoutes());
+  // Train C · C-4b — 봉투 교차 집계(region × built_with × topic × finding_code × user_verdict × resolved),
+  // Bearer INTERNAL_CALLBACK_TOKEN. 개수만 — 식별·내용 컬럼은 SELECT에 없다.
+  app.route("/", createAdminMoatStatsRoutes());
   // Stage 20 — Admin credit ledger (key-gated, manual grant + preview, no debit).
   app.route("/", createWorkspaceAdminCreditsRoutes());
   // Stage 33 — User-facing credit balance + top-up request endpoints.

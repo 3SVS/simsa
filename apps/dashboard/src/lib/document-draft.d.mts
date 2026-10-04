@@ -13,6 +13,7 @@ export type DraftErrorKey =
   | "document_not_found"
   | "rate_limited"
   | "evidence_storage_unconfigured"
+  | "generation_capacity"
   | "generic";
 
 export const DRAFT_ERROR_CODES: string[];

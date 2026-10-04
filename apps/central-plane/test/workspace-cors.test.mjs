@@ -52,6 +52,8 @@ const ROUTES = [
   ["/workspace/credits", "credits"],
   ["/admin/credits", "admin-credits"],
   ["/admin/usage-stats", "admin-stats"],
+  // Train K (0071, PR #574 검증 #574-11): 설정 화면·결과 화면이 브라우저에서 부른다(과거 CORS PUT 전멸 P0 이력).
+  ["/workspace/privacy-prefs?userKey=uk_x", "privacy-prefs"],
 ];
 
 for (const [path, label] of ROUTES) {
@@ -128,6 +130,26 @@ test("P0: Allow-Methods single source of truth — complete list, no stray liter
     const literal = /"Access-Control-Allow-Methods"\s*:\s*"/.exec(src);
     assert.ok(!literal, `${file} declares a hardcoded Allow-Methods literal — use CORS_ALLOW_METHODS from cors.ts`);
   }
+});
+
+// Train K (0071, PR #574 검증 #574-11): 설정 토글·결과 화면 '기록 끄기'는 브라우저에서 JSON POST를 보낸다 →
+// 프리플라이트가 204 + 허용 출처 되돌림 + POST 허용이어야 한다. 허용되지 않은 출처는 되돌리지 않는다.
+test("Train K: /workspace/privacy-prefs preflight allows POST from app.trysimsa.com; evil.com is not echoed", async () => {
+  const pre = await createApp().fetch(
+    new Request("http://x/workspace/privacy-prefs", {
+      method: "OPTIONS",
+      headers: { origin: APP, "access-control-request-method": "POST", "access-control-request-headers": "content-type" },
+    }),
+    makeEnv(),
+    CTX,
+  );
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get("access-control-allow-origin"), APP);
+  assert.match(pre.headers.get("access-control-allow-methods") ?? "", /POST/);
+  assert.match(pre.headers.get("access-control-allow-headers") ?? "", /content-type/i);
+  const evil = await req("/workspace/privacy-prefs?userKey=uk_x", { origin: EVIL });
+  assert.notEqual(evil.headers.get("access-control-allow-origin"), EVIL);
+  assert.equal(evil.headers.get("access-control-allow-origin"), FALLBACK);
 });
 
 test("P0: /workspace/projects/:id/ext preflight allows PUT (the G8 sync method)", async () => {

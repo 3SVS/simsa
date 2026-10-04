@@ -29,6 +29,7 @@ import {
   formatRateLimitedMessage,
 } from "@/lib/document-draft.mjs";
 import type { DraftErrorKey } from "@/lib/document-draft.mjs";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import {
   getLocalProject,
   getUserKey,
@@ -38,6 +39,7 @@ import {
   markProjectSyncFailed,
 } from "@/lib/workflow-store";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
+import { withUserAuthoredItems } from "@/lib/confirmed-items.mjs";
 
 type Phase = "loading" | "ready" | "error";
 
@@ -52,6 +54,8 @@ export default function DocumentDraftPage() {
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
   const [errorKey, setErrorKey] = useState<DraftErrorKey>("generic");
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | undefined>(undefined);
+  // 비용 권고 ③ — when today's AI capacity returns (generation_capacity only).
+  const [resetAt, setResetAt] = useState<string | null>(null);
 
   // Overwrite guard — computed after mount (localStorage is client-only).
   const [overwriteRisk, setOverwriteRisk] = useState(false);
@@ -73,6 +77,7 @@ export default function DocumentDraftPage() {
       const byCode = mapDraftError(res.error);
       setErrorKey(byCode !== "generic" ? byCode : mapDraftError(res.status));
       setRetryAfterSeconds(res.retryAfterSeconds);
+      setResetAt(res.resetAt ?? null);
       setPhase("error");
     }
   }, [id, sourceId, locale]);
@@ -123,6 +128,14 @@ export default function DocumentDraftPage() {
     saveExtendedProjectData(id, {
       productSpec: draft.productSpec,
       itemCriteria: Object.fromEntries(draft.items.map((i) => [i.id, i.criteria ?? []])),
+      // C-A7 (D-2 amend): 유저가 올린 문서에서 나온 항목을 유저가 확정했다 — 앱에서 읽어낸 추론이 아니므로
+      // 확인된 것(그렇지 않으면 기존 앱 문의 지시서가 이 항목들을 should로 강등한다, PR #577 리뷰 P2-2).
+      intentConfirmedItemIds: withUserAuthoredItems({
+        confirmedItemIds: loadExtendedProjectData(id)?.intentConfirmedItemIds,
+        before: (existing?.requirements ?? []).map((r) => r.id),
+        after: draft.items.map((i) => i.id),
+        authored: draft.items.map((i) => i.id),
+      }),
     });
     await saveProjectToDb({
       id,
@@ -140,7 +153,9 @@ export default function DocumentDraftPage() {
   const errorMessage =
     errorKey === "rate_limited"
       ? formatRateLimitedMessage(t.sources.draft.errors.rate_limited, retryAfterSeconds)
-      : t.sources.draft.errors[errorKey] ?? t.sources.draft.errors.generic;
+      : errorKey === "generation_capacity"
+        ? generationCapacityText(t, resetAt) // 비용 권고 ③ — with the reset in the reader's clock
+        : t.sources.draft.errors[errorKey] ?? t.sources.draft.errors.generic;
 
   const confirmDisabled =
     !draft || !canConfirmDraft(draft) || saving || (overwriteRisk && !overwriteAck);
