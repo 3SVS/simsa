@@ -78,6 +78,9 @@ function NewProjectInner() {
   const [submission, setSubmission] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ideaText, setIdeaText] = useState("");
+  // P2 정리(2026-10-04): 입력이 비었다고 버튼을 끄지 않는다 — 왜 안 눌리는지 모르는 버튼은
+  // 초보자에게 막다른 길이다. 누르면 무엇을 적어야 하는지 칸 바로 아래에서 알려준다.
+  const [emptyHint, setEmptyHint] = useState<string | null>(null);
   // D2 (2026-07-16): free-text "anything else Simsa should know" beside the idea.
   const [extraContext, setExtraContext] = useState("");
   // #296 Phase 1 — onboarding interview (all optional, null = unanswered).
@@ -274,7 +277,11 @@ function NewProjectInner() {
   }
 
   async function handleGenerateUnderstanding() {
-    if (!ideaText.trim()) return;
+    if (!ideaText.trim()) {
+      setEmptyHint(t.np.emptyIdea);
+      return;
+    }
+    setEmptyHint(null);
     setIsLoading(true);
     setIsFallback(false);
     setRateLimitMsg(null);
@@ -363,7 +370,11 @@ function NewProjectInner() {
   // No understanding-confirm / question round — a written plan already carries
   // its decisions; asking again is friction.
   async function handleGenerateFromSpec() {
-    if (!ideaText.trim()) return;
+    if (!ideaText.trim()) {
+      setEmptyHint(t.np.emptySpec);
+      return;
+    }
+    setEmptyHint(null);
     setIsLoading(true);
     setIsFallback(false);
     setRateLimitMsg(null);
@@ -727,7 +738,8 @@ function NewProjectInner() {
 
               <button
                 onClick={() => void handleSubmitArtifact()}
-                disabled={!submission.trim() || isCreatingCode}
+                disabled={isCreatingCode}
+                aria-busy={isCreatingCode}
                 data-loading={isCreatingCode}
                 className="btn btn-primary mt-6 w-full py-3"
               >
@@ -782,14 +794,16 @@ function NewProjectInner() {
               </div>
               <textarea
                 value={ideaText}
-                onChange={(e) => setIdeaText(e.target.value)}
+                onChange={(e) => { setIdeaText(e.target.value); setEmptyHint(null); }}
                 placeholder={t.branch.specPastePlaceholder}
                 rows={12}
                 className="input mb-8 resize-none rounded-lg font-mono text-sm"
               />
+              {emptyHint && <p role="alert" className="-mt-6 mb-6 text-sm text-amber-700">{emptyHint}</p>}
               <button
                 onClick={handleGenerateFromSpec}
-                disabled={!ideaText.trim() || isLoading}
+                disabled={isLoading}
+                aria-busy={isLoading}
                 data-loading={isLoading}
                 className="btn btn-primary w-full py-3"
               >
@@ -814,11 +828,12 @@ function NewProjectInner() {
               <p className="mb-8 mt-2 text-sm text-gray-500">{t.np.step1Sub}</p>
               <textarea
                 value={ideaText}
-                onChange={(e) => setIdeaText(e.target.value)}
+                onChange={(e) => { setIdeaText(e.target.value); setEmptyHint(null); }}
                 placeholder={t.np.ideaPlaceholder}
                 rows={5}
                 className="input resize-none rounded-lg"
               />
+              {emptyHint && <p role="alert" className="mt-2 text-sm text-amber-700">{emptyHint}</p>}
               <div className="mt-4">
                 <p className="mb-2 text-xs text-gray-500">{t.np.examplesLabel}</p>
                 <div className="flex flex-col gap-2">
@@ -874,7 +889,8 @@ function NewProjectInner() {
               </div>
               <button
                 onClick={handleGenerateUnderstanding}
-                disabled={!ideaText.trim() || isLoading}
+                disabled={isLoading}
+                aria-busy={isLoading}
                 data-loading={isLoading}
                 className="btn btn-primary w-full py-3"
               >

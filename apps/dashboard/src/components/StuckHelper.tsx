@@ -31,7 +31,12 @@ export function StuckHelper({
   const [copied, setCopied] = useState(false);
 
   const submit = async () => {
-    if (!text.trim() || phase === "loading") return;
+    if (phase === "loading") return;
+    // P2 정리(2026-10-04): 빈 칸이면 버튼을 끄는 대신 무엇을 적을지 알려준다.
+    if (!text.trim()) {
+      setErrMsg(t.stuckHelper.empty);
+      return;
+    }
     setPhase("loading");
     setErrMsg(null);
     const res = await callUnstickApi({
@@ -72,7 +77,7 @@ export function StuckHelper({
 
       <textarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => { setText(e.target.value); if (errMsg) setErrMsg(null); }}
         placeholder={t.stuckHelper.placeholder}
         rows={4}
         className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none font-mono"
@@ -80,7 +85,8 @@ export function StuckHelper({
       <div className="mt-2 flex items-center gap-3">
         <button
           onClick={submit}
-          disabled={!text.trim() || phase === "loading"}
+          disabled={phase === "loading"}
+          aria-busy={phase === "loading"}
           // 도움 요청은 보조 행동이다 — 화면의 주 버튼은 "지금 할 일" 하나뿐이다(#5).
           className="btn btn-sm btn-secondary disabled:opacity-50"
         >
