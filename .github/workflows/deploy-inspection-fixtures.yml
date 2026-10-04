@@ -38,6 +38,9 @@ jobs:
           echo "Refusing to deploy: the 'confirm' input must be exactly 'deploy'."
           exit 1
       - uses: actions/checkout@v5
+      # setup-node v5는 루트 package.json의 packageManager(pnpm)를 보고 pnpm 캐시를 켠다 — pnpm이 먼저 있어야 한다
+      # (2026-10-04 첫 실행 실패: "Unable to locate executable file: pnpm").
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
