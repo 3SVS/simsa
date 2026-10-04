@@ -30,6 +30,13 @@ describe("beginner-terms: developer vocabulary in the default flow (Train N6)", 
     assert.deepEqual(devTermHits("PRD를 붙여넣으세요 · 새PR"), []);
   });
 
+  it("ignores terms inside an address the user gave (my-app.vercel.app) — 2026-10-04", () => {
+    const hits = mod.devTermHits("확인한 주소 https://simsa-autofix-test.vercel.app/ 확인하려던 것 · 내 앱 shop.vercel.app 열기");
+    assert.deepEqual(hits.map((h) => h.term), []);
+    const real = mod.devTermHits("Vercel에 배포하세요 · https://x.vercel.app");
+    assert.deepEqual(real.map((h) => h.term), ["Vercel"]);
+  });
+
   it("caps the list and never returns bare counts", () => {
     const body = DEV_TERMS.join(" · ");
     const hits = devTermHits(body, { max: 3 });
@@ -104,7 +111,7 @@ describe("beginnerFindings: severity per journey (C-J1)", () => {
     assert.match(out[0].what, /PR이 준비됐어요/, "the finding carries the matched text, not just a count");
   });
 
-  it("J1: GitHub is the existing-app door's allowed optional step (D-17 amend) — P2, never dropped", () => {
+  it("J1: GitHub is the existing-app door's allowed optional step (D-17 amend) — recorded as ALLOWED, never dropped", () => {
     const out = mod.beginnerFindings({
       journeyName: J1,
       devTerms: [
@@ -114,7 +121,8 @@ describe("beginnerFindings: severity per journey (C-J1)", () => {
       accountCtas: ["GitHub 연결하기", "Continue with Google"],
     });
     const p0 = out.filter((f) => f.sev === "P0").map((f) => f.what).join(" | ");
-    const p2 = out.filter((f) => f.sev === "P2").map((f) => f.what).join(" | ");
+    const p2 = out.filter((f) => f.sev === "ALLOWED").map((f) => f.what).join(" | ");
+    assert.equal(out.filter((f) => f.sev === "P2").length, 0, "allowed hits are not defects (2026-10-04)");
     assert.match(p0, /Vercel/);
     assert.match(p0, /Continue with Google/);
     assert.doesNotMatch(p0, /GitHub/, "GitHub must not be P0 in the existing-app door");
@@ -139,9 +147,17 @@ describe("beginnerFindings: severity per journey (C-J1)", () => {
       devTerms: [{ term: "repo", snippet: "repo를 연결하세요", where: "셸" }],
       accountCtas: ["GitHub 연결하기"],
     });
-    assert.deepEqual(out.map((f) => f.sev), ["P2", "P2"]);
+    // 2026-10-04: J3(저장소 연결 여정)에서 GitHub 버튼은 화면의 목적 → ALLOWED. 다른 용어(repo)는 P2 그대로.
+    assert.deepEqual(out.map((f) => f.sev), ["P2", "ALLOWED"]);
     assert.match(out[0].what, /^개발 용어 노출 1건\(본문 0\) — \[셸\] repo: "repo를 연결하세요"$/);
-    assert.match(out[1].what, /^외부 계정 CTA 1개 — GitHub 연결하기$/);
+    assert.match(out[1].what, /^외부 계정 CTA 1개 · 저장소 연결 여정 — GitHub 연결하기$/);
+    // J5(시드 세션)는 허용 없음 — GitHub도 P2.
+    const j5 = mod.beginnerFindings({
+      journeyName: "J5 시드 세션: 런 상세 → 왜 이 판정 → 증거 로드",
+      devTerms: [{ term: "GitHub", snippet: "GitHub에서 열기", where: "본문" }],
+      accountCtas: [],
+    });
+    assert.deepEqual(j5.map((f) => f.sev), ["P2"]);
   });
 
   it("nothing found → no findings", () => {
