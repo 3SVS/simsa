@@ -19,7 +19,7 @@
  * 방침 시행일(YYYY-MM-DD). ★배포 직전 이 값을 **배포일**로 갱신한다 — 게시 전 날짜를 시행일로
  * 적으면 안 된다(PR 체크리스트 항목). 변경 이력 **마지막(아직 게시 안 된) 줄**의 날짜만 이 값을 쓴다.
  * Train K: 2026-10-03 = dashboard 배포일(Bae 2026-10-03 `deploy dashboard approved.`, 0071 적용·central 배포 뒤).
- * D-24 T-4: 2026-10-04는 **임시값** — 한 달 고치기 횟수 기록의 보유 예외(그 달이 끝나고 48시간)를 더했다.
+ * D-24 T-4: 2026-10-04 = dashboard 배포일(Bae 2026-10-04 `deploy dashboard approved.`) — 한 달 고치기 횟수 기록의 보유 예외(그 달이 끝나고 48시간)를 더했다.
  * 이 PR의 dashboard 배포일로 바꾼다(PR 체크리스트). central(월 기록을 쓰기 시작) 배포와 같은 날 게시.
  */
 export const PRIVACY_EFFECTIVE_DATE = "2026-10-04";
