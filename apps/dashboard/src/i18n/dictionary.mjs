@@ -2802,8 +2802,8 @@ const EN = {
       progressBodyQueued: "Starting the repair. This section updates automatically when it is ready.",
       statusQueued: "Starting",
       statusRunning: "Preparing",
-      doneTitle: "The repair starting-point PR is ready",
-      doneBody: "A draft PR with the fix brief (SIMSA-FIX-BRIEF.md) was opened. Code changes are not applied automatically yet — hand this PR to your coding agent or developer to continue.",
+      doneTitle: "The fix brief is ready",
+      doneBody: "We put a fix brief (SIMSA-FIX-BRIEF.md) — what to fix and how — into your connected repository. The code was not changed automatically — open it from [See what was changed] and hand it to the AI tool you built the app with, or to a developer.",
       // Train W — W-3 ③: a job that really changed code (mode auto_fix, Stage 270)
       // gets its own done copy — the brief-only copy above says code was NOT changed.
       // #558 검증 P2-3·P2-9: no developer terms (was "…as a PR … before you merge it").
@@ -2814,15 +2814,18 @@ const EN = {
       budgetStopped: "Automatic fixing stopped because this repair reached its AI usage limit. You can continue from the fix instructions.",
       openPr: "See what was changed ↗",
       branchLabel: "Branch",
-      noPrNote: "The PR address was not returned. Please check the branch on your GitHub repository.",
+      noPrNote: "We did not get a link to the changes. Please check your connected repository.",
       envCauseWarning: "The evidence points at an environment or configuration cause, so a code change alone may not fully resolve this.",
       failedTitle: "The repair could not be completed",
-      failedBody: "Something went wrong while creating the repair PR. You can try again.",
+      failedBody: "Something went wrong while putting up the fix. You can try again.",
       failedRepoAccessTitle: "Simsa can't access this repository",
       failedRepoAccessBody:
         "The repository looks private, or the connected GitHub account doesn't have access. Make the repository public, or install the Simsa GitHub App on it from the repository connection screen, then try the repair again.",
       // Stage 272 — post-repair re-check: honest merge+deploy explainer + one click.
       recheckExplainer:
+        "The fix is not on your live site yet. Once you accept the changes and your site has updated, check again and we will show the result compared with before.",
+      // Developer mode only (2026-10-04 journey audit P2): same meaning in technical terms.
+      recheckExplainerDev:
         "The fix currently lives only on the PR branch, so your live site has not changed yet. After you merge the repair PR and your platform finishes deploying, re-inspect and we will show the result compared with before.",
       recheckButton: "Re-inspect to verify the fix",
       detailsLabel: "Details (for developers)",
@@ -5985,8 +5988,8 @@ const KO = {
       progressBodyQueued: "고치기를 시작하고 있어요. 준비되면 이 영역이 자동으로 갱신돼요.",
       statusQueued: "시작하는 중",
       statusRunning: "준비 중",
-      doneTitle: "수리 시작점 PR이 준비됐어요",
-      doneBody: "고침 지시서(SIMSA-FIX-BRIEF.md)를 담은 초안 PR이 열렸어요. 코드가 자동으로 수정된 건 아직 아니에요 — 이 PR을 코딩 에이전트나 개발자에게 넘겨 이어서 진행하세요.",
+      doneTitle: "고침 지시서를 올려 두었어요",
+      doneBody: "무엇을 어떻게 고칠지 적은 고침 지시서(SIMSA-FIX-BRIEF.md)를 연결된 저장소에 올려 두었어요. 코드가 자동으로 고쳐진 건 아니에요 — [고친 내용 보기]에서 열어, 앱을 만들 때 쓴 AI 도구나 개발자에게 넘겨 이어서 진행하세요.",
       // Train W — W-3 ③: 실제로 코드를 고친 잡(mode auto_fix, Stage 270)의 완료 문구 —
       // 위 문구는 "코드는 안 바뀌었다"는 지시서 전용이다.
       // #558 검증 P2-3·P2-9: 개발자 용어 없이("PR이 준비됐어요 … PR로 올렸어요" 교체).
@@ -5997,15 +6000,18 @@ const KO = {
       budgetStopped: "이번 수리에 쓸 수 있는 AI 사용 한도에 닿아 자동 수정 시도를 멈췄어요. 고침 지시서로 이어서 진행할 수 있어요.",
       openPr: "고친 내용 보기 ↗",
       branchLabel: "브랜치",
-      noPrNote: "PR 주소를 받지 못했어요. GitHub 저장소에서 브랜치를 확인해주세요.",
+      noPrNote: "고친 내용을 열 주소를 받지 못했어요. 연결된 저장소에서 확인해 주세요.",
       envCauseWarning: "원인에 환경설정 문제가 포함돼 있어 코드 수정만으로 완전히 해결되지 않을 수 있어요",
       failedTitle: "고치기를 마치지 못했어요",
-      failedBody: "수리 PR을 만드는 중에 문제가 생겼어요. 다시 시도할 수 있어요.",
+      failedBody: "고친 내용을 올리는 중에 문제가 생겼어요. 다시 시도할 수 있어요.",
       failedRepoAccessTitle: "저장소에 접근할 수 없어서 고치기를 못 했어요",
       failedRepoAccessBody:
         "저장소가 비공개이거나, 연결된 GitHub 계정에 접근 권한이 없어요. 저장소를 공개로 바꾸거나, 저장소 연결 화면에서 Simsa GitHub 앱을 설치한 뒤 다시 시도해 주세요.",
       // Stage 272 — 수리 후 재검수: 머지+배포 전에는 라이브가 안 바뀐다는 정직한 안내 + 원클릭.
       recheckExplainer:
+        "고친 내용은 아직 실제 사이트에 반영되지 않았어요. 고친 내용을 받아들이고 사이트가 새로 올라간 뒤 다시 검수하면, 이전과 비교한 결과를 보여드려요.",
+      // 개발자 모드에서만(2026-10-04 여정 감사 P2): 같은 뜻을 기술 용어로.
+      recheckExplainerDev:
         "수리 내용은 아직 PR 브랜치에만 있어서 실제 사이트는 그대로예요. 수리 PR을 머지하고 배포가 끝난 뒤 다시 검수하면, 이전과 비교한 결과를 보여드려요.",
       recheckButton: "수리 확인 재검수",
       detailsLabel: "개발자용 상세 정보",
