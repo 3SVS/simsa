@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-04",
+  "recordedBefore": "inspection engine fix (same PR, earlier commit)",
+  "design": "docs/pilot-2026-10/pilot-classes-answer-key.md",
+  "evidence": "docs/pilot-2026-10/simsa-accuracy-run-2026-10-04.md (PR #593)",
+  "fixtures": [
+    { "id": "F9", "path": "/http-404", "mirrors": "v0 (Vercel DEPLOYMENT_NOT_FOUND)", "truth": "broken",
+      "predictedBeforeFix": { "decision": "Not Verified", "works": null },
+      "expectedAfterFix": { "decision": "Needs Fix", "works": false, "finding": "page_not_found", "clicks": 0 } },
+    { "id": "F10", "path": "/canned-result", "mirrors": "ChatGPT app (작동해?)", "truth": "broken",
+      "predictedBeforeFix": { "decision": "Conditionally Ready", "works": null },
+      "expectedAfterFix": { "decision": "Needs Fix", "works": false, "finding": "canned_result" } },
+    { "id": "F11", "path": "/self-checklist", "mirrors": "Bolt app (진단오딧)", "truth": "intent_mismatch",
+      "predictedBeforeFix": { "decision": "Conditionally Ready", "works": null },
+      "expectedAfterFix": { "decision": "Conditionally Ready", "works": null, "knownLimit": "save request present + input echoed -> no canned signal; server-side URL access is unobservable from the browser" } },
+    { "id": "F12", "path": "/real-echo-checker", "mirrors": "control (real checker)", "truth": "working",
+      "predictedBeforeFix": { "decision": "Conditionally Ready", "works": null },
+      "expectedAfterFix": { "decision": "Conditionally Ready", "works": null, "mustNot": "canned_result" } }
+  ]
+}

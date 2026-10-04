@@ -44,6 +44,17 @@ const TARGETS = [
   // 차단 화면만 보고 "무엇을 눌러야 할지 못 찾음"(Needs Clarification)으로 끝남.
   { id: "F8", url: `${FIXTURES}/geo-gated`, expected: "working", nullOk: true,
     intent: "산책 기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
+  // 2026-10-04 파일럿 사전 실측에서 Simsa가 틀린 유형(정답지 먼저: docs/pilot-2026-10/pilot-classes-answer-key.md).
+  // F9: 호스트 "배포 없음" 404(v0) · F10: 입력 무관 고정 결과(ChatGPT) · F11: 자가 점검표(Bolt, 알려진 한계)
+  // · F12: 진짜 점검기(대조군 — 오탐 방지).
+  { id: "F9", url: `${FIXTURES}/http-404`, expected: "broken",
+    intent: "방문자가 앱 화면을 열어 서비스를 쓸 수 있어야 한다" },
+  { id: "F10", url: `${FIXTURES}/canned-result`, expected: "broken",
+    intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
+  { id: "F11", url: `${FIXTURES}/self-checklist`, expected: "broken",
+    intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
+  { id: "F12", url: `${FIXTURES}/real-echo-checker`, expected: "working", nullOk: true,
+    intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
   { id: "R1", url: "https://app.trysimsa.com", expected: "working", nullOk: true,
     intent: "방문자가 이 제품이 무엇인지 이해하고 시작할 수 있어야 한다" },
   // 실제-타겟 확장 (2026-07-17, Bae "실유저 vibe 앱 재확인"): 빠르게 만들어

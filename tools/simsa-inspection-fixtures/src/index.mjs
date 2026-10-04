@@ -11,6 +11,8 @@
  * 정정 A1(러너 실행 전): IM07은 저장을 안 하는 문 (b) 고장이라 무효(문 (b) 대조군), IM11을 더했다.
  */
 import { INTENT_MISMATCH_INDEX, INTENT_MISMATCH_ROUTES } from "./intent-mismatch.mjs";
+// 2026-10-04 파일럿 사전 실측에서 틀린 유형(F9~F12) — 정답지: docs/pilot-2026-10/pilot-classes-answer-key.md
+import { PILOT_CLASS_ROUTES, handlePilotClassRequest } from "./pilot-classes.mjs";
 
 const SHELL = (title, body, extraHead = "") => `<!doctype html>
 <html lang="ko">
@@ -346,10 +348,13 @@ const ROUTES = {
   "/geo-gated": GEO_GATED,
   "/login-app": LOGIN_APP,
   ...INTENT_MISMATCH_ROUTES,
+  ...PILOT_CLASS_ROUTES,
 };
 
 export default {
   async fetch(request) {
+    const special = await handlePilotClassRequest(request);
+    if (special) return special;
     const { pathname } = new URL(request.url);
     const html = ROUTES[pathname];
     if (!html) return new Response("not found", { status: 404 });
