@@ -632,7 +632,7 @@ function RepairSection({
 
           {/* Stage 272 — honest merge+deploy explainer + one-click re-check */}
           <div className="mt-3 border-t border-green-200 pt-3">
-            <p className="text-sm leading-relaxed text-green-700">{s.recheckExplainer}</p>
+            <p className="text-sm leading-relaxed text-green-700">{developerMode ? s.recheckExplainerDev : s.recheckExplainer}</p>
             <button
               onClick={() => void recheck.run()}
               disabled={recheck.submitting}

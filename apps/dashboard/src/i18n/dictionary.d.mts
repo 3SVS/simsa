@@ -2568,6 +2568,7 @@ export type Dictionary = {
       failedRepoAccessTitle: string;
       failedRepoAccessBody: string;
       recheckExplainer: string;
+      recheckExplainerDev: string;
       recheckButton: string;
       detailsLabel: string;
       goToRepo: string;

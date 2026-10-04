@@ -17,7 +17,7 @@ import { resolveBetterAuthSession, type ResolveSession } from "../routes/workspa
 import { clientNetworkKey } from "./beta-limits.js";
 import { entitlementsFor, type Tier } from "./entitlements.js";
 import { consumeDailyCaps, peekDailyCaps, type DailyCap, type DailyCapScope, type DailyCapsResult } from "./rate-limit.js";
-import { resolveTier } from "./tier-resolve.js";
+import { claimedAccountId, resolveTier } from "./tier-resolve.js";
 
 /** Bucket names (workspace_rate_limit key prefix — also the HMAC salt). */
 export const PROJECT_CREATE_ACCOUNT_BUCKET = "project-create-daily-acct";
@@ -52,20 +52,6 @@ export function buildProjectCreateCaps(id: ProjectCreateIdentity): DailyCap[] {
   return caps;
 }
 
-/** 이 userKey를 claim한 계정(workspace-claim.ts). 없거나 실패 → null. */
-async function claimedAccountId(env: Env, userKey: string): Promise<string | null> {
-  try {
-    const row = await env.DB.prepare(
-      'SELECT "created_by_auth_user_id" AS creator FROM workspaces WHERE legacy_user_key = ? LIMIT 1',
-    )
-      .bind(userKey)
-      .first<{ creator: string | null }>();
-    return row?.creator ? String(row.creator) : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function resolveProjectCreateIdentity(
   env: Env,
   req: Request,
@@ -76,7 +62,8 @@ export async function resolveProjectCreateIdentity(
   const session = await resolveSession(env, req.headers).catch(() => null);
   const accountId = session?.id ?? (await claimedAccountId(env, userKey));
   return {
-    tier: await resolveTier(env, userKey),
+    // 계정 단위 티어(2026-10-04): 세션·claim으로 안 계정의 모든 키 중 가장 높은 플랜.
+    tier: await resolveTier(env, userKey, { accountId }),
     accountId,
     userKey,
     networkKey: clientNetworkKey(req),

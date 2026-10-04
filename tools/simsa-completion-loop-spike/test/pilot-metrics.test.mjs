@@ -896,7 +896,7 @@ const RUNBOOK_LABEL_KEYS = Object.freeze({
   "고침 지시 복사": "visualChecks.copyPrompt",
   "고치기": "visualChecks.repair.button",
   "고친 내용이 준비됐어요": "visualChecks.repair.doneTitleAutoFix",
-  "수리 시작점 PR이 준비됐어요": "visualChecks.repair.doneTitle",
+  "고침 지시서를 올려 두었어요": "visualChecks.repair.doneTitle", // [정정 2026-10-04] 여정 감사 P2 문구
   "수리 확인 재검수": "visualChecks.repair.recheckButton",
   "이 앱을 만든 도구로 고치기": "visualChecks.builderPaste.title",
   "다시 확인": "visualChecks.builderPaste.recheckButton",
