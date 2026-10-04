@@ -298,13 +298,17 @@ export default function VisualChecksPage() {
         <button
           onClick={handleRun}
           disabled={submitting || buttonState.disabled}
+          // 2026-10-04 여정 감사 P2: 꺼지는 경우는 "보내는 중"이거나 "앞선 검수가 도는 중" — 둘 다 일하는 중이다(aria-busy).
+          // 이유 문장(runActiveNotice)을 버튼에 묶어 둔다 — 왜 안 눌리는지 모르는 버튼을 남기지 않는다(#588과 같은 원칙).
+          aria-busy={submitting || hasActiveRun}
+          aria-describedby={hasActiveRun ? "vc-run-active-notice" : undefined}
           className="btn btn-primary btn-md mt-3 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? t.visualChecks.runSubmitting : t.visualChecks.runButton}
         </button>
 
         {hasActiveRun && (
-          <div className="callout callout-info mt-3">{t.visualChecks.runActiveNotice}</div>
+          <div id="vc-run-active-notice" className="callout callout-info mt-3">{t.visualChecks.runActiveNotice}</div>
         )}
 
         {notice?.kind === "queuedOnly" && (

@@ -53,9 +53,11 @@ test("[소스 불변식·약함] 수리 카드: brief 완료 카드에 budgetSto
   assert.match(api, /stoppedByBudget\?: boolean/);
 });
 
+// [정정 2026-10-04] 여정 감사 P2: 완료 문구를 비개발자 말로 바꿨다(PR·초안 PR·코딩 에이전트 제거). 예산 정지 문구는
+// 여전히 이 문장에 한 줄을 더할 뿐이라는 계약은 그대로다 — 고정값만 새 문장으로.
 test("행동 보존: brief_only 완료 문구는 그대로 (한 줄을 더할 뿐)", () => {
   assert.equal(
     DICTIONARIES.ko.visualChecks.repair.doneBody,
-    "고침 지시서(SIMSA-FIX-BRIEF.md)를 담은 초안 PR이 열렸어요. 코드가 자동으로 수정된 건 아직 아니에요 — 이 PR을 코딩 에이전트나 개발자에게 넘겨 이어서 진행하세요.",
+    "무엇을 어떻게 고칠지 적은 고침 지시서(SIMSA-FIX-BRIEF.md)를 연결된 저장소에 올려 두었어요. 코드가 자동으로 고쳐진 건 아니에요 — [고친 내용 보기]에서 열어, 앱을 만들 때 쓴 AI 도구나 개발자에게 넘겨 이어서 진행하세요.",
   );
 });
