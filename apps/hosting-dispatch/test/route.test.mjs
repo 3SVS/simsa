@@ -73,9 +73,15 @@ describe("handle (DISPATCHER 모크)", () => {
   it("미설정 503 · 호스팅 아님 404 · 정지 410", async () => {
     assert.equal((await handle(req("app-abc.simsa.page"), { DISPATCHER: { get() { throw new Error("x"); } } })).status, 503);
     assert.equal((await handle(req("www.simsa.page"), env(() => { throw new Error("should not dispatch"); }))).status, 404);
-    const s = await handle(req("bad-app.simsa.page"), env(() => { throw new Error("should not dispatch"); }), (x) => x === "bad-app");
+    // B-7: 정지 목록은 KV(HOSTING_SUSPENDED) — 주입 함수 대신 바인딩으로 확인한다(자세한 건 hosting-duties.test.mjs).
+    const kv = { async get(k) { return k === "suspended:bad-app" ? "{}" : null; } };
+    const s = await handle(req("bad-app.simsa.page"), { ...env(() => { throw new Error("should not dispatch"); }), HOSTING_SUSPENDED: kv });
     assert.equal(s.status, 410);
     assert.equal(s.headers.get("x-simsa-hosted"), "bad-app");
+  });
+  it("report.<root>는 예약어지만 신고 사이트로 간다(유저 앱 아님)", () => {
+    assert.deepEqual(decideRoute("report.simsa.page", ROOT), { kind: "report_site" });
+    assert.equal(isValidSlug("report"), false);
   });
 });
 

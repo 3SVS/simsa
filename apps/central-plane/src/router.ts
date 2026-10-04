@@ -51,6 +51,7 @@ import { createWorkspaceVisualChecksRoutes } from "./routes/workspace-visual-che
 import { createWorkspaceVisualCheckRunRoutes } from "./routes/workspace-visual-check-runs.js";
 import { createBuilderProbeRoutes } from "./routes/builder-probe.js";
 import { createWorkspaceBuildJobRoutes } from "./routes/workspace-build-jobs.js";
+import { createHostingDutiesRoutes } from "./routes/hosting-duties.js";
 import { createLlmProbeRoutes } from "./routes/llm-probe.js";
 import { createProbeMailRoutes } from "./routes/probe-mail.js";
 import { createWorkspaceRepairJobRoutes } from "./routes/workspace-repair-jobs.js";
@@ -90,6 +91,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createLlmProbeRoutes());
   app.route("/", createBuilderProbeRoutes());
   app.route("/", createWorkspaceBuildJobRoutes());
+  // B-7 호스팅 사업자 의무(D-6): 관리자 정지/해제(/admin/hosting/:slug/*) + 공개 신고(/hosting/report).
+  app.route("/", createHostingDutiesRoutes(opts.fetch));
   app.route("/", createProbeMailRoutes());
   app.route("/", registerRoutes);
   app.route("/", episodicRoutes);
