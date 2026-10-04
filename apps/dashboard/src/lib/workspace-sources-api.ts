@@ -144,7 +144,8 @@ export type DocumentSpecDraft = Omit<IdeaToSpecDraftResponse, "ok">;
 
 export type DocumentSpecDraftResponse =
   | { ok: true; draft: DocumentSpecDraft; source: { id: string; label?: string } }
-  | { ok: false; error: string; status?: number; retryAfterSeconds?: number };
+  /** resetAt: 비용 권고 ③ — with error "generation_capacity", when today's AI capacity returns. */
+  | { ok: false; error: string; status?: number; retryAfterSeconds?: number; resetAt?: string };
 
 /**
  * Generate a spec draft from an uploaded document source. Errors surface the
@@ -170,7 +171,7 @@ export async function generateDocumentSpecDraft(
     );
     const data = (await resp.json().catch(() => null)) as
       | ({ ok: true; draft: DocumentSpecDraft; source: { id: string; label?: string } })
-      | ({ ok: false; error?: string; retryAfterSeconds?: number })
+      | ({ ok: false; error?: string; retryAfterSeconds?: number; resetAt?: unknown })
       | null;
     if (data?.ok) return data;
     return {
@@ -180,6 +181,7 @@ export async function generateDocumentSpecDraft(
       ...(data && !data.ok && typeof data.retryAfterSeconds === "number"
         ? { retryAfterSeconds: data.retryAfterSeconds }
         : {}),
+      ...(data && !data.ok && typeof data.resetAt === "string" ? { resetAt: data.resetAt } : {}),
     };
   } catch (err) {
     return { ok: false, error: String(err) };

@@ -29,6 +29,20 @@ export type RepairJobMode = (typeof REPAIR_JOB_MODES)[number];
 export const BUILD_CHECK_VERIFIED_MARKER = "build_check:verified";
 export const BUILD_CHECK_UNVERIFIED_MARKER = "build_check:unverified";
 
+/**
+ * 비용 권고 ② (2026-09-30) — the brief_only `modeReason` the repair container sends
+ * when it stopped calling the AI because the job reached its USD budget
+ * ("budget_exceeded(cap=$2.00)…", container/coerce-result.mjs REPAIR_BUDGET_STOP —
+ * lock-stepped by test). No column of its own: like every brief_only reason it
+ * rides the DONE row's `error` slot, and fromRow reads it back as `stoppedByBudget`.
+ */
+export const REPAIR_BUDGET_STOP_REASON = "budget_exceeded";
+
+/** true only for the budget stop's own marker at the start (not "budget_exceededish"). */
+export function isBudgetStopReason(raw: string | null | undefined): boolean {
+  return typeof raw === "string" && new RegExp(`^${REPAIR_BUDGET_STOP_REASON}(?![A-Za-z0-9_])`).test(raw);
+}
+
 /** Marker → buildVerified; anything else (null, a diagnostic, garbage) → null. */
 export function parseBuildCheckMarker(raw: string | null | undefined): boolean | null {
   if (raw === BUILD_CHECK_VERIFIED_MARKER) return true;
@@ -57,6 +71,11 @@ export type DbRepairJob = {
    * boolean; brief_only / legacy / in-flight / undecidable → null.
    */
   buildVerified: boolean | null;
+  /**
+   * 비용 권고 ② — a DONE brief_only row whose fallback reason is the job budget stop
+   * (REPAIR_BUDGET_STOP_REASON). false for everything else, never a guess.
+   */
+  stoppedByBudget: boolean;
   error?: string;
   /** 0069 (C4a): ISO-3166 국가 코드(수리 요청 시점). null = 미기록. */
   region: string | null;
@@ -118,6 +137,7 @@ function fromRow(row: RawRow): DbRepairJob {
     mode: row.mode === "auto_fix" || row.mode === "brief_only" ? row.mode : undefined,
     changedFiles: typeof row.changed_files === "number" ? row.changed_files : undefined,
     buildVerified,
+    stoppedByBudget: row.status === "done" && row.mode === "brief_only" && isBudgetStopReason(row.error),
     // The build marker is a flag, not an error message — never surfaced as one.
     error: buildVerified !== null ? undefined : row.error ?? undefined,
     region: typeof row.region === "string" && row.region ? row.region : null,
@@ -173,6 +193,7 @@ export async function insertQueuedRepairJob(
     branchName: input.branchName,
     envCause: input.envCause,
     buildVerified: null,
+    stoppedByBudget: false,
     region: input.region ?? null,
     verifyCheckId: null,
     resolved: null,

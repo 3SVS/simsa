@@ -27,6 +27,12 @@ const DOMAIN_KEYWORDS: Record<string, string[]> = {
   travel: ["travel", "trip", "booking", "hotel", "flight", "여행", "예약", "호텔", "항공"],
 };
 
+/**
+ * The closed domain vocabulary classifyTopics can emit (C-4b: /admin/moat-stats reports only these —
+ * anything else stored in topic_tags_json is folded, never echoed).
+ */
+export const TOPIC_DOMAINS: readonly string[] = Object.freeze(Object.keys(DOMAIN_KEYWORDS));
+
 /** Known external tools/integrations to detect by name. */
 const INTEGRATION_NAMES = [
   "Linear", "Stripe", "Notion", "Slack", "GitHub", "Discord", "Telegram", "Supabase",

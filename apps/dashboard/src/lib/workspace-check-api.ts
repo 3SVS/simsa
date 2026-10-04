@@ -8,6 +8,7 @@
 
 import { isExampleProject } from "./mock-data";
 import { readStoredLocale } from "@/i18n/dictionary.mjs";
+import { capacityFromResponse, type GenerationCapacityError } from "./generation-capacity.mjs";
 
 const CENTRAL_PLANE_URL =
   process.env.NEXT_PUBLIC_CENTRAL_PLANE_URL ??
@@ -84,10 +85,76 @@ export type FixSuggestionResponse = {
   warnings?: string[];
 };
 
+/** D-24.2 새 프로젝트 하루 상한에 닿음 — 화면은 세 갈래(계속하기·다시 만들 시각·플랜)를 그린다. */
+export type ProjectLimit = {
+  ok: false;
+  error: "project_limit";
+  message: string;
+  tier: string;
+  limit: number;
+  resetAt: string;
+  limitedBy: "user" | "network" | "service" | null;
+};
+
 export type ApiError =
+  | ProjectLimit
   | { ok: false; error: "rate_limited"; message: string; retryAfterSeconds?: number }
   | { ok: false; error: "plan"; message: string }
   | { ok: false; error: "network" | "server"; message: string };
+
+/** 비용 권고 ③ — the AI generation calls (check · unstick · fix) can also say "today's capacity is full". */
+export type GenerationApiError = ApiError | GenerationCapacityError;
+
+// ─── D-24 새 프로젝트 하루 상한 ─────────────────────────────────────────────
+
+/** 서버 429 본문 → ProjectLimit. project_daily가 아니면 null(다른 상한은 종전 처리). */
+export function parseProjectLimit(body: Record<string, unknown> | null): ProjectLimit | null {
+  if (!body || body["scope"] !== "project_daily") return null;
+  const limitedBy = body["limitedBy"];
+  return {
+    ok: false,
+    error: "project_limit",
+    message: typeof body["message"] === "string" ? body["message"] : "",
+    tier: typeof body["tier"] === "string" ? body["tier"] : "free",
+    limit: typeof body["limit"] === "number" ? body["limit"] : 1,
+    resetAt: typeof body["resetAt"] === "string" ? body["resetAt"] : "",
+    limitedBy: limitedBy === "user" || limitedBy === "network" || limitedBy === "service" ? limitedBy : null,
+  };
+}
+
+export type ProjectQuota = {
+  tier: string;
+  limit: number;
+  remaining: number;
+  resetAt: string;
+  limitedBy: "user" | "network" | "service" | null;
+};
+
+/**
+ * D-24.3 — 막히기 **전에** 남은 개수를 읽는다(서버는 몫을 쓰지 않는다). 실패하면 null:
+ * 화면은 아무것도 막지 않고 종전대로 진행한다(서버가 최종 집행).
+ */
+export async function fetchProjectQuota(userKey: string): Promise<ProjectQuota | null> {
+  try {
+    const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/quota?userKey=${encodeURIComponent(userKey)}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return null;
+    const b = (await resp.json()) as { ok?: boolean; tier?: unknown; projectCreate?: Record<string, unknown> };
+    const pc = b.projectCreate;
+    if (!b.ok || !pc || typeof pc["limit"] !== "number" || typeof pc["remaining"] !== "number") return null;
+    const limitedBy = pc["limitedBy"];
+    return {
+      tier: typeof b.tier === "string" ? b.tier : "free",
+      limit: pc["limit"],
+      remaining: pc["remaining"],
+      resetAt: typeof pc["resetAt"] === "string" ? pc["resetAt"] : "",
+      limitedBy: limitedBy === "user" || limitedBy === "network" || limitedBy === "service" ? limitedBy : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // ─── save / load project ──────────────────────────────────────────────────────
 
@@ -114,7 +181,12 @@ export async function saveProjectToDb(payload: {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(10000),
     });
-    if (resp.status === 429) return { ok: false, error: "rate_limited", message: "요청이 너무 많습니다." };
+    if (resp.status === 429) {
+      const body = (await resp.json().catch(() => null)) as Record<string, unknown> | null;
+      const limit = parseProjectLimit(body);
+      if (limit) return limit;
+      return { ok: false, error: "rate_limited", message: "요청이 너무 많습니다." };
+    }
     if (!resp.ok) return { ok: false, error: "server", message: `HTTP ${resp.status}` };
     return (await resp.json()) as { ok: true; id: string };
   } catch (err) {
@@ -163,7 +235,7 @@ export type CheckDraftInput = {
 
 export async function callCheckDraftApi(
   input: CheckDraftInput,
-): Promise<CheckDraftResponse | ApiError> {
+): Promise<CheckDraftResponse | GenerationApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/check-draft`, {
       method: "POST",
@@ -173,6 +245,10 @@ export async function callCheckDraftApi(
       // council(협의체)은 다중 모델 2라운드라 기본 검수보다 오래 걸린다.
       signal: AbortSignal.timeout(input.reviewMode === "council" ? 90000 : 25000),
     });
+    // 비용 권고 ③ — today's AI capacity is full (503 service / 429 network share, no AI call):
+    // its own sentence. Read before the hourly 429 below (PR #576 review).
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (resp.status === 429) {
       // 서버 429는 body 파싱 전에 나가 locale을 모른다(KO 고정) — EN UI에서는
       // 서버 문구 대신 클라이언트 EN 문구를 쓴다.
@@ -231,7 +307,7 @@ export async function callUnstickApi(input: {
   userKey?: string;
   productName?: string;
   buildTool?: string;
-}): Promise<UnstickResponse | ApiError> {
+}): Promise<UnstickResponse | GenerationApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/unstick`, {
       method: "POST",
@@ -240,6 +316,9 @@ export async function callUnstickApi(input: {
       body: JSON.stringify({ ...input, locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       signal: AbortSignal.timeout(30000),
     });
+    // 비용 권고 ③ — today's AI capacity is full (503 / 429 network share) — before the hourly 429.
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (resp.status === 429) {
       let msg = "잠시 후 다시 시도해주세요. 요청이 많이 발생했어요.";
       try {
@@ -408,6 +487,25 @@ export async function callGetShareApi(
 
 // ─── plan (RC-4) ─────────────────────────────────────────────────────────────
 
+/**
+ * D-24 — the user's tier (free · basic · pro · staff) from GET /workspace/plan. Failure or an
+ * old server without `tier` → null: the UI then gates nothing itself and the server's answer
+ * (402 plan_required) is what the reader sees.
+ */
+export async function callGetTierApi(userKey: string): Promise<"free" | "basic" | "pro" | "staff" | null> {
+  try {
+    const resp = await fetch(
+      `${CENTRAL_PLANE_URL}/workspace/plan?userKey=${encodeURIComponent(userKey)}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!resp.ok) return null;
+    const b = (await resp.json()) as { ok?: boolean; tier?: string };
+    return b.ok && (b.tier === "free" || b.tier === "basic" || b.tier === "pro" || b.tier === "staff") ? b.tier : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Resolve the user's plan for review-mode gating. Failure → "free" (UI keeps B locked). */
 export async function callGetPlanApi(userKey: string): Promise<"free" | "paid"> {
   try {
@@ -436,7 +534,7 @@ export type FixSuggestionInput = {
 
 export async function callFixSuggestionApi(
   input: FixSuggestionInput,
-): Promise<FixSuggestionResponse | ApiError> {
+): Promise<FixSuggestionResponse | GenerationApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/fix-suggestion`, {
       method: "POST",
@@ -445,6 +543,9 @@ export async function callFixSuggestionApi(
       body: JSON.stringify({ ...input, locale: readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) }),
       signal: AbortSignal.timeout(25000),
     });
+    // 비용 권고 ③ — today's AI capacity is full (503 / 429 network share) — before the hourly 429.
+    const capacity = await capacityFromResponse(resp);
+    if (capacity) return { ok: false, error: "generation_capacity", resetAt: capacity.resetAt };
     if (resp.status === 429) {
       // 서버 429는 locale을 모른다(파싱 전) — EN UI는 클라이언트 EN 문구.
       const en = readStoredLocale(typeof window !== "undefined" ? window.localStorage : null) === "en";

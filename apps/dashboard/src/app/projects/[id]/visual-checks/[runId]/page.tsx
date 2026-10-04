@@ -57,10 +57,11 @@ import {
 import type { VerdictTone, SeverityTone } from "@/lib/visual-check-view.mjs";
 import { compareVisualChecks, pickPreviousDoneCheck } from "@/lib/visual-check-compare.mjs";
 import type { VisualCheckComparison, ComparedFinding } from "@/lib/visual-check-compare.mjs";
-import { isActiveStatus, runErrorNotice, runErrorTone, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
+import { isActiveStatus, isPlanCapKey, runErrorNotice, runErrorTone, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
+import { PlanCapHint } from "@/components/PlanCapHint";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
-import { buildRecheckBody } from "@/lib/visual-check-recheck.mjs";
+import { buildRecheckBody, confirmedIntentAtOf } from "@/lib/visual-check-recheck.mjs";
 import {
   canRepair,
   hasSomethingToFix,
@@ -72,6 +73,7 @@ import {
   repairErrorTone,
   showBuildUnverified,
   repairDoneKind,
+  repairStoppedByBudget,
   REPAIR_POLL_INTERVAL_MS,
 } from "@/lib/repair-state.mjs";
 import type { RepairErrorKey } from "@/lib/repair-state.mjs";
@@ -79,6 +81,7 @@ import { fetchProjectRepo } from "@/lib/workspace-github-api";
 import { fetchProjectRepoSettled, repoConnectedFact } from "@/lib/repo-settle.mjs";
 import { SimsaStampThinking } from "@/components/SimsaStampThinking";
 import { EvidenceChainSection } from "@/components/EvidenceChainSection";
+import { ResultPrivacySection } from "@/components/ResultPrivacySection";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -369,10 +372,15 @@ function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string
     // intent (projects/new sends none). That is not a yardstick anyone chose, so the
     // project's confirmed one-line ("맞나요?" card) travels instead — otherwise the
     // contract-1 cascade stops at body.intent and never reaches productSpec.oneLine.
+    // C-A7 검증 P2-5: when the confirmed intent was set AFTER this run (interview "ask my AI"
+    // revised X → Y; the dev spec's ACs were rebuilt for Y), the run's own intent is stale —
+    // buildRecheckBody sends the confirmed one-line so intent and ACs measure the same thing.
+    const ext = loadExtendedProjectData(projectId);
     const res = await runVisualCheck(
       projectId,
       buildRecheckBody(check, userKey, locale, {
-        confirmedIntent: loadExtendedProjectData(projectId)?.productSpec?.oneLine ?? null,
+        confirmedIntent: ext?.productSpec?.oneLine ?? null,
+        confirmedIntentAt: confirmedIntentAtOf(ext),
       }),
     );
     if (res.ok && res.dispatched) {
@@ -401,6 +409,7 @@ function RecheckNoticeView({ notice, t }: { notice: RecheckNotice | null; t: Dic
   return (
     <div className={`callout mt-2 ${soft ? "callout-info" : "callout-error"}`}>
       {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
+      {isPlanCapKey(notice.errorKey) ? <PlanCapHint /> : null}
     </div>
   );
 }
@@ -591,6 +600,10 @@ function RepairSection({
           {showBuildUnverified(repair) && (
             <p className="mt-2 text-sm leading-relaxed text-amber-700">{s.buildUnverified}</p>
           )}
+          {/* 비용 권고 ② — why the brief card has no code change this time (usage limit). */}
+          {repairStoppedByBudget(repair) && (
+            <p className="mt-2 text-sm leading-relaxed text-amber-700">{s.budgetStopped}</p>
+          )}
           {isEnvCause(repair) && (
             <div className="callout mt-3 border-amber-200 bg-amber-50 text-amber-700">
               {s.envCauseWarning}
@@ -678,6 +691,7 @@ function RepairSection({
       {errorNotice !== null && errorNotice.errorKey !== "repoRequired" && errorNotice.errorKey !== "tokenRequired" && (
         <div className={`callout mt-4 ${repairErrorTone(errorNotice.errorKey) === "info" ? "callout-info" : "callout-error"}`}>
           {errorNoticeText(s.errors, errorNotice.errorKey, errorNotice.resetAt, t.visualChecks.resetWhen, { receivedAt: errorNotice.receivedAt })}
+          {isPlanCapKey(errorNotice.errorKey) ? <PlanCapHint /> : null}
         </div>
       )}
 
@@ -1047,6 +1061,16 @@ export default function VisualCheckDetailPage() {
                 <dd className="text-gray-500">{formatDateTime(check.createdAt, locale)}</dd>
               </div>
             </dl>
+            {/* Train C · C-3 — the printable/copyable receipt of this check (a text link:
+                the report keeps its own single filled button). */}
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <Link
+                href={`/projects/${id}/visual-checks/${runId}/receipt`}
+                className="text-xs text-brand-700 hover:underline"
+              >
+                {t.visualChecks.receipt.openFromReport} →
+              </Link>
+            </div>
           </section>
 
           {/* Stage 266 — compared with the previous inspection */}
@@ -1244,6 +1268,9 @@ export default function VisualCheckDetailPage() {
             initial={initialUserVerdict}
             t={t}
           />
+
+          {/* Train K (계약 5): 학습 데이터 동의 카드(첫 완료 결과 + 1회) + 운영 정보 한 줄 — 인라인. */}
+          <ResultPrivacySection runId={runId} resultDone={check.status === "done"} userKey={userKey} t={t} />
         </>
       )}
     </div>

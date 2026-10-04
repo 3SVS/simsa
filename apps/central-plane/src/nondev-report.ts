@@ -88,19 +88,26 @@ export interface NonDevFinding {
   code?: FindingCode;
 }
 
-/** classifyFindings의 분기 이름. 추가는 되고, 이름 변경은 집계를 깨므로 하지 않는다. */
-export type FindingCode =
-  | "dns_unresolved"
-  | "network_5xx"
-  | "broken_route"
-  | "network_failed"
-  | "console_error"
-  | "noise_third_party"
-  | "no_primary_action"
-  | "step_failed"
-  | "ac_broken"
-  | "ac_not_confirmed"
-  | "signup_blocker";
+/**
+ * classifyFindings의 분기 이름. 추가는 되고, 이름 변경은 집계를 깨므로 하지 않는다.
+ * 런타임 목록이 있어야 집계(/admin/moat-stats, C-4b)가 **닫힌 어휘**로만 내보낼 수 있다 — 콜백이 보낸
+ * 모르는 문자열은 "other"로 접힌다(자유 텍스트가 집계 출력으로 새지 않게).
+ */
+export const FINDING_CODES = [
+  "dns_unresolved",
+  "network_5xx",
+  "broken_route",
+  "network_failed",
+  "console_error",
+  "noise_third_party",
+  "no_primary_action",
+  "step_failed",
+  "ac_broken",
+  "ac_not_confirmed",
+  "signup_blocker",
+] as const;
+
+export type FindingCode = (typeof FINDING_CODES)[number];
 
 export interface NonDevReport {
   title: string;

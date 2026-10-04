@@ -5,7 +5,8 @@
 
 import type { ReactNode } from "react";
 
-type BranchKey = "idea" | "code" | "spec";
+// C-N7: the three first doors add "broken" (door b) and "differs" (door c).
+type BranchKey = "idea" | "code" | "spec" | "broken" | "differs";
 
 const PATHS: Record<BranchKey, ReactNode> = {
   // idea — bulb
@@ -29,6 +30,20 @@ const PATHS: Record<BranchKey, ReactNode> = {
     <>
       <rect x="3.2" y="2" width="9.6" height="12" rx="1.5" />
       <path d="M5.8 6h4.4M5.8 9h4.4" />
+    </>
+  ),
+  // broken — circled exclamation ("it doesn't work")
+  broken: (
+    <>
+      <circle cx="8" cy="8" r="5.8" />
+      <path d="M8 4.9v3.7M8 11v.1" />
+    </>
+  ),
+  // differs — not-equal ("not how I meant")
+  differs: (
+    <>
+      <path d="M3.5 6.3h9M3.5 9.7h9" />
+      <path d="M10.2 3.4 5.8 12.6" />
     </>
   ),
 };

@@ -29,6 +29,7 @@ import type { VerdictTone } from "@/lib/visual-check-view.mjs";
 import { latestDoneTransition } from "@/lib/visual-check-compare.mjs";
 import {
   isActiveStatus,
+  isPlanCapKey,
   runErrorNotice,
   runErrorTone,
   runButtonState,
@@ -36,6 +37,8 @@ import {
 } from "@/lib/visual-check-run-state.mjs";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
+import { callGetTierApi } from "@/lib/workspace-check-api";
+import { PlanCapHint } from "@/components/PlanCapHint";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -110,6 +113,10 @@ export default function VisualChecksPage() {
   //  명시적으로 켜야 한다(서버도 같은 기본을 강제한다).
   const [withSignup, setWithSignup] = useState(false);
   const [signupAvailable, setSignupAvailable] = useState<boolean | null>(null);
+  // D-24 T-5: login-behind inspection is Basic+. Known free → the option says so before the
+  // click (disabled + "See plans"); unknown (lookup failed) → the server's 402 answers.
+  const [tier, setTier] = useState<"free" | "basic" | "pro" | "staff" | null>(null);
+  const signupNeedsPlan = tier === "free";
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<RunNotice | null>(null);
 
@@ -131,6 +138,12 @@ export default function VisualChecksPage() {
     },
     [],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void callGetTierApi(userKey).then((x) => { if (!cancelled) setTier(x); });
+    return () => { cancelled = true; };
+  }, [userKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +204,7 @@ export default function VisualChecksPage() {
       userKey,
       locale,
       ...(trimmedIntent ? { intent: trimmedIntent } : {}),
-      ...(withSignup && signupAvailable ? { withSignup: true } : {}),
+      ...(withSignup && signupAvailable && !signupNeedsPlan ? { withSignup: true } : {}),
     });
     setSubmitting(false);
     if (res.ok) {
@@ -262,13 +275,22 @@ export default function VisualChecksPage() {
           <label className="mt-3 flex items-start gap-2 text-sm">
             <input
               type="checkbox"
-              checked={withSignup}
+              checked={withSignup && !signupNeedsPlan}
+              disabled={signupNeedsPlan}
               onChange={(e) => setWithSignup(e.target.checked)}
-              className="mt-0.5"
+              className="mt-0.5 disabled:cursor-not-allowed"
             />
-            <span className="text-gray-700">
+            <span className={signupNeedsPlan ? "text-gray-400" : "text-gray-700"}>
               {t.visualChecks.signupOptIn}
               <span className="mt-0.5 block text-xs text-gray-500">{t.visualChecks.signupOptInHint}</span>
+              {signupNeedsPlan ? (
+                <span className="mt-0.5 block text-xs text-gray-600" data-testid="signup-needs-basic">
+                  {t.visualChecks.signupNeedsBasic}{" "}
+                  <Link href="/pricing" className="font-medium underline underline-offset-2">
+                    {t.quota.seePlans}
+                  </Link>
+                </span>
+              ) : null}
             </span>
           </label>
         )}
@@ -294,6 +316,7 @@ export default function VisualChecksPage() {
             className={`callout mt-3 ${runErrorTone(notice.errorKey) === "info" ? "callout-info" : "callout-error"}`}
           >
             {errorNoticeText(t.visualChecks.runErrors, notice.errorKey, notice.resetAt, t.visualChecks.resetWhen, { receivedAt: notice.receivedAt })}
+            {isPlanCapKey(notice.errorKey) ? <PlanCapHint /> : null}
           </div>
         )}
       </section>

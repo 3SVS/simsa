@@ -11,6 +11,8 @@ export type RepairErrorKey =
   | "dailyLimitReached"
   /** Train W — W-2: 503 repair_disabled (REPAIR_ENABLED="off"). */
   | "repairDisabled"
+  /** D-24 T-4: 429 daily_limit_reached with period "month" (수리 월 몫, 다음 UTC 달 초기화). */
+  | "monthlyLimitReached"
   | "generic";
 
 export const REPAIR_POLL_INTERVAL_MS: number;
@@ -66,3 +68,11 @@ export function showBuildUnverified(
 
 /** "autoFix" (real code changes, Stage 270) · "briefOnly" (fix-brief draft PR, legacy/unknown). */
 export function repairDoneKind(repair: { mode?: unknown } | null | undefined): "autoFix" | "briefOnly";
+
+/**
+ * 비용 권고 ② (2026-09-30): true only for a finished brief-card job whose server says
+ * stoppedByBudget === true (it stopped at the per-repair AI usage limit). Old servers → false.
+ */
+export function repairStoppedByBudget(
+  repair: { status?: unknown; mode?: unknown; stoppedByBudget?: unknown } | null | undefined,
+): boolean;

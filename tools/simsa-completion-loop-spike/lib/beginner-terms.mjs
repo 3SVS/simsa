@@ -84,10 +84,84 @@ export function accountCtaLabels(actionTexts) {
 
 /**
  * Journeys where the beginner standard applies at P0 severity.
- * J6 (B-8): idea → spec → "만들기" → progress — the default S path, no account (D-17).
+ *
+ *   J0 idea entry · J2 plan paste · J7 first visit (Train N6)
+ *   J1 existing app — doors (b) "만든 앱이 안 돼요" and (c) "생각과 달라요"
+ *      (C-J1, D-17 amend 2026-09-27: until now J1 was P2 only, so the beginner
+ *      standard was invisible on two of the three doors)
+ *   J6 build — door (a)'s delivery path (B-8); registered ahead so the journey
+ *      is P0 from its first run
+ *
+ * A letter suffix is a variant of the same journey (J1b = repo only, J2e = EN
+ * plan entry). The old `^J2\b` found no word boundary inside "J2e", so the EN
+ * plan entry silently fell out of the default flow. J10 is not J1.
  */
 export function isDefaultFlowJourney(journeyName) {
-  return /^J0\b|^J2\b|^J6\b|^J7\b/.test(String(journeyName ?? ""));
+  return /^J(?:0|1|2|6|7)[a-z]?(?![A-Za-z0-9])/.test(String(journeyName ?? ""));
+}
+
+/**
+ * D-17 amend (2026-09-27): only in the existing-app door is "connect your code
+ * (GitHub)" an allowed OPTIONAL step — the user may well have pasted a GitHub
+ * link themselves. There the word and a GitHub connect button drop to P2
+ * (still recorded — signal kept, severity lowered); every other developer term
+ * stays P0. Other journeys allow nothing.
+ * @param {string} journeyName
+ * @returns {{ terms: string[], providers: string[] }}
+ */
+export function beginnerAllowance(journeyName) {
+  const existingAppDoor = /^J1[a-z]?(?![A-Za-z0-9])/.test(String(journeyName ?? ""));
+  return existingAppDoor ? { terms: ["GitHub"], providers: ["GitHub"] } : { terms: [], providers: [] };
+}
+
+function formatTermList(hits) {
+  return hits.map((h) => `[${h.where ?? "본문"}] ${h.term}: "${h.snippet}"`).join(" ⟂ ");
+}
+
+function termFinding(sev, hits, note = "") {
+  const mainCount = hits.filter((h) => (h.where ?? "본문") === "본문").length;
+  return { sev, what: `개발 용어 노출 ${hits.length}건(본문 ${mainCount}${note}) — ${formatTermList(hits)}` };
+}
+
+function ctaFinding(sev, labels, note = "") {
+  return { sev, what: `외부 계정 CTA ${labels.length}개${note} — ${labels.join(" / ")}` };
+}
+
+/**
+ * The beginner-standard findings for one audited step (C-J1 — moved out of the
+ * audit script so the severity rule is testable without a browser; the J1-is-P2
+ * gap hid for exactly that reason). Messages always carry the matched text.
+ *
+ * @param {{ journeyName: string, devTerms?: Array<{ term: string, snippet: string, where?: string }>, accountCtas?: string[] }} input
+ * @returns {Array<{ sev: "P0" | "P2", what: string }>}
+ */
+export function beginnerFindings(input) {
+  const { journeyName, devTerms = [], accountCtas = [] } = input ?? {};
+  const out = [];
+  if (!isDefaultFlowJourney(journeyName)) {
+    // Developer / seeded screens: GitHub is the user's own word there — P2 only.
+    if (devTerms.length > 0) out.push(termFinding("P2", devTerms));
+    if (accountCtas.length > 0) out.push(ctaFinding("P2", accountCtas));
+    return out;
+  }
+  const allow = beginnerAllowance(journeyName);
+  const allowedTerm = (h) => allow.terms.includes(h.term);
+  const blockedTerms = devTerms.filter((h) => !allowedTerm(h));
+  const allowedTerms = devTerms.filter(allowedTerm);
+  // A label is allowed only when every provider it names is allowed.
+  const providersIn = (label) => ACCOUNT_PROVIDERS.filter((p) => new RegExp(escapeRe(p), "i").test(label));
+  const allowedCta = (label) => {
+    const named = providersIn(label);
+    return named.length > 0 && named.every((p) => allow.providers.includes(p));
+  };
+  const blockedCtas = accountCtas.filter((l) => !allowedCta(l));
+  const allowedCtas = accountCtas.filter(allowedCta);
+  const note = " · 기존 앱 문의 선택 단계로 허용(D-17)";
+  if (blockedTerms.length > 0) out.push(termFinding("P0", blockedTerms));
+  if (blockedCtas.length > 0) out.push(ctaFinding("P0", blockedCtas));
+  if (allowedTerms.length > 0) out.push(termFinding("P2", allowedTerms, note));
+  if (allowedCtas.length > 0) out.push(ctaFinding("P2", allowedCtas, note));
+  return out;
 }
 
 /**

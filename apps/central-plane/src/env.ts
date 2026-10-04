@@ -5,6 +5,12 @@
  */
 export interface Env {
   DB: D1Database;
+  /**
+   * Optional Cloudflare Workers KV namespace for short-lived, non-authoritative
+   * caches and idempotency locks. D1 remains the source of truth; KV entries
+   * must be safe to drop at any time.
+   */
+  CENTRAL_CACHE?: KVNamespace;
   ENVIRONMENT: string;
   /**
    * Git commit SHA this Worker was deployed from. Injected at deploy time by
@@ -133,6 +139,18 @@ export interface Env {
   HOSTING_GH_APP_PRIVATE_KEY?: string;
   /** B5: S 모드 앱 주소의 루트 도메인(예 "simsa.page"). hosting-dispatch의 HOSTING_ROOT_DOMAIN과 같아야 한다. [vars]. */
   HOSTING_ROOT_DOMAIN?: string;
+  /**
+   * B-7 호스팅 사업자 의무(D-6): 정지 목록 Workers KV — hosting-dispatch와 **같은 네임스페이스**.
+   * 키 `suspended:<slug>`(정지, 이 Worker가 씀·라우터가 읽음) · `strike:<slug>:<분>`(요청 상한 초과, 라우터가 씀·
+   * 10분 크론이 읽음). 없으면 관리자 정지는 503 suspension_store_not_configured(정지된 척하지 않는다),
+   * 요청 몰림 플래그 스윕은 건너뛴다. 신고 접수는 KV 없이도 된다. 규칙은 workspace/hosting-duties.ts.
+   */
+  HOSTING_SUSPENDED?: KVNamespace;
+  /**
+   * B-7 신고 접수 스위치. 정확히 "on"일 때만 POST /hosting/report가 신고를 저장한다(기본 off — [vars]).
+   * 개인정보처리방침에 '앱 신고' 수집 항목을 고지한 뒤에 켠다.
+   */
+  HOSTING_REPORTS_ENABLED?: string;
   /** B5 [PILOT]: T1 구현 모델. 기본 claude-sonnet-4-6(워커 기본과 동일). 킬스위치 시 폴백. */
   BUILD_MODEL?: string;
   /**
@@ -325,6 +343,11 @@ export interface Env {
   CF_AI_GATEWAY_GOOGLE_URL?: string;
   BETA_PROJECT_CREATE_DAILY_LIMIT?: string;
   /**
+   * D-24.2 킬스위치. 정확히 "off"면 플랜 티어 생성 상한(무료·베이직 하루 1개, 계정+네트워크)
+   * 대신 예전 userKey당 BETA_PROJECT_CREATE_DAILY_LIMIT(기본 20)으로 돌아간다. 미설정 = 켜짐.
+   */
+  PROJECT_CREATE_TIER_GATE?: string;
+  /**
    * Train W · W-2 (D-7 amend [PILOT]) — 유저(userKey)당 검수·수리 일일 상한 override.
    * 기본 검수 10/일 · 수리 5/일(workspace/beta-limits.ts). 양의 정수만, 그 외 = 기본값.
    * [PILOT]: 수치는 파일럿 전에 조정 가능 — 코드 변경 없이 [vars]로.
@@ -333,14 +356,35 @@ export interface Env {
   BETA_REPAIR_DAILY_LIMIT?: string;
   /**
    * PR #561 review P1 — userKey is anonymous, so the per-user cap is not a cost
-   * ceiling. Per-network (cf-connecting-ip as a keyed HMAC; default 검수 30 · 수리 15) and
-   * service-wide (default 검수 300 · 수리 50) daily caps on the same consume.
+   * ceiling. Per-network (cf-connecting-ip as a keyed HMAC; default 검수 30 · 수리 6 — #576 검증으로 15→6,
+   * 서비스 전체의 30% 몫 유지) and service-wide (default 검수 300 · 수리 20 — 2026-09-30 비용 권고로 50→20)
+   * daily caps on the same consume.
    * Same override rule ([PILOT], positive integers only).
    */
   BETA_INSPECTION_DAILY_LIMIT_PER_IP?: string;
   BETA_INSPECTION_DAILY_LIMIT_GLOBAL?: string;
   BETA_REPAIR_DAILY_LIMIT_PER_IP?: string;
   BETA_REPAIR_DAILY_LIMIT_GLOBAL?: string;
+  /**
+   * 비용 권고 ② (2026-09-30, D-7 amend [PILOT]) — 수리 잡 1건이 쓸 수 있는 LLM 달러 상한(USD).
+   * 기본 2. 양의 유한수만, 그 외 = 기본값(workspace/beta-limits.ts repairJobBudgetUsd). Worker가 읽어
+   * 디스패치 페이로드 `repairBudgetUsd`로 컨테이너에 넘기고, 컨테이너가 호출마다 실응답 모델 단가로
+   * 누적해 다음 호출 전에 멈춘다. 비밀 아님 — [vars].
+   */
+  REPAIR_JOB_BUDGET_USD?: string;
+  /**
+   * 비용 권고 ③ (2026-09-30, D-7 amend [PILOT]) — 생성 계열(아이디어 초안·스펙 검수·추천 답변·막힘 풀기·
+   * 수정 제안·문서 초안·의도 추론·PR 검토)과 개발 지시서 생성의 **서비스 전체** 일일 상한 override(요청 수).
+   * 기본 생성 계열 500/일 · 지시서 200/일(workspace/beta-limits.ts). 양의 정수만, 그 외 = 기본값.
+   */
+  BETA_GENERATION_DAILY_LIMIT_GLOBAL?: string;
+  BETA_DEV_SPEC_DAILY_LIMIT_GLOBAL?: string;
+  /**
+   * PR #576 검증 P1-1·P1-3 [PILOT] — 같은 버킷의 **네트워크 몫**(cf-connecting-ip, keyed HMAC). 서비스 버킷보다
+   * 먼저 차감해 한 클라이언트가 서비스 전체를 잠그지 못하게 한다. 기본 생성 100/일 · 지시서 40/일(각 서비스의 20%).
+   */
+  BETA_GENERATION_DAILY_LIMIT_PER_IP?: string;
+  BETA_DEV_SPEC_DAILY_LIMIT_PER_IP?: string;
   /**
    * In-app feedback (workspace-feedback.ts) admin notification targets.
    * ADMIN_TELEGRAM_CHAT_ID: numeric chat id to DM new feedback to (uses the

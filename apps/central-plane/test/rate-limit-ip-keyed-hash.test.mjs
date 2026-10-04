@@ -93,17 +93,33 @@ test("① 같은 IP·같은 버킷·같은 KEK → 같은 저장값 = \"v1:\" + 
   assert.equal(a1, a2, "deterministic — the counter must find its own row again");
   assert.match(a1, /^v1:[0-9a-f]{64}$/);
   assert.equal(a1, keyed(KEK, "workspace", IP_A), "subkey = HMAC(KEK, label); stored = HMAC(subkey, bucket::ip)");
-  assert.equal(await ipRateLimitKey(env, "workspace", IP_V6), keyed(KEK, "workspace", IP_V6), "IPv6 too");
+  // IPv6 is keyed by its /64 network (2026-10-01, rate-limit-ipv6-network.test.mjs) — "2001:db8::1" → "2001:db8:0:0::/64".
+  assert.equal(await ipRateLimitKey(env, "workspace", IP_V6), keyed(KEK, "workspace", "2001:db8:0:0::/64"), "IPv6 too (per /64)");
 });
 
-test("① 저장값에 IP가 없고, 옛 방식 sha256(bucket::ip) · 데모 옛 솔트와 다르다", async () => {
-  const { ipRateLimitKey } = await loadKeyModule();
+test("① 저장값에 IP가 없고, 옛 방식 sha256(bucket::ip) · 데모 옛 솔트와 다르다 — 실제 해시 입력(네트워크 텍스트)으로도", async () => {
+  const mod = await loadKeyModule();
+  const { ipRateLimitKey } = mod;
   const env = { CONCLAVE_TOKEN_KEK: KEK };
+  // PR #580 검증 P2 후속: 두 가지 이유로 이 비교가 항상 참이었다.
+  //   - 저장값은 "v1:" + hex인데 sha256(...)은 hex만이다 — 접두를 떼고 hex 본문끼리 비교한다.
+  //   - IPv6는 코드가 원문이 아니라 networkPrefix 결과("…::/64")를 해시한다 — 원문과 그 텍스트 둘 다와 비교한다.
+  // 그래서 HMAC을 빼고 sha256(bucket::networkPrefix(ip))로 바꾸면 이제 이 테스트가 실패한다.
+  const hashedText = (ip, bits) => (typeof mod.networkPrefix === "function" ? mod.networkPrefix(ip, bits) : ip);
+  const body = (stored) => (stored.startsWith(V1) ? stored.slice(V1.length) : stored);
   for (const [bucket, ip] of [["workspace", IP_A], ["workspace-check", IP_B], ["inspection-daily-ip", IP_A], ["demo", IP_V6]]) {
     const stored = await ipRateLimitKey(env, bucket, ip);
     assert.ok(!stored.includes(ip), `${bucket}: stored value contains the IP`);
-    assert.notEqual(stored, sha256(`${bucket}::${ip}`), `${bucket}: still the unkeyed (brute-forceable) SHA-256`);
-    assert.notEqual(stored, sha256(`conclave-demo::${ip}`), `${bucket}: still the public demo salt`);
+    for (const raw of new Set([ip, hashedText(ip, 64)])) {
+      assert.notEqual(body(stored), sha256(`${bucket}::${raw}`), `${bucket}: still the unkeyed (brute-forceable) SHA-256 of ${raw}`);
+      assert.notEqual(body(stored), sha256(`conclave-demo::${raw}`), `${bucket}: still the public demo salt (${raw})`);
+    }
+  }
+  // IPv6의 /48 행(일일 상한의 두 번째 단계)도 같은 비밀 키 HMAC이다.
+  if (typeof mod.ipWideRateLimitKey === "function") {
+    const wide = await mod.ipWideRateLimitKey(env, "inspection-daily-ip", IP_V6);
+    assert.equal(wide, keyed(KEK, "inspection-daily-ip/48", "2001:db8:0::/48"));
+    assert.notEqual(body(wide), sha256(`inspection-daily-ip/48::${hashedText(IP_V6, 48)}`));
   }
 });
 
@@ -556,6 +572,28 @@ test("④ 실제 SQLite(0011·0026): 시작한 지 48시간 지난 시간 창·�
   assert.doesNotThrow(() => JSON.stringify(r));
 });
 
+test("④ D-24 T-4 실제 SQLite: 월 창은 그 달이 끝나고 48시간이 지나야 지운다(이번 달·막 끝난 달은 남김)", async (t) => {
+  const { purgeExpiredRateLimitRows } = await loadRetentionModule();
+  const db = await sqliteWithRateTables(t);
+  if (!db) return;
+  const d1 = { DB: d1FromSqlite(db) };
+  const run = async (iso, months) => {
+    db.exec("DELETE FROM workspace_rate_limit;");
+    for (const m of months) insWs(db, `${V1}m_${m}`, m);
+    await purgeExpiredRateLimitRows(d1, new Date(iso));
+    return left(db, "workspace_rate_limit", "hour_utc");
+  };
+  // 10월 1일 01:00 — 9월이 끝난 지 1시간: 9월(이번 달 수리 횟수가 막 끝남)은 아직 남긴다.
+  assert.deepEqual(await run("2026-10-01T01:00:00.000Z", ["2026-08", "2026-09", "2026-10"]), ["2026-09", "2026-10"]);
+  // 10월 3일 00:00 — 9월이 끝난 지 48시간: 지운다. 이번 달(10월)은 남는다.
+  assert.deepEqual(await run("2026-10-03T00:00:00.000Z", ["2026-09", "2026-10"]), ["2026-10"]);
+  // 어느 시각이든 이번 달 행은 남는다.
+  for (const iso of ["2026-10-01T00:00:00.000Z", "2026-10-31T23:59:59.999Z", "2027-01-01T00:00:00.000Z"]) {
+    const month = iso.slice(0, 7);
+    assert.ok((await run(iso, [month])).includes(month), `${iso}: ${month} must survive`);
+  }
+});
+
 test("④ 어느 시각에 돌아도 지금 쓰이는 창(이번 시간·오늘)과 48시간 안의 창은 지우지 않는다", async (t) => {
   const { purgeExpiredRateLimitRows } = await loadRetentionModule();
   const db = await sqliteWithRateTables(t);
@@ -628,9 +666,11 @@ test("④ (가짜 D1 · 모든 Node) 청소 SQL은 두 형식을 각자의 기�
   assert.match(where(ws.sql), /\(length\(hour_utc\) = 13 AND hour_utc <= \?\) OR \(length\(hour_utc\) = 10 AND hour_utc <= \?\)/);
   assert.match(where(demo.sql), /length\(day_utc\) = 10 AND day_utc <= \?/);
   assert.match(where(ws.sql), /LIMIT \?/, "batched");
-  assert.deepEqual(ws.args.slice(0, 2), ["2026-09-27T15", "2026-09-27"]);
+  assert.deepEqual(ws.args.slice(0, 3), ["2026-09-27T15", "2026-09-27", "2026-09"]);
   assert.deepEqual(demo.args.slice(0, 1), ["2026-09-27"]);
-  assert.ok(Number.isInteger(ws.args[2]) && ws.args[2] > 0, "batch size bind");
+  assert.ok(Number.isInteger(ws.args[3]) && ws.args[3] > 0, "batch size bind");
+  // D-24 T-4: 월 창("YYYY-MM", 7자)은 그 달이 끝나고 48시간 뒤 — month(cutoff)보다 **앞선** 달만.
+  assert.match(where(ws.sql), /\(length\(hour_utc\) = 7 AND hour_utc < \?\)/);
   assert.deepEqual(
     [r.workspace.more, r.demo.more, r.workspace.error, r.demo.error],
     [false, false, undefined, undefined],

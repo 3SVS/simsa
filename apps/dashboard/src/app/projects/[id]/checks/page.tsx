@@ -19,6 +19,7 @@ import {
   type CheckResultItem,
 } from "@/lib/workspace-check-api";
 import { computeCheckComparison, type CheckComparison } from "@/lib/check-compare.mjs";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { callCreateShareApi } from "@/lib/workspace-check-api";
 import {
   getLatestPRReview,
@@ -221,6 +222,10 @@ export default function ChecksPage() {
     if (!res.ok) {
       if (res.error === "rate_limited") {
         setRateLimitMsg(t.common.rateLimited);
+        setPhase(results ? "done" : "idle");
+      } else if (res.error === "generation_capacity") {
+        // 비용 권고 ③ — today's AI capacity is full: information with the reset time, not an error screen.
+        setRateLimitMsg(generationCapacityText(t, res.resetAt));
         setPhase(results ? "done" : "idle");
       } else if (res.error === "plan") {
         // RC-4: 자격 부족/준비 중 — 서버 메시지를 그대로, 오류 화면 아님.

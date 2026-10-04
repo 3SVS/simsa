@@ -17,7 +17,8 @@ import { Hono } from "hono";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
-import { getProject } from "../workspace/db.js";
+import { getProject, type DbProject } from "../workspace/db.js";
+import { provenanceFrom } from "../workspace/provenance.js";
 import { normalizeGithubRepoRef } from "../workspace/github-repo-ref.js";
 import { probeGithubRepo, probeWebsite, type Reachability } from "../workspace/source-reachability.js";
 import {
@@ -28,6 +29,8 @@ import {
 } from "../workspace/source-evidence.js";
 import { generateIdeaToSpecDraft, toClientDraft } from "../workspace/generate.js";
 import { createUsageCollector, newLlmJobId, recordCollectedUsage, runAfterResponse } from "../workspace/llm-usage.js";
+import { GENERATION_CAPACITY_ERROR, takeGenerationSlot } from "../workspace/generation-capacity.js";
+import { clientNetworkKey } from "../workspace/beta-limits.js";
 import {
   insertProjectSource,
   listProjectSources,
@@ -71,11 +74,11 @@ async function requireOwnedProject(
   env: Env,
   projectId: string,
   userKey: string,
-): Promise<{ ok: true } | { ok: false; status: 403 | 404; error: string }> {
+): Promise<{ ok: true; project: DbProject } | { ok: false; status: 403 | 404; error: string }> {
   const project = await getProject(env, projectId);
   if (!project) return { ok: false, status: 404, error: "project_not_found" };
   if (project.userKey !== userKey) return { ok: false, status: 403, error: "forbidden" };
-  return { ok: true };
+  return { ok: true, project };
 }
 
 export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
@@ -209,6 +212,14 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: true, inferred: null, reason: "unreadable", readSources: [] });
     }
 
+    // D-2 amend: 역추론 결과에 **출처**를 싣는다 — 어떤 도구로 만든 앱인지(빌더 호스트 감지 또는
+    // 유저가 적은 도구), 어느 갈래로 들어왔는지, 무엇을 감지했는지. 새 감지기가 아니라 위 증거 그대로.
+    const provenance = provenanceFrom({
+      stack: evidence.stack,
+      entryPath: owned.project.entryPath,
+      declaredBuiltWith: owned.project.builtWith,
+    });
+
     const idea = composeIdeaFromEvidence(evidence, locale);
     if (!idea) {
       // 읽을 수 있는 설명이 없었다. 그대로 말한다 — 사용자가 직접 적으면 된다.
@@ -218,23 +229,51 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
         reason: "no_evidence",
         readSources: evidence.readSources,
         stack: evidence.stack,
+        provenance,
+      });
+    }
+
+    // 비용 권고 ③ — daily capacity ("generation" buckets, the same as idea-to-spec-draft:
+    // this network's share, then the service bucket), right before the LLM. This route has
+    // no other limiter and the card calls it on every mount, so the network share is what
+    // keeps one client from emptying the service bucket (PR #576 review P1-1). Full → this
+    // route's own convention: 200 with inferred:null and a reason (+ whose share ran out),
+    // so the card says it plainly (no LLM call).
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
+    if (slot.limited) {
+      return c.json({
+        ok: true,
+        inferred: null,
+        reason: GENERATION_CAPACITY_ERROR,
+        scope: slot.scope,
+        resetAt: slot.resetAt,
+        readSources: evidence.readSources,
+        stack: evidence.stack,
       });
     }
 
     // L-3 (Train L): 원장 기록(job_kind generate). 소유 확인된 projectId·userKey만.
     const usage = createUsageCollector();
-    const draft = await generateIdeaToSpecDraft(
-      { idea, locale },
-      c.env.ANTHROPIC_API_KEY,
-      c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
-      vendorFallback(c.env),
-      usage.sink,
-    );
+    let draft: Awaited<ReturnType<typeof generateIdeaToSpecDraft>>;
+    try {
+      draft = await generateIdeaToSpecDraft(
+        { idea, locale },
+        c.env.ANTHROPIC_API_KEY,
+        c.env.CF_AI_GATEWAY_ANTHROPIC_URL,
+        vendorFallback(c.env),
+        usage.sink,
+      );
+    } catch (err) {
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
+      throw err;
+    }
     if (usage.events.length > 0) {
       await runAfterResponse(c, recordCollectedUsage(c.env, usage.events, { jobKind: "generate", jobId: newLlmJobId("inf"), projectId, userKey }));
     }
     if ("ok" in draft && draft.ok === false) {
-      return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack });
+      // unbilled failure → slot back; billed (answer did not parse) → kept.
+      await slot.settle({ failed: true, billedCalls: usage.events.length });
+      return c.json({ ok: true, inferred: null, reason: "llm_unavailable", readSources: evidence.readSources, stack: evidence.stack, provenance });
     }
 
     // #311 경계: llmUsage(토큰·지연·벤더 라우팅)는 운영 관측 데이터 — 사용자 응답에 싣지 않는다.
@@ -243,6 +282,7 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       inferred: toClientDraft(draft),
       readSources: evidence.readSources,
       stack: evidence.stack,
+      provenance,
       ...(evidence.title ? { detectedName: evidence.title } : {}),
     });
   });

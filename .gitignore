@@ -62,3 +62,5 @@ tools/simsa-completion-loop-spike/smoke-shots/
 # Paddle 샌드박스 스파이크($-0) — 샌드박스 키 파일과 실행 증거(요청·응답 요약·스크린샷)는 커밋하지 않는다
 tools/paddle-spike/.env.local
 tools/paddle-spike/evidence/
+# Train P · P-2 pilot-metrics raw output (full ids + app URLs; public repo — only the masked .md goes into RESULT.md)
+tools/simsa-completion-loop-spike/pilot-metrics-out/

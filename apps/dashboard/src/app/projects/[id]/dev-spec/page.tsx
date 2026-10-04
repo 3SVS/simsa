@@ -26,6 +26,8 @@ import { buildAvailability, latestBuildJob, makePanelVisible } from "@/lib/build
 import { useAppPresence } from "@/lib/use-app-presence";
 import { useBuildOpen } from "@/lib/use-build-open";
 import { useDeveloperMode } from "@/lib/use-developer-mode";
+import { effectiveConfirmedItemIds } from "@/lib/confirmed-items.mjs";
+import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ProjectNotFound } from "@/components/ProjectNotFound";
 import { MakeAppPanel } from "@/components/MakeAppPanel";
@@ -112,7 +114,13 @@ export default function DevSpecPage() {
       setError({ ok: false, error: "not_found" });
       return;
     }
-    const r = await generateDevSpecApi(id, getUserKey(), locale === "en" ? "en" : "ko");
+    // C-A7 (D-2 amend): 기존 앱 문이면 유저가 확인한 항목 id를 함께 보낸다 — 역추론 지시서의 must는
+    // 그 목록에서만 나온다(서버가 entry_path로 역추론 여부를 정한다). 목록 필드가 없는 옛 프로젝트는
+    // 지금 항목 전부가 확인된 것이다(confirmed-items.mjs 레거시 폴백) — undefined를 보내면 서버가
+    // 확인 0으로 읽고 must를 전부 강등한다(PR #577 리뷰 P2-1).
+    const r = await generateDevSpecApi(id, getUserKey(), locale === "en" ? "en" : "ko", {
+      confirmedItemIds: effectiveConfirmedItemIds(ext?.intentConfirmedItemIds, project!.requirements.map((req) => req.id)),
+    });
     setPhase("idle");
     if (r.ok) {
       setDevSpec(r.devSpec);
@@ -124,6 +132,8 @@ export default function DevSpecPage() {
 
   const errorText = (e: DevSpecApiError): string => {
     const key = generateErrorKey(e);
+    // 비용 권고 ③ — today's dev-spec capacity is full: the shared sentence with the reset time.
+    if (key === "errCapacity") return generationCapacityText(t, e.error === "generation_capacity" ? e.resetAt : null);
     if (key === "errInvalid" && e.error === "dev_spec_invalid") return d.errInvalid.replace("{n}", String(e.issueCount));
     if (key === "errRateLimited" && e.error === "rate_limited") return d.errRateLimited.replace("{m}", String(Math.max(1, Math.ceil(e.retryAfterSeconds / 60))));
     return d[key];

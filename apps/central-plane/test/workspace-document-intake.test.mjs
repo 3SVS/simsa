@@ -36,13 +36,19 @@ const PRD_TEXT = [
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 function makeDb({ projects = new Map(), sources = [], rateCount = 0 } = {}) {
-  const state = { sources, rateInserts: 0, usageEvents: [], projectWrites: 0 };
+  const state = { sources, rateInserts: 0, dailySlotInserts: 0, usageEvents: [], projectWrites: 0 };
   return {
     _state: state,
     prepare(sql) {
       function handler(args) {
         return {
           async run() {
+            // 비용 권고 ③: the service-wide daily slot (conditional upsert, rate-limit.ts
+            // DAILY_SLOT_CONSUME_SQL) is counted apart from the hourly per-IP counter.
+            if (/INSERT INTO workspace_rate_limit/i.test(sql) && sql.includes("WHERE workspace_rate_limit.count < ?")) {
+              state.dailySlotInserts += 1;
+              return { meta: { changes: 1 } };
+            }
             if (/INSERT INTO workspace_rate_limit/i.test(sql)) {
               state.rateInserts += 1;
               return { meta: { changes: 1 } };
@@ -243,6 +249,8 @@ test("happy path: md document → 200 draft (mock-fallback, same shape as idea-t
   assert.equal(env.DB._state.projectWrites, 0);
   // rate-limit counter incremented + usage event recorded
   assert.equal(env.DB._state.rateInserts, 1);
+  // 비용 권고 ③ (의도된 변경): one slot from the service-wide generation bucket too.
+  assert.equal(env.DB._state.dailySlotInserts, 1);
   assert.equal(env.DB._state.usageEvents.length, 1);
 });
 

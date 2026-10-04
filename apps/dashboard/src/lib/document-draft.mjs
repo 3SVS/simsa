@@ -20,6 +20,8 @@ export const DRAFT_ERROR_CODES = [
   "rate_limited",
   "llm_unavailable",
   "evidence_storage_unconfigured",
+  // 비용 권고 ③ (2026-09-30): the service-wide daily AI capacity is full (503, no AI call).
+  "generation_capacity",
 ];
 
 /**
