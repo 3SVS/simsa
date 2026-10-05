@@ -897,9 +897,11 @@ export function buildAgentAcFixPrompt(report: Pick<AgentReport, "target" | "inte
   failed.forEach((r, i) => {
     lines.push(`${i + 1}. [${r.id} · ${r.priority}] ${r.title}`);
     lines.push(`   ${en ? "Expected" : "기대"}: ${r.then}`);
-    if (r.actions?.length) lines.push(`   ${en ? "What we did" : "해 본 순서"}: ${r.actions.join(" → ")}`);
+    if (r.actions?.length) lines.push(`   ${en ? "Steps to reproduce" : "재현 순서"}: ${r.actions.join(" → ")}`);
     lines.push(`   ${en ? "What happened" : "실제 결과"}: ${r.reason}`);
-    if (r.evidence.length) lines.push(`   ${en ? "Seen on screen" : "화면에서 본 것"}: "${r.evidence.join('" / "')}"`);
+    if (r.evidence.length) lines.push(`   ${en ? "Evidence" : "근거"}: "${r.evidence.join('" / "')}"`);
+    const cause = probableCause(`${r.reason} ${r.evidence.join(" ")}`, locale);
+    if (cause) lines.push(`   ${en ? "Probable cause" : "추정 원인"}: ${cause}`);
   });
   if (brokenScreens.length) {
     lines.push("", en ? "Broken screens / buttons found while visiting every screen:" : "모든 화면을 돌아보다 발견한 고장 난 화면·버튼:");
@@ -911,6 +913,24 @@ export function buildAgentAcFixPrompt(report: Pick<AgentReport, "target" | "inte
   }
   lines.push("", en ? "Simsa will re-run the same criteria after your fix." : "고친 뒤 Simsa가 같은 기준으로 다시 확인합니다.");
   return lines.join("\n");
+}
+
+/**
+ * B4: 탐침이 남긴 고정 문구에서만 원인을 짚는다(주제별 규칙 없음). 근거가 없으면 null — 지어내지 않는다.
+ */
+export function probableCause(text: string, locale: ReportLocale = "ko"): string | null {
+  const en = locale === "en";
+  if (/saved only in this browser|server write requests since this check started = 0/i.test(text)) {
+    return en
+      ? "Data is stored only in the visitor's browser (localStorage/sessionStorage); nothing is saved on a server, so other users and devices can't see it. Store it in a shared database/back end."
+      : "데이터가 방문자 브라우저 저장소(localStorage 등)에만 저장되고 서버에는 저장되지 않아요. 다른 사람·다른 기기에서 보이지 않으니 공용 데이터베이스(백엔드)에 저장하게 바꿔야 해요.";
+  }
+  if (/UTC|timezone|time zone|시간대/i.test(text)) {
+    return en
+      ? "'Today' or times seem computed in UTC instead of the user's time zone (Asia/Seoul)."
+      : "'오늘'이나 시간이 사용자 시간대(한국 시간)가 아니라 UTC로 계산되는 것 같아요.";
+  }
+  return null;
 }
 
 // ─── LLM 프롬프트 ───────────────────────────────────────────────────────────────

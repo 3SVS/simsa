@@ -162,6 +162,13 @@ describe("리포트 · 고침 지시는 실제 실패에서만", () => {
     assert.equal(P.buildAgentAcFixPrompt(clean, "ko"), "");
     assert.equal(clean.findings.length, 0);
   });
+  it("B4 고침 지시: 재현 순서·근거·탐침에서만 나온 추정 원인", () => {
+    const r2 = P.buildAgentReport({ targetUrl: ORIGIN, intent: "i", acs: [ac("CORE-1")], acSource: "interview", results: [{ id: "CORE-1", status: "fail", reason: "다른 손님 화면에 안 보임", evidence: ["storage probe: server write requests since this check started = 0; localStorage changed = yes; sessionStorage changed = no; verdict hint: saved only in this browser"], steps: 4, actions: ["예약하기 누르기"] }], sweep: null, signals: {}, loginDepth: "L1", loginMethod: "none" }, "ko");
+    const p = P.buildAgentAcFixPrompt(r2, "ko");
+    assert.match(p, /재현 순서: 예약하기 누르기/);
+    assert.match(p, /추정 원인: 데이터가 방문자 브라우저 저장소/);
+    assert.equal(P.probableCause("버튼이 안 눌림", "ko"), null, "근거 없으면 원인을 지어내지 않는다");
+  });
   it("EN 리포트에 한글 없음(기준 문장 제외)", () => {
     const en = P.buildAgentReport({ targetUrl: ORIGIN, intent: "booking", acs: [{ ...ac("AC-001"), title: "Booking", then: "booking shows" }], acSource: "interview", results: [{ id: "AC-001", status: "pass", reason: "seen", evidence: ["Booked"], steps: 2 }], sweep: null, signals: {}, loginDepth: "L1", loginMethod: "none" }, "en");
     assert.doesNotMatch(JSON.stringify({ v: en.verdict, o: en.oneLine, n: en.notes, s: en.nextSteps }), /[가-힣]/);
