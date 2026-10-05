@@ -36,3 +36,25 @@ describe("실패 패턴 익명 수집 안내", () => {
     assert.match(read("src", "components", "PrivacySettingsSection.tsx"), /p\.opsFailurePatterns/);
   });
 });
+
+describe("첫 자동 검사에도 동의 · 읽기 전용 결과에서 한 번 누르기", () => {
+  it("주소 입력(새 프로젝트 · 주소 상자) 둘 다 체크박스(기본 꺼짐)를 두고 첫 런에 넘긴다", () => {
+    const np = read("src", "app", "projects", "new", "page.tsx");
+    assert.match(np, /const \[writeConsent, setWriteConsent\] = useState\(false\);/);
+    assert.ok(np.includes("runVisualCheck(id, { userKey, locale, ...(writeConsent ? { writeConsent: true as const } : {}) })"));
+    assert.ok(np.includes("<WriteConsentCheckbox checked={writeConsent}"));
+    const box = read("src", "components", "AppAddressStart.tsx");
+    assert.match(box, /const \[writeConsent, setWriteConsent\] = useState\(false\);/);
+    assert.ok(box.includes("runVisualCheck(projectId, { userKey, locale, sourceId, ...(writeConsent ? { writeConsent: true as const } : {}) })"));
+  });
+  it("읽기 전용 결과를 알아보고, 같은 기준으로 동의해서 다시", async () => {
+    const { reportNeedsWriteConsent, RECHECK_WITH_CONSENT } = await import("../src/lib/write-consent.mjs");
+    assert.equal(reportNeedsWriteConsent({ engine: "agent", acTable: [{ status: "not_verified", reasonCode: "write_not_allowed" }] }), true);
+    assert.equal(reportNeedsWriteConsent({ engine: "agent", acTable: [{ status: "fail" }] }), false);
+    assert.equal(reportNeedsWriteConsent({ engine: "classic" }), false);
+    assert.equal(RECHECK_WITH_CONSENT.ko.button, "시험 데이터 허용하고 다시 확인");
+    const detail = read("src", "app", "projects", "[id]", "visual-checks", "[runId]", "page.tsx");
+    assert.ok(detail.includes("recheck.run({ writeConsent: true })"));
+    assert.ok(detail.includes("...buildRecheckBody(check, userKey, locale"));
+  });
+});

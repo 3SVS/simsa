@@ -60,6 +60,7 @@ import type { VisualCheckComparison, ComparedFinding } from "@/lib/visual-check-
 import { isActiveStatus, isPlanCapKey, runErrorNotice, runErrorTone, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
 import { PlanCapHint } from "@/components/PlanCapHint";
 import { AgentReportSections } from "@/components/AgentReportSections";
+import { RECHECK_WITH_CONSENT, reportNeedsWriteConsent } from "@/lib/write-consent.mjs";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { buildRecheckBody, confirmedIntentAtOf } from "@/lib/visual-check-recheck.mjs";
@@ -361,12 +362,26 @@ function rememberVisualResult(projectId: string, check: VisualCheckDetail): void
 // yardstick instead of the server's generic default sentence.
 // Train C — C2a: shared by the repair card (linked repo) and the builder-paste
 // card (address-only app) so both "check again" buttons behave identically.
+/** 오픈 베타 S2-min: 읽기 전용으로 돈 결과 → 동의하고 같은 기준으로 다시(한 번 누르기). */
+function RecheckWithConsent({ projectId, check, userKey, locale }: { projectId: string; check: VisualCheckDetail; userKey: string; locale: Locale }) {
+  const recheck = useRecheck(projectId, check, userKey, locale);
+  const c = RECHECK_WITH_CONSENT[locale === "en" ? "en" : "ko"];
+  return (
+    <section className="callout callout-info space-y-2" data-testid="recheck-with-consent">
+      <p className="text-sm">{c.lead}</p>
+      <button type="button" className="btn btn-secondary btn-sm" disabled={recheck.submitting} onClick={() => void recheck.run({ writeConsent: true })}>
+        {c.button}
+      </button>
+    </section>
+  );
+}
+
 function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string, locale: Locale) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<RecheckNotice | null>(null);
 
-  async function run() {
+  async function run(extra: { writeConsent?: true } = {}) {
     if (submitting) return;
     setSubmitting(true);
     setNotice(null);
@@ -380,10 +395,13 @@ function useRecheck(projectId: string, check: VisualCheckDetail, userKey: string
     const ext = loadExtendedProjectData(projectId);
     const res = await runVisualCheck(
       projectId,
-      buildRecheckBody(check, userKey, locale, {
-        confirmedIntent: ext?.productSpec?.oneLine ?? null,
-        confirmedIntentAt: confirmedIntentAtOf(ext),
-      }),
+      {
+        ...buildRecheckBody(check, userKey, locale, {
+          confirmedIntent: ext?.productSpec?.oneLine ?? null,
+          confirmedIntentAt: confirmedIntentAtOf(ext),
+        }),
+        ...extra,
+      },
     );
     if (res.ok && res.dispatched) {
       // Keep the button disabled while the navigation happens.
@@ -1131,6 +1149,9 @@ export default function VisualCheckDetailPage() {
 
           {/* 2026-10-05 agent 엔진 — 기준(AC)별 결과 표 + 화면·버튼 점검 (agent 리포트일 때만) */}
           <AgentReportSections report={report} locale={locale} />
+          {check && reportNeedsWriteConsent(report) && (
+            <RecheckWithConsent projectId={id} check={check} userKey={userKey} locale={locale} />
+          )}
 
           {/* Train M-1b — "왜 이 판정인가요?" 증거 체인 (펼침 시 lazy 로드) */}
           <EvidenceChainSection projectId={id} runId={runId} userKey={userKey} t={t} />

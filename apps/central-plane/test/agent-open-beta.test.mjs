@@ -152,6 +152,47 @@ describe("싼 모델 라우팅", { skip: SQLITE_SKIP }, () => {
   });
 });
 
+describe("싼 단계의 실제 경로 — 프로덕션 설정(Anthropic 킬스위치 off · OpenAI 게이트웨이)", { skip: SQLITE_SKIP }, () => {
+  it("haiku를 건너뛰고 게이트웨이로 gpt-5.4-mini · 원장은 실제로 답한 벤더·모델 · 단가 미등록은 보수 최대 단가 + unpriced", async () => {
+    const { db, d1 } = openSqliteD1();
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      const body = JSON.parse(init.body);
+      calls.push({ url: String(url), model: body.model });
+      if (String(url).includes("anthropic")) return new Response("blocked", { status: 403 });
+      return new Response(
+        JSON.stringify({ model: "gpt-5.4-mini-2026-03-17", choices: [{ message: { content: "{\"action\":{}}" }, finish_reason: "stop" }], usage: { prompt_tokens: 1000, completion_tokens: 50 } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    const env = {
+      DB: d1, INSPECTOR: { idFromName: (n) => n, get: () => ({ fetch: async () => new Response("{}", { status: 202 }) }) },
+      INTERNAL_CALLBACK_TOKEN: ICT, CONCLAVE_TOKEN_KEK: KEK, INSPECTION_ENABLED: "on", PUBLIC_BASE_URL: BASE, INSPECTION_AGENT_PUBLIC: "on",
+      ANTHROPIC_API_KEY: "k", ANTHROPIC_ENABLED: "off", OPENAI_API_KEY: "ok", CF_AI_GATEWAY_OPENAI_URL: "https://gateway.ai.cloudflare.com/v1/acct/simsa/openai",
+    };
+    const app = createApp({ fetch: fetchImpl });
+    const post = (path, body, headers = {}) => app.fetch(new Request(BASE + path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) }), env, ctx);
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO workspace_projects (id, user_key, title, idea, understood_json, product_spec_json, items_json, entry_path, dev_spec_json, created_at, updated_at) VALUES ('pc', 'uk_c', 't', '', '{}', '{}', '[]', 'idea', NULL, ?, ?)`).run(now, now);
+    db.prepare(`INSERT INTO project_sources (id, project_id, user_key, type, reference, label, content_type, size_bytes, created_at) VALUES ('sc', 'pc', 'uk_c', 'website', ?, 'a', NULL, NULL, ?)`).run(SITE + "/", now);
+    let tok = null;
+    env.INSPECTOR.get = () => ({ fetch: async (_u, init) => { tok = JSON.parse(init.body).agent.llmToken; return new Response("{}", { status: 202 }); } });
+    await post("/workspace/projects/pc/visual-checks/run", { userKey: "uk_c", writeConsent: true });
+    const r = await post("/internal/inspect-llm/v1/messages", { system: "s", user: "u", tier: "cheap" }, { authorization: `Bearer ${tok}` });
+    assert.equal(r.status, 200);
+    assert.equal(calls.length, 1, "막힌 Anthropic은 부르지 않는다(킬스위치)");
+    assert.equal(calls[0].url, "https://gateway.ai.cloudflare.com/v1/acct/simsa/openai/chat/completions");
+    assert.equal(calls[0].model, "gpt-5.4-mini");
+    const row = db.prepare(`SELECT vendor, model_requested, model_actual, call_site, cost_usd, unpriced FROM llm_usage`).get();
+    assert.equal(row.vendor, "openai");
+    assert.equal(row.model_requested, "claude-haiku-4-5-20251001");
+    assert.equal(row.model_actual, "gpt-5.4-mini-2026-03-17");
+    assert.equal(row.call_site, "inspect_agent");
+    assert.equal(row.unpriced, 1, "gpt-5.4-mini 단가는 표에 없다 — 지어내지 않고 보수 최대 단가");
+    assert.ok(row.cost_usd > 0);
+  });
+});
+
 describe("실행기: 읽기 전용 · 상한", () => {
   const ORIGIN = "https://salon.example";
   const site = {
