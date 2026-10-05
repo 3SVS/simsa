@@ -34,7 +34,7 @@ on:
         required: false
         default: 'envelope-fill-rate'
         type: choice
-        options: [latest-visual-check-fill, envelope-fill-rate, repair-fill-rate]
+        options: [latest-visual-check-fill, envelope-fill-rate, repair-fill-rate, agent-llm-usage-48h]
 
 jobs:
   probe:
