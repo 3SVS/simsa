@@ -89,6 +89,7 @@ export async function runAgentInspection(o) {
   let acSource = o.acSource ?? (acs.length ? "confirmed_inferred" : "inferred_at_run");
   let partial = false;
   let deadline = Infinity;
+  let firstHtml = "";
 
   try {
     await driver.start(o.targetUrl);
@@ -96,6 +97,7 @@ export async function runAgentInspection(o) {
     const first = await driver.goto(o.targetUrl);
     signals.loadStatus = first.status;
     const firstBody = await driver.bodyText();
+    firstHtml = (await driver.html?.().catch(() => "")) ?? "";
     const statusNotFound = !!first.status && first.status >= 400 && first.status < 500 && !nd.isLoginWallStatus(first.status);
     signals.pageNotFound = statusNotFound || nd.looksLikeHostNotFoundPage(firstBody);
     signals.missingIndexFile = statusNotFound && nd.looksLikeMissingIndexFile(o.targetUrl, first.status, firstBody);
@@ -186,7 +188,7 @@ export async function runAgentInspection(o) {
   }
 
   const report = pure.buildAgentReport(
-    { targetUrl: o.targetUrl, intent: o.intent, acs, acSource, results, sweep, signals, loginDepth, loginMethod, partial },
+    { targetUrl: o.targetUrl, intent: o.intent, acs, acSource, results, sweep, signals, loginDepth, loginMethod, partial, firstHtml: firstHtml.slice(0, 200_000) },
     locale,
   );
   report.agent.llmCalls = llmCalls.n;

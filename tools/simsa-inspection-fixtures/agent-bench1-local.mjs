@@ -235,6 +235,8 @@ export async function benchOne(app, { locale = "ko" } = {}) {
     out.agentPrompt = r.agentPrompt;
     out.llmCalls = r.report.agent.llmCalls;
     out.basis = r.report.agent.basis;
+    out.builder = r.report.agent.builder;
+    out.defects = r.report.agent.defects;
   } catch (err) {
     out.error = `agent_failed: ${String(err?.message ?? err).slice(0, 200)}`;
   } finally {

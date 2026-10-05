@@ -622,7 +622,16 @@ export interface AgentReportExtras {
     problems: Array<{ kind: "screen" | "button"; where: string; label?: string; problem: string; detail?: string }>;
   } | null;
   /** 재검수가 **같은 기준**으로 돌도록 AC 정의를 함께 남긴다. */
-  agent: { acs: AgentAc[]; acSource: AcSource; acSourceLabel: string; loginDepth: "L1" | "L3"; loginMethod: LoginMethod; basis: string };
+  agent: {
+    acs: AgentAc[];
+    acSource: AcSource;
+    acSourceLabel: string;
+    loginDepth: "L1" | "L3";
+    loginMethod: LoginMethod;
+    basis: string;
+    builder: Builder;
+    defects: Array<{ acId: string; priority: AcPriority; status: AcStatus; defectClass: DefectClass }>;
+  };
 }
 
 export type LoginMethod = "none" | "signup" | "credentials" | "handover";
@@ -640,6 +649,8 @@ export interface AgentReportInput {
   loginDepth: "L1" | "L3";
   loginMethod: LoginMethod;
   partial?: boolean;
+  /** 첫 화면 HTML 일부(빌더 지문용). 저장하지 않는다. */
+  firstHtml?: string;
 }
 
 const RSTR = {
@@ -865,6 +876,8 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
       loginDepth: input.loginDepth,
       loginMethod: input.loginMethod,
       basis: v.basis,
+      builder: detectBuilder({ url: input.targetUrl, html: input.firstHtml ?? null }),
+      defects: defectsOf(acTable),
     },
   };
 }
@@ -1194,6 +1207,77 @@ export function compareAgentRuns(
     else if (b === "fail" && s === "fail") out.stillBroken.push(id);
   }
   return out;
+}
+
+// ─── C13 빌더 지문 · 결함 분류 ─────────────────────────────────────────────────
+
+export const BUILDERS = ["lovable", "v0", "bolt", "netlify_static", "replit", "base44", "vercel_other", "simsa_hosted", "unknown"] as const;
+export type Builder = (typeof BUILDERS)[number];
+
+/** 호스트·첫 화면 마크업으로 만든 도구를 짐작한다. 사용자가 적은 도구(declared)가 있으면 함께 남긴다(덮지 않는다). */
+export function detectBuilder(input: { url: string; html?: string | null }): Builder {
+  let host = "";
+  try {
+    host = new URL(input.url).hostname.toLowerCase();
+  } catch {
+    return "unknown";
+  }
+  const html = (input.html ?? "").slice(0, 200_000);
+  if (host.endsWith(".lovable.app") || /lovable-tagger|gptengineer|lovable\.dev/i.test(html)) return "lovable";
+  if (host.endsWith(".bolt.host") || host.endsWith(".stackblitz.io") || /Made in Bolt|bolt\.new/i.test(html)) return "bolt";
+  if (host.endsWith(".replit.app") || host.endsWith(".repl.co")) return "replit";
+  if (host.endsWith(".base44.app") || /base44/i.test(html)) return "base44";
+  if (host.endsWith(".simsa.page")) return "simsa_hosted";
+  if (host.endsWith(".vercel.app")) return /v0\.dev|v0\.app|generator" content="v0/i.test(html) || /^[a-z0-9-]*v0|^\d+-[a-z0-9-]+-[a-z0-9]+\.vercel\.app$/.test(host) ? "v0" : "vercel_other";
+  if (host.endsWith(".netlify.app")) return "netlify_static";
+  return "unknown";
+}
+
+export const DEFECT_CLASSES = [
+  "data_not_persisted",
+  "client_only_storage",
+  "not_shared_across_users",
+  "timezone_date",
+  "canned_result",
+  "missing_backend_config",
+  "needs_api_key",
+  "route_404_missing_index",
+  "wrong_language",
+  "auth_gate",
+  "broken_action",
+  "runtime_error",
+  "intent_mismatch",
+  "other",
+] as const;
+export type DefectClass = (typeof DEFECT_CLASSES)[number];
+
+/**
+ * 실패·확인 못 함 AC 하나 → 고정 결함 분류. 주제 단어가 아니라 **관찰 신호**(탐침 문구·사유 코드·오류 문장)로 가른다.
+ * 확인 못 함은 막힌 이유(auth_gate·needs_api_key 등)만 분류하고 나머지는 other.
+ */
+export function classifyDefect(row: { status: AcStatus; reason: string; reasonCode?: AcReasonCode; evidence: string[] }): DefectClass {
+  const t = `${row.reason} ${row.evidence.join(" ")}`;
+  if (row.reasonCode === "login_required" || row.reasonCode === "oauth_unsupported" || row.reasonCode === "sms_unsupported" || row.reasonCode === "login_failed") return "auth_gate";
+  if (row.reasonCode === "api_key_required" || /api ?키|api key/i.test(t)) return "needs_api_key";
+  if (row.reasonCode === "app_missing" || /404|not found|찾을 수 없/i.test(t)) return "route_404_missing_index";
+  if (row.status !== "fail") return "other";
+  if (/saved only in this browser|이 기기 브라우저에만|localStorage|브라우저에만 저장/i.test(t)) return "client_only_storage";
+  if (/다른 (손님|사용자|방문자|기기)|new browser|another (visitor|user|device)|공유되지|사장님 화면에 .*(보이지|없)|관리 화면에서 .*(확인할 수 없|안 보)/i.test(t)) return "not_shared_across_users";
+  if (/UTC|시간대|timezone|어제 날짜|날짜가 하루/i.test(t)) return "timezone_date";
+  if (/새로고침.*(사라|유지되지|없)|after (a )?reload.*(gone|disappear|lost)/i.test(t)) return "data_not_persisted";
+  if (/연결 설정|config|supabase|환경 ?변수|backend config|connection setting/i.test(t)) return "missing_backend_config";
+  if (/같은 결과|고정|canned|regardless of input/i.test(t)) return "canned_result";
+  if (/영어|english|中文|일본어|language/i.test(t)) return "wrong_language";
+  if (/Uncaught|Error:|오류가 났|exception|crash/i.test(t)) return "runtime_error";
+  if (/눌러도|반응|이동하지 않|did nothing|no reaction|doesn't (go|navigate)/i.test(t)) return "broken_action";
+  return "other";
+}
+
+/** 리포트에 싣는 결함 목록(실패 + 막혀서 확인 못 함). */
+export function defectsOf(acTable: readonly AgentAcRow[]): Array<{ acId: string; priority: AcPriority; status: AcStatus; defectClass: DefectClass }> {
+  return acTable
+    .filter((r) => r.status === "fail" || (r.status === "not_verified" && r.reasonCode && r.reasonCode !== "budget" && r.reasonCode !== "not_reached" && r.reasonCode !== "evidence_missing" && r.reasonCode !== "judge_disagreed"))
+    .map((r) => ({ acId: r.id, priority: r.priority, status: r.status, defectClass: classifyDefect(r) }));
 }
 
 /** 재검수: 원 런 리포트에 남은 AC 정의를 그대로 꺼낸다(같은 자로 다시 잰다). 없거나 깨졌으면 null. */

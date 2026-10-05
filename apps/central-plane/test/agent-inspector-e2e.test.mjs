@@ -103,6 +103,8 @@ function setup() {
   const post = (path, body, headers = {}) => call(path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
   const now = new Date().toISOString();
   db.prepare(`INSERT INTO plan_grants (user_key, plan, note, created_at) VALUES (?, 'staff', 'test', ?)`).run(STAFF, now);
+  // 장비 계정은 운영 정보 기록을 켠 상태(결함 분류 C13은 이 게이트를 지난 런만 쌓는다).
+  db.prepare(`INSERT INTO privacy_prefs (user_key, ops_meta, updated_at) VALUES (?, 'on', ?)`).run(STAFF, now);
   const addProject = (id, entryPath, spec, userKey = STAFF) => {
     db.prepare(
       `INSERT INTO workspace_projects (id, user_key, title, idea, understood_json, product_spec_json, items_json, entry_path, dev_spec_json, created_at, updated_at)
@@ -283,6 +285,17 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     assert.match(brief.brief, /AC-002/);
     assert.equal((await buildFixBriefFromCheck(T.env, out.checkRunId, "proj_idea", FREE)).status, 404, "남의 런으로는 못 만든다");
     assert.equal((await buildFixBriefFromCheck(T.env, undefined, "proj_idea", STAFF)).brief, null);
+  });
+
+  it("C13: 결함이 빌더 × 분류로 쌓이고 관리자 집계로만 읽힌다", async () => {
+    const rows = T.db.prepare(`SELECT builder, defect_class FROM inspection_defects`).all();
+    assert.ok(rows.length >= 2, `rows=${rows.length}`);
+    assert.ok(rows.every((r) => r.builder === "unknown"), "salon.example은 알려진 빌더 호스트가 아니다");
+    assert.equal((await T.call("/admin/defect-stats")).status, 401);
+    const ok = await T.call("/admin/defect-stats", { headers: { authorization: `Bearer ${ICT}` } });
+    const body = await ok.json();
+    assert.equal(ok.status, 200);
+    assert.ok(body.rows.some((r) => r.defect_class === "auth_gate" || r.defect_class === "other" || r.n >= 1));
   });
 
   it("남은 비밀은 TTL 정리가 지운다(최후 방어)", async () => {

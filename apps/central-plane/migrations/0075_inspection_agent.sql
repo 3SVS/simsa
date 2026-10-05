@@ -25,6 +25,22 @@ CREATE TABLE IF NOT EXISTS inspection_run_secrets (
 
 CREATE INDEX IF NOT EXISTS inspection_run_secrets_created_idx ON inspection_run_secrets(created_at);
 
+-- inspection_defects (C13) — agent 런의 실패·막힌 기준 하나 = 한 행: 만든 도구(호스트·마크업 지문) × 고정 결함 분류.
+--   내용·주소·사람 정보 없음(run_id · 빌더 · 분류 · AC id · 우선순위 · 상태 · 시각). 운영 정보 기록이 켜진 런만 쓴다
+--   (finding_codes_json과 같은 게이트 opsMetaAllowedForRun). 관리자 집계 /admin/defect-stats가 읽는다.
+CREATE TABLE IF NOT EXISTS inspection_defects (
+  run_id TEXT NOT NULL,
+  ac_id TEXT NOT NULL,
+  builder TEXT NOT NULL,
+  defect_class TEXT NOT NULL,
+  priority TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, ac_id)
+);
+
+CREATE INDEX IF NOT EXISTS inspection_defects_created_idx ON inspection_defects(created_at);
+
 CREATE TABLE IF NOT EXISTS inspection_agent_spend (
   run_id TEXT PRIMARY KEY,
   budget_usd REAL NOT NULL CHECK (budget_usd > 0),

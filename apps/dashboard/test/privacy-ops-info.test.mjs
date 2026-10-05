@@ -158,6 +158,7 @@ const NOT_OPS_META = new Map([
   // 0075(agent 엔진): 시험 계정 암호문은 사용자가 동의하고 준 기능 데이터(런 1회용 · 끝나면 삭제 · TTL 1시간 정리),
   // LLM 예산 행은 원가 통제 장부(사람·앱 정보 없음, run_id·금액·호출 수만). 둘 다 통계용 운영 메타가 아니다.
   ["table:inspection_run_secrets", "시험 계정 암호문 — 사용자가 검수 요청 때 동의하고 준 기능 데이터. AES-GCM 암호문만, 그 런의 디스패치 때만 복호화, 런이 끝나면 즉시 삭제(남으면 1시간 뒤 크론 삭제). 수집 시점 동의 문구로 고지"],
+  ["table:inspection_defects", "agent 런의 결함 분류(빌더 × 고정 분류 · AC id · 상태) — 내용·주소·사람 없음, 운영 정보 기록이 켜진 런만(finding_codes_json과 같은 게이트·같은 고지 '검수 결과 분류')"],
   ["table:inspection_agent_spend", "agent 엔진 런의 LLM 예산 장부 — run_id·예산·사용액·호출 수뿐(사람·앱·내용 없음). 원가 상한 집행용"],
   ["table:plan_grants_v2", "플랜 부여 기록(0060 plan_grants의 재생성 — 같은 열, 허용 값만 basic·pro·staff 추가) — 통계용 운영 정보가 아니라 이용 자격 기록"],
   // B-7(0073): 호스팅 사업자 의무 — 사용자 실행에 대한 운영 메타가 아니다.

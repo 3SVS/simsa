@@ -147,6 +147,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
       return { status: resp ? resp.status() : null, url: page.url() };
     },
     url: () => page.url(),
+    html: () => page.content(),
     bodyText,
     crashCount: () => crashes,
     async observe() {

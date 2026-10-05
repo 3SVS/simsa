@@ -219,6 +219,42 @@ describe("화면·버튼 점검 — 상한과 안전", () => {
   });
 });
 
+describe("C13 빌더 지문 · 결함 분류", () => {
+  it("호스트·마크업으로 빌더", () => {
+    assert.equal(P.detectBuilder({ url: "https://my-town-salon.lovable.app/" }), "lovable");
+    assert.equal(P.detectBuilder({ url: "https://x-8vq8.bolt.host/" }), "bolt");
+    assert.equal(P.detectBuilder({ url: "https://1-pi-three-qk0pjsjigw.vercel.app/" }), "v0");
+    assert.equal(P.detectBuilder({ url: "https://my-site.vercel.app/", html: "<html></html>" }), "vercel_other");
+    assert.equal(P.detectBuilder({ url: "https://cosmic-crostata-7c1265.netlify.app/" }), "netlify_static");
+    assert.equal(P.detectBuilder({ url: "https://example.com/", html: "<script src=lovable-tagger>" }), "lovable");
+    assert.equal(P.detectBuilder({ url: "not a url" }), "unknown");
+  });
+  it("관찰 신호로 결함 분류(주제 단어 아님)", () => {
+    const f = (reason, evidence = [], status = "fail", reasonCode) => P.classifyDefect({ status, reason, evidence, reasonCode });
+    assert.equal(f("공유 안 됨", ["storage probe: ...; verdict hint: saved only in this browser"]), "client_only_storage");
+    assert.equal(f("새 브라우저에서 다른 손님에게 보이지 않아요"), "not_shared_across_users");
+    assert.equal(f("'오늘'이 UTC 날짜로 보여요"), "timezone_date");
+    assert.equal(f("새로고침하니 사라졌어요"), "data_not_persisted");
+    assert.equal(f("사이트 연결 설정이 필요하다고 나와요"), "missing_backend_config");
+    assert.equal(f("x", ["Uncaught Error: Minified React error #418"]), "runtime_error");
+    assert.equal(f("r", [], "not_verified", "login_required"), "auth_gate");
+    assert.equal(f("r", [], "not_verified", "budget"), "other");
+  });
+  it("리포트에 builder·defects가 실린다(시간·근거 부족으로 못 본 것은 결함 아님)", () => {
+    const rep = P.buildAgentReport({
+      targetUrl: "https://a.lovable.app/", intent: "i", acs: [ac("A"), ac("B"), ac("C")], acSource: "interview",
+      results: [
+        { id: "A", status: "fail", reason: "새로고침하니 사라졌어요", evidence: ["x"], steps: 3 },
+        { id: "B", status: "not_verified", reason: "r", reasonCode: "budget", evidence: [], steps: 0 },
+        { id: "C", status: "not_verified", reason: "r", reasonCode: "login_required", evidence: [], steps: 1 },
+      ],
+      sweep: null, signals: {}, loginDepth: "L1", loginMethod: "none",
+    }, "ko");
+    assert.equal(rep.agent.builder, "lovable");
+    assert.deepEqual(rep.agent.defects.map((d) => [d.acId, d.defectClass]), [["A", "data_not_persisted"], ["C", "auth_gate"]]);
+  });
+});
+
 describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
   it("B6 비교: 고쳐진 것·새로 깨진 것·그대로 안 되는 것", () => {
     const prev = JSON.stringify({ engine: "agent", acTable: [{ id: "A", status: "fail" }, { id: "B", status: "pass" }, { id: "C", status: "fail" }] });

@@ -53,7 +53,7 @@
  * runs that dispatched but died silently.
  */
 import { acceptancePlanFromDevSpec, agentAcsFromDevSpec, devSpecAcSource, type AcceptanceScenario } from "../acceptance-plan.js";
-import { acsFromAgentReport, compareAgentRuns, type AcSource, type AgentAc } from "../agent-inspection.js";
+import { BUILDERS, DEFECT_CLASSES, acsFromAgentReport, compareAgentRuns, type AcSource, type AgentAc } from "../agent-inspection.js";
 import {
   TestCredentialsSchema,
   initAgentSpend,
@@ -65,6 +65,7 @@ import {
   type TestCredentials,
 } from "../workspace/inspection-agent.js";
 import { INSPECT_LLM_PATH } from "./inspect-llm-proxy.js";
+import { internalBearerRejection } from "./admin-internal.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import { corsMiddleware } from "./cors.js";
@@ -184,6 +185,32 @@ export function agentAcsForRun(
   const fromSpec = agentAcsFromDevSpec(devSpec);
   if (fromSpec.length > 0) return { acs: fromSpec, acSource: devSpecAcSource(devSpec, entryPath) };
   return { acs: [], acSource: "inferred_at_run" };
+}
+
+/** C13: 리포트의 agent.defects를 닫힌 어휘로만 저장(모르는 값은 버린다). */
+export async function recordAgentDefects(env: Env, runId: string, report: Record<string, unknown>): Promise<number> {
+  if (report["engine"] !== "agent") return 0;
+  const agent = (report["agent"] && typeof report["agent"] === "object" ? report["agent"] : {}) as Record<string, unknown>;
+  const builder = typeof agent["builder"] === "string" && (BUILDERS as readonly string[]).includes(agent["builder"]) ? agent["builder"] : "unknown";
+  const defects = Array.isArray(agent["defects"]) ? (agent["defects"] as unknown[]) : [];
+  const now = new Date().toISOString();
+  const stmts = [];
+  for (const d of defects.slice(0, 40)) {
+    if (!d || typeof d !== "object") continue;
+    const x = d as Record<string, unknown>;
+    const cls = typeof x["defectClass"] === "string" && (DEFECT_CLASSES as readonly string[]).includes(x["defectClass"]) ? x["defectClass"] : "other";
+    const acId = typeof x["acId"] === "string" ? x["acId"].slice(0, 40) : "";
+    const priority = x["priority"] === "must" || x["priority"] === "should" || x["priority"] === "could" ? x["priority"] : "should";
+    const status = x["status"] === "fail" ? "fail" : "not_verified";
+    if (!acId) continue;
+    stmts.push(
+      env.DB.prepare(
+        `INSERT INTO inspection_defects (run_id, ac_id, builder, defect_class, priority, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(run_id, ac_id) DO NOTHING`,
+      ).bind(runId, acId, builder, cls, priority, status, now),
+    );
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return stmts.length;
 }
 
 /** 원 런이 agent 엔진이었는가(재검수·자동 재검수가 엔진을 물려받는다). */
@@ -762,6 +789,22 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     );
   });
 
+  // ── GET /admin/defect-stats (C13) — 빌더 × 결함 분류 개수. 내부 토큰만. ?since=ISO(기본 90일) ──
+  app.get("/admin/defect-stats", async (c) => {
+    const rejected = internalBearerRejection(c);
+    if (rejected) return rejected;
+    const sinceRaw = c.req.query("since");
+    const since = sinceRaw && Number.isFinite(Date.parse(sinceRaw)) ? new Date(sinceRaw).toISOString() : new Date(Date.now() - 90 * 86400_000).toISOString();
+    const rows = await c.env.DB.prepare(
+      `SELECT builder, defect_class, status, COUNT(*) AS n, COUNT(DISTINCT run_id) AS runs FROM inspection_defects
+        WHERE created_at >= ? GROUP BY builder, defect_class, status ORDER BY builder, n DESC`,
+    )
+      .bind(since)
+      .all<{ builder: string; defect_class: string; status: string; n: number; runs: number }>()
+      .catch(() => ({ results: [] as Array<{ builder: string; defect_class: string; status: string; n: number; runs: number }> }));
+    return c.json({ ok: true, since, rows: rows.results ?? [] });
+  });
+
   // ── 직접 로그인해서 넘겨주기(라이브 브라우저) ─────────────────────────────────
   // 카카오·구글·문자 인증처럼 우리가 대신 들어갈 수 없는 로그인을 **사용자가 직접** 한다. 화면은 이 런의 검수
   // 컨테이너 안 Chromium이고, Worker가 그 화면(JPEG)과 입력(클릭·글자·키)을 중계한다. 인증 두 겹:
@@ -1016,6 +1059,13 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       findingCodesJson,
       ...(agentPrompt ? { agentPrompt } : {}),
     });
+
+    // C13: agent 런의 결함 분류(빌더 × 분류) — 운영 정보 기록이 켜진 런만(finding codes와 같은 게이트).
+    if (findingCodesJson !== null && body.report && typeof body.report === "object") {
+      await recordAgentDefects(c.env, body.runId, body.report as Record<string, unknown>).catch((err) => {
+        console.error("[visual-check-runs done] defect record failed:", err);
+      });
+    }
 
     // C2a (0069): a re-inspection closing a repair loop → stamp `resolved` on the
     // repair job(s) that pointed at this run. Original runs (no source) have no
