@@ -39,10 +39,14 @@ async function benchProd(app) {
   const draft = inf.body.inferred;
   out.inference = { reason: inf.body.reason ?? null, items: draft?.items?.length ?? 0, summary: draft?.understood?.summary };
   if (!draft?.items?.length) return { ...out, error: `infer_intent:${inf.body.reason ?? inf.status}` };
-  const answers = await confirmFromPrompt(draft.items, []);
-  out.confirm = answers;
-  await post("/workspace/projects", { id, userKey: USER_KEY, title: `벤치마크1 ${app.id}`, idea: "", understood: draft.understood ?? {}, productSpec: draft.productSpec ?? {}, items: draft.items, entryPath: "code" });
-  const spec = await post(`/workspace/projects/${id}/dev-spec/generate`, { userKey: USER_KEY, locale: "ko", confirmedItemIds: answers.filter((a) => a.confirmed).map((a) => a.id) });
+  // 카드가 저장하는 그대로: 한 줄 = 사용자가 쓴 문장, 항목 = 체크 유지 + "빠진 것"으로 직접 적은 항목(user_N).
+  const card = await confirmFromPrompt(draft.items, []);
+  out.confirm = card;
+  const items = [...draft.items, ...card.added.map(({ why: _w, ...rest }) => ({ ...rest, status: "not_started" }))];
+  const productSpec = { ...(draft.productSpec ?? {}), ...(card.oneLine ? { oneLine: card.oneLine } : {}) };
+  await post("/workspace/projects", { id, userKey: USER_KEY, title: `벤치마크1 ${app.id}`, idea: "", understood: draft.understood ?? {}, productSpec, items, entryPath: "code" });
+  const confirmedItemIds = [...card.items.filter((a) => a.confirmed).map((a) => a.id), ...card.added.map((a) => a.id)];
+  const spec = await post(`/workspace/projects/${id}/dev-spec/generate`, { userKey: USER_KEY, locale: "ko", confirmedItemIds });
   out.devSpec = { status: spec.status, ok: spec.body.ok === true, error: spec.body.error ?? null };
   const run = await post(`/workspace/projects/${id}/visual-checks/run`, { userKey: USER_KEY, engine: "agent", locale: "ko" });
   if (run.status !== 202) return { ...out, error: `run ${run.status} ${run.body.error ?? ""}` };

@@ -54,6 +54,28 @@ const bookScript = [
   { type: "judge", verdict: "pass", reason: "예약 완료 화면에 이름과 시간이 보였어요", evidenceQuote: "예약이 완료되었어요 $NAME 10:30" },
 ];
 
+/** 기본 기준(핵심 일 끝까지): 입력 → 제출(상태 변화) → 새로고침(확인) → 근거 인용 통과. */
+const coreScript = [
+  { type: "fill", target: { label: "이름" }, value: "$NAME" },
+  { type: "click", target: { role: "button", name: "예약하기" } },
+  { type: "reload" },
+  { type: "judge", verdict: "pass", reason: "새로고침해도 예약이 남아 있어요", evidenceQuote: "예약이 완료되었어요 $NAME 10:30" },
+];
+
+describe("agent 실행기 — 핵심 일을 해 보지 않은 통과는 '작동'이 아니다", () => {
+  it("표시만 보고 통과한 must뿐이면 Not Verified(벤치마크 #1 run-1 반대 판정 재현 방지)", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({
+      "CORE-1": [{ type: "judge", verdict: "pass", reason: "예약 버튼이 보여요", evidenceQuote: "예약하기" }],
+      "AC-001": [{ type: "judge", verdict: "pass", reason: "시간이 보여요", evidenceQuote: "10:30 예약 가능" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [acs[0]], acSource: "interview", llm, driver });
+    assert.equal(out.decision, "Not Verified");
+    assert.equal(out.report.agent.basis, "core_goal_not_exercised");
+    assert.notEqual(out.report.verdict, "정상 작동해요");
+  });
+});
+
 describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
   it("결함 있는 앱: Needs Fix, 실패 AC만 고침 지시, 비밀은 어디에도 없음", async () => {
     const driver = makeFakeDriver(salonSite({ manyLinks: 40, buttons: ["고장 버튼"], buttonEffects: { "고장 버튼": "error" } }), { origin: ORIGIN, onAct: salonOnAct });
@@ -79,7 +101,7 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     });
     assert.equal(out.decision, "Needs Fix");
     assert.equal(out.works, false);
-    assert.deepEqual(out.report.acTable.map((r) => [r.id, r.status]), [["AC-001", "pass"], ["AC-002", "fail"], ["AC-003", "fail"]]);
+    assert.deepEqual(out.report.acTable.map((r) => [r.id, r.status]), [["CORE-1", "not_verified"], ["AC-001", "pass"], ["AC-002", "fail"], ["AC-003", "fail"]]);
     assert.equal(out.report.agent.loginMethod, "credentials");
     assert.match(out.agentPrompt, /AC-002/);
     assert.match(out.agentPrompt, /AC-003/);
@@ -132,6 +154,7 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
       typedSecrets: () => [typed],
     };
     const { llm, prompts } = makeScriptedLlm({
+      "CORE-1": coreScript,
       "AC-003": [
         { type: "new_session" },
         { type: "login" },
@@ -142,17 +165,17 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [acs[2]], acSource: "interview", loginMode: "handover", live, llm, driver });
     assert.deepEqual(states, ["awaiting_login", "running"]);
     assert.equal(out.report.agent.loginMethod, "handover");
-    assert.equal(out.report.acTable[0].status, "pass", "new_session 뒤 login이 넘겨받은 상태를 되살린다");
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-003").status, "pass", "new_session 뒤 login이 넘겨받은 상태를 되살린다");
     assert.equal(out.decision, "Ready");
     assert.ok(![JSON.stringify(out.report), ...prompts].join("\n").includes(typed));
   });
 
   it("기준이 없으면 첫 화면을 보고 추정(미확인) → 다 통과해도 Conditionally Ready", async () => {
     const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
-    const { llm } = makeScriptedLlm({ "R-1": bookScript }, { inferred: [{ title: "예약", given: "g", when: "w", then: "예약 완료가 보인다", priority: "must" }] });
+    const { llm } = makeScriptedLlm({ "R-1": bookScript, "CORE-1": coreScript }, { inferred: [{ title: "예약", given: "g", when: "w", then: "예약 완료가 보인다", priority: "must" }] });
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], llm, driver });
     assert.equal(out.report.agent.acSource, "inferred_at_run");
-    assert.equal(out.report.acTable[0].confirmed, false);
+    assert.equal(out.report.acTable.find((r) => r.id === "R-1").confirmed, false);
     assert.equal(out.decision, "Conditionally Ready");
   });
 
@@ -181,8 +204,8 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
       ],
     });
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [acs[0]], acSource: "interview", llm, driver });
-    assert.equal(out.report.acTable[0].status, "not_verified");
-    assert.equal(out.report.acTable[0].reasonCode, "guessed_address");
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-001").status, "not_verified");
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-001").reasonCode, "guessed_address");
     assert.equal(out.agentPrompt, "");
   });
 

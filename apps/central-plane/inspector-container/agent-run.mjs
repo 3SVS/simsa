@@ -153,6 +153,9 @@ export async function runAgentInspection(o) {
         }
       }
 
+      // 3b) Simsa 기본 기준 — 핵심 일을 실제로 끝까지(모든 앱 공통). 의도가 사용자 확인 기준에서 왔을 때만 confirmed.
+      acs = pure.orderAcs(pure.withCoreOutcomeAc(acs, o.intent, acSource !== "inferred_at_run", locale), pure.AGENT_MAX_ACS + 1);
+
       // 4) 화면·버튼 점검
       const sweepBudget = Math.min(SWEEP_MAX_MS, Number.isFinite(timeLeft()) ? timeLeft() * SWEEP_TIME_SHARE : SWEEP_MAX_MS);
       sweep = await runSweep({ driver, pure, startUrl: o.targetUrl, until: Date.now() + sweepBudget, shot, plog });
@@ -211,13 +214,18 @@ export async function runAgentInspection(o) {
     let steps = 0;
     let invalidStreak = 0;
     let lastGate = null;
+    // 상태 변화(입력·선택 뒤의 클릭)와 그 뒤의 확인(새로고침·새 방문자·다른 화면·다른 역할 로그인)을 행동 기록으로 잰다.
+    let filled = false;
+    let stateChange = false;
+    let verified = false;
+    const maxSteps = ac.id === pure.CORE_OUTCOME_AC_ID ? 24 : pure.AGENT_MAX_STEPS_PER_AC;
     const markers = [data.name, data.altName, data.phone];
     // 앱이 링크로 보여 준 주소만 "아는 주소". 그 밖의 goto는 짐작 — 거기서 본 "없음"은 고장 근거가 아니다.
     const known = new Set([normUrl(o.targetUrl)]);
     let onGuessedAddress = false;
     await driver.goto(o.targetUrl);
     const system = pure.agentSystemPrompt(locale);
-    while (steps < pure.AGENT_MAX_STEPS_PER_AC && Date.now() < deadline - 10_000) {
+    while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
       const obs = redObs(obsRaw);
       lastGate = pure.detectLoginGate(obsRaw);
@@ -232,7 +240,7 @@ export async function runAgentInspection(o) {
           system,
           pure.agentTurnPrompt({
             ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
-            stepsLeft: pure.AGENT_MAX_STEPS_PER_AC - steps, nowIso: new Date().toISOString(),
+            stepsLeft: maxSteps - steps, nowIso: new Date().toISOString(),
           }),
         );
       } catch (err) {
@@ -284,6 +292,11 @@ export async function runAgentInspection(o) {
       } else {
         res = await driver.act(a);
       }
+      if (res?.ok) {
+        if (a.type === "fill" || a.type === "select") filled = true;
+        else if (a.type === "click" && filled && !stateChange) stateChange = true;
+        else if (stateChange && (a.type === "reload" || a.type === "new_session" || a.type === "goto" || a.type === "login")) verified = true;
+      }
       if (a.type === "goto") {
         // 짐작한 주소 + 그 화면이 "없음"일 때만 — 링크는 없어도 실제로 있는 화면(/admin 등)은 정상 근거로 쓴다.
         const status = /HTTP (\d{3})/.exec(res.note ?? "")?.[1];
@@ -309,6 +322,7 @@ export async function runAgentInspection(o) {
         evidence: (f.evidence ?? []).map(red),
         steps,
         actions,
+        exercised: { stateChange, verified },
         ...(screenshot ? { screenshot } : {}),
       };
     }

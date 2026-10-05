@@ -188,7 +188,7 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     assert.equal(run.status, "done");
     assert.equal(run.decision, "Needs Fix");
     const report = JSON.parse(run.report_json);
-    assert.deepEqual(report.acTable.map((r) => [r.id, r.status]), [["AC-001", "pass"], ["AC-002", "fail"], ["AC-003", "fail"]]);
+    assert.deepEqual(report.acTable.map((r) => [r.id, r.status]), [["CORE-1", "not_verified"], ["AC-001", "pass"], ["AC-002", "fail"], ["AC-003", "fail"]]);
     assert.ok(report.builderPrompt && report.builderPrompt.length > 0, "빌더 팩(채팅형 빌더용 고침 지시)이 서버에서 붙는다");
     assert.match(run.agent_prompt, /AC-002[\s\S]*AC-003/);
     assert.doesNotMatch(run.agent_prompt, /\[AC-001/);
@@ -220,7 +220,8 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     assert.equal(reBody.engine, "agent");
     assert.equal(reBody.acSource, "source_run");
     const rePayload = T.dispatched.at(-1);
-    assert.deepEqual(rePayload.agent.acs, payload.agent.acs);
+    assert.deepEqual(rePayload.agent.acs.map((a) => a.id), ["CORE-1", ...payload.agent.acs.map((a) => a.id)], "원 런이 쓴 기준(기본 기준 포함) 그대로");
+    assert.deepEqual(rePayload.agent.acs.slice(1), payload.agent.acs);
     assert.equal(rePayload.credentials, undefined);
     // 재검수 런도 끝내 둔다(다음 테스트의 진행 중 1개 가드)
     await T.post("/internal/visual-check-done", { runId: rePayload.runId, ok: false, error: "test" }, { authorization: `Bearer ${ICT}` });

@@ -1,0 +1,294 @@
+{
+  "summary": {
+    "label": "로컬 실행(브랜치 코드) — 프로덕션 아님",
+    "oppositeErrors": 1,
+    "appMatch": "0/6",
+    "mustIdentified": "0/13",
+    "mustIdentifiedPct": 0,
+    "totalCostUsd": 0.2924
+  },
+  "results": [
+    {
+      "app": "claude",
+      "url": "https://dreamy-babka-5f07cd.netlify.app/",
+      "startedKst": "2026-10-05 19:54",
+      "expected": "broken_or_hold",
+      "inference": {
+        "staticEvidenceChars": 58,
+        "usedRenderedText": true,
+        "summary": "고객이 시술·날짜·시간을 골라 1인 미용실 예약을 남기고, 사장님이 예약 현황을 확인하는 웹앱입니다."
+      },
+      "confirm": [
+        {
+          "id": "req_001",
+          "title": "고객은 시술 목록과 가격을 한눈에 볼 수 있어야 한다",
+          "confirmed": false
+        },
+        {
+          "id": "req_002",
+          "title": "고객은 날짜를 선택할 수 있어야 한다",
+          "confirmed": false
+        },
+        {
+          "id": "req_003",
+          "title": "고객은 30분 단위의 예약 가능 시간을 선택할 수 있어야 한다",
+          "confirmed": true
+        },
+        {
+          "id": "req_004",
+          "title": "이미 예약된 시간은 선택할 수 없게 보여야 한다",
+          "confirmed": false
+        },
+        {
+          "id": "req_005",
+          "title": "남은 시간이 없는 날짜에는 안내가 보여야 한다",
+          "confirmed": false
+        },
+        {
+          "id": "req_006",
+          "title": "고객은 이름과 휴대폰 번호를 입력할 수 있어야 한다",
+          "confirmed": true
+        },
+        {
+          "id": "req_007",
+          "title": "화면은 예약 내용을 요약해서 보여줘야 한다",
+          "confirmed": false
+        },
+        {
+          "id": "req_008",
+          "title": "고객은 예약하기 버튼으로 예약을 진행할 수 있어야 한다",
+          "confirmed": false
+        },
+        {
+          "id": "req_009",
+          "title": "사장님은 전용 화면으로 이동할 수 있어야 한다",
+          "confirmed": false
+        }
+      ],
+      "devSpec": {
+        "ok": true,
+        "acs": 10
+      },
+      "decision": "Ready",
+      "works": true,
+      "verdict": "정상 작동해요",
+      "oneLine": "확인하신 핵심 기준 3개를 실제로 해 봤고 모두 통과했어요.",
+      "acTable": [
+        {
+          "id": "AC-001",
+          "priority": "must",
+          "confirmed": true,
+          "title": "30분 단위 예약 가능 시간 선택",
+          "then": "오전과 오후 시간이 30분 단위로 표시되고 오전 10시부터 오후 7시까지 영업 안내 문구가 보여야 한다.",
+          "status": "pass",
+          "reason": "시간표에 오전과 오후가 나뉘어 있고 30분 단위 시간이 보이며 영업 안내 문구도 확인됐다.",
+          "evidence": [
+            "오전 10시부터 오후 7시 영업 · 줄 그어진 시간은 이미 예약되었어요"
+          ]
+        },
+        {
+          "id": "AC-002",
+          "priority": "must",
+          "confirmed": true,
+          "title": "30분 단위 예약 가능 시간 선택",
+          "then": "현재 선택한 시간이 화면에 반영되어야 한다.",
+          "status": "pass",
+          "reason": "누른 시간이 선택 상태로 바뀌었고 현재 선택 내용에도 같은 시간이 보입니다.",
+          "evidence": [
+            "10월 6일 (화) 오전 10:30"
+          ],
+          "actions": [
+            "\"10월 6일 (화)\" 누르기",
+            "\"오전 10:30\" 누르기"
+          ]
+        },
+        {
+          "id": "AC-003",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약자 정보 입력",
+          "then": "이름 입력칸과 휴대폰 번호 입력칸이 예약자 정보라는 맥락 안에서 함께 보여야 한다.",
+          "status": "pass",
+          "reason": "예약자 정보 맥락에서 이름과 휴대폰 번호 입력칸이 함께 보입니다.",
+          "evidence": [
+            "연락처 예약자 정보"
+          ]
+        },
+        {
+          "id": "AC-004",
+          "priority": "should",
+          "confirmed": false,
+          "title": "시술 및 가격 목록 제공",
+          "then": "커트, 펌, 염색, 클리닉이 표시되고 각 시술 옆에 가격이 함께 보여야 한다.",
+          "status": "pass",
+          "reason": "시술 목록에 커트, 펌, 염색, 클리닉이 모두 보이고 각 항목에 가격도 함께 표시됩니다.",
+          "evidence": [
+            "커트 15,000원"
+          ]
+        },
+        {
+          "id": "AC-005",
+          "priority": "should",
+          "confirmed": false,
+          "title": "시술 및 가격 목록 제공",
+          "then": "선택한 시술의 선택 상태가 화면에서 구분되어 보여야 한다.",
+          "status": "pass",
+          "reason": "누른 시술이 화면에서 선택된 상태로 구분되어 보입니다.",
+          "evidence": [
+            "button \"펌 60,000원\" [pressed]"
+          ],
+          "actions": [
+            "\"펌 60,000원\" 누르기"
+          ]
+        },
+        {
+          "id": "AC-006",
+          "priority": "should",
+          "confirmed": false,
+          "title": "예약 날짜 선택",
+          "then": "여러 날짜가 목록 형태로 표시되고 오늘 날짜가 포함되어 있어야 한다.",
+          "status": "pass",
+          "reason": "날짜가 여러 개 목록으로 보이고 오늘 날짜도 포함되어 있습니다.",
+          "evidence": [
+            "button \"10월 5일 (월)\" [pressed]: 오늘 5"
+          ]
+        },
+        {
+          "id": "AC-007",
+          "priority": "should",
+          "confirmed": false,
+          "title": "예약 날짜 선택",
+          "then": "현재 선택한 날짜가 바뀌어야 한다.",
+          "status": "pass",
+          "reason": "날짜를 누른 뒤 현재 선택된 날짜가 방금 누른 날짜로 바뀌었습니다.",
+          "evidence": [
+            "button \"10월 7일 (수)\" [pressed]"
+          ],
+          "actions": [
+            "\"10월 6일 (화)\" 누르기",
+            "\"10월 7일 (수)\" 누르기"
+          ]
+        },
+        {
+          "id": "AC-008",
+          "priority": "should",
+          "confirmed": false,
+          "title": "예약 불가 시간 구분 표시",
+          "then": "이미 예약된 시간은 일반 시간과 다르게 구분되어 표시되고 안내 문구에 줄 그어진 시간이라는 설명이 보여야 한다.",
+          "status": "not_verified",
+          "reason": "현재 화면에서는 예약된 시간이 아니라 지난 시간만 보여서 예약된 시간의 구분 표시를 확인하지 못했습니다.",
+          "evidence": []
+        },
+        {
+          "id": "AC-009",
+          "priority": "should",
+          "confirmed": false,
+          "title": "예약 불가 시간 구분 표시",
+          "then": "그 시간은 선택되지 않아야 한다.",
+          "status": "not_verified",
+          "reason": "예약된 시간인지 화면 정보만으로 구분할 수 없어 이 기준을 확인할 수 없습니다.",
+          "evidence": [],
+          "actions": [
+            "\"10월 6일 (화)\" 누르기"
+          ]
+        },
+        {
+          "id": "AC-010",
+          "priority": "should",
+          "confirmed": false,
+          "title": "남은 시간 없음 안내",
+          "then": "남은 시간이 없고 다른 날짜를 고르라는 안내 문구가 표시되어야 한다.",
+          "status": "pass",
+          "reason": "가능한 시간이 없는 날짜를 선택했을 때 남은 시간이 없고 다른 날짜를 고르라는 안내 문구를 확인했다.",
+          "evidence": [
+            "이 날은 남은 시간이 없어요. 다른 날짜를 골라 주세요."
+          ]
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 7,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "예약하기",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "커트 15,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "펌 60,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "염색 50,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "클리닉 30,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "오늘 5",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "화 6",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [],
+      "agentPrompt": "",
+      "llmCalls": 16,
+      "phasesTail": [
+        "+33.5s ac AC-005 → pass steps=2",
+        "+37.4s ac AC-006 → pass steps=1",
+        "+46.6s ac AC-007 → pass steps=3",
+        "+50.9s ac AC-008 → not_verified steps=1",
+        "+57.6s ac AC-009 → not_verified steps=2",
+        "+61.2s ac AC-010 → pass steps=1"
+      ],
+      "costUsd": {
+        "generation": 0.1802,
+        "agent": 0.1122
+      },
+      "models": [
+        "gpt-5.4-2026-03-05"
+      ],
+      "durationSec": 176,
+      "side": "works",
+      "opposite": true,
+      "match": false,
+      "mustFailedExpected": [
+        "A3",
+        "A6"
+      ],
+      "mustIdentified": []
+    }
+  ]
+}

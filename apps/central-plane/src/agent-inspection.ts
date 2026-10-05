@@ -97,6 +97,11 @@ export interface AcResult {
   actions?: string[];
   /** 마지막 화면 스크린샷 증거 이름(screenshots/*.png). */
   screenshot?: string;
+  /**
+   * 이 기준을 확인하며 **앱의 상태를 실제로 바꿨는가**(입력 뒤 제출 같은 클릭) · 그 뒤 **결과가 남는지/다른 곳에서
+   * 보이는지 확인했는가**(새로고침·새 방문자·다른 화면·다른 역할 로그인). 실행기가 행동 기록에서 잰다(LLM 말이 아님).
+   */
+  exercised?: { stateChange: boolean; verified: boolean };
 }
 
 export interface SweepScreen {
@@ -564,6 +569,13 @@ export function decideAgentVerdict(input: {
   const br = sweepBreakage(input.sweep);
   if (br.screens.length > 0 || br.buttonErrors.length > 0) return { decision: "Needs Fix", works: false, basis: "sweep_broken" };
   if (must.length > 0 && must.every((a) => byId.get(a.id)?.status === "pass")) {
+    // "작동한다"는 화면에 무엇이 **보인다**로는 말할 수 없다: 적어도 하나의 must가 핵심 일을 실제로 해서 앱 상태를
+    // 바꾸고(입력→제출), 그 결과가 남는지·보여야 할 곳에 보이는지까지 확인했어야 한다(벤치마크 #1 run-1 반대 판정).
+    const coreExercised = must.some((a) => {
+      const e = byId.get(a.id)?.exercised;
+      return e?.stateChange === true && e.verified === true;
+    });
+    if (!coreExercised) return { decision: "Not Verified", works: null, basis: "core_goal_not_exercised" };
     return must.every((a) => a.confirmed)
       ? { decision: "Ready", works: true, basis: "all_must_passed_confirmed" }
       : { decision: "Conditionally Ready", works: true, basis: "all_must_passed_inferred" };
@@ -585,6 +597,7 @@ export interface AgentAcRow {
   evidence: string[];
   actions?: string[];
   screenshot?: string;
+  exercised?: { stateChange: boolean; verified: boolean };
 }
 
 export interface AgentReportExtras {
@@ -633,6 +646,7 @@ const RSTR = {
       appMissing: "앱 첫 화면이 열리지 않아요.",
       notVerified: (n: number) => `핵심 기준 중 ${n}개를 확인하지 못해 아직 "작동한다"고 말할 수 없어요.`,
       noMust: "확인할 핵심 기준이 없어 판단하지 않았어요.",
+      notExercised: "보이는 것은 기준대로였지만, 핵심 일을 실제로 끝까지 해 보고 결과가 남는지까지는 확인하지 못해 아직 '작동한다'고 말할 수 없어요.",
     },
     acFailWhat: (t: string) => `기준이 지켜지지 않아요: ${t}`,
     acFailWhy: (r: string) => `실제로 해 보니: ${r}`,
@@ -672,6 +686,7 @@ const RSTR = {
       appMissing: "The app's first screen does not open.",
       notVerified: (n: number) => `We couldn't verify ${n} core criteria, so we can't say it works yet.`,
       noMust: "There were no core criteria to check, so no judgement was made.",
+      notExercised: "What's on screen matched, but we couldn't complete the app's main job end to end and confirm the result stays — so we can't say it works yet.",
     },
     acFailWhat: (t: string) => `Criterion not met: ${t}`,
     acFailWhy: (r: string) => `When we tried it: ${r}`,
@@ -747,6 +762,7 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
     if (code) row.reasonCode = code;
     if (r?.actions?.length) row.actions = r.actions.slice(0, 20);
     if (r?.screenshot) row.screenshot = r.screenshot;
+    if (r?.exercised) row.exercised = r.exercised;
     return row;
   });
   const must = acTable.filter((r) => r.priority === "must");
@@ -801,6 +817,7 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
     : v.decision === "Ready" ? s.oneLine.Ready(must.length)
     : v.decision === "Conditionally Ready" ? s.oneLine["Conditionally Ready"](must.length)
     : v.basis === "no_must_criteria" ? s.oneLine.noMust
+    : v.basis === "core_goal_not_exercised" ? s.oneLine.notExercised
     : s.oneLine.notVerified(mustNotVerified);
 
   const sweep = input.sweep
@@ -924,6 +941,7 @@ export function agentSystemPrompt(locale: ReportLocale = "ko"): string {
     "Rules:",
     "1. Actually perform the criterion end to end like a real user (fill every required field with the test data, submit, then look at the result). Do not judge from labels or prices alone.",
     "2. pass = you SAW the expected outcome. fail = you completed the steps and SAW the outcome is wrong or an error. Otherwise not_verified. evidenceQuote MUST be copied verbatim from an observation (screen text, network line or console line); a judgement without a real quote is discarded.",
+    "2b. A criterion is NOT passed by seeing labels, inputs or buttons on screen. If the criterion is about an outcome, you must actually create the result (fill + submit) before judging pass.",
     "3. Persistence/sharing claims need proof: reload for 'survives refresh'; new_session for 'other customers can't pick it' or 'owner sees it on the admin screen' (data kept only in one browser's localStorage FAILS those).",
     "4. Time-dependent claims (today's list, time slots) — use set_clock to probe edge hours (e.g. 01:00 and 23:30 Korea time) when relevant.",
     "5. Never pay, delete other people's data, send messages or publish. You may cancel/delete ONLY a record you created in this run (set ownRecord:true on that click).",
@@ -995,7 +1013,7 @@ export function acInferencePrompt(intent: string, observation: AgentObservation,
     observation.aria.slice(0, 6000),
     "",
     "Return ONLY JSON: {\"acs\":[{\"title\":\"...\",\"given\":\"...\",\"when\":\"...\",\"then\":\"...\",\"priority\":\"must|should\"}]}",
-    "3 to 8 criteria. 'must' = the app's core promise (data actually saved/shared, the main task completes). Each 'then' must be observable in a browser.",
+    "3 to 8 criteria. 'must' = OUTCOMES of the app's core job: perform the main task end to end with real data, then the result persists after reload, shows up where it should (another visitor, the owner/admin or other role's screen), and conflicts/duplicates are handled. Criteria that only check something is DISPLAYED are 'should', never the only musts. Each 'then' must be observable in a browser.",
     "Do not invent features that neither the intent nor the screen suggests.",
     locale === "en" ? "Write in English." : "한국어로 쓰세요.",
   ].join("\n");
@@ -1023,6 +1041,35 @@ export function parseInferredAcs(text: string): AgentAc[] {
     if (out.length >= 8) break;
   }
   return out;
+}
+
+export const CORE_OUTCOME_AC_ID = "CORE-1";
+
+/**
+ * Simsa 기본 기준 — "이 앱의 핵심 일이 실제로 되는가"(모든 앱 공통, 주제별 조정 없음).
+ * 추론·지시서 항목은 화면에 **보이는 것**에 치우친다(벤치마크 #1 run-1). 그래서 실행기는 의도 문장에서 핵심 일을
+ * 실제 데이터로 끝까지 해 보고, 결과가 남는지·보여야 할 곳(다른 방문자·다른 역할의 화면)에서 보이는지·겹치는
+ * 요청이 바르게 처리되는지까지 재는 기준 하나를 늘 맨 앞에 둔다. confirmed는 의도 문장이 사용자가 확인한 것일 때만.
+ */
+export function coreOutcomeAc(intent: string, confirmed: boolean, locale: ReportLocale = "ko"): AgentAc {
+  const en = locale === "en";
+  return {
+    id: CORE_OUTCOME_AC_ID,
+    title: en ? "The app's main job actually works end to end" : "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+    given: en ? `The app's stated purpose: ${intent}` : `앱의 목적: ${intent}`,
+    when: en
+      ? "A real user completes the main task with realistic data (fill every required field and submit)"
+      : "실제 사용자가 그럴듯한 데이터로 핵심 일을 끝까지 한다(필요한 칸을 모두 채우고 제출)",
+    then: en
+      ? "The result is created; it is still there after a reload; it appears wherever the purpose says it should (another visitor in a fresh browser, the owner/admin or other role's screen); and a conflicting or duplicate request is handled correctly"
+      : "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+    priority: "must",
+    confirmed,
+  };
+}
+
+export function withCoreOutcomeAc(acs: readonly AgentAc[], intent: string, confirmed: boolean, locale: ReportLocale = "ko"): AgentAc[] {
+  return acs.some((a) => a.id === CORE_OUTCOME_AC_ID) ? [...acs] : [coreOutcomeAc(intent, confirmed, locale), ...acs];
 }
 
 /** must 먼저, 상한. */

@@ -324,6 +324,7 @@ ${brief}
 - features: 3~12개. 각 must-have 항목은 최소 1개 기능(FR)으로 옮긴다. priority는 must/should/could. 브리프의 "포함"이 must, 나머지는 should/could.
 - acceptance: 기능마다 1~3개. **Given(전제) / When(행동) / Then(관찰되는 결과)** 세 문장. 항목의 "완성 기준"을 그대로 살린다.
   verifiedBy: 브라우저에서 눈으로 확인 가능하면 "browser", 자동 테스트로만 확인되면 "test", 컴파일·기동만으로 확인되면 "build", 사람 판단이 필요하면 "human".
+  must 기능의 AC는 **결과(outcome)** 여야 한다: 핵심 일을 실제 데이터로 끝까지 해 낸 뒤 결과가 새로고침 뒤에도 남는지, 보여야 할 곳(다른 사용자·다른 역할의 화면)에서 보이는지, 겹치는·중복 요청이 바르게 처리되는지. "~가 보인다"만 확인하는 AC는 must 기능의 유일한 AC가 될 수 없다.
 - 모든 acceptance.featureId는 위 features의 id여야 하고, 기능마다 acceptance가 최소 1개 있어야 한다.
 ${rules}
 ${fix}
@@ -338,6 +339,7 @@ Produce:
 - features: 3–12. Every must-have item becomes at least one feature (FR). priority is must/should/could — "Included" items are must, the rest should/could.
 - acceptance: 1–3 per feature. **Given / When / Then** as three sentences, preserving the items' done-criteria.
   verifiedBy: "browser" if visible in a real browser, "test" if only an automated test can tell, "build" if compile/boot suffices, "human" if it needs human judgment.
+  ACs of a must feature must be OUTCOMES: perform the core task with real data end to end, then the result persists after reload, appears where it should (another user / another role's screen), and conflicting or duplicate requests are handled. An AC that only checks that something is displayed can never be a must feature's only AC.
 - Every acceptance.featureId must be one of the feature ids above, and every feature needs at least one acceptance.
 ${rules}
 ${fix}

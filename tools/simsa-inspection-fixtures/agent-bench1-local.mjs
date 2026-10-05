@@ -107,25 +107,49 @@ function localProxyLlm(events) {
   };
 }
 
-/** "맞나요?"에 답하는 사용자 — 자기가 빌더에 넣은 프롬프트 원문만 안다. 항목마다 예/아니오. */
+/**
+ * "맞나요?" 카드에 답하는 사용자 흉내 — 카드의 실제 모양 그대로(IntentConfirmCard):
+ *   ① 한 줄 의도(내가 원래 원한 것) ② 추론 항목은 **기본 체크**, 내 요청과 어긋나는 것만 해제
+ *   ③ "빠졌는데 꼭 되어야 하는 것" — 내 요청에 있는데 목록에 없는 것을 한 줄씩(intent-missing.mjs와 같은 user_N 항목)
+ * 아는 것은 **빌더에 넣은 프롬프트 원문뿐**이다(정답지는 보지 않는다). 항목마다 이유를 남긴다.
+ */
 export async function confirmFromPrompt(items, events) {
   const llm = localProxyLlm(events);
   const list = items.map((it, i) => `${i + 1}. [${it.id}] ${it.title}${it.criteria?.length ? ` — ${it.criteria.join(" / ")}` : ""}`).join("\n");
   const text = await llm({
-    system:
-      "You simulate a non-developer user answering an app's 'Is this right?' confirmation card. The ONLY thing you know is the request you gave the AI builder (below). For each inferred item, answer yes ONLY if your request clearly asked for it; otherwise no. Reply JSON only: {\"answers\":[{\"id\":\"...\",\"yes\":true|false}]}",
-    user: `My request to the builder (verbatim):\n${REGISTERED_PROMPT}\n\nItems Simsa inferred from my app:\n${list}`,
-    maxTokens: 800,
+    system: [
+      "You simulate a non-developer filling in an app checker's 'Is this right?' card. The ONLY thing you know is the request you typed into the AI builder (below) — answer from that text, not from what would be easy to pass.",
+      "The card has: (1) a one-sentence description of what you wanted, (2) the checker's inferred items, all checked by default — uncheck only items that contradict your request, (3) a box 'anything missing that must work?' — list, one per line in Korean, every requirement your request states (especially outcomes: what must actually happen, who must see it, what must be prevented, what must survive) that the inferred items do not already cover.",
+      'Reply JSON only: {"oneLine":"...","items":[{"id":"...","keep":true|false,"why":"..."}],"missing":[{"text":"...","why":"..."}]}',
+    ].join("\n"),
+    user: `My request to the builder (verbatim):\n${REGISTERED_PROMPT}\n\nItems the checker inferred from my app:\n${list}`,
+    maxTokens: 1500,
   });
   const m = /\{[\s\S]*\}/.exec(text);
-  let answers = [];
+  let parsed = {};
   try {
-    answers = JSON.parse(m ? m[0] : "{}").answers ?? [];
+    parsed = JSON.parse(m ? m[0] : "{}");
   } catch {
-    answers = [];
+    parsed = {};
   }
-  const yes = new Set(answers.filter((a) => a && a.yes === true).map((a) => a.id));
-  return items.map((it) => ({ id: it.id, title: it.title, confirmed: yes.has(it.id) }));
+  const verdicts = new Map((Array.isArray(parsed.items) ? parsed.items : []).map((x) => [x?.id, x]));
+  const kept = items.map((it) => {
+    const v = verdicts.get(it.id);
+    return { id: it.id, title: it.title, confirmed: v?.keep !== false, why: String(v?.why ?? "기본 체크 유지").slice(0, 200) };
+  });
+  const missing = (Array.isArray(parsed.missing) ? parsed.missing : [])
+    .map((x) => ({ text: String(x?.text ?? "").trim().slice(0, 200), why: String(x?.why ?? "").slice(0, 200) }))
+    .filter((x) => x.text.length >= 2)
+    .slice(0, 8);
+  const taken = new Set(items.map((i) => i.id));
+  const added = [];
+  for (const mItem of missing) {
+    let n = added.length + 1;
+    while (taken.has(`user_${n}`)) n += 1;
+    taken.add(`user_${n}`);
+    added.push({ id: `user_${n}`, title: mItem.text, criteria: [], why: mItem.why });
+  }
+  return { oneLine: String(parsed.oneLine ?? "").trim().slice(0, 300), items: kept, added };
 }
 
 async function renderedText(url) {
@@ -170,12 +194,17 @@ export async function benchOne(app, { locale = "ko" } = {}) {
   }
   out.inference.summary = draft.understood?.summary;
   // 2) 맞나요? — 프롬프트 원문만으로
-  const answers = await confirmFromPrompt(draft.items, genEvents);
-  out.confirm = answers;
-  const confirmedItemIds = answers.filter((a) => a.confirmed).map((a) => a.id);
-  // 3) 역추론 지시서
+  const card = await confirmFromPrompt(draft.items, genEvents);
+  out.confirm = card;
+  const confirmedItemIds = [...card.items.filter((a) => a.confirmed).map((a) => a.id), ...card.added.map((a) => a.id)];
+  const allItems = [...draft.items, ...card.added.map(({ why: _w, ...rest }) => ({ ...rest, status: "not_started" }))];
+  const userOneLine = card.oneLine || draft.productSpec?.oneLine || "";
+  // 3) 역추론 지시서 — 카드가 저장하는 그대로(브리프 oneLine = 사용자가 쓴 문장, 항목 = 체크 유지 + 직접 적은 것)
   const call = makeDevSpecLlmCaller(ANTHROPIC_KEY_SLOT, undefined, fallbackConfig(), undefined, (u) => genEvents.push(u));
-  const gen = await generateDevSpec({ brief: draft.productSpec, items: draft.items, idea, locale, source: "inferred", confirmedItemIds }, call);
+  const gen = await generateDevSpec(
+    { brief: { ...(draft.productSpec ?? {}), oneLine: userOneLine }, items: allItems, idea, locale, source: "inferred", confirmedItemIds },
+    call,
+  );
   const acs = gen.ok ? agentAcsFromDevSpec(gen.devSpec) : [];
   out.devSpec = gen.ok ? { ok: true, acs: acs.length } : { ok: false, error: gen.error };
   // 4) agent 엔진(로컬 Playwright, 로그인 없음)
@@ -185,7 +214,8 @@ export async function benchOne(app, { locale = "ko" } = {}) {
     const driver = await createPlaywrightDriver({ outDir, locale, isNoiseResource, chromium });
     const r = await runAgentInspection({
       targetUrl: app.url,
-      intent: draft.understood?.summary || idea.slice(0, 300),
+      // 프로덕션 런의 의도 = 프로젝트의 확정 한 줄(confirmedIntentFromProject) — 카드에서 사용자가 쓴 문장.
+      intent: userOneLine || draft.understood?.summary || idea.slice(0, 300),
       locale,
       budgetMs: 13 * 60 * 1000,
       acs,
@@ -199,11 +229,12 @@ export async function benchOne(app, { locale = "ko" } = {}) {
     out.works = r.works;
     out.verdict = r.report.verdict;
     out.oneLine = r.report.oneLine;
-    out.acTable = r.report.acTable.map((x) => ({ id: x.id, priority: x.priority, confirmed: x.confirmed, title: x.title, then: x.then, status: x.status, reason: x.reason, reasonCode: x.reasonCode, evidence: x.evidence, actions: x.actions }));
+    out.acTable = r.report.acTable.map((x) => ({ id: x.id, priority: x.priority, confirmed: x.confirmed, title: x.title, then: x.then, status: x.status, reason: x.reason, reasonCode: x.reasonCode, evidence: x.evidence, actions: x.actions, exercised: x.exercised }));
     out.sweep = r.report.sweep;
     out.findings = r.report.findings.map((f) => ({ code: f.code, what: f.what }));
     out.agentPrompt = r.agentPrompt;
     out.llmCalls = r.report.agent.llmCalls;
+    out.basis = r.report.agent.basis;
   } catch (err) {
     out.error = `agent_failed: ${String(err?.message ?? err).slice(0, 200)}`;
   } finally {

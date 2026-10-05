@@ -86,13 +86,15 @@ describe("finalizeJudge — 증거 접지와 로그인 벽", () => {
 describe("decideAgentVerdict — 판정 사다리", () => {
   const acs = [ac("AC-001"), ac("AC-002"), ac("AC-003", "should")];
   const r = (id, status) => ({ id, status, reason: "r", evidence: [], steps: 1 });
+  /** 핵심 일을 상태 변화로 해 보고(입력→제출) 그 뒤 결과를 확인한 기록. */
+  const ex = (x) => ({ ...x, exercised: { stateChange: true, verified: true } });
   it("must 실패 하나 → Needs Fix", () => {
     assert.equal(P.decideAgentVerdict({ acs, results: [r("AC-001", "pass"), r("AC-002", "fail")] }).decision, "Needs Fix");
   });
   it("must 전부 통과(확인된 기준) → Ready / 추정 기준 → Conditionally Ready", () => {
-    assert.equal(P.decideAgentVerdict({ acs, results: [r("AC-001", "pass"), r("AC-002", "pass"), r("AC-003", "fail")] }).decision, "Ready");
+    assert.equal(P.decideAgentVerdict({ acs, results: [ex(r("AC-001", "pass")), r("AC-002", "pass"), r("AC-003", "fail")] }).decision, "Ready");
     const inferred = [ac("R-1", "must", false)];
-    assert.equal(P.decideAgentVerdict({ acs: inferred, results: [r("R-1", "pass")] }).decision, "Conditionally Ready");
+    assert.equal(P.decideAgentVerdict({ acs: inferred, results: [ex(r("R-1", "pass"))] }).decision, "Conditionally Ready");
   });
   it("must 확인 못 함 → Not Verified (\"문제를 찾지 못했어요\" 금지)", () => {
     const v = P.decideAgentVerdict({ acs, results: [r("AC-001", "pass"), r("AC-002", "not_verified")] });
@@ -101,11 +103,22 @@ describe("decideAgentVerdict — 판정 사다리", () => {
     assert.notEqual(rep.verdict, "문제를 찾지 못했어요");
     assert.equal(rep.works, null);
   });
+  it("must가 화면 표시만 확인했으면(핵심 일을 상태 변화로 해 보고 검증한 must 없음) Ready 금지 → Not Verified", () => {
+    // 벤치마크 #1 로컬 실측 run-1: "30분 단위 시간이 보인다"·"입력칸이 보인다" 셋만 통과하고 "정상 작동해요"(반대 판정).
+    const displayOnly = [r("AC-001", "pass"), r("AC-002", "pass")];
+    const v = P.decideAgentVerdict({ acs, results: displayOnly });
+    assert.equal(v.decision, "Not Verified");
+    assert.equal(v.basis, "core_goal_not_exercised");
+    const exercised = [{ ...r("AC-001", "pass"), exercised: { stateChange: true, verified: true } }, r("AC-002", "pass")];
+    assert.equal(P.decideAgentVerdict({ acs, results: exercised }).decision, "Ready");
+    const notVerifiedAfter = [{ ...r("AC-001", "pass"), exercised: { stateChange: true, verified: false } }, r("AC-002", "pass")];
+    assert.equal(P.decideAgentVerdict({ acs, results: notVerifiedAfter }).decision, "Not Verified", "상태를 바꿨어도 남는지·보이는지 확인 안 했으면 아님");
+  });
   it("must 없음 → Not Verified", () => {
     assert.equal(P.decideAgentVerdict({ acs: [ac("A", "should")], results: [r("A", "pass")] }).decision, "Not Verified");
   });
   it("화면 고장·버튼 오류 → Needs Fix(반응 없는 버튼은 판정 무영향)", () => {
-    const ok = [r("AC-001", "pass"), r("AC-002", "pass")];
+    const ok = [ex(r("AC-001", "pass")), r("AC-002", "pass")];
     const broken = { screens: [{ url: "/x", status: 500, ok: false, problem: "http_error" }], buttons: [], truncated: { screens: false, buttons: false, time: false } };
     assert.equal(P.decideAgentVerdict({ acs, results: ok, sweep: broken }).decision, "Needs Fix");
     const quiet = { screens: [{ url: "/", status: 200, ok: true }], buttons: [{ screen: "/", label: "장식", outcome: "no_reaction" }], truncated: { screens: false, buttons: false, time: false } };
