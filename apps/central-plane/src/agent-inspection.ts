@@ -79,6 +79,7 @@ export const AC_REASON_CODES = [
   "app_missing",
   "not_reached",
   "agent_error",
+  "guessed_address",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -327,11 +328,16 @@ export type LoginGate = "password" | "oauth" | "sms" | null;
  */
 export function finalizeJudge(
   judge: Extract<AgentAction, { type: "judge" }>,
-  ctx: { corpus: string; loginGate: LoginGate; hasCredentials: boolean; locale: ReportLocale },
+  ctx: { corpus: string; loginGate: LoginGate; hasCredentials: boolean; locale: ReportLocale; onGuessedAddress?: boolean },
 ): { status: AcStatus; reason: string; reasonCode?: AcReasonCode; evidence: string[] } {
   const en = ctx.locale === "en";
   const gateReason = gateNotVerified(ctx.loginGate, ctx.hasCredentials, ctx.locale);
   if (judge.verdict === "fail" && gateReason) return { status: "not_verified", ...gateReason, evidence: [] };
+  // 앱에 링크가 없는 주소를 짐작해 열었는데 "없음"이 나온 것은 앱의 고장이 아니다(벤치마크 #1 로컬 실측에서 발견:
+  // 지어낸 /result 주소의 404를 근거로 '안 됨'이라 했다).
+  if (judge.verdict === "fail" && ctx.onGuessedAddress) {
+    return { status: "not_verified", reason: reasonText("guessed_address", ctx.locale), reasonCode: "guessed_address", evidence: [] };
+  }
   if (judge.verdict === "not_verified") {
     const code = judge.reasonCode ?? (gateReason?.reasonCode);
     return {
@@ -374,6 +380,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     app_missing: "앱 첫 화면이 열리지 않아 확인할 수 없었어요",
     not_reached: "정해진 단계 안에 이 기준을 확인할 화면까지 가지 못했어요",
     agent_error: "확인 도중 오류가 나서 끝까지 보지 못했어요",
+    guessed_address: "앱에 연결되지 않은 주소를 짐작해 열어 본 결과라 고장으로 치지 않았어요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -387,6 +394,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     app_missing: "The app's first screen didn't open, so this couldn't be checked",
     not_reached: "We couldn't reach the screen needed for this check within the step limit",
     agent_error: "An error interrupted the check before it finished",
+    guessed_address: "That result came from an address we guessed (not linked from the app), so it isn't counted as a defect",
   },
 };
 
@@ -637,6 +645,7 @@ const RSTR = {
     buttonHow: "이 버튼을 눌렀을 때 오류 없이 원래 하려던 일이 되게 고쳐 주세요.",
     noReactionNote: (n: number) => `눌러도 반응이 없는 버튼 ${n}개가 있었어요(장식용일 수도 있어 판정에는 넣지 않았어요).`,
     notVerifiedNote: (id: string, r: string) => `${id} 확인 못 함 — ${r}`,
+    unconfirmedFailNote: (t: string, r: string) => `확인받지 않은 기준 "${t}"에서 본 것(고칠 것에 넣지 않음): ${r}`,
     inferredNote: "이번 기준은 앱을 보고 추정한 것이에요. 기준을 확인해 주시면 다음 확인부터 그 기준으로 봐요.",
     partialNote: "시간 안에 다 확인하지 못해 여기까지 본 내용만 담았어요.",
     loginNote: {
@@ -675,6 +684,7 @@ const RSTR = {
     buttonHow: "Make this button do what it's meant to without an error.",
     noReactionNote: (n: number) => `${n} button(s) did nothing when pressed (they may be decorative, so they don't affect the verdict).`,
     notVerifiedNote: (id: string, r: string) => `${id} not verified — ${r}`,
+    unconfirmedFailNote: (t: string, r: string) => `Seen under the unconfirmed criterion "${t}" (not added to fixes): ${r}`,
     inferredNote: "These criteria were inferred from the app. Confirm them and the next check will use them as the standard.",
     partialNote: "We ran out of time, so this covers only what was checked so far.",
     loginNote: {
@@ -750,9 +760,12 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
   };
 
   // 고칠 것 = 실제로 관찰된 실패만: 실패한 AC(must high · 나머지 medium) + 화면/버튼 고장 + #594 신호.
+  // 확인받지 않은 should/could 기준의 실패는 "고칠 것"이 아니라 노트다 — 사용자가 원한다고 말한 적 없는 기준으로 일감을
+  // 만들지 않는다(벤치마크 #1 로컬 실측: 추정 기준 "처리 상태 표시"가 고침 지시에 들어갔다).
+  const actionable = (r: AgentAcRow) => r.confirmed || r.priority === "must";
   const findings: NonDevFinding[] = [];
   for (const r of acTable) {
-    if (r.status !== "fail") continue;
+    if (r.status !== "fail" || !actionable(r)) continue;
     findings.push({
       severity: r.priority === "must" ? "high" : "medium",
       code: "ac_broken",
@@ -774,6 +787,7 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
   const notes: string[] = [s.basis(acSourceLabel(input.acSource, L)), s.loginNote[input.loginMethod]];
   if (input.acSource === "document" && acTable.some((r) => r.status === "fail")) notes.push(s.documentDiff);
   for (const r of acTable) if (r.status === "not_verified") notes.push(s.notVerifiedNote(r.id, r.reason));
+  for (const r of acTable) if (r.status === "fail" && !actionable(r)) notes.push(s.unconfirmedFailNote(r.title, r.reason));
   if (br.noReaction.length > 0) notes.push(s.noReactionNote(br.noReaction.length));
   if (input.acSource === "inferred_at_run" || input.acs.some((a) => a.priority === "must" && !a.confirmed)) notes.push(s.inferredNote);
   if (input.partial) notes.push(s.partialNote);
@@ -843,7 +857,7 @@ function decisionLabelFor(decision: string, L: ReportLocale): string {
  */
 export function buildAgentAcFixPrompt(report: Pick<AgentReport, "target" | "intent" | "acTable" | "sweep" | "findings">, locale: ReportLocale = "ko"): string {
   const en = locale === "en";
-  const failed = report.acTable.filter((r) => r.status === "fail");
+  const failed = report.acTable.filter((r) => r.status === "fail" && (r.confirmed || r.priority === "must"));
   const brokenScreens = (report.sweep?.problems ?? []).filter((p) => p.kind === "screen" || p.problem === "error");
   const signals = report.findings.filter((f) => f.code && SIGNAL_CODES.has(f.code));
   if (failed.length === 0 && brokenScreens.length === 0 && signals.length === 0) return "";
@@ -914,7 +928,9 @@ export function agentSystemPrompt(locale: ReportLocale = "ko"): string {
     "4. Time-dependent claims (today's list, time slots) — use set_clock to probe edge hours (e.g. 01:00 and 23:30 Korea time) when relevant.",
     "5. Never pay, delete other people's data, send messages or publish. You may cancel/delete ONLY a record you created in this run (set ownRecord:true on that click).",
     "6. If a login wall blocks you: use login if a test account is available; if not, judge not_verified with reasonCode login_required. Kakao/Google/social-only login → oauth_unsupported; text-message code → sms_unsupported. If the feature asks for the user's own API key → api_key_required.",
-    "7. Be efficient: at most 14 actions per criterion.",
+    "7. Be efficient: at most 14 actions per criterion. Do not give up early: if a submit did nothing, read the visible messages (e.g. '시간을 골라 주세요', required-field errors), fix the inputs (choose a service/date/time first) and try again.",
+    "8. Never invent addresses. Use goto only for an address you saw as a link on screen or that the criterion itself names. A 'not found' page at a guessed address is NOT a defect of the app.",
+    "9. Selecting a time/date/service means clicking that option on the page (buttons, chips, radio) — check the observation that it became selected before submitting.",
     locale === "en" ? "Write `reason` in English." : "Write `reason` in Korean (한국어, 쉬운 말).",
   ].join("\n");
 }

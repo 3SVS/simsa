@@ -58,6 +58,22 @@ describe("finalizeJudge — 증거 접지와 로그인 벽", () => {
     assert.equal(P.finalizeJudge(j, { corpus: "x", loginGate: "oauth", hasCredentials: true, locale: "ko" }).reasonCode, "oauth_unsupported");
     assert.equal(P.finalizeJudge(j, { corpus: "x", loginGate: "sms", hasCredentials: true, locale: "ko" }).reasonCode, "sms_unsupported");
   });
+  it("짐작한 주소의 '없음'은 고장 근거가 아니다(벤치마크 #1 로컬 실측)", () => {
+    const f = P.finalizeJudge({ type: "judge", verdict: "fail", reason: "결과 화면 없음", evidenceQuote: "Page not found" }, { corpus: "Page not found", loginGate: null, hasCredentials: false, locale: "ko", onGuessedAddress: true });
+    assert.equal(f.status, "not_verified");
+    assert.equal(f.reasonCode, "guessed_address");
+  });
+  it("확인받지 않은 should 기준의 실패는 고칠 것·고침 지시에 넣지 않고 노트로", () => {
+    const acs = [ac("AC-001"), ac("R-2", "should", false)];
+    const results = [
+      { id: "AC-001", status: "pass", reason: "ok", evidence: ["예약 완료"], steps: 3 },
+      { id: "R-2", status: "fail", reason: "로딩 표시 없음", evidence: ["예약하기"], steps: 2 },
+    ];
+    const rep = P.buildAgentReport({ targetUrl: ORIGIN, intent: "i", acs, acSource: "inferred_at_run", results, sweep: null, signals: {}, loginDepth: "L1", loginMethod: "none" }, "ko");
+    assert.equal(rep.findings.length, 0);
+    assert.equal(P.buildAgentAcFixPrompt(rep, "ko"), "");
+    assert.ok(rep.notes.some((n) => n.includes("고칠 것에 넣지 않음")));
+  });
   it("detectLoginGate", () => {
     assert.equal(P.detectLoginGate({ hasPasswordField: true, text: "로그인" }), "password");
     assert.equal(P.detectLoginGate({ hasPasswordField: false, text: "카카오로 로그인" }), "oauth");

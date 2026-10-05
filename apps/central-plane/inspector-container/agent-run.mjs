@@ -212,12 +212,19 @@ export async function runAgentInspection(o) {
     let invalidStreak = 0;
     let lastGate = null;
     const markers = [data.name, data.altName, data.phone];
+    // 앱이 링크로 보여 준 주소만 "아는 주소". 그 밖의 goto는 짐작 — 거기서 본 "없음"은 고장 근거가 아니다.
+    const known = new Set([normUrl(o.targetUrl)]);
+    let onGuessedAddress = false;
     await driver.goto(o.targetUrl);
     const system = pure.agentSystemPrompt(locale);
     while (steps < pure.AGENT_MAX_STEPS_PER_AC && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
       const obs = redObs(obsRaw);
       lastGate = pure.detectLoginGate(obsRaw);
+      for (const l of await driver.links().catch(() => [])) {
+        const abs = pure.resolveSameOrigin(String(l.href ?? ""), o.targetUrl);
+        if (abs) known.add(normUrl(abs));
+      }
       corpus += `\n${obs.url}\n${obs.aria}\n${obs.text}\n${obs.networkErrors.join("\n")}\n${obs.consoleErrors.join("\n")}`;
       let text;
       try {
@@ -243,7 +250,7 @@ export async function runAgentInspection(o) {
       invalidStreak = 0;
       const a = parsed.action;
       if (a.type === "judge") {
-        const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale });
+        const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale, onGuessedAddress });
         if (loginFailed && f.reasonCode === "login_required") f.reason = pure.reasonText("login_failed", locale);
         return finish(f);
       }
@@ -277,6 +284,15 @@ export async function runAgentInspection(o) {
       } else {
         res = await driver.act(a);
       }
+      if (a.type === "goto") {
+        // 짐작한 주소 + 그 화면이 "없음"일 때만 — 링크는 없어도 실제로 있는 화면(/admin 등)은 정상 근거로 쓴다.
+        const status = /HTTP (\d{3})/.exec(res.note ?? "")?.[1];
+        const screen = pure.classifyScreen({ status: status ? Number(status) : null, bodyText: await driver.bodyText(), newCrashes: 0 });
+        onGuessedAddress = !known.has(normUrl(a.path)) && !screen.ok && (screen.problem === "http_error" || screen.problem === "error_text" || screen.problem === "blank");
+        if (onGuessedAddress) res = { ...res, note: `${res.note ?? ""} (this address is not linked from the app — a 'not found' here is not a defect)` };
+      } else if (a.type === "click" || a.type === "back" || a.type === "new_session" || a.type === "login") {
+        onGuessedAddress = false;
+      }
       actions.push(desc);
       history.push(`${desc} → ${res.ok ? "ok" : "failed"}: ${red(res.note ?? "")}`);
       corpus += `\n${red(res.note ?? "")}`;
@@ -296,6 +312,16 @@ export async function runAgentInspection(o) {
         ...(screenshot ? { screenshot } : {}),
       };
     }
+  }
+}
+
+function normUrl(u) {
+  try {
+    const x = new URL(u);
+    x.hash = "";
+    return x.toString().replace(/\/$/, "");
+  } catch {
+    return String(u);
   }
 }
 

@@ -172,6 +172,20 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     assert.ok(prompts.some((p) => /BLOCKED \(unsafe: delete/.test(p)), "막힌 이유가 다음 턴에 보인다");
   });
 
+  it("짐작한 주소 404로는 '안 됨'이라 하지 않는다 · 링크된 실제 화면은 근거가 된다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({
+      "AC-001": [
+        { type: "goto", path: "/result" },
+        { type: "judge", verdict: "fail", reason: "결과 화면이 없어요", evidenceQuote: "404 Not Found" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [acs[0]], acSource: "interview", llm, driver });
+    assert.equal(out.report.acTable[0].status, "not_verified");
+    assert.equal(out.report.acTable[0].reasonCode, "guessed_address");
+    assert.equal(out.agentPrompt, "");
+  });
+
   it("없는 앱(404): AC를 돌리지 않고 Needs Fix + 404 신호", async () => {
     const driver = makeFakeDriver({}, { origin: ORIGIN });
     const { llm, prompts } = makeScriptedLlm({});
