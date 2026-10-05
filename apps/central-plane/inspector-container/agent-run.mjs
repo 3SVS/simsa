@@ -91,6 +91,14 @@ export async function runAgentInspection(o) {
   let deadline = Infinity;
   let firstHtml = "";
   let usedTestData = null;
+  /** C11: 진행 상황을 바깥(server.mjs)에 보인다 — 강제 시간 초과 때 여기까지로 부분 리포트를 만든다. */
+  const progress = o.progress ?? {};
+  const syncProgress = () => {
+    Object.assign(progress, {
+      targetUrl: o.targetUrl, intent: o.intent, locale, acs, acSource, results: [...results], sweep, signals,
+      loginDepth, loginMethod, secrets: secrets(),
+    });
+  };
 
   try {
     await driver.start(o.targetUrl);
@@ -158,11 +166,13 @@ export async function runAgentInspection(o) {
 
       // 3b) Simsa 기본 기준 — 핵심 일을 실제로 끝까지(모든 앱 공통). 의도가 사용자 확인 기준에서 왔을 때만 confirmed.
       acs = pure.orderAcs(pure.withCoreOutcomeAc(acs, o.intent, acSource !== "inferred_at_run", locale), pure.AGENT_MAX_ACS + 1);
+      syncProgress();
 
       // 4) 화면·버튼 점검
       const sweepBudget = Math.min(SWEEP_MAX_MS, Number.isFinite(timeLeft()) ? timeLeft() * SWEEP_TIME_SHARE : SWEEP_MAX_MS);
       sweep = await runSweep({ driver, pure, startUrl: o.targetUrl, until: Date.now() + sweepBudget, shot, plog });
       plog(`sweep screens=${sweep.screens.length} buttons=${sweep.buttons.length}`);
+      syncProgress();
 
       // 5) AC 실행
       const data = pure.koreanTestData(Date.now() % 100000);
@@ -183,6 +193,7 @@ export async function runAgentInspection(o) {
           plog(`ac ${ac.id} clock-variant → ${v.status}`);
         }
         results.push(r);
+        syncProgress();
         plog(`ac ${ac.id} → ${r.status}${r.reasonCode ? `(${r.reasonCode})` : ""} steps=${r.steps}`);
       }
 
@@ -458,4 +469,27 @@ export async function runSweep({ driver, pure, startUrl, until, shot, plog = () 
   }
   plog(`sweep:done screens=${screens.length} clicks=${clicks}`);
   return { screens, buttons, truncated };
+}
+
+/**
+ * C11: 강제 시간 초과·크래시 때 지금까지 잰 것으로 부분 리포트를 만든다(빈손 실패 대신). 돌지 못한 기준은 "시간 한도"로
+ * 확인 못 함 — 판정 사다리는 같다(must 실패가 이미 있으면 Needs Fix, 아니면 확인 못 함). 비밀은 똑같이 가린다.
+ */
+export async function partialAgentResult(progress) {
+  if (!progress || !Array.isArray(progress.acs) || progress.acs.length === 0) return null;
+  const pure = await importPure("agent-inspection.js");
+  const input = {
+    targetUrl: progress.targetUrl, intent: progress.intent, acs: progress.acs, acSource: progress.acSource,
+    results: progress.results ?? [], sweep: progress.sweep ?? null, signals: progress.signals ?? {},
+    loginDepth: progress.loginDepth ?? "L1", loginMethod: progress.loginMethod ?? "none", partial: true,
+  };
+  const report = pure.buildAgentReport(input, progress.locale);
+  const s = progress.secrets ?? [];
+  return {
+    decision: pure.decideAgentVerdict(input).decision,
+    works: report.works,
+    report: pure.redactDeep(report, s),
+    agentPrompt: pure.redactSecrets(pure.buildAgentAcFixPrompt(report, progress.locale), s),
+    evidenceFiles: [],
+  };
 }

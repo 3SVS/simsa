@@ -106,6 +106,38 @@ describe("(1) 시각 경계 · (3) 로그인 벽 공개 범위", () => {
   });
 });
 
+describe("C11 시간 초과 시 부분 리포트", () => {
+  it("돌던 중 멈춰도 잰 만큼 리포트 — 실패한 must는 그대로, 못 돈 기준은 시간 한도", async () => {
+    const { partialAgentResult } = await import("../inspector-container/agent-run.mjs");
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const progress = {};
+    let calls = 0;
+    const { llm: base } = makeScriptedLlm({
+      "CORE-1": [...bookScript.slice(0, 2), { type: "new_session" }, { type: "judge", verdict: "fail", reason: "다른 손님에게 안 보여요", evidenceQuote: "10:30 예약 가능" }],
+    });
+    // 두 번째 기준에서 영원히 멈춘다(무거운 사이트·컨테이너 하드 레일 흉내)
+    const llm = async (req) => {
+      calls += 1;
+      if (/Criterion AC-001/.test(req.user)) return new Promise(() => {});
+      return base(req);
+    };
+    const run = runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [acs[0]], acSource: "interview", llm, driver, progress });
+    await new Promise((r) => setTimeout(r, 300));
+    const out = await partialAgentResult(progress);
+    void run;
+    assert.ok(calls > 0);
+    assert.equal(out.decision, "Needs Fix");
+    assert.equal(out.report.acTable.find((r) => r.id === "CORE-1").status, "fail");
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-001").reasonCode, "budget");
+    assert.ok(out.report.notes.some((n) => n.includes("여기까지 본 내용")));
+    assert.match(out.agentPrompt, /CORE-1/);
+  });
+  it("기준을 하나도 못 잡았으면 null(종전처럼 실패 콜백)", async () => {
+    const { partialAgentResult } = await import("../inspector-container/agent-run.mjs");
+    assert.equal(await partialAgentResult({}), null);
+  });
+});
+
 describe("(2) 남는다 = 만든 기록을 다른 곳에서 다시 찾음 — 새로고침만으로는 아니다", () => {
   it("입력→제출→새로고침→통과만 있으면 핵심 일 확인 안 됨(Not Verified)", async () => {
     const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });

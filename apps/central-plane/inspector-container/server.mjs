@@ -339,7 +339,8 @@ const AGENT_HARD_MS = 15 * 60 * 1000;
 const HANDOVER_WAIT_MS = 10 * 60 * 1000;
 
 async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup }) {
-  const { runAgentInspection } = await import("./agent-run.mjs");
+  const { runAgentInspection, partialAgentResult } = await import("./agent-run.mjs");
+  const progress = {};
   const { createPlaywrightDriver } = await import("./agent-driver.mjs");
   const { createProxyLlm } = await import("./agent-llm.mjs");
   const { isNoiseResource } = await import("./dist/nondev-report.js");
@@ -367,11 +368,18 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
       live,
       handoverWaitMs: HANDOVER_WAIT_MS,
       onPhase,
+      progress,
     }),
     hard,
     `agent inspection timed out after ${Math.round(hard / 1000)}s`,
   ).catch(async (err) => {
     await driver.close().catch(() => {});
+    // C11: 기준을 하나라도 잡았으면 빈손 실패 대신 여기까지의 부분 리포트(돌지 못한 기준 = 시간 한도로 확인 못 함).
+    const partial = await partialAgentResult(progress).catch(() => null);
+    if (partial) {
+      onPhase(`agent:partial after ${String(err?.message ?? err).slice(0, 80)}`);
+      return partial;
+    }
     const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");
     throw new Error(redactWith(secrets(), `${String(err?.message ?? err)} ||trace: ${trace}`).slice(0, 490));
   });
