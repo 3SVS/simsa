@@ -90,6 +90,16 @@ describe("agent 드라이버 — 실제 브라우저", { skip }, () => {
     await driver.setClock("2026-10-06T00:30:00+09:00");
     assert.match(await driver.bodyText(), /KST시각 00/);
   });
+  it("B5: 원본 HTML을 받고, 고친 파일을 그 주소에 끼워 넣었다가 되돌린다", async () => {
+    const src = await driver.fetchSource(base + "/");
+    assert.match(src, /hidden-name/);
+    await driver.serveOverride(base + "/", "<!doctype html><body>고친 파일</body>");
+    await driver.goto(base + "/");
+    assert.match(await driver.bodyText(), /고친 파일/);
+    await driver.serveOverride(base + "/", null);
+    await driver.goto(base + "/");
+    assert.doesNotMatch(await driver.bodyText(), /고친 파일/);
+  });
   it("모바일 폭에서 가로 넘침을 잰다", async () => {
     const wide = await driver.mobileCheck(base + "/wide");
     assert.ok(wide.overflowPx > 100, JSON.stringify(wide));

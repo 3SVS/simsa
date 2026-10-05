@@ -65,6 +65,7 @@ COPY apps/central-plane/inspector-container/click-target.mjs ./click-target.mjs
 COPY apps/central-plane/inspector-container/agent-run.mjs ./agent-run.mjs
 COPY apps/central-plane/inspector-container/agent-driver.mjs ./agent-driver.mjs
 COPY apps/central-plane/inspector-container/agent-llm.mjs ./agent-llm.mjs
+COPY apps/central-plane/inspector-container/single-file-fix.mjs ./single-file-fix.mjs
 
 # Writable scratch space for per-run screenshots/video.
 RUN mkdir -p /var/lib/simsa && chmod 770 /var/lib/simsa

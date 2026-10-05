@@ -91,6 +91,7 @@ export async function runAgentInspection(o) {
   let deadline = Infinity;
   let firstHtml = "";
   let usedTestData = null;
+  let singleFileFix = null;
   /** C11: 진행 상황을 바깥(server.mjs)에 보인다 — 강제 시간 초과 때 여기까지로 부분 리포트를 만든다. */
   const progress = o.progress ?? {};
   const syncProgress = () => {
@@ -200,6 +201,12 @@ export async function runAgentInspection(o) {
       // #594 H4: 화면 언어와 다른 결과 언어(한국어 앱에 중국어·일본어)
       const lastText = await driver.bodyText().catch(() => "");
       signals.outputLanguageMismatch = nd.detectOutputLanguageMismatch(firstBody, lastText) ?? null;
+
+      // B5: 단일 파일 앱이면 고친 파일을 만들고, 그 파일로 실패했던 기준을 다시 돌려 검증한다.
+      if (o.singleFileFix !== false && driver.fetchSource && driver.serveOverride && timeLeft() > 120_000 && !llmCalls.budgetExhausted) {
+        singleFileFix = await trySingleFileFix({ acs, results, data: usedTestData }).catch((err) => ({ attempted: true, error: String(err?.message ?? err).slice(0, 120) }));
+        plog(`single-file-fix ${singleFileFix ? JSON.stringify({ v: singleFileFix.validated, s: singleFileFix.stillFailing, e: singleFileFix.error }) : "skipped"}`);
+      }
     }
   } catch (err) {
     partial = true;
@@ -218,6 +225,16 @@ export async function runAgentInspection(o) {
     report.agent.testData = { names: [usedTestData.name, usedTestData.altName], phone: usedTestData.phone, memo: usedTestData.memo };
     report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
   }
+  if (singleFileFix) {
+    report.agent.singleFileFix = singleFileFix;
+    if (singleFileFix.validated?.length) {
+      report.notes.push(
+        locale === "en"
+          ? `We made a corrected index.html and re-ran the failed criteria against it: ${singleFileFix.validated.join(", ")} now pass. Download it from this report.`
+          : `고친 index.html을 만들어 실패했던 기준을 그 파일로 다시 해 봤어요: ${singleFileFix.validated.join(", ")} 통과. 이 리포트에서 받으실 수 있어요.`,
+      );
+    }
+  }
   report.agent.durationMs = Date.now() - t0;
   if (loginFailed) report.notes.push(pure.reasonText("login_failed", locale));
   const agentPrompt = pure.buildAgentAcFixPrompt(report, locale);
@@ -233,6 +250,44 @@ export async function runAgentInspection(o) {
 
   function redObs(obs) {
     return { ...obs, aria: red(obs.aria), text: red(obs.text), title: red(obs.title), url: red(obs.url) };
+  }
+
+  /** B5 — 단일 파일 앱의 고친 파일 + 실패 기준 재검증(검증 통과분만 "고쳐짐"). */
+  async function trySingleFileFix({ acs, results, data }) {
+    const sf = await import("./single-file-fix.mjs");
+    const failed = acs
+      .map((a) => ({ a, r: results.find((x) => x.id === a.id) }))
+      .filter(({ a, r }) => r?.status === "fail" && (a.priority === "must" || a.confirmed))
+      .map(({ a, r }) => ({ id: a.id, title: a.title, then: a.then, actions: r.actions, reason: r.reason, evidence: r.evidence }));
+    if (failed.length === 0) return null;
+    const source = await driver.fetchSource(o.targetUrl);
+    if (!sf.isSingleFileApp(source, o.targetUrl)) return null;
+    const text = await callLlm("You fix single-file web apps. Reply with JSON only.", sf.singleFileFixPrompt(source, failed, locale), 4000);
+    const parsed = pure.extractJsonObject(text) ?? {};
+    const applied = sf.applyExactEdits(source, parsed.edits);
+    const cannotFix = Array.isArray(parsed.cannotFix) ? parsed.cannotFix.filter((x) => typeof x === "string").slice(0, 10) : [];
+    if (!applied.ok) return { attempted: true, error: applied.error, cannotFix };
+    await driver.serveOverride(o.targetUrl, applied.html);
+    const validated = [];
+    const stillFailing = [];
+    try {
+      for (const f of failed) {
+        if (Date.now() > deadline - 30_000) break;
+        const ac = acs.find((a) => a.id === f.id);
+        const r = await runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials: false, loginFailed, handoverState: null, deadline, shot, plog });
+        (r.status === "pass" ? validated : stillFailing).push(f.id);
+      }
+    } finally {
+      await driver.serveOverride(o.targetUrl, null).catch(() => {});
+    }
+    return {
+      attempted: true,
+      validated,
+      stillFailing,
+      cannotFix,
+      diff: sf.editsDiff(parsed.edits).slice(0, 40_000),
+      ...(validated.length > 0 && applied.html.length <= sf.CORRECTED_FILE_REPORT_MAX ? { correctedHtml: applied.html } : {}),
+    };
   }
 
   async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null }) {

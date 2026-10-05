@@ -95,9 +95,22 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     p.setDefaultTimeout(ACT_TIMEOUT);
   }
 
+  /** B5: 고친 단일 파일을 그 주소에 끼워 넣는다(새 컨텍스트에도 이어진다). null이면 원래 파일. */
+  let override = null;
+  async function applyOverride(ctx) {
+    if (!override) return;
+    const { url, html } = override;
+    const target = new URL(url);
+    await ctx.route(
+      (u) => u.origin === target.origin && (u.pathname === target.pathname || (target.pathname === "/" && u.pathname === "/index.html")),
+      (route) => (route.request().resourceType() === "document" ? route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html }) : route.continue()),
+    );
+  }
+
   async function openContext(storageState) {
     if (context) await context.close().catch(() => {});
     context = await browser.newContext({ ...ctxOpts, ...(storageState ? { storageState } : {}) });
+    await applyOverride(context);
     page = await context.newPage();
     wire(page);
   }
@@ -185,6 +198,16 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     },
     url: () => page.url(),
     html: () => page.content(),
+    /** B5: 서버가 보낸 원본 HTML(렌더 뒤 DOM이 아니라). */
+    async fetchSource(url) {
+      const r = await context.request.get(url, { timeout: NAV_TIMEOUT }).catch(() => null);
+      return r && r.ok() ? r.text() : null;
+    },
+    /** B5: 고친 파일로 바꿔 끼우고 새 브라우저로 연다(저장소 초기화 — 검증은 깨끗한 상태에서). */
+    async serveOverride(url, html) {
+      override = html ? { url, html } : null;
+      await openContext(null);
+    },
     bodyText,
     crashCount: () => crashes,
     async observe() {
