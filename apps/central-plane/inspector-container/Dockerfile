@@ -47,8 +47,8 @@ RUN npm install --no-package-lock --loglevel=error
 
 # Canonical Simsa modules — compiled in-image from apps/central-plane/src so
 # the container always runs the exact logic the repo ships.
-COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts ./src/
-RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts \
+COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts apps/central-plane/src/agent-inspection.ts ./src/
+RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts src/agent-inspection.ts \
     --outDir dist --module nodenext --moduleResolution nodenext \
     --target es2022 --skipLibCheck
 
@@ -61,6 +61,10 @@ COPY apps/central-plane/inspector-container/signup-run.mjs ./signup-run.mjs
 # A5.2: AC then 대조(순수, 의존성 0).
 COPY apps/central-plane/inspector-container/acceptance-observe.mjs ./acceptance-observe.mjs
 COPY apps/central-plane/inspector-container/click-target.mjs ./click-target.mjs
+# 2026-10-05 agent 엔진(수용 기준 실행기): 실행기 · Playwright 드라이버 · Worker LLM 프록시 클라이언트.
+COPY apps/central-plane/inspector-container/agent-run.mjs ./agent-run.mjs
+COPY apps/central-plane/inspector-container/agent-driver.mjs ./agent-driver.mjs
+COPY apps/central-plane/inspector-container/agent-llm.mjs ./agent-llm.mjs
 
 # Writable scratch space for per-run screenshots/video.
 RUN mkdir -p /var/lib/simsa && chmod 770 /var/lib/simsa

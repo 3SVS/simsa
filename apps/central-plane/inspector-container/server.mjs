@@ -50,6 +50,12 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // 직접 로그인해서 넘겨주기 — Worker(소유자·런 토큰 확인 뒤)만 이 컨테이너에 닿는다(DO 바인딩).
+  if (req.url && req.url.startsWith("/live/")) {
+    await handleLive(req, res);
+    return;
+  }
+
   if (req.method !== "POST" || req.url !== "/run") {
     res.writeHead(404, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "POST /run only" }));
@@ -124,6 +130,98 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
   });
 }
 
+// --- 직접 로그인 라이브 세션 -------------------------------------------------
+// runId → { driver, state, done(), typed[] }. 입력 글자(비밀번호 포함)는 typed에만 — 결과물 가림용, 로그 없음.
+const liveSessions = new Map();
+
+function createLiveSession(runId, driver) {
+  let resolveDone = null;
+  const donePromise = new Promise((r) => {
+    resolveDone = r;
+  });
+  const s = {
+    driver,
+    state: "starting",
+    typed: [],
+    setState(v) {
+      s.state = v;
+    },
+    async waitDone(ms) {
+      let timer;
+      const t = new Promise((r) => {
+        timer = setTimeout(() => r(false), ms);
+      });
+      const v = await Promise.race([donePromise.then(() => true), t]);
+      clearTimeout(timer);
+      return v;
+    },
+    markDone() {
+      resolveDone?.();
+    },
+    typedSecrets: () => s.typed.filter((x) => typeof x === "string" && x.length >= 3),
+  };
+  liveSessions.set(runId, s);
+  return s;
+}
+
+async function readJson(req) {
+  let body = "";
+  req.setEncoding("utf8");
+  for await (const chunk of req) {
+    body += chunk;
+    if (body.length > 10_000) break;
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+}
+
+async function handleLive(req, res) {
+  const u = new URL(req.url, "http://inspector");
+  const what = u.pathname.slice("/live/".length);
+  const json = (code, obj) => {
+    res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify(obj));
+  };
+  const body = req.method === "POST" ? await readJson(req) : null;
+  const runId = req.method === "POST" ? body?.runId : u.searchParams.get("runId");
+  const s = typeof runId === "string" ? liveSessions.get(runId) : null;
+  if (!s) return json(404, { ok: false, error: "no_live_session" });
+  try {
+    if (what === "state" && req.method === "GET") return json(200, { ok: true, state: s.state });
+    if (what === "frame" && req.method === "GET") {
+      if (s.state !== "awaiting_login") return json(409, { ok: false, error: "not_awaiting_login", state: s.state });
+      const jpg = await s.driver.liveFrame();
+      res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
+      res.end(jpg);
+      return;
+    }
+    if (what === "input" && req.method === "POST") {
+      if (s.state !== "awaiting_login") return json(409, { ok: false, error: "not_awaiting_login" });
+      if (body.kind === "type" && typeof body.text === "string") s.typed.push(body.text);
+      await s.driver.liveInput(body);
+      return json(200, { ok: true });
+    }
+    if (what === "done" && req.method === "POST") {
+      s.markDone();
+      return json(200, { ok: true });
+    }
+    return json(404, { ok: false, error: "unknown_live_action" });
+  } catch (err) {
+    // 입력 내용은 오류 메시지에도 싣지 않는다.
+    return json(500, { ok: false, error: "live_failed" });
+  }
+}
+
+/** 기록 문자열에서 시험 계정·직접 입력 글자를 가린다(실패 콜백·위상 로그용). */
+function redactWith(secrets, text) {
+  let out = String(text ?? "");
+  for (const s of secrets) if (typeof s === "string" && s.length >= 3) out = out.split(s).join("[REDACTED]");
+  return out;
+}
+
 // --- Job runner -------------------------------------------------------------
 
 async function runJob(payload) {
@@ -163,7 +261,7 @@ async function runJob(payload) {
       phases.push(line);
       if (phases.length > 60) phases.splice(1, 1); // keep [0] = runner-rev marker
     };
-    const result = await withTimeout(
+    const result = payload.engine === "agent" ? await runAgentJob(payload, { outDir, locale, onPhase, phases, signup }) : await withTimeout(
       runInspection({
         targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId, onPhase,
         // SI 티어 A5: 지시서의 수용 기준 시나리오(없으면 undefined → 종전 동작).
@@ -217,19 +315,66 @@ async function runJob(payload) {
     });
     console.log(`[run ${runId}] done (decision=${result.decision}, ${Date.now() - start}ms)`);
   } catch (err) {
-    console.error(`[run ${runId}] failed:`, err);
+    const secrets = [payload.credentials?.username, payload.credentials?.password, ...(liveSessions.get(runId)?.typedSecrets() ?? [])];
+    const message = redactWith(secrets, String(err?.message ?? err)).slice(0, 500);
+    console.error(`[run ${runId}] failed: ${message}`);
     await postJson(callbackUrl, callbackToken, {
       runId,
       ok: false,
-      error: String(err?.message ?? err).slice(0, 500),
+      error: message,
     });
   } finally {
+    liveSessions.delete(runId);
     try {
       await fs.rm(outDir, { recursive: true, force: true });
     } catch (cleanupErr) {
       console.error(`[run ${runId}] cleanup failed:`, cleanupErr);
     }
   }
+}
+
+/** agent 엔진: 실행 15분 + (직접 로그인이면) 사람 대기 10분. 넘으면 실패 콜백(마지막 위상 포함). */
+const AGENT_RUN_BUDGET_MS = 13 * 60 * 1000;
+const AGENT_HARD_MS = 15 * 60 * 1000;
+const HANDOVER_WAIT_MS = 10 * 60 * 1000;
+
+async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup }) {
+  const { runAgentInspection } = await import("./agent-run.mjs");
+  const { createPlaywrightDriver } = await import("./agent-driver.mjs");
+  const { createProxyLlm } = await import("./agent-llm.mjs");
+  const { isNoiseResource } = await import("./dist/nondev-report.js");
+  const { attemptSignup } = await import("./signup-run.mjs");
+  const agent = payload.agent ?? {};
+  const driver = await createPlaywrightDriver({ outDir, locale, isNoiseResource, attemptSignup });
+  const live = agent.loginMode === "handover" ? createLiveSession(payload.runId, driver) : null;
+  const secrets = () => [payload.credentials?.username, payload.credentials?.password, ...(live?.typedSecrets() ?? [])];
+  const hard = AGENT_HARD_MS + (live ? HANDOVER_WAIT_MS : 0);
+  return withTimeout(
+    runAgentInspection({
+      targetUrl: payload.targetUrl,
+      intent: payload.intent,
+      locale,
+      budgetMs: AGENT_RUN_BUDGET_MS,
+      acs: Array.isArray(agent.acs) ? agent.acs : [],
+      acSource: agent.acSource,
+      loginMode: agent.loginMode ?? "none",
+      credentials: payload.credentials,
+      signup: signup?.enabled
+        ? { enabled: true, runId: payload.runId, mailDomain: signup.mailDomain, callbackBaseUrl: signup.callbackBaseUrl, internalToken: signup.internalToken }
+        : undefined,
+      llm: createProxyLlm({ url: agent.llmUrl, token: agent.llmToken }),
+      driver,
+      live,
+      handoverWaitMs: HANDOVER_WAIT_MS,
+      onPhase,
+    }),
+    hard,
+    `agent inspection timed out after ${Math.round(hard / 1000)}s`,
+  ).catch(async (err) => {
+    await driver.close().catch(() => {});
+    const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");
+    throw new Error(redactWith(secrets(), `${String(err?.message ?? err)} ||trace: ${trace}`).slice(0, 490));
+  });
 }
 
 function withTimeout(promise, ms, message) {
