@@ -68,7 +68,8 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
     async captureState() {
       return { store: { ...state.store }, loggedIn: state.loggedIn };
     },
-    async setClock() {
+    async setClock(iso) {
+      state.clock = iso;
       return { ok: true, note: "clock set" };
     },
     async login(creds) {

@@ -173,7 +173,15 @@ export async function runAgentInspection(o) {
           results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [], steps: 0 });
           continue;
         }
-        const r = await runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials: loginMethod === "credentials" || loginMethod === "handover", loginFailed, handoverState, deadline, shot, plog });
+        const acArgs = { ac, o, pure, driver, callLlm, locale, data, hasCredentials: loginMethod === "credentials" || loginMethod === "handover", loginFailed, handoverState, deadline, shot, plog };
+        let r = await runOneAc(acArgs);
+        // (1) 시각 경계: 날짜·시간에 걸린 must가 통과하면 기기 시계를 한국 시간 새벽 00:30으로 옮겨 한 번 더.
+        if (r.status === "pass" && ac.priority === "must" && pure.isTimeRelated(ac) && timeLeft() > 90_000 && !llmCalls.budgetExhausted) {
+          const iso = pure.kstEarlyMorningIso(Date.now());
+          const v = await runOneAc({ ...acArgs, clockIso: iso });
+          r = pure.mergeClockVariant(r, v, iso, locale);
+          plog(`ac ${ac.id} clock-variant → ${v.status}`);
+        }
         results.push(r);
         plog(`ac ${ac.id} → ${r.status}${r.reasonCode ? `(${r.reasonCode})` : ""} steps=${r.steps}`);
       }
@@ -216,7 +224,7 @@ export async function runAgentInspection(o) {
     return { ...obs, aria: red(obs.aria), text: red(obs.text), title: red(obs.title), url: red(obs.url) };
   }
 
-  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog }) {
+  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null }) {
     const history = [];
     const actions = [];
     let corpus = "";
@@ -233,6 +241,10 @@ export async function runAgentInspection(o) {
     const known = new Set([normUrl(o.targetUrl)]);
     let onGuessedAddress = false;
     await driver.goto(o.targetUrl);
+    if (clockIso) {
+      await driver.setClock(clockIso).catch(() => {});
+      history.push(`(device clock set to ${clockIso} = 00:30 Korea time; re-check this criterion at this hour — dates shown as "today" must be the Korea date)`);
+    }
     await driver.markStorage?.().catch(() => {});
     const system = pure.agentSystemPrompt(locale);
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
@@ -329,7 +341,8 @@ export async function runAgentInspection(o) {
       if (res?.ok) {
         if (a.type === "fill" || a.type === "select") filled = true;
         else if (a.type === "click" && filled && !stateChange) stateChange = true;
-        else if (stateChange && (a.type === "reload" || a.type === "new_session" || a.type === "goto" || a.type === "login")) verified = true;
+        // (2) 새로고침만으로는 "남는다"를 증명하지 않는다 — 만든 기록을 다른 곳(새 방문자·다른 화면·다른 역할)에서 다시 찾아야.
+        else if (stateChange && (a.type === "new_session" || a.type === "goto" || a.type === "login")) verified = true;
       }
       if (a.type === "goto") {
         // 짐작한 주소 + 그 화면이 "없음"일 때만 — 링크는 없어도 실제로 있는 화면(/admin 등)은 정상 근거로 쓴다.
@@ -351,6 +364,7 @@ export async function runAgentInspection(o) {
       return {
         id: ac.id,
         status: f.status,
+        ...(f.scope ? { scope: f.scope } : {}),
         reason: red(f.reason),
         ...(f.reasonCode ? { reasonCode: f.reasonCode } : {}),
         evidence: (f.evidence ?? []).map(red),
@@ -362,6 +376,8 @@ export async function runAgentInspection(o) {
     }
   }
 }
+
+const MOBILE_CHECK_MAX = 8;
 
 function normUrl(u) {
   try {
@@ -411,6 +427,11 @@ export async function runSweep({ driver, pure, startUrl, until, shot, plog = () 
     if (!cls.ok) {
       const name = await shot(`sweep-${screens.length + 1}.png`);
       if (name) entry.screenshot = name;
+    }
+    // C10: 열리는 화면은 휴대폰 폭에서 가로 넘침도 잰다(처음 MOBILE_CHECK_MAX개).
+    if (cls.ok && driver.mobileCheck && screens.filter((s) => s.mobileOverflowPx !== undefined).length < MOBILE_CHECK_MAX) {
+      const m = await driver.mobileCheck(url).catch(() => null);
+      if (m && m.overflowPx !== null) entry.mobileOverflowPx = m.overflowPx;
     }
     screens.push(entry);
     enqueue(await driver.links());

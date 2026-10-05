@@ -58,9 +58,71 @@ const bookScript = [
 const coreScript = [
   { type: "fill", target: { label: "이름" }, value: "$NAME" },
   { type: "click", target: { role: "button", name: "예약하기" } },
-  { type: "reload" },
-  { type: "judge", verdict: "pass", reason: "새로고침해도 예약이 남아 있어요", evidenceQuote: "예약이 완료되었어요 $NAME 10:30" },
+  { type: "goto", path: "/" },
+  { type: "judge", verdict: "pass", reason: "첫 화면에서 그 시간이 예약됨으로 보여요", evidenceQuote: "10:30 예약됨" },
 ];
+
+describe("(1) 시각 경계 · (3) 로그인 벽 공개 범위", () => {
+  const todayAc = { id: "AC-T", title: "사장님 오늘 예약 목록", given: "예약 1건", when: "관리 화면", then: "오늘 날짜의 예약이 보인다", priority: "must", confirmed: true };
+  it("날짜 기준이 통과하면 한국 새벽 00:30으로 다시 — 그때 실패면 실패", async () => {
+    const site = salonSite();
+    site["/today"] = (s) => ({ status: 200, text: s.clock ? "오늘 예약 0건 (2026-10-04)" : "오늘 예약 1건 10:30" });
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct: salonOnAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "CORE-1": coreScript,
+      "AC-T": [
+        { type: "goto", path: "/today" },
+        { type: "judge", verdict: "pass", reason: "오늘 예약이 보여요", evidenceQuote: "오늘 예약 1건 10:30" },
+        { type: "goto", path: "/today" },
+        { type: "judge", verdict: "fail", reason: "새벽에는 오늘이 어제 날짜로 보여 예약이 0건이에요", evidenceQuote: "오늘 예약 0건 (2026-10-04)" },
+      ],
+    });
+    site["/"] = ((orig) => (s) => ({ ...orig(s), links: [...orig(s).links, "/today"] }))(site["/"]);
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 300_000, acs: [todayAc], acSource: "interview", llm, driver });
+    const row = out.report.acTable.find((r) => r.id === "AC-T");
+    assert.equal(row.status, "fail");
+    assert.match(row.reason, /한국 시간 새벽 0시 30분/);
+    assert.equal(row.clockVariant.status, "fail");
+    assert.match(driver.state.clock, /T15:30:00\.000Z$/, "KST 00:30 = UTC 전날 15:30");
+    assert.ok(prompts.some((p) => p.includes("00:30 Korea time")));
+    assert.equal(out.decision, "Needs Fix");
+  });
+  it("시간과 무관한 기준은 변형을 돌리지 않는다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({ "CORE-1": coreScript });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], acSource: "interview", llm, driver });
+    assert.equal(driver.state.clock, undefined);
+  });
+  it("로그인 벽: 공개 범위 통과는 pass(scope public) → '문제를 찾지 못했어요 — 로그인 뒤는 못 봄'", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({
+      "CORE-1": [...coreScript.slice(0, 3), { type: "judge", verdict: "pass", reason: "손님 쪽은 됐고 관리 화면은 로그인 뒤라 못 봤어요", evidenceQuote: "10:30 예약됨", scope: "public" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], acSource: "interview", llm, driver });
+    assert.equal(out.report.acTable[0].scope, "public");
+    assert.equal(out.decision, "Conditionally Ready");
+    assert.equal(out.report.agent.basis, "public_scope_only");
+    assert.match(out.report.oneLine, /로그인 뒤 화면은 확인하지 못했어요/);
+  });
+});
+
+describe("(2) 남는다 = 만든 기록을 다른 곳에서 다시 찾음 — 새로고침만으로는 아니다", () => {
+  it("입력→제출→새로고침→통과만 있으면 핵심 일 확인 안 됨(Not Verified)", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({
+      "CORE-1": [
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "click", target: { role: "button", name: "예약하기" } },
+        { type: "reload" },
+        { type: "judge", verdict: "pass", reason: "새로고침해도 완료 화면이 남아 있어요", evidenceQuote: "예약이 완료되었어요 $NAME 10:30" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], acSource: "interview", llm, driver });
+    const core = out.report.acTable.find((r) => r.id === "CORE-1");
+    assert.deepEqual(core.exercised, { stateChange: true, verified: false });
+    assert.equal(out.decision, "Not Verified");
+  });
+});
 
 describe("agent 실행기 — 핵심 일을 해 보지 않은 통과는 '작동'이 아니다", () => {
   it("표시만 보고 통과한 must뿐이면 Not Verified(벤치마크 #1 run-1 반대 판정 재현 방지)", async () => {
