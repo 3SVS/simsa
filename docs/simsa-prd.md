@@ -9,6 +9,8 @@
 > 정확히 일치"). 새 작업/PR은 이 PRD의 해당 절을 근거로 시작한다. 이 문서와 개별 설계 문서가
 > 충돌하면 **개별 설계 문서(더 상세)가 우선**이고, 이 PRD를 고친다.
 >
+> **[2026-10-05 추가]** 사업 방향(단기 비영어권 측정·검수 + 데이터 수집, 장기 모델·빌더 선택 + 결과 보증)은 `docs/simsa-strategy-2026-10-05.md`.
+>
 > 작성 2026-07-09. 출처: `simsa-autopilot-operating-model.md`, `simsa-acceptance-graph.md`,
 > `simsa-visual-completion-check.md`, `simsa-external-vibe-app-completion-loop-spike.md`,
 > `design-prep-layer.md`, `uiux-redesign-instructions.md`, `simsa-research-audit-2026-07.md`,
