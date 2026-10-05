@@ -102,30 +102,67 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     wire(page);
   }
 
-  function locate(target) {
+  function locateAll(target) {
     const n = target.name;
-    if (target.label) return page.getByLabel(target.label, { exact: false }).first();
-    if (target.placeholder) return page.getByPlaceholder(target.placeholder, { exact: false }).first();
-    if (target.role && n) return page.getByRole(target.role, { name: n, exact: false }).first();
-    if (target.text) return page.getByText(target.text, { exact: false }).first();
+    if (target.label) return page.getByLabel(target.label, { exact: false });
+    if (target.placeholder) return page.getByPlaceholder(target.placeholder, { exact: false });
+    if (target.role && n) return page.getByRole(target.role, { name: n, exact: false });
+    if (target.text) return page.getByText(target.text, { exact: false });
     return null;
   }
 
-  /** 이름만 준 경우: 버튼 → 링크 → 아무 글자 순서(누를 수 있는 것 우선 — click-target.mjs와 같은 원칙). */
-  async function locateByName(name) {
-    for (const role of ["button", "link", "tab", "option", "menuitem", "checkbox", "radio"]) {
-      const l = page.getByRole(role, { name, exact: false }).first();
-      if ((await l.count().catch(() => 0)) > 0) return l;
+  /**
+   * 일치 목록에서 **보이는** 첫 요소(입력이면 편집 가능한 요소)를 고른다. 종전 `.first()`는 숨은 사본(모바일/데스크톱
+   * 이중 레이아웃·재렌더 전 노드)을 골라 fill이 8초 타임아웃 → "입력이 안 된다" 오판을 만들었다(벤치마크 #1 run-4 v0).
+   * 고른 경위를 진단 문자열로 돌려준다(계측: 일치 수·보이는 수·태그).
+   */
+  async function pickVisible(all, { editable = false } = {}) {
+    const count = await all.count().catch(() => 0);
+    let visible = 0;
+    let chosen = null;
+    let tag = "";
+    for (let i = 0; i < Math.min(count, 20); i += 1) {
+      const el = all.nth(i);
+      if (!(await el.isVisible().catch(() => false))) continue;
+      visible += 1;
+      if (chosen) continue;
+      if (editable && !(await el.isEditable().catch(() => false))) continue;
+      chosen = el;
+      tag = await el.evaluate((e) => e.tagName.toLowerCase()).catch(() => "?");
     }
-    const t = page.getByText(name, { exact: false }).first();
-    return (await t.count().catch(() => 0)) > 0 ? t : null;
+    return { el: chosen, diag: `matched=${count} visible=${visible} chosen=${chosen ? tag : "none"}` };
+  }
+
+  /** 이름만 준 경우: 버튼 → 링크 → 아무 글자 순서(누를 수 있는 것 우선 — click-target.mjs와 같은 원칙). */
+  async function locateByName(name, editable) {
+    const roles = editable ? ["textbox", "combobox", "spinbutton", "searchbox"] : ["button", "link", "tab", "option", "menuitem", "checkbox", "radio"];
+    for (const role of roles) {
+      const p = await pickVisible(page.getByRole(role, { name, exact: false }), { editable });
+      if (p.el) return p;
+    }
+    if (editable) {
+      const p = await pickVisible(page.getByLabel(name, { exact: false }), { editable });
+      if (p.el) return p;
+      return pickVisible(page.getByPlaceholder(name, { exact: false }), { editable });
+    }
+    return pickVisible(page.getByText(name, { exact: false }));
+  }
+
+  async function resolveTargetDiag(target, editable = false) {
+    const all = locateAll(target);
+    let p = all ? await pickVisible(all, { editable }) : { el: null, diag: "no_locator" };
+    if (p.el) return p;
+    const name = target.name ?? target.label ?? target.placeholder ?? target.text;
+    if (name) {
+      const q = await locateByName(name, editable);
+      if (q.el) return { el: q.el, diag: `${p.diag} → byName ${q.diag}` };
+      p = { el: null, diag: `${p.diag} → byName ${q.diag}` };
+    }
+    return p;
   }
 
   async function resolveTarget(target) {
-    let l = locate(target);
-    if (l && (await l.count().catch(() => 0)) > 0) return l;
-    if (target.name) l = await locateByName(target.name);
-    return l;
+    return (await resolveTargetDiag(target)).el;
   }
 
   const bodyText = async () => (await page.locator("body").innerText({ timeout: 4000 }).catch(() => "")).replace(/\s+\n/g, "\n").trim();
@@ -176,19 +213,30 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
             return { ok: true, note: `clicked → ${page.url()}` };
           }
           case "fill": {
-            const l = await resolveTarget(action.target);
-            if (!l) return { ok: false, note: "target_not_found" };
+            const { el: l, diag } = await resolveTargetDiag(action.target, true);
+            if (!l) return { ok: false, note: `target_not_found (${diag})` };
             const type = await l.getAttribute("type").catch(() => null);
             if (type === "password") return { ok: false, note: "password_field_use_login_action" };
-            await l.fill(action.value, { timeout: ACT_TIMEOUT });
+            let how = "fill";
+            try {
+              await l.fill(action.value, { timeout: ACT_TIMEOUT });
+            } catch (err) {
+              // fill이 막히면(가려진 오버레이·재렌더) 사람처럼 눌러서 친다.
+              how = `fill_failed(${String(err?.message ?? err).split("\n")[0].slice(0, 60)}) → type`;
+              await l.click({ timeout: 4000, force: true }).catch(() => {});
+              await page.keyboard.type(action.value, { delay: 30 });
+            }
             // 화면 재그리기(하이드레이션 불일치 등)로 값이 날아가는 앱이 있다 — 확인하고 사람처럼 한 글자씩 다시 친다.
             if ((await l.inputValue().catch(() => action.value)) !== action.value) {
+              how += " → retype";
               await l.click({ timeout: ACT_TIMEOUT }).catch(() => {});
               await l.fill("").catch(() => {});
               await page.keyboard.type(action.value, { delay: 30 });
             }
             const got = await l.inputValue().catch(() => null);
-            return got === null || got === action.value ? { ok: true, note: "filled" } : { ok: false, note: "value did not stick in the field" };
+            // 계측: 어떤 칸을 골랐는지·어떻게 넣었는지·결과값이 같은지(값 자체는 시험 데이터라 그대로 둔다 — 비밀은 상위에서 가린다).
+            const trace = `${diag}; ${how}; value_ok=${got === null ? "unknown" : got === action.value}`;
+            return got === null || got === action.value ? { ok: true, note: `filled (${trace})` } : { ok: false, note: `value did not stick (${trace})` };
           }
           case "select": {
             const l = await resolveTarget(action.target);
@@ -227,6 +275,23 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     async newSession(url, storageState = null) {
       await openContext(storageState);
       return this.goto(url);
+    },
+    /**
+     * C10: 휴대폰 폭(390×844)에서 그 화면을 열어 가로 넘침(px)을 잰다. 같은 쿠키·저장소의 별도 탭 — 진행 중 화면은 그대로.
+     */
+    async mobileCheck(url) {
+      const p = await context.newPage();
+      try {
+        await p.setViewportSize({ width: 390, height: 844 });
+        await p.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT });
+        await p.waitForTimeout(500);
+        const m = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+        return { url, overflowPx: Math.max(0, m.sw - m.cw) };
+      } catch {
+        return { url, overflowPx: null };
+      } finally {
+        await p.close().catch(() => {});
+      }
     },
     /** A2: 기준 시작 시점 표시 — 이후의 서버 쓰기 요청·브라우저 저장소 변화를 잰다. */
     async markStorage() {
