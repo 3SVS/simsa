@@ -245,7 +245,8 @@ async function runJob(payload) {
   try {
     // Lazy import keeps startup fast and lets a broken Playwright install
     // surface as a per-run failure callback instead of a dead container.
-    const { runInspection } = await import("./inspector-run.mjs");
+    // 기본 엔진 모듈은 그 엔진일 때만 읽는다(agent 런이 기본 엔진의 의존성 때문에 깨지지 않게).
+    const { runInspection } = payload.engine === "agent" ? { runInspection: null } : await import("./inspector-run.mjs");
 
     // Wall-clock rail: Chromium hangs (infinite spinners, slow hosts) must
     // not exceed ~4 minutes. On timeout the run is reported failed; the
@@ -343,8 +344,10 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
   const progress = {};
   const { createPlaywrightDriver } = await import("./agent-driver.mjs");
   const { createProxyLlm } = await import("./agent-llm.mjs");
-  const { isNoiseResource } = await import("./dist/nondev-report.js");
-  const { attemptSignup } = await import("./signup-run.mjs");
+  // 이미지 안은 ./dist, 저장소에서 직접 돌릴 때(C9 로컬 실행 검증)는 central-plane tsc 출력 ../dist.
+  const { isNoiseResource } = await import("./dist/nondev-report.js").catch(() => import("../dist/nondev-report.js"));
+  // 가입 실행은 동의된 런에서만 읽는다.
+  const { attemptSignup } = signup?.enabled ? await import("./signup-run.mjs") : { attemptSignup: null };
   const agent = payload.agent ?? {};
   const driver = await createPlaywrightDriver({ outDir, locale, isNoiseResource, attemptSignup });
   const live = agent.loginMode === "handover" ? createLiveSession(payload.runId, driver) : null;
