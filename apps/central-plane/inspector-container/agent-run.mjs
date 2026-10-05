@@ -90,6 +90,7 @@ export async function runAgentInspection(o) {
   let partial = false;
   let deadline = Infinity;
   let firstHtml = "";
+  let usedTestData = null;
 
   try {
     await driver.start(o.targetUrl);
@@ -165,6 +166,7 @@ export async function runAgentInspection(o) {
 
       // 5) AC 실행
       const data = pure.koreanTestData(Date.now() % 100000);
+      usedTestData = data;
       for (const ac of acs) {
         if (timeLeft() < 20_000 || llmCalls.budgetExhausted) {
           partial = true;
@@ -192,6 +194,11 @@ export async function runAgentInspection(o) {
     locale,
   );
   report.agent.llmCalls = llmCalls.n;
+  // C8: 이번 확인이 앱에 남겼을 수 있는 기록의 표지 — 사용자가 찾아 지울 수 있게 리포트에 적는다.
+  if (usedTestData) {
+    report.agent.testData = { names: [usedTestData.name, usedTestData.altName], phone: usedTestData.phone, memo: usedTestData.memo };
+    report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
+  }
   report.agent.durationMs = Date.now() - t0;
   if (loginFailed) report.notes.push(pure.reasonText("login_failed", locale));
   const agentPrompt = pure.buildAgentAcFixPrompt(report, locale);

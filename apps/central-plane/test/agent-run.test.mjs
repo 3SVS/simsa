@@ -130,6 +130,8 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     assert.equal(out.works, false);
     assert.deepEqual(out.report.acTable.map((r) => [r.id, r.status]), [["CORE-1", "not_verified"], ["AC-001", "pass"], ["AC-002", "fail"], ["AC-003", "fail"]]);
     assert.equal(out.report.agent.loginMethod, "credentials");
+    assert.equal(out.report.agent.testData.names.length, 2, "C8: 남겼을 수 있는 시험 기록 표지");
+    assert.ok(out.report.notes.some((n) => n.includes("시험 기록")));
     assert.match(out.agentPrompt, /AC-002/);
     assert.match(out.agentPrompt, /AC-003/);
     assert.doesNotMatch(out.agentPrompt, /\[AC-001/);
