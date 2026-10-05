@@ -83,7 +83,7 @@ function setup() {
   const vendorFetch = async (_url, init) => {
     const body = JSON.parse(init.body);
     prompts.push(body.messages[0].content);
-    const text = await current.llm({ system: "", user: body.messages[0].content });
+    const text = await current.llm({ system: "", user: body.messages[0].content, tier: /haiku/.test(body.model) ? "cheap" : "strong" });
     return new Response(
       JSON.stringify({ content: [{ type: "text", text }], model: body.model, usage: { input_tokens: 1200, output_tokens: 80 } }),
       { status: 200, headers: { "content-type": "application/json" } },

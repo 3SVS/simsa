@@ -293,6 +293,25 @@ export function parseAgentAction(raw: unknown, origin: string): { ok: true; acti
   }
 }
 
+/**
+ * (F3, 2026-10-06 프로덕션 진단) 사유 없는 "확인 못 함"을 단계 절반도 안 써서 내면 이른 포기다. 막힌 이유(reasonCode)가
+ * 있으면 포기가 아니다(로그인 벽·동의 없음·API 키 등).
+ */
+export function isPrematureGiveUp(a: AgentAction, stepsUsed: number, maxSteps: number): boolean {
+  return a.type === "judge" && a.verdict === "not_verified" && !a.reasonCode && stepsUsed < maxSteps / 2;
+}
+
+/** (F6) 기준 문장(제목·전제·행동·결과·단계)에 그 경로가 그대로 적혀 있는가 — 그런 주소만 링크 없이 열 수 있다. */
+export function criterionNamesPath(criterionText: string, url: string): boolean {
+  let path = "";
+  try {
+    path = new URL(url).pathname.replace(/\/+$/, "");
+  } catch {
+    return false;
+  }
+  return path.length >= 2 && (criterionText ?? "").includes(path);
+}
+
 /** 같은 출처일 때만 절대 주소로. 다른 출처·javascript:·mailto: 등은 null. */
 export function resolveSameOrigin(pathOrUrl: string, origin: string): string | null {
   if (!pathOrUrl) return null;

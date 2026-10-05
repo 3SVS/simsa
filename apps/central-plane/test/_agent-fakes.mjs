@@ -21,6 +21,7 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
     async start() {},
     async goto(url) {
       state.path = pathOf(url);
+      (state.visited ??= []).push(state.path);
       const v = view();
       if (v.crashOnOpen) state.crashes += 1;
       return { status: v.status ?? 200, url: origin + state.path };
@@ -45,7 +46,10 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
     async act(action) {
       if (action.type === "fill") state.fills.push(action.value);
       if (action.type === "click") state.clicks.push(action.target.name ?? action.target.text);
-      if (action.type === "goto") state.path = pathOf(action.path);
+      if (action.type === "goto") {
+        state.path = pathOf(action.path);
+        (state.visited ??= []).push(state.path);
+      }
       if (action.type === "reload") {
         /* 같은 세션 저장소 유지 */
       }
@@ -57,6 +61,10 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
       state.store = storageState?.store ? { ...storageState.store } : {};
       state.loggedIn = Boolean(storageState?.loggedIn);
       return this.goto(url);
+    },
+    /** 화면 상태 서명(진짜 드라이버는 글자+상태 속성). 가짜는 경로·글자·저장소·선택 상태. */
+    async signature() {
+      return JSON.stringify([state.path, view().text ?? "", state.store, state.selected ?? null]);
     },
     async markStorage() {
       state.mark = { store: JSON.stringify(state.store), writes: (state.serverWrites ?? []).length };
@@ -117,10 +125,11 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
  * 가짜 LLM: AC id별 대본(행동 JSON 목록). 대본이 끝나면 not_verified 판정. 받은 모든 프롬프트를 prompts에 쌓는다
  * (비밀이 새지 않았는지 검사용). 첫 화면 AC 추정 요청엔 inferred를 돌려준다.
  */
-export function makeScriptedLlm(scripts, { inferred = null, review = () => true, fix = null } = {}) {
+export function makeScriptedLlm(scripts, { inferred = null, review = () => true, fix = null, strong = null } = {}) {
   const prompts = [];
   const cursor = new Map();
-  const llm = async ({ system, user }) => {
+  const lastById = new Map();
+  const llm = async ({ system, user, tier = "strong" }) => {
     prompts.push(`${system}\n${user}`);
     if (/You fix a single-file web app/.test(user)) return JSON.stringify(fix ?? { edits: [] });
     if (/skeptical reviewer/i.test(user)) {
@@ -132,13 +141,22 @@ export function makeScriptedLlm(scripts, { inferred = null, review = () => true,
     }
     const m = /Criterion ([A-Za-z0-9-]+) \(/.exec(user);
     const id = m?.[1] ?? "?";
+    // (F2) 강한 모델에게 다시 묻는 판정 턴: 기본은 싼 모델이 방금 낸 것과 같은 답(동의). strong[id]로 바꿀 수 있다.
+    if (tier === "strong") {
+      const override = strong?.[id];
+      if (typeof override === "function") return JSON.stringify({ thought: "s", action: override(lastById.get(id)) });
+      if (override) return JSON.stringify({ thought: "s", action: override });
+      return lastById.get(id) ?? JSON.stringify({ thought: "s", action: { type: "judge", verdict: "not_verified", reason: "대본 끝", evidenceQuote: "" } });
+    }
     const list = scripts[id] ?? [];
     const i = cursor.get(id) ?? 0;
     cursor.set(id, i + 1);
     const next = list[i] ?? { type: "judge", verdict: "not_verified", reason: "대본 끝", evidenceQuote: "" };
     // "$NAME"은 실행기가 준 한국어 시험 데이터의 이름(진짜 모델이 하듯 프롬프트에서 읽는다).
     const name = /name=([^,\s]+),/.exec(user)?.[1] ?? "김서연";
-    return JSON.stringify({ thought: "t", action: next }).split("$NAME").join(name);
+    const out = JSON.stringify({ thought: "t", action: next }).split("$NAME").join(name);
+    lastById.set(id, out);
+    return out;
   };
   return { llm, prompts };
 }

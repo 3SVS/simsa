@@ -298,6 +298,17 @@ export async function runAgentInspection(o) {
   }
 
   async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null }) {
+    async function startFresh() {
+      if (driver.newSession) {
+        await driver.newSession(o.targetUrl, handoverState ?? null).catch(() => driver.goto(o.targetUrl));
+        if (!handoverState && o.credentials && hasCredentials && !loginFailed) {
+          await driver.login(o.credentials).catch(() => null);
+          await driver.goto(o.targetUrl);
+        }
+      } else {
+        await driver.goto(o.targetUrl);
+      }
+    }
     const history = [];
     const actions = [];
     let corpus = "";
@@ -313,13 +324,23 @@ export async function runAgentInspection(o) {
     // 앱이 링크로 보여 준 주소만 "아는 주소". 그 밖의 goto는 짐작 — 거기서 본 "없음"은 고장 근거가 아니다.
     const known = new Set([normUrl(o.targetUrl)]);
     let onGuessedAddress = false;
-    await driver.goto(o.targetUrl);
+    // (F1) 2026-10-06 프로덕션 진단: 기준마다 같은 브라우저를 이어 써서 앞 기준이 고른 날짜·시간·입력이 남은 채로
+    //  다음 기준이 시작됐다("이미 날짜와 시간이 선택된 상태라서 …"). 기준마다 새 브라우저(쿠키·저장소 없음)로 시작한다.
+    //  로그인이 있던 런은 그 로그인을 되살린다(넘겨받은 상태 · 시험 계정 재로그인).
+    await startFresh();
     if (clockIso) {
       await driver.setClock(clockIso).catch(() => {});
       history.push(`(device clock set to ${clockIso} = 00:30 Korea time; re-check this criterion at this hour — dates shown as "today" must be the Korea date)`);
     }
     await driver.markStorage?.().catch(() => {});
     const system = pure.agentSystemPrompt(locale, { readOnly: o.readOnly === true });
+    let nudges = 0;
+    let disagreements = 0;
+    // (F5) 진전 없는 행동 감지 → 다음 턴은 강한 모델. (F6) 짐작한 주소로의 이동은 막는다.
+    let stuck = 0;
+    let lastDesc = "";
+    let escalate = false;
+    const criterionText = [ac.title, ac.given, ac.when, ac.then, ...(ac.steps ?? [])].join(" ");
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
       const obs = redObs(obsRaw);
@@ -330,21 +351,31 @@ export async function runAgentInspection(o) {
       }
       corpus += `\n${obs.url}\n${obs.aria}\n${obs.text}\n${obs.networkErrors.join("\n")}\n${obs.consoleErrors.join("\n")}`;
       let text;
+      let lastPrompt = "";
       try {
-        text = await callLlm(
-          system,
-          pure.agentTurnPrompt({
-            ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
-            stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(),
-          }),
-          700,
-          "cheap",
-        );
+        lastPrompt = pure.agentTurnPrompt({
+          ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
+          stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(),
+        });
+        text = await callLlm(system, lastPrompt, 700, escalate ? "strong" : "cheap");
+        escalate = false;
       } catch (err) {
         const code = /budget/.test(String(err?.message ?? err)) ? "budget" : "agent_error";
         return finish({ status: "not_verified", reason: pure.reasonText(code, locale), reasonCode: code, evidence: [] });
       }
-      const parsed = pure.parseAgentAction(text, o.targetUrl);
+      let parsed = pure.parseAgentAction(text, o.targetUrl);
+      // (F2) 싼 모델은 길 찾기(행동)만 — 판정은 강한 모델이 한다. 진단: 행동·판정 모두 gpt-5.4-mini가 냈고(런당 41~67회),
+      //  강한 모델(gpt-5.4)은 재확인 3~6회뿐이었다. 싼 모델이 judge를 내면 같은 관찰로 강한 모델에 다시 묻는다
+      //  (강한 모델이 "더 해 보라"며 행동을 내면 그 행동을 따른다).
+      if (parsed.ok && parsed.action.type === "judge") {
+        try {
+          const strongText = await callLlm(system, lastPrompt, 700, "strong");
+          const strong = pure.parseAgentAction(strongText, o.targetUrl);
+          if (strong.ok) parsed = strong;
+        } catch {
+          /* 강한 모델 실패면 싼 모델의 판정을 그대로 쓴다(아래 규칙은 같다) */
+        }
+      }
       steps += 1;
       actionsUsed += 1;
       if (actionsUsed > caps.maxActions) {
@@ -359,6 +390,14 @@ export async function runAgentInspection(o) {
       invalidStreak = 0;
       const a = parsed.action;
       if (a.type === "judge") {
+        // (F3) 진단: 기준 대부분이 사유 없는 "아직 확인하지 못했어요"로 몇 걸음(0~7) 만에 끝났다 — 단계 상한(14·24)도 시간
+        //  상한(13분, 실제 150~206초)도 아닌 **스스로 멈춤**. 사유 코드 없는 확인 못 함은 단계가 절반 넘게 남았으면 두 번까지 되돌려
+        //  보낸다(막힌 이유가 있으면 reasonCode로 말해야 끝낼 수 있다).
+        if (pure.isPrematureGiveUp(a, steps, maxSteps) && nudges < 2) {
+          nudges += 1;
+          history.push(`(not accepted: you still have ${maxSteps - steps} actions. Actually perform the steps of the criterion — choose options, fill fields, submit, then look. Only stop early with a reasonCode such as login_required, write_not_allowed, api_key_required, app_missing.)`);
+          continue;
+        }
         const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale, onGuessedAddress });
         if (loginFailed && f.reasonCode === "login_required") f.reason = pure.reasonText("login_failed", locale);
         // A3: 근거가 붙은 pass/fail은 다른 눈으로 한 번 더. 동의하지 않거나 답이 깨지면 결과로 치지 않는다.
@@ -376,7 +415,10 @@ export async function runAgentInspection(o) {
             review = null;
           }
           if (!review || !review.agree) {
-            history.push(`(review disagreed: ${review?.why ?? "no answer"})`);
+            history.push(`(review disagreed: ${review?.why ?? "no answer"} — gather the missing proof, then judge again)`);
+            // (F4) 진단: 재확인 불일치 11건이 그 자리에서 기준을 끝냈다. 단계가 남았으면 불일치 이유를 들고 한 번 더 해 본다.
+            disagreements += 1;
+            if (disagreements < 2 && steps < maxSteps - 2) continue;
             return finish({ status: "not_verified", reason: pure.reasonText("judge_disagreed", locale), reasonCode: "judge_disagreed", evidence: [] });
           }
         }
@@ -400,6 +442,13 @@ export async function runAgentInspection(o) {
           }
         }
       }
+      // (F6) 2026-10-06 진단(Gemini): 에이전트가 지어낸 주소(/admin/today)로 가서 404를 보고 "운영자 화면이 404"라 했다 — 실제 화면은 정상.
+      //  앱이 보여 준 링크·지나온 주소·기준 문장에 적힌 경로만 열 수 있다. 짐작한 주소는 아예 열지 않는다(결론의 근거가 될 수 없다).
+      if (a.type === "goto" && !known.has(normUrl(a.path)) && !pure.criterionNamesPath(criterionText, a.path)) {
+        history.push(`${desc} → BLOCKED (this address was never shown by the app — navigate by clicking the app's own links/buttons; never conclude anything from an address you guessed)`);
+        continue;
+      }
+      const sigBefore = driver.signature ? await driver.signature().catch(() => null) : null;
       if (a.type === "login") {
         if (handoverState) {
           res = await driver.newSession(o.targetUrl, handoverState).then(() => ({ ok: true, note: "session restored" }));
@@ -437,8 +486,22 @@ export async function runAgentInspection(o) {
       } else if (a.type === "click" || a.type === "back" || a.type === "new_session" || a.type === "login") {
         onGuessedAddress = false;
       }
+      // (F5) 2026-10-06 진단(Bolt·Claude·Gemini): 같은 단추를 3~9번 눌러도 화면이 그대로인데 계속 눌렀다(필수 선택을 빠뜨린 채).
+      //  누르기·키·고르기 뒤 화면·주소·상태 속성이 그대로면 그렇다고 알리고, 두 번째부터는 강한 모델이 다음 수를 고른다.
+      if (sigBefore !== null && (a.type === "click" || a.type === "press" || a.type === "select")) {
+        const sigAfter = await driver.signature().catch(() => null);
+        if (sigAfter === sigBefore) {
+          stuck += 1;
+          res = { ...res, ok: res.ok, note: `${res.note ?? ""} — NO VISIBLE CHANGE (look for a required choice above, a validation message, or a disabled button; do not repeat the same action)` };
+          if (stuck >= 2 || desc === lastDesc) escalate = true;
+        } else {
+          stuck = 0;
+        }
+      }
+      lastDesc = desc;
       actions.push(desc);
       history.push(`${desc} → ${res.ok ? "ok" : "failed"}: ${red(res.note ?? "")}`);
+      if (!res.ok) escalate = escalate || /failed/.test(history.at(-2) ?? "");
       corpus += `\n${red(res.note ?? "")}`;
     }
     return finish({ status: "not_verified", reason: pure.reasonText("not_reached", locale), reasonCode: "not_reached", evidence: [] });

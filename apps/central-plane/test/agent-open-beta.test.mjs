@@ -235,7 +235,8 @@ describe("실행기: 읽기 전용 · 상한", () => {
     assert.equal(out.report.acTable.length, 5);
     assert.ok(out.report.sweep.screensChecked <= 10);
     const actionTurns = prompts.filter((p) => /Criterion [A-Z0-9-]+ \(/.test(p) && !/skeptical/.test(p)).length;
-    assert.ok(actionTurns <= 3, `turns=${actionTurns}`);
+    // 행동 상한 3 — 판정 턴은 강한 모델에 한 번 더 묻는다(F2)라 프롬프트는 최대 2배.
+    assert.ok(actionTurns <= 6, `turns=${actionTurns}`);
     assert.ok(out.report.acTable.some((r) => r.reasonCode === "budget"));
   });
 });
