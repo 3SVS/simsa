@@ -181,7 +181,14 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
             const type = await l.getAttribute("type").catch(() => null);
             if (type === "password") return { ok: false, note: "password_field_use_login_action" };
             await l.fill(action.value, { timeout: ACT_TIMEOUT });
-            return { ok: true, note: "filled" };
+            // 화면 재그리기(하이드레이션 불일치 등)로 값이 날아가는 앱이 있다 — 확인하고 사람처럼 한 글자씩 다시 친다.
+            if ((await l.inputValue().catch(() => action.value)) !== action.value) {
+              await l.click({ timeout: ACT_TIMEOUT }).catch(() => {});
+              await l.fill("").catch(() => {});
+              await page.keyboard.type(action.value, { delay: 30 });
+            }
+            const got = await l.inputValue().catch(() => null);
+            return got === null || got === action.value ? { ok: true, note: "filled" } : { ok: false, note: "value did not stick in the field" };
           }
           case "select": {
             const l = await resolveTarget(action.target);

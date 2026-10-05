@@ -277,7 +277,7 @@ export async function runAgentInspection(o) {
             review = pure.parseJudgeReview(
               await callLlm(
                 "You review browser test verdicts. Reply with JSON only.",
-                pure.judgeReviewPrompt({ ac, verdict: f.status, reason: f.reason, evidence: f.evidence, actions, observationTail: corpus }),
+                pure.judgeReviewPrompt({ ac, verdict: f.status, reason: f.reason, evidence: f.evidence, actions, observationTail: corpus, history }),
                 300,
               ),
             );

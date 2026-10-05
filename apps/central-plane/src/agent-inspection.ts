@@ -1112,6 +1112,20 @@ export function describeStorageProbe(p: StorageProbe): string {
  * A3: 판정을 다른 눈으로 한 번 더 — 같은 관찰 기록만 보고 "이 근거로 이 판정이 맞나"를 묻는다. 동의하지 않으면
  * not_verified(judge_disagreed). 판정을 뒤집지 않는다(통과→실패로 바꾸지 않음) — 확신이 없을 때 말을 아낄 뿐이다.
  */
+/** 근거 인용 주변만 잘라 낸다(검토자가 근거를 실제로 볼 수 있게 — 끝부분만 주면 앞에서 본 근거가 잘린다). */
+export function evidenceWindows(corpus: string, quotes: readonly string[], radius = 600): string {
+  const nc = corpus.normalize("NFC");
+  const out: string[] = [];
+  for (const q of quotes) {
+    const needle = q.normalize("NFC").replace(/\s+/g, " ").trim().slice(0, 60).toLowerCase();
+    if (needle.length < 2) continue;
+    const flat = nc.replace(/\s+/g, " ");
+    const i = flat.toLowerCase().indexOf(needle);
+    if (i >= 0) out.push(`…${flat.slice(Math.max(0, i - radius), i + needle.length + radius)}…`);
+  }
+  return out.join("\n---\n");
+}
+
 export function judgeReviewPrompt(args: {
   ac: AgentAc;
   verdict: "pass" | "fail";
@@ -1119,6 +1133,7 @@ export function judgeReviewPrompt(args: {
   evidence: string[];
   actions: string[];
   observationTail: string;
+  history?: string[];
 }): string {
   return [
     "You are a skeptical reviewer of a browser test. Decide whether the tester's verdict is justified by what was actually observed. Be strict:",
@@ -1131,9 +1146,13 @@ export function judgeReviewPrompt(args: {
     `Tester's verdict: ${args.verdict} — ${args.reason}`,
     `Quoted evidence: ${args.evidence.map((e) => `"${e}"`).join(" ")}`,
     `Actions taken: ${args.actions.join(" → ") || "(none)"}`,
+    ...(args.history?.length ? ["", "Action results (tool outputs, oldest first):", ...args.history.slice(-20)] : []),
     "",
-    "Observation log (latest last):",
-    args.observationTail.slice(-6000),
+    "Where the quoted evidence appears in the observations:",
+    evidenceWindows(args.observationTail, args.evidence) || "(quote not found)",
+    "",
+    "Latest observation:",
+    args.observationTail.slice(-2500),
   ].join("\n");
 }
 
