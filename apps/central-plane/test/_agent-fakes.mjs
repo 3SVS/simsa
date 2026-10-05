@@ -58,6 +58,13 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
       state.loggedIn = Boolean(storageState?.loggedIn);
       return this.goto(url);
     },
+    async markStorage() {
+      state.mark = { store: JSON.stringify(state.store), writes: (state.serverWrites ?? []).length };
+    },
+    async storageProbe() {
+      const writes = (state.serverWrites ?? []).slice(state.mark?.writes ?? 0);
+      return { serverWrites: writes, localChanged: JSON.stringify(state.store) !== (state.mark?.store ?? "{}"), sessionChanged: false };
+    },
     async captureState() {
       return { store: { ...state.store }, loggedIn: state.loggedIn };
     },
@@ -109,11 +116,15 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
  * 가짜 LLM: AC id별 대본(행동 JSON 목록). 대본이 끝나면 not_verified 판정. 받은 모든 프롬프트를 prompts에 쌓는다
  * (비밀이 새지 않았는지 검사용). 첫 화면 AC 추정 요청엔 inferred를 돌려준다.
  */
-export function makeScriptedLlm(scripts, { inferred = null } = {}) {
+export function makeScriptedLlm(scripts, { inferred = null, review = () => true } = {}) {
   const prompts = [];
   const cursor = new Map();
   const llm = async ({ system, user }) => {
     prompts.push(`${system}\n${user}`);
+    if (/skeptical reviewer/i.test(user)) {
+      const id = /Criterion ([A-Za-z0-9-]+) \(/.exec(user)?.[1] ?? "?";
+      return JSON.stringify({ agree: review(id, user), why: "fake review" });
+    }
     if (/write acceptance criteria/i.test(user) || /acceptance criteria/i.test(system)) {
       return JSON.stringify({ acs: inferred ?? [] });
     }

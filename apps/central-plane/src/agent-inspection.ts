@@ -80,6 +80,7 @@ export const AC_REASON_CODES = [
   "not_reached",
   "agent_error",
   "guessed_address",
+  "judge_disagreed",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -154,6 +155,8 @@ export type AgentAction =
   | { type: "set_clock"; iso: string }
   | { type: "wait"; ms: number }
   | { type: "login" }
+  /** 탐침: 이 기준을 시작한 뒤 앱이 **서버에 쓰기 요청**을 보냈는지 vs 브라우저 저장소(localStorage·sessionStorage)만 바뀌었는지. */
+  | { type: "probe_storage" }
   | { type: "judge"; verdict: AcStatus; reason: string; evidenceQuote: string; reasonCode?: AcReasonCode };
 
 export const ALLOWED_KEYS = ["Enter", "Tab", "Escape", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space", "Backspace"] as const;
@@ -251,6 +254,7 @@ export function parseAgentAction(raw: unknown, origin: string): { ok: true; acti
     case "back":
     case "new_session":
     case "login":
+    case "probe_storage":
       return { ok: true, action: { type } };
     case "set_clock": {
       const iso = typeof a["iso"] === "string" ? a["iso"].trim() : "";
@@ -307,6 +311,7 @@ export function describeAction(a: AgentAction, locale: ReportLocale = "ko"): str
     case "set_clock": return en ? `set the clock to ${a.iso}` : `시계를 ${a.iso}로 맞추기`;
     case "wait": return en ? `wait ${a.ms}ms` : `${a.ms}ms 기다리기`;
     case "login": return en ? "sign in with the test account" : "시험 계정으로 로그인";
+    case "probe_storage": return en ? "check where the data was saved (server vs this browser only)" : "저장된 곳 확인(서버인지 이 브라우저에만인지)";
     case "judge": return en ? `judge: ${a.verdict}` : `판정: ${a.verdict}`;
   }
 }
@@ -386,6 +391,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     not_reached: "정해진 단계 안에 이 기준을 확인할 화면까지 가지 못했어요",
     agent_error: "확인 도중 오류가 나서 끝까지 보지 못했어요",
     guessed_address: "앱에 연결되지 않은 주소를 짐작해 열어 본 결과라 고장으로 치지 않았어요",
+    judge_disagreed: "두 번 따져 본 판단이 서로 달라서 결과로 치지 않았어요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -400,6 +406,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     not_reached: "We couldn't reach the screen needed for this check within the step limit",
     agent_error: "An error interrupted the check before it finished",
     guessed_address: "That result came from an address we guessed (not linked from the app), so it isn't counted as a defect",
+    judge_disagreed: "A second, independent review disagreed with the result, so it isn't counted",
   },
 };
 
@@ -937,13 +944,16 @@ export function agentSystemPrompt(locale: ReportLocale = "ko"): string {
     '- {"type":"new_session"}   (fresh browser, no cookies/localStorage — a DIFFERENT customer or the owner on another device)',
     '- {"type":"set_clock","iso":"2026-10-06T01:00:00+09:00"}   (fake the device clock, then the page reloads)',
     '- {"type":"login"}   (sign in with the test account the user gave; you never see the password)',
+    '- {"type":"probe_storage"}   (tool: reports whether, since this criterion started, the app sent write requests to a server or only changed this browser\'s localStorage/sessionStorage — quote its result as evidence)',
     '- {"type":"judge","verdict":"pass"|"fail"|"not_verified","reason":"<one plain sentence>","evidenceQuote":"<exact text copied from an observation>","reasonCode":"<optional>"}',
     "Rules:",
     "1. Actually perform the criterion end to end like a real user (fill every required field with the test data, submit, then look at the result). Do not judge from labels or prices alone.",
     "2. pass = you SAW the expected outcome. fail = you completed the steps and SAW the outcome is wrong or an error. Otherwise not_verified. evidenceQuote MUST be copied verbatim from an observation (screen text, network line or console line); a judgement without a real quote is discarded.",
     "2b. A criterion is NOT passed by seeing labels, inputs or buttons on screen. If the criterion is about an outcome, you must actually create the result (fill + submit) before judging pass.",
     "3. Persistence/sharing claims need proof: reload for 'survives refresh'; new_session for 'other customers can't pick it' or 'owner sees it on the admin screen' (data kept only in one browser's localStorage FAILS those).",
-    "4. Time-dependent claims (today's list, time slots) — use set_clock to probe edge hours (e.g. 01:00 and 23:30 Korea time) when relevant.",
+    "4. Time-dependent claims (today's list, time slots, 'today' dates) — use set_clock to probe edge hours (e.g. 00:30 and 23:30 Korea time) when relevant; note a server may compute 'today' in UTC, so compare the date shown with the Korea date.",
+    "4b. When data must be shared between people or devices, run probe_storage after creating it: data that never reached a server cannot be seen by another customer or the owner.",
+    "4c. If a result might be canned (same output whatever the input), submit twice with clearly different inputs and compare.",
     "5. Never pay, delete other people's data, send messages or publish. You may cancel/delete ONLY a record you created in this run (set ownRecord:true on that click).",
     "6. If a login wall blocks you: use login if a test account is available; if not, judge not_verified with reasonCode login_required. Kakao/Google/social-only login → oauth_unsupported; text-message code → sms_unsupported. If the feature asks for the user's own API key → api_key_required.",
     "7. Be efficient: at most 14 actions per criterion. Do not give up early: if a submit did nothing, read the visible messages (e.g. '시간을 골라 주세요', required-field errors), fix the inputs (choose a service/date/time first) and try again.",
@@ -1041,6 +1051,65 @@ export function parseInferredAcs(text: string): AgentAc[] {
     if (out.length >= 8) break;
   }
   return out;
+}
+
+// ─── A2 탐침 · A3 판정 재확인 ───────────────────────────────────────────────────
+
+export interface StorageProbe {
+  /** 기준 시작 뒤 앱이 보낸 쓰기 요청(POST·PUT·PATCH·DELETE, 데이터 요청만, 잡음 제외). */
+  serverWrites: string[];
+  localChanged: boolean;
+  sessionChanged: boolean;
+}
+
+/** 탐침 결과를 관찰 기록 한 줄로 — 판정 근거로 그대로 인용할 수 있게 고정된 문구. */
+export function describeStorageProbe(p: StorageProbe): string {
+  const writes = p.serverWrites.length;
+  return [
+    `storage probe: server write requests since this check started = ${writes}${writes ? ` (${p.serverWrites.slice(0, 3).join(" | ")})` : ""}`,
+    `localStorage changed = ${p.localChanged ? "yes" : "no"}`,
+    `sessionStorage changed = ${p.sessionChanged ? "yes" : "no"}`,
+    writes === 0 && (p.localChanged || p.sessionChanged) ? "verdict hint: saved only in this browser" : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+/**
+ * A3: 판정을 다른 눈으로 한 번 더 — 같은 관찰 기록만 보고 "이 근거로 이 판정이 맞나"를 묻는다. 동의하지 않으면
+ * not_verified(judge_disagreed). 판정을 뒤집지 않는다(통과→실패로 바꾸지 않음) — 확신이 없을 때 말을 아낄 뿐이다.
+ */
+export function judgeReviewPrompt(args: {
+  ac: AgentAc;
+  verdict: "pass" | "fail";
+  reason: string;
+  evidence: string[];
+  actions: string[];
+  observationTail: string;
+}): string {
+  return [
+    "You are a skeptical reviewer of a browser test. Decide whether the tester's verdict is justified by what was actually observed. Be strict:",
+    "- 'pass' needs proof the outcome happened (the result was created AND verified as the criterion requires — e.g. reload / another visitor / owner screen). Seeing labels, inputs or buttons is not proof.",
+    "- 'fail' needs proof the steps were really completed and the outcome is wrong — not that the tester got lost, typed into the wrong place, or opened an address the app never linked.",
+    'Reply JSON only: {"agree": true|false, "why": "<one sentence>"}',
+    "",
+    `Criterion ${args.ac.id} (${args.ac.priority}): ${args.ac.title}`,
+    `Then: ${args.ac.then}`,
+    `Tester's verdict: ${args.verdict} — ${args.reason}`,
+    `Quoted evidence: ${args.evidence.map((e) => `"${e}"`).join(" ")}`,
+    `Actions taken: ${args.actions.join(" → ") || "(none)"}`,
+    "",
+    "Observation log (latest last):",
+    args.observationTail.slice(-6000),
+  ].join("\n");
+}
+
+export function parseJudgeReview(text: string): { agree: boolean; why: string } | null {
+  const o = extractJsonObject(text);
+  if (!o || typeof o !== "object") return null;
+  const r = o as Record<string, unknown>;
+  if (typeof r["agree"] !== "boolean") return null;
+  return { agree: r["agree"], why: typeof r["why"] === "string" ? r["why"].slice(0, 300) : "" };
 }
 
 export const CORE_OUTCOME_AC_ID = "CORE-1";

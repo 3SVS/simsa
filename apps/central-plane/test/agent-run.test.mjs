@@ -76,6 +76,33 @@ describe("agent 실행기 — 핵심 일을 해 보지 않은 통과는 '작동'
   });
 });
 
+describe("A2 탐침 · A3 판정 재확인", () => {
+  it("probe_storage: 서버 쓰기 0 + 브라우저 저장소만 변함 → 근거로 인용해 fail 가능", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({
+      "CORE-1": [
+        ...bookScript.slice(0, 2),
+        { type: "probe_storage" },
+        { type: "judge", verdict: "fail", reason: "예약이 이 브라우저에만 저장돼 다른 손님·사장님이 볼 수 없어요", evidenceQuote: "saved only in this browser" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], acSource: "interview", llm, driver });
+    const core = out.report.acTable.find((r) => r.id === "CORE-1");
+    assert.equal(core.status, "fail");
+    assert.deepEqual(core.exercised, { stateChange: true, verified: true });
+    assert.equal(out.decision, "Needs Fix");
+  });
+  it("두 번째 판단이 동의하지 않으면 pass도 fail도 결과로 치지 않는다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({ "CORE-1": coreScript }, { review: () => false });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], acSource: "interview", llm, driver });
+    const core = out.report.acTable.find((r) => r.id === "CORE-1");
+    assert.equal(core.status, "not_verified");
+    assert.equal(core.reasonCode, "judge_disagreed");
+    assert.notEqual(out.decision, "Ready");
+  });
+});
+
 describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
   it("결함 있는 앱: Needs Fix, 실패 AC만 고침 지시, 비밀은 어디에도 없음", async () => {
     const driver = makeFakeDriver(salonSite({ manyLinks: 40, buttons: ["고장 버튼"], buttonEffects: { "고장 버튼": "error" } }), { origin: ORIGIN, onAct: salonOnAct });

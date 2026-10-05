@@ -224,6 +224,7 @@ export async function runAgentInspection(o) {
     const known = new Set([normUrl(o.targetUrl)]);
     let onGuessedAddress = false;
     await driver.goto(o.targetUrl);
+    await driver.markStorage?.().catch(() => {});
     const system = pure.agentSystemPrompt(locale);
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
@@ -260,6 +261,25 @@ export async function runAgentInspection(o) {
       if (a.type === "judge") {
         const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale, onGuessedAddress });
         if (loginFailed && f.reasonCode === "login_required") f.reason = pure.reasonText("login_failed", locale);
+        // A3: 근거가 붙은 pass/fail은 다른 눈으로 한 번 더. 동의하지 않거나 답이 깨지면 결과로 치지 않는다.
+        if (f.status === "pass" || f.status === "fail") {
+          let review = null;
+          try {
+            review = pure.parseJudgeReview(
+              await callLlm(
+                "You review browser test verdicts. Reply with JSON only.",
+                pure.judgeReviewPrompt({ ac, verdict: f.status, reason: f.reason, evidence: f.evidence, actions, observationTail: corpus }),
+                300,
+              ),
+            );
+          } catch {
+            review = null;
+          }
+          if (!review || !review.agree) {
+            history.push(`(review disagreed: ${review?.why ?? "no answer"})`);
+            return finish({ status: "not_verified", reason: pure.reasonText("judge_disagreed", locale), reasonCode: "judge_disagreed", evidence: [] });
+          }
+        }
         return finish(f);
       }
       const desc = red(pure.describeAction(a, locale));
@@ -289,6 +309,11 @@ export async function runAgentInspection(o) {
         res = { ok: true, note: "fresh browser opened" };
       } else if (a.type === "set_clock") {
         res = await driver.setClock(a.iso);
+      } else if (a.type === "probe_storage") {
+        // A2 탐침: 결과 문장은 관찰 기록(corpus)에 그대로 들어가 판정 근거로 인용할 수 있다.
+        const p = driver.storageProbe ? await driver.storageProbe().catch(() => null) : null;
+        res = p ? { ok: true, note: pure.describeStorageProbe(p) } : { ok: false, note: "storage probe unavailable" };
+        if (p && stateChange) verified = true;
       } else {
         res = await driver.act(a);
       }

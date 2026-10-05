@@ -38,6 +38,26 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   /** 로그인 때 채운 칸 — 이후 모든 스크린샷에서 가린다. */
   const maskSelectors = new Set(["input[type=password]"]);
   let dialogSeen = false;
+  const writes = [];
+  let storageMark = { at: Date.now(), local: "", session: "" };
+  const readStorage = async () =>
+    page
+      .evaluate(() => {
+        const dump = (s) => {
+          try {
+            const o = {};
+            for (let i = 0; i < s.length; i += 1) {
+              const k = s.key(i);
+              if (k) o[k] = s.getItem(k);
+            }
+            return JSON.stringify(o);
+          } catch {
+            return "";
+          }
+        };
+        return { local: dump(window.localStorage), session: dump(window.sessionStorage) };
+      })
+      .catch(() => ({ local: "", session: "" }));
 
   function wire(p) {
     p.on("console", (m) => {
@@ -59,6 +79,13 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         networkErrors.push(`HTTP ${r.status()} ${r.request().method()} ${r.url().slice(0, 160)}`);
       } else if (r.status() >= 400 && r.request().resourceType() !== "document" && !isNoiseResource(r.url()) && ["xhr", "fetch"].includes(r.request().resourceType())) {
         networkErrors.push(`HTTP ${r.status()} ${r.request().method()} ${r.url().slice(0, 160)}`);
+      }
+    });
+    // A2 탐침: 앱이 서버로 보낸 쓰기 요청(데이터 요청 중 GET이 아닌 것) — 시각과 함께.
+    p.on("request", (r) => {
+      const t = r.resourceType();
+      if ((t === "xhr" || t === "fetch") && r.method() !== "GET" && r.method() !== "OPTIONS" && !isNoiseResource(r.url())) {
+        writes.push({ at: Date.now(), line: `${r.method()} ${r.url().slice(0, 140)}` });
       }
     });
     p.on("dialog", (d) => {
@@ -192,6 +219,19 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     async newSession(url, storageState = null) {
       await openContext(storageState);
       return this.goto(url);
+    },
+    /** A2: 기준 시작 시점 표시 — 이후의 서버 쓰기 요청·브라우저 저장소 변화를 잰다. */
+    async markStorage() {
+      const s = await readStorage();
+      storageMark = { at: Date.now(), ...s };
+    },
+    async storageProbe() {
+      const now = await readStorage();
+      return {
+        serverWrites: writes.filter((w) => w.at >= storageMark.at).map((w) => w.line),
+        localChanged: now.local !== storageMark.local,
+        sessionChanged: now.session !== storageMark.session,
+      };
     },
     /** 직접 로그인 뒤의 브라우저 상태(쿠키·저장소) — 이 프로세스 메모리에만, 이 런 동안만 쓴다. */
     async captureState() {
