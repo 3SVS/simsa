@@ -68,7 +68,8 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
     async captureState() {
       return { store: { ...state.store }, loggedIn: state.loggedIn };
     },
-    async setClock() {
+    async setClock(iso) {
+      state.clock = iso;
       return { ok: true, note: "clock set" };
     },
     async login(creds) {
@@ -116,11 +117,12 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
  * 가짜 LLM: AC id별 대본(행동 JSON 목록). 대본이 끝나면 not_verified 판정. 받은 모든 프롬프트를 prompts에 쌓는다
  * (비밀이 새지 않았는지 검사용). 첫 화면 AC 추정 요청엔 inferred를 돌려준다.
  */
-export function makeScriptedLlm(scripts, { inferred = null, review = () => true } = {}) {
+export function makeScriptedLlm(scripts, { inferred = null, review = () => true, fix = null } = {}) {
   const prompts = [];
   const cursor = new Map();
   const llm = async ({ system, user }) => {
     prompts.push(`${system}\n${user}`);
+    if (/You fix a single-file web app/.test(user)) return JSON.stringify(fix ?? { edits: [] });
     if (/skeptical reviewer/i.test(user)) {
       const id = /Criterion ([A-Za-z0-9-]+) \(/.exec(user)?.[1] ?? "?";
       return JSON.stringify({ agree: review(id, user), why: "fake review" });

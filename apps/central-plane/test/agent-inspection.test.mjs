@@ -219,6 +219,18 @@ describe("화면·버튼 점검 — 상한과 안전", () => {
   });
 });
 
+describe("(1) 시각 경계 도우미", () => {
+  it("한국 새벽 00:30 — 한국 날짜 기준(UTC 날짜가 하루 앞서 갈리는 경우 포함)", () => {
+    assert.equal(P.kstEarlyMorningIso(Date.parse("2026-10-05T11:00:00Z")), "2026-10-04T15:30:00.000Z"); // KST 10-05 20:00
+    assert.equal(P.kstEarlyMorningIso(Date.parse("2026-10-05T16:00:00Z")), "2026-10-05T15:30:00.000Z"); // KST 10-06 01:00
+  });
+  it("시간 어휘가 있는 기준만", () => {
+    assert.equal(P.isTimeRelated({ title: "오늘 예약 목록", given: "", when: "", then: "" }), true);
+    assert.equal(P.isTimeRelated({ title: "Task list", given: "", when: "", then: "items show the due date" }), true);
+    assert.equal(P.isTimeRelated({ title: "가격 표시", given: "", when: "", then: "원 단위" }), false);
+  });
+});
+
 describe("C13 빌더 지문 · 결함 분류", () => {
   it("호스트·마크업으로 빌더", () => {
     assert.equal(P.detectBuilder({ url: "https://my-town-salon.lovable.app/" }), "lovable");

@@ -27,7 +27,7 @@ import { recordLlmUsage } from "../workspace/llm-usage.js";
 import { inspectionEnabled, INSPECTION_DISABLED } from "../workspace/service-switches.js";
 import { getVisualCheckById } from "../workspace/visual-check-db.js";
 import { worstCaseCallUsd } from "./build-llm-proxy.js";
-import { bearerOf, inspectAgentModel, reserveAgentSpend, settleAgentSpend, verifyRunToken } from "../workspace/inspection-agent.js";
+import { bearerOf, inspectAgentModelFor, reserveAgentSpend, settleAgentSpend, verifyRunToken } from "../workspace/inspection-agent.js";
 import { constantTimeEqual } from "../workspace/build-job-token.js";
 
 export const INSPECT_LLM_PATH = "/internal/inspect-llm/v1/messages";
@@ -41,6 +41,8 @@ const BodySchema = z
     system: z.string().min(1).max(20_000),
     user: z.string().min(1).max(60_000),
     maxTokens: z.number().int().positive().max(INSPECT_LLM_MAX_OUTPUT_TOKENS).optional(),
+    /** 오픈 베타 최소 비용: cheap = 관찰·행동(싼 모델), strong = 판정·추정(기본). 모델 이름은 서버가 고른다. */
+    tier: z.enum(["cheap", "strong"]).optional(),
   })
   .strict();
 
@@ -84,7 +86,8 @@ export function createInspectLlmProxyRoutes(fetchImpl: FetchLike = fetch.bind(gl
     if (reserved === "not_agent_run") return err(403, "not_agent_run");
     if (reserved === "exhausted") return err(402, "budget_exhausted");
 
-    const model = inspectAgentModel(env);
+    const { model, fallbackModel } = inspectAgentModelFor(env, parsed.data.tier ?? "strong");
+    const fb = vendorFallback(env);
     const events: LlmUsageEvent[] = [];
     let actualUsd = 0;
     try {
@@ -95,7 +98,7 @@ export function createInspectLlmProxyRoutes(fetchImpl: FetchLike = fetch.bind(gl
         fetchImpl,
         anthropicEndpoint(env.CF_AI_GATEWAY_ANTHROPIC_URL),
         INSPECT_AGENT_CALL_SITE,
-        { fallback: vendorFallback(env), onUsage: (u) => events.push(u), maxTotalMs: 20_000 },
+        { fallback: fb && fallbackModel ? { ...fb, model: fallbackModel } : fb, onUsage: (u) => events.push(u), maxTotalMs: 20_000 },
       );
       const text = (data.content ?? []).map((b) => (b.type === "text" && typeof b.text === "string" ? b.text : "")).join("");
       for (const e of events) {

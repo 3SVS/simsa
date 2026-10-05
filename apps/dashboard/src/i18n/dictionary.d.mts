@@ -1319,7 +1319,7 @@ export type Dictionary = {
     sectionDesc: string;
     opsTitle: string;
     opsDesc: string;
-    opsToggle: string;
+    opsToggle: string; opsFailurePatterns: string;
     opsDefaultOffNote: string;
     opsKeepNote: string;
     opsSavedOn: string;

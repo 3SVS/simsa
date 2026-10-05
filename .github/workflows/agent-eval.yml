@@ -1,0 +1,72 @@
+# agent-eval — C12 지속 평가: 프로덕션 agent 엔진으로 벤치마크 앱 묶음을 다시 잰다(수동 실행만).
+#
+# 무엇: tools/simsa-inspection-fixtures/agent-bench1.mjs — 실제 사용자 흐름(주소 → 의도 추론 → "맞나요?"(사전 등록
+#       프롬프트 원문만 아는 사용자 흉내) → 역추론 지시서 → visual-checks/run engine:"agent")을 프로덕션 API로 밟고,
+#       결과 JSON을 아티팩트로 남긴다. 정답지는 채점에만 쓴다.
+# 언제: 머지·0075 적용·central 배포(컨테이너 이미지 포함) **뒤**. 그 전에는 engine:"agent"가 없어 run이 400/403.
+# 비용: 앱당 LLM ≈ $0.5~0.8 + 검수 일일 상한(장비 티어 50/일)·네트워크 상한을 쓴다 — 실행은 Bae 승인 뒤에만.
+# 필요한 repo secret: SIMSA_STAFF_USER_KEY(장비 키 — 로그에 가려진다), OPENAI_API_KEY("맞나요?" 흉내용).
+# cron은 꺼 둔다(아래 주석) — 켜려면 비용·상한 승인 뒤 schedule 블록을 연다.
+name: agent-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: '쉼표로 앱 id 제한(예: claude,gemini). 비우면 전부'
+        required: false
+        type: string
+      confirm:
+        description: '비용이 드는 실측이다 — "measure"를 입력해야 돈다'
+        required: true
+        type: string
+  # schedule:
+  #   - cron: '0 18 * * 1'   # 월 03:00 KST — 승인 뒤에만 켠다
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    if: ${{ inputs.confirm == 'measure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SIMSA_STAFF_USER_KEY: ${{ secrets.SIMSA_STAFF_USER_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ONLY: ${{ inputs.only }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Secrets present
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$SIMSA_STAFF_USER_KEY"
+          [ -n "$SIMSA_STAFF_USER_KEY" ] || { echo "::error::SIMSA_STAFF_USER_KEY secret 없음"; exit 1; }
+          [ -n "$OPENAI_API_KEY" ] || { echo "::error::OPENAI_API_KEY secret 없음"; exit 1; }
+      - name: Build central-plane (pure modules for the harness)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm turbo run build --filter @simsa/central-plane...
+      - name: Harness deps (playwright library only — no browsers needed for the production run)
+        working-directory: tools/simsa-completion-loop-spike
+        run: npm install --no-save --no-audit --no-fund
+      - name: Run
+        run: |
+          set -euo pipefail
+          if [ -n "$ONLY" ]; then
+            printf '%s' "$ONLY" | grep -Eq '^[a-z0-9,]{1,80}$' || { echo "::error::only 형식"; exit 1; }
+            node tools/simsa-inspection-fixtures/agent-bench1.mjs "--only=$ONLY"
+          else
+            node tools/simsa-inspection-fixtures/agent-bench1.mjs
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-eval-${{ github.run_id }}
+          path: tools/simsa-inspection-fixtures/agent-bench1-prod-result.json
+          if-no-files-found: warn

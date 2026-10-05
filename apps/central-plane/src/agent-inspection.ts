@@ -81,6 +81,7 @@ export const AC_REASON_CODES = [
   "agent_error",
   "guessed_address",
   "judge_disagreed",
+  "write_not_allowed",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -103,6 +104,10 @@ export interface AcResult {
    * 보이는지 확인했는가**(새로고침·새 방문자·다른 화면·다른 역할 로그인). 실행기가 행동 기록에서 잰다(LLM 말이 아님).
    */
   exercised?: { stateChange: boolean; verified: boolean };
+  /** (3) 로그인 벽 앞에서 공개 범위만 통과(로그인 뒤 부분은 확인 못 함). */
+  scope?: "public";
+  /** (1) 시각 경계 변형: 한국 시간 새벽으로 시계를 옮겨 다시 해 본 결과. */
+  clockVariant?: { iso: string; status: AcStatus };
 }
 
 export interface SweepScreen {
@@ -112,7 +117,12 @@ export interface SweepScreen {
   problem?: "http_error" | "blank" | "error_text" | "crash";
   detail?: string;
   screenshot?: string;
+  /** C10: 390px 폭에서 가로로 넘친 px(0 = 넘침 없음). 판정은 바꾸지 않는다(should 수준 — 노트로만). */
+  mobileOverflowPx?: number;
 }
+
+/** 휴대폰 폭에서 이만큼 넘치면 "가로로 밀어야 보인다"로 적는다(스크롤바·반올림 여유). */
+export const MOBILE_OVERFLOW_TOLERANCE_PX = 8;
 
 export interface SweepButton {
   screen: string;
@@ -157,7 +167,7 @@ export type AgentAction =
   | { type: "login" }
   /** 탐침: 이 기준을 시작한 뒤 앱이 **서버에 쓰기 요청**을 보냈는지 vs 브라우저 저장소(localStorage·sessionStorage)만 바뀌었는지. */
   | { type: "probe_storage" }
-  | { type: "judge"; verdict: AcStatus; reason: string; evidenceQuote: string; reasonCode?: AcReasonCode };
+  | { type: "judge"; verdict: AcStatus; reason: string; evidenceQuote: string; reasonCode?: AcReasonCode; scope?: "public" | "full" };
 
 export const ALLOWED_KEYS = ["Enter", "Tab", "Escape", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Space", "Backspace"] as const;
 const ROLE_RE = /^[a-z]{2,20}$/;
@@ -275,7 +285,8 @@ export function parseAgentAction(raw: unknown, origin: string): { ok: true; acti
       const evidenceQuote = typeof a["evidenceQuote"] === "string" ? a["evidenceQuote"].trim().slice(0, 300) : "";
       const rc = a["reasonCode"];
       const reasonCode = typeof rc === "string" && (AC_REASON_CODES as readonly string[]).includes(rc) ? (rc as AcReasonCode) : undefined;
-      return { ok: true, action: { type, verdict, reason, evidenceQuote, ...(reasonCode ? { reasonCode } : {}) } };
+      const scope = a["scope"] === "public" ? "public" : undefined;
+      return { ok: true, action: { type, verdict, reason, evidenceQuote, ...(reasonCode ? { reasonCode } : {}), ...(scope ? { scope } : {}) } };
     }
     default:
       return { ok: false, error: "unknown_action_type" };
@@ -339,7 +350,7 @@ export type LoginGate = "password" | "oauth" | "sms" | null;
 export function finalizeJudge(
   judge: Extract<AgentAction, { type: "judge" }>,
   ctx: { corpus: string; loginGate: LoginGate; hasCredentials: boolean; locale: ReportLocale; onGuessedAddress?: boolean },
-): { status: AcStatus; reason: string; reasonCode?: AcReasonCode; evidence: string[] } {
+): { status: AcStatus; reason: string; reasonCode?: AcReasonCode; evidence: string[]; scope?: "public" } {
   const en = ctx.locale === "en";
   const gateReason = gateNotVerified(ctx.loginGate, ctx.hasCredentials, ctx.locale);
   if (judge.verdict === "fail" && gateReason) return { status: "not_verified", ...gateReason, evidence: [] };
@@ -367,7 +378,12 @@ export function finalizeJudge(
       evidence: [],
     };
   }
-  return { status: judge.verdict, reason: judge.reason, evidence: [judge.evidenceQuote] };
+  return {
+    status: judge.verdict,
+    reason: judge.reason,
+    evidence: [judge.evidenceQuote],
+    ...(judge.verdict === "pass" && judge.scope === "public" ? { scope: "public" as const } : {}),
+  };
 }
 
 function gateNotVerified(gate: LoginGate, hasCredentials: boolean, locale: ReportLocale): { reason: string; reasonCode: AcReasonCode } | null {
@@ -392,6 +408,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     agent_error: "확인 도중 오류가 나서 끝까지 보지 못했어요",
     guessed_address: "앱에 연결되지 않은 주소를 짐작해 열어 본 결과라 고장으로 치지 않았어요",
     judge_disagreed: "두 번 따져 본 판단이 서로 달라서 결과로 치지 않았어요",
+    write_not_allowed: "시험 데이터를 만들어도 된다는 동의가 없어 입력·제출은 하지 않았어요 — 확인 요청에서 동의해 주시면 끝까지 해 봐요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -407,6 +424,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     agent_error: "An error interrupted the check before it finished",
     guessed_address: "That result came from an address we guessed (not linked from the app), so it isn't counted as a defect",
     judge_disagreed: "A second, independent review disagreed with the result, so it isn't counted",
+    write_not_allowed: "You didn't allow test data, so we didn't type or submit anything — allow it in the check request and we'll go all the way",
   },
 };
 
@@ -583,6 +601,8 @@ export function decideAgentVerdict(input: {
       return e?.stateChange === true && e.verified === true;
     });
     if (!coreExercised) return { decision: "Not Verified", works: null, basis: "core_goal_not_exercised" };
+    // (3) 공개 범위만 통과한 must가 있으면 "정상 작동"이 아니라 "문제를 찾지 못했어요 — 로그인 뒤는 못 봄".
+    if (must.some((a) => byId.get(a.id)?.scope === "public")) return { decision: "Conditionally Ready", works: true, basis: "public_scope_only" };
     return must.every((a) => a.confirmed)
       ? { decision: "Ready", works: true, basis: "all_must_passed_confirmed" }
       : { decision: "Conditionally Ready", works: true, basis: "all_must_passed_inferred" };
@@ -605,6 +625,8 @@ export interface AgentAcRow {
   actions?: string[];
   screenshot?: string;
   exercised?: { stateChange: boolean; verified: boolean };
+  scope?: "public";
+  clockVariant?: { iso: string; status: AcStatus };
 }
 
 export interface AgentReportExtras {
@@ -619,6 +641,9 @@ export interface AgentReportExtras {
     buttonErrors: number;
     buttonsSkippedUnsafe: number;
     truncated: SweepResult["truncated"];
+    /** C10: 휴대폰 폭에서 가로로 넘친 화면. */
+    mobileOverflow: Array<{ url: string; overflowPx: number }>;
+    mobileChecked: number;
     problems: Array<{ kind: "screen" | "button"; where: string; label?: string; problem: string; detail?: string }>;
   } | null;
   /** 재검수가 **같은 기준**으로 돌도록 AC 정의를 함께 남긴다. */
@@ -664,6 +689,7 @@ const RSTR = {
       appMissing: "앱 첫 화면이 열리지 않아요.",
       notVerified: (n: number) => `핵심 기준 중 ${n}개를 확인하지 못해 아직 "작동한다"고 말할 수 없어요.`,
       noMust: "확인할 핵심 기준이 없어 판단하지 않았어요.",
+      publicOnly: "로그인 없이 할 수 있는 핵심 일은 실제로 해 봤고 문제를 찾지 못했어요. 로그인 뒤 화면은 확인하지 못했어요 — 시험 계정을 주시면 들어가서 확인해요.",
       notExercised: "보이는 것은 기준대로였지만, 핵심 일을 실제로 끝까지 해 보고 결과가 남는지까지는 확인하지 못해 아직 '작동한다'고 말할 수 없어요.",
     },
     acFailWhat: (t: string) => `기준이 지켜지지 않아요: ${t}`,
@@ -680,6 +706,7 @@ const RSTR = {
     unconfirmedFailNote: (t: string, r: string) => `확인받지 않은 기준 "${t}"에서 본 것(고칠 것에 넣지 않음): ${r}`,
     inferredNote: "이번 기준은 앱을 보고 추정한 것이에요. 기준을 확인해 주시면 다음 확인부터 그 기준으로 봐요.",
     partialNote: "시간 안에 다 확인하지 못해 여기까지 본 내용만 담았어요.",
+    mobileNote: (n: number) => `휴대폰 화면에서 가로로 밀어야 보이는 화면이 ${n}개 있어요.`,
     loginNote: {
       none: "로그인 뒤 화면은 보지 않았어요.",
       signup: "일회용 계정으로 가입해 로그인 뒤까지 확인했어요.",
@@ -704,6 +731,7 @@ const RSTR = {
       appMissing: "The app's first screen does not open.",
       notVerified: (n: number) => `We couldn't verify ${n} core criteria, so we can't say it works yet.`,
       noMust: "There were no core criteria to check, so no judgement was made.",
+      publicOnly: "We performed the main job that works without signing in and found no problem. Screens behind sign-in were not checked — give us a test account and we'll check them.",
       notExercised: "What's on screen matched, but we couldn't complete the app's main job end to end and confirm the result stays — so we can't say it works yet.",
     },
     acFailWhat: (t: string) => `Criterion not met: ${t}`,
@@ -720,6 +748,7 @@ const RSTR = {
     unconfirmedFailNote: (t: string, r: string) => `Seen under the unconfirmed criterion "${t}" (not added to fixes): ${r}`,
     inferredNote: "These criteria were inferred from the app. Confirm them and the next check will use them as the standard.",
     partialNote: "We ran out of time, so this covers only what was checked so far.",
+    mobileNote: (n: number) => `${n} screen(s) need sideways scrolling on a phone.`,
     loginNote: {
       none: "Screens behind sign-in were not checked.",
       signup: "We signed up with a disposable account and checked behind the login.",
@@ -781,6 +810,8 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
     if (r?.actions?.length) row.actions = r.actions.slice(0, 20);
     if (r?.screenshot) row.screenshot = r.screenshot;
     if (r?.exercised) row.exercised = r.exercised;
+    if (r?.scope) row.scope = r.scope;
+    if (r?.clockVariant) row.clockVariant = r.clockVariant;
     return row;
   });
   const must = acTable.filter((r) => r.priority === "must");
@@ -825,6 +856,8 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
   if (br.noReaction.length > 0) notes.push(s.noReactionNote(br.noReaction.length));
   if (input.acSource === "inferred_at_run" || input.acs.some((a) => a.priority === "must" && !a.confirmed)) notes.push(s.inferredNote);
   if (input.partial) notes.push(s.partialNote);
+  const mobileBad = (input.sweep?.screens ?? []).filter((x) => typeof x.mobileOverflowPx === "number" && x.mobileOverflowPx > MOBILE_OVERFLOW_TOLERANCE_PX).length;
+  if (mobileBad > 0) notes.push(s.mobileNote(mobileBad));
 
   const mustFailed = must.filter((r) => r.status === "fail").length;
   const mustNotVerified = must.filter((r) => r.status === "not_verified").length;
@@ -832,6 +865,7 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
     v.basis === "app_missing" ? s.oneLine.appMissing
     : v.basis === "must_failed" ? s.oneLine.mustFailed(mustFailed)
     : v.basis === "sweep_broken" ? s.oneLine.sweep
+    : v.basis === "public_scope_only" ? s.oneLine.publicOnly
     : v.decision === "Ready" ? s.oneLine.Ready(must.length)
     : v.decision === "Conditionally Ready" ? s.oneLine["Conditionally Ready"](must.length)
     : v.basis === "no_must_criteria" ? s.oneLine.noMust
@@ -847,6 +881,10 @@ export function buildAgentReport(input: AgentReportInput, locale: ReportLocale =
         buttonErrors: br.buttonErrors.length,
         buttonsSkippedUnsafe: input.sweep.buttons.filter((b) => b.outcome === "skipped_unsafe").length,
         truncated: input.sweep.truncated,
+        mobileChecked: input.sweep.screens.filter((x) => typeof x.mobileOverflowPx === "number").length,
+        mobileOverflow: input.sweep.screens
+          .filter((x) => typeof x.mobileOverflowPx === "number" && x.mobileOverflowPx > MOBILE_OVERFLOW_TOLERANCE_PX)
+          .map((x) => ({ url: x.url, overflowPx: x.mobileOverflowPx as number })),
         problems: [
           ...br.screens.map((x) => ({ kind: "screen" as const, where: x.url, problem: x.problem ?? "unknown", ...(x.detail ? { detail: x.detail } : {}) })),
           ...br.buttonErrors.map((b) => ({ kind: "button" as const, where: b.screen, label: b.label, problem: "error", ...(b.detail ? { detail: b.detail } : {}) })),
@@ -949,22 +987,28 @@ export function probableCause(text: string, locale: ReportLocale = "ko"): string
 // ─── LLM 프롬프트 ───────────────────────────────────────────────────────────────
 
 /** 한국어 시험 데이터(실사용자 모양 — Rule 6). seed로 런마다 다르게(다른 손님과 섞이지 않게). */
+/** S2-min: 시험 데이터 이름은 사용자가 동의한 표지 "심사테스트"로 시작한다(찾아 지우기 쉽게). */
+export const TEST_DATA_NAME = "심사테스트";
+
 export function koreanTestData(seed: number): { name: string; altName: string; phone: string; email: string; memo: string } {
-  const names = ["김서연", "이도윤", "박지우", "최하준", "정수아", "강민준", "윤서윤", "장예준"];
+  const names = [TEST_DATA_NAME];
   const n = Math.abs(Math.floor(seed)) || 1;
   const p1 = String(1000 + (n % 9000)).padStart(4, "0");
   const p2 = String(1000 + ((n * 7) % 9000)).padStart(4, "0");
   return {
     name: names[n % names.length]!,
-    altName: names[(n + 3) % names.length]!,
+    altName: `${TEST_DATA_NAME}둘`,
     phone: `010-${p1}-${p2}`,
     email: `simsa.check+${n}@example.com`,
     memo: "심사 자동 확인용 예약입니다(테스트)",
   };
 }
 
-export function agentSystemPrompt(locale: ReportLocale = "ko"): string {
+export function agentSystemPrompt(locale: ReportLocale = "ko", opts: { readOnly?: boolean } = {}): string {
   return [
+    ...(opts.readOnly
+      ? ["READ-ONLY RUN: the owner did not allow test data. Do NOT fill or submit forms. Check only what can be seen and navigated; if a criterion needs creating data, judge not_verified with reasonCode write_not_allowed."]
+      : []),
     "You are Simsa's acceptance tester. You operate a real browser on a web app built by a non-developer and decide, for ONE acceptance criterion at a time, whether the app actually does what the criterion says.",
     "Reply with exactly one JSON object and nothing else: {\"thought\": \"<short>\", \"action\": {...}}.",
     "Actions:",
@@ -990,6 +1034,8 @@ export function agentSystemPrompt(locale: ReportLocale = "ko"): string {
     "5. Never pay, delete other people's data, send messages or publish. You may cancel/delete ONLY a record you created in this run (set ownRecord:true on that click).",
     "6. If a login wall blocks you: use login if a test account is available; if not, judge not_verified with reasonCode login_required. Kakao/Google/social-only login → oauth_unsupported; text-message code → sms_unsupported. If the feature asks for the user's own API key → api_key_required.",
     "7. Be efficient: at most 14 actions per criterion. Do not give up early: if a submit did nothing, read the visible messages (e.g. '시간을 골라 주세요', required-field errors), fix the inputs (choose a service/date/time first) and try again.",
+    "6b. If part of a criterion is behind a login you cannot pass: judge the PUBLIC part. If the public part fully worked, use verdict pass with \"scope\":\"public\" and say in reason what remains behind login. Never fail a criterion only because of a login wall.",
+    "3b. Persistence means the CREATED RECORD is found again somewhere else: a list/admin/history view, a new_session visit, or probe_storage showing a server write. A confirmation screen that survives (or disappears on) reload proves nothing either way.",
     "8. Never invent addresses. Use goto only for an address you saw as a link on screen or that the criterion itself names. A 'not found' page at a guessed address is NOT a defect of the app.",
     "9. Selecting a time/date/service means clicking that option on the page (buttons, chips, radio) — check the observation that it became selected before submitting.",
     locale === "en" ? "Write `reason` in English." : "Write `reason` in Korean (한국어, 쉬운 말).",
@@ -1162,6 +1208,36 @@ export function parseJudgeReview(text: string): { agree: boolean; why: string } 
   const r = o as Record<string, unknown>;
   if (typeof r["agree"] !== "boolean") return null;
   return { agree: r["agree"], why: typeof r["why"] === "string" ? r["why"].slice(0, 300) : "" };
+}
+
+/** (1) 날짜·시간·일정에 걸린 기준인가(시각 경계 변형을 돌릴 대상). 주제 단어가 아니라 시간 어휘로만. */
+export function isTimeRelated(ac: Pick<AgentAc, "title" | "given" | "when" | "then">): boolean {
+  return /날짜|시간|시각|오늘|내일|어제|요일|일정|달력|마감|기한|영업|\bdate|\btime|today|tomorrow|schedule|calendar|deadline|\bhours?\b/i.test(
+    `${ac.title} ${ac.given} ${ac.when} ${ac.then}`,
+  );
+}
+
+/** 한국 시간 오늘(실행 시점 기준) 00:30 — UTC 날짜와 한국 날짜가 갈리는 시간대. */
+export function kstEarlyMorningIso(nowMs: number): string {
+  const kst = new Date(nowMs + 9 * 3600_000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(kst.getUTCDate()).padStart(2, "0");
+  return new Date(`${y}-${m}-${d}T00:30:00+09:00`).toISOString();
+}
+
+/** 원래 결과(pass)와 새벽 변형 결과를 합친다: 변형이 실패면 실패(근거는 변형의 것), 아니면 원래 결과 + 변형 기록. */
+export function mergeClockVariant(base: AcResult, variant: AcResult, iso: string, locale: ReportLocale = "ko"): AcResult {
+  const clockVariant = { iso, status: variant.status };
+  if (variant.status !== "fail") return { ...base, clockVariant };
+  const lead = locale === "en" ? "Re-tried with the device clock at 00:30 Korea time: " : "기기 시계를 한국 시간 새벽 0시 30분으로 옮겨 다시 해 보니: ";
+  return {
+    ...variant,
+    reason: lead + variant.reason,
+    actions: [...(base.actions ?? []), locale === "en" ? "set the clock to 00:30 KST" : "시계를 한국 시간 00:30으로", ...(variant.actions ?? [])],
+    exercised: base.exercised ?? variant.exercised,
+    clockVariant,
+  };
 }
 
 export const CORE_OUTCOME_AC_ID = "CORE-1";

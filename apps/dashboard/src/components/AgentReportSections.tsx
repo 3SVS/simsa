@@ -176,6 +176,40 @@ function AcRow({ row, c }: { row: Row; c: (typeof COPY)["ko"] | (typeof COPY)["e
   );
 }
 
+/** B5: 검증을 통과한 고친 index.html이 있으면 받기 버튼. */
+function CorrectedFileDownload({ report, locale }: { report: unknown; locale: "ko" | "en" }) {
+  const agent = report && typeof report === "object" ? ((report as Record<string, unknown>)["agent"] as Record<string, unknown> | undefined) : undefined;
+  const fix = agent && typeof agent["singleFileFix"] === "object" ? (agent["singleFileFix"] as Record<string, unknown>) : null;
+  const html = fix && typeof fix["correctedHtml"] === "string" ? (fix["correctedHtml"] as string) : null;
+  const validated = fix && Array.isArray(fix["validated"]) ? (fix["validated"] as unknown[]).map(str).filter(Boolean) : [];
+  if (!html || validated.length === 0) return null;
+  const en = locale === "en";
+  return (
+    <section className="space-y-2" data-testid="agent-corrected-file">
+      <h3 className="section-title">{en ? "Corrected file" : "고친 파일"}</h3>
+      <p className="text-xs text-gray-600">
+        {en
+          ? `We fixed index.html and re-ran the failed checks against it (${validated.join(", ")} now pass). Replace the file in your site and publish again.`
+          : `index.html을 고쳐 실패했던 기준을 그 파일로 다시 해 봤어요(${validated.join(", ")} 통과). 사이트의 파일을 이것으로 바꿔 다시 올려 주세요.`}
+      </p>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        onClick={() => {
+          const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "index.html";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }}
+      >
+        {en ? "Download index.html" : "index.html 받기"}
+      </button>
+    </section>
+  );
+}
+
 export function AgentReportSections({ report, locale }: { report: unknown; locale: "ko" | "en" }) {
   const parsed = parseAgentReport(report);
   if (!parsed) return null;
@@ -197,6 +231,7 @@ export function AgentReportSections({ report, locale }: { report: unknown; local
           ))}
         </ul>
       </section>
+      <CorrectedFileDownload report={report} locale={locale} />
       {parsed.sweep && (
         <section className="space-y-2" data-testid="agent-sweep">
           <h3 className="section-title">{c.sweepTitle}</h3>

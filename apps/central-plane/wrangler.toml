@@ -34,6 +34,12 @@ LEGACY_AUTO_REVIEW = "off"
 # 끄기 = 값을 "off"로 + deploy-central-plane 1회. 다시 켜기 = "on" + 배포.
 INSPECTION_ENABLED = "on"
 REPAIR_ENABLED = "on"
+# 2026-10-05 오픈 베타 — agent 엔진(수용 기준 실행기) 공개 스위치. 정확히 "on"일 때만 모든 사용자의 기본 검수가
+# agent 엔진이 된다(스태프는 늘 켜짐). **지금은 "off"** — 켜기 = "on" + deploy-central-plane(Bae 승인).
+INSPECTION_AGENT_PUBLIC = "off"
+# agent 엔진 서비스 전체 하루 LLM 예산(USD, UTC 일). 오늘 사용액(llm_usage call_site inspect_agent)이 이 값에 닿으면
+# 스태프가 아닌 새 런은 기본 검수로 돌고 리포트에 그 사실을 적는다(조용한 실패 없음). 미설정·잘못된 값 = 20.
+AGENT_DAILY_BUDGET_USD = "20"
 # 2026-10-01 hotfix — 빌드(문 a) 킬스위치. 같은 규칙(정확히 "off"만 꺼짐). **지금은 "off"**:
 # POST /workspace/projects/:id/build는 지시서가 있는 누구의 호출에도 프로젝트별 D1과 호스팅 조직
 # 저장소를 만들고 컨테이너에 운영 비밀을 넘긴다. 대시보드는 아직 이 라우트를 쓰지 않는다.

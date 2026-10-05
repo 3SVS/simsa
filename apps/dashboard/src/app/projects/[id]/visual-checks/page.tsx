@@ -39,6 +39,7 @@ import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { callGetTierApi } from "@/lib/workspace-check-api";
 import { PlanCapHint } from "@/components/PlanCapHint";
+import { WriteConsentCheckbox } from "@/components/WriteConsentCheckbox";
 import {
   AgentRunOptions,
   DEFAULT_AGENT_OPTIONS,
@@ -127,6 +128,9 @@ export default function VisualChecksPage() {
   const signupNeedsPlan = tier === "free";
   // 2026-10-05 agent 엔진 — 지금은 스태프 티어에만(서버도 스태프만 받는다). 로그인 갈래는 동의 체크 뒤에만 보낸다.
   const [agentOpts, setAgentOpts] = useState<AgentRunOptionsValue>(DEFAULT_AGENT_OPTIONS);
+  // 오픈 베타 S2-min: 시험 데이터 동의(기본 꺼짐 — 서버가 없으면 읽기 전용으로 돈다).
+  const [writeConsent, setWriteConsent] = useState(false);
+  const [engineNotice, setEngineNotice] = useState<string | null>(null);
   const [live, setLive] = useState<{ runId: string; token: string } | null>(null);
   const isStaff = tier === "staff";
   const [submitting, setSubmitting] = useState(false);
@@ -218,12 +222,15 @@ export default function VisualChecksPage() {
       ...(trimmedIntent ? { intent: trimmedIntent } : {}),
       ...(withSignup && signupAvailable && !signupNeedsPlan ? { withSignup: true } : {}),
       ...(isStaff ? agentRunBody(agentOpts) : {}),
+      ...(!isStaff && writeConsent ? { writeConsent: true as const } : {}),
     });
     setSubmitting(false);
     if (res.ok) {
       // 입력한 비밀번호는 요청이 끝나면 화면 상태에서도 지운다.
       setAgentOpts((v) => ({ ...v, password: "", consent: false }));
       if (res.liveToken) setLive({ runId: res.check.id, token: res.liveToken });
+      // 하루 예산으로 기본 검사로 돈 경우 — 숨기지 않고 바로 말한다(리포트에도 같은 문장).
+      setEngineNotice(res.engineFallbackNote ?? null);
       if (!res.dispatched) setNotice({ kind: "queuedOnly" });
       setIntent("");
       applyListResult(await listVisualChecks(id, userKey));
@@ -312,6 +319,8 @@ export default function VisualChecksPage() {
         )}
 
         {isStaff && <AgentRunOptions value={agentOpts} onChange={setAgentOpts} locale={locale === "en" ? "en" : "ko"} />}
+        {!isStaff && <WriteConsentCheckbox checked={writeConsent} onChange={setWriteConsent} locale={locale === "en" ? "en" : "ko"} />}
+        {engineNotice && <div className="callout callout-info mt-3">{engineNotice}</div>}
 
         <button
           onClick={handleRun}

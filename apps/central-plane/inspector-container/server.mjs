@@ -245,7 +245,8 @@ async function runJob(payload) {
   try {
     // Lazy import keeps startup fast and lets a broken Playwright install
     // surface as a per-run failure callback instead of a dead container.
-    const { runInspection } = await import("./inspector-run.mjs");
+    // 기본 엔진 모듈은 그 엔진일 때만 읽는다(agent 런이 기본 엔진의 의존성 때문에 깨지지 않게).
+    const { runInspection } = payload.engine === "agent" ? { runInspection: null } : await import("./inspector-run.mjs");
 
     // Wall-clock rail: Chromium hangs (infinite spinners, slow hosts) must
     // not exceed ~4 minutes. On timeout the run is reported failed; the
@@ -305,6 +306,11 @@ async function runJob(payload) {
     console.log(`[run ${runId}] evidence uploaded ${uploaded}/${result.evidenceFiles.length}`);
 
     // 2) Final verdict callback.
+    // 서버 안내(예: 하루 예산으로 기본 검수로 돈 이유)를 리포트 노트 맨 앞에 — 어느 엔진이든.
+    if (Array.isArray(payload.serverNotes) && result.report && typeof result.report === "object") {
+      const extra = payload.serverNotes.filter((x) => typeof x === "string" && x.length > 0 && x.length <= 400).slice(0, 5);
+      if (extra.length) result.report.notes = [...extra, ...(Array.isArray(result.report.notes) ? result.report.notes : [])];
+    }
     await postJson(callbackUrl, callbackToken, {
       runId,
       ok: true,
@@ -339,11 +345,14 @@ const AGENT_HARD_MS = 15 * 60 * 1000;
 const HANDOVER_WAIT_MS = 10 * 60 * 1000;
 
 async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup }) {
-  const { runAgentInspection } = await import("./agent-run.mjs");
+  const { runAgentInspection, partialAgentResult } = await import("./agent-run.mjs");
+  const progress = {};
   const { createPlaywrightDriver } = await import("./agent-driver.mjs");
   const { createProxyLlm } = await import("./agent-llm.mjs");
-  const { isNoiseResource } = await import("./dist/nondev-report.js");
-  const { attemptSignup } = await import("./signup-run.mjs");
+  // 이미지 안은 ./dist, 저장소에서 직접 돌릴 때(C9 로컬 실행 검증)는 central-plane tsc 출력 ../dist.
+  const { isNoiseResource } = await import("./dist/nondev-report.js").catch(() => import("../dist/nondev-report.js"));
+  // 가입 실행은 동의된 런에서만 읽는다.
+  const { attemptSignup } = signup?.enabled ? await import("./signup-run.mjs") : { attemptSignup: null };
   const agent = payload.agent ?? {};
   const driver = await createPlaywrightDriver({ outDir, locale, isNoiseResource, attemptSignup });
   const live = agent.loginMode === "handover" ? createLiveSession(payload.runId, driver) : null;
@@ -354,7 +363,10 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
       targetUrl: payload.targetUrl,
       intent: payload.intent,
       locale,
-      budgetMs: AGENT_RUN_BUDGET_MS,
+      // 오픈 베타: 티어 상한의 실행 시간(분)이 있으면 그것(엔진 상한 이하).
+      budgetMs: Math.min(AGENT_RUN_BUDGET_MS, Number(agent.caps?.maxMinutes) > 0 ? Number(agent.caps.maxMinutes) * 60_000 : AGENT_RUN_BUDGET_MS),
+      caps: agent.caps,
+      readOnly: agent.readOnly === true,
       acs: Array.isArray(agent.acs) ? agent.acs : [],
       acSource: agent.acSource,
       loginMode: agent.loginMode ?? "none",
@@ -367,11 +379,18 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
       live,
       handoverWaitMs: HANDOVER_WAIT_MS,
       onPhase,
+      progress,
     }),
     hard,
     `agent inspection timed out after ${Math.round(hard / 1000)}s`,
   ).catch(async (err) => {
     await driver.close().catch(() => {});
+    // C11: 기준을 하나라도 잡았으면 빈손 실패 대신 여기까지의 부분 리포트(돌지 못한 기준 = 시간 한도로 확인 못 함).
+    const partial = await partialAgentResult(progress).catch(() => null);
+    if (partial) {
+      onPhase(`agent:partial after ${String(err?.message ?? err).slice(0, 80)}`);
+      return partial;
+    }
     const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");
     throw new Error(redactWith(secrets(), `${String(err?.message ?? err)} ||trace: ${trace}`).slice(0, 490));
   });

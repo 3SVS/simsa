@@ -145,6 +145,8 @@ export type VisualCheckRunInput = {
   loginMode?: "none" | "credentials" | "handover";
   testCredentials?: { username: string; password: string; loginUrl?: string; consent: true };
   handoverConsent?: true;
+  /** 오픈 베타 S2-min: 시험 데이터 동의. 없으면 서버가 읽기 전용으로 돈다. */
+  writeConsent?: true;
 };
 
 export type VisualCheckRunCheck = {
@@ -187,6 +189,10 @@ export type VisualCheckRunResponse =
       loginMode?: string;
       /** 직접 로그인해서 넘겨주기 런의 라이브 화면 토큰(소유자에게만). */
       liveToken?: string;
+      /** 하루 예산으로 기본 검사로 돈 경우의 안내(그대로 보여 준다). */
+      engineFallback?: string;
+      engineFallbackNote?: string;
+      readOnly?: boolean;
     }
   | ({ ok: false; error: string } & DailyLimitErrorFields);
 

@@ -66,11 +66,18 @@ export async function runAgentInspection(o) {
     return f?.name;
   };
   const llmCalls = { n: 0, failed: 0, budgetExhausted: false };
-  const callLlm = async (system, user, maxTokens = 700) => {
+  // 오픈 베타: 티어 상한(entitlements.agentRun). 없으면 엔진 기본값.
+  const caps = {
+    maxAcs: o.caps?.maxAcs ?? 11,
+    maxScreens: o.caps?.maxScreens ?? 25,
+    maxActions: o.caps?.maxActions ?? 1000,
+  };
+  let actionsUsed = 0;
+  const callLlm = async (system, user, maxTokens = 700, tier = "strong") => {
     if (llmCalls.budgetExhausted) throw new Error("budget_exhausted");
     llmCalls.n += 1;
     try {
-      return await o.llm({ system, user: red(user), maxTokens });
+      return await o.llm({ system, user: red(user), maxTokens, tier });
     } catch (err) {
       llmCalls.failed += 1;
       if (/budget_exhausted|402/.test(String(err?.message ?? err))) llmCalls.budgetExhausted = true;
@@ -91,6 +98,15 @@ export async function runAgentInspection(o) {
   let deadline = Infinity;
   let firstHtml = "";
   let usedTestData = null;
+  let singleFileFix = null;
+  /** C11: 진행 상황을 바깥(server.mjs)에 보인다 — 강제 시간 초과 때 여기까지로 부분 리포트를 만든다. */
+  const progress = o.progress ?? {};
+  const syncProgress = () => {
+    Object.assign(progress, {
+      targetUrl: o.targetUrl, intent: o.intent, locale, acs, acSource, results: [...results], sweep, signals,
+      loginDepth, loginMethod, secrets: secrets(),
+    });
+  };
 
   try {
     await driver.start(o.targetUrl);
@@ -157,30 +173,47 @@ export async function runAgentInspection(o) {
       }
 
       // 3b) Simsa 기본 기준 — 핵심 일을 실제로 끝까지(모든 앱 공통). 의도가 사용자 확인 기준에서 왔을 때만 confirmed.
-      acs = pure.orderAcs(pure.withCoreOutcomeAc(acs, o.intent, acSource !== "inferred_at_run", locale), pure.AGENT_MAX_ACS + 1);
+      acs = pure.orderAcs(pure.withCoreOutcomeAc(acs, o.intent, acSource !== "inferred_at_run", locale), Math.min(pure.AGENT_MAX_ACS + 1, caps.maxAcs));
+      syncProgress();
 
       // 4) 화면·버튼 점검
       const sweepBudget = Math.min(SWEEP_MAX_MS, Number.isFinite(timeLeft()) ? timeLeft() * SWEEP_TIME_SHARE : SWEEP_MAX_MS);
-      sweep = await runSweep({ driver, pure, startUrl: o.targetUrl, until: Date.now() + sweepBudget, shot, plog });
+      sweep = await runSweep({ driver, pure, startUrl: o.targetUrl, until: Date.now() + sweepBudget, shot, plog, maxScreens: caps.maxScreens, maxButtons: Math.min(pure.SWEEP_MAX_BUTTONS, caps.maxScreens * 6) });
       plog(`sweep screens=${sweep.screens.length} buttons=${sweep.buttons.length}`);
+      syncProgress();
 
       // 5) AC 실행
       const data = pure.koreanTestData(Date.now() % 100000);
       usedTestData = data;
       for (const ac of acs) {
-        if (timeLeft() < 20_000 || llmCalls.budgetExhausted) {
+        if (timeLeft() < 20_000 || llmCalls.budgetExhausted || actionsUsed >= caps.maxActions) {
           partial = true;
           results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [], steps: 0 });
           continue;
         }
-        const r = await runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials: loginMethod === "credentials" || loginMethod === "handover", loginFailed, handoverState, deadline, shot, plog });
+        const acArgs = { ac, o, pure, driver, callLlm, locale, data, hasCredentials: loginMethod === "credentials" || loginMethod === "handover", loginFailed, handoverState, deadline, shot, plog };
+        let r = await runOneAc(acArgs);
+        // (1) 시각 경계: 날짜·시간에 걸린 must가 통과하면 기기 시계를 한국 시간 새벽 00:30으로 옮겨 한 번 더.
+        if (r.status === "pass" && ac.priority === "must" && pure.isTimeRelated(ac) && timeLeft() > 90_000 && !llmCalls.budgetExhausted) {
+          const iso = pure.kstEarlyMorningIso(Date.now());
+          const v = await runOneAc({ ...acArgs, clockIso: iso });
+          r = pure.mergeClockVariant(r, v, iso, locale);
+          plog(`ac ${ac.id} clock-variant → ${v.status}`);
+        }
         results.push(r);
+        syncProgress();
         plog(`ac ${ac.id} → ${r.status}${r.reasonCode ? `(${r.reasonCode})` : ""} steps=${r.steps}`);
       }
 
       // #594 H4: 화면 언어와 다른 결과 언어(한국어 앱에 중국어·일본어)
       const lastText = await driver.bodyText().catch(() => "");
       signals.outputLanguageMismatch = nd.detectOutputLanguageMismatch(firstBody, lastText) ?? null;
+
+      // B5: 단일 파일 앱이면 고친 파일을 만들고, 그 파일로 실패했던 기준을 다시 돌려 검증한다.
+      if (o.singleFileFix !== false && driver.fetchSource && driver.serveOverride && timeLeft() > 120_000 && !llmCalls.budgetExhausted) {
+        singleFileFix = await trySingleFileFix({ acs, results, data: usedTestData }).catch((err) => ({ attempted: true, error: String(err?.message ?? err).slice(0, 120) }));
+        plog(`single-file-fix ${singleFileFix ? JSON.stringify({ v: singleFileFix.validated, s: singleFileFix.stillFailing, e: singleFileFix.error }) : "skipped"}`);
+      }
     }
   } catch (err) {
     partial = true;
@@ -199,6 +232,16 @@ export async function runAgentInspection(o) {
     report.agent.testData = { names: [usedTestData.name, usedTestData.altName], phone: usedTestData.phone, memo: usedTestData.memo };
     report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
   }
+  if (singleFileFix) {
+    report.agent.singleFileFix = singleFileFix;
+    if (singleFileFix.validated?.length) {
+      report.notes.push(
+        locale === "en"
+          ? `We made a corrected index.html and re-ran the failed criteria against it: ${singleFileFix.validated.join(", ")} now pass. Download it from this report.`
+          : `고친 index.html을 만들어 실패했던 기준을 그 파일로 다시 해 봤어요: ${singleFileFix.validated.join(", ")} 통과. 이 리포트에서 받으실 수 있어요.`,
+      );
+    }
+  }
   report.agent.durationMs = Date.now() - t0;
   if (loginFailed) report.notes.push(pure.reasonText("login_failed", locale));
   const agentPrompt = pure.buildAgentAcFixPrompt(report, locale);
@@ -216,7 +259,45 @@ export async function runAgentInspection(o) {
     return { ...obs, aria: red(obs.aria), text: red(obs.text), title: red(obs.title), url: red(obs.url) };
   }
 
-  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog }) {
+  /** B5 — 단일 파일 앱의 고친 파일 + 실패 기준 재검증(검증 통과분만 "고쳐짐"). */
+  async function trySingleFileFix({ acs, results, data }) {
+    const sf = await import("./single-file-fix.mjs");
+    const failed = acs
+      .map((a) => ({ a, r: results.find((x) => x.id === a.id) }))
+      .filter(({ a, r }) => r?.status === "fail" && (a.priority === "must" || a.confirmed))
+      .map(({ a, r }) => ({ id: a.id, title: a.title, then: a.then, actions: r.actions, reason: r.reason, evidence: r.evidence }));
+    if (failed.length === 0) return null;
+    const source = await driver.fetchSource(o.targetUrl);
+    if (!sf.isSingleFileApp(source, o.targetUrl)) return null;
+    const text = await callLlm("You fix single-file web apps. Reply with JSON only.", sf.singleFileFixPrompt(source, failed, locale), 4000);
+    const parsed = pure.extractJsonObject(text) ?? {};
+    const applied = sf.applyExactEdits(source, parsed.edits);
+    const cannotFix = Array.isArray(parsed.cannotFix) ? parsed.cannotFix.filter((x) => typeof x === "string").slice(0, 10) : [];
+    if (!applied.ok) return { attempted: true, error: applied.error, cannotFix };
+    await driver.serveOverride(o.targetUrl, applied.html);
+    const validated = [];
+    const stillFailing = [];
+    try {
+      for (const f of failed) {
+        if (Date.now() > deadline - 30_000) break;
+        const ac = acs.find((a) => a.id === f.id);
+        const r = await runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials: false, loginFailed, handoverState: null, deadline, shot, plog });
+        (r.status === "pass" ? validated : stillFailing).push(f.id);
+      }
+    } finally {
+      await driver.serveOverride(o.targetUrl, null).catch(() => {});
+    }
+    return {
+      attempted: true,
+      validated,
+      stillFailing,
+      cannotFix,
+      diff: sf.editsDiff(parsed.edits).slice(0, 40_000),
+      ...(validated.length > 0 && applied.html.length <= sf.CORRECTED_FILE_REPORT_MAX ? { correctedHtml: applied.html } : {}),
+    };
+  }
+
+  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null }) {
     const history = [];
     const actions = [];
     let corpus = "";
@@ -233,8 +314,12 @@ export async function runAgentInspection(o) {
     const known = new Set([normUrl(o.targetUrl)]);
     let onGuessedAddress = false;
     await driver.goto(o.targetUrl);
+    if (clockIso) {
+      await driver.setClock(clockIso).catch(() => {});
+      history.push(`(device clock set to ${clockIso} = 00:30 Korea time; re-check this criterion at this hour — dates shown as "today" must be the Korea date)`);
+    }
     await driver.markStorage?.().catch(() => {});
-    const system = pure.agentSystemPrompt(locale);
+    const system = pure.agentSystemPrompt(locale, { readOnly: o.readOnly === true });
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
       const obs = redObs(obsRaw);
@@ -250,8 +335,10 @@ export async function runAgentInspection(o) {
           system,
           pure.agentTurnPrompt({
             ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
-            stepsLeft: maxSteps - steps, nowIso: new Date().toISOString(),
+            stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(),
           }),
+          700,
+          "cheap",
         );
       } catch (err) {
         const code = /budget/.test(String(err?.message ?? err)) ? "budget" : "agent_error";
@@ -259,6 +346,10 @@ export async function runAgentInspection(o) {
       }
       const parsed = pure.parseAgentAction(text, o.targetUrl);
       steps += 1;
+      actionsUsed += 1;
+      if (actionsUsed > caps.maxActions) {
+        return finish({ status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [] });
+      }
       if (!parsed.ok) {
         invalidStreak += 1;
         history.push(`(rejected: ${parsed.error})`);
@@ -293,6 +384,11 @@ export async function runAgentInspection(o) {
       }
       const desc = red(pure.describeAction(a, locale));
       let res;
+      // S2-min: 동의 없는 런은 입력·고르기를 하지 않는다(시험 데이터를 만들지 않는다).
+      if (o.readOnly === true && (a.type === "fill" || a.type === "select")) {
+        history.push(`${desc} → BLOCKED (read-only run: the owner did not allow test data; judge not_verified with reasonCode write_not_allowed if this criterion needs it)`);
+        continue;
+      }
       if (a.type === "click" || a.type === "select") {
         const label = a.target.name ?? a.target.text ?? a.target.label ?? a.target.placeholder ?? "";
         const safety = classifyActionSafety(label);
@@ -329,7 +425,8 @@ export async function runAgentInspection(o) {
       if (res?.ok) {
         if (a.type === "fill" || a.type === "select") filled = true;
         else if (a.type === "click" && filled && !stateChange) stateChange = true;
-        else if (stateChange && (a.type === "reload" || a.type === "new_session" || a.type === "goto" || a.type === "login")) verified = true;
+        // (2) 새로고침만으로는 "남는다"를 증명하지 않는다 — 만든 기록을 다른 곳(새 방문자·다른 화면·다른 역할)에서 다시 찾아야.
+        else if (stateChange && (a.type === "new_session" || a.type === "goto" || a.type === "login")) verified = true;
       }
       if (a.type === "goto") {
         // 짐작한 주소 + 그 화면이 "없음"일 때만 — 링크는 없어도 실제로 있는 화면(/admin 등)은 정상 근거로 쓴다.
@@ -351,6 +448,7 @@ export async function runAgentInspection(o) {
       return {
         id: ac.id,
         status: f.status,
+        ...(f.scope ? { scope: f.scope } : {}),
         reason: red(f.reason),
         ...(f.reasonCode ? { reasonCode: f.reasonCode } : {}),
         evidence: (f.evidence ?? []).map(red),
@@ -363,6 +461,8 @@ export async function runAgentInspection(o) {
   }
 }
 
+const MOBILE_CHECK_MAX = 8;
+
 function normUrl(u) {
   try {
     const x = new URL(u);
@@ -374,7 +474,7 @@ function normUrl(u) {
 }
 
 /** 화면·버튼 점검 — 같은 출처 화면을 너비 우선으로 열고, 화면마다 안전한 버튼을 한 번씩 눌러 본다. */
-export async function runSweep({ driver, pure, startUrl, until, shot, plog = () => {} }) {
+export async function runSweep({ driver, pure, startUrl, until, shot, plog = () => {}, maxScreens = pure.SWEEP_MAX_SCREENS, maxButtons = pure.SWEEP_MAX_BUTTONS }) {
   const isSafeText = (t) => classifyActionSafety(t).safe;
   const screens = [];
   const buttons = [];
@@ -383,11 +483,11 @@ export async function runSweep({ driver, pure, startUrl, until, shot, plog = () 
   const seen = new Set();
   const queue = [];
   const enqueue = (links) => {
-    const { targets, truncated: t } = pure.discoverSweepTargets(startUrl, links, pure.SWEEP_MAX_SCREENS, isSafeText);
+    const { targets, truncated: t } = pure.discoverSweepTargets(startUrl, links, maxScreens, isSafeText);
     if (t) truncated.screens = true;
     for (const u of targets) {
       if (seen.has(u)) continue;
-      if (seen.size >= pure.SWEEP_MAX_SCREENS) {
+      if (seen.size >= maxScreens) {
         truncated.screens = true;
         break;
       }
@@ -412,13 +512,18 @@ export async function runSweep({ driver, pure, startUrl, until, shot, plog = () 
       const name = await shot(`sweep-${screens.length + 1}.png`);
       if (name) entry.screenshot = name;
     }
+    // C10: 열리는 화면은 휴대폰 폭에서 가로 넘침도 잰다(처음 MOBILE_CHECK_MAX개).
+    if (cls.ok && driver.mobileCheck && screens.filter((s) => s.mobileOverflowPx !== undefined).length < MOBILE_CHECK_MAX) {
+      const m = await driver.mobileCheck(url).catch(() => null);
+      if (m && m.overflowPx !== null) entry.mobileOverflowPx = m.overflowPx;
+    }
     screens.push(entry);
     enqueue(await driver.links());
-    if (!cls.ok || clicks >= pure.SWEEP_MAX_BUTTONS) {
-      if (clicks >= pure.SWEEP_MAX_BUTTONS) truncated.buttons = true;
+    if (!cls.ok || clicks >= maxButtons) {
+      if (clicks >= maxButtons) truncated.buttons = true;
       continue;
     }
-    const sel = pure.selectSweepButtons(await driver.buttons(), { alreadyClicked: clicked, remaining: pure.SWEEP_MAX_BUTTONS - clicks, isSafeText });
+    const sel = pure.selectSweepButtons(await driver.buttons(), { alreadyClicked: clicked, remaining: maxButtons - clicks, isSafeText });
     for (const label of sel.skippedUnsafe) {
       if (clicked.has(label)) continue;
       clicked.add(label);
@@ -437,4 +542,27 @@ export async function runSweep({ driver, pure, startUrl, until, shot, plog = () 
   }
   plog(`sweep:done screens=${screens.length} clicks=${clicks}`);
   return { screens, buttons, truncated };
+}
+
+/**
+ * C11: 강제 시간 초과·크래시 때 지금까지 잰 것으로 부분 리포트를 만든다(빈손 실패 대신). 돌지 못한 기준은 "시간 한도"로
+ * 확인 못 함 — 판정 사다리는 같다(must 실패가 이미 있으면 Needs Fix, 아니면 확인 못 함). 비밀은 똑같이 가린다.
+ */
+export async function partialAgentResult(progress) {
+  if (!progress || !Array.isArray(progress.acs) || progress.acs.length === 0) return null;
+  const pure = await importPure("agent-inspection.js");
+  const input = {
+    targetUrl: progress.targetUrl, intent: progress.intent, acs: progress.acs, acSource: progress.acSource,
+    results: progress.results ?? [], sweep: progress.sweep ?? null, signals: progress.signals ?? {},
+    loginDepth: progress.loginDepth ?? "L1", loginMethod: progress.loginMethod ?? "none", partial: true,
+  };
+  const report = pure.buildAgentReport(input, progress.locale);
+  const s = progress.secrets ?? [];
+  return {
+    decision: pure.decideAgentVerdict(input).decision,
+    works: report.works,
+    report: pure.redactDeep(report, s),
+    agentPrompt: pure.redactSecrets(pure.buildAgentAcFixPrompt(report, progress.locale), s),
+    evidenceFiles: [],
+  };
 }
