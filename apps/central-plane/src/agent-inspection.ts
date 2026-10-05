@@ -1167,6 +1167,35 @@ export function orderAcs(acs: readonly AgentAc[], max: number = AGENT_MAX_ACS): 
   return [...acs].sort((a, b) => rank[a.priority] - rank[b.priority]).slice(0, Math.max(0, max));
 }
 
+/**
+ * B6: 재검수(같은 기준 전부)와 원 런 비교 — 고쳐진 것 · **새로 깨진 것**(전엔 통과, 이번엔 안 됨) · 그대로 안 되는 것.
+ * 둘 다 agent 리포트일 때만. 서버 완료 콜백이 붙인다(컨테이너는 원 런을 모른다).
+ */
+export function compareAgentRuns(
+  previousReportJson: string | null | undefined,
+  current: { acTable?: unknown },
+): { fixed: string[]; newlyBroken: string[]; stillBroken: string[] } | null {
+  let prev: { engine?: unknown; acTable?: unknown } | null = null;
+  try {
+    prev = previousReportJson ? JSON.parse(previousReportJson) : null;
+  } catch {
+    prev = null;
+  }
+  if (!prev || prev.engine !== "agent" || !Array.isArray(prev.acTable) || !Array.isArray(current.acTable)) return null;
+  const status = (t: unknown[]) =>
+    new Map(t.filter((x): x is { id: string; status: string } => !!x && typeof x === "object" && typeof (x as { id?: unknown }).id === "string").map((x) => [x.id, x.status]));
+  const before = status(prev.acTable);
+  const after = status(current.acTable);
+  const out = { fixed: [] as string[], newlyBroken: [] as string[], stillBroken: [] as string[] };
+  for (const [id, s] of after) {
+    const b = before.get(id);
+    if (b === "fail" && s === "pass") out.fixed.push(id);
+    else if (b === "pass" && s === "fail") out.newlyBroken.push(id);
+    else if (b === "fail" && s === "fail") out.stillBroken.push(id);
+  }
+  return out;
+}
+
 /** 재검수: 원 런 리포트에 남은 AC 정의를 그대로 꺼낸다(같은 자로 다시 잰다). 없거나 깨졌으면 null. */
 export function acsFromAgentReport(reportJson: string | null | undefined): AgentAc[] | null {
   if (!reportJson) return null;

@@ -53,7 +53,7 @@
  * runs that dispatched but died silently.
  */
 import { acceptancePlanFromDevSpec, agentAcsFromDevSpec, devSpecAcSource, type AcceptanceScenario } from "../acceptance-plan.js";
-import { acsFromAgentReport, type AcSource, type AgentAc } from "../agent-inspection.js";
+import { acsFromAgentReport, compareAgentRuns, type AcSource, type AgentAc } from "../agent-inspection.js";
 import {
   TestCredentialsSchema,
   initAgentSpend,
@@ -977,6 +977,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     if (body.report !== undefined && body.report !== null && typeof body.report === "object" && !Array.isArray(body.report)) {
       // C2b/C4a — builderPrompt in the RUN's locale (the report prose is already
       // in that language) + finding codes for the failure map.
+      // B6: agent 재검수는 원 런과 AC별로 비교해 "새로 깨진 것"을 리포트에 싣는다.
+      if (run.sourceCheckId && (body.report as Record<string, unknown>)["engine"] === "agent") {
+        const origin = await getVisualCheckById(c.env, run.sourceCheckId).catch(() => null);
+        const cmp = compareAgentRuns(origin?.reportJson, body.report as { acTable?: unknown });
+        if (cmp) (body.report as Record<string, unknown>)["agentComparison"] = { sourceCheckId: run.sourceCheckId, ...cmp };
+      }
       const enriched = enrichReportForStorage(body.report as Record<string, unknown>, run.locale ?? "ko");
       findingCodesJson = enriched.findingCodesJson;
       let serialized = JSON.stringify(enriched.report);

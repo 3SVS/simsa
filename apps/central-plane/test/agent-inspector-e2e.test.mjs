@@ -223,8 +223,13 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     assert.deepEqual(rePayload.agent.acs.map((a) => a.id), ["CORE-1", ...payload.agent.acs.map((a) => a.id)], "원 런이 쓴 기준(기본 기준 포함) 그대로");
     assert.deepEqual(rePayload.agent.acs.slice(1), payload.agent.acs);
     assert.equal(rePayload.credentials, undefined);
-    // 재검수 런도 끝내 둔다(다음 테스트의 진행 중 1개 가드)
-    await T.post("/internal/visual-check-done", { runId: rePayload.runId, ok: false, error: "test" }, { authorization: `Bearer ${ICT}` });
+    // B6: 재검수 결과를 원 런과 AC별로 비교해 싣는다(같은 대본 → 바뀐 것 없음, 그대로 안 되는 것 = AC-002)
+    await T.runContainer(rePayload);
+    const reRow = T.db.prepare(`SELECT report_json FROM workspace_visual_checks WHERE id = ?`).get(rePayload.runId);
+    const cmp = JSON.parse(reRow.report_json).agentComparison;
+    assert.equal(cmp.sourceCheckId, runId);
+    assert.deepEqual(cmp.stillBroken, ["AC-002"], "AC-003은 재검수에 계정이 없어 확인 못 함 — 그대로 안 됨에 세지 않는다");
+    assert.deepEqual(cmp.newlyBroken, []);
   });
 
   it("문 (3) 기획서: document 기준 → '생각과 달라요' + 같은 실패 증거", async () => {

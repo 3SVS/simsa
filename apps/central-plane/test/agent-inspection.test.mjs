@@ -220,6 +220,12 @@ describe("화면·버튼 점검 — 상한과 안전", () => {
 });
 
 describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
+  it("B6 비교: 고쳐진 것·새로 깨진 것·그대로 안 되는 것", () => {
+    const prev = JSON.stringify({ engine: "agent", acTable: [{ id: "A", status: "fail" }, { id: "B", status: "pass" }, { id: "C", status: "fail" }] });
+    const cmp = P.compareAgentRuns(prev, { acTable: [{ id: "A", status: "pass" }, { id: "B", status: "fail" }, { id: "C", status: "fail" }] });
+    assert.deepEqual(cmp, { fixed: ["A"], newlyBroken: ["B"], stillBroken: ["C"] });
+    assert.equal(P.compareAgentRuns('{"engine":"classic"}', { acTable: [] }), null);
+  });
   it("리포트에 남긴 AC 정의를 그대로 꺼낸다", () => {
     const acs = [ac("AC-001"), { ...ac("AC-002", "should", false), steps: ["예약 화면 열기"] }];
     const rep = P.buildAgentReport({ targetUrl: ORIGIN, intent: "i", acs, acSource: "confirmed_inferred", results: [], sweep: null, signals: {}, loginDepth: "L1", loginMethod: "none" }, "ko");
