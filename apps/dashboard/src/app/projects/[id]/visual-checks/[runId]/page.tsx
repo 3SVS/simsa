@@ -59,6 +59,7 @@ import { compareVisualChecks, pickPreviousDoneCheck } from "@/lib/visual-check-c
 import type { VisualCheckComparison, ComparedFinding } from "@/lib/visual-check-compare.mjs";
 import { isActiveStatus, isPlanCapKey, runErrorNotice, runErrorTone, RUN_POLL_INTERVAL_MS } from "@/lib/visual-check-run-state.mjs";
 import { PlanCapHint } from "@/components/PlanCapHint";
+import { AgentReportSections } from "@/components/AgentReportSections";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { buildRecheckBody, confirmedIntentAtOf } from "@/lib/visual-check-recheck.mjs";
@@ -1127,6 +1128,9 @@ export default function VisualCheckDetailPage() {
               </ul>
             </section>
           )}
+
+          {/* 2026-10-05 agent 엔진 — 기준(AC)별 결과 표 + 화면·버튼 점검 (agent 리포트일 때만) */}
+          <AgentReportSections report={report} locale={locale} />
 
           {/* Train M-1b — "왜 이 판정인가요?" 증거 체인 (펼침 시 lazy 로드) */}
           <EvidenceChainSection projectId={id} runId={runId} userKey={userKey} t={t} />

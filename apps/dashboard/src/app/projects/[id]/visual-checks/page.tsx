@@ -39,6 +39,14 @@ import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { callGetTierApi } from "@/lib/workspace-check-api";
 import { PlanCapHint } from "@/components/PlanCapHint";
+import {
+  AgentRunOptions,
+  DEFAULT_AGENT_OPTIONS,
+  LiveLoginPanel,
+  agentOptionsReady,
+  agentRunBody,
+  type AgentRunOptionsValue,
+} from "@/components/AgentRunOptions";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 
@@ -117,6 +125,10 @@ export default function VisualChecksPage() {
   // click (disabled + "See plans"); unknown (lookup failed) → the server's 402 answers.
   const [tier, setTier] = useState<"free" | "basic" | "pro" | "staff" | null>(null);
   const signupNeedsPlan = tier === "free";
+  // 2026-10-05 agent 엔진 — 지금은 스태프 티어에만(서버도 스태프만 받는다). 로그인 갈래는 동의 체크 뒤에만 보낸다.
+  const [agentOpts, setAgentOpts] = useState<AgentRunOptionsValue>(DEFAULT_AGENT_OPTIONS);
+  const [live, setLive] = useState<{ runId: string; token: string } | null>(null);
+  const isStaff = tier === "staff";
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<RunNotice | null>(null);
 
@@ -205,9 +217,13 @@ export default function VisualChecksPage() {
       locale,
       ...(trimmedIntent ? { intent: trimmedIntent } : {}),
       ...(withSignup && signupAvailable && !signupNeedsPlan ? { withSignup: true } : {}),
+      ...(isStaff ? agentRunBody(agentOpts) : {}),
     });
     setSubmitting(false);
     if (res.ok) {
+      // 입력한 비밀번호는 요청이 끝나면 화면 상태에서도 지운다.
+      setAgentOpts((v) => ({ ...v, password: "", consent: false }));
+      if (res.liveToken) setLive({ runId: res.check.id, token: res.liveToken });
       if (!res.dispatched) setNotice({ kind: "queuedOnly" });
       setIntent("");
       applyListResult(await listVisualChecks(id, userKey));
@@ -295,9 +311,11 @@ export default function VisualChecksPage() {
           </label>
         )}
 
+        {isStaff && <AgentRunOptions value={agentOpts} onChange={setAgentOpts} locale={locale === "en" ? "en" : "ko"} />}
+
         <button
           onClick={handleRun}
-          disabled={submitting || buttonState.disabled}
+          disabled={submitting || buttonState.disabled || (isStaff && !agentOptionsReady(agentOpts))}
           // 2026-10-04 여정 감사 P2: 꺼지는 경우는 "보내는 중"이거나 "앞선 검수가 도는 중" — 둘 다 일하는 중이다(aria-busy).
           // 이유 문장(runActiveNotice)을 버튼에 묶어 둔다 — 왜 안 눌리는지 모르는 버튼을 남기지 않는다(#588과 같은 원칙).
           aria-busy={submitting || hasActiveRun}
@@ -309,6 +327,12 @@ export default function VisualChecksPage() {
 
         {hasActiveRun && (
           <div id="vc-run-active-notice" className="callout callout-info mt-3">{t.visualChecks.runActiveNotice}</div>
+        )}
+
+        {live && hasActiveRun && (
+          <div className="mt-3">
+            <LiveLoginPanel projectId={id} runId={live.runId} token={live.token} userKey={userKey} locale={locale === "en" ? "en" : "ko"} />
+          </div>
         )}
 
         {notice?.kind === "queuedOnly" && (

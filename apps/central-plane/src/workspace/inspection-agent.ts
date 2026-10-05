@@ -1,0 +1,181 @@
+/**
+ * workspace/inspection-agent.ts — 검수 "agent" 엔진의 Worker 쪽 토대 (2026-10-05).
+ *
+ *   - 런 범위 토큰(irt1 = LLM 프록시 · ilt1 = 직접 로그인 넘겨주기 화면) — build-job-token.ts와 같은 HMAC 파생,
+ *     **라벨만 다르다**(빌드 토큰으로 검수 프록시를, 검수 토큰으로 빌드 프록시를 쓸 수 없다).
+ *   - 시험 계정 보관: 암호화(CONCLAVE_TOKEN_KEK, crypto.ts) → 디스패치 때 한 번 복호화 → 런 종료 시 삭제.
+ *   - LLM 예산 행: 최악 비용 원자 예약 → 정산(build-llm-proxy와 같은 보수 원칙).
+ *
+ * 비밀은 이 파일 어디에서도 로그로 나가지 않는다(오류 로그도 runId·이유 코드만).
+ */
+import { z } from "zod";
+import type { Env } from "../env.js";
+import { decryptToken, encryptToken } from "../crypto.js";
+import { bearerOf, constantTimeEqual } from "./build-job-token.js";
+import { MIN_SECRET_LENGTH } from "../agent-inspection.js";
+
+// ─── 런 범위 토큰 ───────────────────────────────────────────────────────────────
+
+export type RunTokenKind = "llm" | "live";
+const TOKEN_SPEC: Record<RunTokenKind, { prefix: string; label: string; msg: string }> = {
+  llm: { prefix: "irt1", label: "simsa/inspect-run-token/v1", msg: "simsa/inspect-run/v1:" },
+  live: { prefix: "ilt1", label: "simsa/inspect-live-token/v1", msg: "simsa/inspect-live/v1:" },
+};
+const RUN_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const encoder = new TextEncoder();
+
+type TokenEnv = Pick<Env, "CONCLAVE_TOKEN_KEK" | "INTERNAL_CALLBACK_TOKEN">;
+
+function rootOf(env: TokenEnv): string | null {
+  if (typeof env.CONCLAVE_TOKEN_KEK === "string" && env.CONCLAVE_TOKEN_KEK.length > 0) return env.CONCLAVE_TOKEN_KEK;
+  if (typeof env.INTERNAL_CALLBACK_TOKEN === "string" && env.INTERNAL_CALLBACK_TOKEN.length > 0) return env.INTERNAL_CALLBACK_TOKEN;
+  return null;
+}
+
+async function hmacHex(keyBytes: Uint8Array | ArrayBuffer, message: string): Promise<ArrayBuffer> {
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.sign("HMAC", key, encoder.encode(message));
+}
+
+async function macFor(root: string, kind: RunTokenKind, runId: string): Promise<string> {
+  const spec = TOKEN_SPEC[kind];
+  const sub = await hmacHex(encoder.encode(root), spec.label);
+  const mac = await hmacHex(sub, spec.msg + runId);
+  return [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function mintRunToken(env: TokenEnv, kind: RunTokenKind, runId: string): Promise<string | null> {
+  const root = rootOf(env);
+  if (!root || !RUN_ID_RE.test(runId)) return null;
+  return `${TOKEN_SPEC[kind].prefix}.${runId}.${await macFor(root, kind, runId)}`;
+}
+
+export async function verifyRunToken(env: TokenEnv, kind: RunTokenKind, token: string | null | undefined): Promise<{ ok: true; runId: string } | { ok: false }> {
+  const root = rootOf(env);
+  if (!root || typeof token !== "string") return { ok: false };
+  const m = new RegExp(`^${TOKEN_SPEC[kind].prefix}\\.([A-Za-z0-9_-]{1,64})\\.([0-9a-f]{64})$`).exec(token);
+  if (!m || !m[1] || !m[2]) return { ok: false };
+  return constantTimeEqual(await macFor(root, kind, m[1]), m[2]) ? { ok: true, runId: m[1] } : { ok: false };
+}
+
+export { bearerOf };
+
+// ─── 시험 계정(동의 필수 · 암호화 · 런 종료 시 삭제) ───────────────────────────
+
+/** 요청 본문의 시험 계정. consent는 문자 그대로 true여야 한다(기본값으로 켜지지 않는다). */
+export const TestCredentialsSchema = z
+  .object({
+    username: z.string().trim().min(MIN_SECRET_LENGTH).max(200),
+    password: z.string().min(4).max(200),
+    loginUrl: z.string().trim().max(500).optional(),
+    consent: z.literal(true),
+  })
+  .strict();
+export type TestCredentials = { username: string; password: string; loginUrl?: string };
+
+/** 시험 계정 보관 TTL — 런이 끝나면 즉시 지우지만, 어떤 경로로든 남으면 크론이 이 뒤에 지운다. */
+export const RUN_SECRET_TTL_MS = 60 * 60 * 1000;
+
+export async function storeRunCredentials(env: Env, runId: string, creds: TestCredentials): Promise<void> {
+  const kek = env.CONCLAVE_TOKEN_KEK;
+  if (!kek) throw new Error("credentials_unavailable");
+  const ciphertext = await encryptToken(JSON.stringify(creds), kek);
+  await env.DB.prepare(
+    `INSERT INTO inspection_run_secrets (run_id, kind, ciphertext, created_at) VALUES (?, 'credentials', ?, ?)
+       ON CONFLICT(run_id) DO UPDATE SET ciphertext = excluded.ciphertext, created_at = excluded.created_at`,
+  )
+    .bind(runId, ciphertext, new Date().toISOString())
+    .run();
+}
+
+/** 디스패치 직전에만 부른다. 없으면 null. 복호화 실패(키 교체·변조)는 던진다 — 조용히 평문으로 가지 않는다. */
+export async function loadRunCredentials(env: Env, runId: string): Promise<TestCredentials | null> {
+  const row = await env.DB.prepare(`SELECT ciphertext FROM inspection_run_secrets WHERE run_id = ? AND kind = 'credentials'`)
+    .bind(runId)
+    .first<{ ciphertext: string }>();
+  if (!row) return null;
+  const kek = env.CONCLAVE_TOKEN_KEK;
+  if (!kek) throw new Error("credentials_unavailable");
+  const parsed = JSON.parse(await decryptToken(row.ciphertext, kek)) as Partial<TestCredentials>;
+  if (typeof parsed.username !== "string" || typeof parsed.password !== "string") throw new Error("credentials_corrupt");
+  return { username: parsed.username, password: parsed.password, ...(typeof parsed.loginUrl === "string" ? { loginUrl: parsed.loginUrl } : {}) };
+}
+
+/** 런의 비밀을 지운다. 던지지 않는다(표가 아직 없을 때 포함) — 남은 것은 TTL 정리가 지운다. */
+export async function deleteRunSecret(env: Env, runId: string): Promise<boolean> {
+  try {
+    const r = await env.DB.prepare(`DELETE FROM inspection_run_secrets WHERE run_id = ?`).bind(runId).run();
+    return Number(r?.meta?.changes ?? 0) > 0;
+  } catch (err) {
+    console.error(JSON.stringify({ at: "deleteRunSecret", runId, error: String((err as Error)?.message ?? err).slice(0, 120) }));
+    return false;
+  }
+}
+
+export async function purgeExpiredRunSecrets(env: Env, nowMs: number = Date.now()): Promise<number> {
+  try {
+    const cutoff = new Date(nowMs - RUN_SECRET_TTL_MS).toISOString();
+    const r = await env.DB.prepare(`DELETE FROM inspection_run_secrets WHERE created_at < ?`).bind(cutoff).run();
+    return Number(r?.meta?.changes ?? 0);
+  } catch (err) {
+    console.error(JSON.stringify({ at: "purgeExpiredRunSecrets", error: String((err as Error)?.message ?? err).slice(0, 120) }));
+    return 0;
+  }
+}
+
+/** 로그인 주소는 검수 대상과 같은 출처만(다른 사이트로 비밀번호를 들고 가지 않는다). */
+export function loginUrlAllowed(loginUrl: string | undefined, targetUrl: string): boolean {
+  if (loginUrl === undefined || loginUrl === "") return true;
+  try {
+    const a = new URL(loginUrl);
+    const b = new URL(targetUrl);
+    return (a.protocol === "https:" || a.protocol === "http:") && a.origin === b.origin;
+  } catch {
+    return false;
+  }
+}
+
+// ─── LLM 예산(서버 권위) ────────────────────────────────────────────────────────
+
+export const DEFAULT_INSPECT_AGENT_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_INSPECT_AGENT_BUDGET_USD = 3;
+export const DEFAULT_INSPECT_AGENT_MAX_CALLS = 160;
+
+export function inspectAgentModel(env: Pick<Env, "INSPECT_AGENT_MODEL">): string {
+  const m = (env.INSPECT_AGENT_MODEL ?? "").trim();
+  return m || DEFAULT_INSPECT_AGENT_MODEL;
+}
+
+export function inspectAgentBudgetUsd(env: Pick<Env, "INSPECT_AGENT_BUDGET_USD">): number {
+  const n = Number(env.INSPECT_AGENT_BUDGET_USD);
+  return Number.isFinite(n) && n > 0 && n <= 50 ? n : DEFAULT_INSPECT_AGENT_BUDGET_USD;
+}
+
+export async function initAgentSpend(env: Env, runId: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO inspection_agent_spend (run_id, budget_usd, spent_usd, calls, max_calls, created_at) VALUES (?, ?, 0, 0, ?, ?)
+       ON CONFLICT(run_id) DO NOTHING`,
+  )
+    .bind(runId, inspectAgentBudgetUsd(env), DEFAULT_INSPECT_AGENT_MAX_CALLS, new Date().toISOString())
+    .run();
+}
+
+/** 최악 비용 예약 — 남은 예산·호출 수가 있을 때만(원자적 UPDATE 한 문장). */
+export async function reserveAgentSpend(env: Env, runId: string, usd: number): Promise<"ok" | "exhausted" | "not_agent_run"> {
+  const r = await env.DB.prepare(
+    `UPDATE inspection_agent_spend SET spent_usd = spent_usd + ?, calls = calls + 1
+      WHERE run_id = ? AND spent_usd < budget_usd AND calls < max_calls`,
+  )
+    .bind(usd, runId)
+    .run();
+  if (Number(r?.meta?.changes ?? 0) > 0) return "ok";
+  const exists = await env.DB.prepare(`SELECT run_id FROM inspection_agent_spend WHERE run_id = ?`).bind(runId).first();
+  return exists ? "exhausted" : "not_agent_run";
+}
+
+/** 정산: 예약분을 실제 비용으로 바꾼다(업스트림 실패면 actual=0 → 예약 해제). */
+export async function settleAgentSpend(env: Env, runId: string, reservedUsd: number, actualUsd: number): Promise<void> {
+  await env.DB.prepare(`UPDATE inspection_agent_spend SET spent_usd = MAX(0, spent_usd - ? + ?) WHERE run_id = ?`)
+    .bind(reservedUsd, actualUsd, runId)
+    .run();
+}

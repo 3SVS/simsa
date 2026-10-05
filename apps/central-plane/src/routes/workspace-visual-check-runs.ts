@@ -52,7 +52,20 @@
  * retry right away. The stuck sweep (stuck-cleanup.ts) remains a backstop for
  * runs that dispatched but died silently.
  */
-import { acceptancePlanFromDevSpec, type AcceptanceScenario } from "../acceptance-plan.js";
+import { acceptancePlanFromDevSpec, agentAcsFromDevSpec, devSpecAcSource, type AcceptanceScenario } from "../acceptance-plan.js";
+import { BUILDERS, DEFECT_CLASSES, acsFromAgentReport, compareAgentRuns, type AcSource, type AgentAc } from "../agent-inspection.js";
+import {
+  TestCredentialsSchema,
+  initAgentSpend,
+  loadRunCredentials,
+  loginUrlAllowed,
+  mintRunToken,
+  storeRunCredentials,
+  verifyRunToken,
+  type TestCredentials,
+} from "../workspace/inspection-agent.js";
+import { INSPECT_LLM_PATH } from "./inspect-llm-proxy.js";
+import { internalBearerRejection } from "./admin-internal.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import { corsMiddleware } from "./cors.js";
@@ -151,6 +164,66 @@ function requireInternalToken(c: {
   return { ok: true };
 }
 
+// ─── agent 엔진(수용 기준 실행기) ─────────────────────────────────────────────
+
+/** 로그인 세 갈래: 없음 · 시험 계정(암호화 보관 → 런 종료 시 삭제) · 직접 로그인해서 넘겨주기(라이브 브라우저). */
+export const AGENT_LOGIN_MODES = ["none", "credentials", "handover"] as const;
+export type AgentLoginMode = (typeof AGENT_LOGIN_MODES)[number];
+export type AgentDispatch = { acs: AgentAc[]; acSource: AcSource; loginMode: AgentLoginMode };
+
+/**
+ * 이 런이 쓸 기준(AC). 순서: 원 런이 agent였으면 **그 AC 그대로**(재검수 = 같은 자) › 프로젝트 지시서의 AC
+ * (유저 확인 표시 포함) › 없으면 빈 목록(컨테이너가 첫 화면을 보고 추정 — confirmed:false).
+ */
+export function agentAcsForRun(
+  sourceCheck: Pick<DbVisualCheck, "reportJson"> | null,
+  devSpec: unknown,
+  entryPath?: string | null,
+): { acs: AgentAc[]; acSource: AcSource } {
+  const fromSource = sourceCheck ? acsFromAgentReport(sourceCheck.reportJson) : null;
+  if (fromSource) return { acs: fromSource, acSource: "source_run" };
+  const fromSpec = agentAcsFromDevSpec(devSpec);
+  if (fromSpec.length > 0) return { acs: fromSpec, acSource: devSpecAcSource(devSpec, entryPath) };
+  return { acs: [], acSource: "inferred_at_run" };
+}
+
+/** C13: 리포트의 agent.defects를 닫힌 어휘로만 저장(모르는 값은 버린다). */
+export async function recordAgentDefects(env: Env, runId: string, report: Record<string, unknown>): Promise<number> {
+  if (report["engine"] !== "agent") return 0;
+  const agent = (report["agent"] && typeof report["agent"] === "object" ? report["agent"] : {}) as Record<string, unknown>;
+  const builder = typeof agent["builder"] === "string" && (BUILDERS as readonly string[]).includes(agent["builder"]) ? agent["builder"] : "unknown";
+  const defects = Array.isArray(agent["defects"]) ? (agent["defects"] as unknown[]) : [];
+  const now = new Date().toISOString();
+  const stmts = [];
+  for (const d of defects.slice(0, 40)) {
+    if (!d || typeof d !== "object") continue;
+    const x = d as Record<string, unknown>;
+    const cls = typeof x["defectClass"] === "string" && (DEFECT_CLASSES as readonly string[]).includes(x["defectClass"]) ? x["defectClass"] : "other";
+    const acId = typeof x["acId"] === "string" ? x["acId"].slice(0, 40) : "";
+    const priority = x["priority"] === "must" || x["priority"] === "should" || x["priority"] === "could" ? x["priority"] : "should";
+    const status = x["status"] === "fail" ? "fail" : "not_verified";
+    if (!acId) continue;
+    stmts.push(
+      env.DB.prepare(
+        `INSERT INTO inspection_defects (run_id, ac_id, builder, defect_class, priority, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(run_id, ac_id) DO NOTHING`,
+      ).bind(runId, acId, builder, cls, priority, status, now),
+    );
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return stmts.length;
+}
+
+/** 원 런이 agent 엔진이었는가(재검수·자동 재검수가 엔진을 물려받는다). */
+export function wasAgentRun(run: Pick<DbVisualCheck, "reportJson"> | null): boolean {
+  if (!run?.reportJson) return false;
+  try {
+    const r = JSON.parse(run.reportJson) as { engine?: unknown } | null;
+    return r !== null && typeof r === "object" && r.engine === "agent";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Dispatch the queued run into the SimsaInspector container DO. Mirrors
  * spawnSandbox in saas.ts: fire-and-forget from the caller's perspective —
@@ -176,6 +249,11 @@ export async function dispatchInspection(
     withSignup?: boolean;
     /** SI 티어 A5: 지시서의 수용 기준 시나리오(없으면 종전 — 핵심 흐름 하나). */
     acceptancePlan?: AcceptanceScenario[];
+    /**
+     * 2026-10-05 agent 엔진(수용 기준 실행기). 있으면 컨테이너가 결정론 플래너 대신 AC를 하나씩 실제로 해 본다.
+     * acs가 비면 컨테이너가 첫 화면을 보고 추정한다(confirmed:false — "문제를 찾지 못했어요" 이상은 못 말한다).
+     */
+    agent?: AgentDispatch;
   },
 ): Promise<{ dispatched: boolean; note?: string; disabled?: boolean }> {
   if (!inspectionEnabled(env)) {
@@ -188,6 +266,37 @@ export async function dispatchInspection(
     return { dispatched: false, note: "callback_token_missing" };
   }
   const base = args.publicBaseUrl.replace(/\/+$/, "");
+  let agentPayload: Record<string, unknown> = {};
+  if (args.agent) {
+    const llmToken = await mintRunToken(env, "llm", args.runId);
+    if (!llmToken) return { dispatched: false, note: "agent_token_unavailable" };
+    try {
+      await initAgentSpend(env, args.runId);
+    } catch {
+      return { dispatched: false, note: "agent_budget_unavailable" };
+    }
+    // 시험 계정: 이 순간에만 복호화해 이 런의 페이로드에 싣는다. 실패하면 평문 폴백 없이 디스패치하지 않는다.
+    let credentials: TestCredentials | null = null;
+    if (args.agent.loginMode === "credentials") {
+      try {
+        credentials = await loadRunCredentials(env, args.runId);
+      } catch {
+        credentials = null;
+      }
+      if (!credentials) return { dispatched: false, note: "credentials_unreadable" };
+    }
+    agentPayload = {
+      engine: "agent",
+      agent: {
+        acs: args.agent.acs,
+        acSource: args.agent.acSource,
+        loginMode: args.agent.loginMode,
+        llmUrl: `${base}${INSPECT_LLM_PATH}`,
+        llmToken,
+      },
+      ...(credentials ? { credentials } : {}),
+    };
+  }
   const payload = {
     runId: args.runId,
     projectId: args.projectId,
@@ -219,6 +328,7 @@ export async function dispatchInspection(
           },
         }
       : {}),
+    ...agentPayload,
   };
   try {
     const id = env.INSPECTOR.idFromName(`vc-${args.runId}`);
@@ -483,6 +593,51 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // D-24 T-5 — 로그인 뒤 검수(L2)는 베이직 이상. 상한 슬롯보다 **먼저** 본다(402는 몫을 쓰지 않는다).
     // 서버가 집행한다 — UI가 체크박스를 숨기는 것만으로 게이팅하지 않는다(RC-4 협의체와 같은 원칙).
     const tier = await resolveTier(c.env, userKey);
+
+    // 2026-10-05 agent 엔진(수용 기준 실행기) — **스태프 티어만**(서버 집행). 상한 슬롯보다 먼저 판정한다.
+    const bodyRec = body as Record<string, unknown>;
+    const requestedEngine = bodyRec["engine"];
+    if (requestedEngine !== undefined && requestedEngine !== "agent" && requestedEngine !== "classic") {
+      return c.json({ ok: false, error: "invalid_engine" }, 400);
+    }
+    const isStaff = tier === "staff";
+    if (requestedEngine === "agent" && !isStaff) {
+      return c.json({ ok: false, error: "engine_staff_only", tier }, 403);
+    }
+    const useAgent =
+      isStaff && requestedEngine !== "classic" && (requestedEngine === "agent" || c.env.INSPECTION_ENGINE === "agent" || wasAgentRun(sourceCheck));
+    // 로그인 세 갈래. 기본은 없음 — 남의 앱에 들어가는 일이라 명시 동의 없이는 켜지지 않는다.
+    const rawLoginMode = bodyRec["loginMode"];
+    if (rawLoginMode !== undefined && !(AGENT_LOGIN_MODES as readonly unknown[]).includes(rawLoginMode)) {
+      return c.json({ ok: false, error: "invalid_login_mode" }, 400);
+    }
+    const loginMode: AgentLoginMode =
+      (rawLoginMode as AgentLoginMode | undefined) ?? (bodyRec["testCredentials"] !== undefined ? "credentials" : "none");
+    if (loginMode !== "none" && !useAgent) {
+      return c.json({ ok: false, error: "login_mode_requires_agent_engine" }, 400);
+    }
+    let testCredentials: TestCredentials | null = null;
+    if (loginMode === "credentials") {
+      const raw = bodyRec["testCredentials"];
+      const consent = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>)["consent"] : undefined;
+      if (consent !== true) return c.json({ ok: false, error: "consent_required" }, 400);
+      const parsedCreds = TestCredentialsSchema.safeParse(raw);
+      if (!parsedCreds.success) return c.json({ ok: false, error: "invalid_test_credentials" }, 400);
+      if (!loginUrlAllowed(parsedCreds.data.loginUrl, targetUrl)) return c.json({ ok: false, error: "invalid_login_url" }, 400);
+      if (!c.env.CONCLAVE_TOKEN_KEK) return c.json({ ok: false, error: "credentials_unavailable" }, 503);
+      testCredentials = {
+        username: parsedCreds.data.username,
+        password: parsedCreds.data.password,
+        ...(parsedCreds.data.loginUrl ? { loginUrl: parsedCreds.data.loginUrl } : {}),
+      };
+    }
+    if (loginMode === "handover" && bodyRec["handoverConsent"] !== true) {
+      return c.json({ ok: false, error: "consent_required" }, 400);
+    }
+    if (loginMode !== "none" && !entitlementsFor(tier).loginBehindInspection) {
+      return c.json({ ok: false, error: "plan_required", feature: "login_behind_inspection", tier }, 402);
+    }
+
     if ((body as Record<string, unknown>)["withSignup"] === true && !entitlementsFor(tier).loginBehindInspection) {
       const en = locale === "en";
       return c.json(
@@ -566,6 +721,18 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const withSignup = (body as Record<string, unknown>)["withSignup"] === true;
     // SI 티어 A5: 지시서가 있으면 그 테스트 계획이 검수의 자(尺)가 된다.
     const acceptancePlan = acceptancePlanFromDevSpec(project.devSpec);
+    // agent 엔진: 재검수면 원 런의 AC 그대로, 아니면 지시서(유저 확인 표시 포함), 둘 다 없으면 런에서 추정.
+    const agentDispatch: AgentDispatch | null = useAgent ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode } : null;
+    if (testCredentials) {
+      try {
+        await storeRunCredentials(c.env, run.id, testCredentials);
+      } catch (err) {
+        console.error(JSON.stringify({ at: "visual-check-runs POST run", runId: run.id, note: "credential store failed", error: String((err as Error)?.message ?? err).slice(0, 80) }));
+        await refundSlot();
+        await markVisualCheckFailed(c.env, run.id, "credentials_store_failed").catch(() => undefined);
+        return c.json({ ok: false, error: "credentials_store_failed" }, 500);
+      }
+    }
     const dispatch = await dispatchInspection(c.env, {
       runId: run.id,
       projectId,
@@ -576,7 +743,10 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       locale,
       publicBaseUrl,
       ...(withSignup ? { withSignup: true } : {}),
+      ...(agentDispatch ? { agent: agentDispatch } : {}),
     });
+    // 직접 로그인해서 넘겨주기: 이 런의 라이브 화면 토큰(소유자에게만 응답으로 준다 — userKey 확인을 이미 지났다).
+    const liveToken = agentDispatch?.loginMode === "handover" && dispatch.dispatched ? await mintRunToken(c.env, "live", run.id) : null;
 
     // Fail fast when the dispatch didn't take: nothing ever picks a queued row
     // up later (dispatch is fire-once), so leaving it 'queued' would wedge the
@@ -610,10 +780,116 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
           createdAt: run.createdAt,
         },
         dispatched: dispatch.dispatched,
+        engine: agentDispatch ? "agent" : "classic",
+        ...(agentDispatch ? { acSource: agentDispatch.acSource, acCount: agentDispatch.acs.length, loginMode: agentDispatch.loginMode } : {}),
+        ...(liveToken ? { liveToken } : {}),
         ...(dispatch.note ? { note: dispatch.note } : {}),
       },
       202,
     );
+  });
+
+  // ── GET /admin/defect-stats (C13) — 빌더 × 결함 분류 개수. 내부 토큰만. ?since=ISO(기본 90일) ──
+  app.get("/admin/defect-stats", async (c) => {
+    const rejected = internalBearerRejection(c);
+    if (rejected) return rejected;
+    const sinceRaw = c.req.query("since");
+    const since = sinceRaw && Number.isFinite(Date.parse(sinceRaw)) ? new Date(sinceRaw).toISOString() : new Date(Date.now() - 90 * 86400_000).toISOString();
+    const rows = await c.env.DB.prepare(
+      `SELECT builder, defect_class, status, COUNT(*) AS n, COUNT(DISTINCT run_id) AS runs FROM inspection_defects
+        WHERE created_at >= ? GROUP BY builder, defect_class, status ORDER BY builder, n DESC`,
+    )
+      .bind(since)
+      .all<{ builder: string; defect_class: string; status: string; n: number; runs: number }>()
+      .catch(() => ({ results: [] as Array<{ builder: string; defect_class: string; status: string; n: number; runs: number }> }));
+    return c.json({ ok: true, since, rows: rows.results ?? [] });
+  });
+
+  // ── 직접 로그인해서 넘겨주기(라이브 브라우저) ─────────────────────────────────
+  // 카카오·구글·문자 인증처럼 우리가 대신 들어갈 수 없는 로그인을 **사용자가 직접** 한다. 화면은 이 런의 검수
+  // 컨테이너 안 Chromium이고, Worker가 그 화면(JPEG)과 입력(클릭·글자·키)을 중계한다. 인증 두 겹:
+  //   ① userKey가 이 런의 소유자 ② ilt1 런 토큰(런 생성 응답으로 소유자에게만 준다).
+  // 입력한 글자(비밀번호 포함)는 로그에도 저장에도 남지 않는다 — 컨테이너로 바로 넘긴다. 로그인이 끝나면 컨테이너가
+  // 그 브라우저 상태(쿠키·저장소)를 **메모리에서만** 이 런에 쓰고 런이 끝나면 버린다(디스크·D1·LLM 어디에도 안 간다).
+  const LiveInputSchema = z
+    .object({
+      userKey: z.string().min(1),
+      token: z.string().min(1).max(200),
+      kind: z.enum(["click", "type", "key", "scroll"]),
+      x: z.number().min(0).max(4000).optional(),
+      y: z.number().min(0).max(4000).optional(),
+      text: z.string().max(200).optional(),
+      key: z.enum(["Enter", "Tab", "Backspace", "Escape", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"]).optional(),
+      deltaY: z.number().min(-4000).max(4000).optional(),
+    })
+    .strict();
+
+  async function liveGate(
+    env: Env,
+    projectId: string,
+    runId: string,
+    userKey: string,
+    token: string,
+  ): Promise<{ ok: true; stub: { fetch: (url: string, init?: RequestInit) => Promise<Response> } } | { ok: false; status: 401 | 403 | 404 | 409 | 503; error: string }> {
+    const owned = await requireOwnedRun(env, projectId, runId, userKey);
+    if (!owned.ok) return owned;
+    const v = await verifyRunToken(env, "live", token);
+    if (!v.ok || v.runId !== runId) return { ok: false, status: 401, error: "invalid_live_token" };
+    if (owned.run.status !== "queued" && owned.run.status !== "running") return { ok: false, status: 409, error: "run_not_active" };
+    if (!env.INSPECTOR) return { ok: false, status: 503, error: "inspector_unavailable" };
+    const stub = env.INSPECTOR.get(env.INSPECTOR.idFromName(`vc-${runId}`));
+    return { ok: true, stub };
+  }
+
+  app.get("/workspace/projects/:id/visual-checks/:runId/live/:what", async (c) => {
+    const what = c.req.param("what");
+    if (what !== "frame" && what !== "state") return c.json({ ok: false, error: "not_found" }, 404);
+    const runId = c.req.param("runId");
+    const gate = await liveGate(c.env, c.req.param("id"), runId, c.req.query("userKey") ?? "", c.req.query("token") ?? "");
+    if (!gate.ok) return c.json({ ok: false, error: gate.error }, gate.status);
+    try {
+      const r = await gate.stub.fetch(`http://inspector/live/${what}?runId=${encodeURIComponent(runId)}`);
+      return new Response(r.body, {
+        status: r.status,
+        headers: { "content-type": r.headers.get("content-type") ?? "application/json", "cache-control": "no-store" },
+      });
+    } catch {
+      return c.json({ ok: false, error: "inspector_unreachable" }, 502);
+    }
+  });
+
+  app.post("/workspace/projects/:id/visual-checks/:runId/live/:what", async (c) => {
+    const what = c.req.param("what");
+    if (what !== "input" && what !== "done") return c.json({ ok: false, error: "not_found" }, 404);
+    const runId = c.req.param("runId");
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: "invalid_json" }, 400);
+    }
+    const rec = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+    const userKey = typeof rec["userKey"] === "string" ? rec["userKey"] : "";
+    const token = typeof rec["token"] === "string" ? rec["token"] : "";
+    let forward: Record<string, unknown> = { runId };
+    if (what === "input") {
+      const parsed = LiveInputSchema.safeParse(raw);
+      if (!parsed.success) return c.json({ ok: false, error: "invalid_request" }, 400);
+      const { userKey: _u, token: _t, ...input } = parsed.data;
+      forward = { runId, ...input };
+    }
+    const gate = await liveGate(c.env, c.req.param("id"), runId, userKey, token);
+    if (!gate.ok) return c.json({ ok: false, error: gate.error }, gate.status);
+    try {
+      const r = await gate.stub.fetch(`http://inspector/live/${what}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(forward),
+      });
+      return new Response(r.body, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+    } catch {
+      return c.json({ ok: false, error: "inspector_unreachable" }, 502);
+    }
   });
 
   // ── POST /workspace/projects/:id/visual-checks/:runId/verdict ──────────────
@@ -744,6 +1020,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     if (body.report !== undefined && body.report !== null && typeof body.report === "object" && !Array.isArray(body.report)) {
       // C2b/C4a — builderPrompt in the RUN's locale (the report prose is already
       // in that language) + finding codes for the failure map.
+      // B6: agent 재검수는 원 런과 AC별로 비교해 "새로 깨진 것"을 리포트에 싣는다.
+      if (run.sourceCheckId && (body.report as Record<string, unknown>)["engine"] === "agent") {
+        const origin = await getVisualCheckById(c.env, run.sourceCheckId).catch(() => null);
+        const cmp = compareAgentRuns(origin?.reportJson, body.report as { acTable?: unknown });
+        if (cmp) (body.report as Record<string, unknown>)["agentComparison"] = { sourceCheckId: run.sourceCheckId, ...cmp };
+      }
       const enriched = enrichReportForStorage(body.report as Record<string, unknown>, run.locale ?? "ko");
       findingCodesJson = enriched.findingCodesJson;
       let serialized = JSON.stringify(enriched.report);
@@ -777,6 +1059,13 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       findingCodesJson,
       ...(agentPrompt ? { agentPrompt } : {}),
     });
+
+    // C13: agent 런의 결함 분류(빌더 × 분류) — 운영 정보 기록이 켜진 런만(finding codes와 같은 게이트).
+    if (findingCodesJson !== null && body.report && typeof body.report === "object") {
+      await recordAgentDefects(c.env, body.runId, body.report as Record<string, unknown>).catch((err) => {
+        console.error("[visual-check-runs done] defect record failed:", err);
+      });
+    }
 
     // C2a (0069): a re-inspection closing a repair loop → stamp `resolved` on the
     // repair job(s) that pointed at this run. Original runs (no source) have no

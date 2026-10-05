@@ -198,6 +198,15 @@ export interface Env {
    * wrangler.toml [vars]에 "on"으로 명시. 끄기 = "off" + deploy-central-plane.
    */
   INSPECTION_ENABLED?: string;
+  /**
+   * 2026-10-05 — 검수 엔진 기본값. 정확히 "agent"면 **스태프 티어 런**의 기본 엔진이 수용 기준 실행기(agent)가 된다.
+   * 스태프가 아닌 런에는 적용되지 않는다(요청의 engine:"agent"도 스태프만 — 403 engine_staff_only).
+   */
+  INSPECTION_ENGINE?: string;
+  /** agent 엔진의 판단 모델(미설정 = claude-sonnet-4-6). 프록시가 서버에서 고정한다. */
+  INSPECT_AGENT_MODEL?: string;
+  /** agent 엔진 런 하나의 LLM 예산 USD(미설정·잘못된 값 = 3, 상한 50). */
+  INSPECT_AGENT_BUDGET_USD?: string;
   /** Train W · W-2 — 수리 킬스위치. INSPECTION_ENABLED와 같은 규칙(503 `repair_disabled`, dispatchRepairJob 내부 게이트). */
   REPAIR_ENABLED?: string;
   /**

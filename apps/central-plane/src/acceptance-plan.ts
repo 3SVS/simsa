@@ -9,6 +9,15 @@
  * Worker 전용(컨테이너에는 결과 JSON만 간다). 순수 함수 — 테스트 고정.
  */
 import { validateDevSpec, type DevSpec } from "./workspace/dev-spec.js";
+import { AGENT_MAX_ACS, orderAcs, type AcSource, type AgentAc } from "./agent-inspection.js";
+
+/** 지시서 AC의 출처 라벨: 역추론(주소·저장소 문 + 확인) · 기획서 문 · 아이디어 인터뷰. */
+export function devSpecAcSource(devSpec: unknown, entryPath: string | null | undefined): AcSource {
+  const v = devSpec === null || devSpec === undefined ? null : validateDevSpec(devSpec);
+  if (v && v.ok && v.spec.meta.source === "inferred") return "confirmed_inferred";
+  if (entryPath === "spec" || (v && v.ok && v.spec.meta.source === "manual")) return "document";
+  return "interview";
+}
 
 export type AcceptanceScenario = {
   acceptanceId: string;
@@ -59,4 +68,39 @@ function scenariosFrom(spec: DevSpec, max: number): AcceptanceScenario[] {
   }
   out.sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.acceptanceId.localeCompare(b.acceptanceId));
   return out.slice(0, Math.max(0, max));
+}
+
+/**
+ * agent 엔진(2026-10-05): 지시서의 수용 기준 → 실행기 AC. human만 사람이 보는 것이라 뺀다(build·test·browser는
+ * 실제 앱에서 결과가 보이므로 실행기가 해 본다). confirmed = 정본 지시서(source ≠ inferred)이거나 유저가
+ * "맞나요?"에서 확인한 AC(userConfirmedAcIds). priority는 기능(FR)의 것을 물려받는다(scenariosFrom과 같은 규칙).
+ */
+export function agentAcsFromDevSpec(devSpec: unknown, opts: { max?: number } = {}): AgentAc[] {
+  if (devSpec === null || devSpec === undefined) return [];
+  const v = validateDevSpec(devSpec);
+  if (!v.ok) return [];
+  const spec = v.spec;
+  const featureById = new Map(spec.features.map((f) => [f.id, f]));
+  const stepsByAc = new Map<string, string[]>();
+  for (const t of spec.testPlan) if (t.kind === "browser") stepsByAc.set(t.acceptanceId, t.steps);
+  const inferred = spec.meta.source === "inferred";
+  const confirmedIds = new Set(spec.meta.provenance?.userConfirmedAcIds ?? []);
+  const out: AgentAc[] = [];
+  for (const a of spec.acceptance) {
+    if (a.verifiedBy === "human") continue;
+    const f = featureById.get(a.featureId);
+    if (!f) continue;
+    const steps = stepsByAc.get(a.id);
+    out.push({
+      id: a.id,
+      title: f.title,
+      given: a.given,
+      when: a.when,
+      then: a.then,
+      priority: f.priority,
+      confirmed: !inferred || confirmedIds.has(a.id),
+      ...(steps ? { steps } : {}),
+    });
+  }
+  return orderAcs(out, opts.max ?? AGENT_MAX_ACS);
 }

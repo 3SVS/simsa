@@ -69,6 +69,7 @@ import type { FetchLike } from "../github.js";
 import { RESERVED_SLUGS_FOR_HOSTING } from "../workspace/hosting-reserved.js";
 import { BUILD_DISABLED, BUILD_STAFF_ONLY, buildEnabled, buildMode, buildOpenForTier } from "../workspace/service-switches.js";
 import { resolveTier } from "../workspace/tier-resolve.js";
+import { getVisualCheckById } from "../workspace/visual-check-db.js";
 import { authenticateBuildCallback, checkCallbackJob, mintBuildJobToken } from "../workspace/build-job-token.js";
 import { buildDailyCapRejection, buildDailyCapsFor } from "../workspace/build-daily-caps.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
@@ -95,6 +96,24 @@ export const WORKER_OWNS_DEPLOY = "worker_owns_deploy";
  * 모르는 기능이 섞이면 must로 본다(보수 쪽 — 확인 못 한 것을 선택 사항으로 낮추지 않는다).
  */
 export type BuildWbsItem = { id: string; title: string; order: number; acceptanceIds: string[]; dependsOn: string[]; must: boolean };
+
+/**
+ * 문 (a) 고침 순환(2026-10-05): 확인 런의 고침 지시 → 다음 빌드 지시서에 붙일 절. 값이 없으면(필드 부재) brief 없음.
+ * 런이 이 프로젝트·사용자 것이 아니면 404(다른 사람 런의 존재를 알려 주지 않는다), 끝나지 않았거나 고칠 것이 없으면 409.
+ */
+export async function buildFixBriefFromCheck(
+  env: Env,
+  raw: unknown,
+  projectId: string,
+  userKey: string,
+): Promise<{ brief: string | null; error?: undefined } | { brief?: undefined; error: string; status: 400 | 404 | 409 }> {
+  if (raw === undefined || raw === null) return { brief: null };
+  if (typeof raw !== "string" || !raw.trim()) return { error: "invalid_fix_from_check", status: 400 };
+  const run = await getVisualCheckById(env, raw.trim()).catch(() => null);
+  if (!run || run.projectId !== projectId || run.userKey !== userKey) return { error: "fix_from_check_not_found", status: 404 };
+  if (run.status !== "done" || !run.agentPrompt) return { error: "fix_from_check_has_nothing_to_fix", status: 409 };
+  return { brief: `## 지난 확인에서 실패한 기준 — 이번 빌드에서 반드시 고칠 것 (check ${run.id})\n\n${run.agentPrompt}` };
+}
 
 export function wbsFromDevSpec(spec: DevSpec): BuildWbsItem[] {
   const mustFeatures = new Set(spec.features.filter((f) => f.priority === "must").map((f) => f.id));
@@ -220,6 +239,10 @@ export function createWorkspaceBuildJobRoutes(
     if (!v.ok) return c.json({ ok: false, error: "dev_spec_required" }, 409);
     const wbs = wbsFromDevSpec(v.spec);
     if (wbs.length === 0) return c.json({ ok: false, error: "dev_spec_has_no_work_items" }, 409);
+    // 2026-10-05 문 (a) 고침 순환: 지난 빌드 뒤 확인(agent 엔진)에서 **실패한 AC**의 고침 지시를 이번 빌드 지시서에 붙인다.
+    //  같은 프로젝트·같은 사용자의 끝난 런만. 고칠 것이 없는 런(agentPrompt 없음)은 409 — 지어낸 일감으로 다시 만들지 않는다.
+    const fixFrom = await buildFixBriefFromCheck(c.env, body["fixFromCheckRunId"], projectId, userKey);
+    if (fixFrom.error) return c.json({ ok: false, error: fixFrom.error }, fixFrom.status);
 
     const active = await findActiveBuildJobForProject(c.env, projectId);
     if (active) return c.json({ ok: false, error: "build_already_active", activeJobId: active.id, status: active.status }, 409);
@@ -299,7 +322,11 @@ export function createWorkspaceBuildJobRoutes(
           jobId: job.id, kind: "build", slug, locale,
           baseUrl: base, callbackUrl: `${base}/internal/build-done`, progressUrl: `${base}/internal/build-progress`, jobToken,
           budgetUsd: job.budgetUsd,
-          spec: { markdown: specMarkdownForBuild(v.spec, locale), wbs, productName: v.spec.brief.productName || project.title },
+          spec: {
+            markdown: fixFrom.brief ? `${specMarkdownForBuild(v.spec, locale)}\n\n${fixFrom.brief}` : specMarkdownForBuild(v.spec, locale),
+            wbs,
+            productName: v.spec.brief.productName || project.title,
+          },
           hosting: { d1Id: d1.value.id },
           llm: {
             model: (c.env.BUILD_MODEL ?? "").trim() || DEFAULT_BUILD_MODEL,
