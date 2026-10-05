@@ -101,6 +101,8 @@ export function PrivacySettingsSection({ userKey, t }: { userKey: string; t: Dic
               {p.opsToggle}
             </label>
           </div>
+          {/* 오픈 베타 S5-min: 빌더 × 결함 분류(inspection_defects)는 이 선택이 켜졌을 때만 쌓인다. */}
+          <p className="text-xs leading-relaxed text-gray-600" data-testid="ops-failure-patterns">{p.opsFailurePatterns}</p>
           {loaded && !state.opsMeta.available && <p className="text-xs text-gray-500">{p.unavailable}</p>}
           {state.opsMeta.defaultOff && <p className="text-xs text-gray-500">{p.opsDefaultOffNote}</p>}
           {state.opsMeta.available && <p className="text-xs leading-relaxed text-gray-500">{p.opsKeepNote}</p>}

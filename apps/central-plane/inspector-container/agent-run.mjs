@@ -66,11 +66,18 @@ export async function runAgentInspection(o) {
     return f?.name;
   };
   const llmCalls = { n: 0, failed: 0, budgetExhausted: false };
-  const callLlm = async (system, user, maxTokens = 700) => {
+  // 오픈 베타: 티어 상한(entitlements.agentRun). 없으면 엔진 기본값.
+  const caps = {
+    maxAcs: o.caps?.maxAcs ?? 11,
+    maxScreens: o.caps?.maxScreens ?? 25,
+    maxActions: o.caps?.maxActions ?? 1000,
+  };
+  let actionsUsed = 0;
+  const callLlm = async (system, user, maxTokens = 700, tier = "strong") => {
     if (llmCalls.budgetExhausted) throw new Error("budget_exhausted");
     llmCalls.n += 1;
     try {
-      return await o.llm({ system, user: red(user), maxTokens });
+      return await o.llm({ system, user: red(user), maxTokens, tier });
     } catch (err) {
       llmCalls.failed += 1;
       if (/budget_exhausted|402/.test(String(err?.message ?? err))) llmCalls.budgetExhausted = true;
@@ -166,12 +173,12 @@ export async function runAgentInspection(o) {
       }
 
       // 3b) Simsa 기본 기준 — 핵심 일을 실제로 끝까지(모든 앱 공통). 의도가 사용자 확인 기준에서 왔을 때만 confirmed.
-      acs = pure.orderAcs(pure.withCoreOutcomeAc(acs, o.intent, acSource !== "inferred_at_run", locale), pure.AGENT_MAX_ACS + 1);
+      acs = pure.orderAcs(pure.withCoreOutcomeAc(acs, o.intent, acSource !== "inferred_at_run", locale), Math.min(pure.AGENT_MAX_ACS + 1, caps.maxAcs));
       syncProgress();
 
       // 4) 화면·버튼 점검
       const sweepBudget = Math.min(SWEEP_MAX_MS, Number.isFinite(timeLeft()) ? timeLeft() * SWEEP_TIME_SHARE : SWEEP_MAX_MS);
-      sweep = await runSweep({ driver, pure, startUrl: o.targetUrl, until: Date.now() + sweepBudget, shot, plog });
+      sweep = await runSweep({ driver, pure, startUrl: o.targetUrl, until: Date.now() + sweepBudget, shot, plog, maxScreens: caps.maxScreens, maxButtons: Math.min(pure.SWEEP_MAX_BUTTONS, caps.maxScreens * 6) });
       plog(`sweep screens=${sweep.screens.length} buttons=${sweep.buttons.length}`);
       syncProgress();
 
@@ -179,7 +186,7 @@ export async function runAgentInspection(o) {
       const data = pure.koreanTestData(Date.now() % 100000);
       usedTestData = data;
       for (const ac of acs) {
-        if (timeLeft() < 20_000 || llmCalls.budgetExhausted) {
+        if (timeLeft() < 20_000 || llmCalls.budgetExhausted || actionsUsed >= caps.maxActions) {
           partial = true;
           results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [], steps: 0 });
           continue;
@@ -312,7 +319,7 @@ export async function runAgentInspection(o) {
       history.push(`(device clock set to ${clockIso} = 00:30 Korea time; re-check this criterion at this hour — dates shown as "today" must be the Korea date)`);
     }
     await driver.markStorage?.().catch(() => {});
-    const system = pure.agentSystemPrompt(locale);
+    const system = pure.agentSystemPrompt(locale, { readOnly: o.readOnly === true });
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
       const obs = redObs(obsRaw);
@@ -328,8 +335,10 @@ export async function runAgentInspection(o) {
           system,
           pure.agentTurnPrompt({
             ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
-            stepsLeft: maxSteps - steps, nowIso: new Date().toISOString(),
+            stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(),
           }),
+          700,
+          "cheap",
         );
       } catch (err) {
         const code = /budget/.test(String(err?.message ?? err)) ? "budget" : "agent_error";
@@ -337,6 +346,10 @@ export async function runAgentInspection(o) {
       }
       const parsed = pure.parseAgentAction(text, o.targetUrl);
       steps += 1;
+      actionsUsed += 1;
+      if (actionsUsed > caps.maxActions) {
+        return finish({ status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [] });
+      }
       if (!parsed.ok) {
         invalidStreak += 1;
         history.push(`(rejected: ${parsed.error})`);
@@ -371,6 +384,11 @@ export async function runAgentInspection(o) {
       }
       const desc = red(pure.describeAction(a, locale));
       let res;
+      // S2-min: 동의 없는 런은 입력·고르기를 하지 않는다(시험 데이터를 만들지 않는다).
+      if (o.readOnly === true && (a.type === "fill" || a.type === "select")) {
+        history.push(`${desc} → BLOCKED (read-only run: the owner did not allow test data; judge not_verified with reasonCode write_not_allowed if this criterion needs it)`);
+        continue;
+      }
       if (a.type === "click" || a.type === "select") {
         const label = a.target.name ?? a.target.text ?? a.target.label ?? a.target.placeholder ?? "";
         const safety = classifyActionSafety(label);
@@ -456,7 +474,7 @@ function normUrl(u) {
 }
 
 /** 화면·버튼 점검 — 같은 출처 화면을 너비 우선으로 열고, 화면마다 안전한 버튼을 한 번씩 눌러 본다. */
-export async function runSweep({ driver, pure, startUrl, until, shot, plog = () => {} }) {
+export async function runSweep({ driver, pure, startUrl, until, shot, plog = () => {}, maxScreens = pure.SWEEP_MAX_SCREENS, maxButtons = pure.SWEEP_MAX_BUTTONS }) {
   const isSafeText = (t) => classifyActionSafety(t).safe;
   const screens = [];
   const buttons = [];
@@ -465,11 +483,11 @@ export async function runSweep({ driver, pure, startUrl, until, shot, plog = () 
   const seen = new Set();
   const queue = [];
   const enqueue = (links) => {
-    const { targets, truncated: t } = pure.discoverSweepTargets(startUrl, links, pure.SWEEP_MAX_SCREENS, isSafeText);
+    const { targets, truncated: t } = pure.discoverSweepTargets(startUrl, links, maxScreens, isSafeText);
     if (t) truncated.screens = true;
     for (const u of targets) {
       if (seen.has(u)) continue;
-      if (seen.size >= pure.SWEEP_MAX_SCREENS) {
+      if (seen.size >= maxScreens) {
         truncated.screens = true;
         break;
       }
@@ -501,11 +519,11 @@ export async function runSweep({ driver, pure, startUrl, until, shot, plog = () 
     }
     screens.push(entry);
     enqueue(await driver.links());
-    if (!cls.ok || clicks >= pure.SWEEP_MAX_BUTTONS) {
-      if (clicks >= pure.SWEEP_MAX_BUTTONS) truncated.buttons = true;
+    if (!cls.ok || clicks >= maxButtons) {
+      if (clicks >= maxButtons) truncated.buttons = true;
       continue;
     }
-    const sel = pure.selectSweepButtons(await driver.buttons(), { alreadyClicked: clicked, remaining: pure.SWEEP_MAX_BUTTONS - clicks, isSafeText });
+    const sel = pure.selectSweepButtons(await driver.buttons(), { alreadyClicked: clicked, remaining: maxButtons - clicks, isSafeText });
     for (const label of sel.skippedUnsafe) {
       if (clicked.has(label)) continue;
       clicked.add(label);

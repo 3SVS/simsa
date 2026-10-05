@@ -81,6 +81,7 @@ export const AC_REASON_CODES = [
   "agent_error",
   "guessed_address",
   "judge_disagreed",
+  "write_not_allowed",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -407,6 +408,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     agent_error: "확인 도중 오류가 나서 끝까지 보지 못했어요",
     guessed_address: "앱에 연결되지 않은 주소를 짐작해 열어 본 결과라 고장으로 치지 않았어요",
     judge_disagreed: "두 번 따져 본 판단이 서로 달라서 결과로 치지 않았어요",
+    write_not_allowed: "시험 데이터를 만들어도 된다는 동의가 없어 입력·제출은 하지 않았어요 — 확인 요청에서 동의해 주시면 끝까지 해 봐요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -422,6 +424,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     agent_error: "An error interrupted the check before it finished",
     guessed_address: "That result came from an address we guessed (not linked from the app), so it isn't counted as a defect",
     judge_disagreed: "A second, independent review disagreed with the result, so it isn't counted",
+    write_not_allowed: "You didn't allow test data, so we didn't type or submit anything — allow it in the check request and we'll go all the way",
   },
 };
 
@@ -984,22 +987,28 @@ export function probableCause(text: string, locale: ReportLocale = "ko"): string
 // ─── LLM 프롬프트 ───────────────────────────────────────────────────────────────
 
 /** 한국어 시험 데이터(실사용자 모양 — Rule 6). seed로 런마다 다르게(다른 손님과 섞이지 않게). */
+/** S2-min: 시험 데이터 이름은 사용자가 동의한 표지 "심사테스트"로 시작한다(찾아 지우기 쉽게). */
+export const TEST_DATA_NAME = "심사테스트";
+
 export function koreanTestData(seed: number): { name: string; altName: string; phone: string; email: string; memo: string } {
-  const names = ["김서연", "이도윤", "박지우", "최하준", "정수아", "강민준", "윤서윤", "장예준"];
+  const names = [TEST_DATA_NAME];
   const n = Math.abs(Math.floor(seed)) || 1;
   const p1 = String(1000 + (n % 9000)).padStart(4, "0");
   const p2 = String(1000 + ((n * 7) % 9000)).padStart(4, "0");
   return {
     name: names[n % names.length]!,
-    altName: names[(n + 3) % names.length]!,
+    altName: `${TEST_DATA_NAME}둘`,
     phone: `010-${p1}-${p2}`,
     email: `simsa.check+${n}@example.com`,
     memo: "심사 자동 확인용 예약입니다(테스트)",
   };
 }
 
-export function agentSystemPrompt(locale: ReportLocale = "ko"): string {
+export function agentSystemPrompt(locale: ReportLocale = "ko", opts: { readOnly?: boolean } = {}): string {
   return [
+    ...(opts.readOnly
+      ? ["READ-ONLY RUN: the owner did not allow test data. Do NOT fill or submit forms. Check only what can be seen and navigated; if a criterion needs creating data, judge not_verified with reasonCode write_not_allowed."]
+      : []),
     "You are Simsa's acceptance tester. You operate a real browser on a web app built by a non-developer and decide, for ONE acceptance criterion at a time, whether the app actually does what the criterion says.",
     "Reply with exactly one JSON object and nothing else: {\"thought\": \"<short>\", \"action\": {...}}.",
     "Actions:",

@@ -56,6 +56,8 @@ import { acceptancePlanFromDevSpec, agentAcsFromDevSpec, devSpecAcSource, type A
 import { BUILDERS, DEFECT_CLASSES, acsFromAgentReport, compareAgentRuns, type AcSource, type AgentAc } from "../agent-inspection.js";
 import {
   TestCredentialsSchema,
+  agentDailyBudgetReached,
+  agentPublicOn,
   initAgentSpend,
   loadRunCredentials,
   loginUrlAllowed,
@@ -79,7 +81,7 @@ import { resolveRepairJobsByVerifyCheck } from "../workspace/repair-job-db.js";
 import { INSPECTION_DISABLED, inspectionEnabled } from "../workspace/service-switches.js";
 import { consumeDailyCaps } from "../workspace/rate-limit.js";
 import { clientNetworkKey, dailyCapRejection, dailyCapsFor } from "../workspace/beta-limits.js";
-import { entitlementsFor } from "../workspace/entitlements.js";
+import { entitlementsFor, type Entitlements } from "../workspace/entitlements.js";
 import { resolveTier } from "../workspace/tier-resolve.js";
 import { buildBuilderFixPrompt } from "../nondev-report.js";
 import {
@@ -169,7 +171,29 @@ function requireInternalToken(c: {
 /** 로그인 세 갈래: 없음 · 시험 계정(암호화 보관 → 런 종료 시 삭제) · 직접 로그인해서 넘겨주기(라이브 브라우저). */
 export const AGENT_LOGIN_MODES = ["none", "credentials", "handover"] as const;
 export type AgentLoginMode = (typeof AGENT_LOGIN_MODES)[number];
-export type AgentDispatch = { acs: AgentAc[]; acSource: AcSource; loginMode: AgentLoginMode };
+export type AgentDispatch = {
+  acs: AgentAc[];
+  acSource: AcSource;
+  loginMode: AgentLoginMode;
+  /** 오픈 베타: 티어 상한(entitlements.agentRun). 없으면 기본(스태프 상한). */
+  caps?: Entitlements["agentRun"];
+  /** S2-min: 시험 데이터를 만들어도 된다는 동의가 없는 런 — 쓰기 행동을 하지 않는다. */
+  readOnly?: boolean;
+};
+
+/** 오픈 베타: 이번 런이 agent 엔진 대신 기본 검수로 돈 이유(리포트에 그대로 안내). */
+export const AGENT_FALLBACK_NOTES = {
+  daily_budget: {
+    ko: "오늘 무료 정밀 검사 한도가 다 찼어요 — 기본 검사로 확인했어요. 내일 다시 정밀 검사를 받으실 수 있어요.",
+    en: "Today's free in-depth check budget is used up — we ran the basic check instead. The in-depth check is available again tomorrow.",
+  },
+} as const;
+
+/** S2-min 동의 문구(요청 화면과 같은 문장 — 테스트 고정). */
+export const WRITE_CONSENT_COPY = {
+  ko: "이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요",
+  en: "This app is mine, and it's OK to create test data (name '심사테스트') to check it",
+} as const;
 
 /**
  * 이 런이 쓸 기준(AC). 순서: 원 런이 agent였으면 **그 AC 그대로**(재검수 = 같은 자) › 프로젝트 지시서의 AC
@@ -254,6 +278,8 @@ export async function dispatchInspection(
      * acs가 비면 컨테이너가 첫 화면을 보고 추정한다(confirmed:false — "문제를 찾지 못했어요" 이상은 못 말한다).
      */
     agent?: AgentDispatch;
+    /** 리포트 노트에 붙일 서버 안내(예: 하루 예산으로 기본 검수로 돈 이유). 컨테이너가 notes에 덧붙인다. */
+    serverNotes?: string[];
   },
 ): Promise<{ dispatched: boolean; note?: string; disabled?: boolean }> {
   if (!inspectionEnabled(env)) {
@@ -271,7 +297,9 @@ export async function dispatchInspection(
     const llmToken = await mintRunToken(env, "llm", args.runId);
     if (!llmToken) return { dispatched: false, note: "agent_token_unavailable" };
     try {
-      await initAgentSpend(env, args.runId);
+      const caps = args.agent.caps;
+      // 런 예산·호출 수 = 티어 상한(행동 + 판정·재확인·추정 몫).
+      await initAgentSpend(env, args.runId, caps ? { budgetUsd: caps.budgetUsd, maxCalls: caps.maxActions + caps.maxAcs * 3 + 6 } : undefined);
     } catch {
       return { dispatched: false, note: "agent_budget_unavailable" };
     }
@@ -291,6 +319,8 @@ export async function dispatchInspection(
         acs: args.agent.acs,
         acSource: args.agent.acSource,
         loginMode: args.agent.loginMode,
+        ...(args.agent.caps ? { caps: args.agent.caps } : {}),
+        ...(args.agent.readOnly ? { readOnly: true } : {}),
         llmUrl: `${base}${INSPECT_LLM_PATH}`,
         llmToken,
       },
@@ -329,6 +359,7 @@ export async function dispatchInspection(
         }
       : {}),
     ...agentPayload,
+    ...(args.serverNotes && args.serverNotes.length > 0 ? { serverNotes: args.serverNotes.slice(0, 5) } : {}),
   };
   try {
     const id = env.INSPECTOR.idFromName(`vc-${args.runId}`);
@@ -601,11 +632,23 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       return c.json({ ok: false, error: "invalid_engine" }, 400);
     }
     const isStaff = tier === "staff";
-    if (requestedEngine === "agent" && !isStaff) {
+    // 오픈 베타: 공개 스위치가 켜지면 모든 사용자의 기본 검수가 agent 엔진(스태프는 늘 켜짐).
+    const agentAllowed = isStaff || agentPublicOn(c.env);
+    if (requestedEngine === "agent" && !agentAllowed) {
       return c.json({ ok: false, error: "engine_staff_only", tier }, 403);
     }
-    const useAgent =
-      isStaff && requestedEngine !== "classic" && (requestedEngine === "agent" || c.env.INSPECTION_ENGINE === "agent" || wasAgentRun(sourceCheck));
+    let useAgent =
+      agentAllowed &&
+      requestedEngine !== "classic" &&
+      (requestedEngine === "agent" || wasAgentRun(sourceCheck) || agentPublicOn(c.env) || (isStaff && c.env.INSPECTION_ENGINE === "agent"));
+    // 서비스 하루 예산: 다 쓰면 스태프가 아닌 새 런은 기본 검수로(정직한 안내 — 조용한 실패 없음).
+    let fallbackNote: string | null = null;
+    if (useAgent && !isStaff && (await agentDailyBudgetReached(c.env))) {
+      useAgent = false;
+      fallbackNote = AGENT_FALLBACK_NOTES.daily_budget[locale];
+    }
+    // S2-min: 스태프가 아니면 시험 데이터 동의가 있어야 쓰기 행동(입력·제출)을 한다. 없으면 읽기 전용 런.
+    const readOnly = useAgent && !isStaff && bodyRec["writeConsent"] !== true;
     // 로그인 세 갈래. 기본은 없음 — 남의 앱에 들어가는 일이라 명시 동의 없이는 켜지지 않는다.
     const rawLoginMode = bodyRec["loginMode"];
     if (rawLoginMode !== undefined && !(AGENT_LOGIN_MODES as readonly unknown[]).includes(rawLoginMode)) {
@@ -722,7 +765,9 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // SI 티어 A5: 지시서가 있으면 그 테스트 계획이 검수의 자(尺)가 된다.
     const acceptancePlan = acceptancePlanFromDevSpec(project.devSpec);
     // agent 엔진: 재검수면 원 런의 AC 그대로, 아니면 지시서(유저 확인 표시 포함), 둘 다 없으면 런에서 추정.
-    const agentDispatch: AgentDispatch | null = useAgent ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode } : null;
+    const agentDispatch: AgentDispatch | null = useAgent
+      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}) }
+      : null;
     if (testCredentials) {
       try {
         await storeRunCredentials(c.env, run.id, testCredentials);
@@ -744,6 +789,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       publicBaseUrl,
       ...(withSignup ? { withSignup: true } : {}),
       ...(agentDispatch ? { agent: agentDispatch } : {}),
+      ...(fallbackNote ? { serverNotes: [fallbackNote] } : {}),
     });
     // 직접 로그인해서 넘겨주기: 이 런의 라이브 화면 토큰(소유자에게만 응답으로 준다 — userKey 확인을 이미 지났다).
     const liveToken = agentDispatch?.loginMode === "handover" && dispatch.dispatched ? await mintRunToken(c.env, "live", run.id) : null;
@@ -781,6 +827,8 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
         },
         dispatched: dispatch.dispatched,
         engine: agentDispatch ? "agent" : "classic",
+        ...(fallbackNote ? { engineFallback: "daily_budget", engineFallbackNote: fallbackNote } : {}),
+        ...(agentDispatch?.readOnly ? { readOnly: true } : {}),
         ...(agentDispatch ? { acSource: agentDispatch.acSource, acCount: agentDispatch.acs.length, loginMode: agentDispatch.loginMode } : {}),
         ...(liveToken ? { liveToken } : {}),
         ...(dispatch.note ? { note: dispatch.note } : {}),

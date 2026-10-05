@@ -207,6 +207,13 @@ export interface Env {
   INSPECT_AGENT_MODEL?: string;
   /** agent 엔진 런 하나의 LLM 예산 USD(미설정·잘못된 값 = 3, 상한 50). */
   INSPECT_AGENT_BUDGET_USD?: string;
+  /** 오픈 베타: 정확히 "on"이면 모든 사용자의 기본 검수가 agent 엔진(스태프는 늘 켜짐). */
+  INSPECTION_AGENT_PUBLIC?: string;
+  /** agent 엔진 서비스 전체 하루 LLM 예산 USD(기본 20). 넘으면 스태프 아닌 새 런은 기본 검수로(정직한 안내). */
+  AGENT_DAILY_BUDGET_USD?: string;
+  /** 관찰·행동 단계용 싼 모델(기본 claude-haiku-4-5-20251001)과 그 OpenAI 폴백(기본 gpt-5.4-mini). */
+  INSPECT_AGENT_CHEAP_MODEL?: string;
+  INSPECT_AGENT_CHEAP_FALLBACK_MODEL?: string;
   /** Train W · W-2 — 수리 킬스위치. INSPECTION_ENABLED와 같은 규칙(503 `repair_disabled`, dispatchRepairJob 내부 게이트). */
   REPAIR_ENABLED?: string;
   /**

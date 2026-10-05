@@ -306,6 +306,11 @@ async function runJob(payload) {
     console.log(`[run ${runId}] evidence uploaded ${uploaded}/${result.evidenceFiles.length}`);
 
     // 2) Final verdict callback.
+    // 서버 안내(예: 하루 예산으로 기본 검수로 돈 이유)를 리포트 노트 맨 앞에 — 어느 엔진이든.
+    if (Array.isArray(payload.serverNotes) && result.report && typeof result.report === "object") {
+      const extra = payload.serverNotes.filter((x) => typeof x === "string" && x.length > 0 && x.length <= 400).slice(0, 5);
+      if (extra.length) result.report.notes = [...extra, ...(Array.isArray(result.report.notes) ? result.report.notes : [])];
+    }
     await postJson(callbackUrl, callbackToken, {
       runId,
       ok: true,
@@ -358,7 +363,10 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
       targetUrl: payload.targetUrl,
       intent: payload.intent,
       locale,
-      budgetMs: AGENT_RUN_BUDGET_MS,
+      // 오픈 베타: 티어 상한의 실행 시간(분)이 있으면 그것(엔진 상한 이하).
+      budgetMs: Math.min(AGENT_RUN_BUDGET_MS, Number(agent.caps?.maxMinutes) > 0 ? Number(agent.caps.maxMinutes) * 60_000 : AGENT_RUN_BUDGET_MS),
+      caps: agent.caps,
+      readOnly: agent.readOnly === true,
       acs: Array.isArray(agent.acs) ? agent.acs : [],
       acSource: agent.acSource,
       loginMode: agent.loginMode ?? "none",

@@ -85,7 +85,7 @@ describe("C9 검사 컨테이너 진입점 로컬 실행 — 직접 로그인 �
       body: JSON.stringify({
         runId, projectId: "p", userKey: "uk", targetUrl: target, intent: "가게 예약", baseUrl: wb,
         callbackUrl: `${wb}/internal/visual-check-done`, runningUrl: `${wb}/internal/visual-check-running`, callbackToken: "t",
-        locale: "ko", engine: "agent",
+        locale: "ko", engine: "agent", serverNotes: ["서버 안내 문장"],
         agent: { acs: [{ id: "AC-1", title: "로그인 뒤 내 예약", given: "g", when: "w", then: "내 예약이 보인다", priority: "must", confirmed: true }], acSource: "interview", loginMode: "handover", llmUrl: `${wb}/internal/inspect-llm/v1/messages`, llmToken: "irt1.x.y" },
       }),
     });
@@ -111,6 +111,7 @@ describe("C9 검사 컨테이너 진입점 로컬 실행 — 직접 로그인 �
     assert.equal(body.ok, true, body.error);
     assert.equal(body.report.engine, "agent");
     assert.equal(body.report.agent.loginMethod, "handover");
+    assert.equal(body.report.notes[0], "서버 안내 문장", "서버 안내가 리포트 노트 맨 앞에");
     assert.ok(!done.body.includes(TYPED), "사람이 친 글자는 콜백 어디에도 없다");
   });
 });

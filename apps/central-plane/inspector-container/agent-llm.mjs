@@ -4,7 +4,7 @@
  * "시간·횟수 한도"로 닫게 한다. 5xx·네트워크 오류는 한 번만 다시 한다(Worker가 이미 벤더 폴백·재시도를 한다).
  */
 export function createProxyLlm({ url, token, fetchImpl = fetch }) {
-  return async function llm({ system, user, maxTokens = 700 }) {
+  return async function llm({ system, user, maxTokens = 700, tier = "strong" }) {
     let lastErr = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       let r;
@@ -12,7 +12,7 @@ export function createProxyLlm({ url, token, fetchImpl = fetch }) {
         r = await fetchImpl(url, {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-          body: JSON.stringify({ system, user, maxTokens }),
+          body: JSON.stringify({ system, user, maxTokens, tier }),
           signal: AbortSignal.timeout(100_000),
         });
       } catch (err) {

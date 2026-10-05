@@ -151,13 +151,59 @@ export function inspectAgentBudgetUsd(env: Pick<Env, "INSPECT_AGENT_BUDGET_USD">
   return Number.isFinite(n) && n > 0 && n <= 50 ? n : DEFAULT_INSPECT_AGENT_BUDGET_USD;
 }
 
-export async function initAgentSpend(env: Env, runId: string): Promise<void> {
+export async function initAgentSpend(env: Env, runId: string, limits?: { budgetUsd: number; maxCalls: number }): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO inspection_agent_spend (run_id, budget_usd, spent_usd, calls, max_calls, created_at) VALUES (?, ?, 0, 0, ?, ?)
        ON CONFLICT(run_id) DO NOTHING`,
   )
-    .bind(runId, inspectAgentBudgetUsd(env), DEFAULT_INSPECT_AGENT_MAX_CALLS, new Date().toISOString())
+    .bind(runId, limits?.budgetUsd ?? inspectAgentBudgetUsd(env), limits?.maxCalls ?? DEFAULT_INSPECT_AGENT_MAX_CALLS, new Date().toISOString())
     .run();
+}
+
+// ─── 오픈 베타: 공개 스위치 · 하루 예산 · 싼 모델 ─────────────────────────────
+
+export function agentPublicOn(env: Pick<Env, "INSPECTION_AGENT_PUBLIC">): boolean {
+  return env.INSPECTION_AGENT_PUBLIC === "on";
+}
+
+export const DEFAULT_AGENT_DAILY_BUDGET_USD = 20;
+export function agentDailyBudgetUsd(env: Pick<Env, "AGENT_DAILY_BUDGET_USD">): number {
+  const n = Number(env.AGENT_DAILY_BUDGET_USD);
+  return Number.isFinite(n) && n > 0 && n <= 10_000 ? n : DEFAULT_AGENT_DAILY_BUDGET_USD;
+}
+
+/** 오늘(UTC) agent 엔진 LLM 사용액 — 원장(llm_usage)이 정본. 읽기 실패는 "한도 참"으로(fail-closed: 기본 검수로 간다). */
+export async function agentSpendTodayUsd(env: Pick<Env, "DB">, nowMs: number = Date.now()): Promise<number> {
+  const day = new Date(nowMs).toISOString().slice(0, 10);
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COALESCE(SUM(cost_usd), 0) AS usd FROM llm_usage WHERE job_kind = 'inspection' AND call_site = ? AND created_at >= ?`,
+    )
+      .bind("inspect_agent", `${day}T00:00:00.000Z`)
+      .first<{ usd: number }>();
+    return Number(row?.usd ?? 0);
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export async function agentDailyBudgetReached(env: Pick<Env, "DB" | "AGENT_DAILY_BUDGET_USD">, nowMs?: number): Promise<boolean> {
+  return (await agentSpendTodayUsd(env, nowMs)) >= agentDailyBudgetUsd(env);
+}
+
+export const DEFAULT_INSPECT_AGENT_CHEAP_MODEL = "claude-haiku-4-5-20251001";
+export const DEFAULT_INSPECT_AGENT_CHEAP_FALLBACK_MODEL = "gpt-5.4-mini";
+
+/** 호출 등급별 모델: cheap = 관찰·행동 단계, strong = 판정 재확인·기준 추정·고친 파일. 요청이 모델을 고르지 못한다. */
+export function inspectAgentModelFor(
+  env: Pick<Env, "INSPECT_AGENT_MODEL" | "INSPECT_AGENT_CHEAP_MODEL" | "INSPECT_AGENT_CHEAP_FALLBACK_MODEL">,
+  tier: "cheap" | "strong",
+): { model: string; fallbackModel?: string } {
+  if (tier === "strong") return { model: inspectAgentModel(env) };
+  return {
+    model: (env.INSPECT_AGENT_CHEAP_MODEL ?? "").trim() || DEFAULT_INSPECT_AGENT_CHEAP_MODEL,
+    fallbackModel: (env.INSPECT_AGENT_CHEAP_FALLBACK_MODEL ?? "").trim() || DEFAULT_INSPECT_AGENT_CHEAP_FALLBACK_MODEL,
+  };
 }
 
 /** 최악 비용 예약 — 남은 예산·호출 수가 있을 때만(원자적 UPDATE 한 문장). */
