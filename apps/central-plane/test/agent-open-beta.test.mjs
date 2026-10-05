@@ -153,7 +153,7 @@ describe("싼 모델 라우팅", { skip: SQLITE_SKIP }, () => {
 });
 
 describe("싼 단계의 실제 경로 — 프로덕션 설정(Anthropic 킬스위치 off · OpenAI 게이트웨이)", { skip: SQLITE_SKIP }, () => {
-  it("haiku를 건너뛰고 게이트웨이로 gpt-5.4-mini · 원장은 실제로 답한 벤더·모델 · 단가 미등록은 보수 최대 단가 + unpriced", async () => {
+  it("haiku를 건너뛰고 게이트웨이로 gpt-5.4-mini · 원장은 실제로 답한 벤더·모델 · gpt-5.4-mini 공식 단가로 계산(#599)", async () => {
     const { db, d1 } = openSqliteD1();
     const calls = [];
     const fetchImpl = async (url, init) => {
@@ -188,7 +188,8 @@ describe("싼 단계의 실제 경로 — 프로덕션 설정(Anthropic 킬스�
     assert.equal(row.model_requested, "claude-haiku-4-5-20251001");
     assert.equal(row.model_actual, "gpt-5.4-mini-2026-03-17");
     assert.equal(row.call_site, "inspect_agent");
-    assert.equal(row.unpriced, 1, "gpt-5.4-mini 단가는 표에 없다 — 지어내지 않고 보수 최대 단가");
+    assert.equal(row.unpriced, 0, "gpt-5.4-mini 공식 단가(2026-10-05)가 표에 있다");
+    assert.ok(Math.abs(row.cost_usd - (1000 * 0.75 + 50 * 4.5) / 1_000_000) < 1e-9, `cost ${row.cost_usd}`);
     assert.ok(row.cost_usd > 0);
   });
 });

@@ -23,6 +23,8 @@ const OFFICIAL = {
   "claude-opus-5-5": { inputPerMTok: 4, cacheWritePerMTok: 5, cacheReadPerMTok: 0.2, outputPerMTok: 20 },
   // OpenAI는 캐시 쓰기 할증이 없다(쓰기 = 기본 입력가). ≤272K 컨텍스트 표준 티어.
   "gpt-5.4": { inputPerMTok: 2.5, cacheWritePerMTok: 2.5, cacheReadPerMTok: 0.25, outputPerMTok: 15, maxPricedInputTokens: 272_000 },
+  // 2026-10-05 공식 페이지(Standard): gpt-5.4-mini $0.75 / 캐시 $0.075 / 출력 $4.50 — 긴 문맥 단가 칸 없음.
+  "gpt-5.4-mini": { inputPerMTok: 0.75, cacheWritePerMTok: 0.75, cacheReadPerMTok: 0.075, outputPerMTok: 4.5 },
 };
 
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-12, `${msg ?? ""} expected ${b}, got ${a}`);
