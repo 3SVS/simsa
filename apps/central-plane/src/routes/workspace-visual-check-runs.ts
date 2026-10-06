@@ -215,7 +215,7 @@ export function agentAcsForRun(
 export async function agentRunCostUsd(
   env: Env,
   runId: string,
-): Promise<{ costUsd: number; llmCallsRecorded: number; unpricedCalls: number; callsByModel: Record<string, number> } | null> {
+): Promise<{ costUsd: number; llmCallsRecorded: number; unpricedCalls: number; callsByModel: Record<string, number>; costByModel: Record<string, number> } | null> {
   const rows = await env.DB.prepare(
     `SELECT model_actual, COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd, COALESCE(SUM(unpriced), 0) AS unpriced
        FROM llm_usage WHERE job_kind = 'inspection' AND call_site = 'inspect_agent' AND job_id = ? GROUP BY model_actual`,
@@ -229,6 +229,8 @@ export async function agentRunCostUsd(
     llmCallsRecorded: list.reduce((s, r) => s + Number(r.n), 0),
     unpricedCalls: list.reduce((s, r) => s + Number(r.unpriced), 0),
     callsByModel: Object.fromEntries(list.map((r) => [String(r.model_actual ?? "?").slice(0, 60), Number(r.n)])),
+    // (H3) 모델별 비용 — 싼 행동 vs 강한 판정·재현이 어디서 돈을 쓰는지.
+    costByModel: Object.fromEntries(list.map((r) => [String(r.model_actual ?? "?").slice(0, 60), Math.round(Number(r.usd) * 10_000) / 10_000])),
   };
 }
 
