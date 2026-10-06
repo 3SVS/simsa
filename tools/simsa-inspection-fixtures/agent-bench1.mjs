@@ -81,19 +81,59 @@ async function main() {
   if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) throw new Error("'맞나요?' 흉내용 LLM 키가 없습니다.");
   const only = arg("only", "").split(",").filter(Boolean);
   const apps = APPS.filter((a) => !only.length || only.includes(a.id));
-  const results = [];
-  let i = 0;
-  await Promise.all(
-    [0, 1].map(async () => {
-      while (i < apps.length) {
-        const a = apps[i++];
-        const r = await benchProd(a).catch((e) => ({ app: a.id, error: String(e?.message ?? e).slice(0, 200) }));
-        results.push(r);
-        console.log(`${a.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")} cost=$${r.costUsd ?? "?"}`);
-      }
-    }),
-  );
-  writeFileSync(join(here, "agent-bench1-prod-result.json"), JSON.stringify({ base: BASE, prompt: REGISTERED_PROMPT, results }, null, 2));
+  // (H4) --repeat=N: 같은 묶음을 N번 — 한 번의 점수로 판단하지 않는다(모델·앱 상태의 흔들림). 런마다 시각 붙은 파일, 덮어쓰지 않는다.
+  const repeat = Math.max(1, Math.min(10, Number(arg("repeat", "1")) || 1));
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const runs = [];
+  for (let k = 1; k <= repeat; k += 1) {
+    const results = [];
+    let i = 0;
+    await Promise.all(
+      [0, 1].map(async () => {
+        while (i < apps.length) {
+          const a = apps[i++];
+          const r = await benchProd(a).catch((e) => ({ app: a.id, error: String(e?.message ?? e).slice(0, 200) }));
+          results.push(r);
+          console.log(`[${k}/${repeat}] ${a.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")} cost=${r.costUsd ?? "?"}`);
+        }
+      }),
+    );
+    const summary = summarize(apps, results);
+    runs.push(summary);
+    writeFileSync(join(here, `agent-bench1-prod-result-${stamp}-r${k}.json`), JSON.stringify({ base: BASE, prompt: REGISTERED_PROMPT, run: k, summary, results }, null, 2));
+  }
+  const agg = aggregate(runs);
+  writeFileSync(join(here, `agent-bench1-prod-aggregate-${stamp}.json`), JSON.stringify({ base: BASE, repeat, runs, aggregate: agg }, null, 2));
+  console.log(JSON.stringify(agg, null, 2));
+}
+
+/** 런 하나의 지표(사전 등록 기준과 같은 셈). */
+export function summarize(apps, results) {
+  const scored = results.filter((r) => r.decision);
+  const totalMust = apps.reduce((s, a) => s + a.mustFailed.length, 0);
+  const costs = results.map((r) => r.costUsd).filter((c) => typeof c === "number");
+  return {
+    oppositeErrors: scored.filter((r) => r.opposite).length,
+    appMatch: scored.filter((r) => r.match).length,
+    apps: apps.length,
+    mustIdentified: results.reduce((s, r) => s + (r.mustIdentified?.length ?? 0), 0),
+    mustTotal: totalMust,
+    costPerRunMean: costs.length ? Number((costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(4)) : null,
+    costPerRunMax: costs.length ? Math.max(...costs) : null,
+    errors: results.filter((r) => r.error).length,
+  };
+}
+
+/** 여러 런의 평균·최소·최대. */
+export function aggregate(runs) {
+  const keys = ["oppositeErrors", "appMatch", "mustIdentified", "costPerRunMean", "costPerRunMax", "errors"];
+  const out = {};
+  for (const k of keys) {
+    const v = runs.map((r) => r[k]).filter((x) => typeof x === "number");
+    out[k] = v.length ? { mean: Number((v.reduce((a, b) => a + b, 0) / v.length).toFixed(4)), min: Math.min(...v), max: Math.max(...v) } : null;
+  }
+  out.runs = runs.length;
+  return out;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();

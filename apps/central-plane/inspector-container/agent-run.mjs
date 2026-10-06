@@ -96,6 +96,7 @@ export async function runAgentInspection(o) {
   let acSource = o.acSource ?? (acs.length ? "confirmed_inferred" : "inferred_at_run");
   let partial = false;
   let deadline = Infinity;
+  let runBudgetMs = Infinity;
   let firstHtml = "";
   let usedTestData = null;
   let singleFileFix = null;
@@ -156,6 +157,7 @@ export async function runAgentInspection(o) {
 
     // 실행 예산은 로그인(사람 대기) 뒤부터.
     deadline = o.budgetMs && o.budgetMs > 0 ? Date.now() + o.budgetMs : Infinity;
+    runBudgetMs = o.budgetMs && o.budgetMs > 0 ? o.budgetMs : Infinity;
     const timeLeft = () => deadline - Date.now();
 
     if (!signals.pageNotFound) {
@@ -186,6 +188,12 @@ export async function runAgentInspection(o) {
       const data = pure.koreanTestData(Date.now() % 100000);
       usedTestData = data;
       for (const ac of acs) {
+        // (H3) 남은 예산(행동·시간)이 40% 아래면 should 기준은 건너뛴다 — must 기준과 핵심 탐침에 예산을 쓴다.
+        const budgetLeft = Math.min(1 - actionsUsed / Math.max(1, caps.maxActions), Number.isFinite(timeLeft()) ? timeLeft() / Math.max(1, runBudgetMs) : 1);
+        if (ac.priority !== "must" && budgetLeft < 0.4) {
+          results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [], steps: 0 });
+          continue;
+        }
         if (timeLeft() < 20_000 || llmCalls.budgetExhausted || actionsUsed >= caps.maxActions) {
           partial = true;
           results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [], steps: 0 });
@@ -195,7 +203,7 @@ export async function runAgentInspection(o) {
         let r = await runOneAc(acArgs);
         // (G1) prod bench1 run 2: 사람에겐 되는 앱에 "제출해도 완료 화면이 안 나와요" 같은 거짓 실패가 나왔다. 실패는 고침 지시를
         //  만드는 가장 해로운 출력이다 — 새 브라우저에서 강한 모델이 행동까지 골라 **다시 재현될 때만** 실패로 남긴다.
-        if (r.status === "fail" && timeLeft() > 60_000 && !llmCalls.budgetExhausted) {
+        if (r.status === "fail" && ac.priority === "must" && timeLeft() > 60_000 && !llmCalls.budgetExhausted) {
           const rep = await runOneAc({ ...acArgs, reproduceOf: r });
           plog(`ac ${ac.id} fail-repro → ${rep.status}`);
           if (rep.status === "fail") {
@@ -348,6 +356,8 @@ export async function runAgentInspection(o) {
     let nudges = 0;
     let disagreements = 0;
     let validationNudges = 0;
+    let escalations = 0;
+    let autoProbed = false;
     let turnTier = "cheap";
     if (reproduceOf) {
       history.push(`(an earlier attempt concluded FAIL: "${red(reproduceOf.reason)}". Re-check independently and carefully in this fresh browser — do every required step (choose service/date/time, valid inputs), then look. Judge fail only if you SEE it fail again.)`);
@@ -385,7 +395,8 @@ export async function runAgentInspection(o) {
       // (F2) 싼 모델은 길 찾기(행동)만 — 판정은 강한 모델이 한다. 진단: 행동·판정 모두 gpt-5.4-mini가 냈고(런당 41~67회),
       //  강한 모델(gpt-5.4)은 재확인 3~6회뿐이었다. 싼 모델이 judge를 내면 같은 관찰로 강한 모델에 다시 묻는다
       //  (강한 모델이 "더 해 보라"며 행동을 내면 그 행동을 따른다).
-      if (parsed.ok && parsed.action.type === "judge" && turnTier === "cheap") {
+      // (H3) 비용: 강한 모델 재질문은 must 기준의 pass/fail 판정에만(should·확인 못 함은 싼 모델 그대로).
+      if (parsed.ok && parsed.action.type === "judge" && turnTier === "cheap" && ac.priority === "must" && parsed.action.verdict !== "not_verified") {
         try {
           const strongText = await callLlm(system, lastPrompt, 700, "strong");
           const strong = pure.parseAgentAction(strongText, o.targetUrl);
@@ -433,10 +444,15 @@ export async function runAgentInspection(o) {
           history.push(`(not accepted: you still have ${maxSteps - steps} actions. Actually perform the steps of the criterion — choose options, fill fields, submit, then look. Only stop early when a real blocker is on screen: a login wall (login_required) or the app asking for the user's own API key (api_key_required).)`);
           continue;
         }
+        // (H1) 실패는 "사용자가 얻을 수 없는 결과"를 말해야 한다 — 화면 구성 해석이면 확인 못 함.
+        if (a.verdict === "fail" && !pure.failReasonIsOutcome(a.reason)) {
+          return finish({ status: "not_verified", reason: pure.reasonText("ui_interpretation", locale), reasonCode: "ui_interpretation", evidence: [] });
+        }
         const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale, onGuessedAddress });
         if (loginFailed && f.reasonCode === "login_required") f.reason = pure.reasonText("login_failed", locale);
         // A3: 근거가 붙은 pass/fail은 다른 눈으로 한 번 더. 동의하지 않거나 답이 깨지면 결과로 치지 않는다.
-        if (f.status === "pass" || f.status === "fail") {
+        // (H3) 재확인은 판정을 바꾸는 must 기준에만.
+        if ((f.status === "pass" || f.status === "fail") && ac.priority === "must") {
           let review = null;
           try {
             review = pure.parseJudgeReview(
@@ -508,7 +524,21 @@ export async function runAgentInspection(o) {
       }
       if (res?.ok) {
         if (a.type === "fill" || a.type === "select") filled = true;
-        else if (a.type === "click" && filled && !stateChange) stateChange = true;
+        else if (a.type === "click" && filled && !stateChange) {
+          stateChange = true;
+          // (H2) 핵심 기준: 처음 상태를 바꾼 직후 저장 위치를 자동으로 잰다(LLM 호출 없음). 서버 쓰기 0이면 다른 손님·사장님이
+          //  볼 수 있는지를 새 브라우저로 확인하라고 알린다 — Claude 앱(브라우저에만 저장)을 놓친 실측 교정.
+          if (ac.id === pure.CORE_OUTCOME_AC_ID && !autoProbed && driver.storageProbe) {
+            autoProbed = true;
+            await driver.waitAfterSubmit?.().catch(() => {});
+            const probe = await driver.storageProbe().catch(() => null);
+            if (probe) {
+              const line = pure.describeStorageProbe(probe);
+              corpus += `\n${line}`;
+              history.push(`(automatic check after your submit: ${line}${probe.serverWrites.length === 0 ? " — nothing reached a server; verify with new_session whether another visitor / the owner can see it" : ""})`);
+            }
+          }
+        }
         // (2) 새로고침만으로는 "남는다"를 증명하지 않는다 — 만든 기록을 다른 곳(새 방문자·다른 화면·다른 역할)에서 다시 찾아야.
         else if (stateChange && (a.type === "new_session" || a.type === "goto" || a.type === "login")) verified = true;
       }
@@ -528,7 +558,10 @@ export async function runAgentInspection(o) {
         if (sigAfter === sigBefore) {
           stuck += 1;
           res = { ...res, ok: res.ok, note: `${res.note ?? ""} — NO VISIBLE CHANGE (look for a required choice above, a validation message, or a disabled button; do not repeat the same action)` };
-          if (stuck >= 2 || desc === lastDesc) escalate = true;
+          if ((stuck >= 2 || desc === lastDesc) && escalations < MAX_ESCALATIONS_PER_AC) {
+            escalate = true;
+            escalations += 1;
+          }
         } else {
           stuck = 0;
         }
@@ -536,7 +569,10 @@ export async function runAgentInspection(o) {
       lastDesc = desc;
       actions.push(desc);
       history.push(`${desc} → ${res.ok ? "ok" : "failed"}: ${red(res.note ?? "")}`);
-      if (!res.ok) escalate = escalate || /failed/.test(history.at(-2) ?? "");
+      if (!res.ok && /failed/.test(history.at(-2) ?? "") && escalations < MAX_ESCALATIONS_PER_AC && !escalate) {
+        escalate = true;
+        escalations += 1;
+      }
       corpus += `\n${red(res.note ?? "")}`;
     }
     return finish({ status: "not_verified", reason: pure.reasonText("not_reached", locale), reasonCode: "not_reached", evidence: [] });
@@ -560,6 +596,8 @@ export async function runAgentInspection(o) {
 }
 
 const MOBILE_CHECK_MAX = 8;
+/** (H3) 기준 하나에서 강한 모델로 올리는 행동 턴 상한. */
+const MAX_ESCALATIONS_PER_AC = 3;
 
 function normUrl(u) {
   try {

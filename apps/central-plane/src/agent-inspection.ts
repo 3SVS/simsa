@@ -86,6 +86,7 @@ export const AC_REASON_CODES = [
   "write_not_allowed",
   "fail_not_reproduced",
   "input_rejected",
+  "ui_interpretation",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -325,6 +326,25 @@ export function sanitizeAgentReasonCode(
 }
 
 /**
+ * (H1, prod bench1 run 3) 판정 원칙: must 기준은 **사용자가 그 결과를 얻을 수 없을 때만** 실패다(완료 안 됨·저장 안 됨·
+ * 보여야 할 곳에 안 보임·결과가 틀림·오류). 화면 구조 해석(입력이 한 화면에 다 있음, 단계 순서, 어떤 칸이 "너무 일찍" 보임,
+ * 버튼이 "~처럼 보임")은 실패가 아니다. 실측 거짓 실패: "시간을 고르지 않아도 연락처 입력 단계가 이미 보임"(Claude·ChatGPT),
+ * "19:00이 예약 가능한 버튼으로 보임"(마감 시각 해석). 결정론적 과해석은 재현 검사(G1)도 통과하므로 판정 문장으로 거른다.
+ * 실패 이유가 "얻을 수 없는 결과"를 말하지 않고 구조만 말하면 → 확인 못 함(ui_interpretation).
+ */
+export function failReasonIsOutcome(reason: string): boolean {
+  const t = reason ?? "";
+  const structure =
+    /(이미 (보|진행|나와|표시)|한 (화면|페이지)에|단계(가|를|로|이| 순서| 표시)|순서|먼저 (보|나)|미리 (보|나)|너무 일찍|버튼으로 보|처럼 보|노출되어|레이아웃|배치|on (one|the same) (page|screen)|step (order|gating)|shown (too )?early|before (choosing|selecting)|order of|layout|looks like a button)/i;
+  // 구조 표현이 있으면 "결과를 못 얻었다"는 강한 표현(저장·접수·완료 안 됨·사라짐·중복·오류)이 함께 있어야 실패로 인정한다.
+  // ("상태가 유지되지 않았다"처럼 화면 상태를 말하는 약한 표현만으로는 부족하다.)
+  const strongOutcome =
+    /(완료되지|완료 화면으로 (가지|이동하지)|접수되(지|거나)|저장되지|저장이 (없|안)|사라[지졌]|공유되지|볼 수 없|중복|이중|두 번 예약|오류|에러|not (saved|completed|stored)|did not (complete|save)|disappear|lost|error|duplicate|double[- ]book)/i;
+  if (structure.test(t)) return strongOutcome.test(t);
+  return true;
+}
+
+/**
  * (G1) 우리 입력이 앱의 입력 검사에 걸린 것인가(형식 안내). 이런 "실패"는 앱 고장이 아니라 우리 입력 문제 — 입력을 고쳐
  * 다시 해 본다(실측: Lovable "휴대폰 번호 오류"로 완료를 못 하고 실패 쪽으로 기울었다).
  */
@@ -461,6 +481,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     write_not_allowed: "시험 데이터를 만들어도 된다는 동의가 없어 입력·제출은 하지 않았어요 — 확인 요청에서 동의해 주시면 끝까지 해 봐요",
     fail_not_reproduced: "처음엔 안 되는 것처럼 보였지만 새 브라우저에서 꼼꼼히 다시 해 보니 같은 실패가 나오지 않아 고장으로 치지 않았어요",
     input_rejected: "앱이 우리가 넣은 시험 입력의 형식을 계속 받지 않아 이 단계를 끝내지 못했어요 — 고장으로 치지 않았어요",
+    ui_interpretation: "화면 구성(단계 순서·입력칸 위치 등)에 대한 해석이라 고장으로 치지 않았어요 — 결과를 얻을 수 없는 경우만 고장으로 봐요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -479,6 +500,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     write_not_allowed: "You didn't allow test data, so we didn't type or submit anything — allow it in the check request and we'll go all the way",
     fail_not_reproduced: "A first attempt looked broken, but repeating it carefully in a fresh browser did not reproduce the failure — so we don't call it a defect",
     input_rejected: "The app kept rejecting our test input format, so we couldn't complete this step — not counted as a defect",
+    ui_interpretation: "That was a reading of the screen layout (step order, where fields appear), not a defect — only an outcome the user can't get counts as broken",
   },
 };
 
@@ -1080,6 +1102,7 @@ export function agentSystemPrompt(locale: ReportLocale = "ko", opts: { readOnly?
     "Rules:",
     "1. Actually perform the criterion end to end like a real user (fill every required field with the test data, submit, then look at the result). Do not judge from labels or prices alone.",
     "2. pass = you SAW the expected outcome. fail = you completed the steps and SAW the outcome is wrong or an error. Otherwise not_verified. evidenceQuote MUST be copied verbatim from an observation (screen text, network line or console line); a judgement without a real quote is discarded.",
+    "2a. FAIL only when the user cannot obtain the outcome the criterion states: it can't be completed, isn't saved, doesn't appear where it must, shows a wrong result, or errors. How the screen is arranged (all fields on one page, step order, a field visible 'too early', something 'looking like' a button, an ambiguous closing-time slot) is NEVER a fail — judge not_verified and say so.",
     "2b. A criterion is NOT passed by seeing labels, inputs or buttons on screen. If the criterion is about an outcome, you must actually create the result (fill + submit) before judging pass.",
     "3. Persistence/sharing claims need proof: reload for 'survives refresh'; new_session for 'other customers can't pick it' or 'owner sees it on the admin screen' (data kept only in one browser's localStorage FAILS those).",
     "4. Time-dependent claims (today's list, time slots, 'today' dates) — use set_clock to probe edge hours (e.g. 00:30 and 23:30 Korea time) when relevant; note a server may compute 'today' in UTC, so compare the date shown with the Korea date.",
@@ -1240,6 +1263,7 @@ export function judgeReviewPrompt(args: {
     "You are a skeptical reviewer of a browser test. Decide whether the tester's verdict is justified by what was actually observed. Be strict:",
     "- 'pass' needs proof the outcome happened (the result was created AND verified as the criterion requires — e.g. reload / another visitor / owner screen). Seeing labels, inputs or buttons is not proof.",
     "- 'fail' needs proof the steps were really completed and the outcome is wrong — not that the tester got lost, typed into the wrong place, or opened an address the app never linked.",
+    "- 'fail' must name an outcome the user cannot obtain (not completed / not saved / not visible where required / wrong result / error). A complaint about screen arrangement or step order is not a fail — disagree.",
     'Reply JSON only: {"agree": true|false, "why": "<one sentence>"}',
     "",
     `Criterion ${args.ac.id} (${args.ac.priority}): ${args.ac.title}`,

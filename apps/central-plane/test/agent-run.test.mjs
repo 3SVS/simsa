@@ -127,17 +127,18 @@ describe("2026-10-06 프로덕션 진단 교정(F1~F4) — 모두 옛 코드에�
     assert.ok(!firstAc2.includes("10:30 예약됨"), "AC-1이 만든 예약이 남아 있으면 안 된다");
   });
 
-  it("F2 판정은 강한 모델: 싼 모델이 '확인 못 함'이라 해도 강한 모델이 근거와 함께 실패로 보면 실패", async () => {
+  // (H3, 2026-10-06 run 3) 강한 모델 재질문은 must 기준의 pass/fail 판정에만 — 싼 모델의 pass를 강한 모델이 fail로 뒤집는 경우.
+  it("F2 판정은 강한 모델: must 기준에서 싼 모델이 '통과'라 해도 강한 모델이 근거와 함께 실패로 보면 실패", async () => {
     const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
     const { llm } = makeScriptedLlm(
-      { "AC-1": [...bookScript.slice(0, 2), { type: "judge", verdict: "not_verified", reason: "잘 모르겠어요", evidenceQuote: "", reasonCode: "not_reached" }] },
+      { "AC-1": [...bookScript.slice(0, 2), { type: "judge", verdict: "pass", reason: "된 것 같아요", evidenceQuote: "예약이 완료되었어요" }] },
       {
-        strong: { "AC-1": (last) => (/not_reached/.test(last ?? "") ? { type: "judge", verdict: "fail", reason: "완료 화면에 시간이 틀리게 나와요", evidenceQuote: "예약이 완료되었어요" } : JSON.parse(last).action) },
+        strong: { "AC-1": (last) => (/된 것 같아요/.test(last ?? "") ? { type: "judge", verdict: "fail", reason: "완료 화면에 시간이 틀리게 나와요", evidenceQuote: "예약이 완료되었어요" } : JSON.parse(last).action) },
         // (G1) 재현 런에서도 같은 실패가 보인다
         reproduce: { "AC-1": [...bookScript.slice(0, 2), { type: "judge", verdict: "fail", reason: "완료 화면에 시간이 틀리게 나와요", evidenceQuote: "예약이 완료되었어요" }] },
       },
     );
-    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [{ ...one("AC-1"), priority: "must" }], acSource: "interview", llm, driver });
     assert.equal(out.report.acTable.find((r) => r.id === "AC-1").status, "fail");
   });
 
@@ -199,7 +200,7 @@ describe("2026-10-06 프로덕션 진단 교정(F1~F4) — 모두 옛 코드에�
       { "AC-1": [{ type: "judge", verdict: "pass", reason: "버튼이 보여요", evidenceQuote: "예약하기" }, ...bookScript] },
       { review: () => ++reviews > 1 },
     );
-    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [{ ...one("AC-1"), priority: "must" }], acSource: "interview", llm, driver });
     assert.equal(out.report.acTable.find((r) => r.id === "AC-1").status, "pass");
     assert.ok(prompts.some((p) => p.includes("gather the missing proof")));
   });
@@ -276,6 +277,64 @@ describe("prod bench1 run 2 교정(G1·G3) — 옛 코드에서 실패한다", (
     assert.doesNotMatch(row.reason, /앱 첫 화면이 열리지 않아/);
     assert.ok(prompts.some((p) => p.includes("not accepted: you still have")), "사유 없는 이른 포기로 되돌려졌다");
     assert.equal(row.status, "pass");
+  });
+});
+
+describe("prod bench1 run 3 교정(H1~H3) — 옛 코드에서 실패한다", () => {
+  const must = (id) => ({ id, title: `기준 ${id}`, given: "g", when: "w", then: "예약이 된다", priority: "must", confirmed: true });
+  const should = (id) => ({ ...must(id), priority: "should" });
+
+  it("H1 화면 구성 해석('시간을 고르지 않아도 정보 입력 단계가 이미 보임')은 실패가 아니다 → 확인 못 함", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({
+      "CORE-1": userMustScript,
+      "AC-1": [{ type: "judge", verdict: "fail", reason: "시간을 고르지 않아도 예약자 정보 입력 단계가 이미 보여서 시간 선택이 필요하다는 상태가 유지되지 않았습니다.", evidenceQuote: "예약하기" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [must("AC-1")], acSource: "interview", llm, driver });
+    const row = out.report.acTable.find((r) => r.id === "AC-1");
+    assert.equal(row.status, "not_verified");
+    assert.equal(row.reasonCode, "ui_interpretation");
+    assert.notEqual(out.decision, "Needs Fix");
+  });
+
+  it("H2 핵심 기준: 처음 제출 직후 저장 위치를 자동으로 재고, 서버 쓰기 0이면 새 브라우저로 확인하라고 알린다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [...bookScript.slice(0, 2), { type: "judge", verdict: "not_verified", reason: "끝", evidenceQuote: "", reasonCode: "api_key_required" }],
+    });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [userMust], acSource: "interview", llm, driver });
+    const p = prompts.find((x) => x.includes("automatic check after your submit"));
+    assert.ok(p, "자동 저장 탐침 결과가 다음 턴에 보인다");
+    assert.match(p, /server write requests since this check started = 0[\s\S]*verify with new_session/);
+  });
+
+  it("H3 비용: should 기준의 판정은 강한 모델에 다시 묻지도, 재확인하지도 않는다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const strongForShould = [];
+    const { llm: base } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": userMustScript,
+      "AC-S": [...bookScript],
+    });
+    const llm = async (req) => {
+      if (/Criterion AC-S \(/.test(req.user) && (req.tier === "strong" || /skeptical/.test(req.user))) strongForShould.push(req.tier);
+      return base(req);
+    };
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [userMust, should("AC-S")], acSource: "interview", llm, driver });
+    assert.deepEqual(strongForShould, []);
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-S").status, "pass");
+  });
+
+  it("H3 비용: 행동 예산이 40% 아래로 남으면 should 기준은 건너뛴다(must 먼저)", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm({
+      "CORE-1": [...bookScript.slice(0, 2), { type: "click", target: { role: "button", name: "예약하기" } }, { type: "judge", verdict: "not_verified", reason: "끝", evidenceQuote: "", reasonCode: "api_key_required" }],
+      "AC-U": userMustScript,
+      "AC-S": [...bookScript],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [userMust, should("AC-S")], acSource: "interview", llm, driver, caps: { maxActions: 8 } });
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-S").reasonCode, "budget");
   });
 });
 
@@ -363,8 +422,8 @@ describe("A2 탐침 · A3 판정 재확인", () => {
   it("두 번째 판단이 동의하지 않으면 pass도 fail도 결과로 치지 않는다", async () => {
     const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
     // (F4) 불일치 한 번은 이유를 들고 다시 해 본다 — 두 번째 불일치에서 끝난다.
-    const { llm } = makeScriptedLlm({ "CORE-1": [...coreScript, coreScript.at(-1)] }, { review: () => false });
-    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], acSource: "interview", llm, driver });
+    const { llm } = makeScriptedLlm({ "CORE-1": [...coreScript, coreScript.at(-1)], "AC-U": userMustScript }, { review: () => false });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [userMust], acSource: "interview", llm, driver });
     const core = out.report.acTable.find((r) => r.id === "CORE-1");
     assert.equal(core.status, "not_verified");
     assert.equal(core.reasonCode, "judge_disagreed");

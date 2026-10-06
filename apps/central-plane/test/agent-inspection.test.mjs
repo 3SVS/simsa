@@ -299,6 +299,19 @@ describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
     assert.equal(P.withCoreOutcomeAc(acs, "i", false)[0].priority, "should");
     assert.equal(P.withCoreOutcomeAc([{ ...acs[0], priority: "must", confirmed: true }], "i", true)[0].priority, "must");
   });
+  it("H1 실패 이유는 '얻을 수 없는 결과'여야 한다 — run 3의 거짓 실패 문장 3개는 구조 해석", () => {
+    for (const ui of [
+      "시간을 고르지 않아도 예약자 정보 입력 단계가 이미 보여서 시간 선택이 필요하다는 상태가 유지되지 않았습니다.",
+      "시간을 고르지 않아도 연락처 입력 단계로 이미 진행되어 있어요.",
+      "오후 7시 이후 시간이 없어야 하는데 19:00이 예약 가능한 버튼으로 보입니다.",
+    ]) assert.equal(P.failReasonIsOutcome(ui), false, ui);
+    for (const real of [
+      "필수 정보를 넣고 예약하기를 눌렀지만 예약이 접수되거나 완료 화면으로 이동하지 않았습니다.",
+      "예약 확인 화면은 보였지만 서버 저장이 없어서 다른 손님이나 사장님 화면에 공유되는 핵심 흐름이 끝까지 된다고 볼 수 없어요.",
+      "같은 시간에 두 번째 손님의 예약도 접수되어 중복 예약이 생겼어요.",
+      "The booking disappeared after reload.",
+    ]) assert.equal(P.failReasonIsOutcome(real), true, real);
+  });
   it("G3 막힌 이유 정리: app_missing은 에이전트가 못 쓴다, 로그인 이유는 벽이 보일 때만", () => {
     assert.equal(P.sanitizeAgentReasonCode("app_missing", { loginGate: null, readOnly: false }), undefined);
     assert.equal(P.sanitizeAgentReasonCode("login_required", { loginGate: null, readOnly: false }), undefined);
