@@ -30,6 +30,11 @@ export const LLM_PRICING: Readonly<Record<string, ModelPricing>> = {
   "gpt-5.4": { inputPerMTok: 2.5, cacheWritePerMTok: 2.5, cacheReadPerMTok: 0.25, outputPerMTok: 15, maxPricedInputTokens: 272_000 },
   // 2026-10-05 공식 단가(developers.openai.com/api/docs/pricing, Standard): 입력 $0.75 · 캐시 입력 $0.075 · 출력 $4.50 /1M. 긴 문맥 단가 없음.
   "gpt-5.4-mini": { inputPerMTok: 0.75, cacheWritePerMTok: 0.75, cacheReadPerMTok: 0.075, outputPerMTok: 4.5 },
+  // 2026-10-07 공식 단가(developers.openai.com/api/docs/pricing, Standard, 조회 2026-10-07): GPT-5.6 계열(검사 엔진 v2 기본 = sol).
+  //  캐시 쓰기 가산은 없다(입력 단가 그대로). 긴 문맥 구간 단가는 페이지에 없음.
+  "gpt-5.6-sol": { inputPerMTok: 4, cacheWritePerMTok: 4, cacheReadPerMTok: 0.4, outputPerMTok: 20 },
+  "gpt-5.6-terra": { inputPerMTok: 2, cacheWritePerMTok: 2, cacheReadPerMTok: 0.2, outputPerMTok: 12 },
+  "gpt-5.6-luna": { inputPerMTok: 0.2, cacheWritePerMTok: 0.2, cacheReadPerMTok: 0.02, outputPerMTok: 1.2 },
 };
 
 function maxOf(key: "inputPerMTok" | "cacheWritePerMTok" | "cacheReadPerMTok" | "outputPerMTok"): number {

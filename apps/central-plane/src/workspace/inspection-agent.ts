@@ -141,6 +141,20 @@ export const DEFAULT_INSPECT_AGENT_MODEL = "claude-sonnet-4-6";
 export const DEFAULT_INSPECT_AGENT_BUDGET_USD = 3;
 export const DEFAULT_INSPECT_AGENT_MAX_CALLS = 160;
 
+/**
+ * 2026-10-07 v2 모델 — 실측(로컬 같은 계정 키): gpt-5.6-sol은 Responses API에서만 함수 도구가 된다(Chat Completions는 400).
+ * 프로덕션 경로(Worker → CF AI Gateway openai /responses) 도달성은 llm-probe의 openai_v2 항목으로 잰다(배포 뒤).
+ */
+export const DEFAULT_INSPECT_AGENT_V2_MODEL = "gpt-5.6-sol";
+export function inspectAgentV2Model(env: Pick<Env, "INSPECT_AGENT_V2_MODEL">): string {
+  const m = (env.INSPECT_AGENT_V2_MODEL ?? "").trim();
+  return /^[A-Za-z0-9._-]{1,80}$/.test(m) ? m : DEFAULT_INSPECT_AGENT_V2_MODEL;
+}
+export function inspectAgentV2Effort(env: Pick<Env, "INSPECT_AGENT_V2_EFFORT">): "low" | "medium" | "high" {
+  const e = (env.INSPECT_AGENT_V2_EFFORT ?? "").trim();
+  return e === "low" || e === "high" ? e : "medium";
+}
+
 export function inspectAgentModel(env: Pick<Env, "INSPECT_AGENT_MODEL">): string {
   const m = (env.INSPECT_AGENT_MODEL ?? "").trim();
   return m || DEFAULT_INSPECT_AGENT_MODEL;

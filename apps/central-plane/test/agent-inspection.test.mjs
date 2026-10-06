@@ -292,6 +292,19 @@ describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
     assert.notEqual(P.decideAgentVerdict({ acs, results: [r("AC-001", "pass"), r("AC-002", "not_verified"), r("AC-003", "fail")] }).decision, "Needs Fix", "체크 안 한 기준의 실패");
     assert.equal(P.decideAgentVerdict({ acs, results: [r("AC-001", "fail")] }).decision, "Needs Fix", "체크한 기준의 실패");
   });
+  it("버그(2026-10-07 파일럿 Claude): 사용자가 적은 must 기준이 verifiedBy:human이어도 실행기 기준에 들어간다", () => {
+    const spec = salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] });
+    spec.acceptance[1].verifiedBy = "human"; // AC-002 — 사용자가 "빠진 것"에 적은 항목
+    spec.testPlan = spec.testPlan.filter((t) => t.acceptanceId !== "AC-002");
+    spec.meta.provenance.userTextAcIds = ["AC-002"];
+    const acs = agentAcsFromDevSpec(spec);
+    const row = acs.find((a) => a.id === "AC-002");
+    assert.ok(row, "옛 코드는 human이라 버렸다");
+    assert.equal(row.priority, "must");
+    assert.equal(row.origin, "user_text");
+    // 확인되지 않은 human 기준은 종전대로 뺀다
+    assert.ok(!agentAcsFromDevSpec(salonSpec()).some((a) => a.id === "AC-004"));
+  });
   it("G2 런에서 추정한 기준은 사용자가 고른 게 아니다 — 항상 should", () => {
     const acs = P.parseInferredAcs(JSON.stringify({ acs: [{ title: "예약", then: "완료", priority: "must" }] }));
     assert.equal(acs[0].priority, "should");

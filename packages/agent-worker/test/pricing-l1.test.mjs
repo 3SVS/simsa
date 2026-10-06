@@ -25,6 +25,10 @@ const OFFICIAL = {
   "gpt-5.4": { inputPerMTok: 2.5, cacheWritePerMTok: 2.5, cacheReadPerMTok: 0.25, outputPerMTok: 15, maxPricedInputTokens: 272_000 },
   // 2026-10-05 공식 페이지(Standard): gpt-5.4-mini $0.75 / 캐시 $0.075 / 출력 $4.50 — 긴 문맥 단가 칸 없음.
   "gpt-5.4-mini": { inputPerMTok: 0.75, cacheWritePerMTok: 0.75, cacheReadPerMTok: 0.075, outputPerMTok: 4.5 },
+  // 2026-10-07 공식 페이지(Standard): GPT-5.6 sol $4/$0.40/$20 · terra $2/$0.20/$12 · luna $0.20/$0.02/$1.20.
+  "gpt-5.6-sol": { inputPerMTok: 4, cacheWritePerMTok: 4, cacheReadPerMTok: 0.4, outputPerMTok: 20 },
+  "gpt-5.6-terra": { inputPerMTok: 2, cacheWritePerMTok: 2, cacheReadPerMTok: 0.2, outputPerMTok: 12 },
+  "gpt-5.6-luna": { inputPerMTok: 0.2, cacheWritePerMTok: 0.2, cacheReadPerMTok: 0.02, outputPerMTok: 1.2 },
 };
 
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-12, `${msg ?? ""} expected ${b}, got ${a}`);

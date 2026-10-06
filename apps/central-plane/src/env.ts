@@ -205,6 +205,15 @@ export interface Env {
   INSPECTION_ENGINE?: string;
   /** agent 엔진의 판단 모델(미설정 = claude-sonnet-4-6). 프록시가 서버에서 고정한다. */
   INSPECT_AGENT_MODEL?: string;
+  /**
+   * 2026-10-07 검사 엔진 v2(engine "agent_v2")의 모델 — 계획·조작·판정 전부(미설정 = gpt-5.6-sol, OpenAI Responses).
+   * 서버가 고정한다(요청이 모델을 못 고른다). docs/simsa-inspector-v2-design-2026-10-07.md V-5.
+   */
+  INSPECT_AGENT_V2_MODEL?: string;
+  /** v2 추론 강도(low|medium|high, 미설정 = medium). */
+  INSPECT_AGENT_V2_EFFORT?: string;
+  /** v2 청구 예상액 배수(원가 × 이 값, 미설정 = 3 [PILOT]). 실제 결제는 꺼짐 — 견적만 기록(V-6). */
+  INSPECTION_CHARGE_MARKUP?: string;
   /** agent 엔진 런 하나의 LLM 예산 USD(미설정·잘못된 값 = 3, 상한 50). */
   INSPECT_AGENT_BUDGET_USD?: string;
   /** 오픈 베타: 정확히 "on"이면 모든 사용자의 기본 검수가 agent 엔진(스태프는 늘 켜짐). */
