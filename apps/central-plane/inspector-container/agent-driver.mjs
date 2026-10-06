@@ -39,6 +39,15 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   const maskSelectors = new Set(["input[type=password]"]);
   let dialogSeen = false;
   const writes = [];
+  // ── v2(engine agent_v2) 관찰 도구: 요청 기록 · 같은 출처 소스 · 화면 폭 ──
+  /** 요청 기록(최근 400): 방법·주소·상태·요청/응답 본문 앞부분. 응답 본문은 데이터 요청(xhr/fetch)만. */
+  const netLog = [];
+  let netSeq = 0;
+  /** 이 페이지가 읽은 같은 출처 HTML/JS/CSS 주소(소스 읽기 후보). */
+  const loadedSources = new Set();
+  let appOrigin = null;
+  let viewport = { ...VIEWPORT };
+  let ctxOverrides = {};
   let storageMark = { at: Date.now(), local: "", session: "" };
   const readStorage = async () =>
     page
@@ -88,6 +97,33 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         writes.push({ at: Date.now(), line: `${r.method()} ${r.url().slice(0, 140)}` });
       }
     });
+    p.on("response", (r) => {
+      const req = r.request();
+      const type = req.resourceType();
+      const u = r.url();
+      if (isNoiseResource(u)) return;
+      let sameOrigin = false;
+      try {
+        sameOrigin = appOrigin !== null && new URL(u).origin === appOrigin;
+      } catch {
+        sameOrigin = false;
+      }
+      if (sameOrigin && (type === "document" || type === "script" || type === "stylesheet")) loadedSources.add(u.split("#")[0]);
+      if (!["xhr", "fetch", "document", "websocket", "eventsource"].includes(type)) return;
+      const entry = { i: ++netSeq, at: Date.now(), method: req.method(), url: u.slice(0, 300), status: r.status(), type, reqBody: (req.postData() ?? "").slice(0, 800), resBody: "" };
+      netLog.push(entry);
+      if (netLog.length > 400) netLog.shift();
+      if (type === "xhr" || type === "fetch") {
+        r.text().then((t) => { entry.resBody = String(t ?? "").slice(0, 1500); }).catch(() => {});
+      }
+    });
+    p.on("requestfailed", (r) => {
+      if (isNoiseResource(r.url())) return;
+      const type = r.resourceType();
+      if (!["xhr", "fetch", "document"].includes(type)) return;
+      netLog.push({ i: ++netSeq, at: Date.now(), method: r.method(), url: r.url().slice(0, 300), status: null, type, reqBody: (r.postData() ?? "").slice(0, 800), resBody: `FAILED ${r.failure()?.errorText ?? ""}` });
+      if (netLog.length > 400) netLog.shift();
+    });
     p.on("dialog", (d) => {
       dialogSeen = true;
       d.dismiss().catch(() => {});
@@ -109,7 +145,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
 
   async function openContext(storageState) {
     if (context) await context.close().catch(() => {});
-    context = await browser.newContext({ ...ctxOpts, ...(storageState ? { storageState } : {}) });
+    context = await browser.newContext({ ...ctxOpts, viewport, ...ctxOverrides, ...(storageState ? { storageState } : {}) });
     await applyOverride(context);
     page = await context.newPage();
     wire(page);
@@ -207,8 +243,96 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   const bodyText = async () => (await page.locator("body").innerText({ timeout: 4000 }).catch(() => "")).replace(/\s+\n/g, "\n").trim();
 
   return {
-    async start(_targetUrl) {
+    async start(targetUrl) {
+      try {
+        appOrigin = new URL(targetUrl).origin;
+      } catch {
+        appOrigin = null;
+      }
       await openContext(null);
+    },
+    // ── v2 관찰 도구 ──
+    /** 요청 기록(필터·최근 n개). 본문은 이미 잘려 있다 — 비밀 가림은 실행기가 한다. */
+    netLog({ filter = null, last = 40 } = {}) {
+      const f = typeof filter === "string" && filter ? filter : null;
+      return netLog.filter((e) => !f || e.url.includes(f)).slice(-Math.max(1, Math.min(120, last)));
+    },
+    async storageDump() {
+      const web = await page
+        .evaluate(async () => {
+          const dump = (s) => {
+            const out = [];
+            try {
+              for (let i = 0; i < s.length; i += 1) {
+                const k = s.key(i);
+                if (!k) continue;
+                const v = s.getItem(k) ?? "";
+                out.push({ key: k.slice(0, 120), size: v.length, preview: v.slice(0, 400) });
+              }
+            } catch {
+              /* 막힌 저장소 */
+            }
+            return out;
+          };
+          let idb = [];
+          try {
+            idb = indexedDB.databases ? (await indexedDB.databases()).map((d) => String(d.name ?? "")) : [];
+          } catch {
+            idb = [];
+          }
+          return { local: dump(window.localStorage), session: dump(window.sessionStorage), indexedDB: idb };
+        })
+        .catch(() => ({ local: [], session: [], indexedDB: [] }));
+      const cookies = await context.cookies().catch(() => []);
+      return { ...web, cookies: cookies.slice(0, 40).map((c) => ({ name: c.name.slice(0, 80), domain: c.domain, size: String(c.value ?? "").length })) };
+    },
+    /** 같은 출처 소스 목록 — 응답으로 본 것 + 지금 문서의 script/link. */
+    async listSources() {
+      const inDom = await page
+        .$eval("script[src], link[rel=stylesheet][href], link[rel=modulepreload][href]", (els) => els.map((e) => e.src || e.href).filter(Boolean))
+        .catch(() => []);
+      for (const u of inDom) {
+        try {
+          if (appOrigin && new URL(u).origin === appOrigin) loadedSources.add(u.split("#")[0]);
+        } catch {
+          /* skip */
+        }
+      }
+      loadedSources.add(page.url().split("#")[0]);
+      return [...loadedSources].slice(0, 120);
+    },
+    /** 같은 출처 GET만(다른 출처는 거절 — 쓰기·외부 요청 없음). */
+    async readSourceText(url) {
+      let u;
+      try {
+        u = new URL(url, page.url());
+      } catch {
+        return { ok: false, error: "bad_url" };
+      }
+      if (!appOrigin || u.origin !== appOrigin) return { ok: false, error: "other_origin" };
+      const r = await context.request.get(u.toString(), { timeout: NAV_TIMEOUT }).catch(() => null);
+      if (!r) return { ok: false, error: "fetch_failed" };
+      const text = await r.text().catch(() => "");
+      return { ok: r.ok(), status: r.status(), url: u.toString().split("#")[0], text: text.slice(0, 3_000_000) };
+    },
+    consoleErrorList: () => consoleErrors.slice(-40),
+    async setViewport(width, height) {
+      viewport = { width: Math.max(320, Math.min(1920, width)), height: Math.max(480, Math.min(1400, height)) };
+      await page.setViewportSize(viewport).catch(() => {});
+      await page.waitForTimeout(400);
+      const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth })).catch(() => ({ sw: 0, cw: 0 }));
+      return { width: viewport.width, height: viewport.height, overflowPx: Math.max(0, m.sw - m.cw) };
+    },
+    /** 화면 이미지(JPEG base64) — 비밀 칸은 가린다. */
+    async screenshotJpeg() {
+      const buf = await page.screenshot({ type: "jpeg", quality: 60, fullPage: false, mask: [...maskSelectors].map((s) => page.locator(s)) }).catch(() => null);
+      return buf ? Buffer.from(buf).toString("base64") : null;
+    },
+    /** v2 new_context: 새 브라우저(쿠키·저장소 없음), 시간대를 바꿀 수 있다. */
+    async newContextAt(url, { timezoneId = null } = {}) {
+      ctxOverrides = timezoneId ? { timezoneId } : {};
+      await openContext(null);
+      return this.goto(url);
     },
     async goto(url) {
       const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT }).catch(() => null);

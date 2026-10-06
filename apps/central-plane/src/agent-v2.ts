@@ -9,7 +9,19 @@
  *
  * 컨테이너 이미지 안에서도 같은 파일을 컴파일해 쓴다(Dockerfile — agent-inspection.ts와 함께).
  */
-import { failReasonIsOutcome, type AcReasonCode, type AgentAc } from "./agent-inspection.js";
+import {
+  buildAgentReport,
+  failReasonIsOutcome,
+  reasonText,
+  type AcReasonCode,
+  type AcResult,
+  type AcSource,
+  type AgentAc,
+  type AgentReport,
+  type AgentSignals,
+  type LoginMethod,
+  type SweepResult,
+} from "./agent-inspection.js";
 
 export const AGENT_V2_RUNNER_REV = "agent-v2-1";
 
@@ -330,4 +342,221 @@ export function causeIsGrounded(cause: V2Judgment["cause"], readSources: Readonl
   if (snip.length < 8) return false;
   for (const text of readSources.values()) if (text.replace(/\s+/g, " ").includes(snip)) return true;
   return false;
+}
+
+// ─── S2 정찰: 접속 불가는 LLM 없이 곧바로 · 소스·번들의 정적 사실 ──────────────
+
+export type LandingCause = "unreachable" | "http_error" | "host_not_found" | "missing_index";
+
+/** 첫 화면이 열리는가 — 열리지 않음·404·호스트 "없음"·index 없음이면 곧바로 고장(원인 포함, LLM 0회). 401·403·407은 로그인 벽(고장 아님). */
+export function v2LandingBroken(o: { status: number | null; bodyText: string; hostNotFound: boolean; missingIndexFile: boolean }): { broken: boolean; cause?: LandingCause } {
+  if (o.status === null && !(o.bodyText ?? "").trim()) return { broken: true, cause: "unreachable" };
+  if (o.missingIndexFile) return { broken: true, cause: "missing_index" };
+  if (o.hostNotFound) return { broken: true, cause: "host_not_found" };
+  if (o.status !== null && o.status >= 400 && o.status !== 401 && o.status !== 403 && o.status !== 407) return { broken: true, cause: "http_error" };
+  return { broken: false };
+}
+
+/** 비개발자 말(KO/EN) — "무엇이 안 되고 왜", 개발 용어 없이(X-2). */
+export function v2LandingCauseText(cause: LandingCause, status: number | null, locale: "ko" | "en"): string {
+  const en = locale === "en";
+  switch (cause) {
+    case "unreachable":
+      return en ? "The address doesn't open at all — nothing answers there." : "주소가 아예 열리지 않아요 — 그 주소에서 아무것도 답하지 않아요.";
+    case "missing_index":
+      return en ? "The site is there but its first page is missing from what was published." : "사이트는 있지만 올린 파일에 첫 화면이 빠져 있어요.";
+    case "host_not_found":
+      return en ? "The hosting service says there is no app at this address — it was deleted or never published." : "호스팅 회사가 이 주소에 앱이 없다고 해요 — 지워졌거나 아직 올리지 않았어요.";
+    default:
+      return en ? `The first screen shows an error page (code ${status ?? "?"}).` : `첫 화면이 오류 화면으로 열려요(코드 ${status ?? "?"}).`;
+  }
+}
+
+export function v2LandingHow(cause: LandingCause, locale: "ko" | "en"): string {
+  const en = locale === "en";
+  if (cause === "missing_index") return en ? "Publish again from your builder and make sure the main page (index.html) is included." : "만든 도구에서 다시 올려 주세요. 첫 화면 파일(index.html)이 함께 올라갔는지 확인해 주세요.";
+  if (cause === "unreachable") return en ? "Check the address, or publish the app again from your builder and use the new address." : "주소가 맞는지 확인하거나, 만든 도구에서 다시 올린 뒤 새 주소로 확인해 주세요.";
+  return en ? "Publish the app again from your builder (Deploy/Publish) and check the address it gives you." : "만든 도구에서 다시 올려(배포·게시) 주시고, 그때 나온 주소로 다시 확인해 주세요.";
+}
+
+export type StaticFactKind = "external_endpoint" | "backend_client" | "local_storage_key" | "indexed_db" | "placeholder_config" | "utc_date" | "random_result" | "route";
+
+export interface StaticFact {
+  kind: StaticFactKind;
+  /** 소스 주소. */
+  file: string;
+  /** 그대로 복사한 코드 조각(증거물 원문 — 원인 인용의 근거). */
+  snippet: string;
+  /** 사람이 읽는 값(엔드포인트 주소·키 이름·경로). */
+  value: string;
+}
+
+const FACT_PATTERNS: Array<{ kind: StaticFactKind; re: RegExp; value: (m: RegExpExecArray) => string }> = [
+  { kind: "external_endpoint", re: /\bfetch\(\s*[`'"]((?:https?:)?\/\/[^`'"\s]{3,200}|\/api\/[^`'"\s]{0,200})[`'"]/g, value: (m) => m[1] ?? "" },
+  { kind: "external_endpoint", re: /\baxios\.(?:get|post|put|patch|delete)\(\s*[`'"]([^`'"\s]{2,200})[`'"]/g, value: (m) => m[1] ?? "" },
+  { kind: "backend_client", re: /https:\/\/[a-z0-9-]+\.(?:supabase\.co|firebaseio\.com|firebaseapp\.com)/g, value: (m) => m[0] },
+  { kind: "backend_client", re: /\b(initializeApp|getFirestore)\(/g, value: (m) => m[1] ?? m[0] },
+  { kind: "backend_client", re: /\.from\(\s*[`'"]([a-z_][a-z0-9_]{1,60})[`'"]\s*\)\s*\.(?:select|insert|upsert|update|delete)\b/g, value: (m) => `table:${m[1] ?? ""}` },
+  { kind: "backend_client", re: /functions\.invoke\(\s*[`'"]([A-Za-z0-9_-]{1,60})[`'"]/g, value: (m) => `function:${m[1] ?? ""}` },
+  { kind: "external_endpoint", re: /\bfetch\(\s*`([^`]{3,200})`/g, value: (m) => m[1] ?? "" },
+  { kind: "local_storage_key", re: /localStorage\.(?:setItem|getItem)\(\s*[`'"]([^`'"]{1,80})[`'"]/g, value: (m) => m[1] ?? "" },
+  { kind: "indexed_db", re: /indexedDB\.open\(\s*[`'"]([^`'"]{1,80})[`'"]/g, value: (m) => m[1] ?? "" },
+  { kind: "placeholder_config", re: /(YOUR[_-][A-Z_]{3,40}|your-project(?:-ref)?\.supabase\.co|REPLACE[_-]?ME|<YOUR[_ ][A-Z_ ]{2,30}>|sk-xxxx+|INSERT[_-][A-Z_]{3,30})/g, value: (m) => m[1] ?? m[0] },
+  { kind: "utc_date", re: /toISOString\(\)\s*\.\s*(?:slice|substring|substr)\(\s*0\s*,\s*10\s*\)|toISOString\(\)\s*\.\s*split\(\s*['"]T['"]\s*\)\s*\[\s*0\s*\]/g, value: (m) => m[0] },
+  { kind: "random_result", re: /Math\.random\(\)\s*[*<>]/g, value: (m) => m[0] },
+  { kind: "route", re: /\bpath\s*:\s*[`'"](\/[A-Za-z0-9_\-/:]{1,80})[`'"]|<Route[^>]{0,80}\bpath=[`'"](\/[A-Za-z0-9_\-/:]{1,80})[`'"]/g, value: (m) => m[1] ?? m[2] ?? "" },
+];
+
+/**
+ * 소스·번들에서 정적 사실을 뽑는다(설계 §2.2 R): 외부로 나가는 요청 대상 · 백엔드 연결 · 저장소 사용 · 설정 자리표시자 ·
+ * UTC 날짜 자르기 · 난수 결과 · 라우트. **가설의 근거일 뿐 판정 근거가 아니다**(판정은 실행 증거로, V-4).
+ * 같은 (종류, 값)은 한 번만. 조각은 원문 그대로(앞뒤 문맥 포함) — 원인 인용 검사(causeIsGrounded)가 이 조각을 찾는다.
+ */
+export function extractStaticFacts(sources: ReadonlyArray<{ url: string; text: string }>, max = 80): StaticFact[] {
+  const out: StaticFact[] = [];
+  const seen = new Set<string>();
+  for (const src of sources) {
+    const text = src.text ?? "";
+    for (const p of FACT_PATTERNS) {
+      p.re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      let perPattern = 0;
+      while ((m = p.re.exec(text)) !== null && perPattern < 12) {
+        if (m[0].length === 0) {
+          p.re.lastIndex += 1;
+          continue;
+        }
+        const value = p.value(m).slice(0, 200);
+        if (!value) continue;
+        const key = `${p.kind}|${value}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        perPattern += 1;
+        const start = Math.max(0, m.index - 80);
+        const end = Math.min(text.length, m.index + m[0].length + 80);
+        out.push({ kind: p.kind, file: src.url, snippet: text.slice(start, end), value });
+        if (out.length >= max) return out;
+      }
+    }
+  }
+  return out;
+}
+
+/** 정적 사실 요약(모델에게 주는 가설 재료이자 source 증거물의 원문). */
+export function describeStaticFacts(facts: readonly StaticFact[]): string {
+  if (facts.length === 0) return "No notable static facts found in the same-origin sources read so far.";
+  const by = new Map<StaticFactKind, StaticFact[]>();
+  for (const f of facts) by.set(f.kind, [...(by.get(f.kind) ?? []), f]);
+  const lines: string[] = [];
+  for (const [k, list] of by) {
+    lines.push(`## ${k} (${list.length})`);
+    for (const f of list.slice(0, 12)) lines.push(`- ${f.value}  [${f.file.split("/").pop()}] …${f.snippet.replace(/\s+/g, " ").slice(0, 220)}…`);
+  }
+  return lines.join("\n");
+}
+
+// ─── 리포트(v1 리포트 모양 그대로 + v2 부분) ──────────────────────────────────
+
+export interface V2ReportInput {
+  targetUrl: string;
+  intent: string;
+  acs: AgentAc[];
+  acSource: AcSource;
+  records: V2JudgmentRecord[];
+  store: EvidenceStore;
+  signals: AgentSignals;
+  sweep: SweepResult | null;
+  loginDepth: "L1" | "L3";
+  loginMethod: LoginMethod;
+  landing?: { broken: boolean; cause?: LandingCause; status: number | null; artifactId?: string };
+  partial?: boolean;
+  firstHtml?: string;
+  model?: string | null;
+  staticFacts?: StaticFact[];
+  plan?: unknown;
+  toolCalls?: number;
+}
+
+/**
+ * v2 결과를 v1 리포트(buildAgentReport) 모양으로 싣는다 — 대시보드·결함 기록·재검사 비교가 그대로 쓴다(engine "agent",
+ * engineVersion "v2"). 판정 = 기계 검증기를 통과한 기록만. 증거물은 접어 두고 "무엇이 안 되고 왜"를 먼저(X-2).
+ */
+export function buildV2Report(input: V2ReportInput, locale: "ko" | "en" = "ko"): AgentReport & { engineVersion: "v2" } {
+  const L = locale === "en" ? "en" : "ko";
+  const byId = new Map(input.records.filter((r) => r.acId !== INTENT_AC_ID).map((r) => [r.acId, r]));
+  const evidenceLine = (id: string) => input.store.get(id)?.summary ?? id;
+  const results: AcResult[] = input.acs.map((a) => {
+    const r = byId.get(a.id);
+    if (!r) {
+      const code: AcReasonCode = input.landing?.broken ? "app_missing" : input.partial ? "budget" : "not_reached";
+      return { id: a.id, status: "not_verified", reason: reasonText(code, L), reasonCode: code, evidence: [], steps: 0 };
+    }
+    const status = r.verdict === "mismatch" ? "not_verified" : r.verdict;
+    return {
+      id: a.id,
+      status,
+      reason: r.verdict === "not_verified" && r.reasonCode && !r.claim ? reasonText(r.reasonCode, L) : r.claim.slice(0, 600),
+      ...(r.reasonCode ? { reasonCode: r.reasonCode } : {}),
+      evidence: r.artifactIds.map(evidenceLine).slice(0, 6),
+      steps: 0,
+      exercised: r.exercised,
+    };
+  });
+  const signals: AgentSignals = { ...input.signals, ...(input.landing?.broken ? { pageNotFound: true } : {}) };
+  const report = buildAgentReport(
+    {
+      targetUrl: input.targetUrl,
+      intent: input.intent,
+      acs: input.acs,
+      acSource: input.acSource,
+      results,
+      sweep: input.sweep,
+      signals,
+      loginDepth: input.loginDepth,
+      loginMethod: input.loginMethod,
+      ...(input.partial ? { partial: true } : {}),
+      ...(input.firstHtml ? { firstHtml: input.firstHtml } : {}),
+    },
+    L,
+  ) as AgentReport & { engineVersion: "v2" };
+  report.engineVersion = "v2";
+  if (input.landing?.broken && input.landing.cause) {
+    const why = v2LandingCauseText(input.landing.cause, input.landing.status, L);
+    report.oneLine = (L === "en" ? "The app doesn't open: " : "앱이 열리지 않아요: ") + why;
+    report.findings = [
+      {
+        severity: "high",
+        code: input.landing.cause === "missing_index" ? "missing_index_file" : "page_not_found",
+        what: L === "en" ? "The app doesn't open" : "앱이 열리지 않아요",
+        why,
+        how: v2LandingHow(input.landing.cause, L),
+        evidence: input.landing.artifactId ? evidenceLine(input.landing.artifactId) : null,
+      },
+      ...report.findings.filter((f) => f.code !== "page_not_found" && f.code !== "missing_index_file"),
+    ];
+  }
+  (report.agent as unknown as Record<string, unknown>)["v2"] = {
+    runnerRev: AGENT_V2_RUNNER_REV,
+    model: input.model ?? null,
+    landing: input.landing ?? null,
+    staticFacts: (input.staticFacts ?? []).slice(0, 40).map((f) => ({ kind: f.kind, file: f.file, value: f.value })),
+    plan: input.plan ?? null,
+    judgments: input.records.map((r) => ({ acId: r.acId, verdict: r.verdict, artifactIds: r.artifactIds, quotes: r.quotes, refusals: r.refusals, ...(r.cause ? { cause: r.cause } : {}) })),
+    artifacts: input.store.all().filter((a) => a.kind !== "plan").slice(-120).map((a) => ({ id: a.id, kind: a.kind, context: a.context, summary: a.summary })),
+    citation: citationRate(input.records, input.store),
+    toolCalls: input.toolCalls ?? 0,
+  };
+  return report;
+}
+
+/** 알려진 주소 비교용 정규화 — 해시 라우터(#/path)는 주소의 일부, 일반 해시·쿼리·끝 슬래시는 뗀다. */
+export function normalizeKnownUrl(u: string): string {
+  try {
+    const x = new URL(u);
+    if (!x.hash.startsWith("#/")) x.hash = "";
+    x.search = "";
+    return x.toString().replace(/\/$/, "");
+  } catch {
+    return u;
+  }
 }
