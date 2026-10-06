@@ -70,6 +70,9 @@ async function benchProd(app) {
   out.acTable = report.acTable ?? [];
   out.sweep = report.sweep ?? null;
   out.durationSec = Math.round((Date.now() - t0) / 1000);
+  // (G4) 런 비용 — 서버가 원장(llm_usage)에서 합산해 리포트에 실은 값.
+  out.costUsd = report.agent?.costUsd ?? null;
+  out.llmCallsByModel = report.agent?.callsByModel ?? null;
   return score(app, out);
 }
 
@@ -86,7 +89,7 @@ async function main() {
         const a = apps[i++];
         const r = await benchProd(a).catch((e) => ({ app: a.id, error: String(e?.message ?? e).slice(0, 200) }));
         results.push(r);
-        console.log(`${a.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")}`);
+        console.log(`${a.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")} cost=$${r.costUsd ?? "?"}`);
       }
     }),
   );

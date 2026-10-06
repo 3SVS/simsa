@@ -126,7 +126,11 @@ describe("2026-10-06 프로덕션 진단 교정(F1~F4) — 모두 옛 코드에�
     const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
     const { llm } = makeScriptedLlm(
       { "AC-1": [...bookScript.slice(0, 2), { type: "judge", verdict: "not_verified", reason: "잘 모르겠어요", evidenceQuote: "", reasonCode: "not_reached" }] },
-      { strong: { "AC-1": (last) => (/not_reached/.test(last ?? "") ? { type: "judge", verdict: "fail", reason: "완료 화면에 시간이 틀리게 나와요", evidenceQuote: "예약이 완료되었어요" } : JSON.parse(last).action) } },
+      {
+        strong: { "AC-1": (last) => (/not_reached/.test(last ?? "") ? { type: "judge", verdict: "fail", reason: "완료 화면에 시간이 틀리게 나와요", evidenceQuote: "예약이 완료되었어요" } : JSON.parse(last).action) },
+        // (G1) 재현 런에서도 같은 실패가 보인다
+        reproduce: { "AC-1": [...bookScript.slice(0, 2), { type: "judge", verdict: "fail", reason: "완료 화면에 시간이 틀리게 나와요", evidenceQuote: "예약이 완료되었어요" }] },
+      },
     );
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
     assert.equal(out.report.acTable.find((r) => r.id === "AC-1").status, "fail");
@@ -193,6 +197,80 @@ describe("2026-10-06 프로덕션 진단 교정(F1~F4) — 모두 옛 코드에�
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
     assert.equal(out.report.acTable.find((r) => r.id === "AC-1").status, "pass");
     assert.ok(prompts.some((p) => p.includes("gather the missing proof")));
+  });
+});
+
+describe("prod bench1 run 2 교정(G1·G3) — 옛 코드에서 실패한다", () => {
+  const one = (id) => ({ id, title: `기준 ${id}`, given: "g", when: "w", then: "예약이 된다", priority: "must", confirmed: true });
+
+  it("G1 실패는 새 브라우저에서 강한 모델로 재현돼야 남는다 — 재현 안 되면 확인 못 함(fail_not_reproduced)", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const tiers = [];
+    const { llm: base } = makeScriptedLlm(
+      {
+        "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "생략", evidenceQuote: "", reasonCode: "api_key_required" }],
+        // 첫 시도: 이름을 안 넣고 제출 → "완료 화면이 안 나와요"(우리 실수로 생긴 거짓 실패)
+        "AC-1": [{ type: "click", target: { role: "button", name: "예약하기" } }, { type: "judge", verdict: "fail", reason: "제출해도 완료 화면이 안 나와요", evidenceQuote: "10:30 예약 가능" }],
+      },
+      { reproduce: { "AC-1": [...bookScript] } },
+    );
+    const llm = async (req) => {
+      if (/earlier attempt concluded FAIL/.test(req.user)) tiers.push(req.tier);
+      return base(req);
+    };
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    const row = out.report.acTable.find((r) => r.id === "AC-1");
+    assert.equal(row.status, "not_verified");
+    assert.equal(row.reasonCode, "fail_not_reproduced");
+    assert.ok(tiers.length > 0 && tiers.every((t) => t === "strong"), "재현 런의 행동은 강한 모델");
+    assert.equal(out.agentPrompt, "", "재현 안 된 실패로는 고침 지시를 만들지 않는다");
+  });
+
+  it("G1 앱이 우리 입력 형식을 거절한 '실패'는 입력을 고쳐 다시 — 고장이 아니다", async () => {
+    const site = salonSite();
+    site["/"] = (s) => ({ status: 200, text: s.badPhone ? "휴대폰 번호 형식이 올바르지 않습니다" : s.store.booking ? "예약됨" : "예약 화면 예약하기", links: ["/"], buttons: [] });
+    const driver = makeFakeDriver(site, {
+      origin: ORIGIN,
+      onAct: (a, s) => {
+        if (a.type === "fill" && a.target.label === "휴대폰") s.badPhone = a.value.includes("-");
+        if (a.type === "click" && !s.badPhone) {
+          s.store.booking = { name: "x" };
+          s.path = "/done";
+        }
+        return null;
+      },
+    });
+    const { llm, prompts } = makeScriptedLlm({
+      "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "생략", evidenceQuote: "", reasonCode: "api_key_required" }],
+      "AC-1": [
+        { type: "fill", target: { label: "휴대폰" }, value: "010-1234-5678" },
+        { type: "judge", verdict: "fail", reason: "휴대폰 번호 오류로 예약이 안 돼요", evidenceQuote: "휴대폰 번호 형식이 올바르지 않습니다" },
+        { type: "fill", target: { label: "휴대폰" }, value: "01012345678" },
+        { type: "click", target: { role: "button", name: "예약하기" } },
+        { type: "judge", verdict: "pass", reason: "예약이 완료됐어요", evidenceQuote: "예약이 완료되었어요" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    assert.ok(prompts.some((p) => p.includes("rejecting OUR input format")));
+    assert.notEqual(out.report.acTable.find((r) => r.id === "AC-1").status, "fail");
+  });
+
+  it("G3 화면이 열린 뒤 에이전트가 고른 app_missing은 인정하지 않는다('앱 첫 화면이 열리지 않아' 거짓 표시 방지)", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "생략", evidenceQuote: "", reasonCode: "api_key_required" }],
+      "AC-1": [
+        { type: "click", target: { role: "button", name: "예약하기" } },
+        { type: "judge", verdict: "not_verified", reason: "모르겠어요", evidenceQuote: "", reasonCode: "app_missing" },
+        ...bookScript,
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    const row = out.report.acTable.find((r) => r.id === "AC-1");
+    assert.notEqual(row.reasonCode, "app_missing");
+    assert.doesNotMatch(row.reason, /앱 첫 화면이 열리지 않아/);
+    assert.ok(prompts.some((p) => p.includes("not accepted: you still have")), "사유 없는 이른 포기로 되돌려졌다");
+    assert.equal(row.status, "pass");
   });
 });
 

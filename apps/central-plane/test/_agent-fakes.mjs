@@ -125,9 +125,10 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
  * 가짜 LLM: AC id별 대본(행동 JSON 목록). 대본이 끝나면 not_verified 판정. 받은 모든 프롬프트를 prompts에 쌓는다
  * (비밀이 새지 않았는지 검사용). 첫 화면 AC 추정 요청엔 inferred를 돌려준다.
  */
-export function makeScriptedLlm(scripts, { inferred = null, review = () => true, fix = null, strong = null } = {}) {
+export function makeScriptedLlm(scripts, { inferred = null, review = () => true, fix = null, strong = null, reproduce = null } = {}) {
   const prompts = [];
   const cursor = new Map();
+  const replay = new Map();
   const lastById = new Map();
   const llm = async ({ system, user, tier = "strong" }) => {
     prompts.push(`${system}\n${user}`);
@@ -142,6 +143,15 @@ export function makeScriptedLlm(scripts, { inferred = null, review = () => true,
     const m = /Criterion ([A-Za-z0-9-]+) \(/.exec(user);
     const id = m?.[1] ?? "?";
     // (F2) 강한 모델에게 다시 묻는 판정 턴: 기본은 싼 모델이 방금 낸 것과 같은 답(동의). strong[id]로 바꿀 수 있다.
+    // (G1) 실패 재현 런: 기본은 같은 대본을 처음부터 다시(일관된 모델 흉내). reproduce[id]로 다른 대본을 줄 수 있다.
+    if (/earlier attempt concluded FAIL/.test(user)) {
+      const list = reproduce?.[id] ?? scripts[id] ?? [];
+      const i = replay.get(id) ?? 0;
+      replay.set(id, i + 1);
+      const next = list[i] ?? { type: "judge", verdict: "not_verified", reason: "재현 대본 끝", evidenceQuote: "", reasonCode: "not_reached" };
+      const name = /name=([^,\s]+),/.exec(user)?.[1] ?? "김서연";
+      return JSON.stringify({ thought: "r", action: next }).split("$NAME").join(name);
+    }
     if (tier === "strong") {
       const override = strong?.[id];
       if (typeof override === "function") return JSON.stringify({ thought: "s", action: override(lastById.get(id)) });

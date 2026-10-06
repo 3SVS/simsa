@@ -281,6 +281,27 @@ describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
     assert.equal(P.acsFromAgentReport('{"engine":"classic"}'), null);
     assert.equal(P.acsFromAgentReport("not json"), null);
   });
+  it("G2 역추론 지시서: 사용자가 자기 말로 적지 않은(추론만) must는 should로 — 그 실패가 '고쳐야 해요'를 만들지 않는다", () => {
+    const spec = salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] });
+    spec.meta.provenance.userTextAcIds = ["AC-002"]; // 사용자가 "빠진 것"으로 직접 적은 항목에서 나온 기준만
+    const acs = agentAcsFromDevSpec(spec);
+    assert.deepEqual(acs.map((a) => [a.id, a.priority, a.origin]), [["AC-002", "must", "user_text"], ["AC-001", "should", "inferred"], ["AC-003", "should", "inferred"]]);
+    // 추론만인 기준의 실패로는 Needs Fix가 되지 않는다
+    const r = (id, status) => ({ id, status, reason: "r", evidence: ["x"], steps: 3 });
+    const v = P.decideAgentVerdict({ acs, results: [r("AC-001", "fail"), r("AC-002", "not_verified"), r("AC-003", "fail")] });
+    assert.notEqual(v.decision, "Needs Fix");
+    // 옛 지시서(userTextAcIds 없음)는 종전대로
+    assert.equal(agentAcsFromDevSpec(salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] }))[0].priority, "must");
+  });
+  it("G3 막힌 이유 정리: app_missing은 에이전트가 못 쓴다, 로그인 이유는 벽이 보일 때만", () => {
+    assert.equal(P.sanitizeAgentReasonCode("app_missing", { loginGate: null, readOnly: false }), undefined);
+    assert.equal(P.sanitizeAgentReasonCode("login_required", { loginGate: null, readOnly: false }), undefined);
+    assert.equal(P.sanitizeAgentReasonCode("login_required", { loginGate: "password", readOnly: false }), "login_required");
+    assert.equal(P.sanitizeAgentReasonCode("write_not_allowed", { loginGate: null, readOnly: false }), undefined);
+    assert.equal(P.sanitizeAgentReasonCode("api_key_required", { loginGate: null, readOnly: false }), "api_key_required");
+    assert.equal(P.looksLikeInputValidation("휴대폰 번호 형식이 올바르지 않습니다"), true);
+    assert.equal(P.looksLikeInputValidation("예약이 저장되지 않았어요"), false);
+  });
   it("지시서 → AC: human 제외 · 기능 우선순위 · 역추론은 확인된 것만 confirmed", () => {
     // 역추론 지시서는 must AC가 전부 확인돼야 유효하다(D-2 amend) — 그래서 must 셋 모두 확인, should는 없음.
     const spec = salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] });
