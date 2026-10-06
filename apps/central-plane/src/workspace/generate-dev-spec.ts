@@ -191,6 +191,12 @@ export type InferredPlan = {
   unconfirmed: Item[];
 };
 
+/** 사용자가 직접 적은 항목(id `user_…`, intent-missing.mjs)에서 나온 기능의 AC id. */
+export function userTextAcIdsOf(acceptance: ReadonlyArray<{ id: string; featureId: string }>, plan: InferredPlan): string[] {
+  const features = new Set(plan.confirmed.filter((c) => (c.item.id ?? "").startsWith("user_")).map((c) => c.featureId));
+  return acceptance.filter((a) => features.has(a.featureId)).map((a) => a.id).sort();
+}
+
 export function planInferredConfirmation(items: readonly Item[], confirmedItemIds: readonly string[] | undefined): InferredPlan {
   const wanted = new Set((confirmedItemIds ?? []).filter((x) => typeof x === "string"));
   const confirmed: InferredPlan["confirmed"] = [];
@@ -590,6 +596,7 @@ export async function generateDevSpec(
             provenance: {
               ...(input.provenance ?? {}),
               userConfirmedAcIds: applyInferredConfirmation(p1!, confirmedFeatureIds).userConfirmedAcIds,
+              userTextAcIds: userTextAcIdsOf(p1!.acceptance, inferred!),
             },
           }
         : {}),

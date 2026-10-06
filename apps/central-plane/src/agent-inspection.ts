@@ -37,6 +37,8 @@ export interface AgentAc {
   confirmed: boolean;
   /** 지시서 테스트 계획의 단계(있으면 참고용). */
   steps?: string[];
+  /** 기준의 출처: 사용자의 말(지시서·기획서·사용자가 적은 항목) / 추론만. 추론만인 기준은 must가 될 수 없다. */
+  origin?: "spec" | "user_text" | "user_checked" | "inferred";
 }
 
 /**
@@ -82,6 +84,8 @@ export const AC_REASON_CODES = [
   "guessed_address",
   "judge_disagreed",
   "write_not_allowed",
+  "fail_not_reproduced",
+  "input_rejected",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -301,6 +305,33 @@ export function isPrematureGiveUp(a: AgentAction, stepsUsed: number, maxSteps: n
   return a.type === "judge" && a.verdict === "not_verified" && !a.reasonCode && stepsUsed < maxSteps / 2;
 }
 
+/**
+ * (G3, prod bench1 run 2) 에이전트가 고를 수 있는 "막힌 이유"는 관찰로 뒷받침될 때만 인정한다.
+ * 실측: 첫 화면이 열린 뒤(행동 2~8걸음) "app_missing"을 골라 이른 포기 되돌림(F3)을 빠져나갔다 — 리포트엔 "앱 첫 화면이
+ * 열리지 않아"로 거짓 표시. app_missing은 실행기가 첫 화면에서만 판정한다(에이전트는 못 쓴다). login_required는 로그인 벽이
+ * 보일 때만, write_not_allowed는 읽기 전용 런일 때만. 뒷받침 없는 코드는 지운다(→ 사유 없는 확인 못 함 규칙을 탄다).
+ */
+export function sanitizeAgentReasonCode(
+  code: AcReasonCode | undefined,
+  ctx: { loginGate: LoginGate; readOnly: boolean },
+): AcReasonCode | undefined {
+  if (!code) return undefined;
+  if (code === "app_missing" || code === "budget" || code === "evidence_missing" || code === "judge_disagreed" || code === "guessed_address") return undefined;
+  if ((code === "login_required" || code === "login_failed") && !ctx.loginGate) return undefined;
+  if ((code === "oauth_unsupported") && ctx.loginGate !== "oauth") return undefined;
+  if ((code === "sms_unsupported") && ctx.loginGate !== "sms") return undefined;
+  if (code === "write_not_allowed" && !ctx.readOnly) return undefined;
+  return code;
+}
+
+/**
+ * (G1) 우리 입력이 앱의 입력 검사에 걸린 것인가(형식 안내). 이런 "실패"는 앱 고장이 아니라 우리 입력 문제 — 입력을 고쳐
+ * 다시 해 본다(실측: Lovable "휴대폰 번호 오류"로 완료를 못 하고 실패 쪽으로 기울었다).
+ */
+export function looksLikeInputValidation(text: string): boolean {
+  return /(형식|올바른|유효한|정확히 입력|다시 입력|입력해\s*주세요|입력하세요|번호 오류|숫자만|자리|invalid|valid (phone|email|number)|format|required field|please enter)/i.test(text ?? "");
+}
+
 /** (F6) 기준 문장(제목·전제·행동·결과·단계)에 그 경로가 그대로 적혀 있는가 — 그런 주소만 링크 없이 열 수 있다. */
 export function criterionNamesPath(criterionText: string, url: string): boolean {
   let path = "";
@@ -428,6 +459,8 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     guessed_address: "앱에 연결되지 않은 주소를 짐작해 열어 본 결과라 고장으로 치지 않았어요",
     judge_disagreed: "두 번 따져 본 판단이 서로 달라서 결과로 치지 않았어요",
     write_not_allowed: "시험 데이터를 만들어도 된다는 동의가 없어 입력·제출은 하지 않았어요 — 확인 요청에서 동의해 주시면 끝까지 해 봐요",
+    fail_not_reproduced: "처음엔 안 되는 것처럼 보였지만 새 브라우저에서 꼼꼼히 다시 해 보니 같은 실패가 나오지 않아 고장으로 치지 않았어요",
+    input_rejected: "앱이 우리가 넣은 시험 입력의 형식을 계속 받지 않아 이 단계를 끝내지 못했어요 — 고장으로 치지 않았어요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -444,6 +477,8 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     guessed_address: "That result came from an address we guessed (not linked from the app), so it isn't counted as a defect",
     judge_disagreed: "A second, independent review disagreed with the result, so it isn't counted",
     write_not_allowed: "You didn't allow test data, so we didn't type or submit anything — allow it in the check request and we'll go all the way",
+    fail_not_reproduced: "A first attempt looked broken, but repeating it carefully in a fresh browser did not reproduce the failure — so we don't call it a defect",
+    input_rejected: "The app kept rejecting our test input format, so we couldn't complete this step — not counted as a defect",
   },
 };
 
@@ -707,7 +742,7 @@ const RSTR = {
       sweep: "기준은 통과했거나 확인 전이지만, 열리지 않는 화면이나 오류가 나는 버튼이 있어요.",
       appMissing: "앱 첫 화면이 열리지 않아요.",
       notVerified: (n: number) => `핵심 기준 중 ${n}개를 확인하지 못해 아직 "작동한다"고 말할 수 없어요.`,
-      noMust: "확인할 핵심 기준이 없어 판단하지 않았어요.",
+      noMust: "꼭 되어야 하는 것으로 체크하신 항목이 없어서, 핵심 기능이 된다·안 된다를 판단하지 않았어요. '맞나요?'에서 꼭 되어야 하는 것에 체크하시면 그 기준으로 판단해 드려요.",
       publicOnly: "로그인 없이 할 수 있는 핵심 일은 실제로 해 봤고 문제를 찾지 못했어요. 로그인 뒤 화면은 확인하지 못했어요 — 시험 계정을 주시면 들어가서 확인해요.",
       notExercised: "보이는 것은 기준대로였지만, 핵심 일을 실제로 끝까지 해 보고 결과가 남는지까지는 확인하지 못해 아직 '작동한다'고 말할 수 없어요.",
     },
@@ -749,7 +784,7 @@ const RSTR = {
       sweep: "The criteria passed or weren't verified, but some screens don't open or some buttons throw errors.",
       appMissing: "The app's first screen does not open.",
       notVerified: (n: number) => `We couldn't verify ${n} core criteria, so we can't say it works yet.`,
-      noMust: "There were no core criteria to check, so no judgement was made.",
+      noMust: "You didn't check anything as must-work, so we didn't judge whether the core works or is broken. Check the things that must work in 'Is this right?' and we'll judge against them.",
       publicOnly: "We performed the main job that works without signing in and found no problem. Screens behind sign-in were not checked — give us a test account and we'll check them.",
       notExercised: "What's on screen matched, but we couldn't complete the app's main job end to end and confirm the result stays — so we can't say it works yet.",
     },
@@ -1143,7 +1178,8 @@ export function parseInferredAcs(text: string): AgentAc[] {
       given: str(r["given"], 600) ?? "",
       when: str(r["when"], 600) ?? "",
       then,
-      priority: r["priority"] === "must" ? "must" : "should",
+      // 2026-10-06 Bae 결정: 런에서 추정한 기준은 사용자가 고른 게 아니다 — 살펴보되 should로만(고칠 것을 만들지 않는다).
+      priority: "should",
       confirmed: false,
     });
     if (out.length >= 8) break;
@@ -1285,7 +1321,12 @@ export function coreOutcomeAc(intent: string, confirmed: boolean, locale: Report
 }
 
 export function withCoreOutcomeAc(acs: readonly AgentAc[], intent: string, confirmed: boolean, locale: ReportLocale = "ko"): AgentAc[] {
-  return acs.some((a) => a.id === CORE_OUTCOME_AC_ID) ? [...acs] : [coreOutcomeAc(intent, confirmed, locale), ...acs];
+  if (acs.some((a) => a.id === CORE_OUTCOME_AC_ID)) return [...acs];
+  // 2026-10-06 Bae 결정: 사용자가 꼭 되어야 한다고 고른 기준(확인된 must)이 하나도 없으면, 기본 기준도 must가 아니다 —
+  //  "핵심이 된다/안 된다"를 사용자 대신 정하지 않는다(살펴보되 판정은 '확인 못 함' + 체크 안내).
+  const userMust = acs.some((a) => a.priority === "must" && a.confirmed);
+  const core = coreOutcomeAc(intent, confirmed, locale);
+  return [userMust ? core : { ...core, priority: "should" }, ...acs];
 }
 
 /** must 먼저, 상한. */
@@ -1419,6 +1460,7 @@ export function acsFromAgentReport(reportJson: string | null | undefined): Agent
       given: typeof r["given"] === "string" ? r["given"] : "",
       when: typeof r["when"] === "string" ? r["when"] : "",
       confirmed: r["confirmed"] === true,
+      ...(r["origin"] === "spec" || r["origin"] === "user_text" || r["origin"] === "user_checked" || r["origin"] === "inferred" ? { origin: r["origin"] as AgentAc["origin"] } : {}),
       ...(Array.isArray(r["steps"]) ? { steps: (r["steps"] as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 30) } : {}),
     });
   }

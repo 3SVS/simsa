@@ -193,6 +193,17 @@ export async function runAgentInspection(o) {
         }
         const acArgs = { ac, o, pure, driver, callLlm, locale, data, hasCredentials: loginMethod === "credentials" || loginMethod === "handover", loginFailed, handoverState, deadline, shot, plog };
         let r = await runOneAc(acArgs);
+        // (G1) prod bench1 run 2: 사람에겐 되는 앱에 "제출해도 완료 화면이 안 나와요" 같은 거짓 실패가 나왔다. 실패는 고침 지시를
+        //  만드는 가장 해로운 출력이다 — 새 브라우저에서 강한 모델이 행동까지 골라 **다시 재현될 때만** 실패로 남긴다.
+        if (r.status === "fail" && timeLeft() > 60_000 && !llmCalls.budgetExhausted) {
+          const rep = await runOneAc({ ...acArgs, reproduceOf: r });
+          plog(`ac ${ac.id} fail-repro → ${rep.status}`);
+          if (rep.status === "fail") {
+            r = { ...r, evidence: [...r.evidence, ...rep.evidence].slice(0, 4), reproduced: true };
+          } else {
+            r = { ...r, status: "not_verified", reason: pure.reasonText("fail_not_reproduced", locale), reasonCode: "fail_not_reproduced", evidence: [] };
+          }
+        }
         // (1) 시각 경계: 날짜·시간에 걸린 must가 통과하면 기기 시계를 한국 시간 새벽 00:30으로 옮겨 한 번 더.
         if (r.status === "pass" && ac.priority === "must" && pure.isTimeRelated(ac) && timeLeft() > 90_000 && !llmCalls.budgetExhausted) {
           const iso = pure.kstEarlyMorningIso(Date.now());
@@ -297,7 +308,7 @@ export async function runAgentInspection(o) {
     };
   }
 
-  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null }) {
+  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null, reproduceOf = null }) {
     async function startFresh() {
       if (driver.newSession) {
         await driver.newSession(o.targetUrl, handoverState ?? null).catch(() => driver.goto(o.targetUrl));
@@ -336,6 +347,11 @@ export async function runAgentInspection(o) {
     const system = pure.agentSystemPrompt(locale, { readOnly: o.readOnly === true });
     let nudges = 0;
     let disagreements = 0;
+    let validationNudges = 0;
+    let turnTier = "cheap";
+    if (reproduceOf) {
+      history.push(`(an earlier attempt concluded FAIL: "${red(reproduceOf.reason)}". Re-check independently and carefully in this fresh browser — do every required step (choose service/date/time, valid inputs), then look. Judge fail only if you SEE it fail again.)`);
+    }
     // (F5) 진전 없는 행동 감지 → 다음 턴은 강한 모델. (F6) 짐작한 주소로의 이동은 막는다.
     let stuck = 0;
     let lastDesc = "";
@@ -357,7 +373,9 @@ export async function runAgentInspection(o) {
           ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
           stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(),
         });
-        text = await callLlm(system, lastPrompt, 700, escalate ? "strong" : "cheap");
+        // (G1) 실패 재현 런은 행동도 강한 모델이 고른다.
+        turnTier = escalate || reproduceOf ? "strong" : "cheap";
+        text = await callLlm(system, lastPrompt, 700, turnTier);
         escalate = false;
       } catch (err) {
         const code = /budget/.test(String(err?.message ?? err)) ? "budget" : "agent_error";
@@ -367,7 +385,7 @@ export async function runAgentInspection(o) {
       // (F2) 싼 모델은 길 찾기(행동)만 — 판정은 강한 모델이 한다. 진단: 행동·판정 모두 gpt-5.4-mini가 냈고(런당 41~67회),
       //  강한 모델(gpt-5.4)은 재확인 3~6회뿐이었다. 싼 모델이 judge를 내면 같은 관찰로 강한 모델에 다시 묻는다
       //  (강한 모델이 "더 해 보라"며 행동을 내면 그 행동을 따른다).
-      if (parsed.ok && parsed.action.type === "judge") {
+      if (parsed.ok && parsed.action.type === "judge" && turnTier === "cheap") {
         try {
           const strongText = await callLlm(system, lastPrompt, 700, "strong");
           const strong = pure.parseAgentAction(strongText, o.targetUrl);
@@ -388,14 +406,31 @@ export async function runAgentInspection(o) {
         continue;
       }
       invalidStreak = 0;
-      const a = parsed.action;
+      let a = parsed.action;
+      // (G3) 관찰로 뒷받침되지 않는 "막힌 이유"는 지운다(app_missing을 골라 되돌림을 빠져나가던 것).
+      if (a.type === "judge" && a.reasonCode) {
+        const rc = pure.sanitizeAgentReasonCode(a.reasonCode, { loginGate: lastGate, readOnly: o.readOnly === true });
+        if (rc !== a.reasonCode) {
+          const { reasonCode: _drop, ...rest } = a;
+          a = rc ? { ...rest, reasonCode: rc } : rest;
+        }
+      }
       if (a.type === "judge") {
         // (F3) 진단: 기준 대부분이 사유 없는 "아직 확인하지 못했어요"로 몇 걸음(0~7) 만에 끝났다 — 단계 상한(14·24)도 시간
         //  상한(13분, 실제 150~206초)도 아닌 **스스로 멈춤**. 사유 코드 없는 확인 못 함은 단계가 절반 넘게 남았으면 두 번까지 되돌려
         //  보낸다(막힌 이유가 있으면 reasonCode로 말해야 끝낼 수 있다).
+        // (G1) 앱이 우리 입력 형식을 거절한 것이면 고장이 아니다 — 입력을 고쳐 다시(두 번까지), 그래도면 input_rejected.
+        if (a.verdict === "fail" && pure.looksLikeInputValidation(`${a.reason} ${a.evidenceQuote}`)) {
+          if (validationNudges < 2 && steps < maxSteps - 2) {
+            validationNudges += 1;
+            history.push("(not accepted: that message looks like the app rejecting OUR input format — not an app defect. Correct the input and retry: e.g. phone as 01012345678 or 010-1234-5678, a full Korean name, required choices selected.)");
+            continue;
+          }
+          return finish({ status: "not_verified", reason: pure.reasonText("input_rejected", locale), reasonCode: "input_rejected", evidence: [] });
+        }
         if (pure.isPrematureGiveUp(a, steps, maxSteps) && nudges < 2) {
           nudges += 1;
-          history.push(`(not accepted: you still have ${maxSteps - steps} actions. Actually perform the steps of the criterion — choose options, fill fields, submit, then look. Only stop early with a reasonCode such as login_required, write_not_allowed, api_key_required, app_missing.)`);
+          history.push(`(not accepted: you still have ${maxSteps - steps} actions. Actually perform the steps of the criterion — choose options, fill fields, submit, then look. Only stop early when a real blocker is on screen: a login wall (login_required) or the app asking for the user's own API key (api_key_required).)`);
           continue;
         }
         const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale, onGuessedAddress });

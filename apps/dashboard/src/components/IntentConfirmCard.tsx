@@ -131,7 +131,11 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
       setInferredOneLine((spec.oneLine ?? "").trim());
       // 읽기 실패 뒤 사용자가 이미 적어 둔 문장은 다시 읽기가 덮어쓰지 않는다.
       setOneLine((prev) => (prev.trim() ? prev : draft.initialOneLine));
-      setItems((data.inferred.items ?? []).slice(0, 12));
+      const loaded = (data.inferred.items ?? []).slice(0, 12);
+      setItems(loaded);
+      // 2026-10-06 Bae 결정("기본 체크 해제"): 추론 항목은 **체크 해제로 시작**한다. 사용자가 직접 체크한 것과 "빠진 것"에
+      // 적은 것만 '안 되면 고쳐야 해요'(must) 기준이 된다. 체크 안 한 항목도 검사는 하지만 고칠 것으로 판단하지 않는다.
+      setDropped(new Set(loaded.map((i) => i.id)));
       setPhase("ready");
     } catch {
       setPhase("error");

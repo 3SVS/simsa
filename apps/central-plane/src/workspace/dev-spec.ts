@@ -200,6 +200,11 @@ export const DevSpecProvenanceSchema = z
       .optional(),
     /** 유저가 확인한 수용 기준 id — inferred에서 must는 이 목록 안의 AC만. */
     userConfirmedAcIds: z.array(AcceptanceId).max(200).optional(),
+    /**
+     * 2026-10-06(prod bench1 run 2 진단): 사용자가 **자기 말로 적은** 항목(카드의 "빠진 것" — item id `user_…`)에서 나온 AC.
+     * 추론 항목을 기본 체크로 넘긴 것과 구분한다 — 추론만으로 생긴 기준은 실행기에서 should로 다룬다(agentAcsFromDevSpec).
+     */
+    userTextAcIds: z.array(AcceptanceId).max(200).optional(),
   })
   .strict();
 

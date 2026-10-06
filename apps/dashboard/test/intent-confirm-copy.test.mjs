@@ -79,9 +79,11 @@ describe("③ 근거를 밝힌다", () => {
     assert.match(DICTIONARIES.en.intentConfirm.readFrom, /drafted from|read from/i);
   });
 
-  it("항목을 지울 수 있다고 안내한다 — 지어낸 항목에 갇히지 않도록", () => {
-    assert.match(DICTIONARIES.ko.intentConfirm.itemsHint, /체크를 풀|상관없/);
-    assert.match(DICTIONARIES.en.intentConfirm.itemsHint, /uncheck|not really/i);
+  // 2026-10-06 Bae 결정 "기본 체크 해제": 항목은 체크 해제로 시작한다 — 지어낸 항목에 갇히지 않도록, 이제는
+  // "지우라"가 아니라 "꼭 되어야 하는 것에 체크하라"고 안내한다(체크한 것만 고칠 것으로 판단).
+  it("꼭 되어야 하는 것에 체크하라고 안내한다 — 체크 안 한 추론 항목은 고칠 것이 되지 않는다", () => {
+    assert.match(DICTIONARIES.ko.intentConfirm.itemsHint, /꼭 되어야 하는 것에 체크/);
+    assert.match(DICTIONARIES.en.intentConfirm.itemsHint, /check the things that must work/i);
   });
 });
 

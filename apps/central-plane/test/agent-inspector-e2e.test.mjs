@@ -207,6 +207,10 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     assert.ok(usage.every((u) => u.job_kind === "inspection" && u.call_site === "inspect_agent"));
     const spend = T.db.prepare(`SELECT spent_usd, calls FROM inspection_agent_spend WHERE run_id = ?`).get(runId);
     assert.ok(spend.spent_usd > 0 && spend.calls === usage.length);
+    // (G4) 런 비용이 리포트에(원장 합산) — 벤치 결과가 그대로 쓴다.
+    assert.ok(report.agent.costUsd > 0, JSON.stringify(report.agent.costUsd));
+    assert.equal(report.agent.llmCallsRecorded, usage.length);
+    assert.ok(Object.keys(report.agent.callsByModel).length >= 1);
 
     // 끝난 런의 토큰으로는 더 못 쓴다
     const late = await T.post("/internal/inspect-llm/v1/messages", { system: "s", user: "u" }, { authorization: `Bearer ${payload.agent.llmToken}` });

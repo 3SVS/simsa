@@ -211,6 +211,27 @@ export function agentAcsForRun(
   return { acs: [], acSource: "inferred_at_run" };
 }
 
+/** (G4) 이 런의 agent LLM 비용(원장 합산). 행동(싼)·판정(강한) 요청 모델별 호출 수도. */
+export async function agentRunCostUsd(
+  env: Env,
+  runId: string,
+): Promise<{ costUsd: number; llmCallsRecorded: number; unpricedCalls: number; callsByModel: Record<string, number> } | null> {
+  const rows = await env.DB.prepare(
+    `SELECT model_actual, COUNT(*) AS n, COALESCE(SUM(cost_usd), 0) AS usd, COALESCE(SUM(unpriced), 0) AS unpriced
+       FROM llm_usage WHERE job_kind = 'inspection' AND call_site = 'inspect_agent' AND job_id = ? GROUP BY model_actual`,
+  )
+    .bind(runId)
+    .all<{ model_actual: string; n: number; usd: number; unpriced: number }>();
+  const list = rows.results ?? [];
+  if (list.length === 0) return null;
+  return {
+    costUsd: Math.round(list.reduce((s, r) => s + Number(r.usd), 0) * 10_000) / 10_000,
+    llmCallsRecorded: list.reduce((s, r) => s + Number(r.n), 0),
+    unpricedCalls: list.reduce((s, r) => s + Number(r.unpriced), 0),
+    callsByModel: Object.fromEntries(list.map((r) => [String(r.model_actual ?? "?").slice(0, 60), Number(r.n)])),
+  };
+}
+
 /** C13: 리포트의 agent.defects를 닫힌 어휘로만 저장(모르는 값은 버린다). */
 export async function recordAgentDefects(env: Env, runId: string, report: Record<string, unknown>): Promise<number> {
   if (report["engine"] !== "agent") return 0;
@@ -1068,6 +1089,12 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     if (body.report !== undefined && body.report !== null && typeof body.report === "object" && !Array.isArray(body.report)) {
       // C2b/C4a — builderPrompt in the RUN's locale (the report prose is already
       // in that language) + finding codes for the failure map.
+      // (G4) agent 런의 실제 LLM 비용 — 원장(llm_usage, 실제로 답한 모델의 단가)에서 합산해 리포트에 싣는다(벤치 결과에 그대로).
+      if ((body.report as Record<string, unknown>)["engine"] === "agent") {
+        const agentPart = (body.report as Record<string, unknown>)["agent"];
+        const cost = await agentRunCostUsd(c.env, body.runId).catch(() => null);
+        if (cost && agentPart && typeof agentPart === "object") Object.assign(agentPart as Record<string, unknown>, cost);
+      }
       // B6: agent 재검수는 원 런과 AC별로 비교해 "새로 깨진 것"을 리포트에 싣는다.
       if (run.sourceCheckId && (body.report as Record<string, unknown>)["engine"] === "agent") {
         const origin = await getVisualCheckById(c.env, run.sourceCheckId).catch(() => null);

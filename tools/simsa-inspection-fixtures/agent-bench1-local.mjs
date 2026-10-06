@@ -113,7 +113,7 @@ function localProxyLlm(events) {
 
 /**
  * "맞나요?" 카드에 답하는 사용자 흉내 — 카드의 실제 모양 그대로(IntentConfirmCard):
- *   ① 한 줄 의도(내가 원래 원한 것) ② 추론 항목은 **기본 체크**, 내 요청과 어긋나는 것만 해제
+ *   ① 한 줄 의도(내가 원래 원한 것) ② 추론 항목은 **체크 해제로 시작**(2026-10-06 Bae 결정) — 내 요청이 분명히 말하는 것만 체크
  *   ③ "빠졌는데 꼭 되어야 하는 것" — 내 요청에 있는데 목록에 없는 것을 한 줄씩(intent-missing.mjs와 같은 user_N 항목)
  * 아는 것은 **빌더에 넣은 프롬프트 원문뿐**이다(정답지는 보지 않는다). 항목마다 이유를 남긴다.
  */
@@ -123,7 +123,7 @@ export async function confirmFromPrompt(items, events) {
   const text = await llm({
     system: [
       "You simulate a non-developer filling in an app checker's 'Is this right?' card. The ONLY thing you know is the request you typed into the AI builder (below) — answer from that text, not from what would be easy to pass.",
-      "The card has: (1) a one-sentence description of what you wanted, (2) the checker's inferred items, all checked by default — uncheck only items that contradict your request, (3) a box 'anything missing that must work?' — list, one per line in Korean, every requirement your request states (especially outcomes: what must actually happen, who must see it, what must be prevented, what must survive) that the inferred items do not already cover.",
+      "The card has: (1) a one-sentence description of what you wanted, (2) the checker's inferred items, all UNCHECKED by default — check ONLY items your request clearly asks for (checked items are judged 'must work'); leave everything else unchecked, (3) a box 'anything missing that must work?' — list, one per line in Korean, every requirement your request states (especially outcomes: what must actually happen, who must see it, what must be prevented, what must survive) that the inferred items do not already cover.",
       'Reply JSON only: {"oneLine":"...","items":[{"id":"...","keep":true|false,"why":"..."}],"missing":[{"text":"...","why":"..."}]}',
     ].join("\n"),
     user: `My request to the builder (verbatim):\n${REGISTERED_PROMPT}\n\nItems the checker inferred from my app:\n${list}`,
@@ -139,7 +139,8 @@ export async function confirmFromPrompt(items, events) {
   const verdicts = new Map((Array.isArray(parsed.items) ? parsed.items : []).map((x) => [x?.id, x]));
   const kept = items.map((it) => {
     const v = verdicts.get(it.id);
-    return { id: it.id, title: it.title, confirmed: v?.keep !== false, why: String(v?.why ?? "기본 체크 유지").slice(0, 200) };
+    // 기본은 체크 해제 — 흉내 사용자가 명시적으로 체크(keep:true)한 것만 확인 목록.
+    return { id: it.id, title: it.title, confirmed: v?.keep === true, why: String(v?.why ?? "체크하지 않음(기본)").slice(0, 200) };
   });
   const missing = (Array.isArray(parsed.missing) ? parsed.missing : [])
     .map((x) => ({ text: String(x?.text ?? "").trim().slice(0, 200), why: String(x?.why ?? "").slice(0, 200) }))

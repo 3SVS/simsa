@@ -85,6 +85,10 @@ export function agentAcsFromDevSpec(devSpec: unknown, opts: { max?: number } = {
   for (const t of spec.testPlan) if (t.kind === "browser") stepsByAc.set(t.acceptanceId, t.steps);
   const inferred = spec.meta.source === "inferred";
   const confirmedIds = new Set(spec.meta.provenance?.userConfirmedAcIds ?? []);
+  // 2026-10-06: 역추론 지시서에서 사용자가 자기 말로 적지 않은(추론만으로 생긴) 기준은 must여도 should로 — 그 실패가
+  // "고쳐야 해요"를 만들면 안 된다(지어낸 요구로 고침 지시를 만든다). userTextAcIds가 없는 옛 지시서는 종전대로.
+  const userText = spec.meta.provenance?.userTextAcIds;
+  const userTextIds = userText ? new Set(userText) : null;
   const out: AgentAc[] = [];
   for (const a of spec.acceptance) {
     if (a.verifiedBy === "human") continue;
@@ -97,8 +101,11 @@ export function agentAcsFromDevSpec(devSpec: unknown, opts: { max?: number } = {
       given: a.given,
       when: a.when,
       then: a.then,
-      priority: f.priority,
+      // 2026-10-06 Bae 결정("기본 체크 해제"): 카드의 추론 항목은 체크 해제로 시작하므로, 확인 목록(userConfirmedAcIds)은
+      //  사용자가 **직접 체크한** 것이다. must = 직접 체크 + 직접 적은 것. 그 밖(추론만)의 must는 should로.
+      priority: inferred && !confirmedIds.has(a.id) && !userTextIds?.has(a.id) && f.priority === "must" ? "should" : f.priority,
       confirmed: !inferred || confirmedIds.has(a.id),
+      origin: !inferred ? "spec" : userTextIds?.has(a.id) ? "user_text" : confirmedIds.has(a.id) ? "user_checked" : "inferred",
       ...(steps ? { steps } : {}),
     });
   }
