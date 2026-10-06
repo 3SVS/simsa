@@ -560,3 +560,251 @@ export function normalizeKnownUrl(u: string): string {
     return u;
   }
 }
+
+// ─── S3 가설·계획 ─────────────────────────────────────────────────────────────
+
+export interface V2Hypothesis {
+  id: string;
+  /** 위험(비개발자 말 아님 — 모델·기록용). */
+  risk: string;
+  /** 무엇을 하면 무엇이 관찰되어야 참/거짓인가. */
+  test: string;
+  /** 근거가 된 정적 사실(있으면). */
+  basis?: string;
+}
+
+export interface V2PlanItem {
+  acId: string;
+  steps: string[];
+  probes: string[];
+}
+
+export interface V2Plan {
+  hypotheses: V2Hypothesis[];
+  items: V2PlanItem[];
+}
+
+/**
+ * 정적 사실 → 시작 가설(결정론, 일반 규칙 — 특정 앱·주제에 맞추지 않는다). 모델은 이것을 출발점으로 더하고 고친다.
+ * 가설은 판정 근거가 아니다 — 각 가설은 실행으로 참/거짓을 가린다(V-4).
+ */
+export function seedHypotheses(facts: readonly StaticFact[]): V2Hypothesis[] {
+  const has = (k: StaticFactKind) => facts.filter((f) => f.kind === k);
+  const out: V2Hypothesis[] = [];
+  const add = (risk: string, test: string, basis?: StaticFact) =>
+    out.push({ id: `H${out.length + 1}`, risk, test, ...(basis ? { basis: `${basis.kind}:${basis.value}` } : {}) });
+  const backend = has("backend_client").length > 0 || has("external_endpoint").some((f) => !/anthropic|openai|googleapis/i.test(f.value));
+  const ls = has("local_storage_key").filter((f) => !/supabase|gotrue|theme|locale|lang/i.test(f.value));
+  if (ls.length > 0 && !backend) {
+    add(
+      "Data the user creates may live only in this browser (localStorage) — other people/devices/roles would never see it.",
+      "Create a record, then open the screen that must show it in a NEW browser (new_context) and as the other role; check storage_dump and network_log for a write request.",
+      ls[0],
+    );
+  }
+  const ph = has("placeholder_config")[0];
+  if (ph) add("The backend connection may still contain a placeholder, so saving/loading would fail.", "Submit the core action and read network_log for failing requests to that backend; console_errors.", ph);
+  const utc = has("utc_date")[0];
+  if (utc) add("Dates are cut from UTC time; in Korea between 00:00 and 09:00 'today' would be yesterday.", "set_clock to today 00:30 KST and check which date the app treats as today / which slots it shows.", utc);
+  const rnd = has("random_result")[0];
+  if (rnd) add("Results may be random or fixed rather than computed from the input.", "Run the core action twice with clearly different inputs and compare the results; grep the source near the random call.", rnd);
+  const llmDirect = has("external_endpoint").find((f) => /api\.anthropic\.com|api\.openai\.com|generativelanguage\.googleapis/i.test(f.value));
+  if (llmDirect) add("The app calls an AI service directly from the browser; without a key in the page it cannot work for visitors.", "Use the core feature and read network_log for that call's status/response.", llmDirect);
+  add(
+    "The app may do a different job than the owner intended (e.g. a manual checklist instead of an automatic check, a brochure instead of a working service).",
+    "Use the core feature with the input the intent implies; check in network_log whether anything is sent to the target / backend; read the source of the result screen.",
+  );
+  return out;
+}
+
+/** 모델이 낸 계획을 정리하고 빠진 must 기준을 알려 준다(빠지면 실행기가 돌려보낸다). */
+export function normalizePlan(raw: unknown, acs: readonly AgentAc[]): { plan: V2Plan; missingMust: string[] } {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const strs = (v: unknown, n: number, len = 300) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string" && s.trim().length > 0).map((s) => s.slice(0, len)).slice(0, n) : []);
+  const ids = new Set(acs.map((a) => a.id));
+  const items: V2PlanItem[] = [];
+  for (const it of Array.isArray(r["items"]) ? (r["items"] as unknown[]) : []) {
+    if (!it || typeof it !== "object") continue;
+    const x = it as Record<string, unknown>;
+    const acId = typeof x["acId"] === "string" ? x["acId"] : "";
+    if (!ids.has(acId) || items.some((i) => i.acId === acId)) continue;
+    items.push({ acId, steps: strs(x["steps"], 15), probes: strs(x["probes"], 10) });
+  }
+  const hypotheses: V2Hypothesis[] = [];
+  for (const h of Array.isArray(r["hypotheses"]) ? (r["hypotheses"] as unknown[]) : []) {
+    if (!h || typeof h !== "object") continue;
+    const x = h as Record<string, unknown>;
+    if (typeof x["risk"] !== "string" || typeof x["test"] !== "string") continue;
+    hypotheses.push({ id: `H${hypotheses.length + 1}`, risk: x["risk"].slice(0, 300), test: x["test"].slice(0, 400) });
+    if (hypotheses.length >= 15) break;
+  }
+  const missingMust = acs.filter((a) => a.priority === "must" && !items.some((i) => i.acId === a.id && i.steps.length > 0)).map((a) => a.id);
+  return { plan: { hypotheses, items }, missingMust };
+}
+
+/** 계획 → 증거물 원문(재검사 때 그대로 재사용 — L 단계). */
+export function planText(plan: V2Plan): string {
+  return JSON.stringify(plan);
+}
+
+/** 원 런 리포트에서 v2 계획을 꺼낸다(재검사 = 같은 계획, X-4). 없거나 v2가 아니면 null. */
+export function v2PlanFromReport(reportJson: string | null | undefined): V2Plan | null {
+  if (!reportJson) return null;
+  try {
+    const r = JSON.parse(reportJson) as { engineVersion?: unknown; agent?: { v2?: { plan?: unknown } } };
+    if (r?.engineVersion !== "v2" || !r.agent?.v2?.plan || typeof r.agent.v2.plan !== "object") return null;
+    const p = r.agent.v2.plan as Record<string, unknown>;
+    const strs = (v: unknown, n: number) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string").map((s) => s.slice(0, 400)).slice(0, n) : []);
+    const items = (Array.isArray(p["items"]) ? (p["items"] as unknown[]) : [])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && typeof (x as Record<string, unknown>)["acId"] === "string")
+      .slice(0, 15)
+      .map((x) => ({ acId: String(x["acId"]).slice(0, 40), steps: strs(x["steps"], 15), probes: strs(x["probes"], 10) }));
+    const hypotheses = (Array.isArray(p["hypotheses"]) ? (p["hypotheses"] as unknown[]) : [])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+      .slice(0, 15)
+      .map((x, i) => ({ id: `H${i + 1}`, risk: String(x["risk"] ?? "").slice(0, 300), test: String(x["test"] ?? "").slice(0, 400) }));
+    return items.length || hypotheses.length ? { hypotheses, items } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 원 런이 v2였는가(재검사가 엔진을 물려받는다). */
+export function wasAgentV2Report(reportJson: string | null | undefined): boolean {
+  if (!reportJson) return false;
+  try {
+    const r = JSON.parse(reportJson) as { engine?: unknown; engineVersion?: unknown };
+    return r?.engine === "agent" && r?.engineVersion === "v2";
+  } catch {
+    return false;
+  }
+}
+
+// ─── S3 도구 정의 · 지시 ──────────────────────────────────────────────────────
+
+type JsonSchema = Record<string, unknown>;
+export interface V2ToolDef {
+  type: "function";
+  name: string;
+  description: string;
+  parameters: JsonSchema;
+  strict: true;
+}
+
+const nullableStr: JsonSchema = { type: ["string", "null"] };
+const TARGET: JsonSchema = {
+  type: "object",
+  description: "Element to act on: accessible role+name from observe, or a label / placeholder / visible text (others null).",
+  properties: { role: nullableStr, name: nullableStr, label: nullableStr, placeholder: nullableStr, text: nullableStr },
+  required: ["role", "name", "label", "placeholder", "text"],
+  additionalProperties: false,
+};
+const STR_ARR: JsonSchema = { type: "array", items: { type: "string" } };
+
+function tool(name: string, description: string, properties: Record<string, JsonSchema>): V2ToolDef {
+  return { type: "function", name, description, parameters: { type: "object", properties, required: Object.keys(properties), additionalProperties: false }, strict: true };
+}
+
+export const V2_TOOLS: readonly V2ToolDef[] = [
+  tool("observe", "See the current screen: address, accessibility tree, visible text, links. screenshot:true adds an image.", { screenshot: { type: "boolean" } }),
+  tool("click", "Click an element.", { target: TARGET }),
+  tool("fill", "Type into an input (replaces its content).", { target: TARGET, value: { type: "string" } }),
+  tool("select", "Choose an option of a <select>.", { target: TARGET, value: { type: "string" } }),
+  tool("press", "Press a key (Enter, Tab, Escape, ArrowDown, Space…).", { key: { type: "string" } }),
+  tool("navigate", "Open an address of this app — ONLY one you saw (links, requests, routes in the source) or that a criterion names. Guessed addresses are refused.", { url: { type: "string" } }),
+  tool("back", "Browser back.", {}),
+  tool("reload", "Reload (same browser, same storage).", {}),
+  tool("wait", "Wait for the app (ms ≤ 8000).", { ms: { type: "integer" } }),
+  tool("network_log", "Requests the app made in this browser: method, url, status, request/response body excerpts. filter = url substring or null.", { filter: nullableStr, last: { type: "integer" } }),
+  tool("storage_dump", "localStorage/sessionStorage keys, sizes and value excerpts; IndexedDB names; cookie names.", {}),
+  tool("list_sources", "Same-origin HTML/JS/CSS files this page loaded.", {}),
+  tool("read_source", "Read a same-origin source file. offset/length in characters (length ≤ 12000).", { url: { type: "string" }, offset: { type: "integer" }, length: { type: "integer" } }),
+  tool("grep_source", "Regex search over the same-origin sources (and page HTML). Returns file + surrounding code.", { pattern: { type: "string" } }),
+  tool("console_errors", "Console errors and uncaught exceptions in this browser.", {}),
+  tool("new_context", "Open a NEW browser with no cookies/storage (another customer, another device, the owner) at an address of this app. timezone = IANA name or null (Asia/Seoul).", { url: { type: "string" }, timezone: nullableStr }),
+  tool("set_clock", "Set this browser's clock to an ISO time and reload (date/time behaviour).", { iso: { type: "string" } }),
+  tool("set_viewport", "Resize the screen (e.g. 390x844 phone); reports sideways overflow.", { width: { type: "integer" }, height: { type: "integer" } }),
+  tool("record_plan", "Record hypotheses (risks + how to test them) and the QA plan: per criterion the steps and adversarial probes. Required before verdicts; saved and reused on re-check.", {
+    hypotheses: { type: "array", items: { type: "object", properties: { risk: { type: "string" }, test: { type: "string" } }, required: ["risk", "test"], additionalProperties: false } },
+    items: { type: "array", items: { type: "object", properties: { acId: { type: "string" }, steps: STR_ARR, probes: STR_ARR }, required: ["acId", "steps", "probes"], additionalProperties: false } },
+  }),
+  tool("record_verdict", "Verdict for ONE criterion, or acId \"INTENT\" for the intent comparison. Cite evidence ids (ev-N) and quote the key values exactly as they appear in that evidence.", {
+    acId: { type: "string" },
+    verdict: { type: "string", enum: ["pass", "fail", "not_verified", "mismatch"] },
+    claim: { type: "string" },
+    artifactIds: STR_ARR,
+    quotes: STR_ARR,
+    reasonCode: { type: ["string", "null"], enum: ["login_required", "oauth_unsupported", "sms_unsupported", "api_key_required", "unsafe_action", "write_not_allowed", "not_reached", null] },
+    cause: {
+      type: ["object", "null"],
+      description: "For fail/mismatch: the cause in the app's code — file url, function/area, an exact snippet copied from read_source/grep_source, and a plain explanation.",
+      properties: { file: { type: "string" }, where: { type: "string" }, snippet: { type: "string" }, explanation: { type: "string" } },
+      required: ["file", "where", "snippet", "explanation"],
+      additionalProperties: false,
+    },
+  }),
+  tool("finish", "End when every criterion and INTENT have a verdict, or you cannot get further.", { note: { type: "string" } }),
+];
+
+export const V2_ACTION_TOOLS: ReadonlySet<string> = new Set(["click", "fill", "select", "press", "navigate", "back", "reload", "wait", "set_clock", "set_viewport", "new_context"]);
+
+export function v2Instructions(locale: "ko" | "en", o: { readOnly: boolean; testData: { name: string; phone: string } }): string {
+  const lang = locale === "en" ? "English" : "Korean";
+  return [
+    "You are a senior QA engineer and an independent judge. A non-developer built this web app with an AI builder. Decide whether it ACTUALLY does what its owner wanted — against the owner's confirmed intent and criteria, not a generic bug list.",
+    "",
+    "Nobody gets it right in one pass. Work as an evidence loop: hypothesis → execute → observe hard evidence (requests and responses, storage contents, source code, screens in another browser/role, console errors, before/after changes) → revise. Repeat until confident.",
+    "",
+    "Order of work:",
+    "1. RECON — use the app like its intended user; read its source (list_sources/read_source/grep_source) to learn what it really does: backend or browser-only, where submitted data goes, whether results are computed from input or fixed/random, which roles and screens exist. Static facts are hypotheses, never verdict evidence.",
+    "2. HYPOTHESES + PLAN — record_plan: risks with how to test each, and per criterion the steps plus adversarial probes: vary inputs (fixed results?), a NEW browser (new_context) for persistence and other customers/devices, the other role's screen through links/routes you observed, the clock at 00:30 KST (set_clock) for anything date-related, empty/invalid input.",
+    "3. EXECUTE the plan adaptively. If a screen does not change, don't repeat the action — find another way (a required choice, a validation message, a disabled button).",
+    "4. CONFIRM — before a verdict, re-run independently in a fresh browser and get the same evidence again (required for must fails, strongly preferred for passes).",
+    "5. VERDICTS — record_verdict for every criterion, and one for acId INTENT: \"mismatch\" if the app does a different job than intended (cite what it actually does: source, requests, screens after use), else \"pass\".",
+    "",
+    "Rules the executor enforces mechanically (verdicts that break them are refused and you must gather more evidence):",
+    "- Cite evidence ids and copy the key values into quotes exactly as they appear in that evidence.",
+    "- A screen's description/marketing/instruction text is never evidence. A pass needs a state change caused by you: a successful write request, a storage change, a before/after change, or the result seen in another browser. A must pass also needs the result confirmed where it must persist/appear.",
+    "- A fail is an outcome the user cannot obtain (not a layout or wording preference), reproduced in a fresh browser with the same key value.",
+    "- Guessed addresses are refused. Login you don't have, API keys, payment, SMS/OAuth → not_verified with the reasonCode. Never invent credentials.",
+    `- Test data: name '${o.testData.name}', phone ${o.testData.phone}; Korean names/text, Korea time. Never real people's data.`,
+    o.readOnly ? "- READ-ONLY run: do not submit anything that creates data; criteria that need it are not_verified with write_not_allowed." : "- You may create test records with the test data. Never delete or cancel records you did not create.",
+    "- For each fail/mismatch give the cause in the code when you can (exact snippet from read_source/grep_source).",
+    "",
+    `Write claims and causes in ${lang} plain words a non-developer understands (what you did → what happened), no developer jargon. Call finish when done.`,
+  ].join("\n");
+}
+
+export function v2Kickoff(o: {
+  targetUrl: string;
+  intent: string;
+  acs: readonly AgentAc[];
+  landing: { status: number | null; url?: string };
+  loginNote: string;
+  facts: readonly StaticFact[];
+  hypotheses: readonly V2Hypothesis[];
+  sourceArtifactId?: string;
+  priorPlan?: V2Plan | null;
+}): string {
+  const acLines = o.acs.map((a) => `- [${a.id}] (${a.priority}${a.confirmed ? ", confirmed by the owner" : ", not confirmed"}) ${a.title}\n  given: ${a.given}\n  when: ${a.when}\n  then: ${a.then}`).join("\n");
+  return [
+    `App: ${o.targetUrl} (opened: HTTP ${o.landing.status ?? "?"})`,
+    `Login: ${o.loginNote}`,
+    "",
+    `What the owner wanted (confirmed intent): ${o.intent || "(not given)"}`,
+    "",
+    "Criteria to judge (each needs record_verdict; plus one for INTENT):",
+    acLines || "(none)",
+    "",
+    `Static facts from the source (evidence ${o.sourceArtifactId ?? "-"}; hypotheses only):`,
+    describeStaticFacts(o.facts).slice(0, 6000),
+    "",
+    "Starting hypotheses (add, drop or refine them in record_plan):",
+    ...o.hypotheses.map((h) => `- ${h.id}: ${h.risk} — test: ${h.test}`),
+    ...(o.priorPlan
+      ? ["", "RE-CHECK after the owner fixed the app: run the SAME plan as last time (below) and judge again. You may add probes but do not drop any.", JSON.stringify(o.priorPlan).slice(0, 8000)]
+      : []),
+    "",
+    "Begin with RECON.",
+  ].join("\n");
+}
