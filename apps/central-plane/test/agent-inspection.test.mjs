@@ -281,17 +281,23 @@ describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
     assert.equal(P.acsFromAgentReport('{"engine":"classic"}'), null);
     assert.equal(P.acsFromAgentReport("not json"), null);
   });
-  it("G2 역추론 지시서: 사용자가 자기 말로 적지 않은(추론만) must는 should로 — 그 실패가 '고쳐야 해요'를 만들지 않는다", () => {
-    const spec = salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] });
-    spec.meta.provenance.userTextAcIds = ["AC-002"]; // 사용자가 "빠진 것"으로 직접 적은 항목에서 나온 기준만
+  it("G2 (Bae 결정 '기본 체크 해제') must = 사용자가 직접 체크한 것 + 직접 적은 것 · 체크 안 한 추론은 should — 그 실패가 '고쳐야 해요'를 만들지 않는다", () => {
+    // 카드에서 AC-001은 체크, AC-002는 "빠진 것"에 직접 적음, FR-003(AC-003)은 체크 안 함 → 생성기가 should로 낸다.
+    const spec = salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002"] });
+    spec.features[2].priority = "should";
+    spec.meta.provenance.userTextAcIds = ["AC-002"];
     const acs = agentAcsFromDevSpec(spec);
-    assert.deepEqual(acs.map((a) => [a.id, a.priority, a.origin]), [["AC-002", "must", "user_text"], ["AC-001", "should", "inferred"], ["AC-003", "should", "inferred"]]);
-    // 추론만인 기준의 실패로는 Needs Fix가 되지 않는다
+    assert.deepEqual(acs.map((a) => [a.id, a.priority, a.origin]), [["AC-001", "must", "user_checked"], ["AC-002", "must", "user_text"], ["AC-003", "should", "inferred"]]);
     const r = (id, status) => ({ id, status, reason: "r", evidence: ["x"], steps: 3 });
-    const v = P.decideAgentVerdict({ acs, results: [r("AC-001", "fail"), r("AC-002", "not_verified"), r("AC-003", "fail")] });
-    assert.notEqual(v.decision, "Needs Fix");
-    // 옛 지시서(userTextAcIds 없음)는 종전대로
-    assert.equal(agentAcsFromDevSpec(salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] }))[0].priority, "must");
+    assert.notEqual(P.decideAgentVerdict({ acs, results: [r("AC-001", "pass"), r("AC-002", "not_verified"), r("AC-003", "fail")] }).decision, "Needs Fix", "체크 안 한 기준의 실패");
+    assert.equal(P.decideAgentVerdict({ acs, results: [r("AC-001", "fail")] }).decision, "Needs Fix", "체크한 기준의 실패");
+  });
+  it("G2 런에서 추정한 기준은 사용자가 고른 게 아니다 — 항상 should", () => {
+    const acs = P.parseInferredAcs(JSON.stringify({ acs: [{ title: "예약", then: "완료", priority: "must" }] }));
+    assert.equal(acs[0].priority, "should");
+    // 사용자 must가 없으면 기본 기준(CORE-1)도 must가 아니다
+    assert.equal(P.withCoreOutcomeAc(acs, "i", false)[0].priority, "should");
+    assert.equal(P.withCoreOutcomeAc([{ ...acs[0], priority: "must", confirmed: true }], "i", true)[0].priority, "must");
   });
   it("G3 막힌 이유 정리: app_missing은 에이전트가 못 쓴다, 로그인 이유는 벽이 보일 때만", () => {
     assert.equal(P.sanitizeAgentReasonCode("app_missing", { loginGate: null, readOnly: false }), undefined);

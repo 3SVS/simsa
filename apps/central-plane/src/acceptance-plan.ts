@@ -101,9 +101,11 @@ export function agentAcsFromDevSpec(devSpec: unknown, opts: { max?: number } = {
       given: a.given,
       when: a.when,
       then: a.then,
-      priority: inferred && userTextIds && !userTextIds.has(a.id) && f.priority === "must" ? "should" : f.priority,
+      // 2026-10-06 Bae 결정("기본 체크 해제"): 카드의 추론 항목은 체크 해제로 시작하므로, 확인 목록(userConfirmedAcIds)은
+      //  사용자가 **직접 체크한** 것이다. must = 직접 체크 + 직접 적은 것. 그 밖(추론만)의 must는 should로.
+      priority: inferred && !confirmedIds.has(a.id) && !userTextIds?.has(a.id) && f.priority === "must" ? "should" : f.priority,
       confirmed: !inferred || confirmedIds.has(a.id),
-      origin: !inferred ? "spec" : userTextIds?.has(a.id) ? "user_text" : "inferred",
+      origin: !inferred ? "spec" : userTextIds?.has(a.id) ? "user_text" : confirmedIds.has(a.id) ? "user_checked" : "inferred",
       ...(steps ? { steps } : {}),
     });
   }
