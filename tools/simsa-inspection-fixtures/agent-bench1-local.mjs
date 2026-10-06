@@ -32,6 +32,7 @@ const { generateDevSpec, makeDevSpecLlmCaller } = await imp("dist/workspace/gene
 const { anthropicMessages, OPENAI_FALLBACK_MODEL } = await imp("dist/workspace/anthropic-fetch.js");
 const { priceTokens } = await imp("dist/workspace/llm-pricing.js");
 const { agentAcsFromDevSpec } = await imp("dist/acceptance-plan.js");
+const { inspectAgentModelFor } = await imp("dist/workspace/inspection-agent.js");
 const { runAgentInspection } = await imp("inspector-container/agent-run.mjs");
 const { createPlaywrightDriver } = await imp("inspector-container/agent-driver.mjs");
 const { isNoiseResource } = await imp("dist/nondev-report.js");
@@ -92,8 +93,11 @@ function costOf(events) {
 
 /** Worker 프록시의 로컬 대역: 같은 anthropicMessages(폴백·재시도), 같은 서버 고정 모델, 같은 단일 턴 모양. */
 function localProxyLlm(events) {
-  const model = process.env.INSPECT_AGENT_MODEL || "claude-sonnet-4-6";
-  return async ({ system, user, maxTokens = 700 }) => {
+  // 2026-10-06 진단: run-1~4는 등급(tier)을 무시해 **모든 호출이 강한 모델(gpt-5.4 폴백)** 이었다 — 프로덕션(행동=gpt-5.4-mini)과
+  // 달라 로컬 결과가 프로덕션에서 재현되지 않았다. 이제 프로덕션 프록시와 같은 규칙(inspectAgentModelFor)으로 모델을 고른다.
+  return async ({ system, user, maxTokens = 700, tier = "strong" }) => {
+    const { model, fallbackModel } = inspectAgentModelFor(process.env, tier);
+    const fb = fallbackConfig();
     const data = await anthropicMessages(
       ANTHROPIC_KEY_SLOT,
       { model, max_tokens: maxTokens, messages: [{ role: "user", content: `${system}\n\n---\n\n${user}` }] },
@@ -101,7 +105,7 @@ function localProxyLlm(events) {
       fetch,
       undefined,
       "inspect_agent",
-      { fallback: fallbackConfig(), onUsage: (u) => events.push(u), maxTotalMs: 20_000 },
+      { fallback: fb && fallbackModel ? { ...fb, model: fallbackModel } : fb, onUsage: (u) => events.push(u), maxTotalMs: 20_000 },
     );
     return (data.content ?? []).map((b) => (b.type === "text" ? b.text ?? "" : "")).join("");
   };

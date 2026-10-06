@@ -36,7 +36,7 @@ async function load() {
   return mod;
 }
 
-const NAMES = ["latest-visual-check-fill", "envelope-fill-rate", "repair-fill-rate"];
+const NAMES = ["latest-visual-check-fill", "envelope-fill-rate", "repair-fill-rate", "agent-llm-usage-48h"];
 
 /** Identifying / content columns that must never leave D1 through this tool. */
 const FORBIDDEN = [
@@ -82,7 +82,19 @@ const ALLOWED_ITEM = [
   /^substr\(created_at, 1, 10\) AS created_day$/i,
 ];
 
-test("⑨ 이름 붙은 질의는 정확히 세 개", async () => {
+const AGENT_USAGE_ITEMS = [
+  "r.seq AS run_seq",
+  "substr(r.first_at, 1, 10) AS run_day",
+  "u.model_requested AS model_requested",
+  "u.model_actual AS model_actual",
+  "COUNT(*) AS calls",
+  "ROUND(SUM(u.cost_usd), 4) AS cost_usd",
+  "SUM(u.unpriced) AS unpriced_calls",
+  "SUM(u.input_tokens) AS input_tokens",
+  "SUM(u.output_tokens) AS output_tokens",
+];
+
+test("⑨ 이름 붙은 질의는 정확히 네 개", async () => {
   const { D1_READONLY_QUERIES } = await load();
   assert.deepEqual(Object.keys(D1_READONLY_QUERIES).sort(), [...NAMES].sort());
   assert.ok(Object.isFrozen(D1_READONLY_QUERIES), "the table of queries is frozen");
@@ -133,6 +145,11 @@ test("⑨ PUBLIC 요약: 출력 항목은 개수·채움 여부·날짜뿐 — i
   const { D1_READONLY_QUERIES } = await load();
   for (const [name, sql] of Object.entries(D1_READONLY_QUERIES)) {
     for (const item of selectItems(sql)) {
+      // agent 진단 질의: 런 순번·날짜·모델 이름(사람·앱 정보 아님)·합계만 — 고정 목록.
+      if (name === "agent-llm-usage-48h") {
+        assert.ok(AGENT_USAGE_ITEMS.includes(item), `${name}: "${item}" is not in the fixed list`);
+        continue;
+      }
       assert.ok(ALLOWED_ITEM.some((re) => re.test(item)), `${name}: "${item}" is not a count / filled-flag / day`);
       const alias = /\bAS\s+([a-z_]+)$/i.exec(item)?.[1] ?? "";
       assert.ok(alias !== "id" && !/_id$/i.test(alias), `${name}: output column "${alias}" must not be an id`);
@@ -183,7 +200,7 @@ test("⑨ 실제 마이그레이션 스키마에서 세 질의가 실행된다 �
   const { D1_READONLY_QUERIES } = await load();
   const db = new DatabaseSync(":memory:");
   const mig = (f) => readFileSync(path.join(ROOT, "migrations", f), "utf8");
-  for (const f of ["0050_workspace_visual_checks.sql", "0051_workspace_repair_jobs.sql", "0052_repair_job_mode.sql", "0065_visual_check_locale.sql"]) {
+  for (const f of ["0050_workspace_visual_checks.sql", "0051_workspace_repair_jobs.sql", "0052_repair_job_mode.sql", "0065_visual_check_locale.sql", "0070_llm_usage.sql"]) {
     db.exec(mig(f));
   }
   // 0069 also alters workspace_projects (not needed here) — apply only the two tables' ALTERs.
@@ -194,6 +211,11 @@ test("⑨ 실제 마이그레이션 스키마에서 세 질의가 실행된다 �
            VALUES ('wvc_secret1', 'wsp_p', 'uk_secret', 'https://x.example.app', '의도', 'Needs Fix', 'done', 'container', '{}', '[]', '2026-09-28T07:41:13.512Z', '2026-09-28T07:41:13.512Z', 'PH', '{"locale":"ko"}', 'as_intended')`);
   db.exec(`INSERT INTO workspace_repair_jobs (id, project_id, user_key, visual_check_id, repo_full_name, status, branch_name, created_at, updated_at, region, verify_check_id, resolved)
            VALUES ('wrj_secret1', 'wsp_p', 'uk_secret', 'wvc_secret1', 'acme/app', 'done', 'fix/simsa-wvc_secret1', '2026-09-28T08:02:55.001Z', '2026-09-28T08:02:55.001Z', 'PH', 'wvc_secret2', 1)`);
+
+  // agent 진단 질의: 런 id(job_id)·사용자 해시는 출력에 없어야 한다.
+  const recent = new Date(Date.now() - 3600_000).toISOString();
+  db.exec(`INSERT INTO llm_usage (id, created_at, job_kind, job_id, project_id, user_key_hash, vendor, model_requested, model_actual, call_site, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, cost_usd, unpriced, latency_ms, container_seconds)
+           VALUES ('lu_1', '${recent}', 'inspection', 'wvc_secret1', 'wsp_p', 'uk_secret', 'openai', 'claude-haiku-4-5-20251001', 'gpt-5.4-mini-2026-03-17', 'inspect_agent', 1000, 0, 0, 50, 0.001, 0, 900, NULL)`);
 
   const out = {};
   // node:sqlite rows have a null prototype — spread them into plain objects.

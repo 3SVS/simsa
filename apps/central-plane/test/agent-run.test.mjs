@@ -106,6 +106,96 @@ describe("(1) 시각 경계 · (3) 로그인 벽 공개 범위", () => {
   });
 });
 
+describe("2026-10-06 프로덕션 진단 교정(F1~F4) — 모두 옛 코드에서 실패한다", () => {
+  const one = (id) => ({ id, title: `기준 ${id}`, given: "g", when: "w", then: "예약이 된다", priority: "should", confirmed: true });
+
+  it("F1 기준마다 새 브라우저: 앞 기준이 만든 상태가 다음 기준 첫 화면에 남지 않는다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "생략", evidenceQuote: "", reasonCode: "app_missing" }],
+      "AC-1": [...bookScript],
+      "AC-2": [{ type: "judge", verdict: "not_verified", reason: "끝", evidenceQuote: "", reasonCode: "app_missing" }],
+    });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1"), one("AC-2")], acSource: "interview", llm, driver });
+    const firstAc2 = prompts.find((p) => p.includes("Criterion AC-2 ("));
+    assert.ok(firstAc2.includes("10:30 예약 가능"), "AC-2는 깨끗한 상태에서 시작한다");
+    assert.ok(!firstAc2.includes("10:30 예약됨"), "AC-1이 만든 예약이 남아 있으면 안 된다");
+  });
+
+  it("F2 판정은 강한 모델: 싼 모델이 '확인 못 함'이라 해도 강한 모델이 근거와 함께 실패로 보면 실패", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm } = makeScriptedLlm(
+      { "AC-1": [...bookScript.slice(0, 2), { type: "judge", verdict: "not_verified", reason: "잘 모르겠어요", evidenceQuote: "", reasonCode: "not_reached" }] },
+      { strong: { "AC-1": (last) => (/not_reached/.test(last ?? "") ? { type: "judge", verdict: "fail", reason: "완료 화면에 시간이 틀리게 나와요", evidenceQuote: "예약이 완료되었어요" } : JSON.parse(last).action) } },
+    );
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-1").status, "fail");
+  });
+
+  it("F3 이른 포기 되돌림: 사유 없는 '확인 못 함'을 첫 걸음에 내면 계속 해 보게 한다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-1": [{ type: "judge", verdict: "not_verified", reason: "아직 확인하지 못했어요", evidenceQuote: "" }, ...bookScript],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-1").status, "pass");
+    assert.ok(prompts.some((p) => p.includes("not accepted: you still have")));
+  });
+
+  it("F6 지어낸 주소는 열지 않는다(Gemini /admin/today 404 오판) — 앱이 보여 준 주소·기준에 적힌 경로만", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-1": [
+        { type: "goto", path: "/admin/today" },
+        { type: "judge", verdict: "not_verified", reason: "관리 화면이 404", evidenceQuote: "", reasonCode: "app_missing" },
+      ],
+    });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    assert.ok(!driver.state.visited?.includes("/admin/today"), "짐작한 주소로 가지 않는다");
+    assert.ok(prompts.some((p) => p.includes("BLOCKED (this address was never shown by the app")));
+    // 기준 문장에 적힌 경로는 열 수 있다
+    const d2 = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    const { llm: l2 } = makeScriptedLlm({
+      "AC-2": [{ type: "goto", path: "/reports" }, { type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "", reasonCode: "app_missing" }],
+    });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [{ ...one("AC-2"), when: "사장님이 /reports 화면을 연다" }], acSource: "interview", llm: l2, driver: d2 });
+    assert.ok(d2.state.visited.includes("/reports"));
+  });
+
+  it("F5 같은 단추를 눌러도 화면이 그대로면 알려 주고, 두 번째부터 다음 수는 강한 모델이 고른다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN });
+    const tiers = [];
+    const { llm: base, prompts } = makeScriptedLlm({
+      "AC-1": [
+        { type: "click", target: { role: "button", name: "예약하기" } },
+        { type: "click", target: { role: "button", name: "예약하기" } },
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "judge", verdict: "not_verified", reason: "끝", evidenceQuote: "", reasonCode: "app_missing" },
+      ],
+    });
+    const llm = async (req) => {
+      if (/Criterion AC-1 \(/.test(req.user) && !/skeptical/.test(req.user)) tiers.push(req.tier);
+      return base({ ...req, tier: "cheap" });
+    };
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    assert.ok(prompts.some((p) => p.includes("NO VISIBLE CHANGE")), "변화 없음을 알린다");
+    assert.equal(tiers[2], "strong", "같은 행동이 두 번 헛돌면 다음 턴은 강한 모델");
+    assert.equal(tiers[0], "cheap");
+  });
+
+  it("F4 재확인 불일치 한 번은 이유를 들고 더 해 본다", async () => {
+    const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
+    let reviews = 0;
+    const { llm, prompts } = makeScriptedLlm(
+      { "AC-1": [{ type: "judge", verdict: "pass", reason: "버튼이 보여요", evidenceQuote: "예약하기" }, ...bookScript] },
+      { review: () => ++reviews > 1 },
+    );
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [one("AC-1")], acSource: "interview", llm, driver });
+    assert.equal(out.report.acTable.find((r) => r.id === "AC-1").status, "pass");
+    assert.ok(prompts.some((p) => p.includes("gather the missing proof")));
+  });
+});
+
 describe("C11 시간 초과 시 부분 리포트", () => {
   it("돌던 중 멈춰도 잰 만큼 리포트 — 실패한 must는 그대로, 못 돈 기준은 시간 한도", async () => {
     const { partialAgentResult } = await import("../inspector-container/agent-run.mjs");
@@ -188,7 +278,8 @@ describe("A2 탐침 · A3 판정 재확인", () => {
   });
   it("두 번째 판단이 동의하지 않으면 pass도 fail도 결과로 치지 않는다", async () => {
     const driver = makeFakeDriver(salonSite(), { origin: ORIGIN, onAct: salonOnAct });
-    const { llm } = makeScriptedLlm({ "CORE-1": coreScript }, { review: () => false });
+    // (F4) 불일치 한 번은 이유를 들고 다시 해 본다 — 두 번째 불일치에서 끝난다.
+    const { llm } = makeScriptedLlm({ "CORE-1": [...coreScript, coreScript.at(-1)] }, { review: () => false });
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [], acSource: "interview", llm, driver });
     const core = out.report.acTable.find((r) => r.id === "CORE-1");
     assert.equal(core.status, "not_verified");
@@ -236,7 +327,8 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     assert.ok(out.report.sweep.buttonsSkippedUnsafe >= 1);
     assert.ok(out.report.sweep.buttonErrors >= 1, "오류 나는 버튼은 고장으로");
     assert.ok(driver.state.closed, "드라이버는 닫힌다");
-    assert.deepEqual(driver.state.logins, [USER, USER], "처음 로그인 + AC-003의 login 행동");
+    // (F1) 기준마다 새 브라우저 + 시험 계정 재로그인(처음 1 + 기준 4 + AC-003의 login 행동 1).
+    assert.ok(driver.state.logins.length >= 2 && driver.state.logins.every((u) => u === USER), JSON.stringify(driver.state.logins.length));
     // 비밀: LLM 프롬프트·리포트·고침 지시·위상 로그 어디에도
     const everything = [JSON.stringify(out.report), out.agentPrompt, ...prompts, ...phases].join("\n");
     assert.ok(!everything.includes(USER), "아이디가 새면 안 된다");
@@ -328,7 +420,8 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     });
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [acs[0]], acSource: "interview", llm, driver });
     assert.equal(out.report.acTable.find((r) => r.id === "AC-001").status, "not_verified");
-    assert.equal(out.report.acTable.find((r) => r.id === "AC-001").reasonCode, "guessed_address");
+    // (F6) 이제 짐작한 주소는 아예 열지 않는다 — 그 404를 근거로 한 판정은 화면에 없는 인용이라 결과로 치지 않는다.
+    assert.ok(["guessed_address", "evidence_missing"].includes(out.report.acTable.find((r) => r.id === "AC-001").reasonCode));
     assert.equal(out.agentPrompt, "");
   });
 

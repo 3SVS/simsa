@@ -178,13 +178,33 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     return (await resolveTargetDiag(target)).el;
   }
 
-  const bodyText = async () => (await page.locator("body").innerText({ timeout: 4000 }).catch(() => "")).replace(/\s+\n/g, "\n").trim();
-  const textHash = async () => {
-    const t = await bodyText();
+  /**
+   * 화면 상태 서명: 주소 + 본문 글자 + 상태 속성(aria-pressed/selected/checked/expanded/current, data-state, disabled,
+   * class)·입력값. (F7) 2026-10-06 진단: 시간·시술 칩("10:00", "커트 15,000원")은 눌러도 글자·주소가 그대로고 선택 표시
+   * (aria-pressed·class)만 바뀐다 — 글자만 재던 점검이 그걸 "반응 없음"으로 셌다. 상태 속성 변화도 반응이다.
+   */
+  const stateSignature = async () => {
+    const dom = await page
+      .evaluate(() => {
+        const parts = [];
+        const els = document.querySelectorAll("button, a, input, select, textarea, [role], [aria-pressed], [aria-selected], [aria-checked], [data-state]");
+        let i = 0;
+        for (const el of els) {
+          if (i++ > 600) break;
+          const a = (n) => el.getAttribute(n) ?? "";
+          parts.push(
+            [el.tagName, a("aria-pressed"), a("aria-selected"), a("aria-checked"), a("aria-expanded"), a("aria-current"), a("data-state"), el.disabled ? "D" : "", el.className && typeof el.className === "string" ? el.className : "", "value" in el ? String(el.value ?? "") : "", el.checked ? "C" : ""].join("|"),
+          );
+        }
+        return (document.body?.innerText ?? "") + "\n" + parts.join("\n");
+      })
+      .catch(() => "");
     let h = 0;
-    for (let i = 0; i < t.length; i += 1) h = (h * 31 + t.charCodeAt(i)) | 0;
-    return `${t.length}:${h}`;
+    for (let i = 0; i < dom.length; i += 1) h = (h * 31 + dom.charCodeAt(i)) | 0;
+    return `${page.url()}#${dom.length}:${h}`;
   };
+
+  const bodyText = async () => (await page.locator("body").innerText({ timeout: 4000 }).catch(() => "")).replace(/\s+\n/g, "\n").trim();
 
   return {
     async start(_targetUrl) {
@@ -197,6 +217,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
       return { status: resp ? resp.status() : null, url: page.url() };
     },
     url: () => page.url(),
+    signature: () => stateSignature(),
     html: () => page.content(),
     /** B5: 서버가 보낸 원본 HTML(렌더 뒤 DOM이 아니라). */
     async fetchSource(url) {
@@ -416,7 +437,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
       const crashBefore = crashes;
       const net5xxBefore = net5xx;
       const urlBefore = page.url();
-      const hashBefore = await textHash();
+      const sigBefore = await stateSignature();
       dialogSeen = false;
       try {
         let l = page.getByRole("button", { name: label, exact: true }).first();
@@ -435,7 +456,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
       } else if (net5xx > net5xxBefore) {
         outcome = "error";
         detail = networkErrors[networkErrors.length - 1];
-      } else if (page.url() === urlBefore && !dialogSeen && (await textHash()) === hashBefore) {
+      } else if (page.url() === urlBefore && !dialogSeen && (await stateSignature()) === sigBefore) {
         outcome = "no_reaction";
       }
       if (page.url() !== screenUrl) await this.goto(screenUrl).catch(() => {});

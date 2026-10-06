@@ -40,6 +40,9 @@ const PAGES = {
       let wiped = false;
       document.getElementById('memo').addEventListener('input', (e) => { if (!wiped) { wiped = true; setTimeout(() => { e.target.value = ''; }, 0); } });
     </script></body></html>`,
+  "/chips": `<!doctype html><html><body><p>시간을 고르세요</p>
+    <button aria-pressed="false" onclick="this.setAttribute('aria-pressed', this.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); this.classList.toggle('on')">10:00</button>
+    <button>장식 단추</button></body></html>`,
   "/wide": `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body><div style="width:900px">넓은 표</div></body></html>`,
 };
 
@@ -99,6 +102,16 @@ describe("agent 드라이버 — 실제 브라우저", { skip }, () => {
     await driver.serveOverride(base + "/", null);
     await driver.goto(base + "/");
     assert.doesNotMatch(await driver.bodyText(), /고친 파일/);
+  });
+  it("F7 선택 칩(글자·주소 그대로, aria-pressed·class만 바뀜)은 반응이 있는 단추다 — 진짜 무반응만 no_reaction", async () => {
+    await driver.goto(base + "/chips");
+    const chip = await driver.probeButton("10:00", base + "/chips");
+    assert.equal(chip.outcome, "ok", JSON.stringify(chip));
+    const dead = await driver.probeButton("장식 단추", base + "/chips");
+    assert.equal(dead.outcome, "no_reaction");
+    const before = await driver.signature();
+    await driver.act({ type: "click", target: { role: "button", name: "10:00" } });
+    assert.notEqual(await driver.signature(), before, "실행기의 '진전 없음' 감지도 같은 서명을 쓴다");
   });
   it("모바일 폭에서 가로 넘침을 잰다", async () => {
     const wide = await driver.mobileCheck(base + "/wide");
