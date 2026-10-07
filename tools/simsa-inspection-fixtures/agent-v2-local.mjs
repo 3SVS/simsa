@@ -43,7 +43,7 @@ function loadLocalEnv() {
     const m = /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
     if (!m) continue;
     const [, k, raw] = m;
-    if (!["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "INSPECT_AGENT_V2_MODEL", "INSPECT_AGENT_V2_FALLBACK_MODEL", "INSPECT_AGENT_V2_ANTHROPIC"].includes(k)) continue;
+    if (!["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "V2_TEST_USERNAME", "V2_TEST_PASSWORD", "V2_TEST_LOGIN_URL", "INSPECT_AGENT_V2_MODEL", "INSPECT_AGENT_V2_FALLBACK_MODEL", "INSPECT_AGENT_V2_ANTHROPIC"].includes(k)) continue;
     if (process.env[k]) continue;
     process.env[k] = raw.replace(/^["']|["']$/g, "");
   }
@@ -119,7 +119,7 @@ export async function serveFixtures(port = 0) {
 }
 
 /** v2 한 런(프로덕션과 같은 상한). */
-export async function runV2Local({ url, intent, acs = [], acSource, locale = "ko", priorPlan = null, onPhase }) {
+export async function runV2Local({ url, intent, acs = [], acSource, locale = "ko", priorPlan = null, onPhase, credentials = null }) {
   const events = [];
   const outDir = mkdtempSync(join(tmpdir(), "v2-local-"));
   const phases = [];
@@ -136,7 +136,8 @@ export async function runV2Local({ url, intent, acs = [], acSource, locale = "ko
       acs,
       acSource: acSource ?? (acs.length ? "confirmed_inferred" : "inferred_at_run"),
       priorPlan,
-      loginMode: "none",
+      loginMode: credentials ? "credentials" : "none",
+      ...(credentials ? { credentials } : {}),
       llm,
       driver,
       onPhase: (l) => {

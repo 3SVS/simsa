@@ -93,7 +93,12 @@ async function main() {
       const t0 = Date.now();
       let row;
       try {
-        const r = await runV2Local({ url, intent: shared.intent, acs: shared.acs, acSource: "confirmed_inferred", onPhase: (l) => process.env.V2_VERBOSE && console.log("  ", l) });
+        // 시험 계정(선택): 키 파일의 V2_TEST_USERNAME·V2_TEST_PASSWORD(·V2_TEST_LOGIN_URL). 값은 출력·기록하지 않는다(실행기가 리포트에서 가린다).
+        const credentials = process.env.V2_TEST_USERNAME && process.env.V2_TEST_PASSWORD
+          ? { username: process.env.V2_TEST_USERNAME, password: process.env.V2_TEST_PASSWORD, ...(process.env.V2_TEST_LOGIN_URL ? { loginUrl: process.env.V2_TEST_LOGIN_URL } : {}) }
+          : null;
+        if (k === 1) console.log(`login: ${credentials ? "test account (credentials)" : "none — behind-login is not_verified"}`);
+        const r = await runV2Local({ url, intent: shared.intent, acs: shared.acs, acSource: "confirmed_inferred", credentials, onPhase: (l) => process.env.V2_VERBOSE && console.log("  ", l) });
         row = {
           model,
           run: k,
