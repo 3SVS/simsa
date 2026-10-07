@@ -495,7 +495,10 @@ export function buildV2Report(input: V2ReportInput, locale: "ko" | "en" = "ko"):
     return {
       id: a.id,
       status,
-      reason: r.verdict === "not_verified" && r.reasonCode && !r.claim ? reasonText(r.reasonCode, L) : r.claim.slice(0, 600),
+      reason:
+        r.verdict === "not_verified" && r.reasonCode && !r.claim
+          ? reasonText(r.reasonCode, L)
+          : `${r.claim.slice(0, 600)}${r.cause ? ` — ${L === "en" ? "cause in the code" : "코드 원인"}: ${r.cause.file} · ${r.cause.where} — ${r.cause.explanation} [${r.cause.snippet.slice(0, 300)}]` : ""}`,
       ...(r.reasonCode ? { reasonCode: r.reasonCode } : {}),
       evidence: r.artifactIds.map(evidenceLine).slice(0, 6),
       steps: 0,
@@ -535,6 +538,43 @@ export function buildV2Report(input: V2ReportInput, locale: "ko" | "en" = "ko"):
       ...report.findings.filter((f) => f.code !== "page_not_found" && f.code !== "missing_index_file"),
     ];
   }
+  // ── V-7 · X-1: 의도 불일치는 독립 판정 — 기계 검증기를 통과한 INTENT mismatch만. 앱이 열리지 않으면(고장) 그대로 둔다. ──
+  const intent = input.records.find((r) => r.acId === INTENT_AC_ID);
+  const L2 = L;
+  if (intent && intent.verdict === "mismatch" && !input.landing?.broken) {
+    const what = L2 === "en" ? "Not what you had in mind — the app does a different job" : "생각과 달라요 — 원하신 일과 다른 일을 하는 앱이에요";
+    const how =
+      L2 === "en"
+        ? `Ask your builder to rebuild the core so it actually does what you wanted: "${input.intent.slice(0, 160)}".`
+        : `만든 도구에 핵심 기능을 원래 원하신 일("${input.intent.slice(0, 160)}")을 실제로 하도록 다시 만들어 달라고 요청해 주세요.`;
+    report.findings.unshift({
+      severity: "high",
+      code: "intent_mismatch",
+      what,
+      why: intent.claim.slice(0, 500),
+      how,
+      evidence: intent.artifactIds.map(evidenceLine).join(" | ").slice(0, 600),
+    });
+    report.works = false;
+    report.verdict = L2 === "en" ? "Not what you had in mind" : "생각과 달라요";
+    report.oneLine = (L2 === "en" ? "The app does something different from what you wanted: " : "원하신 것과 다른 일을 하는 앱이에요: ") + intent.claim.slice(0, 220);
+    report.agent.basis = "intent_mismatch";
+    report.agent.defects = [{ acId: INTENT_AC_ID, priority: "must", status: "fail", defectClass: "intent_mismatch" }, ...report.agent.defects];
+    report.nextSteps = [
+      L2 === "en"
+        ? "Paste the 'what to fix' below into your builder, then check again — we'll run the same plan."
+        : "아래 '고칠 것'을 만든 도구에 그대로 붙여 넣어 고친 뒤 다시 확인을 눌러 주세요. 같은 계획으로 다시 봐요.",
+    ];
+  }
+  // ── X-3: 실패마다 소스 근거 원인을 고칠 것에 붙인다(읽은 코드에 실제로 있는 조각만 — 실행기가 이미 검사). ──
+  for (const r of input.records) {
+    if (!r.cause) continue;
+    const f = report.findings.find((x) => x.code === "ac_broken" && (x.evidence ?? "").startsWith(r.acId)) ?? (r.acId === INTENT_AC_ID ? report.findings.find((x) => x.code === "intent_mismatch") : undefined);
+    if (!f) continue;
+    f.why = `${f.why} — ${L2 === "en" ? "cause in the code" : "코드에서 찾은 원인"}: ${r.cause.explanation}`.slice(0, 900);
+    f.evidence = `${f.evidence ?? ""} | ${r.cause.file} · ${r.cause.where}: ${r.cause.snippet}`.slice(0, 1200);
+  }
+
   (report.agent as unknown as Record<string, unknown>)["v2"] = {
     runnerRev: AGENT_V2_RUNNER_REV,
     model: input.model ?? null,
