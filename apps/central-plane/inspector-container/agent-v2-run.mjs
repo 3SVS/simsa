@@ -15,6 +15,24 @@ const CONTEXT_MAX_CHARS = 500_000;
 const TOOL_OUTPUT_MAX = 12_000;
 /** 한 기준의 판정이 기계 검증기에 이만큼 거절되면 확인 못 함으로 기록한다(증거를 더 모으면 다시 판정 가능). */
 const MAX_REFUSALS_PER_AC = 3;
+/** 고친 파일 검증에 남겨야 할 최소 시간 · 검증 런의 도구 호출 상한. */
+const SINGLE_FILE_FIX_MIN_MS = 3 * 60 * 1000;
+const SINGLE_FILE_VERIFY_TOOL_CALLS = 80;
+const PROPOSE_EDITS_TOOL = {
+  type: "function",
+  name: "propose_edits",
+  description: "Minimal exact search/replace edits to the single HTML file, plus criteria that cannot be fixed in one file.",
+  parameters: {
+    type: "object",
+    properties: {
+      edits: { type: "array", items: { type: "object", properties: { search: { type: "string" }, replace: { type: "string" } }, required: ["search", "replace"], additionalProperties: false } },
+      cannotFix: { type: "array", items: { type: "string" } },
+    },
+    required: ["edits", "cannotFix"],
+    additionalProperties: false,
+  },
+  strict: true,
+};
 /** 실서비스 안전(일반 규칙): 실제 사람·돈·계정에 닿는 한국어 행동은 누르지 않는다(safety.mjs는 영어 위주). */
 const RISKY_KO_RE = /(초대|공유하기|메일 ?보내|문자 ?보내|알림 ?보내|발송|탈퇴|계정 ?삭제|비밀번호 ?변경|구독|결제|환불|송금|주문하기|구매하기|삭제|지우기)/;
 
@@ -131,7 +149,14 @@ export async function runAgentV2(o) {
 
     // 가설·계획 → 실행 고리 → 확인 → 판정(테스트는 afterRecon으로 정찰 결과만 볼 수 있다).
     if (typeof o.afterRecon === "function") await o.afterRecon({ v2, pure, store, state, red, plog, shot });
-    else if (typeof o.llm === "function") await executeLoop();
+    else if (typeof o.llm === "function") {
+      await executeLoop();
+      // ── F 고치기: 한 파일 앱이면 고친 파일을 만들고, 그 파일로 실패했던 기준을 **같은 계획으로** 다시 돌려 통과한 것만 "고쳐짐"(X-3) ──
+      if (o.singleFileFix !== false && !state.budgetExhausted && Date.now() < (state.deadline ?? 0) - SINGLE_FILE_FIX_MIN_MS) {
+        state.singleFileFix = await trySingleFileFixV2().catch((err) => ({ attempted: true, error: String(err?.message ?? err).slice(0, 160) }));
+        if (state.singleFileFix) plog(`single-file-fix ${JSON.stringify({ v: state.singleFileFix.validated, s: state.singleFileFix.stillFailing, e: state.singleFileFix.error })}`);
+      }
+    }
   } catch (err) {
     state.partial = true;
     plog(`agent-v2:error ${String(err?.message ?? err).slice(0, 160)}`);
@@ -205,6 +230,7 @@ export async function runAgentV2(o) {
       maxAcs: o.caps?.maxAcs ?? 11,
     };
     const deadline = Date.now() + (o.budgetMs && o.budgetMs > 0 ? o.budgetMs : DEFAULT_BUDGET_MS);
+    state.deadline = deadline;
     state.acs = pure.orderAcs(pure.withCoreOutcomeAc(state.acs, o.intent, state.acSource !== "inferred_at_run", locale), Math.min(pure.AGENT_MAX_ACS + 1, caps.maxAcs));
     const acById = new Map(state.acs.map((a) => [a.id, a]));
     const criteriaText = state.acs.map((a) => `${a.title} ${a.given} ${a.when} ${a.then}`).join("\n");
@@ -595,6 +621,66 @@ export async function runAgentV2(o) {
     }
   }
 
+  /**
+   * F(설계 §2.2-7): 한 파일 앱(빌드 없는 index.html)의 고친 파일. 모델이 **정확히 한 번 나오는** 편집만 내고(파일 통째로 다시 쓰지 않는다),
+   * 실행기가 그 파일을 주소에 끼워 넣어 실패했던 기준을 원 계획으로 다시 돌린다 — 검증 통과분만 고쳐짐. 서버가 필요한 결함은 cannotFix로 정직하게.
+   */
+  async function trySingleFileFixV2() {
+    const sf = await import("./single-file-fix.mjs");
+    const failedIds = state.records.filter((r) => r.verdict === "fail").map((r) => r.acId);
+    const failed = state.acs.filter((a) => failedIds.includes(a.id) && (a.priority === "must" || a.confirmed));
+    if (failed.length === 0) return null;
+    const source = (await driver.fetchSource?.(o.targetUrl).catch(() => null)) ?? null;
+    if (!sf.isSingleFileApp(source, o.targetUrl)) return null;
+    const rows = failed.map((a) => {
+      const r = state.records.find((x) => x.acId === a.id);
+      return { id: a.id, title: a.title, then: a.then, actions: [], reason: r?.claim ?? "", evidence: (r?.artifactIds ?? []).map((id) => store.get(id)?.summary ?? id) };
+    });
+    const res = await o.llm({
+      instructions: "You fix single-file web apps. Answer by calling propose_edits exactly once.",
+      input: [{ role: "user", content: sf.singleFileFixPrompt(source, rows, locale) }],
+      tools: [PROPOSE_EDITS_TOOL],
+      maxOutputTokens: 12000,
+    });
+    const call = v2.functionCallsOf(res?.output).find((c) => c.name === "propose_edits");
+    const edits = Array.isArray(call?.args?.edits) ? call.args.edits : [];
+    const cannotFix = Array.isArray(call?.args?.cannotFix) ? call.args.cannotFix.filter((x) => typeof x === "string").slice(0, 10) : [];
+    const applied = sf.applyExactEdits(source, edits);
+    if (!applied.ok) return { attempted: true, error: applied.error, cannotFix };
+    await driver.serveOverride(o.targetUrl, applied.html);
+    const validated = [];
+    const stillFailing = [];
+    try {
+      // 같은 브라우저를 쓰되 닫지 않는 껍데기로 원 계획을 다시 돈다(실패했던 기준만).
+      const inner = await runAgentV2({
+        ...o,
+        acs: failed,
+        priorPlan: state.plan,
+        singleFileFix: false,
+        progress: undefined,
+        onPhase: (l) => plog(`[fix-verify] ${l}`),
+        budgetMs: Math.max(60_000, (state.deadline ?? Date.now()) - Date.now() - 20_000),
+        caps: { ...(o.caps ?? {}), maxToolCalls: SINGLE_FILE_VERIFY_TOOL_CALLS },
+        driver: { ...driver, start: async () => {}, close: async () => {} },
+      });
+      for (const a of failed) {
+        const row = inner.report.acTable.find((x) => x.id === a.id);
+        (row?.status === "pass" ? validated : stillFailing).push(a.id);
+      }
+      state.innerLlmTurns = inner.report.agent.llmCalls ?? 0;
+    } finally {
+      await driver.serveOverride(o.targetUrl, null).catch(() => {});
+    }
+    return {
+      attempted: true,
+      validated,
+      stillFailing,
+      cannotFix,
+      diff: sf.editsDiff(edits).slice(0, 40_000),
+      ...(validated.length > 0 && applied.html.length <= sf.CORRECTED_FILE_REPORT_MAX ? { correctedHtml: applied.html } : {}),
+    };
+  }
+
   function finish() {
     const report = v2.buildV2Report(
       {
@@ -620,6 +706,16 @@ export async function runAgentV2(o) {
     );
     report.agent.durationMs = Date.now() - t0;
     report.agent.llmCalls = state.llmTurns ?? 0;
+    if (state.singleFileFix) {
+      report.agent.singleFileFix = state.singleFileFix;
+      if (state.singleFileFix.validated?.length) {
+        report.notes.push(
+          locale === "en"
+            ? `We made a corrected index.html and re-ran the failed criteria against it with the same plan: ${state.singleFileFix.validated.join(", ")} now pass. Download it from this report.`
+            : `고친 index.html을 만들어 실패했던 기준을 같은 계획으로 다시 해 봤어요: ${state.singleFileFix.validated.join(", ")} 통과. 이 리포트에서 받으실 수 있어요.`,
+        );
+      }
+    }
     if (state.testData && store.submittedEver) {
       const d = state.testData;
       report.agent.testData = { names: [d.name, d.altName], phone: d.phone, memo: d.memo };
