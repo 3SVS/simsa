@@ -246,7 +246,8 @@ async function runJob(payload) {
     // Lazy import keeps startup fast and lets a broken Playwright install
     // surface as a per-run failure callback instead of a dead container.
     // 기본 엔진 모듈은 그 엔진일 때만 읽는다(agent 런이 기본 엔진의 의존성 때문에 깨지지 않게).
-    const { runInspection } = payload.engine === "agent" ? { runInspection: null } : await import("./inspector-run.mjs");
+    const isAgent = payload.engine === "agent" || payload.engine === "agent_v2";
+    const { runInspection } = isAgent ? { runInspection: null } : await import("./inspector-run.mjs");
 
     // Wall-clock rail: Chromium hangs (infinite spinners, slow hosts) must
     // not exceed ~4 minutes. On timeout the run is reported failed; the
@@ -262,7 +263,9 @@ async function runJob(payload) {
       phases.push(line);
       if (phases.length > 60) phases.splice(1, 1); // keep [0] = runner-rev marker
     };
-    const result = payload.engine === "agent" ? await runAgentJob(payload, { outDir, locale, onPhase, phases, signup }) : await withTimeout(
+    const result = payload.engine === "agent_v2"
+      ? await runAgentV2Job(payload, { outDir, locale, onPhase, phases, signup })
+      : payload.engine === "agent" ? await runAgentJob(payload, { outDir, locale, onPhase, phases, signup }) : await withTimeout(
       runInspection({
         targetUrl, intent, outDir, locale, budgetMs: INSPECTION_SOFT_BUDGET_MS, runId, onPhase,
         // SI 티어 A5: 지시서의 수용 기준 시나리오(없으면 undefined → 종전 동작).
@@ -389,6 +392,62 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
     const partial = await partialAgentResult(progress).catch(() => null);
     if (partial) {
       onPhase(`agent:partial after ${String(err?.message ?? err).slice(0, 80)}`);
+      return partial;
+    }
+    const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");
+    throw new Error(redactWith(secrets(), `${String(err?.message ?? err)} ||trace: ${trace}`).slice(0, 490));
+  });
+}
+
+/**
+ * 검사 엔진 v2(engine "agent_v2", 스태프 전용): 증거 고리 실행 18분 + 여유 4분(+ 직접 로그인이면 사람 대기 10분).
+ * 넘으면 여기까지의 증거로 부분 리포트(빈손 실패 대신).
+ */
+const AGENT_V2_RUN_BUDGET_MS = 18 * 60 * 1000;
+const AGENT_V2_HARD_MS = 22 * 60 * 1000;
+
+async function runAgentV2Job(payload, { outDir, locale, onPhase, phases, signup }) {
+  const { runAgentV2 } = await import("./agent-v2-run.mjs");
+  const { createPlaywrightDriver } = await import("./agent-driver.mjs");
+  const { createProxyResponses } = await import("./agent-llm.mjs");
+  const { isNoiseResource } = await import("./dist/nondev-report.js").catch(() => import("../dist/nondev-report.js"));
+  const { attemptSignup } = signup?.enabled ? await import("./signup-run.mjs") : { attemptSignup: null };
+  const agent = payload.agent ?? {};
+  const progress = {};
+  const driver = await createPlaywrightDriver({ outDir, locale, isNoiseResource, attemptSignup });
+  const live = agent.loginMode === "handover" ? createLiveSession(payload.runId, driver) : null;
+  const secrets = () => [payload.credentials?.username, payload.credentials?.password, ...(live?.typedSecrets() ?? [])];
+  const hard = AGENT_V2_HARD_MS + (live ? HANDOVER_WAIT_MS : 0);
+  return withTimeout(
+    runAgentV2({
+      targetUrl: payload.targetUrl,
+      intent: payload.intent,
+      locale,
+      budgetMs: Math.min(AGENT_V2_RUN_BUDGET_MS, Number(agent.caps?.maxMinutes) > 0 ? Number(agent.caps.maxMinutes) * 60_000 : AGENT_V2_RUN_BUDGET_MS),
+      caps: agent.caps,
+      readOnly: agent.readOnly === true,
+      acs: Array.isArray(agent.acs) ? agent.acs : [],
+      acSource: agent.acSource,
+      priorPlan: agent.priorPlan ?? null,
+      loginMode: agent.loginMode ?? "none",
+      credentials: payload.credentials,
+      signup: signup?.enabled
+        ? { enabled: true, runId: payload.runId, mailDomain: signup.mailDomain, callbackBaseUrl: signup.callbackBaseUrl, internalToken: signup.internalToken }
+        : undefined,
+      llm: createProxyResponses({ url: agent.llmUrl, token: agent.llmToken }),
+      driver,
+      live,
+      handoverWaitMs: HANDOVER_WAIT_MS,
+      onPhase,
+      progress,
+    }),
+    hard,
+    `agent_v2 inspection timed out after ${Math.round(hard / 1000)}s`,
+  ).catch(async (err) => {
+    await driver.close().catch(() => {});
+    const partial = progress.partialResult ? await Promise.resolve(progress.partialResult()).catch(() => null) : null;
+    if (partial) {
+      onPhase(`agent_v2:partial after ${String(err?.message ?? err).slice(0, 80)}`);
       return partial;
     }
     const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");

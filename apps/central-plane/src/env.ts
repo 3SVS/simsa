@@ -212,6 +212,15 @@ export interface Env {
   INSPECT_AGENT_V2_MODEL?: string;
   /** v2 추론 강도(low|medium|high, 미설정 = medium). */
   INSPECT_AGENT_V2_EFFORT?: string;
+  /** v2 대체 모델(미설정 = gpt-5.6-sol). 주 모델이 실패하거나 쓸 수 없을 때만. */
+  INSPECT_AGENT_V2_FALLBACK_MODEL?: string;
+  /**
+   * v2 전용 Anthropic 스위치 — 정확히 "on"일 때만 v2가 Claude를 쓴다. 전역 ANTHROPIC_ENABLED(다른 호출 지점)와 독립.
+   * 2026-10-07 llm-probe(run 37497630881): anthropic gateway·direct 둘 다 usable(n=1).
+   */
+  INSPECT_AGENT_V2_ANTHROPIC?: string;
+  /** v2 런 하나의 LLM 예산 USD(미설정 = 12, 상한 50). 서버가 원자 예약으로 집행한다. */
+  INSPECT_AGENT_V2_BUDGET_USD?: string;
   /** v2 청구 예상액 배수(원가 × 이 값, 미설정 = 3 [PILOT]). 실제 결제는 꺼짐 — 견적만 기록(V-6). */
   INSPECTION_CHARGE_MARKUP?: string;
   /** agent 엔진 런 하나의 LLM 예산 USD(미설정·잘못된 값 = 3, 상한 50). */

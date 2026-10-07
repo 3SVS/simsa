@@ -47,8 +47,8 @@ RUN npm install --no-package-lock --loglevel=error
 
 # Canonical Simsa modules — compiled in-image from apps/central-plane/src so
 # the container always runs the exact logic the repo ships.
-COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts apps/central-plane/src/agent-inspection.ts ./src/
-RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts src/agent-inspection.ts \
+COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts apps/central-plane/src/agent-inspection.ts apps/central-plane/src/agent-v2.ts ./src/
+RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts src/agent-inspection.ts src/agent-v2.ts \
     --outDir dist --module nodenext --moduleResolution nodenext \
     --target es2022 --skipLibCheck
 
@@ -66,6 +66,8 @@ COPY apps/central-plane/inspector-container/agent-run.mjs ./agent-run.mjs
 COPY apps/central-plane/inspector-container/agent-driver.mjs ./agent-driver.mjs
 COPY apps/central-plane/inspector-container/agent-llm.mjs ./agent-llm.mjs
 COPY apps/central-plane/inspector-container/single-file-fix.mjs ./single-file-fix.mjs
+# 2026-10-07 검사 엔진 v2(engine agent_v2, 스태프 전용): 증거 고리 실행기(순수 규칙은 dist/agent-v2.js).
+COPY apps/central-plane/inspector-container/agent-v2-run.mjs ./agent-v2-run.mjs
 
 # Writable scratch space for per-run screenshots/video.
 RUN mkdir -p /var/lib/simsa && chmod 770 /var/lib/simsa

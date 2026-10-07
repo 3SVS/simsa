@@ -808,3 +808,262 @@ export function v2Kickoff(o: {
     "Begin with RECON.",
   ].join("\n");
 }
+
+// ─── S4 실행 고리 보조(순수) ──────────────────────────────────────────────────
+
+/** 관찰 글(링크·요청·소스)에서 같은 출처 주소 후보를 뽑는다 — "본 주소"만 열 수 있게(지어낸 주소 금지). */
+export function extractKnownUrls(text: string, origin: string): string[] {
+  let o: URL;
+  try {
+    o = new URL(origin);
+  } catch {
+    return [];
+  }
+  const out = new Set<string>();
+  const re = /(https?:\/\/[^\s"'`<>)\]]+)|["'`](\/[A-Za-z0-9_\-./#?=&%]{1,200})["'`]|href=["']?([^"'\s>]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text ?? "")) !== null) {
+    const raw = m[1] ?? m[2] ?? m[3] ?? "";
+    if (!raw || raw.length > 300 || raw.startsWith("//")) continue;
+    try {
+      const u = new URL(raw, o.origin + "/");
+      if (u.origin === o.origin) out.add(normalizeKnownUrl(u.toString()));
+    } catch {
+      /* skip */
+    }
+    if (out.size >= 500) break;
+  }
+  return [...out];
+}
+
+/** navigate 허용: 같은 출처 + (본 주소 · 첫 주소 · 기준 문장에 나온 경로). */
+export function navigateAllowed(url: string, targetUrl: string, known: ReadonlySet<string>, criteriaText: string): { ok: true; url: string } | { ok: false; why: "other_origin" | "unknown_address" } {
+  let u: URL;
+  let o: URL;
+  try {
+    o = new URL(targetUrl);
+    u = new URL(url, o.origin + "/");
+  } catch {
+    return { ok: false, why: "unknown_address" };
+  }
+  if (u.origin !== o.origin) return { ok: false, why: "other_origin" };
+  const n = normalizeKnownUrl(u.toString());
+  if (known.has(n) || n === normalizeKnownUrl(o.toString()) || n === normalizeKnownUrl(o.origin)) return { ok: true, url: u.toString() };
+  const path = (u.pathname + (u.hash.startsWith("#/") ? u.hash : "")).replace(/\/$/, "");
+  if (path.length > 1 && criteriaText.includes(path)) return { ok: true, url: u.toString() };
+  return { ok: false, why: "unknown_address" };
+}
+
+export interface V2FunctionCall {
+  callId: string;
+  name: string;
+  args: Record<string, unknown>;
+  argsError?: string;
+}
+
+/** Responses 출력에서 함수 호출을 꺼낸다(인자 JSON이 깨졌으면 argsError — 모델에게 돌려준다). */
+export function functionCallsOf(output: unknown): V2FunctionCall[] {
+  if (!Array.isArray(output)) return [];
+  const out: V2FunctionCall[] = [];
+  for (const item of output) {
+    if (!item || typeof item !== "object") continue;
+    const it = item as Record<string, unknown>;
+    if (it["type"] !== "function_call" || typeof it["name"] !== "string" || typeof it["call_id"] !== "string") continue;
+    let args: Record<string, unknown> = {};
+    let argsError: string | undefined;
+    try {
+      const parsed: unknown = JSON.parse(typeof it["arguments"] === "string" ? (it["arguments"] as string) : "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
+    } catch (e) {
+      argsError = String((e as Error)?.message ?? e).slice(0, 120);
+    }
+    out.push({ callId: it["call_id"] as string, name: it["name"] as string, args, ...(argsError ? { argsError } : {}) });
+  }
+  return out;
+}
+
+/** 대화에 다시 넣을 출력 항목(추론·함수 호출·메시지만). */
+export function replayableOutput(output: unknown): unknown[] {
+  if (!Array.isArray(output)) return [];
+  return output.filter((x) => x && typeof x === "object" && ["reasoning", "function_call", "message"].includes(String((x as Record<string, unknown>)["type"])));
+}
+
+const COMPACT_KEEP_RECENT = 24;
+
+/**
+ * 대화 압축: 입력이 커지면 오래된 도구 결과를 증거물 요약 한 줄로 바꾼다(증거물 원문은 저장소에 그대로 — 판정은 id로 인용하므로
+ * 잃는 것이 없다). 이미지는 마지막 1장만 남긴다. 원본 배열을 바꾸지 않는다.
+ */
+export function compactInput(input: readonly unknown[], maxChars: number): unknown[] {
+  const out = input.map((x) => x);
+  let lastImage = -1;
+  for (let i = out.length - 1; i >= 0; i -= 1) {
+    const it = out[i] as Record<string, unknown>;
+    if (it && it["role"] === "user" && Array.isArray(it["content"]) && (it["content"] as Array<Record<string, unknown>>).some((c) => c["type"] === "input_image")) {
+      if (lastImage === -1) lastImage = i;
+      else out[i] = { role: "user", content: [{ type: "input_text", text: "[older screenshot removed]" }] };
+    }
+  }
+  const size = () => out.reduce<number>((s, x) => s + JSON.stringify(x).length, 0);
+  if (size() <= maxChars) return out;
+  const outputs = out.map((x, i) => [x as Record<string, unknown>, i] as const).filter(([x]) => x && x["type"] === "function_call_output");
+  for (const [x, i] of outputs.slice(0, Math.max(0, outputs.length - COMPACT_KEEP_RECENT))) {
+    const text = String(x["output"] ?? "");
+    const head = text.split("\n")[0]?.slice(0, 200) ?? "";
+    out[i] = { ...x, output: `${head}\n[compacted — cite the evidence id; the full content is kept]` };
+    if (size() <= maxChars) break;
+  }
+  return out;
+}
+
+/** v2 Responses 요청 본문(프록시와 로컬 하네스가 **같은 함수**로 만든다 — 같은 모델·같은 설정). */
+export function buildV2ResponsesBody(
+  req: { instructions: string; input: unknown[]; tools: readonly unknown[]; maxOutputTokens?: number },
+  cfg: { model: string; effort: "low" | "medium" | "high" },
+): Record<string, unknown> {
+  return {
+    model: cfg.model,
+    instructions: req.instructions,
+    // Claude의 생각 블록(대체 전 턴)은 OpenAI가 모르는 항목 — 뺀다.
+    input: req.input.filter((x) => !(x && typeof x === "object" && (x as Record<string, unknown>)["type"] === "reasoning" && (x as Record<string, unknown>)["vendor"] === "anthropic")),
+    tools: req.tools,
+    tool_choice: "auto",
+    parallel_tool_calls: true,
+    store: false,
+    include: ["reasoning.encrypted_content"],
+    reasoning: { effort: cfg.effort },
+    max_output_tokens: Math.min(Math.max(256, req.maxOutputTokens ?? 8000), 16000),
+  };
+}
+
+/** OpenAI Responses usage → 원장 토큰(입력은 캐시 제외분 — Anthropic 의미와 같게). */
+export function usageFromResponses(u: unknown): { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number } {
+  const x = (u && typeof u === "object" ? u : {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+  const input = n(x["input_tokens"]);
+  const cached = n((x["input_tokens_details"] as Record<string, unknown> | undefined)?.["cached_tokens"]);
+  return { inputTokens: Math.max(0, input - cached), cacheReadTokens: Math.min(cached, input), cacheWriteTokens: 0, outputTokens: n(x["output_tokens"]) };
+}
+
+// ─── 비용·청구 예상(V-6) ──────────────────────────────────────────────────────
+
+export const DEFAULT_CHARGE_MARKUP = 3;
+export const DEFAULT_V2_RUN_BUDGET_USD = 12;
+
+/** 청구 예상액 = 실제 LLM 원가 × 배수([PILOT] 기본 3). **실제 결제는 꺼짐** — 기록만 한다(V-6). */
+export function chargeEstimate(costUsd: number, markupRaw: unknown): { chargeEstimateUsd: number; markup: number; billing: "off" } {
+  const n = Number(markupRaw);
+  const markup = Number.isFinite(n) && n >= 1 && n <= 50 ? n : DEFAULT_CHARGE_MARKUP;
+  const cost = Number.isFinite(costUsd) && costUsd > 0 ? costUsd : 0;
+  return { chargeEstimateUsd: Math.round(cost * markup * 100) / 100, markup, billing: "off" };
+}
+
+/** v2 런 하나의 LLM 예산(서버 권위, 원자 예약) — 미설정·잘못된 값 = 12, 상한 50. */
+export function v2RunBudgetUsd(raw: unknown): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n <= 50 ? n : DEFAULT_V2_RUN_BUDGET_USD;
+}
+
+// ─── V-5 벤더 어댑터: 실행기는 Responses 항목만 안다 — Claude(Messages + tool use)로 옮기고 되돌린다 ─────────
+
+export type V2Vendor = "openai" | "anthropic";
+export const v2VendorOf = (model: string): V2Vendor => (/^claude-/i.test(model) ? "anthropic" : "openai");
+
+type Block = Record<string, unknown>;
+
+/**
+ * Responses 대화 → Anthropic Messages 요청. 추론 항목(OpenAI 전용 암호문)은 버린다. 함수 호출 = assistant tool_use,
+ * 함수 결과 = user tool_result, 이미지 = base64 image. 같은 역할이 이어지면 한 메시지로 합친다(교대 규칙).
+ * 시스템 지시와 마지막 블록에 캐시 표시(긴 대화의 입력 비용을 줄인다).
+ */
+export function toAnthropicRequest(
+  req: { instructions: string; input: readonly unknown[]; tools: readonly V2ToolDef[] | readonly unknown[]; maxOutputTokens?: number },
+  model: string,
+): Record<string, unknown> {
+  const messages: Array<{ role: "user" | "assistant"; content: Block[] }> = [];
+  const push = (role: "user" | "assistant", blocks: Block[]) => {
+    if (blocks.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last && last.role === role) last.content.push(...blocks);
+    else messages.push({ role, content: [...blocks] });
+  };
+  for (const raw of req.input) {
+    if (!raw || typeof raw !== "object") continue;
+    const it = raw as Record<string, unknown>;
+    if (it["type"] === "reasoning") {
+      // Claude의 생각 블록은 도구 호출과 함께 그대로 되돌려야 한다(서명 포함). OpenAI 추론 항목은 버린다.
+      if (it["vendor"] === "anthropic" && Array.isArray(it["blocks"])) push("assistant", (it["blocks"] as Block[]).map((b) => ({ ...b })));
+      continue;
+    }
+    if (it["type"] === "function_call") {
+      let input: unknown = {};
+      try {
+        input = JSON.parse(String(it["arguments"] ?? "{}"));
+      } catch {
+        input = {};
+      }
+      push("assistant", [{ type: "tool_use", id: safeToolId(String(it["call_id"] ?? "")), name: String(it["name"] ?? ""), input }]);
+      continue;
+    }
+    if (it["type"] === "function_call_output") {
+      push("user", [{ type: "tool_result", tool_use_id: safeToolId(String(it["call_id"] ?? "")), content: String(it["output"] ?? "") }]);
+      continue;
+    }
+    const role = it["role"] === "assistant" || (it["type"] === "message" && it["role"] !== "user") ? "assistant" : "user";
+    const content = it["content"];
+    if (typeof content === "string") {
+      push(role, [{ type: "text", text: content }]);
+      continue;
+    }
+    if (Array.isArray(content)) {
+      const blocks: Block[] = [];
+      for (const c of content as Block[]) {
+        const t = c?.["type"];
+        if ((t === "input_text" || t === "output_text" || t === "text") && typeof c["text"] === "string") blocks.push({ type: "text", text: c["text"] });
+        else if (t === "input_image" && typeof c["image_url"] === "string") {
+          const m = /^data:(image\/[a-z]+);base64,(.+)$/.exec(c["image_url"] as string);
+          if (m) blocks.push({ type: "image", source: { type: "base64", media_type: m[1], data: m[2] } });
+        }
+      }
+      push(role, blocks);
+    }
+  }
+  const lastMsg = messages[messages.length - 1];
+  const lastBlock = lastMsg?.content[lastMsg.content.length - 1];
+  if (lastBlock) lastBlock["cache_control"] = { type: "ephemeral" };
+  const tools = (req.tools as V2ToolDef[]).map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters }));
+  return {
+    model,
+    max_tokens: Math.min(Math.max(256, req.maxOutputTokens ?? 8000), 16000),
+    system: [{ type: "text", text: req.instructions, cache_control: { type: "ephemeral" } }],
+    tools,
+    messages,
+  };
+}
+
+function safeToolId(id: string): string {
+  const s = id.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
+  return s || "call";
+}
+
+/** Anthropic 응답 → Responses 출력 항목(실행기는 벤더를 모른다) + 원장 토큰. */
+export function fromAnthropicResponse(j: unknown): { output: unknown[]; model: string | null; tokens: { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number } } {
+  const x = (j && typeof j === "object" ? j : {}) as Record<string, unknown>;
+  const output: unknown[] = [];
+  const thinking = (Array.isArray(x["content"]) ? (x["content"] as Block[]) : []).filter((b) => b["type"] === "thinking" || b["type"] === "redacted_thinking");
+  if (thinking.length) output.push({ type: "reasoning", vendor: "anthropic", blocks: thinking });
+  for (const b of Array.isArray(x["content"]) ? (x["content"] as Block[]) : []) {
+    if (b["type"] === "text" && typeof b["text"] === "string" && (b["text"] as string).trim()) {
+      output.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: b["text"] }] });
+    } else if (b["type"] === "tool_use" && typeof b["name"] === "string") {
+      output.push({ type: "function_call", call_id: String(b["id"] ?? ""), name: b["name"], arguments: JSON.stringify(b["input"] ?? {}) });
+    }
+  }
+  const u = (x["usage"] && typeof x["usage"] === "object" ? x["usage"] : {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+  return {
+    output,
+    model: typeof x["model"] === "string" ? (x["model"] as string) : null,
+    tokens: { inputTokens: n(u["input_tokens"]), cacheReadTokens: n(u["cache_read_input_tokens"]), cacheWriteTokens: n(u["cache_creation_input_tokens"]), outputTokens: n(u["output_tokens"]) },
+  };
+}

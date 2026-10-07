@@ -45,6 +45,9 @@ export const PRICING: Readonly<Record<string, ModelPricing>> = {
   "gpt-5.4-mini": { inputPerMTok: 0.75, cacheWritePerMTok: 0.75, cacheReadPerMTok: 0.075, outputPerMTok: 4.5 },
   // 2026-10-07 공식 단가(developers.openai.com/api/docs/pricing, Standard, 조회 2026-10-07): GPT-5.6 계열(검사 엔진 v2 기본 = sol).
   //  캐시 쓰기 가산은 없다(입력 단가 그대로). 긴 문맥 구간 단가는 페이지에 없음.
+  // 2026-10-07 Anthropic 공식 단가(platform.claude.com/docs/en/about-claude/pricing): Fable 5.1 입력 $10 · 5분 캐시 쓰기 $12.50 ·
+  //  캐시 적중 $0.25(0.025x) · 출력 $50. 검사 엔진 v2 주 모델 기본.
+  "claude-fable-5-1": { inputPerMTok: 10, cacheWritePerMTok: 12.5, cacheReadPerMTok: 0.25, outputPerMTok: 50 },
   "gpt-5.6-sol": { inputPerMTok: 4, cacheWritePerMTok: 4, cacheReadPerMTok: 0.4, outputPerMTok: 20 },
   "gpt-5.6-terra": { inputPerMTok: 2, cacheWritePerMTok: 2, cacheReadPerMTok: 0.2, outputPerMTok: 12 },
   "gpt-5.6-luna": { inputPerMTok: 0.2, cacheWritePerMTok: 0.2, cacheReadPerMTok: 0.02, outputPerMTok: 1.2 },
