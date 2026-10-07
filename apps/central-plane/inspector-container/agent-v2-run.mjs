@@ -15,6 +15,7 @@ const CONTEXT_MAX_CHARS = 500_000;
 const TOOL_OUTPUT_MAX = 12_000;
 /** 한 기준의 판정이 기계 검증기에 이만큼 거절되면 확인 못 함으로 기록한다(증거를 더 모으면 다시 판정 가능). */
 const MAX_REFUSALS_PER_AC = 3;
+const MESSAGE_FIELD_RE = /(문의|요청 ?사항|궁금한|메시지|메세지|내용을 (적|입력)|하고 싶은 말|\bmessage\b|\binquiry\b|\bquestion\b|\bcomments?\b)/i;
 /** 고친 파일 검증에 남겨야 할 최소 시간 · 검증 런의 도구 호출 상한. */
 const SINGLE_FILE_FIX_MIN_MS = 3 * 60 * 1000;
 const SINGLE_FILE_VERIFY_TOOL_CALLS = 80;
@@ -34,7 +35,9 @@ const PROPOSE_EDITS_TOOL = {
   strict: true,
 };
 /** 실서비스 안전(일반 규칙): 실제 사람·돈·계정에 닿는 한국어 행동은 누르지 않는다(safety.mjs는 영어 위주). */
-const RISKY_KO_RE = /(초대|공유하기|메일 ?보내|문자 ?보내|알림 ?보내|발송|탈퇴|계정 ?삭제|비밀번호 ?변경|구독|결제|환불|송금|주문하기|구매하기|삭제|지우기)/;
+// 2026-10-08 실측(daehwa-ai.com bake-off): 문의 폼 "문의 보내기"·채팅 "보내기"를 눌러 실제 운영팀에 메시지를 보냈다 — 메시지를 사람에게
+// 보내는 행동(보내기·전송·문의·상담/견적 요청·채팅)은 시험 데이터여도 하지 않는다. 판정은 확인 못 함(unsafe_action).
+const RISKY_KO_RE = /(초대|공유하기|보내기|보내요|전송|발송|문의|상담 ?(신청|요청)|견적 ?(요청|받기)|의뢰하기|채팅|탈퇴|계정 ?삭제|비밀번호 ?변경|구독|결제|환불|송금|주문하기|구매하기|삭제|지우기|\bsend\b|\bcontact\b|\binquir|\bmessage us\b|\brequest (a )?(quote|demo)\b)/i;
 
 function v2LoginNote(method, locale) {
   const ko = { none: "로그인 계정 없음 — 로그인 뒤는 확인 못 함으로", signup: "일회용 계정으로 로그인됨", credentials: "주신 시험 계정으로 로그인됨", handover: "사용자가 직접 로그인해 넘겨줌" };
@@ -389,6 +392,14 @@ export async function runAgentV2(o) {
             if (!safety.safe && safety.category !== "empty/unknown") return { text: `Refused: "${label}" looks like a ${safety.category} action; the inspector never does that. If a criterion needs it, it is not_verified (unsafe_action).` };
             if (RISKY_KO_RE.test(label)) return { text: `Refused: "${label}" could reach real people, money or the account (invite/share/send/withdraw/password/subscribe/pay/refund/order/delete). The inspector never does that on a live app — not_verified (unsafe_action).` };
           }
+          // 메시지 칸(문의·요청사항·궁금한 점·메시지)을 채운 뒤의 제출(클릭·엔터)은 사람에게 보내는 일 — 버튼 이름과 무관하게 막는다.
+          if (name === "fill" || name === "select") {
+            const fieldLabel = `${target.label ?? ""} ${target.placeholder ?? ""} ${target.name ?? ""} ${target.text ?? ""}`;
+            if (MESSAGE_FIELD_RE.test(fieldLabel)) state.messageFieldFilled = true;
+          }
+          if ((name === "click" || name === "press") && store.pendingInput && state.messageFieldFilled) {
+            return { text: "Refused: this form sends a message to real people (inquiry/request/chat). The inspector never submits it on a live app — judge as not_verified (unsafe_action)." };
+          }
           if (o.readOnly && (name === "click" || name === "press") && store.pendingInput) {
             return { text: "Refused: READ-ONLY run — submitting entered data would create records. Judge criteria that need it as not_verified (write_not_allowed)." };
           }
@@ -412,6 +423,7 @@ export async function runAgentV2(o) {
           if (!ok.ok) return { text: ok.why === "other_origin" ? "Refused: other sites are out of scope." : "Refused: you have not seen this address (links, requests, routes in the source). Find how a user gets there; guessed addresses are not evidence." };
           const r = await driver.goto(ok.url);
           store.noteAction("navigate");
+          state.messageFieldFilled = false;
           const scr = await screenAfter();
           const a = store.add("screen", "navigate", { summary: `${ok.url} 열기 → HTTP ${r.status ?? "?"}`, raw: `open ${ok.url} → HTTP ${r.status ?? "?"}\n${scr}` });
           return { text: `${header(a)}\nHTTP ${r.status ?? "?"}\n${scr}` };
@@ -514,6 +526,7 @@ export async function runAgentV2(o) {
           const ok = v2.navigateAllowed(String(args.url ?? o.targetUrl), o.targetUrl, state.knownUrls, criteriaText);
           if (!ok.ok) return { text: "Refused: open a new browser only at an address you have seen in this app." };
           store.newContext();
+          state.messageFieldFilled = false;
           const tz = typeof args.timezone === "string" && /^[A-Za-z_]+\/[A-Za-z_]+$/.test(args.timezone) ? args.timezone : null;
           const r = await driver.newContextAt(ok.url, { timezoneId: tz });
           baseline = await storageSig();

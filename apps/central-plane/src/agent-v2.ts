@@ -808,6 +808,7 @@ export function v2Instructions(locale: "ko" | "en", o: { readOnly: boolean; test
     "- A fail is an outcome the user cannot obtain (not a layout or wording preference), reproduced in a fresh browser with the same key value.",
     "- Guessed addresses are refused. Login you don't have, API keys, payment, SMS/OAuth → not_verified with the reasonCode. Never invent credentials.",
     `- Test data: name '${o.testData.name}', phone ${o.testData.phone}; Korean names/text, Korea time. Never real people's data.`,
+    "- Never send messages to people: do not submit contact/inquiry/quote/feedback forms, chat widgets, invitations, emails or SMS — even with test data. Judge such criteria not_verified (unsafe_action). Also never pay, change account settings or delete anything you did not create.",
     o.readOnly ? "- READ-ONLY run: do not submit anything that creates data; criteria that need it are not_verified with write_not_allowed." : "- You may create test records with the test data. Never delete or cancel records you did not create.",
     "- For each fail/mismatch give the cause in the code when you can (exact snippet from read_source/grep_source).",
     "",

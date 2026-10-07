@@ -124,3 +124,24 @@ describe("S5 소개 문구 통과 금지(Lovable형)", () => {
     assert.notEqual(r.decision, "Conditionally Ready");
   });
 });
+
+describe("실서비스 안전 — 사람에게 메시지를 보내는 제출은 하지 않는다(2026-10-08 daehwa bake-off 사고)", () => {
+  it("문의 칸을 채운 뒤 '제출'·엔터·'문의 보내기' 모두 거절, 드라이버에 닿지 않는다", async () => {
+    const d = checklistDriver();
+    const acted = [];
+    const origAct = d.act.bind(d);
+    d.act = async (a) => {
+      acted.push(a);
+      return origAct(a);
+    };
+    const llm = scripted([
+      () => [PLAN],
+      () => [["fill", { target: T({ label: "궁금한 점을 적어주세요" }), value: "심사테스트 문의" }]],
+      () => [["click", { target: T({ role: "button", name: "제출" }) }], ["press", { key: "Enter", target: T({}) }], ["click", { target: T({ role: "button", name: "문의 보내기" }) }]],
+      () => [["finish", { note: "" }]],
+      () => [["finish", { note: "" }]],
+    ]);
+    await runAgentV2({ targetUrl: ORIGIN + "/", intent: "x", locale: "ko", acs: MUST, acSource: "confirmed_inferred", driver: d, llm, budgetMs: 60_000 });
+    assert.deepEqual(acted.map((a) => a.type), ["fill"], "제출 행동은 드라이버에 닿지 않는다");
+  });
+});
