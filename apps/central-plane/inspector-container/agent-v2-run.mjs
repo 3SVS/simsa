@@ -15,6 +15,8 @@ const CONTEXT_MAX_CHARS = 500_000;
 const TOOL_OUTPUT_MAX = 12_000;
 /** 한 기준의 판정이 기계 검증기에 이만큼 거절되면 확인 못 함으로 기록한다(증거를 더 모으면 다시 판정 가능). */
 const MAX_REFUSALS_PER_AC = 3;
+/** 실서비스 안전(일반 규칙): 실제 사람·돈·계정에 닿는 한국어 행동은 누르지 않는다(safety.mjs는 영어 위주). */
+const RISKY_KO_RE = /(초대|공유하기|메일 ?보내|문자 ?보내|알림 ?보내|발송|탈퇴|계정 ?삭제|비밀번호 ?변경|구독|결제|환불|송금|주문하기|구매하기|삭제|지우기)/;
 
 function v2LoginNote(method, locale) {
   const ko = { none: "로그인 계정 없음 — 로그인 뒤는 확인 못 함으로", signup: "일회용 계정으로 로그인됨", credentials: "주신 시험 계정으로 로그인됨", handover: "사용자가 직접 로그인해 넘겨줌" };
@@ -359,6 +361,7 @@ export async function runAgentV2(o) {
             const label = target.name ?? target.text ?? target.label ?? "";
             const safety = classifyActionSafety(label);
             if (!safety.safe && safety.category !== "empty/unknown") return { text: `Refused: "${label}" looks like a ${safety.category} action; the inspector never does that. If a criterion needs it, it is not_verified (unsafe_action).` };
+            if (RISKY_KO_RE.test(label)) return { text: `Refused: "${label}" could reach real people, money or the account (invite/share/send/withdraw/password/subscribe/pay/refund/order/delete). The inspector never does that on a live app — not_verified (unsafe_action).` };
           }
           if (o.readOnly && (name === "click" || name === "press") && store.pendingInput) {
             return { text: "Refused: READ-ONLY run — submitting entered data would create records. Judge criteria that need it as not_verified (write_not_allowed)." };

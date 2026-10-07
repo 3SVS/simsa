@@ -36,8 +36,9 @@ const OPENAI_RESPONSES = "https://api.openai.com/v1/responses";
 
 /** 키 파일: 셸에 없으면 tools/simsa-completion-loop-spike/.env.staff.local(gitignore)에서 읽는다 — 값은 출력하지 않는다. */
 function loadLocalEnv() {
-  const file = join(here, "..", "simsa-completion-loop-spike", ".env.staff.local");
-  if (!existsSync(file)) return;
+  // 워크트리에는 gitignore 파일이 없다 — SIMSA_STAFF_ENV_FILE로 본 체크아웃의 파일을 가리킬 수 있다.
+  const file = [process.env.SIMSA_STAFF_ENV_FILE, join(here, "..", "simsa-completion-loop-spike", ".env.staff.local")].find((f) => f && existsSync(f));
+  if (!file) return;
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
     const m = /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
     if (!m) continue;
