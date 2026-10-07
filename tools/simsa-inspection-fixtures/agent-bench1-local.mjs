@@ -117,7 +117,7 @@ function localProxyLlm(events) {
  *   ③ "빠졌는데 꼭 되어야 하는 것" — 내 요청에 있는데 목록에 없는 것을 한 줄씩(intent-missing.mjs와 같은 user_N 항목)
  * 아는 것은 **빌더에 넣은 프롬프트 원문뿐**이다(정답지는 보지 않는다). 항목마다 이유를 남긴다.
  */
-export async function confirmFromPrompt(items, events) {
+export async function confirmFromPrompt(items, events, prompt = REGISTERED_PROMPT) {
   const llm = localProxyLlm(events);
   const list = items.map((it, i) => `${i + 1}. [${it.id}] ${it.title}${it.criteria?.length ? ` — ${it.criteria.join(" / ")}` : ""}`).join("\n");
   const text = await llm({
@@ -126,7 +126,7 @@ export async function confirmFromPrompt(items, events) {
       "The card has: (1) a one-sentence description of what you wanted, (2) the checker's inferred items, all UNCHECKED by default — check ONLY items your request clearly asks for (checked items are judged 'must work'); leave everything else unchecked, (3) a box 'anything missing that must work?' — list, one per line in Korean, every requirement your request states (especially outcomes: what must actually happen, who must see it, what must be prevented, what must survive) that the inferred items do not already cover.",
       'Reply JSON only: {"oneLine":"...","items":[{"id":"...","keep":true|false,"why":"..."}],"missing":[{"text":"...","why":"..."}]}',
     ].join("\n"),
-    user: `My request to the builder (verbatim):\n${REGISTERED_PROMPT}\n\nItems the checker inferred from my app:\n${list}`,
+    user: `My request to the builder (verbatim):\n${prompt}\n\nItems the checker inferred from my app:\n${list}`,
     maxTokens: 1500,
   });
   const m = /\{[\s\S]*\}/.exec(text);
