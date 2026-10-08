@@ -210,6 +210,48 @@ function CorrectedFileDownload({ report, locale }: { report: unknown; locale: "k
   );
 }
 
+/** 2026-10-09 "만든 AI의 설명 vs 실제" — 다름은 증거물을 인용한 판정만 서버가 남긴다. 확인 못 함은 그대로 밝힌다. */
+type ClaimRow = { id: string; claim: string; result: "matches" | "differs" | "not_verified"; actual: string; evidence: string[] };
+export function parseBuilderClaims(report: unknown): ClaimRow[] {
+  const r = report && typeof report === "object" ? (report as Record<string, unknown>) : null;
+  const rows = Array.isArray(r?.["builderClaims"]) ? (r!["builderClaims"] as unknown[]) : [];
+  return rows
+    .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}))
+    .filter((x) => typeof x["claim"] === "string" && ["matches", "differs", "not_verified"].includes(String(x["result"])))
+    .slice(0, 30)
+    .map((x) => ({ id: str(x["id"]), claim: str(x["claim"]), result: x["result"] as ClaimRow["result"], actual: str(x["actual"]), evidence: Array.isArray(x["evidence"]) ? (x["evidence"] as unknown[]).map(str).slice(0, 4) : [] }));
+}
+const CLAIM_COPY = {
+  ko: { title: "만든 AI의 설명 vs 실제", said: "만든 AI의 설명", actual: "실제로 확인한 것", result: { matches: "설명대로예요", differs: "설명과 달라요", not_verified: "확인 못 함" } },
+  en: { title: "What the builder said vs. what we found", said: "Builder said", actual: "What we actually found", result: { matches: "As described", differs: "Not as described", not_verified: "Couldn't check" } },
+} as const;
+function BuilderClaimsTable({ report, locale }: { report: unknown; locale: "ko" | "en" }) {
+  const rows = parseBuilderClaims(report);
+  if (rows.length === 0) return null;
+  const c = CLAIM_COPY[locale];
+  return (
+    <section className="space-y-2" data-testid="agent-builder-claims">
+      <h3 className="section-title">{c.title}</h3>
+      <ul className="space-y-2">
+        {rows.map((row) => (
+          <li key={row.id} className="rounded-md border border-stone-200 p-2 text-xs">
+            <p className={row.result === "differs" ? "font-semibold text-red-700" : row.result === "matches" ? "font-semibold text-gray-800" : "font-semibold text-gray-500"}>{c.result[row.result]}</p>
+            <p className="text-gray-700">
+              {c.said}: {row.claim}
+            </p>
+            {row.actual && (
+              <p className="text-gray-700">
+                {c.actual}: {row.actual}
+              </p>
+            )}
+            {row.evidence.length > 0 && <p className="text-gray-400">{row.evidence.join(" · ")}</p>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function AgentReportSections({ report, locale }: { report: unknown; locale: "ko" | "en" }) {
   const parsed = parseAgentReport(report);
   if (!parsed) return null;
@@ -231,6 +273,7 @@ export function AgentReportSections({ report, locale }: { report: unknown; local
           ))}
         </ul>
       </section>
+      <BuilderClaimsTable report={report} locale={locale === "en" ? "en" : "ko"} />
       <CorrectedFileDownload report={report} locale={locale} />
       {parsed.sweep && (
         <section className="space-y-2" data-testid="agent-sweep">

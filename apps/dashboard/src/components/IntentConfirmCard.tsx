@@ -56,6 +56,7 @@ import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { mirrorThenBuildIntentRuler } from "@/lib/intent-ruler";
 import { missingItemsFromText } from "@/lib/intent-missing.mjs";
 import { generationCapacityText } from "@/lib/generation-capacity.mjs";
+import { BuilderSelfReportPanel } from "@/components/BuilderSelfReportPanel";
 
 type InferredItem = { id: string; title: string; criteria?: string[] };
 type InferResponse = {
@@ -91,6 +92,8 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<InferredItem[]>([]);
   const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [missing, setMissing] = useState("");
+  // 2026-10-09 만든 AI가 말한 핵심 흐름 중 사용자가 체크한 것 — "빠진 것"처럼 사용자가 확인한 기준이 된다(체크 해제로 시작).
+  const [builderFlows, setBuilderFlows] = useState<string[]>([]);
   const [reason, setReason] = useState<string>("");
   const [raw, setRaw] = useState<InferResponse | null>(null);
   // C-N7: door (c) "만들었는데 생각과 달라요" — the same card and the same save, but
@@ -156,7 +159,10 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   function confirm() {
     // 2026-10-05: 사용자가 적은 "빠진 것"도 확인된 항목이다 — 앱에서 읽지 못한 원래 의도가 기준이 된다.
     const added = missingItemsFromText(missing, items.map((i) => i.id));
+    // 만든 AI가 말한 흐름 중 사용자가 체크한 것도 같은 경로(직접 적은 항목 user_N)로 — 체크 안 한 것은 들어가지 않는다.
+    const fromBuilder = missingItemsFromText(builderFlows.join("\n"), [...items.map((i) => i.id), ...added.map((a) => a.id)]);
     const kept = [...items.filter((i) => !dropped.has(i.id)), ...added];
+    kept.push(...fromBuilder);
     const proj = getLocalProject(projectId);
     const finalName = name.trim() || proj?.name || "";
     saveProject({
@@ -334,6 +340,8 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
                 </ul>
               </div>
             )}
+
+            <BuilderSelfReportPanel projectId={projectId} locale={locale === "en" ? "en" : "ko"} checkedFlows={builderFlows} onCheckedFlowsChange={setBuilderFlows} />
 
             {/* 2026-10-05: 앱에서 못 읽은 원래 의도 — 한 줄에 하나. 적은 것은 그대로 확인 기준이 된다. */}
             <div className="mt-4">
