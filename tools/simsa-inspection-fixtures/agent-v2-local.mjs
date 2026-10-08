@@ -119,7 +119,7 @@ export async function serveFixtures(port = 0) {
 }
 
 /** v2 한 런(프로덕션과 같은 상한). */
-export async function runV2Local({ url, intent, acs = [], acSource, locale = "ko", priorPlan = null, onPhase, credentials = null }) {
+export async function runV2Local({ url, intent, acs = [], acSource, locale = "ko", priorPlan = null, onPhase, credentials = null, builderReport = null }) {
   const events = [];
   const outDir = mkdtempSync(join(tmpdir(), "v2-local-"));
   const phases = [];
@@ -136,6 +136,7 @@ export async function runV2Local({ url, intent, acs = [], acSource, locale = "ko
       acs,
       acSource: acSource ?? (acs.length ? "confirmed_inferred" : "inferred_at_run"),
       priorPlan,
+      builderReport,
       loginMode: credentials ? "credentials" : "none",
       ...(credentials ? { credentials } : {}),
       llm,

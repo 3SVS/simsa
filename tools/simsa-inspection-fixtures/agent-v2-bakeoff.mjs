@@ -24,6 +24,7 @@ const { evidenceFromWebsite, composeIdeaFromEvidence } = await imp("dist/workspa
 const { generateIdeaToSpecDraft } = await imp("dist/workspace/generate.js");
 const { generateDevSpec, makeDevSpecLlmCaller } = await imp("dist/workspace/generate-dev-spec.js");
 const { agentAcsFromDevSpec } = await imp("dist/acceptance-plan.js");
+const { parseBuilderSelfReport } = await imp("dist/workspace/builder-self-report.js");
 const require = createRequire(join(here, "..", "simsa-completion-loop-spike", "package.json"));
 const { chromium } = require("playwright");
 
@@ -81,7 +82,16 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   const specFile = join(outDir, "shared-intent-acs.json");
   const shared = existsSync(specFile) ? JSON.parse(readFileSync(specFile, "utf8")) : await inferOnce(url);
+  // 만든 AI의 자기 설명(선택): --self-report=<텍스트 파일> → 프로덕션과 같은 함수로 정리(비밀 지움) → 모든 런이 같은 정리본을 쓴다.
+  const srFile = arg("self-report", "");
+  if (srFile && !shared.builderReport) {
+    const parsed = await parseBuilderSelfReport(readFileSync(srFile, "utf8"), "ko", KEY_SLOT, undefined, fallback());
+    if (!parsed.ok) throw new Error(`self-report parse failed: ${parsed.error}`);
+    shared.builderReport = parsed.report;
+    shared.selfReportSource = srFile;
+  }
   writeFileSync(specFile, JSON.stringify(shared, null, 2));
+  if (shared.builderReport) console.log(`builder self-report: ${shared.builderReport.claims.length} claims`);
   console.log(`intent: ${shared.intent}\nacs: ${shared.acs.length} (${shared.acs.map((a) => `${a.id}:${a.priority}`).join(" ")})`);
   const summary = [];
   for (const model of models) {
@@ -98,7 +108,7 @@ async function main() {
           ? { username: process.env.V2_TEST_USERNAME, password: process.env.V2_TEST_PASSWORD, ...(process.env.V2_TEST_LOGIN_URL ? { loginUrl: process.env.V2_TEST_LOGIN_URL } : {}) }
           : null;
         if (k === 1) console.log(`login: ${credentials ? "test account (credentials)" : "none — behind-login is not_verified"}`);
-        const r = await runV2Local({ url, intent: shared.intent, acs: shared.acs, acSource: "confirmed_inferred", credentials, onPhase: (l) => process.env.V2_VERBOSE && console.log("  ", l) });
+        const r = await runV2Local({ url, intent: shared.intent, acs: shared.acs, acSource: "confirmed_inferred", credentials, builderReport: shared.builderReport ?? null, onPhase: (l) => process.env.V2_VERBOSE && console.log("  ", l) });
         row = {
           model,
           run: k,
@@ -109,6 +119,7 @@ async function main() {
           acTable: r.report.acTable.map((x) => ({ id: x.id, priority: x.priority, status: x.status, reasonCode: x.reasonCode, reason: x.reason, evidence: x.evidence })),
           findings: r.report.findings,
           builderPack: r.agentPrompt,
+          builderClaims: r.report.builderClaims ?? null,
           v2: r.report.agent.v2,
           costUsd: r.costUsd,
           chargeEstimate: r.chargeEstimate,
