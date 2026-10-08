@@ -1012,7 +1012,7 @@ export function buildAgentAcFixPrompt(report: Pick<AgentReport, "target" | "inte
   const brokenScreens = (report.sweep?.problems ?? []).filter((p) => p.kind === "screen" || p.problem === "error");
   const signals = report.findings.filter((f) => f.code && SIGNAL_CODES.has(f.code));
   // v2(V-7): 근거가 검사된 의도 불일치도 고칠 것이다 — 앱이 원하신 일과 다른 일을 한다.
-  const mismatch = report.findings.filter((f) => f.code === "intent_mismatch");
+  const mismatch = report.findings.filter((f) => f.code === "intent_mismatch" || f.code === "builder_claim_contradicted");
   if (failed.length === 0 && brokenScreens.length === 0 && signals.length === 0 && mismatch.length === 0) return "";
   const lines: string[] = [
     en
@@ -1024,7 +1024,8 @@ export function buildAgentAcFixPrompt(report: Pick<AgentReport, "target" | "inte
     "",
   ];
   for (const f of mismatch) {
-    lines.push(en ? "0. [INTENT] The app does a different job than intended — rebuild the core to do what was intended." : "0. [의도] 생각과 달라요 — 앱이 원래 원한 일과 다른 일을 합니다. 핵심 기능을 원래 의도대로 다시 만들어 주세요.");
+    if (f.code === "builder_claim_contradicted") lines.push(`0. [${en ? "BUILDER CLAIM" : "만든 AI 설명"}] ${f.what}`);
+    else lines.push(en ? "0. [INTENT] The app does a different job than intended — rebuild the core to do what was intended." : "0. [의도] 생각과 달라요 — 앱이 원래 원한 일과 다른 일을 합니다. 핵심 기능을 원래 의도대로 다시 만들어 주세요.");
     lines.push(`   ${en ? "What it does now" : "지금 하는 일"}: ${f.why}`);
     if (f.evidence) lines.push(`   ${en ? "Evidence" : "근거"}: ${f.evidence}`);
     lines.push(`   ${en ? "What to do" : "할 일"}: ${f.how}`);

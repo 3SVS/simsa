@@ -68,6 +68,7 @@ import {
 } from "../workspace/inspection-agent.js";
 import { INSPECT_LLM_PATH, INSPECT_LLM_V2_PATH } from "./inspect-llm-proxy.js";
 import { chargeEstimate, v2PlanFromReport, v2RunBudgetUsd, wasAgentV2Report, type V2Plan } from "../agent-v2.js";
+import { sanitizeBuilderReport, type BuilderSelfReport } from "../workspace/builder-self-report.js";
 import { internalBearerRejection } from "./admin-internal.js";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -184,6 +185,8 @@ export type AgentDispatch = {
   engineVersion?: "v2";
   /** v2 재검사: 원 런의 계획(가설·단계·탐침)을 그대로 다시 돈다(X-4). */
   priorPlan?: V2Plan | null;
+  /** 만든 AI의 자기 설명(파싱·비밀 제거됨) — v2 가설 재료. 증거가 아니다. */
+  builderReport?: BuilderSelfReport | null;
 };
 
 /** v2 런의 도구 호출 상한·실행 시간(분). 예산은 INSPECT_AGENT_V2_BUDGET_USD(기본 12). */
@@ -360,6 +363,7 @@ export async function dispatchInspection(
         ...(args.agent.caps ? { caps: isV2 ? { ...args.agent.caps, ...AGENT_V2_CAPS } : args.agent.caps } : {}),
         ...(args.agent.readOnly ? { readOnly: true } : {}),
         ...(isV2 && args.agent.priorPlan ? { priorPlan: args.agent.priorPlan } : {}),
+        ...(isV2 && args.agent.builderReport ? { builderReport: args.agent.builderReport } : {}),
         llmUrl: `${base}${isV2 ? INSPECT_LLM_V2_PATH : INSPECT_LLM_PATH}`,
         llmToken,
       },
@@ -818,7 +822,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
           loginMode,
           caps: entitlementsFor(tier).agentRun,
           ...(readOnly ? { readOnly: true } : {}),
-          ...(useV2 ? { engineVersion: "v2" as const, priorPlan: v2PlanFromReport(sourceCheck?.reportJson) } : {}),
+          ...(useV2 ? { engineVersion: "v2" as const, priorPlan: v2PlanFromReport(sourceCheck?.reportJson), builderReport: bodyRec["builderReport"] !== undefined ? sanitizeBuilderReport(bodyRec["builderReport"]) : null } : {}),
         }
       : null;
     if (testCredentials) {

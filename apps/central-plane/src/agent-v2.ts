@@ -162,6 +162,9 @@ export interface V2Judgment {
 }
 
 export const INTENT_AC_ID = "INTENT";
+/** 만든 AI의 자기 설명 주장 하나의 판정 id: CLAIM-C1, CLAIM-C2 … */
+export const CLAIM_ID_PREFIX = "CLAIM-";
+export const isClaimId = (id: string): boolean => /^CLAIM-C\d{1,2}$/.test(id ?? "");
 
 export type V2Problem =
   | "unknown_ac"
@@ -217,10 +220,12 @@ export function isVerifiedOutcome(a: Artifact): boolean {
  *   ④ fail = 사용자가 얻을 수 없는 결과 + 새 브라우저에서 같은 값이 다시 나온 재현 쌍(must)
  */
 export function validateV2Verdict(j: V2Judgment, ac: AgentAc | undefined, store: { get(id: string): Artifact | undefined }): V2Check {
-  const isIntent = j.acId === INTENT_AC_ID;
+  // 만든 AI의 주장(CLAIM-Cn)도 의도처럼 판정한다: pass = 주장대로임, mismatch = 주장과 다름(증거물 필수), not_verified.
+  const isClaim = isClaimId(j.acId);
+  const isIntent = j.acId === INTENT_AC_ID || isClaim;
   if (!isIntent && !ac) return { accept: false, problem: "unknown_ac", feedback: `Unknown criterion id "${j.acId}". Judge only the given criteria (or ${INTENT_AC_ID} for the intent comparison).` };
-  if (isIntent && j.verdict !== "mismatch" && j.verdict !== "pass") {
-    return { accept: false, problem: "verdict_on_intent", feedback: `${INTENT_AC_ID} takes verdict "mismatch" (the app does a different job) or "pass" (it does the intended job).` };
+  if (isIntent && j.verdict === "fail") {
+    return { accept: false, problem: "verdict_on_intent", feedback: `${j.acId} takes verdict "mismatch" (actual app differs), "pass" (matches) or not_verified.` };
   }
   if (!isIntent && j.verdict === "mismatch") {
     return { accept: false, problem: "mismatch_on_criterion", feedback: `"mismatch" is only for ${INTENT_AC_ID}. For a criterion use pass, fail or not_verified.` };
@@ -475,6 +480,8 @@ export interface V2ReportInput {
   staticFacts?: StaticFact[];
   plan?: unknown;
   toolCalls?: number;
+  /** 만든 AI의 자기 설명(있으면 "설명 vs 실제" 표). */
+  builderReport?: V2BuilderReport | null;
 }
 
 /**
@@ -573,6 +580,23 @@ export function buildV2Report(input: V2ReportInput, locale: "ko" | "en" = "ko"):
     if (!f) continue;
     f.why = `${f.why} — ${L2 === "en" ? "cause in the code" : "코드에서 찾은 원인"}: ${r.cause.explanation}`.slice(0, 900);
     f.evidence = `${f.evidence ?? ""} | ${r.cause.file} · ${r.cause.where}: ${r.cause.snippet}`.slice(0, 1200);
+  }
+
+  // ── 만든 AI의 설명 vs 실제: 다름(증거물 인용 판정)은 고칠 것 — 설명과 실제가 다르면 사용자가 믿고 있는 앱이 아니다. ──
+  const claimRows = input.builderReport ? builderClaimTable(input.builderReport.claims, input.records, input.store) : [];
+  if (claimRows.length) {
+    (report as unknown as Record<string, unknown>)["builderClaims"] = claimRows;
+    for (const row of claimRows.filter((r) => r.result === "differs")) {
+      report.findings.push({
+        severity: "high",
+        code: "builder_claim_contradicted",
+        what: L === "en" ? `The builder's description doesn't match the app: "${row.claim.slice(0, 160)}"` : `만든 AI의 설명과 실제가 달라요: "${row.claim.slice(0, 160)}"`,
+        why: row.actual.slice(0, 500),
+        how: L === "en" ? "Ask your builder to make the app actually work as it described (or correct its description), then check again." : "만든 도구에 설명한 대로 실제로 작동하게 고쳐 달라고(또는 설명을 바로잡아 달라고) 요청한 뒤 다시 확인해 주세요.",
+        evidence: `CLAIM-${row.id} | ${row.evidence.join(" | ")}`.slice(0, 600),
+      });
+      report.agent.defects.push({ acId: `CLAIM-${row.id}`, priority: "should", status: "fail", defectClass: "other" });
+    }
   }
 
   (report.agent as unknown as Record<string, unknown>)["v2"] = {
@@ -1107,4 +1131,68 @@ export function fromAnthropicResponse(j: unknown): { output: unknown[]; model: s
     model: typeof x["model"] === "string" ? (x["model"] as string) : null,
     tokens: { inputTokens: n(u["input_tokens"]), cacheReadTokens: n(u["cache_read_input_tokens"]), cacheWriteTokens: n(u["cache_creation_input_tokens"]), outputTokens: n(u["output_tokens"]) },
   };
+}
+
+
+// ─── 만든 AI의 자기 설명(Builder self-report, 2026-10-09) ────────────────────────
+// 주장은 **증거가 아니다**(V-1·V-2 그대로) — 확인할 가설일 뿐. 다른 것이 증거물로 드러나면 그 자체가 결함 신호다.
+
+export interface V2BuilderClaim {
+  id: string;
+  kind: "works" | "fake" | "storage" | "integration" | "limitation" | "untested" | "login";
+  text: string;
+}
+
+export interface V2BuilderReport {
+  intent: string;
+  mustFlows: string[];
+  claims: V2BuilderClaim[];
+  access: { loginMethod: string; testAccountHow: string };
+}
+
+const CLAIM_TEST: Record<V2BuilderClaim["kind"], string> = {
+  works: "Use it end to end and observe the outcome (requests, storage, another browser).",
+  fake: "Confirm it is fake (vary inputs, grep the source for fixed data) and report it as a gap if a criterion needs it real.",
+  storage: "Verify where data really goes: storage_dump, network_log after submitting, grep_source for the backend client; then check it appears in a NEW browser.",
+  integration: "Check the request to that service in network_log and the code that calls it; placeholders or missing keys in the source contradict 'connected'.",
+  limitation: "Reproduce the stated limit/bug and report it with evidence.",
+  untested: "Test it — the builder never did.",
+  login: "Follow the stated login/test-account method if it needs no secret; otherwise not_verified (login_required).",
+};
+
+/** 주장 → 가설(H 단계 재료). id는 판정 id(CLAIM-Cn)와 같게. */
+export function claimHypotheses(claims: readonly V2BuilderClaim[]): V2Hypothesis[] {
+  return claims.slice(0, 30).map((c) => ({ id: `${CLAIM_ID_PREFIX}${c.id}`, risk: `Builder claims (${c.kind}): ${c.text}`, test: CLAIM_TEST[c.kind] ?? CLAIM_TEST.works }));
+}
+
+/** 첫 메시지에 붙일 자기 설명 블록(주장은 가설임을 분명히). */
+export function builderReportBlock(r: V2BuilderReport | null | undefined): string {
+  if (!r || (!r.claims.length && !r.mustFlows.length)) return "";
+  return [
+    "",
+    "The AI that BUILT the app described it as follows. These are CLAIMS, not evidence — verify each one. For every claim record_verdict with acId CLAIM-<id>: \"pass\" if the app really is as claimed, \"mismatch\" if the evidence shows otherwise (cite it), not_verified if you cannot tell.",
+    `Builder says the app is for: ${r.intent}`,
+    ...(r.mustFlows.length ? ["Builder's core flows:", ...r.mustFlows.map((f) => `- ${f}`)] : []),
+    "Claims:",
+    ...r.claims.map((c) => `- CLAIM-${c.id} [${c.kind}] ${c.text}`),
+    ...(r.access.loginMethod || r.access.testAccountHow ? [`Access hints (claims too): login=${r.access.loginMethod || "-"}; test account=${r.access.testAccountHow || "-"}`] : []),
+  ].join("\n");
+}
+
+export interface BuilderClaimRow {
+  id: string;
+  kind: V2BuilderClaim["kind"];
+  claim: string;
+  result: "matches" | "differs" | "not_verified";
+  actual: string;
+  evidence: string[];
+}
+
+/** "만든 AI의 설명 vs 실제" 표 — 다름은 기계 검증기를 통과한(증거물 인용) 판정만. */
+export function builderClaimTable(claims: readonly V2BuilderClaim[], records: readonly V2JudgmentRecord[], store: { get(id: string): Artifact | undefined }): BuilderClaimRow[] {
+  return claims.map((c) => {
+    const r = records.find((x) => x.acId === `${CLAIM_ID_PREFIX}${c.id}`);
+    const result: BuilderClaimRow["result"] = r?.verdict === "pass" ? "matches" : r?.verdict === "mismatch" ? "differs" : "not_verified";
+    return { id: c.id, kind: c.kind, claim: c.text, result, actual: r && r.verdict !== "not_verified" ? r.claim : "", evidence: (r?.artifactIds ?? []).map((id) => store.get(id)?.summary ?? id).slice(0, 6) };
+  });
 }

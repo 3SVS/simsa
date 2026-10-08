@@ -45,6 +45,7 @@ import {
   generateFixSuggestion,
   type WorkspaceFixSuggestionRequest,
 } from "../workspace/fix.js";
+import { parseBuilderSelfReport, SELF_REPORT_MAX_CHARS } from "../workspace/builder-self-report.js";
 import {
   generateRecommendedAnswer,
   type WorkspaceRecommendAnswerRequest,
@@ -729,6 +730,41 @@ export function createWorkspaceRoutes(): Hono<{ Bindings: Env }> {
       JSON.stringify(comparison ? { ...result, comparison } : result),
       { status: 200, headers: { "content-type": "application/json", ...headers } },
     );
+  });
+
+  // ── POST /workspace/builder-self-report (2026-10-09) ─────────────────────────
+  // 만든 AI의 자기 설명을 구조로. 상태 없음(원문 저장 안 함) · 비밀은 지운 뒤에만 LLM으로 · 실패는 정직하게(503/422).
+  // 결과는 클라이언트가 "맞나요?" 카드를 미리 채우고, 런 요청(builderReport)으로 검사 엔진 v2의 가설에 넘긴다.
+  app.post("/workspace/builder-self-report", async (c) => {
+    const origin = c.req.header("origin") ?? null;
+    const headers = corsHeaders(origin);
+    const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+    const limitPerHour = parseInt(c.env.WORKSPACE_GENERATION_LIMIT_PER_HOUR ?? "", 10) || DEFAULT_LIMIT_PER_HOUR;
+    const rawIp = c.req.header("cf-connecting-ip") ?? (c.req.header("x-forwarded-for") ?? "").split(",")[0]?.trim() ?? "unknown";
+    const ipHash = await ipRateLimitKey(c.env, "workspace-self-report", rawIp);
+    const hourUtc = currentHourUtc();
+    if ((await getRateLimitCount(c.env.DB, ipHash, hourUtc)) >= limitPerHour) return json(429, { ok: false, error: "rate_limited", retryAfterSeconds: secondsUntilNextHour() });
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return json(400, { ok: false, error: "invalid_json" });
+    }
+    const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+    const text = typeof b["text"] === "string" ? b["text"] : "";
+    if (text.trim().length === 0) return json(400, { ok: false, error: "text_required" });
+    if (text.length > SELF_REPORT_MAX_CHARS) return json(413, { ok: false, error: "text_too_long", max: SELF_REPORT_MAX_CHARS });
+    const locale = b["locale"] === "en" ? "en" : "ko";
+    const slot = await takeGenerationSlot(c.env, "generation", clientNetworkKey(c.req.raw));
+    if (slot.limited) return generationCapacityResponse(slot, headers);
+    const billing = createUsageCollector();
+    const result = await parseBuilderSelfReport(text, locale, c.env.ANTHROPIC_API_KEY, c.env.CF_AI_GATEWAY_ANTHROPIC_URL, vendorFallback(c.env), billing.sink);
+    await incrementRateLimitCount(c.env.DB, ipHash, hourUtc);
+    if (!result.ok) {
+      await slot.settle({ failed: true, billedCalls: billing.events.length });
+      return json(result.error === "empty" ? 422 : result.error === "unparseable" ? 422 : 503, { ok: false, error: result.error, removedSecrets: result.removedSecrets });
+    }
+    return json(200, { ok: true, report: result.report, removedSecrets: result.removedSecrets });
   });
 
   // ── POST /workspace/recommend-answer ─────────────────────────────────────────

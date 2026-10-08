@@ -429,6 +429,7 @@ async function runAgentV2Job(payload, { outDir, locale, onPhase, phases, signup 
       acs: Array.isArray(agent.acs) ? agent.acs : [],
       acSource: agent.acSource,
       priorPlan: agent.priorPlan ?? null,
+      builderReport: agent.builderReport ?? null,
       loginMode: agent.loginMode ?? "none",
       credentials: payload.credentials,
       signup: signup?.enabled

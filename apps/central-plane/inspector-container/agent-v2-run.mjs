@@ -239,7 +239,11 @@ export async function runAgentV2(o) {
     const criteriaText = state.acs.map((a) => `${a.title} ${a.given} ${a.when} ${a.then}`).join("\n");
     const data = pure.koreanTestData(Date.now() % 100000);
     state.testData = data;
-    const hypotheses = v2.seedHypotheses(state.staticFacts);
+    // 만든 AI의 자기 설명: 주장 → 가설(증거 아님). 클레임 id는 판정 id(CLAIM-Cn)로.
+    const builderReport = o.builderReport && Array.isArray(o.builderReport.claims) ? o.builderReport : null;
+    state.builderReport = builderReport;
+    const claimIds = new Set((builderReport?.claims ?? []).map((c) => `${v2.CLAIM_ID_PREFIX}${c.id}`));
+    const hypotheses = [...v2.seedHypotheses(state.staticFacts), ...v2.claimHypotheses(builderReport?.claims ?? [])];
     if (o.priorPlan) {
       state.plan = o.priorPlan;
       store.add("plan", "prior_plan", { summary: "이전 검사의 계획(재검사)", raw: v2.planText(o.priorPlan) });
@@ -258,7 +262,7 @@ export async function runAgentV2(o) {
           hypotheses,
           sourceArtifactId: state.sourceArtifactId,
           priorPlan: o.priorPlan ?? null,
-        }),
+        }) + v2.builderReportBlock(builderReport),
       },
     ];
     const refusals = new Map();
@@ -564,7 +568,7 @@ export async function runAgentV2(o) {
         case "record_verdict":
           return recordVerdict(args);
         case "finish": {
-          const missing = [...state.acs.map((a) => a.id), v2.INTENT_AC_ID].filter((id) => !state.records.some((r) => r.acId === id));
+          const missing = [...state.acs.map((a) => a.id), v2.INTENT_AC_ID, ...claimIds].filter((id) => !state.records.some((r) => r.acId === id));
           if (missing.length > 0 && !finishNudged && Date.now() < deadline - 60_000 && state.toolCalls < caps.maxToolCalls - 5) {
             finishNudged = true;
             return { text: `Still missing verdicts for: ${missing.join(", ")}. Judge them (not_verified with a reason if you truly cannot), then finish.` };
@@ -590,6 +594,7 @@ export async function runAgentV2(o) {
         refusals.set("__noplan", 1);
         return { text: "Refused: record_plan first (hypotheses + QA plan), then execute it, then judge." };
       }
+      if (v2.isClaimId(j.acId) && !claimIds.has(j.acId)) return { text: `Unknown claim id ${j.acId}.` };
       const check = v2.validateV2Verdict(j, acById.get(j.acId), store);
       const prior = state.records.find((r) => r.acId === j.acId);
       if (!check.accept) {
@@ -714,6 +719,7 @@ export async function runAgentV2(o) {
         staticFacts: state.staticFacts,
         plan: state.plan,
         toolCalls: state.toolCalls,
+        builderReport: state.builderReport ?? null,
       },
       locale,
     );
