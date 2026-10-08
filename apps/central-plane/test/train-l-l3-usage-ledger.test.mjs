@@ -236,7 +236,7 @@ describe("③ recordLlmUsage — 해시·실응답 단가·fail-open", () => {
     const db = makeDb();
     await recordLlmUsage({ DB: db }, { jobKind: "council", vendor: "google", modelRequested: "gemini-2.5-flash", modelActual: "gemini-2.5-flash", inputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, latencyMs: 1 });
     assert.equal(db.ledger[0].unpriced, 1);
-    near(db.ledger[0].cost_usd, 5);
+    near(db.ledger[0].cost_usd, 10); // 보수 단가 = 표의 최고 입력가(2026-10-07부터 claude-fable-5-1 $10)
     assert.equal(db.ledger[0].user_key_hash, null);
   });
 
@@ -247,7 +247,7 @@ describe("③ recordLlmUsage — 해시·실응답 단가·fail-open", () => {
       const p = priceTokens(m, u);
       assert.equal(p.unpriced, true, `${m}: unpriced`);
       assert.equal(p.pricedAs, null, `${m}: pricedAs`);
-      near(p.costUsd, 30);
+      near(p.costUsd, 60); // 표 최고가 $10 + $50(claude-fable-5-1)
     }
   });
 
@@ -261,9 +261,9 @@ describe("③ recordLlmUsage — 해시·실응답 단가·fail-open", () => {
     assert.equal(db.ledger.length, 2);
     const [a, b] = db.ledger;
     assert.equal(a.unpriced, 1, "constructor → unpriced");
-    near(a.cost_usd, 150);
+    near(a.cost_usd, 300);
     assert.equal(b.unpriced, 1, "__proto__ → unpriced");
-    near(b.cost_usd, 5);
+    near(b.cost_usd, 10);
   });
 
   it("★fail-open: 기록 실패는 false를 돌려주고 던지지 않으며 console.error 한 줄 JSON", async () => {

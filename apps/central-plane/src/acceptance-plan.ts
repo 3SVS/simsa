@@ -91,9 +91,13 @@ export function agentAcsFromDevSpec(devSpec: unknown, opts: { max?: number } = {
   const userTextIds = userText ? new Set(userText) : null;
   const out: AgentAc[] = [];
   for (const a of spec.acceptance) {
-    if (a.verifiedBy === "human") continue;
     const f = featureById.get(a.featureId);
     if (!f) continue;
+    // 2026-10-07 버그 수정(파일럿 Claude 앱): 사용자가 "빠진 것"에 적은 6개 항목의 AC가 생성기에서 verifiedBy:"human"으로
+    //  나와 여기서 전부 버려졌고, 결과가 "체크하신 항목이 없어서…"였다. 사용자가 확인한(직접 체크·직접 적은) must 기준은
+    //  사람 판단 표시가 있어도 실행기가 사람처럼 해 본다. 확인되지 않은 human 기준만 뺀다(종전).
+    const userOwnedMust = f.priority === "must" && (!inferred || confirmedIds.has(a.id) || Boolean(userTextIds?.has(a.id)));
+    if (a.verifiedBy === "human" && !userOwnedMust) continue;
     const steps = stepsByAc.get(a.id);
     out.push({
       id: a.id,

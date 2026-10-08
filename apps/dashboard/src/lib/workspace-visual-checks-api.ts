@@ -9,6 +9,7 @@
  * backend): "[고치기]" turns a failed check into a repair branch + PR (code
  * changes since Stage 270, or a fix-brief draft PR as the fallback).
  */
+import { loadBuilderReport } from "./builder-self-report.mjs";
 
 export const CENTRAL_PLANE_URL =
   process.env.NEXT_PUBLIC_CENTRAL_PLANE_URL ??
@@ -291,6 +292,12 @@ export async function listVisualChecks(
  * (Train W) daily_limit_reached (429, with kind/limit/resetAt) and
  * inspection_disabled (503). Map the whole answer with runErrorNotice().
  */
+function withBuilderReport(projectId: string, input: VisualCheckRunInput): VisualCheckRunInput & { builderReport?: unknown } {
+  if (typeof window === "undefined") return input;
+  const report = loadBuilderReport(projectId);
+  return report ? { ...input, builderReport: report } : input;
+}
+
 export async function runVisualCheck(
   projectId: string,
   input: VisualCheckRunInput,
@@ -301,7 +308,8 @@ export async function runVisualCheck(
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(input),
+        // 2026-10-09: 만든 AI의 자기 설명(이 브라우저에만 둔 정리본)을 함께 — 서버가 다시 검사·비밀 제거, 검사 엔진 v2의 가설(증거 아님).
+        body: JSON.stringify(withBuilderReport(projectId, input)),
         signal: AbortSignal.timeout(30000),
       },
     );

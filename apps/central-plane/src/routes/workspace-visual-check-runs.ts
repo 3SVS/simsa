@@ -66,7 +66,9 @@ import {
   verifyRunToken,
   type TestCredentials,
 } from "../workspace/inspection-agent.js";
-import { INSPECT_LLM_PATH } from "./inspect-llm-proxy.js";
+import { INSPECT_LLM_PATH, INSPECT_LLM_V2_PATH } from "./inspect-llm-proxy.js";
+import { chargeEstimate, v2PlanFromReport, v2RunBudgetUsd, wasAgentV2Report, type V2Plan } from "../agent-v2.js";
+import { sanitizeBuilderReport, type BuilderSelfReport } from "../workspace/builder-self-report.js";
 import { internalBearerRejection } from "./admin-internal.js";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -179,7 +181,16 @@ export type AgentDispatch = {
   caps?: Entitlements["agentRun"];
   /** S2-min: 시험 데이터를 만들어도 된다는 동의가 없는 런 — 쓰기 행동을 하지 않는다. */
   readOnly?: boolean;
+  /** 2026-10-07 검사 엔진 v2(engine "agent_v2", 스태프 전용) — 증거 고리 실행기. 없으면 v1. */
+  engineVersion?: "v2";
+  /** v2 재검사: 원 런의 계획(가설·단계·탐침)을 그대로 다시 돈다(X-4). */
+  priorPlan?: V2Plan | null;
+  /** 만든 AI의 자기 설명(파싱·비밀 제거됨) — v2 가설 재료. 증거가 아니다. */
+  builderReport?: BuilderSelfReport | null;
 };
+
+/** v2 런의 도구 호출 상한·실행 시간(분). 예산은 INSPECT_AGENT_V2_BUDGET_USD(기본 12). */
+export const AGENT_V2_CAPS = { maxToolCalls: 220, maxMinutes: 18 } as const;
 
 /** 오픈 베타: 이번 런이 agent 엔진 대신 기본 검수로 돈 이유(리포트에 그대로 안내). */
 export const AGENT_FALLBACK_NOTES = {
@@ -319,10 +330,17 @@ export async function dispatchInspection(
   if (args.agent) {
     const llmToken = await mintRunToken(env, "llm", args.runId);
     if (!llmToken) return { dispatched: false, note: "agent_token_unavailable" };
+    const isV2 = args.agent.engineVersion === "v2";
     try {
       const caps = args.agent.caps;
-      // 런 예산·호출 수 = 티어 상한(행동 + 판정·재확인·추정 몫).
-      await initAgentSpend(env, args.runId, caps ? { budgetUsd: caps.budgetUsd, maxCalls: caps.maxActions + caps.maxAcs * 3 + 6 } : undefined);
+      // 런 예산·호출 수 = 티어 상한(행동 + 판정·재확인·추정 몫). v2는 고리 한 번이 LLM 한 턴이라 턴 수 + 별도 예산(V-6).
+      await initAgentSpend(
+        env,
+        args.runId,
+        isV2
+          ? { budgetUsd: v2RunBudgetUsd(env.INSPECT_AGENT_V2_BUDGET_USD), maxCalls: AGENT_V2_CAPS.maxToolCalls + 40 }
+          : caps ? { budgetUsd: caps.budgetUsd, maxCalls: caps.maxActions + caps.maxAcs * 3 + 6 } : undefined,
+      );
     } catch {
       return { dispatched: false, note: "agent_budget_unavailable" };
     }
@@ -337,14 +355,16 @@ export async function dispatchInspection(
       if (!credentials) return { dispatched: false, note: "credentials_unreadable" };
     }
     agentPayload = {
-      engine: "agent",
+      engine: isV2 ? "agent_v2" : "agent",
       agent: {
         acs: args.agent.acs,
         acSource: args.agent.acSource,
         loginMode: args.agent.loginMode,
-        ...(args.agent.caps ? { caps: args.agent.caps } : {}),
+        ...(args.agent.caps ? { caps: isV2 ? { ...args.agent.caps, ...AGENT_V2_CAPS } : args.agent.caps } : {}),
         ...(args.agent.readOnly ? { readOnly: true } : {}),
-        llmUrl: `${base}${INSPECT_LLM_PATH}`,
+        ...(isV2 && args.agent.priorPlan ? { priorPlan: args.agent.priorPlan } : {}),
+        ...(isV2 && args.agent.builderReport ? { builderReport: args.agent.builderReport } : {}),
+        llmUrl: `${base}${isV2 ? INSPECT_LLM_V2_PATH : INSPECT_LLM_PATH}`,
         llmToken,
       },
       ...(credentials ? { credentials } : {}),
@@ -651,7 +671,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // 2026-10-05 agent 엔진(수용 기준 실행기) — **스태프 티어만**(서버 집행). 상한 슬롯보다 먼저 판정한다.
     const bodyRec = body as Record<string, unknown>;
     const requestedEngine = bodyRec["engine"];
-    if (requestedEngine !== undefined && requestedEngine !== "agent" && requestedEngine !== "classic") {
+    if (requestedEngine !== undefined && requestedEngine !== "agent" && requestedEngine !== "classic" && requestedEngine !== "agent_v2") {
       return c.json({ ok: false, error: "invalid_engine" }, 400);
     }
     const isStaff = tier === "staff";
@@ -660,10 +680,18 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     if (requestedEngine === "agent" && !agentAllowed) {
       return c.json({ ok: false, error: "engine_staff_only", tier }, 403);
     }
+    // v2(V-8): 장비 키 전용 — 공개 스위치와 무관하게 스태프만. 재검사는 원 런이 v2였으면 v2를 물려받는다(같은 계획).
+    if (requestedEngine === "agent_v2" && !isStaff) {
+      return c.json({ ok: false, error: "engine_staff_only", tier }, 403);
+    }
+    const useV2 =
+      isStaff &&
+      (requestedEngine === "agent_v2" ||
+        (requestedEngine === undefined && (wasAgentV2Report(sourceCheck?.reportJson) || c.env.INSPECTION_ENGINE === "agent_v2")));
     let useAgent =
       agentAllowed &&
       requestedEngine !== "classic" &&
-      (requestedEngine === "agent" || wasAgentRun(sourceCheck) || agentPublicOn(c.env) || (isStaff && c.env.INSPECTION_ENGINE === "agent"));
+      (useV2 || requestedEngine === "agent" || wasAgentRun(sourceCheck) || agentPublicOn(c.env) || (isStaff && c.env.INSPECTION_ENGINE === "agent"));
     // 서비스 하루 예산: 다 쓰면 스태프가 아닌 새 런은 기본 검수로(정직한 안내 — 조용한 실패 없음).
     let fallbackNote: string | null = null;
     if (useAgent && !isStaff && (await agentDailyBudgetReached(c.env))) {
@@ -789,7 +817,13 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const acceptancePlan = acceptancePlanFromDevSpec(project.devSpec);
     // agent 엔진: 재검수면 원 런의 AC 그대로, 아니면 지시서(유저 확인 표시 포함), 둘 다 없으면 런에서 추정.
     const agentDispatch: AgentDispatch | null = useAgent
-      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}) }
+      ? {
+          ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath),
+          loginMode,
+          caps: entitlementsFor(tier).agentRun,
+          ...(readOnly ? { readOnly: true } : {}),
+          ...(useV2 ? { engineVersion: "v2" as const, priorPlan: v2PlanFromReport(sourceCheck?.reportJson), builderReport: bodyRec["builderReport"] !== undefined ? sanitizeBuilderReport(bodyRec["builderReport"]) : null } : {}),
+        }
       : null;
     if (testCredentials) {
       try {
@@ -849,7 +883,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
           createdAt: run.createdAt,
         },
         dispatched: dispatch.dispatched,
-        engine: agentDispatch ? "agent" : "classic",
+        engine: agentDispatch ? (agentDispatch.engineVersion === "v2" ? "agent_v2" : "agent") : "classic",
         ...(fallbackNote ? { engineFallback: "daily_budget", engineFallbackNote: fallbackNote } : {}),
         ...(agentDispatch?.readOnly ? { readOnly: true } : {}),
         ...(agentDispatch ? { acSource: agentDispatch.acSource, acCount: agentDispatch.acs.length, loginMode: agentDispatch.loginMode } : {}),
@@ -874,6 +908,26 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       .all<{ builder: string; defect_class: string; status: string; n: number; runs: number }>()
       .catch(() => ({ results: [] as Array<{ builder: string; defect_class: string; status: string; n: number; runs: number }> }));
     return c.json({ ok: true, since, rows: rows.results ?? [] });
+  });
+
+  // ── GET /admin/agent-costs (V-6) — 최근 검사 런별 LLM 원가·청구 예상액(결제는 꺼짐). 내부 토큰만. ?limit=1..200 ──
+  app.get("/admin/agent-costs", async (c) => {
+    const rejected = internalBearerRejection(c);
+    if (rejected) return rejected;
+    const limit = Math.min(200, Math.max(1, parseInt(c.req.query("limit") ?? "50", 10) || 50));
+    const rows = await c.env.DB.prepare(
+      `SELECT job_id, MIN(created_at) AS started_at, COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS usd, COALESCE(SUM(unpriced), 0) AS unpriced,
+              GROUP_CONCAT(DISTINCT model_actual) AS models
+         FROM llm_usage WHERE job_kind = 'inspection' AND call_site = 'inspect_agent' GROUP BY job_id ORDER BY started_at DESC LIMIT ?`,
+    )
+      .bind(limit)
+      .all<{ job_id: string; started_at: string; calls: number; usd: number; unpriced: number; models: string | null }>()
+      .catch(() => ({ results: [] as Array<{ job_id: string; started_at: string; calls: number; usd: number; unpriced: number; models: string | null }> }));
+    const runs = (rows.results ?? []).map((r) => {
+      const cost = Math.round(Number(r.usd) * 10_000) / 10_000;
+      return { runId: r.job_id, startedAt: r.started_at, llmCalls: Number(r.calls), costUsd: cost, unpricedCalls: Number(r.unpriced), models: String(r.models ?? "").split(",").filter(Boolean).slice(0, 6), ...chargeEstimate(cost, c.env.INSPECTION_CHARGE_MARKUP) };
+    });
+    return c.json({ ok: true, billing: "off", runs });
   });
 
   // ── 직접 로그인해서 넘겨주기(라이브 브라우저) ─────────────────────────────────
@@ -1095,7 +1149,13 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
       if ((body.report as Record<string, unknown>)["engine"] === "agent") {
         const agentPart = (body.report as Record<string, unknown>)["agent"];
         const cost = await agentRunCostUsd(c.env, body.runId).catch(() => null);
-        if (cost && agentPart && typeof agentPart === "object") Object.assign(agentPart as Record<string, unknown>, cost);
+        if (cost && agentPart && typeof agentPart === "object") {
+          Object.assign(agentPart as Record<string, unknown>, cost);
+          // V-6: v2 런은 청구 예상액(원가 × 배수)을 함께 — 실제 결제는 꺼짐(billing:"off").
+          if ((body.report as Record<string, unknown>)["engineVersion"] === "v2") {
+            Object.assign(agentPart as Record<string, unknown>, chargeEstimate(cost.costUsd, c.env.INSPECTION_CHARGE_MARKUP));
+          }
+        }
       }
       // B6: agent 재검수는 원 런과 AC별로 비교해 "새로 깨진 것"을 리포트에 싣는다.
       if (run.sourceCheckId && (body.report as Record<string, unknown>)["engine"] === "agent") {

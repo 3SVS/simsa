@@ -21,9 +21,10 @@
 import { Hono } from "hono";
 import type { Env } from "../env.js";
 import { anthropicEndpoint, OPENAI_FALLBACK_MODEL } from "../workspace/anthropic-fetch.js";
+import { inspectAgentV2FallbackModel, inspectAgentV2Model } from "../workspace/inspection-agent.js";
 
 type ProbeResult = {
-  vendor: "anthropic" | "openai" | "gemini";
+  vendor: "anthropic" | "openai" | "gemini" | "openai_v2" | "anthropic_v2";
   path: "gateway" | "direct";
   status: number | "network_error" | "no_key";
   ms: number;
@@ -116,6 +117,73 @@ async function probeOpenAi(env: Env): Promise<ProbeResult> {
   return { vendor: "openai", path, ...out };
 }
 
+/**
+ * 2026-10-07 검사 엔진 v2(V-5): 가장 강한 모델(INSPECT_AGENT_V2_MODEL, 기본 gpt-5.6-sol)이 **Responses API + 함수 도구**로
+ * 이 Worker에서 닿는가. usable = 함수 호출을 실제로 돌려줬다(200만으로는 부족). 게이트웨이·직행 둘 다 잰다.
+ */
+/** v2 주/대체 모델 중 그 벤더의 모델(둘 다 아니면 그 벤더 기본). */
+function v2ModelFor(env: Env, vendor: "openai" | "anthropic"): string {
+  const pair = [inspectAgentV2Model(env), inspectAgentV2FallbackModel(env)];
+  const hit = pair.find((m) => (vendor === "anthropic") === /^claude-/i.test(m));
+  return hit ?? (vendor === "anthropic" ? "claude-fable-5-1" : "gpt-5.6-sol");
+}
+
+/**
+ * 2026-10-07 v2 주 모델(Claude 최상위)이 **도구 호출**까지 이 Worker에서 되는가 — v2 전용 스위치와 무관하게 도달성만 잰다.
+ * usable = tool_use 블록을 실제로 돌려받음.
+ */
+async function probeAnthropicV2(env: Env, useGateway: boolean): Promise<ProbeResult> {
+  const key = env.ANTHROPIC_API_KEY;
+  const path = useGateway ? "gateway" : "direct";
+  if (!key || (useGateway && !env.CF_AI_GATEWAY_ANTHROPIC_URL)) return { vendor: "anthropic_v2", path, status: "no_key", ms: 0 };
+  const url = useGateway ? anthropicEndpoint(env.CF_AI_GATEWAY_ANTHROPIC_URL) : anthropicEndpoint();
+  const out = await timed(async () => {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: v2ModelFor(env, "anthropic"),
+        max_tokens: 1024,
+        tools: [{ name: "say", description: "say a word", input_schema: { type: "object", properties: { word: { type: "string" } }, required: ["word"] } }],
+        messages: [{ role: "user", content: "Call the say tool with the word ok." }],
+      }),
+    });
+    const requestId = r.headers.get("request-id");
+    if (!r.ok) return { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 120), requestId };
+    const j = (await r.json().catch(() => null)) as { model?: string; content?: Array<{ type?: string; name?: string }> } | null;
+    const called = (j?.content ?? []).some((b) => b?.type === "tool_use" && b.name === "say");
+    return { status: r.status, usable: called, textChars: called ? 1 : 0, requestId, detail: `model=${String(j?.model ?? "?").slice(0, 60)}` };
+  });
+  return { vendor: "anthropic_v2", path, ...out };
+}
+
+async function probeOpenAiV2(env: Env, useGateway: boolean): Promise<ProbeResult> {
+  const key = env.OPENAI_API_KEY;
+  const base = (env.CF_AI_GATEWAY_OPENAI_URL ?? "").trim().replace(/\/$/, "");
+  const path = useGateway ? "gateway" : "direct";
+  if (!key || (useGateway && !base)) return { vendor: "openai_v2", path, status: "no_key", ms: 0 };
+  const url = useGateway ? `${base}/responses` : "https://api.openai.com/v1/responses";
+  const out = await timed(async () => {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: v2ModelFor(env, "openai"),
+        max_output_tokens: MAX_OUT,
+        store: false,
+        tools: [{ type: "function", name: "say", description: "say a word", parameters: { type: "object", properties: { word: { type: "string" } }, required: ["word"], additionalProperties: false }, strict: true }],
+        input: [{ role: "user", content: "Call the say tool with the word ok." }],
+      }),
+    });
+    const requestId = r.headers.get("x-request-id");
+    if (!r.ok) return { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 120), requestId };
+    const j = (await r.json().catch(() => null)) as { model?: string; output?: Array<{ type?: string; name?: string }> } | null;
+    const called = (j?.output ?? []).some((o) => o?.type === "function_call" && o.name === "say");
+    return { status: r.status, usable: called, textChars: called ? 1 : 0, requestId, detail: `model=${String(j?.model ?? "?").slice(0, 60)}` };
+  });
+  return { vendor: "openai_v2", path, ...out };
+}
+
 async function probeGemini(env: Env): Promise<ProbeResult> {
   const key = env.GEMINI_API_KEY;
   const base = (env.CF_AI_GATEWAY_GOOGLE_URL ?? "").trim().replace(/\/$/, "");
@@ -157,6 +225,10 @@ export function createLlmProbeRoutes(): Hono<{ Bindings: Env }> {
       probeAnthropic(c.env, false),
       probeOpenAi(c.env),
       probeGemini(c.env),
+      probeOpenAiV2(c.env, true),
+      probeOpenAiV2(c.env, false),
+      probeAnthropicV2(c.env, true),
+      probeAnthropicV2(c.env, false),
     ];
     const rounds = Array.from({ length: n }, () => one()).flat();
     const results = await Promise.all(rounds);

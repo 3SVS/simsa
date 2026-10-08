@@ -25,6 +25,12 @@ const OFFICIAL = {
   "gpt-5.4": { inputPerMTok: 2.5, cacheWritePerMTok: 2.5, cacheReadPerMTok: 0.25, outputPerMTok: 15, maxPricedInputTokens: 272_000 },
   // 2026-10-05 공식 페이지(Standard): gpt-5.4-mini $0.75 / 캐시 $0.075 / 출력 $4.50 — 긴 문맥 단가 칸 없음.
   "gpt-5.4-mini": { inputPerMTok: 0.75, cacheWritePerMTok: 0.75, cacheReadPerMTok: 0.075, outputPerMTok: 4.5 },
+  // 2026-10-07 공식 페이지(Standard): GPT-5.6 sol $4/$0.40/$20 · terra $2/$0.20/$12 · luna $0.20/$0.02/$1.20.
+  // 2026-10-07 Anthropic 공식(Fable 5.1): $10 / 캐시 쓰기 $12.50 / 캐시 적중 $0.25 / 출력 $50.
+  "claude-fable-5-1": { inputPerMTok: 10, cacheWritePerMTok: 12.5, cacheReadPerMTok: 0.25, outputPerMTok: 50 },
+  "gpt-5.6-sol": { inputPerMTok: 4, cacheWritePerMTok: 4, cacheReadPerMTok: 0.4, outputPerMTok: 20 },
+  "gpt-5.6-terra": { inputPerMTok: 2, cacheWritePerMTok: 2, cacheReadPerMTok: 0.2, outputPerMTok: 12 },
+  "gpt-5.6-luna": { inputPerMTok: 0.2, cacheWritePerMTok: 0.2, cacheReadPerMTok: 0.02, outputPerMTok: 1.2 },
 };
 
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-12, `${msg ?? ""} expected ${b}, got ${a}`);
@@ -43,11 +49,11 @@ describe("L-1 공식 단가 스냅샷", () => {
     const p = pricing.priceUsage("mystery-model-9", u);
     assert.equal(p.unpriced, true);
     assert.equal(p.pricedAs, null);
-    // 최고 입력가 $5(opus) + 최고 출력가 $25(opus) — 표에서 성분별 최대값
-    near(p.costUsd, 30);
+    // 최고 입력가 $10 + 최고 출력가 $50(claude-fable-5-1, 2026-10-07) — 표에서 성분별 최대값
+    near(p.costUsd, 60);
     // 기존 API(actualCost/estimateCallCost)도 미지 모델에서 던지지 않고 같은 보수값을 쓴다
-    near(actualCost("mystery-model-9", u), 30);
-    near(estimateCallCost("mystery-model-9", 1_000_000, 1_000_000), 30);
+    near(actualCost("mystery-model-9", u), 60);
+    near(estimateCallCost("mystery-model-9", 1_000_000, 1_000_000), 60);
   });
 
   it("② 보수 단가는 표의 성분별 최대값이다(가격표가 바뀌어도 자동으로 따라간다)", () => {
@@ -74,7 +80,7 @@ describe("L-1 공식 단가 스냅샷", () => {
     const p = pricing.priceUsage("gpt-5.4", { inputTokens: 300_000, outputTokens: 0 });
     assert.equal(p.unpriced, true);
     assert.equal(p.pricedAs, null);
-    near(p.costUsd, 300_000 * 5 / 1_000_000);
+    near(p.costUsd, 300_000 * 10 / 1_000_000);
   });
 
   it("★⑤ Object.prototype 키 모델명은 '알려진 모델'이 아니다 — 보수 단가 + unpriced, NaN 없음 (#562 결함 7)", () => {
@@ -85,9 +91,9 @@ describe("L-1 공식 단가 스냅샷", () => {
       const p = pricing.priceUsage(m, u);
       assert.equal(p.unpriced, true, `${m}: unpriced`);
       assert.equal(p.pricedAs, null, `${m}: pricedAs`);
-      near(p.costUsd, 30, `${m}: 보수 단가`);
-      near(actualCost(m, u), 30, `${m}: actualCost`);
-      near(estimateCallCost(m, 1_000_000, 1_000_000), 30, `${m}: estimateCallCost`);
+      near(p.costUsd, 60, `${m}: 보수 단가`);
+      near(actualCost(m, u), 60, `${m}: actualCost`);
+      near(estimateCallCost(m, 1_000_000, 1_000_000), 60, `${m}: estimateCallCost`);
     }
   });
 

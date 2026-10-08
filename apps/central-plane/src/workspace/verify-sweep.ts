@@ -46,6 +46,7 @@ import {
   markVisualCheckFailed,
 } from "./visual-check-db.js";
 import { agentAcsForRun, dispatchInspection, wasAgentRun } from "../routes/workspace-visual-check-runs.js";
+import { v2PlanFromReport, wasAgentV2Report } from "../agent-v2.js";
 import { inspectionEnabled } from "./service-switches.js";
 import { opsMetaAllowedForRun } from "./privacy-prefs.js";
 
@@ -183,7 +184,16 @@ export async function runVerifySweep(
       publicBaseUrl: opts.publicBaseUrl ?? env.PUBLIC_BASE_URL ?? "https://conclave-ai.seunghunbae.workers.dev",
       // agent 엔진 런의 수리 확인은 **같은 AC로** 다시 잰다(원 런 리포트에 남긴 정의). 로그인은 물려받지 않는다 —
       // 시험 계정은 원 런이 끝날 때 지워졌고, 직접 로그인은 사람이 다시 해야 한다.
-      ...(wasAgentRun(origin) ? { agent: { ...agentAcsForRun(origin, project?.devSpec, project?.entryPath), loginMode: "none" as const } } : {}),
+      // v2(X-4): 원 런이 v2면 엔진과 **계획**까지 물려받는다(같은 계획으로 재검사).
+      ...(wasAgentRun(origin)
+        ? {
+            agent: {
+              ...agentAcsForRun(origin, project?.devSpec, project?.entryPath),
+              loginMode: "none" as const,
+              ...(wasAgentV2Report(origin?.reportJson) ? { engineVersion: "v2" as const, priorPlan: v2PlanFromReport(origin?.reportJson) } : {}),
+            },
+          }
+        : {}),
     });
     if (dispatch.dispatched) {
       summary.dispatched++;

@@ -122,6 +122,11 @@ WORKSPACE_GH_DASHBOARD_URL = "https://app.trysimsa.com"
 # 회로 차단기와 달리 이 스위치는 **스스로 복구하지 않는다** — 사람이 실측하고
 # 켜는 것이 의도된 설계다. 해석은 workspace/vendor-routing.ts 단일 출처.
 ANTHROPIC_ENABLED = "off"
+# ★검사 엔진 v2(engine agent_v2, 스태프 전용) 전용 Anthropic 스위치 (2026-10-07, 별도 승인 항목 — PR #604 본문).
+# 전역 ANTHROPIC_ENABLED와 독립: 이 값이 "on"이면 v2만 Claude 최상위 모델(INSPECT_AGENT_V2_MODEL, 기본 claude-fable-5-1)을
+# 주 모델로 쓰고 실패 시 gpt-5.6-sol로 대체한다. 다른 호출 지점은 그대로 OpenAI 폴백. 근거: llm-probe run 37497630881
+# (anthropic gateway·direct usable, n=1). 끄기 = "off"로 바꾸고 배포(v2는 gpt-5.6-sol로만 돈다).
+INSPECT_AGENT_V2_ANTHROPIC = "on"
 
 # Private-repo support — public install URL of the existing GitHub App
 # (e.g. "https://github.com/apps/<slug>/installations/new"). Shown to users

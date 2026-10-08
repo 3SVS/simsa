@@ -141,6 +141,45 @@ export const DEFAULT_INSPECT_AGENT_MODEL = "claude-sonnet-4-6";
 export const DEFAULT_INSPECT_AGENT_BUDGET_USD = 3;
 export const DEFAULT_INSPECT_AGENT_MAX_CALLS = 160;
 
+/**
+ * 2026-10-07 v2 모델(V-5). Bae 결정: **Claude 최상위 모델이 주 모델, gpt-5.6-sol은 대체만.**
+ *   - 주 모델 기본 = claude-fable-5-1 — Anthropic 모델 문서(platform.claude.com/docs/en/models/overview, 2026-10-07 조회)가
+ *     "demanding reasoning and long-horizon agentic work"용 최상위로 둔 모델(Opus 5.5 위). INSPECT_AGENT_V2_MODEL로 바꾼다
+ *     (예: claude-opus-5-5).
+ *   - 대체 기본 = gpt-5.6-sol(로컬 실측: Responses API에서만 함수 도구 — Chat Completions 400).
+ *   - Anthropic은 **v2 전용 스위치** INSPECT_AGENT_V2_ANTHROPIC="on"일 때만 쓴다(전역 ANTHROPIC_ENABLED는 다른 호출 지점용 —
+ *     건드리지 않는다). 꺼져 있거나 키가 없으면 그 항목을 건너뛰고 대체 모델로.
+ */
+export const DEFAULT_INSPECT_AGENT_V2_MODEL = "claude-fable-5-1";
+export const DEFAULT_INSPECT_AGENT_V2_FALLBACK_MODEL = "gpt-5.6-sol";
+const MODEL_ID_RE = /^[A-Za-z0-9._-]{1,80}$/;
+export function inspectAgentV2Model(env: Pick<Env, "INSPECT_AGENT_V2_MODEL">): string {
+  const m = (env.INSPECT_AGENT_V2_MODEL ?? "").trim();
+  return MODEL_ID_RE.test(m) ? m : DEFAULT_INSPECT_AGENT_V2_MODEL;
+}
+export function inspectAgentV2FallbackModel(env: Pick<Env, "INSPECT_AGENT_V2_FALLBACK_MODEL">): string {
+  const m = (env.INSPECT_AGENT_V2_FALLBACK_MODEL ?? "").trim();
+  return MODEL_ID_RE.test(m) ? m : DEFAULT_INSPECT_AGENT_V2_FALLBACK_MODEL;
+}
+export type V2Route = Array<{ vendor: "anthropic" | "openai"; model: string }>;
+/** 이번 호출이 시도할 순서(주 → 대체). 스위치·키가 없는 벤더는 빠진다. 빈 배열 = 쓸 수 있는 모델 없음(503). */
+export function inspectAgentV2Route(
+  env: Pick<Env, "INSPECT_AGENT_V2_MODEL" | "INSPECT_AGENT_V2_FALLBACK_MODEL" | "INSPECT_AGENT_V2_ANTHROPIC" | "ANTHROPIC_API_KEY" | "OPENAI_API_KEY">,
+): V2Route {
+  const out: V2Route = [];
+  for (const model of [inspectAgentV2Model(env), inspectAgentV2FallbackModel(env)]) {
+    const vendor = /^claude-/i.test(model) ? "anthropic" : "openai";
+    if (vendor === "anthropic" && (env.INSPECT_AGENT_V2_ANTHROPIC !== "on" || !env.ANTHROPIC_API_KEY)) continue;
+    if (vendor === "openai" && !env.OPENAI_API_KEY) continue;
+    if (!out.some((r) => r.model === model)) out.push({ vendor, model });
+  }
+  return out;
+}
+export function inspectAgentV2Effort(env: Pick<Env, "INSPECT_AGENT_V2_EFFORT">): "low" | "medium" | "high" {
+  const e = (env.INSPECT_AGENT_V2_EFFORT ?? "").trim();
+  return e === "low" || e === "high" ? e : "medium";
+}
+
 export function inspectAgentModel(env: Pick<Env, "INSPECT_AGENT_MODEL">): string {
   const m = (env.INSPECT_AGENT_MODEL ?? "").trim();
   return m || DEFAULT_INSPECT_AGENT_MODEL;

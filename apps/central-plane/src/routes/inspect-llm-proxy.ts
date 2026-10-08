@@ -27,7 +27,8 @@ import { recordLlmUsage } from "../workspace/llm-usage.js";
 import { inspectionEnabled, INSPECTION_DISABLED } from "../workspace/service-switches.js";
 import { getVisualCheckById } from "../workspace/visual-check-db.js";
 import { worstCaseCallUsd } from "./build-llm-proxy.js";
-import { bearerOf, inspectAgentModelFor, reserveAgentSpend, settleAgentSpend, verifyRunToken } from "../workspace/inspection-agent.js";
+import { bearerOf, inspectAgentModelFor, inspectAgentV2Effort, inspectAgentV2Route, reserveAgentSpend, settleAgentSpend, verifyRunToken } from "../workspace/inspection-agent.js";
+import { buildV2ResponsesBody, fromAnthropicResponse, toAnthropicRequest, usageFromResponses } from "../agent-v2.js";
 import { constantTimeEqual } from "../workspace/build-job-token.js";
 
 export const INSPECT_LLM_PATH = "/internal/inspect-llm/v1/messages";
@@ -123,5 +124,133 @@ export function createInspectLlmProxyRoutes(fetchImpl: FetchLike = fetch.bind(gl
     }
   });
 
+  // ── 검사 엔진 v2: OpenAI Responses(함수 도구) — 같은 원칙(런 토큰·서버 고정 모델·원자 예약·원장 단일 경로) ──
+  app.post(INSPECT_LLM_V2_PATH, async (c) => {
+    const env = c.env;
+    const presented = bearerOf(c.req.header("authorization"));
+    if (!presented) return err(401, "unauthorized");
+    const ict = env.INTERNAL_CALLBACK_TOKEN;
+    if (typeof ict === "string" && ict.length > 0 && constantTimeEqual(presented, ict)) return err(403, "run_token_required");
+    const auth = await verifyRunToken(env, "llm", presented);
+    if (!auth.ok) return err(401, "unauthorized");
+    const runId = auth.runId;
+
+    if (!inspectionEnabled(env)) return err(503, INSPECTION_DISABLED);
+    const run = await getVisualCheckById(env, runId);
+    if (!run) return err(404, "run_not_found");
+    if (run.status !== "queued" && run.status !== "running") return err(409, "run_not_active");
+    if (!env.OPENAI_API_KEY && !env.ANTHROPIC_API_KEY) return err(503, "llm_unavailable");
+
+    const raw = await c.req.text();
+    if (raw.length > V2_MAX_BODY_BYTES) return err(413, "request_too_large");
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(raw);
+    } catch {
+      return err(400, "invalid_json");
+    }
+    const parsed = V2BodySchema.safeParse(parsedJson);
+    if (!parsed.success) return err(400, "invalid_request");
+
+    // V-5 · Bae 2026-10-07: 주 = Claude 최상위(v2 전용 스위치), 대체 = gpt-5.6-sol. 모델은 서버가 고른다(요청은 못 고른다).
+    const route = inspectAgentV2Route(env);
+    if (route.length === 0) return err(503, "llm_unavailable");
+    const req = { instructions: parsed.data.instructions, input: parsed.data.input, tools: parsed.data.tools, ...(parsed.data.maxOutputTokens ? { maxOutputTokens: parsed.data.maxOutputTokens } : {}) };
+    const maxOut = Math.min(Math.max(256, parsed.data.maxOutputTokens ?? 8000), 16000);
+    // 예약 = 경로 중 가장 비싼 모델 기준 최악 비용(대체로 넘어가도 예약이 모자라지 않게).
+    const reservedUsd = Math.max(...route.map((r) => v2WorstCaseUsd(r.model, raw, maxOut)));
+    const reserved = await reserveAgentSpend(env, runId, reservedUsd);
+    if (reserved === "not_agent_run") return err(403, "not_agent_run");
+    if (reserved === "exhausted") return err(402, "budget_exhausted");
+
+    const t0 = Date.now();
+    let lastStatus = 0;
+    let lastDetail = "";
+    for (const { vendor, model } of route) {
+      const gwBase = (vendor === "anthropic" ? env.CF_AI_GATEWAY_ANTHROPIC_URL : env.CF_AI_GATEWAY_OPENAI_URL ?? "")?.trim().replace(/\/$/, "") ?? "";
+      const targets =
+        vendor === "anthropic"
+          ? [...(gwBase ? [anthropicEndpoint(gwBase)] : []), anthropicEndpoint()]
+          : [...(gwBase ? [`${gwBase}/responses`] : []), OPENAI_RESPONSES_DIRECT];
+      const payload = vendor === "anthropic" ? toAnthropicRequest(req, model) : buildV2ResponsesBody(req, { model, effort: inspectAgentV2Effort(env) });
+      const headers: Record<string, string> =
+        vendor === "anthropic"
+          ? { "x-api-key": env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01", "content-type": "application/json" }
+          : { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" };
+      let badRequest = false;
+      for (const url of targets) {
+        let r: Response;
+        try {
+          r = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(V2_UPSTREAM_TIMEOUT_MS) });
+        } catch (e) {
+          lastStatus = 0;
+          lastDetail = `${vendor}: ${String((e as Error)?.message ?? e).slice(0, 120)}`;
+          continue;
+        }
+        if (!r.ok) {
+          lastStatus = r.status;
+          lastDetail = `${vendor}: ${(await r.text().catch(() => "")).slice(0, 300)}`;
+          // 요청 자체가 잘못된 것(400·422)은 같은 벤더 다른 경로로도 같다 — 다음 벤더로. 게이트웨이 거절·5xx·429는 직행으로 한 번 더.
+          if (r.status === 400 || r.status === 422) {
+            badRequest = true;
+            break;
+          }
+          continue;
+        }
+        const j = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+        const conv = vendor === "anthropic" ? fromAnthropicResponse(j) : { output: Array.isArray(j?.["output"]) ? (j!["output"] as unknown[]) : [], model: typeof j?.["model"] === "string" ? (j!["model"] as string) : null, tokens: usageFromResponses(j?.["usage"]) };
+        const modelActual = conv.model || model;
+        const priced = priceTokens(modelActual, conv.tokens);
+        await recordLlmUsage(env, {
+          vendor,
+          modelRequested: model,
+          modelActual,
+          ...conv.tokens,
+          latencyMs: Date.now() - t0,
+          callSite: INSPECT_AGENT_CALL_SITE,
+          jobKind: "inspection",
+          jobId: runId,
+          projectId: run.projectId,
+          userKey: run.userKey,
+          costOverride: { costUsd: priced.costUsd, unpriced: priced.unpriced },
+        }).catch(() => false);
+        await settleAgentSpend(env, runId, reservedUsd, priced.costUsd);
+        if (route[0] && route[0].model !== model) console.warn(JSON.stringify({ event: "inspect_llm_v2_fallback", run_id: runId, from: route[0].model, to: model, primary_status: lastStatus }));
+        return c.json({ ok: true, output: conv.output, usage: conv.tokens, model: modelActual, vendor });
+      }
+      void badRequest;
+    }
+    await settleAgentSpend(env, runId, reservedUsd, 0).catch(() => undefined);
+    console.error(JSON.stringify({ event: "inspect_llm_v2_failed", run_id: runId, status: lastStatus, detail: lastDetail.slice(0, 160) }));
+    return err(502, `upstream_failed:${lastStatus}`);
+  });
+
   return app;
+}
+
+export const INSPECT_LLM_V2_PATH = "/internal/inspect-llm/v2/responses";
+const OPENAI_RESPONSES_DIRECT = "https://api.openai.com/v1/responses";
+const V2_MAX_BODY_BYTES = 8 * 1024 * 1024;
+const V2_UPSTREAM_TIMEOUT_MS = 200_000;
+
+/** 대화에 들어올 수 있는 항목만(메시지·함수 호출·함수 결과·추론). 서버 키로 다른 도구(웹 검색 등)를 쓰지 못하게 도구는 function만. */
+const V2ItemSchema = z.union([
+  z.object({ role: z.enum(["user", "assistant"]), content: z.union([z.string().max(200_000), z.array(z.record(z.string(), z.unknown())).max(20)]) }).passthrough(),
+  z.object({ type: z.enum(["function_call", "function_call_output", "reasoning", "message"]) }).passthrough(),
+]);
+const V2BodySchema = z
+  .object({
+    instructions: z.string().min(1).max(40_000),
+    input: z.array(V2ItemSchema).min(1).max(2_000),
+    tools: z.array(z.object({ type: z.literal("function"), name: z.string().min(1).max(64) }).passthrough()).max(40),
+    maxOutputTokens: z.number().int().positive().max(16_000).optional(),
+  })
+  .strict();
+
+/** 최악 비용 예약: 이미지(base64)는 장당 ~1,600토큰으로, 나머지 글자는 3자=1토큰으로 어림 — 캐시 없음·출력 상한까지. */
+export function v2WorstCaseUsd(model: string, rawBody: string, maxOutputTokens: number): number {
+  const images = (rawBody.match(/data:image\/[a-z]+;base64,/g) ?? []).length;
+  const textChars = rawBody.replace(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/g, "").length;
+  const inputTokens = Math.ceil(textChars / 3) + images * 1600;
+  return priceTokens(model, { inputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: maxOutputTokens }).costUsd;
 }

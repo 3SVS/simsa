@@ -81,6 +81,54 @@ describe("/internal/llm-probe — 결과 형태와 무누출", () => {
   });
 });
 
+describe("★v2 모델 도달성(2026-10-07, V-5) — Responses + 함수 도구", () => {
+  it("openai_v2 게이트웨이·직행을 따로 재고, usable = 함수 호출을 돌려받음", async () => {
+    const calls = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null });
+      if (String(url).endsWith("/v1/messages") && calls.at(-1).body?.tools) {
+        return new Response(JSON.stringify({ model: "claude-fable-5-1", content: [{ type: "tool_use", id: "t1", name: "say", input: { word: "ok" } }] }), { status: 200 });
+      }
+      if (String(url).endsWith("/responses")) {
+        return new Response(JSON.stringify({ model: "gpt-5.6-sol", output: [{ type: "function_call", name: "say", call_id: "c1", arguments: "{\"word\":\"ok\"}" }] }), { status: 200, headers: { "x-request-id": "req_1" } });
+      }
+      return new Response("{}", { status: 500 });
+    };
+    try {
+      const env = envWith({ GEMINI_API_KEY: undefined, CF_AI_GATEWAY_OPENAI_URL: "https://gw.example/openai" });
+      const body = await (await post(env)).json();
+      assert.equal(body.summary["openai_v2:gateway"].usable, 1);
+      assert.equal(body.summary["openai_v2:direct"].usable, 1);
+      // Claude 최상위 + 도구 호출(v2 주 모델) — 게이트웨이·직행
+      assert.equal(body.summary["anthropic_v2:gateway"].usable, 1);
+      assert.equal(body.summary["anthropic_v2:direct"].usable, 1);
+      const claude = calls.filter((c) => c.url.endsWith("/v1/messages") && c.body?.tools);
+      assert.ok(claude.every((c) => c.body.model === "claude-fable-5-1" && c.body.tools[0].name === "say"));
+      assert.ok(!JSON.stringify(body).includes("sk-ant-secret-value"));
+      const v2 = calls.filter((c) => c.url.endsWith("/responses"));
+      assert.deepEqual(v2.map((c) => c.url).sort(), ["https://api.openai.com/v1/responses", "https://gw.example/openai/responses"]);
+      assert.ok(v2.every((c) => c.body.model === "gpt-5.6-sol" && c.body.store === false && c.body.tools[0].type === "function"));
+      assert.ok(!JSON.stringify(body).includes("sk-openai-secret-value"));
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+  it("INSPECT_AGENT_V2_MODEL로 바꿀 수 있고, 이상한 값은 기본으로", async () => {
+    const { inspectAgentV2Model, inspectAgentV2Effort } = await import("../dist/workspace/inspection-agent.js");
+    assert.equal(inspectAgentV2Model({}), "claude-fable-5-1", "Bae 2026-10-07: 주 = Claude 최상위");
+    assert.equal(inspectAgentV2Model({ INSPECT_AGENT_V2_MODEL: "gpt-5.5" }), "gpt-5.5");
+    assert.equal(inspectAgentV2Model({ INSPECT_AGENT_V2_MODEL: "x y; drop" }), "claude-fable-5-1");
+    const { inspectAgentV2Route } = await import("../dist/workspace/inspection-agent.js");
+    const keys = { ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "o" };
+    assert.deepEqual(inspectAgentV2Route({ ...keys, INSPECT_AGENT_V2_ANTHROPIC: "on" }), [{ vendor: "anthropic", model: "claude-fable-5-1" }, { vendor: "openai", model: "gpt-5.6-sol" }]);
+    assert.deepEqual(inspectAgentV2Route(keys), [{ vendor: "openai", model: "gpt-5.6-sol" }], "v2 전용 스위치가 꺼져 있으면 Claude를 건너뛴다");
+    assert.deepEqual(inspectAgentV2Route({ ...keys, INSPECT_AGENT_V2_ANTHROPIC: "on", ANTHROPIC_ENABLED: "off" }).map((r) => r.model), ["claude-fable-5-1", "gpt-5.6-sol"], "전역 킬스위치와 독립");
+    assert.equal(inspectAgentV2Effort({}), "medium");
+    assert.equal(inspectAgentV2Effort({ INSPECT_AGENT_V2_EFFORT: "high" }), "high");
+  });
+});
+
 describe("/internal/llm-probe — usable (200 ≠ 쓸 만하다)", () => {
   it("★요약이 ok와 usable을 따로 센다", async () => {
     const env = envWith({ ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, GEMINI_API_KEY: undefined });

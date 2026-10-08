@@ -130,6 +130,10 @@ export const FINDING_CODES = [
   "output_language_mismatch",
   "needs_user_credential",
   "missing_index_file",
+  // 2026-10-07 검사 엔진 v2: 근거가 검사된 의도 불일치("생각과 달라요", V-7) — 독립 판정.
+  "intent_mismatch",
+  // 2026-10-09: 만든 AI의 자기 설명과 실제가 다름(증거물 인용).
+  "builder_claim_contradicted",
 ] as const;
 
 export type FindingCode = (typeof FINDING_CODES)[number];

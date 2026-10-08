@@ -1,0 +1,775 @@
+{
+  "model": "claude-fable-5-1",
+  "run": 1,
+  "url": "https://daehwa-ai.com",
+  "decision": "Not Verified",
+  "verdict": "확인 못 했어요",
+  "oneLine": "꼭 되어야 하는 것으로 체크하신 항목이 없어서, 핵심 기능이 된다·안 된다를 판단하지 않았어요. '맞나요?'에서 꼭 되어야 하는 것에 체크하시면 그 기준으로 판단해 드려요.",
+  "acTable": [
+    {
+      "id": "CORE-1",
+      "priority": "should",
+      "status": "not_verified",
+      "reasonCode": "login_required",
+      "reason": "핵심 기능(실시간 통역 자막, 미팅 후 양측 확인 기록·요약, 대화노트)은 모두 로그인 뒤에 있습니다. 하단의 '대화노트' 링크(/note)를 눌렀더니 로그인 화면(/login?next=%2Fnote)으로 넘어갔고, 가입 화면은 '초대 코드와 회사 이메일이 필요합니다'라고 안내해 초대 코드 없이는 계정을 만들 수 없었습니다. 로그인 계정이 없어 핵심 흐름(통역→기록→요약 저장)은 끝까지 확인하지 못했습니다. 로그인 없이 가능한 공개 쓰기(행사 도입 문의 보내기)는 서버가 {\"ok\":true}로 받아 정상 동작했습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/note 열기 → HTTP 200",
+        "https://daehwa-ai.com/signup?next=/note 열기 → HTTP 200",
+        "https://daehwa-ai.com/note 열기 → HTTP 200",
+        "page-167def1460c555c5.js?dpl=dpl_5pjmUetwdqxSzBEavU8YMLAoDEiB [1200…3200 / 10525]",
+        "요청 1건 (저장 요청 성공 포함)"
+      ]
+    },
+    {
+      "id": "AC-001",
+      "priority": "should",
+      "status": "pass",
+      "reason": "새 브라우저(다른 방문자)로 첫 화면을 열었을 때 상단 머리글에 '로그인', '도입 문의', '무료로 시작하기' 버튼이 있고, 본문 첫 영역에 \"수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다.\" 문구, '무료로 시작하기 · 60분'(→/signup?next=/note)과 '행사 도입 문의'(→/contact) 버튼, '카드 등록 없음 · 한국어 · English · 日本語' 안내가 한 화면 흐름에 함께 보였습니다. EN 링크를 눌렀더니 /en 영어 화면으로 전환되어 다국어 안내도 실제로 동작했습니다.",
+      "evidence": [
+        "새 브라우저(Asia/Seoul): https://daehwa-ai.com/ → 대·화.ai",
+        "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로",
+        "click EN → 화면 바뀜"
+      ]
+    },
+    {
+      "id": "AC-002",
+      "priority": "should",
+      "status": "not_verified",
+      "reasonCode": "login_required",
+      "reason": "실시간 미팅 화면은 로그인 뒤에만 열립니다. 로그인 없이 보이는 것은 첫 화면의 '부스 태블릿 통역 화면 예시'라는 그림(참여자 구분 '바이어 · EN'/'우리 기업 · KO', 원문·번역, '08:02 / 30:00' 타이머)뿐이며 이는 고정된 예시 이미지이지 실제 미팅 화면이 아닙니다. 계정이 없어 실제 양방향 통역 자막 흐름은 확인하지 못했습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로",
+        "https://daehwa-ai.com/note 열기 → HTTP 200",
+        "https://daehwa-ai.com/signup?next=/note 열기 → HTTP 200"
+      ]
+    },
+    {
+      "id": "AC-003",
+      "priority": "should",
+      "status": "not_verified",
+      "reasonCode": "login_required",
+      "reason": "미팅 종료 후 기록 화면은 로그인한 계정으로 미팅을 끝낸 뒤에만 볼 수 있습니다. 로그인 없이 보이는 것은 첫 화면의 '미팅 종료 후 / 양측 확인 요약 · 서명 완료'라는 소개용 표시뿐이며 실제 기록 데이터가 아닙니다. 계정이 없어 실제 확인·서명 기록은 확인하지 못했습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로",
+        "https://daehwa-ai.com/note 열기 → HTTP 200",
+        "https://daehwa-ai.com/signup?next=/note 열기 → HTTP 200"
+      ]
+    },
+    {
+      "id": "AC-004",
+      "priority": "should",
+      "status": "not_verified",
+      "reasonCode": "login_required",
+      "reason": "행사 운영자용 컨트롤타워 화면은 로그인 화면이 '행사 주최사 계정으로 접속하세요'라고 안내하듯 주최사 계정이 있어야 들어갈 수 있습니다. 로그인 없이 보이는 것은 첫 화면의 '컨트롤타워 화면 예시' 그림(B1~B4 부스의 통역 중·무음 2분·대기 상태, 타이머, '바이어 지정'·'화면 리셋' 버튼 모양)뿐이며 누를 수 없는 소개용 이미지입니다. 계정이 없어 실제 운영 화면은 확인하지 못했습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로",
+        "https://daehwa-ai.com/note 열기 → HTTP 200"
+      ]
+    },
+    {
+      "id": "AC-005",
+      "priority": "should",
+      "status": "not_verified",
+      "reasonCode": "login_required",
+      "reason": "무대 발표 자막(큰 화면·청중 휴대폰 QR 접속·음성 읽기 켜기/끄기)은 공개 화면이나 공개 주소로 제공되는 것을 찾지 못했고, 첫 화면에는 \"수신기 임대 없이 큰 화면과 청중 폰에 같은 자막이 나갑니다. 음성 읽기도 켤 수 있습니다.\"라는 소개 문구만 있습니다. 실제 발표 세션을 열려면 주최사 로그인 계정이 필요하므로 확인하지 못했습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로",
+        "소스 검색 //(meeting|stage|tower|control|booth|even/ → 25곳",
+        "https://daehwa-ai.com/note 열기 → HTTP 200"
+      ]
+    },
+    {
+      "id": "AC-006",
+      "priority": "should",
+      "status": "not_verified",
+      "reasonCode": "login_required",
+      "reason": "대화노트(/note)로 들어가면 바로 로그인 화면(/login?next=%2Fnote)으로 넘어가고, 가입에는 초대 코드가 필요합니다(서버가 잘못된 코드에 403을 돌려주도록 되어 있음). 계정이 없어 녹음·파일 업로드 후 전사·번역·요약 결과 화면은 확인하지 못했습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/note 열기 → HTTP 200",
+        "https://daehwa-ai.com/signup?next=/note 열기 → HTTP 200",
+        "page-167def1460c555c5.js?dpl=dpl_5pjmUetwdqxSzBEavU8YMLAoDEiB [1200…3200 / 10525]"
+      ]
+    },
+    {
+      "id": "AC-007",
+      "priority": "should",
+      "status": "pass",
+      "reason": "요금제 화면(/pricing)을 열어 보니 상단에 '가입하면 60분 무료 / 카드 등록 없이 바로 써 보세요.'가 있고, 시간권은 5시간권 49,000원·20시간권 149,000원(가장 많이 선택)·50시간권 329,000원·100시간권 590,000원, 기간권은 1일권 39,000원·3일권 99,000원·7일권 190,000원이 함께 안내됩니다. 새 브라우저에서 영어판(/en/pricing)으로 다시 열어도 같은 가격(49,000원·149,000원·39,000원 등)이 나왔고, 첫 화면 요금 요약(20시간권 149,000원, 기간권 39,000원부터)과도 일치했습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/pricing 열기 → HTTP 200",
+        "https://daehwa-ai.com/pricing 열기 → HTTP 200",
+        "새 브라우저(Asia/Seoul): https://daehwa-ai.com/ → 대·화.ai"
+      ]
+    },
+    {
+      "id": "AC-008",
+      "priority": "should",
+      "status": "pass",
+      "reason": "새 브라우저로 첫 화면의 '정확도를 숫자로 공개하는 통역.' 영역을 확인하니 말레이시아 영어 4.6%, 필리핀 영어 12.7%, 한국어 7.8% 수치와 함께 각주 \"실시간 인식 오류율(영어 WER · 한국어 CER). 2026년 9월, 3개국 상담회 음성 기준 · 오프라인 전사와 모델 판정이 합의한 기계 골드셋 대비.\"가 측정 시점·환경 기준으로 함께 표시됩니다. 영어판(/en)에도 같은 수치(4.6% / 12.7% / 7.8%)가 나왔습니다.",
+      "evidence": [
+        "새 브라우저(Asia/Seoul): https://daehwa-ai.com/ → 대·화.ai",
+        "click EN → 화면 바뀜"
+      ]
+    },
+    {
+      "id": "AC-009",
+      "priority": "should",
+      "status": "pass",
+      "reason": "새 브라우저로 첫 화면을 열면 상단에 'LIVE 2026년 3개국 6개 행사에서 검증' 신뢰 문구와 운영 실적(6 행사 · 3개국, 284 실상담 미팅, 148h 누적 상담 시간)이 보이고, 도입 사례 영역에는 행사명 단위 사례 4건이 각각 수치와 함께 나옵니다: 2026 ICT Business Summit 말레이시아 56건 상담, 2026 ICT Business Summit 필리핀 40건 상담, KOSA 일본어 무대 동시통역 2일 운영, X-DIGITAL@ASEAN(싱가포르) 12개 부스. 다만 이 수치들은 화면에 고정 표기된 소개 내용으로, 실제 운영 데이터와 연결되어 있는지는 외부에서 확인할 수 없습니다.",
+      "evidence": [
+        "새 브라우저(Asia/Seoul): https://daehwa-ai.com/ → 대·화.ai",
+        "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로"
+      ]
+    },
+    {
+      "id": "AC-010",
+      "priority": "should",
+      "status": "pass",
+      "reason": "상단 머리글에는 로그인(/login)·도입 문의(/contact)·무료로 시작하기(/signup?next=/note) 링크가, 하단에는 제품(기능·요금제·대화노트·연동)·회사(회사 소개·도입 문의)·정책(이용약관·개인정보처리방침·환불 규정) 안내와 '이메일 hello@daehwa-ai.com'이 있고 요금제·문의 페이지에도 동일하게 나옵니다. 문의 경로가 실제로 동작하는지 확인하려고 /contact 폼을 심사테스트 데이터(담당자 심사테스트, 연락처 010-8100-5700)로 보냈더니 서버가 {\"ok\":true}를 돌려주고 '문의가 접수되었습니다' 화면이 떴으며, 새 브라우저에서 다시 보내도 같은 결과였습니다. 필수 칸을 비우면 전송되지 않았습니다. 우측 하단 '대·화 팀에게 문의' 채팅으로 보낸 테스트 메시지도 서버에 저장되어(thread id, 메시지 본문, 저장 시각) 다시 조회되었습니다.",
+      "evidence": [
+        "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로",
+        "요청 1건 (저장 요청 성공 포함)",
+        "요청 2건 (저장 요청 성공 포함)",
+        "wait → https://daehwa-ai.com/contact",
+        "click 문의 보내기 → 화면 바뀜 (제출)",
+        "요청 0건"
+      ]
+    }
+  ],
+  "findings": [],
+  "builderPack": "",
+  "v2": {
+    "runnerRev": "agent-v2-1",
+    "model": "claude-fable-5-1",
+    "landing": {
+      "broken": false,
+      "status": 200,
+      "artifactId": "ev-1"
+    },
+    "staticFacts": [
+      {
+        "kind": "external_endpoint",
+        "file": "https://daehwa-ai.com/_next/static/chunks/app/%5Blocale%5D/page-095e8f14fe7b1d97.js?dpl=dpl_5pjmUetwdqxSzBEavU8YMLAoDEiB",
+        "value": "/api/chat"
+      }
+    ],
+    "plan": {
+      "hypotheses": [
+        {
+          "id": "H1",
+          "risk": "H1: 핵심 기능(실시간 통역 자막, 미팅 기록/서명, 컨트롤타워, 무대 자막, 대화노트)이 모두 로그인 뒤에 있고 가입은 초대 코드가 필요해 외부 방문자는 실제 동작을 확인할 수 없다 — 공개 화면은 소개(브로슈어) 역할만 할 가능성",
+          "test": "/note, /login, /signup 진입해 로그인/초대코드 요구 여부 확인, 소스에서 공개 라우트와 API 호출 확인"
+        },
+        {
+          "id": "H2",
+          "risk": "H2: 문의 폼이 실제 서버에 저장되지 않고 화면만 '완료'로 바뀔 수 있다",
+          "test": "심사테스트 데이터로 /contact 제출 후 network_log에서 /api/contact-inquiries 응답 코드와 본문 확인; 새 브라우저에서도 재현"
+        },
+        {
+          "id": "H3",
+          "risk": "H3: 가격·정확도·사례 숫자가 소개 페이지와 요금제 페이지에서 서로 다를 수 있음",
+          "test": "/ 와 /pricing 수치 비교, /en 과 비교"
+        },
+        {
+          "id": "H4",
+          "risk": "H4: 챗 위젯(/api/chat)이 실제로 서버에 전송되는지",
+          "test": "위젯 열어 메시지 전송 후 network_log 확인(가능하면)"
+        }
+      ],
+      "items": [
+        {
+          "acId": "CORE-1",
+          "steps": [
+            "/note 진입 → 로그인 요구 확인",
+            "/signup 진입 → 초대 코드 필요 확인",
+            "로그인 없이 가능한 공개 쓰기(문의 폼) 수행"
+          ],
+          "probes": [
+            "새 브라우저에서 동일 확인",
+            "로그인 없이 통역 화면 경로가 있는지 소스 grep"
+          ]
+        },
+        {
+          "acId": "AC-001",
+          "steps": [
+            "첫 화면 상단/히어로/하단 CTA 문구와 링크 확인"
+          ],
+          "probes": [
+            "새 브라우저(새 방문자)에서 동일 표시 확인",
+            "/en 전환 링크 확인"
+          ]
+        },
+        {
+          "acId": "AC-002",
+          "steps": [
+            "실시간 미팅 화면 접근 시도(/note → 로그인)"
+          ],
+          "probes": [
+            "소스에서 미팅 라우트 검색"
+          ]
+        },
+        {
+          "acId": "AC-003",
+          "steps": [
+            "미팅 기록 화면 접근 시도"
+          ],
+          "probes": [
+            "로그인 요구 확인"
+          ]
+        },
+        {
+          "acId": "AC-004",
+          "steps": [
+            "운영자 컨트롤타워 접근 시도"
+          ],
+          "probes": [
+            "로그인 요구 확인"
+          ]
+        },
+        {
+          "acId": "AC-005",
+          "steps": [
+            "무대 자막/QR 화면 접근 시도"
+          ],
+          "probes": [
+            "공개 라우트 존재 여부 소스 확인"
+          ]
+        },
+        {
+          "acId": "AC-006",
+          "steps": [
+            "/note 진입"
+          ],
+          "probes": [
+            "로그인 요구 확인"
+          ]
+        },
+        {
+          "acId": "AC-007",
+          "steps": [
+            "/pricing 열어 무료 60분·카드 등록 없음·시간권/기간권 가격 확인"
+          ],
+          "probes": [
+            "새 브라우저에서 재확인, 첫 화면 수치와 비교"
+          ]
+        },
+        {
+          "acId": "AC-008",
+          "steps": [
+            "첫 화면 정확도 섹션 수치와 각주 확인"
+          ],
+          "probes": [
+            "새 브라우저 재확인"
+          ]
+        },
+        {
+          "acId": "AC-009",
+          "steps": [
+            "첫 화면 도입 사례 목록과 상단 신뢰 문구 확인"
+          ],
+          "probes": [
+            "새 브라우저 재확인"
+          ]
+        },
+        {
+          "acId": "AC-010",
+          "steps": [
+            "상단/하단 네비 링크 확인",
+            "/contact 폼을 심사테스트 데이터로 제출 → 성공 표시 및 서버 응답 확인"
+          ],
+          "probes": [
+            "필수 칸 비우고 제출",
+            "새 브라우저에서 재제출로 재현"
+          ]
+        }
+      ]
+    },
+    "judgments": [
+      {
+        "acId": "CORE-1",
+        "verdict": "not_verified",
+        "artifactIds": [
+          "ev-6",
+          "ev-7",
+          "ev-44",
+          "ev-13",
+          "ev-26"
+        ],
+        "quotes": [
+          "url: https://daehwa-ai.com/login?next=%2Fnote",
+          "초대 코드와 회사 이메일이 필요합니다.",
+          "if(403===l.status){v(n.errorBadInvite);return}",
+          "POST https://daehwa-ai.com/api/contact-inquiries → 200",
+          "{\"ok\":true}"
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-001",
+        "verdict": "pass",
+        "artifactIds": [
+          "ev-27",
+          "ev-32",
+          "ev-28"
+        ],
+        "quotes": [
+          "수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다.",
+          "무료로 시작하기 · 60분",
+          "행사 도입 문의",
+          "카드 등록 없음 · 한국어 · English · 日本語",
+          "url: https://daehwa-ai.com/en"
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-002",
+        "verdict": "not_verified",
+        "artifactIds": [
+          "ev-32",
+          "ev-44",
+          "ev-7"
+        ],
+        "quotes": [
+          "img \"부스 태블릿 통역 화면 예시\"",
+          "url: https://daehwa-ai.com/login?next=%2Fnote",
+          "초대 코드와 회사 이메일이 필요합니다."
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-003",
+        "verdict": "not_verified",
+        "artifactIds": [
+          "ev-32",
+          "ev-44",
+          "ev-7"
+        ],
+        "quotes": [
+          "양측 확인 요약 · 서명 완료",
+          "url: https://daehwa-ai.com/login?next=%2Fnote",
+          "초대 코드와 회사 이메일이 필요합니다."
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-004",
+        "verdict": "not_verified",
+        "artifactIds": [
+          "ev-32",
+          "ev-44"
+        ],
+        "quotes": [
+          "img \"컨트롤타워 화면 예시\"",
+          "행사 주최사 계정으로 접속하세요."
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-005",
+        "verdict": "not_verified",
+        "artifactIds": [
+          "ev-32",
+          "ev-12",
+          "ev-44"
+        ],
+        "quotes": [
+          "수신기 임대 없이 큰 화면과 청중 폰에 같은 자막이 나갑니다. 음성 읽기도 쾜 수 있습니다.",
+          "url: https://daehwa-ai.com/login?next=%2Fnote"
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-006",
+        "verdict": "not_verified",
+        "artifactIds": [
+          "ev-44",
+          "ev-7",
+          "ev-13"
+        ],
+        "quotes": [
+          "url: https://daehwa-ai.com/login?next=%2Fnote",
+          "초대 코드와 회사 이메일이 필요합니다.",
+          "fetch(\"/api/auth/signup\""
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-007",
+        "verdict": "pass",
+        "artifactIds": [
+          "ev-8",
+          "ev-29",
+          "ev-27"
+        ],
+        "quotes": [
+          "가입하면 60분 무료",
+          "카드 등록 없이 바로 써 보세요.",
+          "5시간권\n49,000원",
+          "20시간권\n가장 많이 선택\n149,000원",
+          "1일권\n39,000원",
+          "60 free minutes on sign-up\nNo card required.",
+          "20시간권\n가장 많이 선택\n149,000원"
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-008",
+        "verdict": "pass",
+        "artifactIds": [
+          "ev-27",
+          "ev-28"
+        ],
+        "quotes": [
+          "4.6%\n말레이시아 영어\n12.7%\n필리핀 영어\n7.8%\n한국어",
+          "실시간 인식 오류율(영어 WER · 한국어 CER). 2026년 9월, 3개국 상담회 음성 기준 · 오프라인 전사와 모델 판정이 합의한 기계 골드셋 대비.",
+          "4.6%\nMalaysian English\n12.7%\nFilipino English\n7.8%\nKorean"
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-009",
+        "verdict": "pass",
+        "artifactIds": [
+          "ev-27",
+          "ev-32"
+        ],
+        "quotes": [
+          "2026년 3개국 6개 행사에서 검증",
+          "2026 ICT Business Summit 말레이시아",
+          "56\n건 상담",
+          "2026 ICT Business Summit 필리핀",
+          "40\n건 상담",
+          "KOSA 일본어 무대 동시통역",
+          "2\n일 운영",
+          "X-DIGITAL@ASEAN"
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "AC-010",
+        "verdict": "pass",
+        "artifactIds": [
+          "ev-32",
+          "ev-26",
+          "ev-42",
+          "ev-25",
+          "ev-41",
+          "ev-16",
+          "ev-36"
+        ],
+        "quotes": [
+          "link \"로그인\":\n    - /url: /login",
+          "이메일 hello@daehwa-ai.com",
+          "POST https://daehwa-ai.com/api/contact-inquiries → 200",
+          "\"contactName\":\"심사테스트\",\"contactEmail\":\"qa-simsatest2@example.com\"",
+          "{\"ok\":true}",
+          "문의가 접수되었습니다. 영업일 기준 1일 안에 회신드리겠습니다.",
+          "\"author_role\":\"visitor\",\"body\":\"QA 심사용 테스트 메시지입니다. 무시하셔도 됩니다.\""
+        ],
+        "refusals": 0
+      },
+      {
+        "acId": "INTENT",
+        "verdict": "pass",
+        "artifactIds": [
+          "ev-27",
+          "ev-44",
+          "ev-7",
+          "ev-42",
+          "ev-36"
+        ],
+        "quotes": [
+          "수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다.",
+          "url: https://daehwa-ai.com/login?next=%2Fnote",
+          "초대 코드와 회사 이메일이 필요합니다.",
+          "POST https://daehwa-ai.com/api/contact-inquiries → 200",
+          "\"author_role\":\"visitor\""
+        ],
+        "refusals": 0
+      }
+    ],
+    "artifacts": [
+      {
+        "id": "ev-1",
+        "kind": "request",
+        "context": 0,
+        "summary": "https://daehwa-ai.com → HTTP 200"
+      },
+      {
+        "id": "ev-2",
+        "kind": "source",
+        "context": 0,
+        "summary": "소스 12개를 읽고 눈여겨볼 사실 1개"
+      },
+      {
+        "id": "ev-3",
+        "kind": "screen",
+        "context": 0,
+        "summary": "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로"
+      },
+      {
+        "id": "ev-4",
+        "kind": "source",
+        "context": 0,
+        "summary": "소스 14개"
+      },
+      {
+        "id": "ev-5",
+        "kind": "source",
+        "context": 0,
+        "summary": "소스 검색 //api/chat|/api/[a-z-]+|href:\"/[a-z]+/ → 3곳"
+      },
+      {
+        "id": "ev-6",
+        "kind": "screen",
+        "context": 0,
+        "summary": "https://daehwa-ai.com/note 열기 → HTTP 200"
+      },
+      {
+        "id": "ev-7",
+        "kind": "screen",
+        "context": 0,
+        "summary": "https://daehwa-ai.com/signup?next=/note 열기 → HTTP 200"
+      },
+      {
+        "id": "ev-8",
+        "kind": "screen",
+        "context": 0,
+        "summary": "https://daehwa-ai.com/pricing 열기 → HTTP 200"
+      },
+      {
+        "id": "ev-9",
+        "kind": "screen",
+        "context": 0,
+        "summary": "https://daehwa-ai.com/contact 열기 → HTTP 200"
+      },
+      {
+        "id": "ev-10",
+        "kind": "source",
+        "context": 0,
+        "summary": "page-6e6fa95fdee0e6ce.js?dpl=dpl_5pjmUetwdqxSzBEavU8YMLAoDEiB [1200…4200 / 11755]"
+      },
+      {
+        "id": "ev-12",
+        "kind": "source",
+        "context": 0,
+        "summary": "소스 검색 //(meeting|stage|tower|control|booth|even/ → 25곳"
+      },
+      {
+        "id": "ev-13",
+        "kind": "source",
+        "context": 0,
+        "summary": "page-167def1460c555c5.js?dpl=dpl_5pjmUetwdqxSzBEavU8YMLAoDEiB [1200…3200 / 10525]"
+      },
+      {
+        "id": "ev-14",
+        "kind": "screen",
+        "context": 0,
+        "summary": "https://daehwa-ai.com/contact 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 행사 의뢰 행사 동시통역, 의뢰해주세요 한-영 비즈니스 미팅·바이어 상담·전시 부스 동시통역. 행사 정보를 알려주시면 24시간 안에 견적과 함께 연락드립니다. 회사명 담당자 이름· 필수 이메일· 필수 연락처"
+      },
+      {
+        "id": "ev-15",
+        "kind": "diff",
+        "context": 0,
+        "summary": "click 문의 보내기 → 화면 그대로"
+      },
+      {
+        "id": "ev-16",
+        "kind": "request",
+        "context": 0,
+        "summary": "요청 0건"
+      },
+      {
+        "id": "ev-17",
+        "kind": "diff",
+        "context": 0,
+        "summary": "fill 회사명 → 화면 바뀜"
+      },
+      {
+        "id": "ev-18",
+        "kind": "diff",
+        "context": 0,
+        "summary": "fill 담당자 이름· 필수 → 화면 바뀜"
+      },
+      {
+        "id": "ev-19",
+        "kind": "diff",
+        "context": 0,
+        "summary": "fill 이메일· 필수 → 화면 바뀜"
+      },
+      {
+        "id": "ev-20",
+        "kind": "diff",
+        "context": 0,
+        "summary": "fill 연락처 → 화면 바뀜"
+      },
+      {
+        "id": "ev-21",
+        "kind": "diff",
+        "context": 0,
+        "summary": "fill 행사명 → 화면 바뀜"
+      },
+      {
+        "id": "ev-22",
+        "kind": "diff",
+        "context": 0,
+        "summary": "fill 부스 수 (예상) → 화면 바뀜"
+      },
+      {
+        "id": "ev-23",
+        "kind": "diff",
+        "context": 0,
+        "summary": "fill 추가 요청사항 → 화면 바뀜"
+      },
+      {
+        "id": "ev-24",
+        "kind": "diff",
+        "context": 0,
+        "summary": "click 문의 보내기 → 화면 바뀜 (제출)"
+      },
+      {
+        "id": "ev-25",
+        "kind": "screen",
+        "context": 0,
+        "summary": "wait → https://daehwa-ai.com/contact"
+      },
+      {
+        "id": "ev-26",
+        "kind": "request",
+        "context": 0,
+        "summary": "요청 1건 (저장 요청 성공 포함)"
+      },
+      {
+        "id": "ev-27",
+        "kind": "context",
+        "context": 1,
+        "summary": "새 브라우저(Asia/Seoul): https://daehwa-ai.com/ → 대·화.ai"
+      },
+      {
+        "id": "ev-28",
+        "kind": "diff",
+        "context": 1,
+        "summary": "click EN → 화면 바뀜"
+      },
+      {
+        "id": "ev-29",
+        "kind": "screen",
+        "context": 1,
+        "summary": "https://daehwa-ai.com/pricing 열기 → HTTP 200"
+      },
+      {
+        "id": "ev-30",
+        "kind": "diff",
+        "context": 1,
+        "summary": "click KO → 화면 바뀜"
+      },
+      {
+        "id": "ev-31",
+        "kind": "diff",
+        "context": 1,
+        "summary": "click 대·화 팀에게 문의 → 화면 바뀜"
+      },
+      {
+        "id": "ev-32",
+        "kind": "screen",
+        "context": 1,
+        "summary": "https://daehwa-ai.com/ 화면: 대·화.ai 기능 요금제 도입 사례 문의 EN 로그인 도입 문의 무료로 시작하기 LIVE 2026년 3개국 6개 행사에서 검증 통역사 없이, 상담은 그대로. 수출상담회 부스와 1:1 비즈니스 미팅을 실시간으로 통역합니다. 미팅이 끝나면 양측이 함께 확인한 기록과 요약이 남습니다. 무료로"
+      },
+      {
+        "id": "ev-33",
+        "kind": "diff",
+        "context": 1,
+        "summary": "fill 이름 (선택) → 화면 바뀜"
+      },
+      {
+        "id": "ev-34",
+        "kind": "diff",
+        "context": 1,
+        "summary": "fill 궁금한 점을 적어주세요 → 화면 바뀜"
+      },
+      {
+        "id": "ev-35",
+        "kind": "diff",
+        "context": 1,
+        "summary": "click 보내기 → 화면 바뀜 (제출)"
+      },
+      {
+        "id": "ev-36",
+        "kind": "request",
+        "context": 1,
+        "summary": "요청 4건"
+      },
+      {
+        "id": "ev-37",
+        "kind": "screen",
+        "context": 1,
+        "summary": "https://daehwa-ai.com/contact 열기 → HTTP 200"
+      },
+      {
+        "id": "ev-38",
+        "kind": "diff",
+        "context": 1,
+        "summary": "fill 담당자 이름· 필수 → 화면 바뀜"
+      },
+      {
+        "id": "ev-39",
+        "kind": "diff",
+        "context": 1,
+        "summary": "fill 이메일· 필수 → 화면 바뀜"
+      },
+      {
+        "id": "ev-40",
+        "kind": "diff",
+        "context": 1,
+        "summary": "fill 추가 요청사항 → 화면 바뀜"
+      },
+      {
+        "id": "ev-41",
+        "kind": "diff",
+        "context": 1,
+        "summary": "click 문의 보내기 → 화면 바뀜 (제출)"
+      },
+      {
+        "id": "ev-42",
+        "kind": "request",
+        "context": 1,
+        "summary": "요청 2건 (저장 요청 성공 포함)"
+      },
+      {
+        "id": "ev-43",
+        "kind": "console",
+        "context": 1,
+        "summary": "콘솔 오류 0건"
+      },
+      {
+        "id": "ev-44",
+        "kind": "screen",
+        "context": 1,
+        "summary": "https://daehwa-ai.com/note 열기 → HTTP 200"
+      }
+    ],
+    "citation": {
+      "decided": 6,
+      "cited": 6,
+      "pct": 100
+    },
+    "toolCalls": 55
+  },
+  "costUsd": 2.9996,
+  "chargeEstimate": {
+    "chargeEstimateUsd": 9,
+    "markup": 3,
+    "billing": "off"
+  },
+  "llmCalls": 55,
+  "models": [
+    "claude-fable-5-1"
+  ],
+  "durationSec": 652,
+  "phasesTail": [
+    "+0.0s agent-v2 rev=agent-v2-1 acs=10 login=none",
+    "+3.1s landing status=200 broken=false",
+    "+3.8s recon facts=1 sources=12",
+    "+652.0s loop done tools=55 turns=55 verdicts=12"
+  ]
+}

@@ -102,7 +102,7 @@ describe("L-2 빌드 루프는 실제 응답 모델로 과금한다", () => {
     const client = { messages: { create: async () => finishResponse("test-model", { input_tokens: 1_000_000, output_tokens: 0 }) } };
     const r = await runBuildLoop(TASK, { client, executor: noopExecutor, model: "test-model", gate });
     assert.equal(r.status, "done");
-    near(r.costUsd, 5);
+    near(r.costUsd, 10); // 보수 입력가 = 표 최고(claude-fable-5-1 $10, 2026-10-07)
     assert.equal(r.unpricedCalls, 1);
     assert.equal(r.usage[0].unpriced, true);
     assert.equal(r.usage[0].modelRequested, "test-model", "게이트가 넘긴 모델 = 요청 모델");
