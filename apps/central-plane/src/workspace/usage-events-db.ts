@@ -23,7 +23,9 @@ export type UsageEventType =
   | "workspace_email_notification_error"
   // Train C · C2b (재정렬 D-19 amend): 북극성 계측 — 사람 수용 라벨 + 고침 지시 복사.
   | "workspace_visual_check_verdict"
-  | "workspace_fix_prompt_copied";
+  | "workspace_fix_prompt_copied"
+  // 2026-10-18 HANDOFF §3-3: 지시서 재생성은 사용자가 "기획을 바꿨다"고 명시한 때만 — 개수·시각만 남긴다.
+  | "workspace_dev_spec_regenerated";
 
 function randId(): string {
   const ts = Date.now().toString(36).slice(-6);

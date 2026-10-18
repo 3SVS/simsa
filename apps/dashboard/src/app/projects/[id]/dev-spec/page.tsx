@@ -19,8 +19,8 @@ import Link from "next/link";
 import { getProject } from "@/lib/mock-data";
 import { getLocalProject, getUserKey, loadExtendedProjectData, markProjectSyncFailed } from "@/lib/workflow-store";
 import { saveProjectToDb } from "@/lib/workspace-check-api";
-import { generateDevSpecApi, getDevSpecApi, type DevSpecApiError } from "@/lib/dev-spec-api";
-import { devSpecView, generateButtonState, generateErrorKey } from "@/lib/dev-spec-view.mjs";
+import { generateDevSpecApi, getDevSpecApi, type DevSpecAcDiff, type DevSpecApiError } from "@/lib/dev-spec-api";
+import { devSpecView, generateButtonState, generateErrorKey, regenerateDiffCounts, regenerateStep } from "@/lib/dev-spec-view.mjs";
 import { listBuildJobs, type BuildApiFailure, type BuildJobListOk } from "@/lib/build-job-api";
 import { buildAvailability, latestBuildJob, makePanelVisible } from "@/lib/build-job-view.mjs";
 import { useAppPresence } from "@/lib/use-app-presence";
@@ -44,6 +44,9 @@ export default function DevSpecPage() {
   const [error, setError] = useState<DevSpecApiError | null>(null);
   const [showDev, setShowDev] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // 2026-10-18 HANDOFF §3-3: 지시서가 있으면 "다시 만들기"는 확인 단계를 거친다(기획을 바꿨다고 명시해야 기준이 바뀐다).
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [lastDiff, setLastDiff] = useState<DevSpecAcDiff | null>(null);
   // B-8: 만들기를 여기서 쓸 수 있는가 + 최근 잡(진행 중·끝이면 다시 만들라고 하지 않는다).
   const [buildList, setBuildList] = useState<BuildJobListOk | BuildApiFailure | null>(null);
   const presence = useAppPresence(id);
@@ -82,6 +85,7 @@ export default function DevSpecPage() {
   const hasItems = project.requirements.length > 0;
   const view = devSpecView(devSpec);
   const btn = generateButtonState({ hasSpec, hasItems, hasDevSpec: !!view, phase });
+  const diffCounts = regenerateDiffCounts(lastDiff);
   const d = t.devSpec;
   const showMake = view
     ? makePanelVisible({
@@ -94,8 +98,15 @@ export default function DevSpecPage() {
     : false;
   const latestJob = buildList?.ok ? latestBuildJob(buildList.jobs) : null;
 
-  async function handleGenerate() {
+  async function handleGenerate(reason?: "plan_changed") {
     setError(null);
+    // 지시서가 이미 있으면 먼저 묻는다 — 기준이 바뀌면 지난 확인과 비교할 수 없게 된다(서버도 reason 없이는 409로 거절).
+    if (regenerateStep({ hasDevSpec: devSpec !== null, reason }) === "confirm") {
+      setConfirmRegen(true);
+      return;
+    }
+    setConfirmRegen(false);
+    setLastDiff(null);
     setPhase("loading");
     // 서버는 D1의 브리프·항목을 읽는다 — 로컬 우선 저장소를 먼저 미러한다(items 페이지와 같은 페이로드).
     const criteria = ext?.itemCriteria ?? {};
@@ -120,11 +131,13 @@ export default function DevSpecPage() {
     // 확인 0으로 읽고 must를 전부 강등한다(PR #577 리뷰 P2-1).
     const r = await generateDevSpecApi(id, getUserKey(), locale === "en" ? "en" : "ko", {
       confirmedItemIds: effectiveConfirmedItemIds(ext?.intentConfirmedItemIds, project!.requirements.map((req) => req.id)),
+      ...(reason ? { reason } : {}),
     });
     setPhase("idle");
     if (r.ok) {
       setDevSpec(r.devSpec);
       setShowDev(false);
+      setLastDiff(r.diff ?? null);
     } else {
       setError(r);
     }
@@ -164,10 +177,25 @@ export default function DevSpecPage() {
             <button onClick={() => setShowDev((v) => !v)} className="btn btn-md btn-secondary">
               {showDev ? d.hideDev : d.showDev}
             </button>
-            <button onClick={handleGenerate} disabled={!btn.enabled} className="btn btn-md btn-secondary">
+            <button onClick={() => handleGenerate()} disabled={!btn.enabled} className="btn btn-md btn-secondary">
               {d[btn.labelKey]}
             </button>
           </div>
+          {confirmRegen && (
+            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-4">
+              <p className="text-sm font-medium text-gray-900">{d.regenConfirmTitle}</p>
+              <p className="mt-1 text-xs text-gray-600">{d.regenConfirmBody.replace("{n}", String(view.counts.acceptance))}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button onClick={() => handleGenerate("plan_changed")} className="btn btn-md btn-primary">{d.regenConfirmYes}</button>
+                <button onClick={() => setConfirmRegen(false)} className="btn btn-md btn-secondary">{d.regenCancel}</button>
+              </div>
+            </div>
+          )}
+          {diffCounts && (
+            <p className="mt-3 text-xs text-gray-600">
+              {d.regenDiff.replace("{a}", String(diffCounts.added)).replace("{r}", String(diffCounts.removed)).replace("{k}", String(diffCounts.kept))}
+            </p>
+          )}
         </div>
       ) : (
         <div className="card p-6">
@@ -175,7 +203,7 @@ export default function DevSpecPage() {
           {loaded && <p className="mt-1 text-xs text-gray-500">{d.emptyBody}</p>}
           {loaded && (
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button onClick={handleGenerate} disabled={!btn.enabled} className="btn btn-md btn-primary">
+              <button onClick={() => handleGenerate()} disabled={!btn.enabled} className="btn btn-md btn-primary">
                 {d[btn.labelKey]}
               </button>
               {btn.hintKey === "needSpec" && <Link href={`/projects/${id}/spec`} className="text-sm text-brand-700 underline">{d.needSpec}</Link>}

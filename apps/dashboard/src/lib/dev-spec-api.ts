@@ -21,8 +21,17 @@ export type DevSpecApiError =
   | { ok: false; error: "rate_limited"; retryAfterSeconds: number }
   | { ok: false; error: "not_found" }
   | { ok: false; error: "no_dev_spec" }
+  /** 2026-10-18: 지시서가 이미 있다 — 기획을 바꿨다고 명시(reason:"plan_changed")해야 다시 뽑는다. AI 호출 없었음. */
+  | { ok: false; error: "dev_spec_exists"; acCount: number }
   | { ok: false; error: "server"; status: number }
   | { ok: false; error: "network"; message: string };
+
+/** 기획 변경 재생성 때 서버가 돌려주는 이전 기준과의 차이(같은 기준 = 제목+결과가 같은 것, id 무관). */
+export type DevSpecAcDiff = {
+  added: Array<{ id: string; title: string; then: string }>;
+  removed: Array<{ id: string; title: string; then: string }>;
+  kept: Array<{ prevId: string; nextId: string; title: string }>;
+};
 
 export type DevSpecSummary = {
   what: string;
@@ -32,7 +41,7 @@ export type DevSpecSummary = {
   mustFeatureTitles: string[];
 };
 
-export type DevSpecGenerateOk = { ok: true; devSpec: unknown; summary: DevSpecSummary; repaired: boolean; updatedAt: string };
+export type DevSpecGenerateOk = { ok: true; devSpec: unknown; summary: DevSpecSummary; repaired: boolean; updatedAt: string; diff?: DevSpecAcDiff };
 export type DevSpecGetOk = { ok: true; devSpec: unknown; updatedAt: string | null };
 
 export async function generateDevSpecApi(
@@ -43,7 +52,11 @@ export async function generateDevSpecApi(
    * C-A7 (D-2 amend): 기존 앱 문에서 유저가 확인한 항목 id. 서버가 역추론 지시서의
    * userConfirmedAcIds로 바꾼다 — must는 여기서만 나온다. 없으면 보내지 않는다(서버 = 빈 배열).
    */
-  opts: { confirmedItemIds?: readonly string[] } = {},
+  opts: {
+    confirmedItemIds?: readonly string[];
+    /** 2026-10-18: 지시서가 이미 있을 때 다시 뽑는 유일한 길 — 사용자가 "기획을 바꿨다"고 명시한 때만 보낸다. */
+    reason?: "plan_changed";
+  } = {},
 ): Promise<DevSpecGenerateOk | DevSpecApiError> {
   try {
     const resp = await fetch(`${CENTRAL_PLANE_URL}/workspace/projects/${encodeURIComponent(projectId)}/dev-spec/generate`, {
@@ -53,6 +66,7 @@ export async function generateDevSpecApi(
         userKey,
         locale,
         ...(opts.confirmedItemIds ? { confirmedItemIds: [...opts.confirmedItemIds].slice(0, 60) } : {}),
+        ...(opts.reason ? { reason: opts.reason } : {}),
       }),
       // 세 패스 × 최대 120초 — 한 번의 생성이 몇 분 걸릴 수 있다.
       signal: AbortSignal.timeout(6 * 60 * 1000),
@@ -63,6 +77,7 @@ export async function generateDevSpecApi(
     if (resp.ok && body["ok"] === true) return body as unknown as DevSpecGenerateOk;
     if (resp.status === 429) return { ok: false, error: "rate_limited", retryAfterSeconds: Number(body["retryAfterSeconds"] ?? 3600) };
     if (resp.status === 404) return { ok: false, error: "not_found" };
+    if (resp.status === 409 && body["error"] === "dev_spec_exists") return { ok: false, error: "dev_spec_exists", acCount: Number(body["acCount"] ?? 0) };
     if (resp.status === 503) return { ok: false, error: "llm_unavailable" };
     if (resp.status === 422) {
       const issues = Array.isArray(body["issues"]) ? body["issues"].length : 0;

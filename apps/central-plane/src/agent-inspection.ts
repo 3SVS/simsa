@@ -145,7 +145,12 @@ export interface SweepResult {
 export const SWEEP_MAX_SCREENS = 25;
 export const SWEEP_MAX_BUTTONS = 60;
 export const SWEEP_MAX_BUTTONS_PER_SCREEN = 8;
-export const AGENT_MAX_ACS = 10;
+/**
+ * 지시서에서 뽑아 **보내는** AC의 풀 상한. 실제로 돌리는 수는 티어(entitlements maxAcs: free 5 · basic 8 · pro/staff 11)가
+ * 정한다 — 풀을 늘려도 런당 비용 상한은 그대로다. 2026-10-18(문 (b) 격차 §1-2): 10이던 동안 사용자가 직접 적은 기준이
+ * 풀에서 잘려 나갔다(체크한 기능 6개 × AC 2 = 12). 재검수는 같은 AC(acsFromAgentReport)를 쓰므로 그 슬라이스도 이 값이다.
+ */
+export const AGENT_MAX_ACS = 16;
 export const AGENT_MAX_STEPS_PER_AC = 14;
 
 // ─── 행동(LLM 출력) 검증 ──────────────────────────────────────────────────────

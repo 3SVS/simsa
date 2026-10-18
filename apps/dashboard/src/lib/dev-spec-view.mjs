@@ -63,15 +63,38 @@ export function generateButtonState(f) {
 }
 
 /**
+ * 2026-10-18 HANDOFF §3-3: 지시서가 이미 있을 때 "다시 만들기"는 곧바로 서버를 부르지 않고 **확인 단계**를 거친다 —
+ * 기준이 바뀌면 지난 확인과 비교할 수 없게 되므로, 사용자가 "기획을 바꿨다"고 명시해야 한다. 순수 — 테스트 고정.
+ * @param {{ hasDevSpec: boolean, reason?: "plan_changed" }} f
+ * @returns {"confirm"|"generate"} confirm = 확인 단계를 띄운다 · generate = 서버를 부른다(reason이 있으면 동봉)
+ */
+export function regenerateStep(f) {
+  return f.hasDevSpec && f.reason !== "plan_changed" ? "confirm" : "generate";
+}
+
+/**
+ * 재생성 응답의 차이를 한 줄 숫자로. diff가 없으면(첫 생성) null.
+ * @param {{ added?: unknown[], removed?: unknown[], kept?: unknown[] } | null | undefined} diff
+ * @returns {{ added: number, removed: number, kept: number } | null}
+ */
+export function regenerateDiffCounts(diff) {
+  if (!diff || typeof diff !== "object") return null;
+  const n = (k) => (Array.isArray(diff[k]) ? diff[k].length : 0);
+  return { added: n("added"), removed: n("removed"), kept: n("kept") };
+}
+
+/**
  * 실패를 초보자 말로 — 종류별 문구 키. 예시로 대체하지 않고 이유를 말한다.
  * @param {{ error: string, stage?: string, issueCount?: number, retryAfterSeconds?: number }} err
- * @returns {"errLlm"|"errInvalid"|"errRateLimited"|"errCapacity"|"errNotSynced"|"errNetwork"|"errServer"}
+ * @returns {"errLlm"|"errInvalid"|"errRateLimited"|"errCapacity"|"errNotSynced"|"errNetwork"|"errServer"|"errExists"}
  */
 export function generateErrorKey(err) {
   switch (err.error) {
     case "llm_unavailable": return "errLlm";
     case "dev_spec_invalid": return "errInvalid";
     case "rate_limited": return "errRateLimited";
+    // 2026-10-18: 지시서가 이미 있다 — 기획을 바꿨다고 명시해야 다시 뽑는다(화면의 확인 단계가 그 길).
+    case "dev_spec_exists": return "errExists";
     // 비용 권고 ③: service-wide daily capacity (the page renders generationCapacityText).
     case "generation_capacity": return "errCapacity";
     case "not_found": return "errNotSynced";

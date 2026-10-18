@@ -14,4 +14,6 @@ export declare function generateButtonState(f: { hasSpec: boolean; hasItems: boo
   labelKey: "make" | "remake" | "making";
   hintKey: null | "needSpec" | "needItems";
 };
-export declare function generateErrorKey(err: { error: string; stage?: string; issueCount?: number; retryAfterSeconds?: number }): "errLlm" | "errInvalid" | "errRateLimited" | "errCapacity" | "errNotSynced" | "errNetwork" | "errServer";
+export declare function generateErrorKey(err: { error: string; stage?: string; issueCount?: number; retryAfterSeconds?: number }): "errLlm" | "errInvalid" | "errRateLimited" | "errCapacity" | "errNotSynced" | "errNetwork" | "errServer" | "errExists";
+export declare function regenerateStep(f: { hasDevSpec: boolean; reason?: "plan_changed" }): "confirm" | "generate";
+export declare function regenerateDiffCounts(diff: { added?: unknown[]; removed?: unknown[]; kept?: unknown[] } | null | undefined): { added: number; removed: number; kept: number } | null;
