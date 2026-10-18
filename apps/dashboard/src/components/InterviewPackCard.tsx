@@ -134,7 +134,8 @@ export function InterviewPackCard({ projectId }: { projectId: string }) {
     setApplyState("done");
     setRuler("building");
     // 미러 → 역추론 지시서(확인된 must) — 실패는 조용히 알리되 반영 자체는 되돌리지 않는다.
-    const outcome = await mirrorThenBuildIntentRuler(projectId, loc, applied.confirmedItemIds).catch(() => "generate_failed" as const);
+    // 인터뷰 답은 사용자가 자기 말로 기획을 다시 적은 것 — 지시서가 이미 있어도 다시 뽑는다(2026-10-18 Bae: 기획 변경 명시로 본다).
+    const outcome = await mirrorThenBuildIntentRuler(projectId, loc, applied.confirmedItemIds, "plan_changed").catch(() => "generate_failed" as const);
     setRuler(outcome === "built" ? "built" : outcome === "skipped_no_confirmed" ? "skipped" : "failed");
   }
 

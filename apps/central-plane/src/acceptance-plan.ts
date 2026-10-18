@@ -90,24 +90,78 @@ export function agentAcsFromDevSpec(devSpec: unknown, opts: { max?: number } = {
   const userText = spec.meta.provenance?.userTextAcIds;
   const userTextIds = userText ? new Set(userText) : null;
   const out: AgentAc[] = [];
+  // 2026-10-18(문 (b) 격차 §1-2): 상한에 잘릴 때 **사용자가 직접 적은 것 > 직접 체크한 것 > 정본 > 추론** 순으로 남기고,
+  // 같은 출처 안에서는 기능마다 첫 AC를 먼저(라운드로빈) — 체크한 기능 6개가 AC 2개씩으로 10칸을 다 써서 사용자가
+  // "빠진 것"에 적은 항목이 전부 잘리던 결함. 정렬은 안정(저장 순서 보존)이고 orderAcs도 안정 정렬이라 컨테이너까지 유지된다.
+  const nthOfFeature = new Map<string, number>();
+  const keyed: Array<{ ac: AgentAc; originRank: number; nth: number; index: number }> = [];
   for (const a of spec.acceptance) {
     if (a.verifiedBy === "human") continue;
     const f = featureById.get(a.featureId);
     if (!f) continue;
     const steps = stepsByAc.get(a.id);
-    out.push({
-      id: a.id,
-      title: f.title,
-      given: a.given,
-      when: a.when,
-      then: a.then,
-      // 2026-10-06 Bae 결정("기본 체크 해제"): 카드의 추론 항목은 체크 해제로 시작하므로, 확인 목록(userConfirmedAcIds)은
-      //  사용자가 **직접 체크한** 것이다. must = 직접 체크 + 직접 적은 것. 그 밖(추론만)의 must는 should로.
-      priority: inferred && !confirmedIds.has(a.id) && !userTextIds?.has(a.id) && f.priority === "must" ? "should" : f.priority,
-      confirmed: !inferred || confirmedIds.has(a.id),
-      origin: !inferred ? "spec" : userTextIds?.has(a.id) ? "user_text" : confirmedIds.has(a.id) ? "user_checked" : "inferred",
-      ...(steps ? { steps } : {}),
+    const origin: NonNullable<AgentAc["origin"]> = !inferred ? "spec" : userTextIds?.has(a.id) ? "user_text" : confirmedIds.has(a.id) ? "user_checked" : "inferred";
+    const nth = nthOfFeature.get(a.featureId) ?? 0;
+    nthOfFeature.set(a.featureId, nth + 1);
+    keyed.push({
+      ac: {
+        id: a.id,
+        title: f.title,
+        given: a.given,
+        when: a.when,
+        then: a.then,
+        // 2026-10-06 Bae 결정("기본 체크 해제"): 카드의 추론 항목은 체크 해제로 시작하므로, 확인 목록(userConfirmedAcIds)은
+        //  사용자가 **직접 체크한** 것이다. must = 직접 체크 + 직접 적은 것. 그 밖(추론만)의 must는 should로.
+        priority: inferred && !confirmedIds.has(a.id) && !userTextIds?.has(a.id) && f.priority === "must" ? "should" : f.priority,
+        confirmed: !inferred || confirmedIds.has(a.id),
+        origin,
+        ...(steps ? { steps } : {}),
+      },
+      originRank: AC_ORIGIN_RANK[origin],
+      nth,
+      index: keyed.length,
     });
   }
+  keyed.sort(
+    (x, y) =>
+      PRIORITY_RANK[x.ac.priority] - PRIORITY_RANK[y.ac.priority] || x.originRank - y.originRank || x.nth - y.nth || x.index - y.index,
+  );
+  for (const k of keyed) out.push(k.ac);
   return orderAcs(out, opts.max ?? AGENT_MAX_ACS);
+}
+
+/** 상한에 잘릴 때 남기는 순서 — 사용자가 직접 적은 것이 맨 앞. */
+const AC_ORIGIN_RANK: Record<NonNullable<AgentAc["origin"]>, number> = { user_text: 0, user_checked: 1, spec: 2, inferred: 3 };
+
+/** 제목+결과를 정규화한 열쇠 — AC-nnn id는 생성마다 LLM이 새로 매기므로 id로는 "같은 기준"을 알 수 없다. */
+function acKey(a: Pick<AgentAc, "title" | "then">): string {
+  const norm = (s: string) => s.toLowerCase().replace(/[\s\p{P}]+/gu, " ").trim();
+  return `${norm(a.title)}\u0000${norm(a.then)}`;
+}
+
+export type AcDiff = {
+  added: Array<{ id: string; title: string; then: string }>;
+  removed: Array<{ id: string; title: string; then: string }>;
+  kept: Array<{ prevId: string; nextId: string; title: string }>;
+};
+
+/**
+ * 2026-10-18 HANDOFF §3-3: 사용자가 "기획을 바꿨다"고 명시해 지시서를 다시 뽑을 때, 이전 AC와의 차이를 기록한다.
+ * 같은 기준 = 정규화한 제목+결과가 같은 것(id 무관). 순수 함수 — 테스트 고정.
+ */
+export function diffAcs(prev: readonly AgentAc[], next: readonly AgentAc[]): AcDiff {
+  const prevByKey = new Map<string, AgentAc>();
+  for (const a of prev) if (!prevByKey.has(acKey(a))) prevByKey.set(acKey(a), a);
+  const matchedPrev = new Set<string>();
+  const added: AcDiff["added"] = [];
+  const kept: AcDiff["kept"] = [];
+  for (const n of next) {
+    const p = prevByKey.get(acKey(n));
+    if (p && !matchedPrev.has(p.id)) {
+      matchedPrev.add(p.id);
+      kept.push({ prevId: p.id, nextId: n.id, title: n.title });
+    } else added.push({ id: n.id, title: n.title, then: n.then });
+  }
+  const removed = prev.filter((p) => !matchedPrev.has(p.id)).map((p) => ({ id: p.id, title: p.title, then: p.then }));
+  return { added, removed, kept };
 }

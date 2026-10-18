@@ -22,10 +22,15 @@ export async function mirrorThenBuildIntentRuler(
   projectId: string,
   locale: "ko" | "en",
   confirmedItemIds: readonly string[],
+  /**
+   * 2026-10-18 HANDOFF §3-3: 지시서가 이미 있으면 서버는 명시적 의사 없이 다시 뽑지 않는다(409). 카드의 첫 확정은
+   * 지시서가 없으므로 reason 없이 간다. 인터뷰 답 반영은 사용자가 자기 말로 기획을 다시 적은 것이라 "plan_changed"로 보낸다.
+   */
+  reason?: "plan_changed",
 ): Promise<IntentRulerOutcome> {
   const mirrored = await mirrorLocalProjectToDb(projectId).catch(() => false);
   if (!mirrored) return "mirror_failed";
   if (confirmedItemIds.length === 0) return "skipped_no_confirmed";
-  const r = await generateDevSpecApi(projectId, getUserKey(), locale, { confirmedItemIds });
+  const r = await generateDevSpecApi(projectId, getUserKey(), locale, { confirmedItemIds, ...(reason ? { reason } : {}) });
   return r.ok ? "built" : "generate_failed";
 }

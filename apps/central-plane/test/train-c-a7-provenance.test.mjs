@@ -566,3 +566,74 @@ describe("④′ POST /infer-intent — 역추론 결과에 provenance", () => {
     assert.deepEqual(r.json.provenance, { builtWith: "lovable", entryPath: "code", detectedStack: { hosting: "lovable" } });
   });
 });
+
+// ─── ⑥ 2026-10-18 HANDOFF §3-3: 지시서 재생성 게이트 — 명시적 "기획 변경" 없이는 다시 뽑지 않는다 ───────────────
+
+function envWithDevSpec(entryPath, devSpec) {
+  const projects = new Map([
+    [PROJECT, projectRow(PROJECT, USER, {
+      title: "(주)트루픽셀 예약 앱",
+      idea: "손님이 원하는 날짜와 시간을 골라 미용실 예약을 잡는 웹앱",
+      product_spec_json: JSON.stringify(brief),
+      items_json: JSON.stringify(items),
+      entry_path: entryPath,
+      dev_spec_json: JSON.stringify(devSpec),
+    })],
+  ]);
+  return { ENVIRONMENT: "test", ANTHROPIC_API_KEY: "test-anthropic-key", DB: makeFakeD1({ projects, sources: [websiteSource(PROJECT, USER, { reference: APP_URL })] }) };
+}
+const llmCalls = (calls) => calls.filter((u) => u.includes("anthropic") || u.includes("/v1/messages")).length;
+
+describe("⑥ POST /dev-spec/generate — 지시서가 있으면 reason:'plan_changed' 없이는 409·LLM 0회", () => {
+  const existing = specWith({ provenance: { userConfirmedAcIds: ["AC-001", "AC-002"] } });
+
+  it("지시서 있음 + reason 없음 → 409 dev_spec_exists · LLM 0회 · 저장 쓰기 0 · 이벤트 0 (옛 코드: 200·세 패스 재호출)", async () => {
+    __resetAnthropicBreaker();
+    assert.equal(validateDevSpec(existing).ok, true);
+    const env = envWithDevSpec("code", existing);
+    const calls = [];
+    const r = await withFetch(fetchStub(calls), () => post(env, `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, locale: "ko", confirmedItemIds: ["req_001"] }));
+    assert.equal(r.status, 409, JSON.stringify(r.json).slice(0, 300));
+    assert.equal(r.json.error, "dev_spec_exists");
+    assert.equal(r.json.acCount, 2);
+    assert.deepEqual(r.json.regenerateWith, { reason: "plan_changed" });
+    assert.equal(llmCalls(calls), 0, "AI를 부르지 않는다");
+    assert.ok(!env.DB.writes.some((w) => w.sql.includes("UPDATE workspace_projects SET dev_spec_json")), "저장하지 않는다");
+    assert.ok(!env.DB.writes.some((w) => w.sql.includes("INSERT INTO workspace_usage_events")), "생성 이벤트도 없다");
+  });
+
+  it("reason:'plan_changed' → 다시 뽑고 저장 · 응답에 이전 기준과의 diff · usage event는 개수만 (옛 코드: diff·이벤트 없음)", async () => {
+    __resetAnthropicBreaker();
+    const env = envWithDevSpec("code", existing);
+    const calls = [];
+    const r = await withFetch(fetchStub(calls), () =>
+      post(env, `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, locale: "ko", confirmedItemIds: ["req_001", "req_003"], reason: "plan_changed" }));
+    assert.equal(r.status, 200, JSON.stringify(r.json).slice(0, 400));
+    assert.ok(llmCalls(calls) >= 3, "세 패스를 다시 돈다");
+    assert.ok(r.json.diff && Array.isArray(r.json.diff.added) && Array.isArray(r.json.diff.removed) && Array.isArray(r.json.diff.kept));
+    assert.equal(r.json.diff.kept.length + r.json.diff.removed.length, 2, "이전 기준 2개는 유지 아니면 제거");
+    assert.deepEqual(savedDevSpec(env).meta.provenance.userConfirmedAcIds, ["AC-001", "AC-002"]);
+    const ev = env.DB.writes.filter((w) => w.sql.includes("INSERT INTO workspace_usage_events")).map((w) => ({ type: w.bound[3], meta: JSON.parse(w.bound[4]) }));
+    const regen = ev.find((e) => e.type === "workspace_dev_spec_regenerated");
+    assert.ok(regen, "재생성 이벤트 1행");
+    assert.equal(regen.meta.reason, "plan_changed");
+    assert.equal(regen.meta.prevAcCount, 2);
+    for (const k of ["added", "removed", "kept", "nextAcCount"]) assert.equal(typeof regen.meta[k], "number", k);
+    assert.ok(!("devSpec" in regen.meta) && !("title" in regen.meta), "개수만 — 내용은 남기지 않는다");
+  });
+
+  it("지시서가 없으면 reason 없이도 종전대로 생성(첫 확정 경로) · 응답에 diff 없음", async () => {
+    __resetAnthropicBreaker();
+    const env = envFor("code");
+    const r = await withFetch(fetchStub([]), () => post(env, `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, locale: "ko", confirmedItemIds: ["req_001"] }));
+    assert.equal(r.status, 200, JSON.stringify(r.json).slice(0, 300));
+    assert.equal(r.json.diff, undefined);
+  });
+
+  it("reason 모양이 틀리면 400 invalid_reason(조용히 버리지 않는다)", async () => {
+    const env = envWithDevSpec("code", existing);
+    const r = await post(env, `/workspace/projects/${PROJECT}/dev-spec/generate`, { userKey: USER, reason: "because" });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.error, "invalid_reason");
+  });
+});

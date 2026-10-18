@@ -287,7 +287,8 @@ describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
     spec.features[2].priority = "should";
     spec.meta.provenance.userTextAcIds = ["AC-002"];
     const acs = agentAcsFromDevSpec(spec);
-    assert.deepEqual(acs.map((a) => [a.id, a.priority, a.origin]), [["AC-001", "must", "user_checked"], ["AC-002", "must", "user_text"], ["AC-003", "should", "inferred"]]);
+    // 2026-10-18(격차 §1-2): 상한에 잘릴 때 직접 적은 것이 먼저 남도록 user_text가 user_checked 앞에 선다 — 우선순위·출처 자체는 그대로.
+    assert.deepEqual(acs.map((a) => [a.id, a.priority, a.origin]), [["AC-002", "must", "user_text"], ["AC-001", "must", "user_checked"], ["AC-003", "should", "inferred"]]);
     const r = (id, status) => ({ id, status, reason: "r", evidence: ["x"], steps: 3 });
     assert.notEqual(P.decideAgentVerdict({ acs, results: [r("AC-001", "pass"), r("AC-002", "not_verified"), r("AC-003", "fail")] }).decision, "Needs Fix", "체크 안 한 기준의 실패");
     assert.equal(P.decideAgentVerdict({ acs, results: [r("AC-001", "fail")] }).decision, "Needs Fix", "체크한 기준의 실패");
@@ -332,5 +333,13 @@ describe("재검수는 같은 기준 · 지시서 AC 출처", () => {
     assert.equal(devSpecAcSource(salonSpec(), "spec"), "document");
     assert.equal(devSpecAcSource(salonSpec(), "idea"), "interview");
     assert.deepEqual(agentAcsFromDevSpec({ broken: true }), []);
+  });
+});
+
+describe("2026-10-18 재검수는 11번째 AC를 잃지 않는다(옛 코드: acsFromAgentReport가 10개로 잘라 CORE-1 포함 11개 런의 마지막 기준이 재검수에서 빠짐)", () => {
+  it("리포트에 11개 → 11개 그대로", () => {
+    const acs = Array.from({ length: 11 }, (_, i) => ac(`AC-${String(i + 1).padStart(3, "0")}`, i < 7 ? "must" : "should"));
+    const rep = P.buildAgentReport({ targetUrl: ORIGIN, intent: "i", acs, acSource: "confirmed_inferred", results: [], sweep: null, signals: {}, loginDepth: "L1", loginMethod: "none" }, "ko");
+    assert.equal(P.acsFromAgentReport(JSON.stringify(rep)).length, 11);
   });
 });

@@ -556,6 +556,12 @@ export type Dictionary = {
     hideDev: string;
     make: string;
     remake: string;
+    regenConfirmTitle: string;
+    regenConfirmBody: string;
+    regenConfirmYes: string;
+    regenCancel: string;
+    regenDiff: string;
+    errExists: string;
     making: string;
     makingHint: string;
     emptyTitle: string;

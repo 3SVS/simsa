@@ -62,3 +62,15 @@ describe("generateErrorKey — 실패는 종류별로, 예시 대체 없음", ()
     assert.equal(generateErrorKey({ error: "server" }), "errServer");
   });
 });
+
+describe("2026-10-18 HANDOFF §3-3 — 다시 만들기는 '기획을 바꿨다'는 확인을 거친다", () => {
+  it("regenerateStep: 지시서가 있고 reason이 없으면 확인 단계, reason이 있거나 지시서가 없으면 생성", async () => {
+    const { regenerateStep, regenerateDiffCounts, generateErrorKey: errKey } = await import("../src/lib/dev-spec-view.mjs");
+    assert.equal(regenerateStep({ hasDevSpec: true }), "confirm");
+    assert.equal(regenerateStep({ hasDevSpec: true, reason: "plan_changed" }), "generate");
+    assert.equal(regenerateStep({ hasDevSpec: false }), "generate");
+    assert.deepEqual(regenerateDiffCounts({ added: [1, 2], removed: [], kept: [1] }), { added: 2, removed: 0, kept: 1 });
+    assert.equal(regenerateDiffCounts(undefined), null);
+    assert.equal(errKey({ error: "dev_spec_exists", acCount: 7 }), "errExists");
+  });
+});

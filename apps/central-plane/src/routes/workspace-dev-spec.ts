@@ -4,11 +4,17 @@
  *   PUT /workspace/projects/:id/dev-spec           — { userKey, devSpec } 저장.
  *                                                    스키마·무결성 실패 = 422 (저장 안 함).
  *   GET /workspace/projects/:id/dev-spec?userKey=  — 소유자만 조회. 없으면 404 no_dev_spec.
- *   POST /workspace/projects/:id/dev-spec/generate — { userKey, locale? } 브리프+항목에서 다단계
+ *   POST /workspace/projects/:id/dev-spec/generate — { userKey, locale?, reason? } 브리프+항목에서 다단계
  *                                                    생성(D-3) → 무결성 통과본만 저장·반환.
  *                                                    실패는 503 llm_unavailable / 422 dev_spec_invalid.
  *                                                    비용 권고 ③: 서비스 전체 일 200(기본) 초과 →
  *                                                    503 generation_capacity(LLM 0회).
+ *                                                    2026-10-18 HANDOFF §3-3: 지시서가 **이미 있으면** 409 dev_spec_exists
+ *                                                    (LLM 0회·몫 소모 0) — 검수의 자(AC)는 지시서에서 결정론으로 나오므로
+ *                                                    지시서가 고정이면 같은 프로젝트의 검수는 늘 같은 질문을 받는다.
+ *                                                    사용자가 "기획을 바꿨다"고 명시(reason:"plan_changed")한 때만 다시 뽑고,
+ *                                                    이전 AC와의 차이(diff)를 응답·usage event로 남긴다. 지난 런의 판정은
+ *                                                    그대로다(런마다 report_json에 AC가 남는다).
  *
  *   POST /workspace/projects/:id/interview-pack   — C-A7: { userKey, locale?, confirmedItemIds? } → 유저가 자기
  *                                                    AI 채팅에 붙여넣을 인터뷰 텍스트(역추론 지시서 요약 기반).
@@ -28,6 +34,7 @@ import { evidenceFromRepo, evidenceFromWebsite, type FetchLike, type StackHint }
 import { mergeStackHints, provenanceFrom, type BaseProvenance } from "../workspace/provenance.js";
 import { MAX_ANSWER_CHARS, buildInterviewPrompt, parseInterviewAnswer } from "../workspace/interview-pack.js";
 import { validateDevSpec, summarizeForBeginner, type DevSpecValidation } from "../workspace/dev-spec.js";
+import { agentAcsFromDevSpec, diffAcs } from "../acceptance-plan.js";
 import { generateDevSpec, makeDevSpecLlmCaller } from "../workspace/generate-dev-spec.js";
 import { vendorFallback } from "../workspace/vendor-routing.js";
 import { consumeUserDailyLimit } from "../workspace/rate-limit.js";
@@ -199,6 +206,23 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
     const owned = await getOwnedProject(c.env, projectId, userKey).catch(() => null);
     if (!owned) return json(headers, 404, { ok: false, error: "not_found" });
 
+    // 2026-10-18 HANDOFF §3-3 — 재생성 게이트. 지시서가 있으면 명시적 의사(reason:"plan_changed") 없이는 다시 뽑지 않는다:
+    // LLM 0회, 용량 슬롯·일일 몫 소모 0. 깨진 옛 지시서(검증 실패)는 없는 것으로 본다.
+    const reasonRaw = b["reason"];
+    if (reasonRaw !== undefined && reasonRaw !== "plan_changed") return json(headers, 400, { ok: false, error: "invalid_reason" });
+    const reason = reasonRaw === "plan_changed" ? "plan_changed" : null;
+    const existingV = owned.devSpec === null || owned.devSpec === undefined ? null : validateDevSpec(owned.devSpec);
+    const existing = existingV && existingV.ok ? existingV.spec : null;
+    if (existing && reason !== "plan_changed") {
+      return json(headers, 409, {
+        ok: false,
+        error: "dev_spec_exists",
+        acCount: agentAcsFromDevSpec(existing).length,
+        summary: summarizeForBeginner(existing),
+        regenerateWith: { reason: "plan_changed" },
+      });
+    }
+
     if (!c.env.ANTHROPIC_API_KEY) {
       // D-3: 예시 폴백 없음 — 키가 없으면 정직하게 불가.
       return json(headers, 503, { ok: false, error: "llm_unavailable" });
@@ -298,7 +322,26 @@ export function createWorkspaceDevSpecRoutes(): Hono<{ Bindings: Env }> {
       .bind(JSON.stringify(result.devSpec), now, projectId, userKey)
       .run();
 
-    return json(headers, 200, { ok: true, devSpec: result.devSpec, summary: summarizeForBeginner(result.devSpec), repaired: result.repaired, updatedAt: now });
+    // 기획 변경에 따른 재생성: 이전 기준과의 차이를 돌려주고(화면이 "바뀐 기준"으로 보여 준다) 개수만 계측한다.
+    let diff: ReturnType<typeof diffAcs> | undefined;
+    if (existing && reason === "plan_changed") {
+      const prevAcs = agentAcsFromDevSpec(existing);
+      diff = diffAcs(prevAcs, agentAcsFromDevSpec(result.devSpec));
+      await insertUsageEvent(c.env, {
+        userKey,
+        eventType: "workspace_dev_spec_regenerated",
+        metadata: { reason, prevAcCount: prevAcs.length, nextAcCount: prevAcs.length - diff.removed.length + diff.added.length, added: diff.added.length, removed: diff.removed.length, kept: diff.kept.length },
+      }).catch(() => undefined);
+    }
+
+    return json(headers, 200, {
+      ok: true,
+      devSpec: result.devSpec,
+      summary: summarizeForBeginner(result.devSpec),
+      repaired: result.repaired,
+      updatedAt: now,
+      ...(diff ? { diff } : {}),
+    });
   });
 
   // ── C-A7: 인터뷰 프롬프트 팩 ──────────────────────────────────────────────
