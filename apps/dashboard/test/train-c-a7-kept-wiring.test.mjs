@@ -46,12 +46,16 @@ test("K-2: confirm()이 미러 뒤 역추론 지시서 생성에 kept id를 동�
 test("K-3: 헬퍼 — 미러 먼저, 확인 0이면 생성 안 함, 있으면 confirmedItemIds로", () => {
   const mirror = ruler.indexOf("await mirrorLocalProjectToDb(projectId)");
   const skip = ruler.indexOf("if (confirmedItemIds.length === 0) return \"skipped_no_confirmed\"");
-  const gen = ruler.indexOf("generateDevSpecApi(projectId, getUserKey(), locale, { confirmedItemIds })");
+  // 2026-10-18(PR #608): reason("plan_changed")은 있을 때만 동봉 — 카드 첫 확정은 reason 없이 간다.
+  const gen = ruler.indexOf("generateDevSpecApi(projectId, getUserKey(), locale, { confirmedItemIds, ...(reason ? { reason } : {}) })");
   assert.ok(mirror >= 0 && skip > mirror && gen > skip, "mirror → skip-if-empty → generate");
 });
 
 test("K-4: API 클라이언트는 confirmedItemIds가 있을 때만 싣는다(옛 호출은 그대로)", () => {
-  assert.match(api, /opts: \{ confirmedItemIds\?: readonly string\[\] \} = \{\}/);
+  assert.match(api, /confirmedItemIds\?: readonly string\[\];/);
+  // 2026-10-18(PR #608): reason은 선택 — 지시서가 있을 때 다시 뽑는 유일한 길.
+  assert.match(api, /reason\?: "plan_changed";/);
+  assert.match(api, /\.\.\.\(opts\.reason \? \{ reason: opts\.reason \} : \{\}\)/);
   assert.match(api, /\.\.\.\(opts\.confirmedItemIds \? \{ confirmedItemIds: \[\.\.\.opts\.confirmedItemIds\]\.slice\(0, 60\) \} : \{\}\)/);
 });
 

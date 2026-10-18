@@ -86,7 +86,8 @@ test("I-3: 카드 배선 — 기존 앱 문 개요에 인라인, 모달 없음, 
   const apply = body.indexOf("applyInterviewAnswer({");
   const saveP = body.indexOf("saveProject({");
   const saveExt = body.indexOf("saveExtendedProjectData(projectId, {");
-  const ruler = body.indexOf("mirrorThenBuildIntentRuler(projectId, loc, applied.confirmedItemIds)");
+  // 2026-10-18(PR #608): 인터뷰 답 반영 = 기획 변경 명시 → reason "plan_changed" 동봉(지시서가 있어도 다시 뽑는다).
+  const ruler = body.indexOf("mirrorThenBuildIntentRuler(projectId, loc, applied.confirmedItemIds, \"plan_changed\")");
   assert.ok(parse >= 0 && apply > parse && saveP > apply && saveExt > saveP && ruler > saveExt, "parse → apply → local save → mirror+ruler");
   assert.match(body, /intentConfirmedItemIds: applied\.confirmedItemIds/);
   // 복사 버튼 + 붙여넣기 칸 + 반영 버튼
