@@ -11,13 +11,18 @@
  *      (Lovable /admin 비밀번호는 쓰지 않는다 — "로그인 필요"로 끝나야 정답)
  * LLM은 Worker 프록시 대신 **같은 anthropicMessages(벤더 폴백 포함)** 를 셸 환경의 키로 부른다(키는 출력·기록하지 않는다).
  *
- * 사용: node tools/simsa-inspection-fixtures/agent-bench1-local.mjs [--only=claude,gemini] [--concurrency=2]
+ * 사용: node tools/simsa-inspection-fixtures/agent-bench1-local.mjs [--only=claude,gemini] [--concurrency=2] [--repeat=3] [--acs=prereg|inferred]
  *   필요: apps/central-plane 빌드(dist), tools/simsa-completion-loop-spike의 playwright(npm install --no-save),
  *         ANTHROPIC_API_KEY 또는 OPENAI_API_KEY.
- * 결과: tools/simsa-inspection-fixtures/agent-bench1-local-result.json (+ 표준 출력 요약)
+ *   --acs=prereg(기본, 2026-10-18 HANDOFF §3-3): 사전 등록 조건 A1~A10(benchmark-salon-2026-10-05.md §2)을 AC로 **주입**한다 —
+ *         의도 추론·"맞나요?"·지시서의 3단 LLM을 거치지 않으므로 질문(AC 목록)이 런마다 같다(질문 동일성 = 구성으로 보장).
+ *   --acs=inferred: 옛 경로(의도 추론 → "맞나요?" 흉내 → 역추론 지시서 → AC 추출). 제품 경로 그대로를 재고 싶을 때.
+ *   --repeat=N: 같은 묶음을 N번. 런마다 시각 붙은 파일(덮어쓰지 않음) + 집계 파일(평균·최소·최대 + 질문/판정 동일성).
+ * 결과: tools/simsa-inspection-fixtures/agent-bench1-local-result-<시각>-r<k>.json · agent-bench1-local-aggregate-<시각>.json
  */
 import { createRequire } from "node:module";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { summarize, aggregate, compareRuns, costOfResult } from "./agent-bench-aggregate.mjs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -57,6 +62,30 @@ export const APPS = [
   { id: "claude", url: "https://dreamy-babka-5f07cd.netlify.app/", expected: "broken_or_hold", mustFailed: ["A3", "A6"] },
   { id: "lovable", url: "https://my-town-salon.lovable.app/", expected: "works", mustFailed: [] },
 ];
+
+/** 주입 모드의 의도 한 줄 — 사전 등록 프롬프트를 사용자가 카드에 적었을 법한 한 문장으로(고정값, 런마다 같다). */
+export const BENCH1_INTENT =
+  "동네 1인 미용실 예약 웹사이트 — 손님이 날짜·시간(10:00~19:00, 30분 단위)을 고르고 이름·휴대폰 번호를 넣으면 예약되고, 사장님은 관리 화면에서 오늘 예약을 시간순으로 보고 취소한다";
+
+/**
+ * 사전 등록 조건 A1~A10(docs/pilot-2026-10/benchmark-salon-2026-10-05.md §2, Simsa 실행 전 고정)을 agent AC 모양으로.
+ * id = 조건 번호 그대로라 정답지 mustFailed와 바로 맞물린다(키워드 대조 불필요). 우선순위도 §2 그대로(A1~A7 must, A8~A10 should).
+ * 이 표를 고치는 것은 정답지를 고치는 것과 같다 — 실행 뒤에는 [정정 날짜]로만 덧붙인다.
+ */
+export const BENCH1_PREREG_ACS = Object.freeze(
+  [
+    { id: "A1", title: "10:00~19:00, 30분 단위로 시간 선택", given: "예약 화면에서 날짜를 골랐다", when: "시간 목록을 본다", then: "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다", priority: "must" },
+    { id: "A2", title: "이름·휴대폰 번호 없이는 예약되지 않는다", given: "날짜와 시간을 골랐다", when: "이름이나 휴대폰 번호를 비우거나 형식에 맞지 않게 넣고 예약한다", then: "예약되지 않고 무엇이 잘못됐는지 알려 준다", priority: "must" },
+    { id: "A3", title: "이미 예약된 시간은 다른 손님이 고를 수 없다", given: "어떤 날짜·시간에 예약이 하나 있다", when: "다른 손님(새 브라우저)이 같은 날짜·시간을 고르려 한다", then: "그 시간은 고를 수 없다(이중 예약이 되지 않는다)", priority: "must" },
+    { id: "A4", title: "예약하면 완료 화면에 예약 내용이 보인다", given: "날짜·시간·이름·휴대폰 번호를 넣었다", when: "예약한다", then: "완료 화면에 날짜·시간·이름이 보인다", priority: "must" },
+    { id: "A5", title: "새로고침해도 예약이 남는다", given: "예약을 마쳤다", when: "새로고침하거나 새 브라우저로 다시 연다", then: "예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)", priority: "must" },
+    { id: "A6", title: "관리 화면에 오늘 예약이 시간순으로 보인다", given: "오늘 날짜에 예약이 1건 이상 있다", when: "사장님이 관리 화면을 연다", then: "오늘 예약 목록이 시간순으로 보인다", priority: "must" },
+    { id: "A7", title: "취소하면 그 시간을 다시 예약할 수 있다", given: "관리 화면에 예약이 1건 보인다", when: "그 예약을 취소한다", then: "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다", priority: "must" },
+    { id: "A8", title: "가격이 원 단위로 보인다", given: "첫 화면 또는 예약 화면", when: "가격을 본다", then: "커트 15,000원처럼 원 단위 형식으로 보인다", priority: "should" },
+    { id: "A9", title: "휴대폰 폭(390px)에서 쓸 수 있다", given: "휴대폰 폭 화면", when: "예약 흐름을 밟는다", then: "글자·버튼이 잘리지 않고 예약까지 할 수 있다", priority: "should" },
+    { id: "A10", title: "모든 글이 한국어다", given: "앱의 모든 화면", when: "글을 읽는다", then: "영어 등 다른 언어 문구가 없다", priority: "should" },
+  ].map((a) => Object.freeze({ ...a, confirmed: true })),
+);
 
 /** 정답지 조건 ↔ 실패 AC 문장 대조(키워드). 사람이 결과 문서에서 한 번 더 본다. */
 const CONDITION_KEYWORDS = {
@@ -169,12 +198,21 @@ async function renderedText(url) {
   }
 }
 
-export async function benchOne(app, { locale = "ko" } = {}) {
+export async function benchOne(app, { locale = "ko", acMode = "prereg" } = {}) {
   const t0 = Date.now();
   const kst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 16);
   const genEvents = [];
   const agentEvents = [];
-  const out = { app: app.id, url: app.url, startedKst: kst, expected: app.expected };
+  const out = { app: app.id, url: app.url, startedKst: kst, expected: app.expected, acMode };
+  let acs;
+  let intent;
+  if (acMode === "prereg") {
+    // 주입 — 사전 등록 조건 그대로. 생성 LLM 0회, 런마다 같은 질문.
+    acs = BENCH1_PREREG_ACS.map((a) => ({ ...a }));
+    intent = BENCH1_INTENT;
+    out.inference = { mode: "prereg" };
+    out.devSpec = { ok: true, acs: acs.length, source: "prereg" };
+  } else {
   // 1) 의도 추론 — 프로덕션 함수 그대로(정적 HTML). 비어 있으면(SPA) 렌더 본문으로 한 번 더 — 차이를 기록한다.
   const ev = await evidenceFromWebsite(app.url, fetch).catch(() => null);
   let idea = ev ? composeIdeaFromEvidence(ev, locale) : "";
@@ -210,8 +248,11 @@ export async function benchOne(app, { locale = "ko" } = {}) {
     { brief: { ...(draft.productSpec ?? {}), oneLine: userOneLine }, items: allItems, idea, locale, source: "inferred", confirmedItemIds },
     call,
   );
-  const acs = gen.ok ? agentAcsFromDevSpec(gen.devSpec) : [];
+  acs = gen.ok ? agentAcsFromDevSpec(gen.devSpec) : [];
   out.devSpec = gen.ok ? { ok: true, acs: acs.length } : { ok: false, error: gen.error };
+  // 프로덕션 런의 의도 = 프로젝트의 확정 한 줄(confirmedIntentFromProject) — 카드에서 사용자가 쓴 문장.
+  intent = userOneLine || draft.understood?.summary || idea.slice(0, 300);
+  }
   // 4) agent 엔진(로컬 Playwright, 로그인 없음)
   const outDir = mkdtempSync(join(tmpdir(), `bench1-${app.id}-`));
   const phases = [];
@@ -219,12 +260,12 @@ export async function benchOne(app, { locale = "ko" } = {}) {
     const driver = await createPlaywrightDriver({ outDir, locale, isNoiseResource, chromium });
     const r = await runAgentInspection({
       targetUrl: app.url,
-      // 프로덕션 런의 의도 = 프로젝트의 확정 한 줄(confirmedIntentFromProject) — 카드에서 사용자가 쓴 문장.
-      intent: userOneLine || draft.understood?.summary || idea.slice(0, 300),
+      intent,
       locale,
       budgetMs: 13 * 60 * 1000,
       acs,
-      acSource: acs.length ? "confirmed_inferred" : "inferred_at_run",
+      // 주입된 사전 등록 조건은 사용자가 직접 적어 확인한 기준과 같은 자리(interview).
+      acSource: acMode === "prereg" ? "interview" : acs.length ? "confirmed_inferred" : "inferred_at_run",
       loginMode: "none",
       llm: localProxyLlm(agentEvents),
       driver,
@@ -249,6 +290,7 @@ export async function benchOne(app, { locale = "ko" } = {}) {
   }
   out.phasesTail = phases.slice(-6);
   out.costUsd = { generation: Number(costOf(genEvents).toFixed(4)), agent: Number(costOf(agentEvents).toFixed(4)) };
+  out.costUsdTotal = Number((out.costUsd.generation + out.costUsd.agent).toFixed(4));
   out.models = [...new Set([...genEvents, ...agentEvents].map((e) => e.modelActual))];
   out.durationSec = Math.round((Date.now() - t0) / 1000);
   return score(app, out);
@@ -265,8 +307,14 @@ export function score(app, out) {
   const s = side(out.decision);
   const opposite = (app.expected === "works" && s === "broken") || (app.expected !== "works" && s === "works");
   const match = app.expected === "broken" ? s === "broken" : app.expected === "broken_or_hold" ? s !== "works" : s === "works";
-  const failedText = (out.acTable ?? []).filter((x) => x.status === "fail").map((x) => `${x.title} ${x.then} ${x.reason}`).join(" \n ");
-  const identified = app.mustFailed.filter((c) => CONDITION_KEYWORDS[c].test(failedText));
+  // 주입 모드: AC id = 조건 번호이므로 그 AC가 fail이면 짚은 것(키워드 대조보다 엄격). 추론 모드: 실패 문장 키워드 대조(관대 — 사람이 한 번 더 본다).
+  const identified =
+    out.acMode === "prereg"
+      ? app.mustFailed.filter((c) => (out.acTable ?? []).some((x) => x.id === c && x.status === "fail"))
+      : (() => {
+          const failedText = (out.acTable ?? []).filter((x) => x.status === "fail").map((x) => `${x.title} ${x.then} ${x.reason}`).join(" \n ");
+          return app.mustFailed.filter((c) => CONDITION_KEYWORDS[c].test(failedText));
+        })();
   return { ...out, side: s, opposite, match, mustFailedExpected: app.mustFailed, mustIdentified: identified };
 }
 
@@ -277,37 +325,43 @@ async function main() {
   }
   const only = arg("only", "").split(",").filter(Boolean);
   const conc = Math.max(1, Math.min(2, Number(arg("concurrency", "2")) || 2));
+  const acMode = arg("acs", "prereg") === "inferred" ? "inferred" : "prereg";
+  // (H4·2026-10-18) --repeat=N: 같은 묶음을 N번 — 한 번의 점수로 판단하지 않는다. 런마다 시각 붙은 파일, 덮어쓰지 않는다.
+  const repeat = Math.max(1, Math.min(10, Number(arg("repeat", "1")) || 1));
   const apps = APPS.filter((a) => !only.length || only.includes(a.id));
-  const results = [];
-  let i = 0;
-  await Promise.all(
-    Array.from({ length: conc }, async () => {
-      while (i < apps.length) {
-        const app = apps[i++];
-        console.log(`▶ ${app.id} ${app.url}`);
-        const r = await benchOne(app).catch((err) => ({ app: app.id, error: String(err?.message ?? err).slice(0, 300) }));
-        results.push(r);
-        console.log(`  ${app.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")}/${(r.mustFailedExpected ?? []).join(",")} $${(r.costUsd?.generation ?? 0) + (r.costUsd?.agent ?? 0)} ${r.durationSec}s`);
-      }
-    }),
-  );
-  const ordered = APPS.map((a) => results.find((r) => r.app === a.id)).filter(Boolean);
-  const scored = ordered.filter((r) => r.decision);
-  const brokenApps = APPS.filter((a) => a.mustFailed.length > 0);
-  const totalMust = brokenApps.reduce((s, a) => s + a.mustFailed.length, 0);
-  const idMust = ordered.reduce((s, r) => s + (r.mustIdentified?.length ?? 0), 0);
-  const summary = {
-    label: "로컬 실행(브랜치 코드) — 프로덕션 아님",
-    oppositeErrors: scored.filter((r) => r.opposite).length,
-    appMatch: `${scored.filter((r) => r.match).length}/${APPS.length}`,
-    mustIdentified: `${idMust}/${totalMust}`,
-    mustIdentifiedPct: totalMust ? Math.round((idMust / totalMust) * 100) : 0,
-    totalCostUsd: Number(ordered.reduce((s, r) => s + (r.costUsd?.generation ?? 0) + (r.costUsd?.agent ?? 0), 0).toFixed(4)),
-  };
-  const file = join(here, "agent-bench1-local-result.json");
-  writeFileSync(file, JSON.stringify({ summary, results: ordered }, null, 2));
-  console.log(JSON.stringify(summary, null, 2));
-  console.log(`saved: ${file}`);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const label = `로컬 실행(브랜치 코드) — 프로덕션 아님 · AC=${acMode === "prereg" ? "사전 등록 A1~A10 주입" : "추론(옛 경로)"}`;
+  const runs = [];
+  const runsFull = [];
+  for (let k = 1; k <= repeat; k += 1) {
+    const results = [];
+    let i = 0;
+    await Promise.all(
+      Array.from({ length: conc }, async () => {
+        while (i < apps.length) {
+          const app = apps[i++];
+          console.log(`▶ [${k}/${repeat}] ${app.id} ${app.url}`);
+          const r = await benchOne(app, { acMode }).catch((err) => ({ app: app.id, acMode, error: String(err?.message ?? err).slice(0, 300) }));
+          results.push(r);
+          console.log(`  [${k}/${repeat}] ${app.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")}/${(r.mustFailedExpected ?? []).join(",")} $${costOfResult(r) ?? "?"} ${r.durationSec}s`);
+        }
+      }),
+    );
+    const ordered = apps.map((a) => results.find((r) => r.app === a.id)).filter(Boolean);
+    const summary = { label, acMode, run: k, ...summarize(apps, ordered) };
+    runs.push(summary);
+    runsFull.push({ results: ordered });
+    const file = join(here, `agent-bench1-local-result-${stamp}-r${k}.json`);
+    writeFileSync(file, JSON.stringify({ label, acMode, prompt: REGISTERED_PROMPT, run: k, summary, results: ordered }, null, 2));
+    console.log(JSON.stringify(summary, null, 2));
+    console.log(`saved: ${file}`);
+  }
+  // 두 층: 질문 동일성(AC 목록이 런마다 같은가 — 주입 모드는 구성으로 보장, 추론 모드는 측정) · 판정 동일성(같은 AC의 status).
+  const compare = compareRuns(runsFull);
+  const aggFile = join(here, `agent-bench1-local-aggregate-${stamp}.json`);
+  writeFileSync(aggFile, JSON.stringify({ label, acMode, repeat, concurrency: conc, runs, aggregate: aggregate(runs), compare }, null, 2));
+  console.log(JSON.stringify({ ...aggregate(runs), compare: compare.totals }, null, 2));
+  console.log(`saved: ${aggFile}`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
