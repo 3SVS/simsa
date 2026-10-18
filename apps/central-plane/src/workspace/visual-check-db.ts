@@ -10,6 +10,7 @@
  * user_verdict(+at) · source_check_id. All nullable; legacy rows read as null.
  */
 import type { Env } from "../env.js";
+import { deleteRunSecret } from "./inspection-agent.js";
 
 export const VISUAL_CHECK_STATUSES = ["uploaded", "queued", "running", "done", "failed"] as const;
 export type VisualCheckStatus = (typeof VISUAL_CHECK_STATUSES)[number];
@@ -377,6 +378,8 @@ export async function firstActiveVisualCheckIdForProject(
  */
 export async function discardQueuedVisualCheck(env: Env, id: string): Promise<void> {
   await env.DB.prepare(`DELETE FROM workspace_visual_checks WHERE id = ? AND status = 'queued'`).bind(id).run();
+  // agent 엔진: 이 런에 맡긴 시험 계정은 런과 함께 사라진다(런 종료 = 비밀 삭제, 어느 경로든).
+  await deleteRunSecret(env, id);
 }
 
 /** Stage 263 — queued → running (only from an in-flight state; done/failed are final). */
@@ -416,6 +419,7 @@ export async function markVisualCheckDone(
       id,
     )
     .run();
+  await deleteRunSecret(env, id);
 }
 
 /**
@@ -436,6 +440,7 @@ export async function markVisualCheckFailed(env: Env, id: string, error: string)
   )
     .bind(JSON.stringify({ error: truncated }), new Date().toISOString(), id)
     .run();
+  await deleteRunSecret(env, id);
 }
 
 /**

@@ -54,6 +54,7 @@ import { runErrorNotice, runErrorTone } from "@/lib/visual-check-run-state.mjs";
 import type { RunErrorKey } from "@/lib/visual-check-run-state.mjs";
 import { errorNoticeText } from "@/lib/daily-limit.mjs";
 import { mirrorThenBuildIntentRuler } from "@/lib/intent-ruler";
+import { missingItemsFromText } from "@/lib/intent-missing.mjs";
 import { generationCapacityText } from "@/lib/generation-capacity.mjs";
 
 type InferredItem = { id: string; title: string; criteria?: string[] };
@@ -89,6 +90,7 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   const [name, setName] = useState("");
   const [items, setItems] = useState<InferredItem[]>([]);
   const [dropped, setDropped] = useState<Set<string>>(new Set());
+  const [missing, setMissing] = useState("");
   const [reason, setReason] = useState<string>("");
   const [raw, setRaw] = useState<InferResponse | null>(null);
   // C-N7: door (c) "만들었는데 생각과 달라요" — the same card and the same save, but
@@ -129,7 +131,11 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
       setInferredOneLine((spec.oneLine ?? "").trim());
       // 읽기 실패 뒤 사용자가 이미 적어 둔 문장은 다시 읽기가 덮어쓰지 않는다.
       setOneLine((prev) => (prev.trim() ? prev : draft.initialOneLine));
-      setItems((data.inferred.items ?? []).slice(0, 12));
+      const loaded = (data.inferred.items ?? []).slice(0, 12);
+      setItems(loaded);
+      // 2026-10-06 Bae 결정("기본 체크 해제"): 추론 항목은 **체크 해제로 시작**한다. 사용자가 직접 체크한 것과 "빠진 것"에
+      // 적은 것만 '안 되면 고쳐야 해요'(must) 기준이 된다. 체크 안 한 항목도 검사는 하지만 고칠 것으로 판단하지 않는다.
+      setDropped(new Set(loaded.map((i) => i.id)));
       setPhase("ready");
     } catch {
       setPhase("error");
@@ -148,7 +154,9 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
   }, [projectId, infer]);
 
   function confirm() {
-    const kept = items.filter((i) => !dropped.has(i.id));
+    // 2026-10-05: 사용자가 적은 "빠진 것"도 확인된 항목이다 — 앱에서 읽지 못한 원래 의도가 기준이 된다.
+    const added = missingItemsFromText(missing, items.map((i) => i.id));
+    const kept = [...items.filter((i) => !dropped.has(i.id)), ...added];
     const proj = getLocalProject(projectId);
     const finalName = name.trim() || proj?.name || "";
     saveProject({
@@ -326,6 +334,13 @@ export function IntentConfirmCard({ projectId }: { projectId: string }) {
                 </ul>
               </div>
             )}
+
+            {/* 2026-10-05: 앱에서 못 읽은 원래 의도 — 한 줄에 하나. 적은 것은 그대로 확인 기준이 된다. */}
+            <div className="mt-4">
+              <label htmlFor="intent-missing" className="mb-1 block text-xs font-semibold text-gray-600">{c.missingLabel}</label>
+              <p className="mb-2 text-xs text-gray-500">{c.missingHint}</p>
+              <textarea id="intent-missing" value={missing} onChange={(e) => setMissing(e.target.value)} rows={3} className="input resize-y" />
+            </div>
 
             {/* 무엇을 읽고 쓴 초안인지 밝힌다 — 근거를 숨기지 않는다. */}
             {raw?.readSources && raw.readSources.length > 0 && (

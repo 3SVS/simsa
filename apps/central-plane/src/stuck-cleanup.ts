@@ -16,6 +16,7 @@ import type { Env } from "./env.js";
 import { findInstallationByRepoSlug } from "./db/saas.js";
 import { postPrComment } from "./gh-app.js";
 import { listStuckVisualChecks, markVisualCheckFailed } from "./workspace/visual-check-db.js";
+import { purgeExpiredRunSecrets } from "./workspace/inspection-agent.js";
 import { listStuckRepairJobs, markRepairJobFailed } from "./workspace/repair-job-db.js";
 import { listStuckBuildJobs, listStuckWorkerOwnedBuildJobs, markBuildJobFailed } from "./workspace/build-job-db.js";
 import { BUILD_DEPLOY_DEADLINE_MS } from "./workspace/build-deploy.js";
@@ -95,6 +96,8 @@ export async function cleanupStuckVisualChecks(
   env: Env,
 ): Promise<{ swept: number; errors: number }> {
   const cutoff = new Date(Date.now() - STUCK_AFTER_MS).toISOString();
+  // agent 엔진 시험 계정의 최후 방어선: 런 종료 경로가 어떤 이유로 못 지운 비밀은 1시간 뒤 여기서 지운다.
+  await purgeExpiredRunSecrets(env);
   let rows: Array<{ id: string; status: string }>;
   try {
     rows = await listStuckVisualChecks(env, cutoff, SWEEP_LIMIT);

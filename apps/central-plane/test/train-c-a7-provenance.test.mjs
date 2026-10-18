@@ -257,6 +257,8 @@ describe("③ 역추론 생성 — 확인된 것만 must", () => {
     assert.deepEqual(d.meta.provenance, {
       builtWith: "lovable", entryPath: "code", detectedStack: { hosting: "lovable", tools: ["React"] },
       userConfirmedAcIds: ["AC-001", "AC-002"],
+      // 2026-10-06 G2: 사용자가 자기 말로 적은 항목(user_…)이 없으면 빈 목록 — 확인된 must도 추론에서 왔다.
+      userTextAcIds: [],
     });
     assert.equal(validateDevSpec(d).ok, true);
     // 프롬프트는 확인된 것과 아닌 것을 **나눠서** 보여준다(섞으면 전부 must가 된다).
@@ -274,7 +276,7 @@ describe("③ 역추론 생성 — 확인된 것만 must", () => {
     );
     assert.equal(r.ok, true, JSON.stringify(r));
     assert.ok(r.devSpec.features.every((f) => f.priority !== "must"));
-    assert.deepEqual(r.devSpec.meta.provenance, { userConfirmedAcIds: [] });
+    assert.deepEqual(r.devSpec.meta.provenance, { userConfirmedAcIds: [], userTextAcIds: [] });
   });
 
   it("확인된 항목의 고정 FR id가 빠지면 P1을 한 번 더 만든다(유저가 '반드시'라 한 것이 조용히 사라지지 않게)", async () => {

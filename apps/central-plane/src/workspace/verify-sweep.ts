@@ -45,7 +45,7 @@ import {
   findActiveVisualCheckForProject,
   markVisualCheckFailed,
 } from "./visual-check-db.js";
-import { dispatchInspection } from "../routes/workspace-visual-check-runs.js";
+import { agentAcsForRun, dispatchInspection, wasAgentRun } from "../routes/workspace-visual-check-runs.js";
 import { inspectionEnabled } from "./service-switches.js";
 import { opsMetaAllowedForRun } from "./privacy-prefs.js";
 
@@ -181,6 +181,9 @@ export async function runVerifySweep(
       locale: origin.locale ?? "ko", // 0065: 원 런의 언어 — 레거시 행만 ko 폴백
       acceptancePlan,
       publicBaseUrl: opts.publicBaseUrl ?? env.PUBLIC_BASE_URL ?? "https://conclave-ai.seunghunbae.workers.dev",
+      // agent 엔진 런의 수리 확인은 **같은 AC로** 다시 잰다(원 런 리포트에 남긴 정의). 로그인은 물려받지 않는다 —
+      // 시험 계정은 원 런이 끝날 때 지워졌고, 직접 로그인은 사람이 다시 해야 한다.
+      ...(wasAgentRun(origin) ? { agent: { ...agentAcsForRun(origin, project?.devSpec, project?.entryPath), loginMode: "none" as const } } : {}),
     });
     if (dispatch.dispatched) {
       summary.dispatched++;

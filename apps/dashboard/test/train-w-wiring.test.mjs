@@ -73,7 +73,7 @@ test("W-2d: 알림을 만드는 곳은 받은 시각(receivedAt)을 함께 저�
 // #558 검증 P2-4·P2-14 — 이 안내는 runErrorTone이 'info'로 정한 두 경우(상한·일시 중지)인데 빨간
 // error 토스트(role=alert, 3초)로 뜨고 곧바로 화면을 옮겨 놓치기 쉬웠다 → info 톤 + 오래 머문다.
 test("W-2c: 새 프로젝트의 자동 첫 검수가 상한·일시 중지면 info 토스트로, 충분히 오래 알린다", () => {
-  const i = newPage.indexOf("await runVisualCheck(id, { userKey, locale })");
+  const i = newPage.indexOf("await runVisualCheck(id, { userKey, locale");
   assert.ok(i >= 0, "auto first inspection call");
   const tail = newPage.slice(i, i + 900);
   assert.match(tail, /runErrorNotice\(/);
@@ -86,7 +86,7 @@ test("W-2c: 새 프로젝트의 자동 첫 검수가 상한·일시 중지면 in
 // #558 검증 2차 P2-1 — 토스트는 응답을 받는 순간 한 번만 문장을 만든다. 그 순간 '지금 다시 할 수 있어요'가
 // 나오는 경우는 (시계 차이로) 방금 거절된 경우뿐이므로 receivedAt을 넘기지 않는다 → lib가 cleared를 내지 않는다.
 test("[행동 보존] W-2c: 새 프로젝트 토스트는 받은 시각을 넘기지 않는다 (받는 순간 계산 — 'cleared' 경로 없음)", () => {
-  const i = newPage.indexOf("await runVisualCheck(id, { userKey, locale })");
+  const i = newPage.indexOf("await runVisualCheck(id, { userKey, locale");
   const tail = newPage.slice(i, i + 900);
   const call = /errorNoticeText\(t\.visualChecks\.runErrors[^;]*?t\.visualChecks\.resetWhen\)/.exec(tail);
   assert.ok(call, "toast sentence call");

@@ -41,6 +41,7 @@ on:
       - 'apps/central-plane/src/visual-flow-plan.ts'
       - 'apps/central-plane/src/nondev-report.ts'
       - 'apps/central-plane/src/signup-plan.ts'
+      - 'apps/central-plane/src/agent-inspection.ts'
       - 'packages/core/**'
       - 'packages/agent-worker/**'
       - 'templates/simsa-hosted-app/**'

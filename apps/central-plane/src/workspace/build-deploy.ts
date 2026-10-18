@@ -31,7 +31,8 @@
  */
 import type { Env } from "../env.js";
 import type { FetchLike } from "../github.js";
-import { acceptancePlanFromDevSpec } from "../acceptance-plan.js";
+import { acceptancePlanFromDevSpec, agentAcsFromDevSpec, devSpecAcSource } from "../acceptance-plan.js";
+import { resolveTier } from "./tier-resolve.js";
 import { confirmedIntentFromProject, defaultInspectionIntent, dispatchInspection } from "../routes/workspace-visual-check-runs.js";
 import { getProject, projectExists } from "./db.js";
 import { validateDevSpec } from "./dev-spec.js";
@@ -315,15 +316,20 @@ export async function startBuildAutoCheck(
     await caps.refund();
     return { started: false, reason: "save_failed" };
   }
+  // 2026-10-05 문 (a): 스태프 티어 빌드는 **같은 지시서 AC**를 agent 엔진(수용 기준 실행기)으로 실제로 해 본다.
+  //  실패한 AC는 런의 고침 지시(agentPrompt)가 되고, 다시 만들기(POST build · fixFromCheckRunId)가 그것을 빌드 지시서에 붙인다.
+  const tier = await resolveTier(env, job.userKey).catch(() => "free" as const);
+  const agentAcs = tier === "staff" ? agentAcsFromDevSpec(project.devSpec) : [];
   const dispatch = await dispatchInspection(env, {
     runId, projectId: job.projectId, userKey: job.userKey, targetUrl: deployedUrl, intent, locale, publicBaseUrl: args.publicBaseUrl, acceptancePlan,
+    ...(agentAcs.length > 0 ? { agent: { acs: agentAcs, acSource: devSpecAcSource(project.devSpec, project.entryPath), loginMode: "none" as const } } : {}),
   });
   if (!dispatch.dispatched) {
     await markVisualCheckFailed(env, runId, dispatch.note ?? "dispatch_failed").catch(() => undefined);
     await caps.refund();
     return { started: false, reason: `dispatch_failed:${String(dispatch.note ?? "unknown").slice(0, 60)}` };
   }
-  return { started: true, checkRunId: runId, acceptanceIds: acceptancePlan.map((s) => s.acceptanceId) };
+  return { started: true, checkRunId: runId, acceptanceIds: agentAcs.length > 0 ? agentAcs.map((a) => a.id) : acceptancePlan.map((s) => s.acceptanceId) };
 }
 
 /**

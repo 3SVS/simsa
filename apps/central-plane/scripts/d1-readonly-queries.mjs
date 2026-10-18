@@ -61,6 +61,16 @@ export const D1_READONLY_QUERIES = Object.freeze({
     "COUNT(verify_check_id) AS verify_linked, COUNT(resolved) AS resolved_recorded " +
     "FROM workspace_repair_jobs WHERE id IN " +
     "(SELECT id FROM workspace_repair_jobs ORDER BY created_at DESC LIMIT 50)",
+  // 2026-10-06 agent 엔진 진단: 최근 48시간 agent 런마다(시작 순서 번호 — 런 id는 내지 않는다) 요청 모델 ×
+  // 실제로 답한 모델별 호출 수·비용. 요청 모델로 "행동 단계(cheap)"와 "판정·추정(strong)"을 가른다.
+  "agent-llm-usage-48h":
+    "SELECT r.seq AS run_seq, substr(r.first_at, 1, 10) AS run_day, u.model_requested AS model_requested, " +
+    "u.model_actual AS model_actual, COUNT(*) AS calls, ROUND(SUM(u.cost_usd), 4) AS cost_usd, SUM(u.unpriced) AS unpriced_calls, " +
+    "SUM(u.input_tokens) AS input_tokens, SUM(u.output_tokens) AS output_tokens " +
+    "FROM llm_usage u JOIN (SELECT job_id, MIN(created_at) AS first_at, ROW_NUMBER() OVER (ORDER BY MIN(created_at)) AS seq " +
+    "FROM llm_usage WHERE call_site = 'inspect_agent' AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days') GROUP BY job_id) r " +
+    "ON r.job_id = u.job_id WHERE u.call_site = 'inspect_agent' " +
+    "GROUP BY r.seq, u.model_requested, u.model_actual ORDER BY r.seq, calls DESC",
 });
 
 const WRITE_OR_ADMIN =

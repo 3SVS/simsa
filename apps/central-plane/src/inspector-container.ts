@@ -21,7 +21,9 @@ import type { Env } from "./env.js";
 
 export class SimsaInspector extends Container<Env> {
   override defaultPort = 8080;
-  override sleepAfter = "10m";
+  // 2026-10-05: agent 엔진 런은 직접 로그인 대기(≤10분) + 실행(≤15분)까지 갈 수 있다 — 들어오는 요청이 없는 동안
+  // 10분 만에 재우면 진행 중인 런이 죽는다. 30분(스턱 스윕 기준과 같다). 기본 엔진 런은 종전처럼 4분 안에 끝난다.
+  override sleepAfter = "30m";
   override envVars = {
     NODE_ENV: "production",
   };

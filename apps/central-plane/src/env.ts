@@ -198,6 +198,22 @@ export interface Env {
    * wrangler.toml [vars]에 "on"으로 명시. 끄기 = "off" + deploy-central-plane.
    */
   INSPECTION_ENABLED?: string;
+  /**
+   * 2026-10-05 — 검수 엔진 기본값. 정확히 "agent"면 **스태프 티어 런**의 기본 엔진이 수용 기준 실행기(agent)가 된다.
+   * 스태프가 아닌 런에는 적용되지 않는다(요청의 engine:"agent"도 스태프만 — 403 engine_staff_only).
+   */
+  INSPECTION_ENGINE?: string;
+  /** agent 엔진의 판단 모델(미설정 = claude-sonnet-4-6). 프록시가 서버에서 고정한다. */
+  INSPECT_AGENT_MODEL?: string;
+  /** agent 엔진 런 하나의 LLM 예산 USD(미설정·잘못된 값 = 3, 상한 50). */
+  INSPECT_AGENT_BUDGET_USD?: string;
+  /** 오픈 베타: 정확히 "on"이면 모든 사용자의 기본 검수가 agent 엔진(스태프는 늘 켜짐). */
+  INSPECTION_AGENT_PUBLIC?: string;
+  /** agent 엔진 서비스 전체 하루 LLM 예산 USD(기본 20). 넘으면 스태프 아닌 새 런은 기본 검수로(정직한 안내). */
+  AGENT_DAILY_BUDGET_USD?: string;
+  /** 관찰·행동 단계용 싼 모델(기본 claude-haiku-4-5-20251001)과 그 OpenAI 폴백(기본 gpt-5.4-mini). */
+  INSPECT_AGENT_CHEAP_MODEL?: string;
+  INSPECT_AGENT_CHEAP_FALLBACK_MODEL?: string;
   /** Train W · W-2 — 수리 킬스위치. INSPECTION_ENABLED와 같은 규칙(503 `repair_disabled`, dispatchRepairJob 내부 게이트). */
   REPAIR_ENABLED?: string;
   /**

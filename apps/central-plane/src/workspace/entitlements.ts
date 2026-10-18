@@ -48,6 +48,11 @@ export type Entitlements = {
   devSpecsPerDay: number;
   /** T-5: 로그인 뒤 검수(일회용 계정으로 가입 후 확인, L2). 무료는 L1(공개 화면)만. */
   loginBehindInspection: boolean;
+  /**
+   * 2026-10-05 오픈 베타: agent 엔진(수용 기준 실행기) 런 하나의 상한 — 원가 천장. 기준 수(기본 기준 CORE-1 포함)·
+   * 점검 화면 수·행동(LLM 호출) 수·실행 시간·LLM 예산(USD). 무료는 작게, 장비·프로는 크게.
+   */
+  agentRun: { maxAcs: number; maxScreens: number; maxActions: number; maxMinutes: number; budgetUsd: number };
 };
 
 export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
@@ -63,6 +68,7 @@ export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
     repairsPerMonth: 3,
     devSpecsPerDay: 2,
     loginBehindInspection: false,
+    agentRun: { maxAcs: 5, maxScreens: 10, maxActions: 40, maxMinutes: 8, budgetUsd: 0.6 },
   },
   basic: {
     buildsPerDay: 3,
@@ -74,6 +80,7 @@ export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
     repairsPerMonth: 10,
     devSpecsPerDay: 5,
     loginBehindInspection: true,
+    agentRun: { maxAcs: 8, maxScreens: 15, maxActions: 80, maxMinutes: 10, budgetUsd: 1.2 },
   },
   pro: {
     buildsPerDay: 10,
@@ -85,6 +92,7 @@ export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
     repairsPerMonth: 30,
     devSpecsPerDay: 20,
     loginBehindInspection: true,
+    agentRun: { maxAcs: 11, maxScreens: 25, maxActions: 160, maxMinutes: 13, budgetUsd: 3 },
   },
   staff: {
     buildsPerDay: 50,
@@ -96,6 +104,7 @@ export const ENTITLEMENTS: Readonly<Record<Tier, Entitlements>> = {
     repairsPerMonth: 200,
     devSpecsPerDay: 200,
     loginBehindInspection: true,
+    agentRun: { maxAcs: 11, maxScreens: 25, maxActions: 200, maxMinutes: 13, budgetUsd: 5 },
   },
 };
 

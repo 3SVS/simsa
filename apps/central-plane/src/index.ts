@@ -22,6 +22,7 @@ import { runAwesomeListMiner } from "./awesome-list-miner.js";
 import { purgeExpiredRateLimitRows } from "./rate-limit-retention.js";
 import { sweepDeletedProjectHosting } from "./workspace/hosted-app-teardown.js";
 import { purgeExpiredHostingReports, sendReportDigest, sweepHostingRateStrikes } from "./workspace/hosting-duties.js";
+import { sweepExpiredEvidence } from "./workspace/evidence-retention.js";
 import { runTrainingPrivacyCron } from "./workspace/training-records-index.js";
 
 const app = createApp();
@@ -156,6 +157,13 @@ export default {
         console.log(JSON.stringify({ cron: "rate-limit-purge", cronExpression: event.cron, ...purge }));
       } catch (err) {
         console.error(JSON.stringify({ cron: "rate-limit-purge", cronExpression: event.cron, error: String(err).slice(0, 200) }));
+      }
+      // S5-min(오픈 베타): 검수가 남의 앱에서 찍은 화면·인용 — 30일 지나면 지운다(evidence-retention.ts).
+      try {
+        const kept = await sweepExpiredEvidence(env);
+        if (kept.runs > 0) console.log(JSON.stringify({ cron: "evidence-retention", cronExpression: event.cron, ...kept }));
+      } catch (err) {
+        console.error(JSON.stringify({ cron: "evidence-retention", cronExpression: event.cron, error: String(err).slice(0, 200) }));
       }
       // B-7 — 호스팅 앱 신고(연락처·자유 서술 포함) 보유 기간 180일([PILOT]) 지난 행. 같은 관례(잘게·던지지 않음).
       try {

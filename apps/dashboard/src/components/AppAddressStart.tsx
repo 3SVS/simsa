@@ -27,6 +27,7 @@ import { useRouter } from "next/navigation";
 import type { Dictionary, Locale } from "@/i18n/dictionary.mjs";
 import { connectProjectSource, deleteProjectSource } from "@/lib/workspace-sources-api";
 import { runVisualCheck } from "@/lib/workspace-visual-checks-api";
+import { WriteConsentCheckbox } from "@/components/WriteConsentCheckbox";
 import { mirrorLocalProjectToDb } from "@/lib/project-mirror";
 import { getUserKey } from "@/lib/workflow-store";
 import { APP_ADDRESS_ANCHOR } from "@/lib/project-steps.mjs";
@@ -56,6 +57,8 @@ export function AppAddressStart({
   const router = useRouter();
   const [value, setValue] = useState("");
   const [working, setWorking] = useState(false);
+  // 오픈 베타 S2-min: 첫 검사에도 시험 데이터 동의(기본 꺼짐).
+  const [writeConsent, setWriteConsent] = useState(false);
   const [errorKey, setErrorKey] = useState<ErrorKey | null>(null);
   // The address already registered in THIS attempt — so a retry after a failed
   // start reuses it instead of adding the same address again.
@@ -111,7 +114,7 @@ export function AppAddressStart({
       saved.current = { url: norm.url, sourceId };
     }
 
-    const run = await runVisualCheck(projectId, { userKey, locale, sourceId });
+    const run = await runVisualCheck(projectId, { userKey, locale, sourceId, ...(writeConsent ? { writeConsent: true as const } : {}) });
     if (run.ok) {
       router.push(`/projects/${projectId}/visual-checks/${run.check.id}`);
       return;
@@ -158,6 +161,7 @@ export function AppAddressStart({
           {working ? cc.addUrlStarting : cc.addUrlStart}
         </button>
       </div>
+      <WriteConsentCheckbox checked={writeConsent} onChange={setWriteConsent} locale={locale === "en" ? "en" : "ko"} />
       {errorKey && (
         <p id={`${APP_ADDRESS_ANCHOR}-error`} role="alert" className="mt-2 text-sm text-red-600">
           {cc.addUrlErrors[errorKey]}

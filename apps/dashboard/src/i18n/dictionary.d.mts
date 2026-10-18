@@ -1319,7 +1319,7 @@ export type Dictionary = {
     sectionDesc: string;
     opsTitle: string;
     opsDesc: string;
-    opsToggle: string;
+    opsToggle: string; opsFailurePatterns: string;
     opsDefaultOffNote: string;
     opsKeepNote: string;
     opsSavedOn: string;
@@ -2736,7 +2736,7 @@ export type Dictionary = {
   };
   intentConfirm: {
     loading: string; title: string; subtitle: string; nameLabel: string; oneLineLabel: string;
-    oneLinePlaceholder: string; itemsLabel: string; itemsHint: string; readFrom: string;
+    oneLinePlaceholder: string; itemsLabel: string; itemsHint: string; missingLabel: string; missingHint: string; readFrom: string;
     confirm: string; later: string; errorLead: string; retry: string; emptyTitle: string;
     emptyNoSource: string; emptyUnreadable: string; emptyNoEvidence: string; emptyLlm: string;
     saveMine: string;
