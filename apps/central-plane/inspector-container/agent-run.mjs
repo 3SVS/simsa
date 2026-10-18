@@ -603,6 +603,8 @@ export async function runAgentInspection(o) {
         const safety = classifyActionSafety(label);
         if (!safety.safe && safety.category !== "empty/unknown") {
           const allowed = safety.category === "delete" && a.type === "click" && a.ownRecord === true && (await driver.ownsRecordNear(a.target, markers));
+          // (2026-10-19 Bae) 취소·삭제 클릭은 대상·표지 일치 여부를 위상 로그에 남긴다 — 측정 기록이 "무엇을 지웠나"를 보여 줄 수 있게.
+          plog(`cancel-click ${ac.id} target="${red(label).slice(0, 60)}" ownRecord=${a.ownRecord === true} markerMatch=${allowed} → ${allowed ? "allowed" : "blocked"}`);
           if (!allowed) {
             history.push(`${desc} → BLOCKED (unsafe: ${safety.category}; only records you created may be cancelled — set ownRecord:true on a row that shows phone ${data.phone})`);
             continue;

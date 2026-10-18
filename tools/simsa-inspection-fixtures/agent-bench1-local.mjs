@@ -288,12 +288,17 @@ export async function benchOne(app, { locale = "ko", acMode = "prereg", runTag =
     out.basis = r.report.agent.basis;
     out.builder = r.report.agent.builder;
     out.defects = r.report.agent.defects;
+    // (2026-10-19 PR4) 셋업·정리 결과 — 측정 기록의 "만든 것·남은 것".
+    out.testData = r.report.agent.testData ?? null;
+    out.setup = r.report.agent.setup ?? null;
   } catch (err) {
     out.error = `agent_failed: ${String(err?.message ?? err).slice(0, 200)}`;
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
   out.phasesTail = phases.slice(-6);
+  // (2026-10-19) 셋업·정리·취소 클릭의 위상 로그 전체 — 측정 기록이 "무엇을 만들고 무엇을 지웠나"를 보여 준다.
+  out.phases = phases.filter((l) => /setup:|cleanup|cancel-click|ac [A-Z0-9-]+ →/.test(l));
   out.costUsd = { generation: Number(costOf(genEvents).toFixed(4)), agent: Number(costOf(agentEvents).toFixed(4)) };
   out.costUsdTotal = Number((out.costUsd.generation + out.costUsd.agent).toFixed(4));
   out.models = [...new Set([...genEvents, ...agentEvents].map((e) => e.modelActual))];
