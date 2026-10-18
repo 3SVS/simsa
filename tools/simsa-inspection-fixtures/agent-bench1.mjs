@@ -15,6 +15,7 @@ import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { APPS, REGISTERED_PROMPT, confirmFromPrompt, score } from "./agent-bench1-local.mjs";
+import { summarize, aggregate, compareRuns } from "./agent-bench-aggregate.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (n, d) => process.argv.find((x) => x.startsWith(`--${n}=`))?.slice(n.length + 3) ?? d;
@@ -85,6 +86,7 @@ async function main() {
   const repeat = Math.max(1, Math.min(10, Number(arg("repeat", "1")) || 1));
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runs = [];
+  const runsFull = [];
   for (let k = 1; k <= repeat; k += 1) {
     const results = [];
     let i = 0;
@@ -100,40 +102,18 @@ async function main() {
     );
     const summary = summarize(apps, results);
     runs.push(summary);
+    runsFull.push({ results });
     writeFileSync(join(here, `agent-bench1-prod-result-${stamp}-r${k}.json`), JSON.stringify({ base: BASE, prompt: REGISTERED_PROMPT, run: k, summary, results }, null, 2));
   }
   const agg = aggregate(runs);
-  writeFileSync(join(here, `agent-bench1-prod-aggregate-${stamp}.json`), JSON.stringify({ base: BASE, repeat, runs, aggregate: agg }, null, 2));
-  console.log(JSON.stringify(agg, null, 2));
+  // (2026-10-18) 두 층: 질문 동일성(AC 목록) · 판정 동일성(같은 AC의 status). 프로덕션은 AC를 주입할 길이 없어
+  // 질문 동일성은 '재는 것'이지 '보장하는 것'이 아니다(제품 AC 고정 PR 뒤에 같아져야 한다).
+  const compare = compareRuns(runsFull);
+  writeFileSync(join(here, `agent-bench1-prod-aggregate-${stamp}.json`), JSON.stringify({ base: BASE, repeat, runs, aggregate: agg, compare }, null, 2));
+  console.log(JSON.stringify({ ...agg, compare: compare.totals }, null, 2));
 }
 
-/** 런 하나의 지표(사전 등록 기준과 같은 셈). */
-export function summarize(apps, results) {
-  const scored = results.filter((r) => r.decision);
-  const totalMust = apps.reduce((s, a) => s + a.mustFailed.length, 0);
-  const costs = results.map((r) => r.costUsd).filter((c) => typeof c === "number");
-  return {
-    oppositeErrors: scored.filter((r) => r.opposite).length,
-    appMatch: scored.filter((r) => r.match).length,
-    apps: apps.length,
-    mustIdentified: results.reduce((s, r) => s + (r.mustIdentified?.length ?? 0), 0),
-    mustTotal: totalMust,
-    costPerRunMean: costs.length ? Number((costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(4)) : null,
-    costPerRunMax: costs.length ? Math.max(...costs) : null,
-    errors: results.filter((r) => r.error).length,
-  };
-}
-
-/** 여러 런의 평균·최소·최대. */
-export function aggregate(runs) {
-  const keys = ["oppositeErrors", "appMatch", "mustIdentified", "costPerRunMean", "costPerRunMax", "errors"];
-  const out = {};
-  for (const k of keys) {
-    const v = runs.map((r) => r[k]).filter((x) => typeof x === "number");
-    out[k] = v.length ? { mean: Number((v.reduce((a, b) => a + b, 0) / v.length).toFixed(4)), min: Math.min(...v), max: Math.max(...v) } : null;
-  }
-  out.runs = runs.length;
-  return out;
-}
+// 집계는 로컬 하네스와 공용(agent-bench-aggregate.mjs). 이름은 그대로 내보낸다(테스트·외부 호출 호환).
+export { summarize, aggregate, compareRuns };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();
