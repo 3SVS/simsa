@@ -32,7 +32,13 @@ import { constantTimeEqual } from "../workspace/build-job-token.js";
 
 export const INSPECT_LLM_PATH = "/internal/inspect-llm/v1/messages";
 export const INSPECT_AGENT_CALL_SITE = "inspect_agent";
-export const INSPECT_LLM_MAX_OUTPUT_TOKENS = 2048;
+/**
+ * 출력 상한. 실행기의 가장 큰 호출은 B5 단일파일 고침(`inspector-container/agent-run.mjs` SINGLE_FILE_FIX_MAX_TOKENS = 4000,
+ * 고친 파일의 편집 목록 JSON)이다. 2048이던 동안 그 호출이 프로덕션에서 늘 400(invalid_request)으로 끝나 단일파일 고침이
+ * 한 번도 되지 않았다(2026-10-18 문 (b) 격차 §2) — 상한은 실행기의 최대 호출을 덮어야 하고, 둘의 관계는
+ * test/single-file-fix-max-tokens.test.mjs가 고정한다.
+ */
+export const INSPECT_LLM_MAX_OUTPUT_TOKENS = 4096;
 const MAX_BODY_BYTES = 200 * 1024;
 const UPSTREAM_TIMEOUT_MS = 90_000;
 

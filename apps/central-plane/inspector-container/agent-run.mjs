@@ -23,6 +23,11 @@ async function importPure(name) {
 }
 
 export const AGENT_RUNNER_REV = "agent-ac-1";
+/**
+ * B5 단일파일 고침 호출의 출력 상한 — 실행기에서 가장 큰 호출(고친 파일의 편집 목록 JSON). Worker 프록시의
+ * INSPECT_LLM_MAX_OUTPUT_TOKENS(routes/inspect-llm-proxy.ts)보다 크면 프로덕션에서 400으로 끝난다(2026-10-06 3차까지 그랬다).
+ */
+export const SINGLE_FILE_FIX_MAX_TOKENS = 4000;
 const SWEEP_TIME_SHARE = 0.3;
 const SWEEP_MAX_MS = 4 * 60 * 1000;
 const LOGIN_HANDOVER_WAIT_MS = 10 * 60 * 1000;
@@ -288,7 +293,7 @@ export async function runAgentInspection(o) {
     if (failed.length === 0) return null;
     const source = await driver.fetchSource(o.targetUrl);
     if (!sf.isSingleFileApp(source, o.targetUrl)) return null;
-    const text = await callLlm("You fix single-file web apps. Reply with JSON only.", sf.singleFileFixPrompt(source, failed, locale), 4000);
+    const text = await callLlm("You fix single-file web apps. Reply with JSON only.", sf.singleFileFixPrompt(source, failed, locale), SINGLE_FILE_FIX_MAX_TOKENS);
     const parsed = pure.extractJsonObject(text) ?? {};
     const applied = sf.applyExactEdits(source, parsed.edits);
     const cannotFix = Array.isArray(parsed.cannotFix) ? parsed.cannotFix.filter((x) => typeof x === "string").slice(0, 10) : [];
