@@ -1,6 +1,7 @@
 # 벤치 #1 로컬 하네스 3회 반복 — 판정 불일치 집계 (2026-10-18)
 
 > **로컬 실행(브랜치 코드 2602b43) — 프로덕션 아님, LLM 경로=OpenAI 폴백** (ANTHROPIC 키 없음 → preferFallback; 결과 모델 gpt-5.4 / gpt-5.4-mini). 하네스 `tools/simsa-inspection-fixtures/agent-bench1-local.mjs --concurrency=2`를 순차 3회 수동 실행(로컬 하네스엔 `--repeat`가 없음). 원본: `tools/simsa-inspection-fixtures/agent-bench1-local-result-2026-10-18-r{1,2,3}.json`(+`.stdout.txt`). 실행 시각(KST) r1 22:00~22:20 · r2 22:20~22:40 · r3 22:40~22:59. 기존 결과 파일은 `agent-bench1-local-result-prev-20261007-0129.json`으로 보존.
+> **측정 모델 = gpt-5.4(강한 판정) / gpt-5.4-mini(행동·관찰) — 전부 OpenAI 폴백.** 로컬에서 Anthropic이 꺼진 이유: 하네스 `agent-bench1-local.mjs` `fallbackConfig()`가 셸에 ANTHROPIC_API_KEY가 없으면 `preferFallback:true`로 두어 Anthropic 호출을 아예 건너뛴다(코드 기본값, 설정 아님 — 로그 `llm_primary_skipped reason:anthropic_disabled`). 프로덕션도 같은 벤더다: `apps/central-plane/wrangler.toml:124 ANTHROPIC_ENABLED="off"` 킬스위치 → `vendor-routing.ts:38 preferFallback` → OpenAI 게이트웨이. 프로덕션 3차 결과의 `llmCallsByModel`도 앱 6개 전부 `gpt-5.4-2026-03-05`·`gpt-5.4-mini-2026-03-17`만 기록(Anthropic 0회). 따라서 이 기준선과 PR #607 주입 측정(같은 셸·같은 하네스 LLM 경로)은 같은 모델로 비교된다.
 
 ## 1. 런별 요약
 
