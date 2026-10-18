@@ -75,3 +75,21 @@ _(측정 완료 후 기입)_
 | 4~ | 판정 결함 §3 — 한 PR = 한 격차, 영향 큰 순(3-1 → 3-2 → 3-4 → 3-5 → 3-6 → 3-3 → 3-7 → 3-8 → 3-9) | §3 | 로컬 `--repeat=3`에서 판정 동일성 + must 짚음 > 31% + 런당 ≤ $0.30 |
 
 HANDOFF §3-3 통과 기준은 그대로: 셋 중 하나라도 빠지면 "완료"라 쓰지 않는다.
+
+## 6. PR3(제품 AC 고정) 설계 조사 요약 (simsa-diagnose, 2026-10-18 — 코드 변경 0)
+
+**핵심:** "캐시"는 이미 있다 — `workspace_projects.dev_spec_json`. 제품 런의 AC는 LLM이 아니라 `agentAcsFromDevSpec`(순수·결정론, `src/acceptance-plan.ts:93-112`)이 저장된 지시서에서 뽑고(`routes/workspace-visual-check-runs.ts:792 → :202-212`), 지시서는 `POST /dev-spec/generate`(`routes/workspace-dev-spec.ts:182-302`, `:295-299` UPDATE)가 불릴 때만 바뀐다. 프로젝트 재저장(`routes/workspace.ts:374-487 → db.ts:115-135 upsert`)은 `dev_spec_json`을 건드리지 않는다. **마이그레이션 불필요.**
+
+제품에서 AC가 달라지는 경로(전수 5): ① 첫 런은 지시서 이전(제출 즉시 런, `app/projects/new/page.tsx:489`·`components/AppAddressStart.tsx:117` → 컨테이너 LLM 추정 `inferred_at_run`) — 설계상 첫 런≠둘째 런 ② 재생성 트리거 3곳: 카드 확정 `intent-ruler.ts:21-31` · 인터뷰 답 반영 `InterviewPackCard.tsx:137` · 지시서 화면 "다시 만들기" `dev-spec/page.tsx:97-131` ③ **[결함] 재검수가 11번째 AC를 잃음** — 컨테이너는 CORE-1 포함 11개(`agent-run.mjs:178`, pro/staff `entitlements.ts:95·107 maxAcs:11`)를 돌리는데 `acsFromAgentReport`가 `slice(0, 10)`(`agent-inspection.ts:1491`) ④ 티어 절단(free 5 / basic 8, `entitlements.ts:71·83`) — 응답 `acCount`(`:855`)는 실행 수가 아님 ⑤ [추정] CORE-1 문구는 `intent`를 품어 검수 화면에서 intent를 바꾸면 문구만 달라짐(id 고정).
+
+| 후보 | 마이그레이션 | HANDOFF §4 저촉 | 되돌리기 |
+|---|---|---|---|
+| **A. 컬럼 0 — 재생성 게이트 + 결정론 결함 수리 + 사용자 우선 정렬 (추천)** | 없음 | 없음 | 게이트 1함수 제거 |
+| B. `agent_acs_json` 컬럼 | 필요 | 소지(AC 2번째 정본) | 어려움 |
+| C. `workspace_dev_spec_versions` 표(전문 이력) | 필요 | 없음 | 표만 남음 — PR4+ 후보 |
+
+**A 설계:** S1 generate 라우트에 `reason?: "plan_changed"` — 지시서가 있고 reason 없으면 **409 `dev_spec_exists`**(LLM 0회·일일 몫 0); `plan_changed`면 `diffAcs(prev,next)`(id가 아니라 정규화한 제목+then으로 대응)를 응답에 + usage event `workspace_dev_spec_regenerated`(개수·시각만) · S2 `acsFromAgentReport` slice `+1`, `agent-run.mjs:95` 같은 상한 · S3 `agentAcsFromDevSpec` 정렬 키 = priority → origin(`user_text > user_checked > spec > inferred`, `acceptance-plan.ts:108`에 이미 있음) → 기능별 n번째 라운드로빈 → 저장 순서; 풀 `AGENT_MAX_ACS` 10→16, 티어 실행 수는 유지(비용 ≤ $0.30 지키기 — AC당 한계비용 [추정] ≈ $0.03) · S4 재검수 source_run 우선 그대로(`verify-sweep.ts:186` 자동 일치) · S5 대시보드 "다시 만들기" → "기획을 바꿨어요 — 기준 다시 뽑기"(확인 단계 + 이전 기준 N개·지난 결과 보존 카피), 409 → "이미 있어요". 이력: 런마다 `agent.acs`+`acTable`이 `report_json`에 남고 30일 스윕은 근거만 걷는다(`evidence-retention.ts:17-40`) — 재생성이 지난 런을 건드리는 경로 없음.
+
+옛 코드에서 실패할 테스트: ① 정렬(user_text 4개 전부 포함, 확인 기능 10개 모두 AC ≥1 — 옛 0개) ② `acsFromAgentReport` 11 → 옛 10 ③ generate 지시서 있음+reason 없음 → 옛 200·LLM 3회, 새 409·LLM 0 ④ `plan_changed` → `diff`+usage event ⑤ `diffAcs` 제목+then 대응 ⑥ (회귀 잠금) 같은 spec run 2회 payload AC 동일.
+
+**열린 질문(Bae):** Q1 인터뷰 답 반영을 "기획 변경" 명시로 보고 자동 `plan_changed` 동봉할지(권고: 예) · Q2 티어 실행 수(pro/staff 11) 상향 여부(권고: 풀만 16, 실행 수 유지) · Q3 기획 변경 뒤 옛 런의 "다시 확인"은 옛 AC 유지+안내(권고, 현 코드 규칙 그대로) vs 새 AC 전환 · Q4 전문 버전 이력(C)은 PR4+로 미룸(권고).
