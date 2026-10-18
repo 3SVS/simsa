@@ -367,6 +367,9 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
       budgetMs: Math.min(AGENT_RUN_BUDGET_MS, Number(agent.caps?.maxMinutes) > 0 ? Number(agent.caps.maxMinutes) * 60_000 : AGENT_RUN_BUDGET_MS),
       caps: agent.caps,
       readOnly: agent.readOnly === true,
+      // 2026-10-19 given 셋업: 시험 데이터 seed·표지는 runId에서(재현 가능), 정리 정책은 Worker가 정한다(장비=bench · 실유저=user).
+      runId: payload.runId,
+      setupPolicy: agent.setupPolicy === "bench" ? "bench" : "user",
       acs: Array.isArray(agent.acs) ? agent.acs : [],
       acSource: agent.acSource,
       loginMode: agent.loginMode ?? "none",

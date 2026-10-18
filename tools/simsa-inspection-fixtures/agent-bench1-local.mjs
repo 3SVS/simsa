@@ -38,6 +38,7 @@ const { anthropicMessages, OPENAI_FALLBACK_MODEL } = await imp("dist/workspace/a
 const { priceTokens } = await imp("dist/workspace/llm-pricing.js");
 const { agentAcsFromDevSpec } = await imp("dist/acceptance-plan.js");
 const { inspectAgentModelFor } = await imp("dist/workspace/inspection-agent.js");
+const { stableSeed } = await imp("dist/agent-inspection.js");
 const { runAgentInspection } = await imp("inspector-container/agent-run.mjs");
 const { createPlaywrightDriver } = await imp("inspector-container/agent-driver.mjs");
 const { isNoiseResource } = await imp("dist/nondev-report.js");
@@ -198,7 +199,7 @@ async function renderedText(url) {
   }
 }
 
-export async function benchOne(app, { locale = "ko", acMode = "prereg" } = {}) {
+export async function benchOne(app, { locale = "ko", acMode = "prereg", runTag = "r1" } = {}) {
   const t0 = Date.now();
   const kst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 16);
   const genEvents = [];
@@ -267,6 +268,10 @@ export async function benchOne(app, { locale = "ko", acMode = "prereg" } = {}) {
       // 주입된 사전 등록 조건은 사용자가 직접 적어 확인한 기준과 같은 자리(interview).
       acSource: acMode === "prereg" ? "interview" : acs.length ? "confirmed_inferred" : "inferred_at_run",
       loginMode: "none",
+      // (2026-10-19 given 셋업) 벤치 앱 = 정리 예산이 모자라도 셋업하고 "남음 n건"으로 표시. seed·표지는 런·앱에서(재현 가능, 런마다 다름).
+      setupPolicy: "bench",
+      testDataSeed: stableSeed(`${runTag}:${app.id}`),
+      runTag: `${runTag}${app.id.slice(0, 2)}`,
       llm: localProxyLlm(agentEvents),
       driver,
       onPhase: (l) => phases.push(l),
@@ -341,7 +346,7 @@ async function main() {
         while (i < apps.length) {
           const app = apps[i++];
           console.log(`▶ [${k}/${repeat}] ${app.id} ${app.url}`);
-          const r = await benchOne(app, { acMode }).catch((err) => ({ app: app.id, acMode, error: String(err?.message ?? err).slice(0, 300) }));
+          const r = await benchOne(app, { acMode, runTag: `r${k}` }).catch((err) => ({ app: app.id, acMode, error: String(err?.message ?? err).slice(0, 300) }));
           results.push(r);
           console.log(`  [${k}/${repeat}] ${app.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")}/${(r.mustFailedExpected ?? []).join(",")} $${costOfResult(r) ?? "?"} ${r.durationSec}s`);
         }

@@ -46,6 +46,10 @@ const LOGIN_HANDOVER_WAIT_MS = 10 * 60 * 1000;
  * @param {(req:{system:string,user:string,maxTokens?:number}) => Promise<string>} o.llm
  * @param {object} o.driver      agent-driver.mjs 인터페이스
  * @param {{ setState:(s:string)=>void, waitDone:(ms:number)=>Promise<boolean>, typedSecrets:()=>string[] }} [o.live]
+ * @param {number} [o.testDataSeed]  시험 데이터 seed(프로덕션 = runId 해시, 하네스 = 런·앱 해시). 없으면 시각.
+ * @param {string} [o.runTag]        시험 기록 메모에 남기는 런 표지.
+ * @param {"user"|"bench"} [o.setupPolicy]  given 셋업 정책(2026-10-19 Bae): bench = 정리 예산이 모자라도 셋업하고 "남음 n건" 표시 ·
+ *                                    user(기본) = 치울 여유가 없으면 만들지 않는다(setup_skipped_budget).
  */
 export async function runAgentInspection(o) {
   const pure = await importPure("agent-inspection.js");
@@ -105,6 +109,14 @@ export async function runAgentInspection(o) {
   let firstHtml = "";
   let usedTestData = null;
   let singleFileFix = null;
+  /** 2026-10-19 given 셋업: 이 런에서 만든 기록(뒤 기준의 given을 채운다). */
+  let setup = null;
+  let setupAttempted = false;
+  let recordsCreated = 0;
+  let cleanup = null;
+  const setupPolicy = o.setupPolicy === "bench" ? "bench" : "user";
+  const SETUP_STEPS = 14;
+  const cleanupBudget = () => Math.min(8, Math.floor(caps.maxActions * 0.15));
   /** C11: 진행 상황을 바깥(server.mjs)에 보인다 — 강제 시간 초과 때 여기까지로 부분 리포트를 만든다. */
   const progress = o.progress ?? {};
   const syncProgress = () => {
@@ -181,6 +193,8 @@ export async function runAgentInspection(o) {
 
       // 3b) Simsa 기본 기준 — 핵심 일을 실제로 끝까지(모든 앱 공통). 의도가 사용자 확인 기준에서 왔을 때만 confirmed.
       acs = pure.orderAcs(pure.withCoreOutcomeAc(acs, o.intent, acSource !== "inferred_at_run", locale), Math.min(pure.AGENT_MAX_ACS + 1, caps.maxAcs));
+      // (2026-10-19 given 셋업) 기록이 있어야 하는 기준은 같은 우선순위 안에서 뒤로 — 앞 기준이 만든 기록을 재사용한다.
+      acs = pure.orderAcsByPrecondition(acs);
       syncProgress();
 
       // 4) 화면·버튼 점검
@@ -190,8 +204,24 @@ export async function runAgentInspection(o) {
       syncProgress();
 
       // 5) AC 실행
-      const data = pure.koreanTestData(Date.now() % 100000);
+      // seed: 명시 > runId 해시(프로덕션, 재현 가능) > 시각. 표지: 명시 > runId 꼬리.
+      const seed = Number.isFinite(o.testDataSeed) ? o.testDataSeed : typeof o.runId === "string" && o.runId ? pure.stableSeed(o.runId) : Date.now() % 100000;
+      const data = pure.koreanTestData(seed, o.runTag ?? (typeof o.runId === "string" ? o.runId.slice(-6) : undefined));
       usedTestData = data;
+      const acArgsBase = () => ({ o, pure, driver, callLlm, locale, data, hasCredentials: loginMethod === "credentials" || loginMethod === "handover", loginFailed, handoverState, deadline, shot, plog });
+      /** 기준 결과에서 셋업 재료를 꺼내 둔다(첫 공급자만). */
+      const harvest = (r, acId) => {
+        const s = r._setup;
+        if (s?.created) recordsCreated += 1;
+        if (!setup && s?.created) {
+          setup = { byAc: acId, date: s.date, time: s.time, excerpt: s.excerpt, serverWrites: s.serverWrites, recipe: s.recipe, storageState: s.storageState };
+          plog(`setup:from ${acId} date=${s.date ?? "?"} time=${s.time ?? "?"} writes=${s.serverWrites}`);
+        }
+      };
+      const strip = (r) => {
+        const { _setup: _s, ...row } = r;
+        return row;
+      };
       for (const ac of acs) {
         // (H3) 남은 예산(행동·시간)이 40% 아래면 should 기준은 건너뛴다 — must 기준과 핵심 탐침에 예산을 쓴다.
         const budgetLeft = Math.min(1 - actionsUsed / Math.max(1, caps.maxActions), Number.isFinite(timeLeft()) ? timeLeft() / Math.max(1, runBudgetMs) : 1);
@@ -204,8 +234,55 @@ export async function runAgentInspection(o) {
           results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("budget", locale), reasonCode: "budget", evidence: [], steps: 0 });
           continue;
         }
-        const acArgs = { ac, o, pure, driver, callLlm, locale, data, hasCredentials: loginMethod === "credentials" || loginMethod === "handover", loginFailed, handoverState, deadline, shot, plog };
+        // (2026-10-19 given 셋업) 전제가 "기록이 이미 있다"인 기준: 만들어 둔 기록이 없으면 — 동의 없음 → setup_not_consented,
+        //  치울 여유 없음(user 정책) → setup_skipped_budget, 아니면 런당 1회 SETUP-1 미니런으로 만든다. 그래도 없으면 precondition_not_met.
+        const pre = pure.classifyPrecondition(ac);
+        if (pre.needsRecord && !setup) {
+          const skip = (code) => {
+            results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText(code, locale), reasonCode: code, evidence: [], steps: 0 });
+            syncProgress();
+            plog(`ac ${ac.id} → not_verified(${code}) setup`);
+          };
+          if (o.readOnly === true) {
+            skip("setup_not_consented");
+            continue;
+          }
+          if (!setupAttempted) {
+            setupAttempted = true;
+            const actionsLeft = caps.maxActions - actionsUsed;
+            const roomToClean = setupPolicy === "bench" || (cleanupBudget() >= 4 && actionsLeft >= SETUP_STEPS + cleanupBudget());
+            if (!roomToClean) {
+              skip("setup_skipped_budget");
+              continue;
+            }
+            if (timeLeft() > 150_000 && actionsLeft >= SETUP_STEPS && !llmCalls.budgetExhausted) {
+              const setupAc = {
+                id: "SETUP-1", title: locale === "en" ? "Create one booking for later checks" : "뒤 기준을 위한 예약 1건 만들기", given: "",
+                when: locale === "en"
+                  ? `Make ONE booking with the test data for the Korea date ${pure.kstDateString()} at the earliest free time today; if today has no free time, the nearest later day. Then judge pass only if a confirmation shows the booking.`
+                  : `시험 데이터로 오늘(한국 날짜 ${pure.kstDateString()}) 남은 가장 이른 시간에 예약을 1건 만든다. 오늘 빈 시간이 없으면 가장 가까운 날. 완료 화면에 예약이 보이면 pass.`,
+                then: locale === "en" ? "A confirmation shows the booking (date, time, name)." : "완료 화면에 예약(날짜·시간·이름)이 보인다.", priority: "should", confirmed: true,
+              };
+              const s = await runOneAc({ ...acArgsBase(), ac: setupAc, setupMode: true });
+              harvest(s, "SETUP-1");
+              plog(`setup:run → ${s.status} created=${Boolean(s._setup?.created)}`);
+            }
+          }
+          if (!setup) {
+            skip("precondition_not_met");
+            continue;
+          }
+        }
+        // "오늘" 기록이어야 하는데 만든 날짜가 오늘이 아니면(야간 실행) 정직하게 전제 미충족(Bae Q2).
+        if (pre.needsRecord && pre.needsToday && setup?.date && setup.date !== pure.kstDateString()) {
+          results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("precondition_not_met", locale), reasonCode: "precondition_not_met", evidence: [], steps: 0 });
+          syncProgress();
+          plog(`ac ${ac.id} → not_verified(precondition_not_met) today≠${setup.date}`);
+          continue;
+        }
+        const acArgs = { ...acArgsBase(), ac, setup: pre.needsRecord ? setup : null, sameSession: pre.needsRecord && pre.sameSession };
         let r = await runOneAc(acArgs);
+        harvest(r, ac.id);
         // (G1) prod bench1 run 2: 사람에겐 되는 앱에 "제출해도 완료 화면이 안 나와요" 같은 거짓 실패가 나왔다. 실패는 고침 지시를
         //  만드는 가장 해로운 출력이다 — 새 브라우저에서 강한 모델이 행동까지 골라 **다시 재현될 때만** 실패로 남긴다.
         if (r.status === "fail" && ac.priority === "must" && timeLeft() > 60_000 && !llmCalls.budgetExhausted) {
@@ -224,7 +301,7 @@ export async function runAgentInspection(o) {
           r = pure.mergeClockVariant(r, v, iso, locale);
           plog(`ac ${ac.id} clock-variant → ${v.status}`);
         }
-        results.push(r);
+        results.push(strip(r));
         syncProgress();
         plog(`ac ${ac.id} → ${r.status}${r.reasonCode ? `(${r.reasonCode})` : ""} steps=${r.steps}`);
       }
@@ -237,6 +314,29 @@ export async function runAgentInspection(o) {
       if (o.singleFileFix !== false && driver.fetchSource && driver.serveOverride && timeLeft() > 120_000 && !llmCalls.budgetExhausted) {
         singleFileFix = await trySingleFileFix({ acs, results, data: usedTestData }).catch((err) => ({ attempted: true, error: String(err?.message ?? err).slice(0, 120) }));
         plog(`single-file-fix ${singleFileFix ? JSON.stringify({ v: singleFileFix.validated, s: singleFileFix.stillFailing, e: singleFileFix.error }) : "skipped"}`);
+      }
+
+      // (2026-10-19 (b) 정리) 서버에 남은 내 기록을 지우려 한다 — 내 번호(+런 표지)가 붙은 기록만, 행동 예산의 15%(≤8) 안에서.
+      //  브라우저에만 저장된 기록(서버 쓰기 0)은 그 브라우저가 닫히면 사라지므로 잔여로 세지 않는다.
+      if (recordsCreated > 0 && setup && setup.serverWrites > 0 && o.readOnly !== true) {
+        const budget = Math.min(cleanupBudget(), caps.maxActions - actionsUsed);
+        if (budget < 4) cleanup = { created: recordsCreated, cleaned: 0, leftover: recordsCreated, cleanupSkipped: "budget" };
+        else if (timeLeft() < 60_000 || llmCalls.budgetExhausted) cleanup = { created: recordsCreated, cleaned: 0, leftover: recordsCreated, cleanupSkipped: "timeout" };
+        else {
+          const cleanupAc = {
+            id: "CLEANUP-1", title: locale === "en" ? "Remove the test bookings" : "시험 예약 지우기", given: "",
+            when: locale === "en"
+              ? `Open the admin/owner screen or 'my bookings' (follow the known path) and cancel EVERY booking whose phone is ${data.phone} (name ${data.name}); set ownRecord:true on those clicks. There may be ${recordsCreated}.`
+              : `관리 화면(또는 내 예약)을 열어(아는 경로를 따라) 번호가 ${data.phone}(이름 ${data.name})인 예약을 모두 취소한다 — 그 클릭에 ownRecord:true. ${recordsCreated}건일 수 있다.`,
+            then: locale === "en" ? `No booking with phone ${data.phone} remains in the list.` : `목록에 번호 ${data.phone}인 예약이 남아 있지 않다.`, priority: "should", confirmed: true,
+          };
+          const c = await runOneAc({ ...acArgsBase(), ac: cleanupAc, setup, cleanupMode: true, maxStepsOverride: budget });
+          const gate = c.reasonCode === "login_required" ? "login_wall" : c.status === "pass" ? null : "not_confirmed";
+          cleanup = { created: recordsCreated, cleaned: c.status === "pass" ? recordsCreated : 0, leftover: c.status === "pass" ? 0 : recordsCreated, ...(gate ? { cleanupSkipped: gate } : {}) };
+          plog(`cleanup → ${c.status}${c.reasonCode ? `(${c.reasonCode})` : ""} leftover=${cleanup.leftover}`);
+        }
+      } else if (recordsCreated > 0) {
+        cleanup = { created: recordsCreated, cleaned: 0, leftover: 0, cleanupSkipped: setup?.serverWrites === 0 ? "browser_only" : "no_setup" };
       }
     }
   } catch (err) {
@@ -253,9 +353,13 @@ export async function runAgentInspection(o) {
   report.agent.llmCalls = llmCalls.n;
   // C8: 이번 확인이 앱에 남겼을 수 있는 기록의 표지 — 사용자가 찾아 지울 수 있게 리포트에 적는다.
   if (usedTestData) {
-    report.agent.testData = { names: [usedTestData.name, usedTestData.altName], phone: usedTestData.phone, memo: usedTestData.memo };
-    report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
+    // 시간 초과로 정리에 못 갔으면 만든 만큼 남은 것으로 적는다(정직).
+    const td = cleanup ?? (recordsCreated > 0 ? { created: recordsCreated, cleaned: 0, leftover: setup?.serverWrites > 0 ? recordsCreated : 0, cleanupSkipped: "timeout" } : { created: 0, cleaned: 0, leftover: 0 });
+    report.agent.testData = { names: [usedTestData.name, usedTestData.altName], phone: usedTestData.phone, memo: usedTestData.memo, runTag: usedTestData.runTag, ...td };
+    if (td.leftover > 0) report.notes.push(pure.testDataLeftoverNote(td.leftover, usedTestData, locale));
+    else report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
   }
+  if (setup) report.agent.setup = { byAc: setup.byAc, date: setup.date, time: setup.time, serverWrites: setup.serverWrites, recipeSteps: setup.recipe.length };
   if (singleFileFix) {
     report.agent.singleFileFix = singleFileFix;
     if (singleFileFix.validated?.length) {
@@ -321,10 +425,12 @@ export async function runAgentInspection(o) {
     };
   }
 
-  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null, reproduceOf = null }) {
+  async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null, reproduceOf = null, setup = null, sameSession = false, setupMode = false, cleanupMode = false, maxStepsOverride = null }) {
     async function startFresh() {
       if (driver.newSession) {
-        await driver.newSession(o.targetUrl, handoverState ?? null).catch(() => driver.goto(o.targetUrl));
+        // (2026-10-19) "새로고침해도 남는다"류는 기록을 만든 브라우저를 이어 쓴다(그 브라우저 저장소·쿠키 복원). 그 밖은 새 브라우저.
+        const restore = sameSession && setup?.storageState ? setup.storageState : handoverState ?? null;
+        await driver.newSession(o.targetUrl, restore).catch(() => driver.goto(o.targetUrl));
         if (!handoverState && o.credentials && hasCredentials && !loginFailed) {
           await driver.login(o.credentials).catch(() => null);
           await driver.goto(o.targetUrl);
@@ -343,8 +449,11 @@ export async function runAgentInspection(o) {
     let filled = false;
     let stateChange = false;
     let verified = false;
-    const maxSteps = ac.id === pure.CORE_OUTCOME_AC_ID ? 24 : pure.AGENT_MAX_STEPS_PER_AC;
-    const markers = [data.name, data.altName, data.phone];
+    const maxSteps = maxStepsOverride ?? (ac.id === pure.CORE_OUTCOME_AC_ID ? 24 : pure.AGENT_MAX_STEPS_PER_AC);
+    // (2026-10-19 격차 §3-3) 내 기록 표지는 번호(+런 표지)다 — 이름 '심사테스트'만 맞으면 이전 런의 기록도 "내 것"이 됐다.
+    const markers = [data.phone, data.phone.replace(/-/g, ""), data.runTag ? `테스트 ${data.runTag}` : null].filter(Boolean);
+    /** 셋업 재료(첫 상태 변화 직후): 제출 화면 발췌·저장 위치·폼까지의 경로. */
+    const setupInfo = { created: false, date: null, time: null, excerpt: "", serverWrites: 0, recipe: [], storageState: null };
     // 앱이 링크로 보여 준 주소만 "아는 주소". 그 밖의 goto는 짐작 — 거기서 본 "없음"은 고장 근거가 아니다.
     const known = new Set([normUrl(o.targetUrl)]);
     let onGuessedAddress = false;
@@ -367,6 +476,8 @@ export async function runAgentInspection(o) {
     if (reproduceOf) {
       history.push(`(an earlier attempt concluded FAIL: "${red(reproduceOf.reason)}". Re-check independently and carefully in this fresh browser — do every required step (choose service/date/time, valid inputs), then look. Judge fail only if you SEE it fail again.)`);
     }
+    // (2026-10-19) 만들어 둔 기록은 관찰 기록에도 같은 문장으로 넣는다 — 판정이 그 사실을 인용할 수 있게(접지).
+    if (setup) corpus += `\n${pure.setupContextLines(setup, data).join("\n")}`;
     // (F5) 진전 없는 행동 감지 → 다음 턴은 강한 모델. (F6) 짐작한 주소로의 이동은 막는다.
     let stuck = 0;
     let lastDesc = "";
@@ -386,10 +497,10 @@ export async function runAgentInspection(o) {
       try {
         lastPrompt = pure.agentTurnPrompt({
           ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
-          stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(),
+          stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(), setup,
         });
-        // (G1) 실패 재현 런은 행동도 강한 모델이 고른다.
-        turnTier = escalate || reproduceOf ? "strong" : "cheap";
+        // (G1) 실패 재현 런은 행동도 강한 모델이 고른다. 셋업·정리 미니런은 늘 싼 모델(판정이 아니라 길 찾기).
+        turnTier = (escalate || reproduceOf) && !setupMode && !cleanupMode ? "strong" : "cheap";
         text = await callLlm(system, lastPrompt, 700, turnTier);
         escalate = false;
       } catch (err) {
@@ -493,9 +604,11 @@ export async function runAgentInspection(o) {
         if (!safety.safe && safety.category !== "empty/unknown") {
           const allowed = safety.category === "delete" && a.type === "click" && a.ownRecord === true && (await driver.ownsRecordNear(a.target, markers));
           if (!allowed) {
-            history.push(`${desc} → BLOCKED (unsafe: ${safety.category}; only records you created may be cancelled — set ownRecord:true)`);
+            history.push(`${desc} → BLOCKED (unsafe: ${safety.category}; only records you created may be cancelled — set ownRecord:true on a row that shows phone ${data.phone})`);
             continue;
           }
+          // 허용된 내 기록의 취소·삭제: 앱이 confirm()으로 되물으면 이 클릭 동안만 "확인"으로 답한다(그 밖엔 늘 dismiss).
+          a = { ...a, acceptDialog: true };
         }
       }
       // (F6) 2026-10-06 진단(Gemini): 에이전트가 지어낸 주소(/admin/today)로 가서 404를 보고 "운영자 화면이 404"라 했다 — 실제 화면은 정상.
@@ -533,11 +646,24 @@ export async function runAgentInspection(o) {
           stateChange = true;
           // (H2) 핵심 기준: 처음 상태를 바꾼 직후 저장 위치를 자동으로 잰다(LLM 호출 없음). 서버 쓰기 0이면 다른 손님·사장님이
           //  볼 수 있는지를 새 브라우저로 확인하라고 알린다 — Claude 앱(브라우저에만 저장)을 놓친 실측 교정.
-          if (ac.id === pure.CORE_OUTCOME_AC_ID && !autoProbed && driver.storageProbe) {
+          // (2026-10-19 given 셋업) 어느 기준이든 첫 제출 직후를 셋업 재료로 거둔다: 저장 위치·화면 발췌(날짜·시간)·폼까지의 경로·브라우저 상태.
+          if (!autoProbed && driver.storageProbe && !cleanupMode) {
             autoProbed = true;
             await driver.waitAfterSubmit?.().catch(() => {});
             const probe = await driver.storageProbe().catch(() => null);
-            if (probe) {
+            const after = await driver.bodyText().catch(() => "");
+            const facts = pure.extractBookingFacts(after);
+            const confirmed = /완료|예약되|예약이 접수|확정|confirmed|booked|reserved|success/i.test(after);
+            if (probe && (probe.serverWrites.length > 0 || probe.localChanged || confirmed)) {
+              setupInfo.created = true;
+              setupInfo.date = facts.date;
+              setupInfo.time = facts.time;
+              setupInfo.excerpt = after.slice(0, 600);
+              setupInfo.serverWrites = probe.serverWrites.length;
+              setupInfo.recipe = [...actions, desc];
+              if (probe.serverWrites.length > 0 && driver.captureState) setupInfo.storageState = await driver.captureState().catch(() => null);
+            }
+            if (probe && ac.id === pure.CORE_OUTCOME_AC_ID) {
               const line = pure.describeStorageProbe(probe);
               corpus += `\n${line}`;
               history.push(`(automatic check after your submit: ${line}${probe.serverWrites.length === 0 ? " — nothing reached a server; verify with new_session whether another visitor / the owner can see it" : ""})`);
@@ -595,6 +721,8 @@ export async function runAgentInspection(o) {
         actions,
         exercised: { stateChange, verified },
         ...(screenshot ? { screenshot } : {}),
+        // 실행기 내부용 — results에 넣기 전에 strip된다(리포트에는 agent.setup 요약만).
+        _setup: setupInfo,
       };
     }
   }

@@ -38,6 +38,8 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   /** 로그인 때 채운 칸 — 이후 모든 스크린샷에서 가린다. */
   const maskSelectors = new Set(["input[type=password]"]);
   let dialogSeen = false;
+  /** "dismiss"(기본) | "accept" — 허용된 내 기록 클릭(acceptDialog) 동안만 accept. */
+  let dialogPolicy = "dismiss";
   const writes = [];
   let storageMark = { at: Date.now(), local: "", session: "" };
   const readStorage = async () =>
@@ -88,9 +90,11 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         writes.push({ at: Date.now(), line: `${r.method()} ${r.url().slice(0, 140)}` });
       }
     });
+    // 2026-10-19(격차 §7 발견 ③): confirm()을 늘 dismiss하면 confirm으로 묻는 앱에서 "취소"가 절대 실행되지 않아 앱 결함처럼
+    //  보였다(bolt·gemini 실측). 허용된 내 기록 클릭(acceptDialog) 동안만 accept, 그 밖엔 종전대로 dismiss.
     p.on("dialog", (d) => {
       dialogSeen = true;
-      d.dismiss().catch(() => {});
+      (dialogPolicy === "accept" ? d.accept() : d.dismiss()).catch(() => {});
     });
     p.setDefaultTimeout(ACT_TIMEOUT);
   }
@@ -251,9 +255,14 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
           case "click": {
             const l = await resolveTarget(action.target);
             if (!l) return { ok: false, note: "target_not_found" };
-            await l.click({ timeout: ACT_TIMEOUT });
-            await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {});
-            await page.waitForTimeout(900);
+            dialogPolicy = action.acceptDialog === true ? "accept" : "dismiss";
+            try {
+              await l.click({ timeout: ACT_TIMEOUT });
+              await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {});
+              await page.waitForTimeout(900);
+            } finally {
+              dialogPolicy = "dismiss";
+            }
             return { ok: true, note: `clicked → ${page.url()}` };
           }
           case "fill": {

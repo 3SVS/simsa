@@ -23,7 +23,9 @@ describe("벤치 하네스 집계", () => {
       { app: "a", decision: "Needs Fix", match: true, opposite: false, mustIdentified: ["A1"], costUsd: 0.3 },
       { app: "b", decision: "Ready", match: true, opposite: false, mustIdentified: [], costUsd: 0.2 },
     ]);
-    assert.deepEqual(r1, { oppositeErrors: 0, appMatch: 2, apps: 2, mustIdentified: 1, mustTotal: 2, costPerRunMean: 0.25, costPerRunMax: 0.3, errors: 0 });
+    // 2026-10-19: status 분포 필드가 추가됐다(아래 describe) — 기존 지표는 그대로.
+    const { statusCounts: _sc, notVerifiedShare: _nv, notVerifiedByReason: _nr, ...base } = r1;
+    assert.deepEqual(base, { oppositeErrors: 0, appMatch: 2, apps: 2, mustIdentified: 1, mustTotal: 2, costPerRunMean: 0.25, costPerRunMax: 0.3, errors: 0 });
     const r2 = { ...r1, mustIdentified: 2, costPerRunMean: 0.35, appMatch: 1 };
     const agg = aggregate([r1, r2]);
     assert.deepEqual(agg.mustIdentified, { mean: 1.5, min: 1, max: 2 });
@@ -117,5 +119,21 @@ describe("사전 등록 조건 주입(--acs=prereg)", { skip }, () => {
     const inf = score(app, { decision: "Needs Fix", acMode: "inferred", acTable });
     assert.deepEqual(inf.mustIdentified, ["A3"], "추론 모드는 fail 문장 키워드 대조 — A6 문장은 fail이 아니라 제외");
     assert.equal(pre.match, true);
+  });
+});
+
+describe("2026-10-19 PR4 통과 기준 집계 — not_verified 비율(3회 합산) · 반대 판정 0 (옛 코드에는 없다)", () => {
+  it("summarize에 status 분포·비율·사유별, aggregate에 합산 비율과 oppositeZeroAllRuns", () => {
+    const apps = [{ id: "a", mustFailed: [] }];
+    const t = (rows) => rows.map(([status, reasonCode]) => ({ id: "x", status, ...(reasonCode ? { reasonCode } : {}) }));
+    const r1 = summarize(apps, [{ app: "a", decision: "Needs Fix", match: true, opposite: false, mustIdentified: [], costUsd: 0.2, acTable: t([["pass"], ["fail"], ["not_verified", "precondition_not_met"], ["not_verified"]]) }]);
+    assert.deepEqual(r1.statusCounts, { pass: 1, fail: 1, not_verified: 2 });
+    assert.equal(r1.notVerifiedShare, 0.5);
+    assert.deepEqual(r1.notVerifiedByReason, { precondition_not_met: 1, "-": 1 });
+    const r2 = summarize(apps, [{ app: "a", decision: "Ready", match: true, opposite: true, mustIdentified: [], costUsd: 0.2, acTable: t([["pass"], ["pass"]]) }]);
+    const agg = aggregate([r1, r2]);
+    assert.deepEqual(agg.notVerifiedPooled, { cells: 6, notVerified: 2, share: 0.3333 });
+    assert.equal(agg.oppositeZeroAllRuns, false);
+    assert.equal(aggregate([r1]).oppositeZeroAllRuns, true);
   });
 });

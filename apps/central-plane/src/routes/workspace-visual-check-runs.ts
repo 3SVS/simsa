@@ -179,6 +179,11 @@ export type AgentDispatch = {
   caps?: Entitlements["agentRun"];
   /** S2-min: 시험 데이터를 만들어도 된다는 동의가 없는 런 — 쓰기 행동을 하지 않는다. */
   readOnly?: boolean;
+  /**
+   * 2026-10-19 given 셋업 정리 정책(Bae): bench(장비) = 정리 예산이 모자라도 셋업하고 "남음 n건" 표시 ·
+   * user(실유저) = 치울 여유가 없으면 만들지 않는다(setup_skipped_budget) — "치울 수 없는 것은 만들지 않는다".
+   */
+  setupPolicy?: "bench" | "user";
 };
 
 /** 오픈 베타: 이번 런이 agent 엔진 대신 기본 검수로 돈 이유(리포트에 그대로 안내). */
@@ -191,8 +196,9 @@ export const AGENT_FALLBACK_NOTES = {
 
 /** S2-min 동의 문구(요청 화면과 같은 문장 — 테스트 고정). */
 export const WRITE_CONSENT_COPY = {
-  ko: "이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요",
-  en: "This app is mine, and it's OK to create test data (name '심사테스트') to check it",
+  // 2026-10-19(Bae Q1): 정리는 사용자 앱에 하는 추가 행동이라 함께 고지한다.
+  ko: "이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요 — 확인이 끝나면 그 기록을 취소해 지우려 해요",
+  en: "This app is mine, and it's OK to create test data (name '심사테스트') to check it — we'll try to cancel and remove it when the check is done",
 } as const;
 
 /**
@@ -344,6 +350,7 @@ export async function dispatchInspection(
         loginMode: args.agent.loginMode,
         ...(args.agent.caps ? { caps: args.agent.caps } : {}),
         ...(args.agent.readOnly ? { readOnly: true } : {}),
+        setupPolicy: args.agent.setupPolicy ?? "user",
         llmUrl: `${base}${INSPECT_LLM_PATH}`,
         llmToken,
       },
@@ -789,7 +796,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const acceptancePlan = acceptancePlanFromDevSpec(project.devSpec);
     // agent 엔진: 재검수면 원 런의 AC 그대로, 아니면 지시서(유저 확인 표시 포함), 둘 다 없으면 런에서 추정.
     const agentDispatch: AgentDispatch | null = useAgent
-      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}) }
+      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}), setupPolicy: isStaff ? "bench" : "user" }
       : null;
     if (testCredentials) {
       try {
