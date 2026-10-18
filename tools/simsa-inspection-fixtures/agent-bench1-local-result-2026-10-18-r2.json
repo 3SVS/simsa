@@ -1,0 +1,2589 @@
+{
+  "summary": {
+    "label": "로컬 실행(브랜치 코드) — 프로덕션 아님",
+    "oppositeErrors": 0,
+    "appMatch": "4/6",
+    "mustIdentified": "0/13",
+    "mustIdentifiedPct": 0,
+    "totalCostUsd": 3.3253
+  },
+  "results": [
+    {
+      "app": "chatgpt",
+      "url": "https://cosmic-crostata-7c1265.netlify.app/",
+      "startedKst": "2026-10-18 22:20",
+      "expected": "broken",
+      "inference": {
+        "staticEvidenceChars": 48,
+        "usedRenderedText": true,
+        "summary": "동네 1인 미용실에서 고객이 시술, 날짜, 시간, 이름, 휴대폰 번호를 입력해 예약을 남길 수 있는 웹앱입니다."
+      },
+      "confirm": {
+        "oneLine": "손님이 한국어 모바일 웹에서 시술을 선택하고 날짜·시간·이름·휴대폰 번호로 예약하며, 중복 시간은 막고 예약 내용이 저장되고, 사장님은 오늘 예약을 시간순으로 보고 취소할 수 있는 1인 미용실 예약 사이트를 원했어요.",
+        "items": [
+          {
+            "id": "req_001",
+            "title": "예약 화면이 미용실 기본 정보를 보여준다",
+            "confirmed": false,
+            "why": "미용실 이름·'예약하기'·'사장님' 문구 표시 같은 구체적 화면 문구는 요청에 없어요."
+          },
+          {
+            "id": "req_002",
+            "title": "고객이 시술 종류와 가격을 확인하고 선택할 수 있다",
+            "confirmed": true,
+            "why": "커트 15,000원과 펌 60,000원처럼 가격을 원 단위로 보여달라고 했고, 시술 선택이 예약에 필요하다고 볼 수 있어요."
+          },
+          {
+            "id": "req_003",
+            "title": "고객이 예약 날짜를 선택할 수 있다",
+            "confirmed": true,
+            "why": "손님이 예약 날짜를 고른다고 명확히 요청했어요."
+          },
+          {
+            "id": "req_004",
+            "title": "고객이 30분 단위 예약 시간을 선택할 수 있다",
+            "confirmed": true,
+            "why": "오전 10시부터 오후 7시까지, 30분 단위로 예약 시간을 고른다고 명확히 요청했어요."
+          },
+          {
+            "id": "req_005",
+            "title": "고객이 예약자 정보를 입력할 수 있다",
+            "confirmed": true,
+            "why": "이름과 휴대폰 번호를 넣으면 예약된다고 명확히 요청했어요."
+          },
+          {
+            "id": "req_006",
+            "title": "고객이 예약하기 버튼으로 예약을 제출할 수 있다",
+            "confirmed": true,
+            "why": "입력 후 실제로 예약이 되어야 하므로 예약 제출 기능은 요청에 포함돼요."
+          },
+          {
+            "id": "req_007",
+            "title": "화면이 현재 연결 상태를 안내한다",
+            "confirmed": false,
+            "why": "연결 상태 안내 문구는 요청에 없어요."
+          },
+          {
+            "id": "req_008",
+            "title": "화면이 변경 및 취소 방법을 안내한다",
+            "confirmed": false,
+            "why": "변경·취소 문의 안내 문구는 요청에 없고, 오히려 사장님 관리 화면에서 취소 기능을 원했어요."
+          },
+          {
+            "id": "req_009",
+            "title": "화면이 간단하고 바로 예약 가능한 흐름으로 구성된다",
+            "confirmed": true,
+            "why": "휴대폰으로 보기 편하게 해달라는 요청은 모바일에서 읽기 쉽고 바로 예약 가능한 구성 요구와 맞아요."
+          }
+        ],
+        "added": [
+          {
+            "id": "user_1",
+            "title": "이미 예약된 시간은 다른 손님이 선택하거나 예약할 수 없게 해야 함",
+            "criteria": [],
+            "why": "중복 예약 방지 동작은 inferred items에 없어요."
+          },
+          {
+            "id": "user_2",
+            "title": "예약 완료 후 예약 완료 화면에서 예약 내용이 보여야 함",
+            "criteria": [],
+            "why": "예약 성공 후 결과 화면 표시 요구는 inferred items에 없어요."
+          },
+          {
+            "id": "user_3",
+            "title": "예약 정보는 새로고침해도 사라지지 않게 저장되어야 함",
+            "criteria": [],
+            "why": "데이터 유지/저장 요구는 inferred items에 없어요."
+          },
+          {
+            "id": "user_4",
+            "title": "사장님용 관리 화면이 있어야 함",
+            "criteria": [],
+            "why": "관리자 화면 자체는 inferred items에 없어요."
+          },
+          {
+            "id": "user_5",
+            "title": "사장님은 관리 화면에서 오늘 예약 목록을 볼 수 있어야 함",
+            "criteria": [],
+            "why": "오늘 예약 조회 요구는 inferred items에 없어요."
+          },
+          {
+            "id": "user_6",
+            "title": "오늘 예약 목록은 시간순으로 정렬되어 보여야 함",
+            "criteria": [],
+            "why": "정렬 기준 요구는 inferred items에 없어요."
+          },
+          {
+            "id": "user_7",
+            "title": "사장님은 관리 화면에서 예약을 취소할 수 있어야 함",
+            "criteria": [],
+            "why": "관리자 취소 기능은 inferred items에 없어요."
+          },
+          {
+            "id": "user_8",
+            "title": "모든 글은 한국어로 표시되어야 함",
+            "criteria": [],
+            "why": "한국어 전체 적용 요구는 inferred items에 없어요."
+          }
+        ]
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10
+      },
+      "decision": "Not Verified",
+      "works": null,
+      "verdict": "확인 못 했어요",
+      "oneLine": "핵심 기준 중 10개를 확인하지 못해 아직 \"작동한다\"고 말할 수 없어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "사이트 연결 설정이 아직 필요해서 예약을 실제로 저장할 수 없었습니다.",
+          "evidence": [],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-001",
+          "priority": "must",
+          "confirmed": true,
+          "title": "시술 종류와 가격 확인 및 선택",
+          "then": "선택한 시술만 선택 상태로 구분되고 가격 정보는 각각 커트 15,000원, 펌 60,000원으로 유지된다.",
+          "status": "not_verified",
+          "reason": "시술 버튼을 눌러도 선택됨/해제됨이 화면에서 구분되어 보이지 않아 확인할 수 없습니다.",
+          "evidence": [],
+          "actions": [
+            "\"커트 15,000원\" 누르기",
+            "\"펌 60,000원\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"커트 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-002",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 날짜 선택",
+          "then": "선택한 날짜가 화면에 반영되고 다른 예약 입력 단계에서 기준 날짜로 유지된다.",
+          "status": "not_verified",
+          "reason": "날짜 입력은 보이지만 아직 새 날짜를 선택해 반영과 유지까지 확인하지 못했다.",
+          "evidence": [],
+          "actions": [
+            "\"2026-10-18\" 누르기",
+            "\"2026-10-18\" 누르기",
+            "\"2026-10-18\"에 \"2026-10-20\" 입력",
+            "\"2026-10-18\"에 \"2026-10-20\" 입력",
+            "\"2026-10-18\"에 \"2026-10-20\" 입력",
+            "\"2026-10-18\"에 \"2026-10-20\" 입력"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-003",
+          "priority": "must",
+          "confirmed": true,
+          "title": "30분 단위 예약 시간 선택",
+          "then": "선택한 시간만 선택 상태로 표시되고 예약 제출 시 선택값으로 사용된다.",
+          "status": "not_verified",
+          "reason": "시간 목록은 보였지만 선택한 시간이 실제로 선택 상태로 남고 제출에 쓰이는지까지는 확인하지 못했어요.",
+          "evidence": [],
+          "actions": [
+            "\"10:00\" 누르기",
+            "\"10:00\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"10:30\" 누르기",
+            "\"10:00\" 누르기",
+            "\"10:30\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-004",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약자 정보 입력",
+          "then": "입력한 이름과 휴대폰 번호가 예약 제출 직전까지 화면에 유지된다.",
+          "status": "pass",
+          "reason": "이름과 휴대폰 번호를 입력한 뒤 다른 영역의 시간을 눌러도 입력값이 화면에 유지됐어요.",
+          "evidence": [
+            "textbox \"이름\":\n    - /placeholder: 이름을 입력하세요\n    - text: 심사테스트"
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-3308-8156\" 입력",
+            "\"10:00\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-005",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 제출",
+          "then": "예약 제출이 완료되어 다음 단계에서 예약 결과를 확인할 수 있는 상태가 된다.",
+          "status": "not_verified",
+          "reason": "예약하기를 눌렀지만 완료 화면이나 다음 단계로 이동한 것을 보지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"커트 15,000원\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-3308-8156\" 입력",
+            "\"예약하기\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"10:30\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-007",
+          "priority": "must",
+          "confirmed": true,
+          "title": "중복 시간 예약 방지",
+          "then": "이미 예약된 시간은 선택할 수 없거나 예약이 완료되지 않아 중복 예약이 생성되지 않는다.",
+          "status": "not_verified",
+          "reason": "예약을 완료하고 다른 손님이 같은 시간에 시도하는지 확인해야 하지만, 현재 화면에 사이트 연결 설정 안내가 떠서 저장 여부를 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"커트 15,000원\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"커트 15,000원\" 누르기",
+            "\"휴대폰 번호\"에 \"010-3308-8156\" 입력"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-008",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 완료 화면에서 예약 내용 표시",
+          "then": "예약 완료 화면에 시술, 날짜, 시간, 이름, 휴대폰 번호를 포함한 방금 예약한 내용이 표시된다.",
+          "status": "not_verified",
+          "reason": "예약 완료 화면으로 이동한 뒤 예약 내용이 표시되는지 아직 확인하지 못했어요.",
+          "evidence": [],
+          "actions": [
+            "\"커트 15,000원\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"10:30\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-3308-8156\" 입력",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-009",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 정보 저장 유지",
+          "then": "저장된 예약 정보가 사라지지 않고 다시 조회된다.",
+          "status": "not_verified",
+          "reason": "새로고침 후에도 저장된 예약이 보이는지 확인할 수 있는 예약 완료 화면이나 관리 화면이 없어서 아직 검증하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "새로고침",
+            "새로고침",
+            "새로고침"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-010",
+          "priority": "must",
+          "confirmed": true,
+          "title": "사장님용 관리 화면 제공",
+          "then": "고객 예약과 구분된 사장님용 관리 화면에 접근할 수 있다.",
+          "status": "not_verified",
+          "reason": "로그인 필요 — 시험 계정을 주시면 들어가서 확인해요",
+          "reasonCode": "login_required",
+          "evidence": [],
+          "actions": [
+            "\"사장님\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-011",
+          "priority": "must",
+          "confirmed": true,
+          "title": "오늘 예약 목록 조회",
+          "then": "오늘 날짜에 해당하는 예약 목록이 화면에 표시된다.",
+          "status": "not_verified",
+          "reason": "로그인 필요 — 시험 계정을 주시면 들어가서 확인해요",
+          "reasonCode": "login_required",
+          "evidence": [],
+          "actions": [
+            "\"사장님\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 2,
+        "screensBroken": 0,
+        "buttonsChecked": 9,
+        "buttonsNoReaction": 0,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 2,
+        "mobileOverflow": [],
+        "problems": []
+      },
+      "findings": [],
+      "agentPrompt": "",
+      "llmCalls": 74,
+      "basis": "must_not_verified",
+      "builder": "netlify_static",
+      "defects": [
+        {
+          "acId": "AC-010",
+          "priority": "must",
+          "status": "not_verified",
+          "defectClass": "auth_gate"
+        },
+        {
+          "acId": "AC-011",
+          "priority": "must",
+          "status": "not_verified",
+          "defectClass": "auth_gate"
+        }
+      ],
+      "phasesTail": [
+        "+126.2s ac AC-007 → not_verified steps=8",
+        "+143.4s ac AC-008 → not_verified steps=8",
+        "+157.2s ac AC-009 → not_verified steps=6",
+        "+163.6s ac AC-010 → not_verified(login_required) steps=2",
+        "+169.7s ac AC-011 → not_verified(login_required) steps=2",
+        "+169.7s single-file-fix skipped"
+      ],
+      "costUsd": {
+        "generation": 0.2204,
+        "agent": 0.2186
+      },
+      "models": [
+        "gpt-5.4-2026-03-05",
+        "gpt-5.4-mini-2026-03-17"
+      ],
+      "durationSec": 298,
+      "side": "hold",
+      "opposite": false,
+      "match": false,
+      "mustFailedExpected": [
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7"
+      ],
+      "mustIdentified": []
+    },
+    {
+      "app": "gemini",
+      "url": "https://elaborate-crostata-d9b61c.netlify.app/",
+      "startedKst": "2026-10-18 22:20",
+      "expected": "broken_or_hold",
+      "inference": {
+        "staticEvidenceChars": 10,
+        "usedRenderedText": true,
+        "summary": "손님이 날짜, 시술, 시간을 고르고 이름과 휴대폰 번호를 입력해 1인 헤어살롱 예약을 신청하는 웹앱입니다."
+      },
+      "confirm": {
+        "oneLine": "손님이 한국어로 된 모바일 친화적인 웹사이트에서 날짜·시간·이름·휴대폰 번호로 예약하고, 이미 예약된 시간은 막히며 예약 내용이 저장되고, 사장님은 오늘 예약을 시간순으로 보고 취소할 수 있기를 원했어요.",
+        "items": [
+          {
+            "id": "req_001",
+            "title": "메인 화면이 살롱 예약 서비스임을 분명하게 보여준다",
+            "confirmed": false,
+            "why": "메인 화면의 서비스 이름, 안내 문구, 이동 요소 구성까지는 요청에 없음."
+          },
+          {
+            "id": "req_002",
+            "title": "손님이 예약 날짜를 선택할 수 있다",
+            "confirmed": true,
+            "why": "손님이 예약 날짜를 고르는 기능을 분명히 요청함."
+          },
+          {
+            "id": "req_003",
+            "title": "손님이 시술 메뉴를 여러 개 선택할 수 있다",
+            "confirmed": false,
+            "why": "여러 시술 메뉴 선택이나 구체적인 메뉴 목록은 요청에 없음. 가격 예시만 있음."
+          },
+          {
+            "id": "req_004",
+            "title": "화면이 선택한 시술의 총 금액을 계산해 보여준다",
+            "confirmed": false,
+            "why": "총 금액 계산을 보여달라는 요청은 없음."
+          },
+          {
+            "id": "req_005",
+            "title": "손님이 정해진 시간표 안에서 예약 시간을 선택할 수 있다",
+            "confirmed": true,
+            "why": "오전 10시부터 오후 7시까지 30분 단위로 예약 시간을 고르는 기능을 분명히 요청함."
+          },
+          {
+            "id": "req_006",
+            "title": "손님이 예약자 정보를 입력할 수 있다",
+            "confirmed": true,
+            "why": "이름과 휴대폰 번호 입력을 분명히 요청함."
+          },
+          {
+            "id": "req_007",
+            "title": "예약 완료 버튼이 필요한 입력이 끝난 뒤 예약을 접수한다",
+            "confirmed": false,
+            "why": "예약 접수 자체는 필요하지만 이 항목은 시술 선택까지 필수로 요구해 원문보다 더 넓음."
+          },
+          {
+            "id": "req_008",
+            "title": "원장님이 관리자 화면으로 이동할 수 있다",
+            "confirmed": false,
+            "why": "사장님 관리 화면은 필요하지만 메인 화면에 관리자 이동 요소가 보여야 한다는 내용은 요청에 없음."
+          },
+          {
+            "id": "req_009",
+            "title": "화면이 휴대폰에서도 읽기 쉽게 배치된다",
+            "confirmed": true,
+            "why": "휴대폰으로 보기 편하게 해달라는 요청이 있음."
+          }
+        ],
+        "added": [
+          {
+            "id": "user_1",
+            "title": "이미 예약된 시간은 다른 손님이 선택할 수 없게 해야 함",
+            "criteria": [],
+            "why": "중복 예약 방지 요구가 inferred items에 없음."
+          },
+          {
+            "id": "user_2",
+            "title": "예약 완료 화면에 방금 예약한 내용이 보여야 함",
+            "criteria": [],
+            "why": "예약 후 보여주는 완료 화면 요구가 inferred items에 없음."
+          },
+          {
+            "id": "user_3",
+            "title": "새로고침해도 예약이 사라지지 않게 저장되어야 함",
+            "criteria": [],
+            "why": "예약 데이터의 지속성 요구가 inferred items에 없음."
+          },
+          {
+            "id": "user_4",
+            "title": "사장님은 관리 화면에서 오늘 예약 목록을 시간순으로 볼 수 있어야 함",
+            "criteria": [],
+            "why": "관리 화면 이동만 있고 오늘 예약 목록 조회와 시간순 정렬 요구가 없음."
+          },
+          {
+            "id": "user_5",
+            "title": "사장님은 관리 화면에서 예약을 취소할 수 있어야 함",
+            "criteria": [],
+            "why": "관리 화면에서의 취소 기능 요구가 inferred items에 없음."
+          },
+          {
+            "id": "user_6",
+            "title": "가격은 원 단위로 표시되어야 함",
+            "criteria": [],
+            "why": "가격 표기 형식 요구는 있지만 inferred items는 특정 메뉴/총액 중심이며 원 단위 표기 자체를 보장하지 않음."
+          },
+          {
+            "id": "user_7",
+            "title": "모든 글은 한국어로 표시되어야 함",
+            "criteria": [],
+            "why": "한국어 전체 언어 요구가 inferred items에 없음."
+          }
+        ]
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10
+      },
+      "decision": "Not Verified",
+      "works": null,
+      "verdict": "확인 못 했어요",
+      "oneLine": "핵심 기준 중 8개를 확인하지 못해 아직 \"작동한다\"고 말할 수 없어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "예약 화면은 보이지만 아직 실제 예약 완료와 저장, 다른 방문자/관리자 화면 확인까지 끝내지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-9546-6822\" 입력",
+            "\"10:30\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"10:30\" 누르기",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "새로고침",
+            "다른 손님처럼 새 브라우저로 열기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": true
+          }
+        },
+        {
+          "id": "AC-001",
+          "priority": "must",
+          "confirmed": true,
+          "title": "손님 예약 날짜 선택",
+          "then": "예약은 접수되지 않고 새로운 예약 건도 저장되지 않는다.",
+          "status": "pass",
+          "reason": "예약 날짜를 고르지 않고 제출했을 때 새 예약이 저장되지 않았습니다.",
+          "evidence": [
+            "storage probe: server write requests since this check started = 0; localStorage changed = no; sessionStorage changed = no"
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"예약 완료하기\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "Backspace 키 누르기",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"예약 날짜\"에 \"\" 입력",
+            "\"예약 완료하기\" 누르기",
+            "\"10:00\" 누르기",
+            "\"휴대폰 번호\"에 \"010-9546-6822\" 입력",
+            "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": true
+          }
+        },
+        {
+          "id": "AC-002",
+          "priority": "must",
+          "confirmed": true,
+          "title": "손님 예약 시간 선택",
+          "then": "예약은 접수되지 않고 새로운 예약 건도 저장되지 않는다.",
+          "status": "not_verified",
+          "reason": "시간을 선택하지 않고 제출했을 때 접수 실패 여부를 아직 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약 완료하기\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "Tab 키 누르기",
+            "\"남성 커트 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-003",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약자 정보 입력",
+          "then": "예약은 접수되지 않고 새로운 예약 건도 저장되지 않는다.",
+          "status": "not_verified",
+          "reason": "시간 선택이 실제로 적용됐는지 보이지 않아 예약 접수 차단과 저장 안 됨을 끝까지 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약 완료하기\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"휴대폰 번호\"에 \"010-9546-6822\" 입력",
+            "\"예약 완료하기\" 누르기",
+            "\"10:00\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-005",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간 차단",
+          "then": "같은 시간대의 중복 예약은 생성되지 않고 해당 시간은 선택 불가이거나 예약 완료가 거부된다.",
+          "status": "not_verified",
+          "reason": "같은 시간대 예약 생성과 중복 차단을 아직 끝까지 확인하지 못했다.",
+          "evidence": [],
+          "actions": [
+            "\"손님 예약하기\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "다른 손님처럼 새 브라우저로 열기",
+            "\"10:00\" 누르기",
+            "\"10:00\" 누르기",
+            "\"남성 커트 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-006",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 완료 내용 확인",
+          "then": "완료 직후 화면에 방금 예약한 날짜, 시간, 시술, 예약자 정보가 표시된다.",
+          "status": "pass",
+          "reason": "예약 완료 직후 화면에 날짜, 시간, 시술, 이름, 휴대폰 번호가 방금 입력한 값으로 표시되었습니다.",
+          "evidence": [
+            "예약 일시 2026-10-18 10:30 예약자 성함 심사테스트 휴대폰 번호 010-9546-6822 선택한 시술 남성 커트 총 결제 예정 금액 15,000원"
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-9546-6822\" 입력",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"10:30\" 누르기",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-007",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 데이터 저장 유지",
+          "then": "방금 완료한 예약이 사라지지 않고 남아 있어 이후 화면에서도 동일하게 참조된다.",
+          "status": "not_verified",
+          "reason": "방금 만든 예약의 날짜와 생성 성공 여부를 끝까지 확인하지 못해 새로고침 후 같은 예약이 남는지 검증할 수 없었습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-9546-6822\" 입력",
+            "\"예약 완료하기\" 누르기",
+            "\"10:30\" 누르기",
+            "새로고침",
+            "\"원장님 관리자\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-008",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리자 오늘 예약 목록 조회",
+          "then": "오늘 예약이 시간순으로 정렬되어 한눈에 확인된다.",
+          "status": "not_verified",
+          "reason": "관리자 화면 주소가 404라 오늘 예약 목록을 확인할 수 없었어요.",
+          "evidence": [],
+          "actions": [
+            "\"원장님 관리자\" 누르기",
+            "\"손님 예약하기\" 누르기",
+            "\"원장님 관리자\" 누르기",
+            "\"손님 예약하기\" 누르기",
+            "https://elaborate-crostata-d9b61c.netlify.app/admin 열기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-009",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리자 예약 취소",
+          "then": "해당 예약은 오늘 예약 목록에서 제거되고 같은 시간은 다시 예약 가능 상태가 된다.",
+          "status": "not_verified",
+          "reason": "관리자 화면에 오늘 예약이 하나도 없어 취소 동작을 확인할 수 없었습니다.",
+          "evidence": [],
+          "actions": [
+            "\"원장님 관리자\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-010",
+          "priority": "must",
+          "confirmed": true,
+          "title": "원 단위 가격 표시",
+          "then": "각 가격은 원 단위 표기로 표시되고 총 금액도 원 단위로 일관되게 보여진다.",
+          "status": "not_verified",
+          "reason": "완료 화면의 총 금액 원 표시는 확인했지만, 시술 목록의 각 가격과 미선택 시 총 금액 0원 표시는 이번 화면에서 끝까지 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"남성 커트 15,000원\" 누르기",
+            "\"여성 커트 20,000원\" 누르기",
+            "\"10:00\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-9546-6822\" 입력",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-012",
+          "priority": "should",
+          "confirmed": false,
+          "title": "메인 화면 서비스 안내와 관리자 진입",
+          "then": "서비스 이름과 안내 문구가 보이고 손님 예약하기와 원장님 관리자 진입 요소를 각각 통해 목적에 맞는 화면으로 이동할 수 있다.",
+          "status": "pass",
+          "reason": "첫 화면에 서비스 이름과 안내 문구가 보이고, 손님 예약하기와 원장님 관리자 진입 요소로 각각 이동할 수 있었다.",
+          "evidence": [
+            "💈 1인 헤어살롱\n100% 우선 예약제 · 1:1 맞춤 시술\n손님 예약하기\n원장님 관리자"
+          ],
+          "actions": [
+            "\"손님 예약하기\" 누르기",
+            "\"원장님 관리자\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 7,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "손님 예약하기",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "10:00",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "10:30",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "11:00",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "11:30",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "12:00",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "12:30",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [],
+      "agentPrompt": "",
+      "llmCalls": 121,
+      "basis": "must_not_verified",
+      "builder": "netlify_static",
+      "defects": [],
+      "phasesTail": [
+        "+229.7s ac AC-007 → not_verified steps=7",
+        "+245.9s ac AC-008 → not_verified steps=8",
+        "+253.7s ac AC-009 → not_verified steps=4",
+        "+280.3s ac AC-010 → not_verified steps=9",
+        "+287.9s ac AC-012 → pass steps=3",
+        "+287.9s single-file-fix skipped"
+      ],
+      "costUsd": {
+        "generation": 0.1965,
+        "agent": 0.4022
+      },
+      "models": [
+        "gpt-5.4-2026-03-05",
+        "gpt-5.4-mini-2026-03-17"
+      ],
+      "durationSec": 401,
+      "side": "hold",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A3",
+        "A6"
+      ],
+      "mustIdentified": []
+    },
+    {
+      "app": "v0",
+      "url": "https://1-pi-three-qk0pjsjigw.vercel.app/",
+      "startedKst": "2026-10-18 22:25",
+      "expected": "broken_or_hold",
+      "inference": {
+        "staticEvidenceChars": 87,
+        "usedRenderedText": true,
+        "summary": "1인 미용실 고객이 날짜·시간·시술을 선택하고 예약자 정보를 입력해 예약할 수 있는 간단한 웹 예약 서비스입니다."
+      },
+      "confirm": {
+        "oneLine": "손님이 휴대폰으로 한국어 예약 화면에서 날짜·시간·이름·휴대폰 번호를 입력해 예약하고, 중복 예약은 막으며, 예약 내역이 유지되고 사장님은 오늘 예약을 시간순으로 보고 취소할 수 있는 1인 미용실 예약 웹사이트를 원했어요.",
+        "items": [
+          {
+            "id": "req_001",
+            "title": "고객은 예약 가능한 날짜를 선택할 수 있어야 한다",
+            "confirmed": true,
+            "why": "손님이 날짜를 고른다고 명확히 요청했다."
+          },
+          {
+            "id": "req_002",
+            "title": "고객은 선택한 날짜에 맞는 시간을 선택할 수 있어야 한다",
+            "confirmed": true,
+            "why": "시간을 오전 10시부터 오후 7시까지 30분 단위로 고른다고 명확히 요청했다."
+          },
+          {
+            "id": "req_003",
+            "title": "마감된 시간은 고객이 바로 알아볼 수 있어야 한다",
+            "confirmed": false,
+            "why": "이미 예약된 시간은 선택할 수 없어야 한다는 요청은 있었지만, 회색 표시나 안내 문구 방식까지는 요청하지 않았다."
+          },
+          {
+            "id": "req_004",
+            "title": "고객은 시술 종류와 가격을 확인하고 선택할 수 있어야 한다",
+            "confirmed": false,
+            "why": "가격 표시 요구는 있었지만, 손님이 시술 종류를 선택해야 한다는 말은 요청문에 없다."
+          },
+          {
+            "id": "req_005",
+            "title": "고객은 예약자 정보를 입력할 수 있어야 한다",
+            "confirmed": true,
+            "why": "이름과 휴대폰 번호를 입력하면 예약된다고 명확히 요청했다."
+          },
+          {
+            "id": "req_006",
+            "title": "고객은 선택한 날짜 기준으로 예약을 진행할 수 있어야 한다",
+            "confirmed": false,
+            "why": "예약 버튼에 선택한 날짜가 반영되어 보여야 한다는 구체 요구는 없었다."
+          },
+          {
+            "id": "req_007",
+            "title": "서비스는 예약 정보 보관에 대한 안내를 보여줘야 한다",
+            "confirmed": false,
+            "why": "예약 정보 보관 안내 문구를 보여달라는 요청은 없었다."
+          },
+          {
+            "id": "req_008",
+            "title": "사장님은 관리 화면의 존재를 확인할 수 있어야 한다",
+            "confirmed": true,
+            "why": "사장님이 관리 화면에서 오늘 예약 목록을 보고 취소할 수 있어야 하므로 관리 화면 자체는 필요하다."
+          },
+          {
+            "id": "req_009",
+            "title": "예약 화면은 편안하고 단순한 흐름으로 구성되어야 한다",
+            "confirmed": false,
+            "why": "단순한 흐름이나 소개 문구 같은 구성 방식은 요청하지 않았다."
+          }
+        ],
+        "added": [
+          {
+            "id": "user_1",
+            "title": "이미 예약된 시간은 다른 손님이 선택하거나 예약할 수 없어야 함",
+            "criteria": [],
+            "why": "추론 항목에는 마감 시간 표시만 있고 실제 중복 예약 방지 동작이 빠져 있다."
+          },
+          {
+            "id": "user_2",
+            "title": "예약 완료 화면에 방금 예약한 내용이 보여야 함",
+            "criteria": [],
+            "why": "예약 후 결과 화면에 예약 내용 표시 요구가 추론 항목에 없다."
+          },
+          {
+            "id": "user_3",
+            "title": "새로고침해도 예약이 사라지지 않아야 함",
+            "criteria": [],
+            "why": "예약 데이터가 유지되어야 한다는 핵심 요구가 추론 항목에 없다."
+          },
+          {
+            "id": "user_4",
+            "title": "사장님은 관리 화면에서 오늘 예약 목록을 시간순으로 볼 수 있어야 함",
+            "criteria": [],
+            "why": "관리 화면의 존재만 있고 오늘 예약 목록 조회와 시간순 정렬 요구가 빠져 있다."
+          },
+          {
+            "id": "user_5",
+            "title": "사장님은 관리 화면에서 예약을 취소할 수 있어야 함",
+            "criteria": [],
+            "why": "관리 화면에서 가능한 핵심 작업인 예약 취소가 추론 항목에 없다."
+          },
+          {
+            "id": "user_6",
+            "title": "가격은 커트 15,000원, 펌 60,000원처럼 원 단위로 표시되어야 함",
+            "criteria": [],
+            "why": "가격 표시 형식이 중요한데, 추론 항목은 선택과 설명 위주로 되어 있어 원 단위 표기 요구를 직접 담지 않는다."
+          },
+          {
+            "id": "user_7",
+            "title": "휴대폰으로 보기 편해야 함",
+            "criteria": [],
+            "why": "모바일 사용성 요구가 추론 항목에 없다."
+          },
+          {
+            "id": "user_8",
+            "title": "모든 글은 한국어여야 함",
+            "criteria": [],
+            "why": "언어 전체를 한국어로 해야 한다는 요구가 추론 항목에 없다."
+          }
+        ]
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10
+      },
+      "decision": "Not Verified",
+      "works": null,
+      "verdict": "확인 못 했어요",
+      "oneLine": "핵심 기준 중 7개를 확인하지 못해 아직 \"작동한다\"고 말할 수 없어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "예약 완료 화면은 확인했지만, 새로고침 유지와 다른 방문자/관리자 화면에서 보이는지까지는 아직 검증하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"11:00\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호 (010-0000-0000)\"에 \"010-7460-1220\" 입력",
+            "\"커트 깔끔한 기본 커트 15,000원\" 누르기",
+            "\"10월 18일 (일) 11:00 예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-001",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 가능한 날짜 선택",
+          "then": "선택한 날짜가 현재 예약 기준 날짜로 화면에 표시되고 이후 예약 절차에서 같은 날짜가 기준으로 사용된다.",
+          "status": "not_verified",
+          "reason": "날짜를 실제로 선택했다는 증거가 없어서 기준 날짜 반영 여부를 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"2026-10-18\" 누르기",
+            "\"2026-10-18\" 누르기",
+            "\"11:30\" 누르기",
+            "Tab 키 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-002",
+          "priority": "must",
+          "confirmed": true,
+          "title": "선택한 날짜 기준 시간 선택",
+          "then": "선택한 시간만 예약 시간으로 반영되어 다른 시간과 구분되게 표시된다.",
+          "status": "not_verified",
+          "reason": "선택할 시간 10:30이 비활성화되어 있어 선택한 시간만 강조되는지까지 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"10:30\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-003",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약자 정보 입력",
+          "then": "입력한 정보가 예약 생성에 사용될 수 있는 상태로 유지된다.",
+          "status": "pass",
+          "reason": "날짜와 시간을 고른 뒤 이름과 휴대폰 번호를 입력한 값이 화면에 그대로 남아 있고 예약 버튼도 제출 가능한 상태로 보입니다.",
+          "evidence": [
+            "textbox \"이름\": 심사테스트"
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호 (010-0000-0000)\"에 \"010-7460-1220\" 입력",
+            "새로고침",
+            "\"11:30\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호 (010-0000-0000)\"에 \"010-7460-1220\" 입력",
+            "\"커트 깔끔한 기본 커트 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-004",
+          "priority": "must",
+          "confirmed": true,
+          "title": "사장님 관리 화면 구분",
+          "then": "사장님 관리 화면이라는 문구를 통해 고객용 예약 화면과 운영자용 화면이 구분되어 있음을 알 수 있다.",
+          "status": "pass",
+          "reason": "고객용 예약 화면에서 운영자용 화면으로 구분되는 문구를 직접 봤습니다.",
+          "evidence": [
+            "사장님 관리 화면"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-005",
+          "priority": "must",
+          "confirmed": true,
+          "title": "중복 예약 방지",
+          "then": "이미 예약된 시간은 다시 예약 완료될 수 없고 다른 손님에게는 선택 불가 상태로 처리된다.",
+          "status": "pass",
+          "reason": "다른 손님 새 브라우저에서 같은 날짜의 이미 예약된 시간이 비활성화되어 다시 예약할 수 없었습니다.",
+          "evidence": [
+            "button \"11:30\" [disabled]"
+          ],
+          "actions": [
+            "\"11:30\" 누르기",
+            "\"11:30\" 누르기",
+            "\"커트 깔끔한 기본 커트 15,000원\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호 (010-0000-0000)\"에 \"010-7460-1220\" 입력",
+            "\"11:30\" 누르기",
+            "\"10월 18일 (일) 11:30 예약하기\" 누르기",
+            "다른 손님처럼 새 브라우저로 열기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": true
+          }
+        },
+        {
+          "id": "AC-006",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 완료 내용 표시",
+          "then": "완료 화면에 방금 예약한 날짜, 시간, 시술, 예약자 정보가 표시된다.",
+          "status": "not_verified",
+          "reason": "예약 완료 단계까지 못 가서 완료 화면에 예약 정보가 보이는지 확인하지 못했어요.",
+          "evidence": [],
+          "actions": [
+            "\"커트 깔끔한 기본 커트 15,000원\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호 (010-0000-0000)\"에 \"010-7460-1220\" 입력",
+            "\"10월 18일 (일) 시간 예약하기\" 누르기",
+            "\"12:00\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-007",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 내역 지속 보관",
+          "then": "방금 생성된 예약 내역이 사라지지 않고 유지된다.",
+          "status": "not_verified",
+          "reason": "예약 시간을 아직 선택하지 못해서 완료된 예약 내역이 생성되었는지 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호 (010-0000-0000)\"에 \"010-7460-1220\" 입력",
+            "\"10월 18일 (일) 시간 예약하기\" 누르기",
+            "\"12:00\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-008",
+          "priority": "must",
+          "confirmed": true,
+          "title": "오늘 예약 목록 시간순 조회",
+          "then": "오늘 예약이 시간 이른 순서부터 늦은 순서로 정렬되어 표시된다.",
+          "status": "not_verified",
+          "reason": "오늘 예약이 2건 이상인 상태가 아니어서 시간순 정렬을 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"사장님 관리 화면\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-009",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에서 예약 취소",
+          "then": "취소된 예약은 오늘 예약 목록에서 제거되거나 취소 상태로 반영되고 해당 시간은 다시 예약 가능 상태로 처리된다.",
+          "status": "not_verified",
+          "reason": "오늘 예약 목록에 취소할 예약이 아직 없어서 관리 화면 취소 동작을 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"사장님 관리 화면\" 누르기",
+            "\"예약 화면\" 누르기",
+            "https://1-pi-three-qk0pjsjigw.vercel.app/admin 열기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-010",
+          "priority": "must",
+          "confirmed": true,
+          "title": "원 단위 가격 표시",
+          "then": "가격이 각각 15,000원과 60,000원처럼 원 단위 형식으로 표시된다.",
+          "status": "pass",
+          "reason": "시술 목록에서 커트와 펌 가격이 각각 원 단위 형식으로 표시되는 것을 화면에서 확인했습니다.",
+          "evidence": [
+            "커트\n깔끔한 기본 커트\n15,000원\n펌\n상담 포함 디자인 펌\n60,000원"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 2,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 0,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 2,
+        "mobileOverflow": [],
+        "problems": []
+      },
+      "findings": [],
+      "agentPrompt": "",
+      "llmCalls": 94,
+      "basis": "must_not_verified",
+      "builder": "v0",
+      "defects": [],
+      "phasesTail": [
+        "+165.7s ac AC-006 → not_verified steps=7",
+        "+180.1s ac AC-007 → not_verified steps=7",
+        "+187.6s ac AC-008 → not_verified steps=4",
+        "+200.7s ac AC-009 → not_verified steps=6",
+        "+209.3s ac AC-010 → pass steps=1",
+        "+209.3s single-file-fix skipped"
+      ],
+      "costUsd": {
+        "generation": 0.2109,
+        "agent": 0.29
+      },
+      "models": [
+        "gpt-5.4-2026-03-05",
+        "gpt-5.4-mini-2026-03-17"
+      ],
+      "durationSec": 376,
+      "side": "hold",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A6",
+        "A7"
+      ],
+      "mustIdentified": []
+    },
+    {
+      "app": "bolt",
+      "url": "https://hair-salon-booking-w-8vq8.bolt.host/",
+      "startedKst": "2026-10-18 22:27",
+      "expected": "broken_or_hold",
+      "inference": {
+        "staticEvidenceChars": 11,
+        "usedRenderedText": true,
+        "summary": "동네 1인 미용실의 시술 메뉴, 영업시간, 가격을 보여주고 원하는 시간으로 예약을 받는 웹앱입니다."
+      },
+      "confirm": {
+        "oneLine": "손님이 휴대폰으로 한국어 예약을 하고, 중복 없이 저장되며, 사장님이 오늘 예약을 시간순으로 보고 취소할 수 있는 1인 미용실 예약 웹사이트를 원했어요.",
+        "items": [
+          {
+            "id": "req_001",
+            "title": "첫 화면이 미용실 기본 정보를 보여준다",
+            "confirmed": false,
+            "why": "첫 화면에 미용실 이름, 소개 문구, 가격 시작점까지 보여달라는 요청은 없었어요."
+          },
+          {
+            "id": "req_002",
+            "title": "시술 메뉴 목록이 이름과 가격을 보여준다",
+            "confirmed": false,
+            "why": "시술 메뉴 목록, 염색·샴푸, 설명 표시까지는 요청하지 않았고 가격 예시는 커트와 펌만 있었어요."
+          },
+          {
+            "id": "req_003",
+            "title": "손님이 예약 시작 버튼으로 예약 흐름에 들어갈 수 있다",
+            "confirmed": false,
+            "why": "첫 화면의 예약하기 버튼이나 화면 이동 방식은 요청에 없었어요."
+          },
+          {
+            "id": "req_004",
+            "title": "손님이 원하는 시술을 선택할 수 있다",
+            "confirmed": false,
+            "why": "시술 선택 기능 자체를 요청하지 않았어요."
+          },
+          {
+            "id": "req_005",
+            "title": "손님이 원하는 예약 시간을 선택할 수 있다",
+            "confirmed": true,
+            "why": "날짜와 시간 선택, 오전 10시~오후 7시, 30분 단위, 예약 시간 선택이 요청에 분명히 있어요."
+          },
+          {
+            "id": "req_006",
+            "title": "손님이 예약에 필요한 정보를 입력할 수 있다",
+            "confirmed": true,
+            "why": "이름과 휴대폰 번호를 넣으면 예약된다고 분명히 요청했어요."
+          },
+          {
+            "id": "req_007",
+            "title": "예약 완료 화면이 선택 내용을 확인시켜 준다",
+            "confirmed": true,
+            "why": "예약 완료 화면에 예약 내용이 보여야 한다고 직접 요청했어요."
+          },
+          {
+            "id": "req_008",
+            "title": "운영자가 예약 내용을 확인할 수 있다",
+            "confirmed": true,
+            "why": "사장님이 관리 화면에서 오늘 예약 목록을 보는 기능은 분명히 요청했어요."
+          },
+          {
+            "id": "req_009",
+            "title": "화면 구성이 모바일에서 편하게 보인다",
+            "confirmed": true,
+            "why": "휴대폰으로 보기 편하게 해달라고 직접 요청했어요."
+          }
+        ],
+        "added": [
+          {
+            "id": "user_1",
+            "title": "이미 예약된 시간은 다른 손님이 선택하거나 예약할 수 없어야 함",
+            "criteria": [],
+            "why": "시간 선택 가능 범위만 있고 중복 예약 방지는 따로 빠져 있어요."
+          },
+          {
+            "id": "user_2",
+            "title": "예약 내용은 새로고침해도 사라지지 않게 저장되어야 함",
+            "criteria": [],
+            "why": "완료 화면 표시는 있지만 새로고침 후에도 유지되는 저장 요구가 빠져 있어요."
+          },
+          {
+            "id": "user_3",
+            "title": "사장님 관리 화면에서는 오늘 예약만 보여야 함",
+            "criteria": [],
+            "why": "운영자용 예약 목록은 있지만 '오늘 예약'으로 범위가 한정된 요구가 빠져 있어요."
+          },
+          {
+            "id": "user_4",
+            "title": "사장님 관리 화면의 오늘 예약 목록은 시간순으로 정렬되어야 함",
+            "criteria": [],
+            "why": "목록 표시만 있고 시간순 정렬 요구가 빠져 있어요."
+          },
+          {
+            "id": "user_5",
+            "title": "사장님이 관리 화면에서 예약을 취소할 수 있어야 함",
+            "criteria": [],
+            "why": "운영자가 보기만 하는 항목이고 취소 기능은 포함되지 않았어요."
+          },
+          {
+            "id": "user_6",
+            "title": "가격은 원 단위로 표시되어야 함",
+            "criteria": [],
+            "why": "일부 예시 가격 표시는 있지만 '원 단위로 보여줘'라는 표시 방식 요구가 명시적으로 다뤄지지 않았어요."
+          },
+          {
+            "id": "user_7",
+            "title": "모든 글은 한국어로 표시되어야 함",
+            "criteria": [],
+            "why": "모바일 최적화만 있고 전체 언어를 한국어로 해야 한다는 요구가 빠져 있어요."
+          },
+          {
+            "id": "user_8",
+            "title": "예약 완료 화면에는 예약 내용이 보여야 하며 이름, 휴대폰 번호, 날짜와 시간 등 입력한 예약 정보가 확인 가능해야 함",
+            "criteria": [],
+            "why": "완료 화면에서 시술과 시간만 본다고 되어 있어, 요청한 예약 내용 전반 확인이 충분히 반영되지 않았어요."
+          }
+        ]
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10
+      },
+      "decision": "Not Verified",
+      "works": null,
+      "verdict": "확인 못 했어요",
+      "oneLine": "핵심 기준 중 9개를 확인하지 못해 아직 \"작동한다\"고 말할 수 없어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "예약 저장은 된 것 같지만 새로고침 뒤 결과와 다른 화면에서의 표시를 끝까지 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기",
+            "\"10월 18 일\" 누르기",
+            "\"10:30\" 누르기",
+            "\"다음\" 누르기",
+            "\"홍길동\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-1385-3695\" 입력",
+            "\"휴대폰 번호\"에 \"010-1385-3695\" 입력",
+            "\"010-0000-0000\"에 \"010-1385-3695\" 입력",
+            "\"예약 완료하기\" 누르기",
+            "1000ms 기다리기",
+            "새로고침"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-001",
+          "priority": "must",
+          "confirmed": true,
+          "title": "손님이 예약 가능 시간을 선택할 수 있다",
+          "then": "선택 가능한 시간은 30분 단위로 제공되며 10:00부터 19:00 범위를 벗어나는 시간은 예약 대상으로 선택할 수 없다.",
+          "status": "pass",
+          "reason": "예약 가능 시간이 30분 단위로 보였고 10:00부터 19:00까지만 선택 목록에 있어요.",
+          "evidence": [
+            "10:00 10:30 11:00 11:30 12:00 12:30 13:00 13:30 14:00 14:30 15:00 15:30 16:00 16:30 17:00 17:30 18:00 18:30 19:00"
+          ],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-002",
+          "priority": "must",
+          "confirmed": true,
+          "title": "손님이 예약에 필요한 정보를 입력하고 접수할 수 있다",
+          "then": "예약은 접수되지 않아야 하며 누락된 필수 정보가 있는 상태에서는 다음 단계로 넘어갈 수 없다.",
+          "status": "pass",
+          "reason": "이름을 비운 채 제출했을 때 예약이 접수되지 않았고 같은 입력 단계에 남으면서 누락 안내가 보였습니다.",
+          "evidence": [
+            "이름을 입력해주세요."
+          ],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기",
+            "\"다음\" 누르기",
+            "\"다음\" 누르기",
+            "\"10:00\" 누르기",
+            "\"다음\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-003",
+          "priority": "must",
+          "confirmed": true,
+          "title": "손님이 예약에 필요한 정보를 입력하고 접수할 수 있다",
+          "then": "예약이 실제로 접수되어 완료 단계로 이동해야 하며 접수된 예약은 새로고침 후에도 유지되어야 한다.",
+          "status": "not_verified",
+          "reason": "이름은 일부 입력됐지만 전화번호가 아직 비어 있어 예약 접수까지 끝내지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기",
+            "\"11:00\" 누르기",
+            "\"다음\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"홍길동\"에 \"심사테스트\" 입력"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-004",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 완료 화면이 선택한 예약 내용을 확인시켜 준다",
+          "then": "완료 안내 문구와 함께 방금 예약한 시술과 시간이 표시되어야 한다.",
+          "status": "not_verified",
+          "reason": "예약 완료 화면이 아직 보이지 않아서 완료 안내와 예약 내용 표시를 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기",
+            "\"11:00\" 누르기",
+            "\"다음\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"홍길동\"에 \"심사테스트\" 입력",
+            "\"홍길동\"에 \"심사테스트\" 입력",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-005",
+          "priority": "must",
+          "confirmed": true,
+          "title": "운영자가 접수된 예약 내용을 확인할 수 있다",
+          "then": "접수된 예약이 목록에 나타나며 각 항목에서 예약자 정보, 시술, 시간이 서로 구분되어 확인 가능해야 한다.",
+          "status": "not_verified",
+          "reason": "두 번 따져 본 판단이 서로 달라서 결과로 치지 않았어요",
+          "reasonCode": "judge_disagreed",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"관리\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-007",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간은 중복 예약할 수 없다",
+          "then": "이미 예약된 시간은 선택할 수 없거나 예약 완료가 차단되어 중복 예약이 생성되지 않아야 한다.",
+          "status": "not_verified",
+          "reason": "같은 시간 버튼이 이미 취소선 상태로 보이지만, 실제로 다른 손님 예약을 완료해 중복 생성이 차단되는지까지 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-008",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 데이터는 새로고침 후에도 유지되어야 한다",
+          "then": "방금 접수한 예약 내용이 사라지지 않고 그대로 남아 있어야 한다.",
+          "status": "not_verified",
+          "reason": "예약을 접수한 뒤 새로고침해서 같은 내용이 남아 있는지까지 확인하지 못했다.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기",
+            "새로고침",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-009",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에는 오늘 예약만 보여야 한다",
+          "then": "오늘 날짜에 해당하는 예약만 표시되고 오늘이 아닌 예약은 목록에 보이지 않아야 한다.",
+          "status": "not_verified",
+          "reason": "오늘 예약만 보이는지는 보였지만, 오늘이 아닌 날짜 예약이 저장된 상태를 만들거나 확인하지 못해 기준을 끝까지 검증하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"관리\" 누르기",
+            "\"고객 예약 화면으로\" 누르기",
+            "\"관리\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-010",
+          "priority": "must",
+          "confirmed": true,
+          "title": "오늘 예약 목록은 시간순으로 정렬되어야 한다",
+          "then": "예약 목록은 시간의 빠른 순서부터 늦은 순서로 정렬되어 보여야 한다.",
+          "status": "not_verified",
+          "reason": "오늘 예약이 두 건 이상인 상태를 만들지 못해 시간순 정렬을 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 18 일\" 누르기",
+            "\"관리\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-011",
+          "priority": "must",
+          "confirmed": true,
+          "title": "운영자가 관리 화면에서 예약을 취소할 수 있다",
+          "then": "해당 예약은 오늘 예약 목록에서 사라져야 하며 손님 예약 화면에서는 그 시간이 다시 예약 가능 상태로 반영되어야 한다.",
+          "status": "not_verified",
+          "reason": "정해진 단계 안에 이 기준을 확인할 화면까지 가지 못했어요",
+          "reasonCode": "not_reached",
+          "evidence": [],
+          "actions": [
+            "\"관리\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기",
+            "\"취소\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 4,
+        "buttonsNoReaction": 2,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://hair-salon-booking-w-8vq8.bolt.host/",
+            "label": "우리동네 미용실",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://hair-salon-booking-w-8vq8.bolt.host/",
+            "label": "예약하기",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [],
+      "agentPrompt": "",
+      "llmCalls": 121,
+      "basis": "must_not_verified",
+      "builder": "bolt",
+      "defects": [],
+      "phasesTail": [
+        "+224.7s ac AC-007 → not_verified steps=6",
+        "+244.5s ac AC-008 → not_verified steps=7",
+        "+262.4s ac AC-009 → not_verified steps=6",
+        "+277.9s ac AC-010 → not_verified steps=7",
+        "+315.6s ac AC-011 → not_verified(not_reached) steps=14",
+        "+315.6s single-file-fix skipped"
+      ],
+      "costUsd": {
+        "generation": 0.2287,
+        "agent": 0.3353
+      },
+      "models": [
+        "gpt-5.4-2026-03-05",
+        "gpt-5.4-mini-2026-03-17"
+      ],
+      "durationSec": 447,
+      "side": "hold",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A6",
+        "A7"
+      ],
+      "mustIdentified": []
+    },
+    {
+      "app": "claude",
+      "url": "https://dreamy-babka-5f07cd.netlify.app/",
+      "startedKst": "2026-10-18 22:31",
+      "expected": "broken_or_hold",
+      "inference": {
+        "staticEvidenceChars": 58,
+        "usedRenderedText": true,
+        "summary": "하루 미용실 예약은 1인 운영 미용실에서 고객이 시술, 날짜, 시간을 고르고 이름과 휴대폰 번호를 입력해 30분 단위로 예약하는 웹앱입니다."
+      },
+      "confirm": {
+        "oneLine": "동네 1인 미용실용으로 손님이 모바일에서 한국어로 시술·날짜·시간을 선택해 예약하고, 중복 예약은 막고, 예약 내용이 저장되며, 사장님은 오늘 예약을 시간순으로 보고 취소할 수 있는 웹사이트를 원했어요.",
+        "items": [
+          {
+            "id": "req_001",
+            "title": "고객은 시술 종류와 가격을 한눈에 볼 수 있어야 한다",
+            "confirmed": true,
+            "why": "시술 가격을 커트 15,000원, 펌 60,000원처럼 보여달라고 요청했다."
+          },
+          {
+            "id": "req_002",
+            "title": "고객은 날짜를 선택할 수 있어야 한다",
+            "confirmed": true,
+            "why": "손님이 날짜를 고를 수 있어야 한다고 요청했다."
+          },
+          {
+            "id": "req_003",
+            "title": "고객은 30분 단위로 예약 시간을 선택할 수 있어야 한다",
+            "confirmed": true,
+            "why": "시간을 오전 10시부터 오후 7시까지 30분 단위로 고르도록 요청했다."
+          },
+          {
+            "id": "req_004",
+            "title": "이미 예약된 시간은 선택할 수 없게 보여야 한다",
+            "confirmed": true,
+            "why": "이미 예약된 시간은 다른 손님이 고를 수 없어야 한다고 요청했다."
+          },
+          {
+            "id": "req_005",
+            "title": "고객은 예약자 정보를 입력할 수 있어야 한다",
+            "confirmed": true,
+            "why": "이름과 휴대폰 번호를 넣으면 예약된다고 요청했다."
+          },
+          {
+            "id": "req_006",
+            "title": "고객은 예약 전에 선택한 내용을 다시 확인할 수 있어야 한다",
+            "confirmed": false,
+            "why": "예약 전에 선택 내용을 다시 확인하는 요약 화면은 요청하지 않았다."
+          },
+          {
+            "id": "req_007",
+            "title": "고객은 예약을 접수할 수 있어야 한다",
+            "confirmed": true,
+            "why": "입력 후 예약이 되어야 하므로 예약 접수 기능은 필요하다."
+          },
+          {
+            "id": "req_008",
+            "title": "사장님은 예약 확인용 화면으로 이동할 수 있어야 한다",
+            "confirmed": true,
+            "why": "사장님은 관리 화면에서 오늘 예약 목록을 보고 취소할 수 있어야 한다고 요청했다."
+          },
+          {
+            "id": "req_009",
+            "title": "화면은 모바일에서 예약하기 쉽게 구성되어야 한다",
+            "confirmed": true,
+            "why": "휴대폰으로 보기 편하게 해달라고 요청했다."
+          }
+        ],
+        "added": [
+          {
+            "id": "user_1",
+            "title": "예약 가능한 시간은 오전 10시부터 오후 7시까지여야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 30분 단위는 있지만 운영 시간이 명시되어 있지 않다."
+          },
+          {
+            "id": "user_2",
+            "title": "예약 완료 후 예약 완료 화면에 예약 내용이 보여야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 완료 화면에서 예약 내용을 보여주는 요구가 없다."
+          },
+          {
+            "id": "user_3",
+            "title": "예약 정보는 새로고침해도 사라지지 않게 저장되어야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 예약 데이터의 저장·유지 조건이 없다."
+          },
+          {
+            "id": "user_4",
+            "title": "사장님 관리 화면에서는 오늘 예약 목록만 보여야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 오늘 예약이라는 범위 제한이 없다."
+          },
+          {
+            "id": "user_5",
+            "title": "사장님 관리 화면의 예약 목록은 시간순으로 정렬되어야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 정렬 기준이 없다."
+          },
+          {
+            "id": "user_6",
+            "title": "사장님은 관리 화면에서 예약을 취소할 수 있어야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 예약 취소 기능이 없다."
+          },
+          {
+            "id": "user_7",
+            "title": "모든 글은 한국어로 표시되어야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 언어가 한국어여야 한다는 요구가 없다."
+          },
+          {
+            "id": "user_8",
+            "title": "가격은 원 단위 형식으로 표시되어야 한다.",
+            "criteria": [],
+            "why": "추론 항목에는 가격 표시 형식이 원 단위여야 한다는 점이 없다."
+          }
+        ]
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10
+      },
+      "decision": "Not Verified",
+      "works": null,
+      "verdict": "확인 못 했어요",
+      "oneLine": "핵심 기준 중 5개를 확인하지 못해 아직 \"작동한다\"고 말할 수 없어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "예약 정보는 입력됐지만 제출 후 예약 생성이나 오류 메시지가 보이지 않아 실제 완료 여부를 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"10월 19일 (월)\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"오전 10:30\" 누르기",
+            "\"휴대폰 번호\"에 \"010-5317-4219\" 입력",
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기",
+            "Enter 키 누르기",
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-001",
+          "priority": "must",
+          "confirmed": true,
+          "title": "시술 종류와 가격 표시 및 선택",
+          "then": "선택한 시술만 선택 상태로 구분되어 표시되고, 해당 시술의 가격이 원 단위 형식으로 함께 확인된다.",
+          "status": "pass",
+          "reason": "시술 하나를 선택했을 때 그 시술만 선택 상태로 보이고 가격도 원 단위로 함께 확인됩니다.",
+          "evidence": [
+            "button \"펌 60,000원\" [pressed]"
+          ],
+          "actions": [
+            "\"펌 60,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-002",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 날짜 선택",
+          "then": "선택한 날짜가 현재 선택된 날짜로 구분되어 표시되고, 그 날짜에 대한 시간 선택을 이어서 진행할 수 있다.",
+          "status": "pass",
+          "reason": "날짜를 선택하자 그 날짜가 선택 상태로 보였고, 바로 아래에서 그 날짜의 시간을 고를 수 있었습니다.",
+          "evidence": [
+            "button \"10월 19일 (월)\" [pressed]: 월 19"
+          ],
+          "actions": [
+            "\"10월 19일 (월)\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-003",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 날짜 선택",
+          "then": "다른 날짜를 고르라는 안내가 표시되고, 해당 날짜에서는 예약 가능한 시간을 선택할 수 없다.",
+          "status": "pass",
+          "reason": "예약 가능한 시간이 없는 날짜에서 다른 날짜를 고르라는 안내가 보이고, 시간도 선택할 수 없었습니다.",
+          "evidence": [
+            "이 날은 남은 시간이 없어요. 다른 날짜를 골라 주세요."
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-004",
+          "priority": "must",
+          "confirmed": true,
+          "title": "30분 단위 예약 시간 선택",
+          "then": "선택한 시간만 다른 시간과 구분되어 표시되고, 오전과 오후로 나뉜 30분 단위 시간 중에서만 선택된다.",
+          "status": "pass",
+          "reason": "선택한 시간만 선택 상태로 구분되어 보이고, 시간 목록이 오전/오후로 나뉘며 30분 단위로만 표시됩니다.",
+          "evidence": [
+            "button \"오전 10:30\" [pressed]: 10:30"
+          ],
+          "actions": [
+            "\"10월 19일 (월)\" 누르기",
+            "\"오전 10:30\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-005",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약된 시간 비활성화 표시",
+          "then": "예약된 시간은 줄 그어진 표시 등 일반 시간과 다른 방식으로 구분되고, 눌러도 선택되지 않는다.",
+          "status": "not_verified",
+          "reason": "예약된 시간 표시를 아직 직접 눌러 확인하지 못해서 판단할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"10월 19일 (월)\" 누르기",
+            "\"오전 10:00\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-5317-4219\" 입력"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-006",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약자 정보 입력",
+          "then": "이름과 휴대폰 번호가 모두 없으면 예약이 접수되지 않는다.",
+          "status": "not_verified",
+          "reason": "이름만 입력한 상태에서 예약 접수 여부를 아직 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"10월 19일 (월)\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"오전 10:00\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-007",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 접수",
+          "then": "예약이 실제로 생성되고 예약 완료 화면으로 이어지며, 화면 하단의 현장 결제 안내와 함께 예약 내용을 확인할 수 있다.",
+          "status": "not_verified",
+          "reason": "예약 접수 후 완료 화면으로 넘어가는지 확인할 수 없었어요. 버튼을 눌러도 화면 변화가 없었습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"10월 19일 (월)\" 누르기",
+            "\"휴대폰 번호\"에 \"010-5317-4219\" 입력",
+            "\"오전 10:30\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기",
+            "Enter 키 누르기",
+            "\"예약하기\" 누르기",
+            "Tab 키 누르기",
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-008",
+          "priority": "must",
+          "confirmed": true,
+          "title": "사장님 화면 진입",
+          "then": "고객 예약 화면과 구분되는 사장님용 예약 확인 화면으로 접근할 수 있다.",
+          "status": "pass",
+          "reason": "사장님용 예약 확인 화면에 접근되어 고객 예약 화면과 구분되는 구성이 보입니다.",
+          "evidence": [
+            "예약 0건 예상 매출 0원"
+          ],
+          "actions": [
+            "\"사장님 화면\" 누르기",
+            "\"사장님 화면\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-010",
+          "priority": "must",
+          "confirmed": true,
+          "title": "운영시간 범위 내 예약 가능",
+          "then": "오전 10시부터 오후 7시까지의 운영시간 안내가 보이고, 제공되는 선택 시간은 그 범위 내 30분 단위 시간들로 제한된다.",
+          "status": "pass",
+          "reason": "운영시간 안내가 보이고, 화면에 나온 선택 시간이 오전 10시부터 오후 6시 30분까지 30분 단위로만 보입니다.",
+          "evidence": [
+            "오전 10시부터 오후 7시 영업 · 줄 그어진 시간은 이미 예약되었어요"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-011",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 완료 내용 표시",
+          "then": "예약 완료 화면에 접수한 시술, 날짜 또는 일시, 가격 등 예약 내용이 표시된다.",
+          "status": "not_verified",
+          "reason": "완료 화면으로 넘어가서 접수 내용이 표시되는지 끝까지 확인하지 못했다.",
+          "evidence": [],
+          "actions": [
+            "\"10월 19일 (월)\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"예약하기\" 누르기",
+            "\"시간\"에서 \"10:30\" 고르기",
+            "\"오전 10:30\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 7,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "예약하기",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "커트 15,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "펌 60,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "염색 50,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "클리닉 30,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "오늘 18",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "월 19",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [],
+      "agentPrompt": "",
+      "llmCalls": 100,
+      "basis": "must_not_verified",
+      "builder": "netlify_static",
+      "defects": [],
+      "phasesTail": [
+        "+202.6s ac AC-007 → not_verified steps=13",
+        "+214.6s ac AC-008 → pass steps=3",
+        "+231.1s ac AC-010 clock-variant → pass",
+        "+231.1s ac AC-010 → pass steps=1",
+        "+246.0s ac AC-011 → not_verified steps=7",
+        "+246.0s single-file-fix skipped"
+      ],
+      "costUsd": {
+        "generation": 0.2428,
+        "agent": 0.4448
+      },
+      "models": [
+        "gpt-5.4-2026-03-05",
+        "gpt-5.4-mini-2026-03-17"
+      ],
+      "durationSec": 406,
+      "side": "hold",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A3",
+        "A6"
+      ],
+      "mustIdentified": []
+    },
+    {
+      "app": "lovable",
+      "url": "https://my-town-salon.lovable.app/",
+      "startedKst": "2026-10-18 22:34",
+      "expected": "works",
+      "inference": {
+        "staticEvidenceChars": 59,
+        "usedRenderedText": true,
+        "summary": "동네 1인 미용실 고객이 날짜·시간·서비스를 고르고 이름과 휴대폰 번호를 입력해 온라인으로 예약하는 웹앱입니다."
+      },
+      "confirm": {
+        "oneLine": "손님이 날짜와 시간, 이름과 휴대폰 번호를 입력해 예약하고 사장님이 오늘 예약을 관리할 수 있는 한국어 모바일용 1인 미용실 예약 웹사이트를 원했어요.",
+        "items": [
+          {
+            "id": "req_001",
+            "title": "예약 페이지는 미용실 이름과 기본 소개를 보여준다",
+            "confirmed": false,
+            "why": "미용실 이름이나 기본 소개 문구를 보여달라는 요청은 없었어요."
+          },
+          {
+            "id": "req_002",
+            "title": "사용자는 예약 날짜를 선택할 수 있다",
+            "confirmed": true,
+            "why": "손님이 날짜를 고를 수 있어야 한다고 했어요."
+          },
+          {
+            "id": "req_003",
+            "title": "사용자는 시간대의 예약 가능 상태를 구분해서 볼 수 있다",
+            "confirmed": true,
+            "why": "이미 예약된 시간은 다른 손님이 고를 수 없어야 하므로 시간대의 예약 가능 상태 구분이 필요해요."
+          },
+          {
+            "id": "req_004",
+            "title": "사용자는 예약 가능한 시간을 선택할 수 있다",
+            "confirmed": true,
+            "why": "손님이 예약 가능한 시간을 선택해야 한다고 했어요."
+          },
+          {
+            "id": "req_005",
+            "title": "사용자는 서비스 목록과 가격을 확인하고 선택할 수 있다",
+            "confirmed": false,
+            "why": "서비스 목록 선택 기능은 요청하지 않았고, 가격 표시만 요청했어요. 게다가 inferred 항목의 염색/클리닉은 요청에 없어요."
+          },
+          {
+            "id": "req_006",
+            "title": "화면은 선택한 서비스 기준의 예상 결제 금액을 보여준다",
+            "confirmed": false,
+            "why": "예상 결제 금액 표시나 서비스 선택에 따른 금액 변경은 요청하지 않았어요."
+          },
+          {
+            "id": "req_007",
+            "title": "사용자는 이름과 휴대폰 번호를 입력할 수 있다",
+            "confirmed": true,
+            "why": "이름과 휴대폰 번호를 넣으면 예약이 된다고 했어요."
+          },
+          {
+            "id": "req_008",
+            "title": "사용자는 예약하기 버튼으로 예약을 진행할 수 있다",
+            "confirmed": true,
+            "why": "예약을 실제로 진행할 수 있어야 해요."
+          },
+          {
+            "id": "req_009",
+            "title": "화면은 입력한 예약 내용을 새로고침 후에도 유지한다",
+            "confirmed": false,
+            "why": "요청은 입력 중인 내용 유지 아니라 예약 후 예약이 사라지지 않아야 한다는 뜻이에요."
+          }
+        ],
+        "added": [
+          {
+            "id": "user_1",
+            "title": "예약 가능한 시간은 오전 10시부터 오후 7시까지여야 해요.",
+            "criteria": [],
+            "why": "inferred 항목들에 운영 시간이 빠져 있어요."
+          },
+          {
+            "id": "user_2",
+            "title": "시간 선택은 30분 단위여야 해요.",
+            "criteria": [],
+            "why": "inferred 항목들에 30분 간격 조건이 없어요."
+          },
+          {
+            "id": "user_3",
+            "title": "예약이 완료되면 예약 완료 화면에 예약 내용이 보여야 해요.",
+            "criteria": [],
+            "why": "예약 후 완료 화면과 그 화면에 예약 내용 표시가 빠져 있어요."
+          },
+          {
+            "id": "user_4",
+            "title": "완료된 예약은 새로고침해도 사라지지 않아야 해요.",
+            "criteria": [],
+            "why": "inferred req_009는 입력값 유지에 가깝고, 실제 예약 데이터의 저장/유지 요구를 다루지 않아요."
+          },
+          {
+            "id": "user_5",
+            "title": "사장님은 관리 화면에서 오늘 예약 목록을 시간순으로 볼 수 있어야 해요.",
+            "criteria": [],
+            "why": "사장님용 관리 화면, 오늘 예약만 보기, 시간순 정렬이 빠져 있어요."
+          },
+          {
+            "id": "user_6",
+            "title": "사장님은 관리 화면에서 예약을 취소할 수 있어야 해요.",
+            "criteria": [],
+            "why": "사장님의 예약 취소 기능이 빠져 있어요."
+          },
+          {
+            "id": "user_7",
+            "title": "가격은 커트 15,000원, 펌 60,000원처럼 원 단위로 표시돼야 해요.",
+            "criteria": [],
+            "why": "가격 표시 형식 요구는 있지만 서비스 선택 기능과는 별개예요."
+          },
+          {
+            "id": "user_8",
+            "title": "휴대폰으로 보기 편해야 해요.",
+            "criteria": [],
+            "why": "모바일 화면 최적화 요구가 inferred 항목에 없어요."
+          }
+        ]
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10
+      },
+      "decision": "Not Verified",
+      "works": null,
+      "verdict": "확인 못 했어요",
+      "oneLine": "핵심 기준 중 9개를 확인하지 못해 아직 \"작동한다\"고 말할 수 없어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "예약 시간을 고를 수 없어서 제출까지 완료할 수 없었습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-5813-7691\" 입력",
+            "\"오늘 18\" 누르기",
+            "\"오늘 18\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-001",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 날짜 선택",
+          "then": "선택한 날짜가 해당 예약의 날짜로 저장되고 이후 화면과 관련 조회 화면에서 같은 날짜로 확인된다.",
+          "status": "not_verified",
+          "reason": "남은 행동 수가 부족해서 이름·번호 입력, 예약 완료, 이후 화면의 날짜 확인까지 끝내지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"월 19\" 누르기",
+            "\"오늘 18\" 누르기",
+            "\"월 19\" 누르기",
+            "\"월 26\" 누르기",
+            "\"월 26\" 누르기",
+            "\"10:00 가능\" 누르기",
+            "\"월 19\" 누르기",
+            "\"화 20\" 누르기",
+            "\"화 20\" 누르기",
+            "\"커트 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-002",
+          "priority": "must",
+          "confirmed": true,
+          "title": "시간대 상태 구분 표시",
+          "then": "마감된 시간은 예약 시간으로 선택되지 않고 상태 구분은 계속 유지된다.",
+          "status": "not_verified",
+          "reason": "같은 날짜에 예약 가능 시간과 마감 시간이 함께 있는 상태를 찾지 못해 이 기준을 끝까지 검증할 수 없었습니다.",
+          "evidence": [],
+          "actions": [
+            "\"10:00 마감\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-003",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 가능 시간 선택",
+          "then": "선택한 시간만 해당 예약의 시간으로 저장되고 완료 후에도 다른 시간과 구분되는 선택 결과가 반영된다.",
+          "status": "not_verified",
+          "reason": "예약 가능한 시간이 화면에 없어 이 기준을 끝까지 확인할 수 없습니다.",
+          "evidence": [],
+          "actions": [
+            "\"오늘 18\" 누르기",
+            "\"오늘 18\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-004",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약자 정보 입력",
+          "then": "입력한 이름과 휴대폰 번호가 해당 예약 내용으로 저장되어 완료 화면 또는 이후 확인 가능한 화면에 동일하게 반영된다.",
+          "status": "not_verified",
+          "reason": "예약 시간을 고르지 않아서 완료 화면에서 이름과 휴대폰 번호가 저장되는지 아직 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"오늘 18\" 누르기",
+            "\"휴대폰 번호\"에 \"010-5813-7691\" 입력",
+            "\"커트 15,000원\" 누르기",
+            "\"월 19\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-005",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약하기로 예약 진행",
+          "then": "예약 절차가 실제로 진행되어 예약 완료 상태에 도달하고 예약 결과를 확인할 수 있다.",
+          "status": "not_verified",
+          "reason": "예약은 아직 실제 완료 화면까지 확인하지 못했고, 현재는 예약 시간을 다시 고르라는 안내가 보여서 끝났는지 알 수 없습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-5813-7691\" 입력",
+            "\"예약하기\" 누르기",
+            "\"월 19\" 누르기",
+            "\"10:30 가능\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-006",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 시간 범위 제한",
+          "then": "예약 가능한 시간 범위는 오전 10시부터 오후 7시까지로 제한된다.",
+          "status": "pass",
+          "reason": "화면에서 예약 가능 시간 목록이 10:00부터 19:00까지로만 표시되는 것을 확인했습니다.",
+          "evidence": [
+            "10:00 마감"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-007",
+          "priority": "must",
+          "confirmed": true,
+          "title": "30분 단위 시간 선택",
+          "then": "시간 항목은 전체적으로 30분 단위 간격으로 제공된다.",
+          "status": "not_verified",
+          "reason": "판단의 근거를 실제 화면에서 찾지 못해 결과로 치지 않았어요.",
+          "reasonCode": "evidence_missing",
+          "evidence": [],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-008",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약 완료 화면의 예약 내용 표시",
+          "then": "예약 완료 화면에 방금 예약한 날짜, 시간, 서비스, 예약자 정보 등 예약 내용이 표시된다.",
+          "status": "pass",
+          "reason": "예약을 완료한 뒤 완료 화면에 방금 입력한 예약 내용이 모두 같은 값으로 표시됐습니다.",
+          "evidence": [
+            "날짜 10월 19일 (월) 시간 10:30 서비스 커트 가격 15,000원 이름 심사테스트 휴대폰 010-5813-7691"
+          ],
+          "actions": [
+            "\"오늘 18\" 누르기",
+            "\"오늘 18\" 누르기",
+            "\"월 19\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-5813-7691\" 입력",
+            "\"예약하기\" 누르기",
+            "\"10:30 가능\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-009",
+          "priority": "must",
+          "confirmed": true,
+          "title": "완료된 예약의 새로고침 후 유지",
+          "then": "완료된 예약이 사라지지 않고 그대로 유지된다.",
+          "status": "not_verified",
+          "reason": "아직 완료 화면이 아니라서 새로고침 후 같은 예약 내용이 유지되는지 확인하지 못했어요.",
+          "evidence": [],
+          "actions": [
+            "\"오늘 18\" 누르기",
+            "\"오늘 18\" 누르기",
+            "\"월 19\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-5813-7691\" 입력",
+            "\"11:00 가능\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "AC-010",
+          "priority": "must",
+          "confirmed": true,
+          "title": "오늘 예약 목록의 시간순 관리 화면",
+          "then": "오늘 예약이 시간순으로 정렬된 목록으로 표시된다.",
+          "status": "not_verified",
+          "reason": "로그인 필요 — 시험 계정을 주시면 들어가서 확인해요",
+          "reasonCode": "login_required",
+          "evidence": [],
+          "actions": [
+            "https://my-town-salon.lovable.app/admin 열기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 1,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://my-town-salon.lovable.app/",
+            "label": "오늘 18",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [],
+      "agentPrompt": "",
+      "llmCalls": 90,
+      "basis": "must_not_verified",
+      "builder": "lovable",
+      "defects": [
+        {
+          "acId": "AC-010",
+          "priority": "must",
+          "status": "not_verified",
+          "defectClass": "auth_gate"
+        }
+      ],
+      "phasesTail": [
+        "+162.8s ac AC-007 → not_verified(evidence_missing) steps=1",
+        "+208.8s ac AC-008 clock-variant → not_verified",
+        "+208.8s ac AC-008 → pass steps=10",
+        "+228.0s ac AC-009 → not_verified steps=9",
+        "+237.3s ac AC-010 → not_verified(login_required) steps=4",
+        "+237.3s single-file-fix skipped"
+      ],
+      "costUsd": {
+        "generation": 0.1807,
+        "agent": 0.3544
+      },
+      "models": [
+        "gpt-5.4-2026-03-05",
+        "gpt-5.4-mini-2026-03-17"
+      ],
+      "durationSec": 344,
+      "side": "hold",
+      "opposite": false,
+      "match": false,
+      "mustFailedExpected": [],
+      "mustIdentified": []
+    }
+  ]
+}
