@@ -44,6 +44,10 @@ const PAGES = {
     <button aria-pressed="false" onclick="this.setAttribute('aria-pressed', this.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); this.classList.toggle('on')">10:00</button>
     <button>장식 단추</button></body></html>`,
   "/wide": `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body><div style="width:900px">넓은 표</div></body></html>`,
+  // (§8 c-1) bolt 관리 화면 모양: 행마다 "취소" 버튼(이름 같음), 0~1행은 남의 기록, 2행이 내 기록.
+  "/admin": `<!doctype html><html><body><h1>오늘 예약</h1><div class="row" style="display:flex;justify-content:space-between"><div><p>10:00</p><p>심사테스트 010-1111-2222</p></div><button onclick="this.closest('.row').remove()">취소</button></div><div class="row" style="display:flex;justify-content:space-between"><div><p>10:30</p><p>심사테스트 010-3333-4444</p></div><button onclick="this.closest('.row').remove()">취소</button></div><div class="row" style="display:flex;justify-content:space-between"><div><p>13:00</p><p>심사테스트 010-2245-9715</p></div><button onclick="this.closest('.row').remove()">취소</button></div></body></html>`,
+  // 행 구분 없이 한 상자에 번호·버튼이 섞인 화면 — 행 범위가 넓으면 남의 번호가 섞여 거부돼야 한다.
+  "/admin-flat": `<!doctype html><html><body><div><p>10:00 심사테스트 010-1111-2222</p><button>취소</button><p>13:00 심사테스트 010-2245-9715</p><button>취소</button></div></body></html>`,
 };
 
 describe("agent 드라이버 — 실제 브라우저", { skip }, () => {
@@ -118,5 +122,27 @@ describe("agent 드라이버 — 실제 브라우저", { skip }, () => {
     assert.ok(wide.overflowPx > 100, JSON.stringify(wide));
     const ok = await driver.mobileCheck(base + "/");
     assert.equal(ok.overflowPx, 0);
+  });
+  it("(§8 c-1) 이름이 같은 '취소'가 여러 행에 있으면 내 번호 행의 버튼만 고르고 그 버튼을 누른다 — 옛 코드는 첫 행을 봐서 false", async () => {
+    const markers = ["010-2245-9715", "01022459715"];
+    await driver.goto(base + "/admin");
+    const target = { role: "button", name: "취소" };
+    assert.equal(await driver.ownsRecordNear(target, markers), true);
+    const r = await driver.act({ type: "click", target, acceptDialog: true });
+    assert.equal(r.ok, true, r.note);
+    const text = await driver.bodyText();
+    assert.match(text, /010-1111-2222/, "남의 기록은 남는다");
+    assert.match(text, /010-3333-4444/, "남의 기록은 남는다");
+    assert.doesNotMatch(text, /010-2245-9715/, "내 기록만 지워졌다");
+  });
+  it("(§8 c-1) 행 범위가 넓어 남의 번호가 섞이면 고르지 않는다 · 검사 없이 허용 클릭은 누르지 않는다", async () => {
+    const markers = ["010-2245-9715", "01022459715"];
+    await driver.goto(base + "/admin-flat");
+    const target = { role: "button", name: "취소" };
+    assert.equal(await driver.ownsRecordNear(target, markers), false);
+    const r = await driver.act({ type: "click", target, acceptDialog: true });
+    assert.equal(r.ok, false);
+    assert.equal(r.note, "own_record_target_lost");
+    assert.match(await driver.bodyText(), /010-1111-2222[\s\S]*010-2245-9715/, "아무것도 지우지 않았다");
   });
 });

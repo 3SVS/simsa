@@ -821,6 +821,108 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3, A5], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench" });
     assert.ok(driver.state.session - sessionsBefore >= 3, "기준마다 newSession");
   });
+
+  /** v0 모양: 입력 → "시간 예약하기"(시간 고르기 화면만 연다, 쓰기 0) → "11:00" → "예약하기"(쓰기 1). */
+  function pickerSalon() {
+    const site = {
+      "/": { status: 200, text: "동네 미용실 예약 이름 휴대폰 시간 예약하기", buttons: ["시간 예약하기"] },
+      "/pick": { status: 200, text: "시간을 고르세요 11:00 예약하기", buttons: ["11:00", "예약하기"] },
+      "/done": () => ({ status: 200, text: `예약이 완료되었어요 ${TD.name} 2026-10-19 11:00` }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "시간 예약하기") state.path = "/pick";
+      if (action.type === "click" && action.target.name === "예약하기" && state.path === "/pick" && state.fills.length > 0) {
+        (state.serverWrites ??= []).push("POST /api/bookings");
+        state.path = "/done";
+      }
+      return null;
+    };
+    return { site, onAct };
+  }
+
+  it("T11 (§8 b-3) 입력 뒤 첫 클릭이 시간 고르기 창을 열어도, 진짜 제출에서 기록을 잡아 셋업 공급자가 된다 — 옛 코드는 첫 클릭만 재서 셋업 없음", async () => {
+    const { site, onAct } = pickerSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+        { type: "click", target: { role: "button", name: "시간 예약하기" } },
+        { type: "click", target: { role: "button", name: "11:00" } },
+        { type: "click", target: { role: "button", name: "예약하기" } },
+        { type: "judge", verdict: "pass", reason: "완료 화면에 예약이 보여요", evidenceQuote: "예약이 완료되었어요 $NAME" },
+      ],
+      A3: [{ type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    assert.equal(out.report.agent.setup?.byAc, "CORE-1", JSON.stringify(out.report.agent.setup));
+    assert.equal(out.report.agent.setup.serverWrites, 1);
+    assert.equal(out.report.agent.setup.time, "11:00", "완료 화면의 새 줄에서 읽는다");
+    assert.ok(prompts.some((p) => /Criterion A3 \(/.test(p)), "A3가 실행됐다(0걸음 스킵 아님)");
+    assert.notEqual(out.report.acTable.find((r) => r.id === "A3").reasonCode, "precondition_not_met");
+  });
+
+  it("T12 (§8 a-1) 브라우저에만 저장하는 앱: '새로고침하거나 새 브라우저' A5는 기록을 만든 브라우저 상태로 시작해 pass — 옛 코드는 빈 브라우저라 확인 못 함", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `동네 미용실 예약 이름 휴대폰 예약하기${state.store.booking ? ` 내 예약: ${state.store.booking}` : ""}`, buttons: ["예약하기"] }),
+      "/done": (state) => ({ status: 200, text: `예약이 완료되었어요 ${state.store.booking ?? ""}` }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) {
+        state.store.booking = `${TD.name} 10:00`;
+        state.path = "/done";
+      }
+      return null;
+    };
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const A5 = { id: "A5", title: "새로고침해도 예약이 남는다", given: "예약을 마쳤다", when: "새로고침하거나 새 브라우저로 다시 연다", then: "예약이 남아 있다", priority: "must", confirmed: true };
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      A5: [{ type: "judge", verdict: "pass", reason: "다시 열어도 내 예약이 그대로 남아 있어요", evidenceQuote: `내 예약: ${TD.name} 10:00` }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A5], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", trace: true });
+    const t = out.report.agent.trace.A5;
+    assert.equal(t.startedWith, "restored_setup");
+    assert.equal(t.setupVisibleAtStart, true);
+    assert.equal(out.report.acTable.find((r) => r.id === "A5").status, "pass");
+    assert.equal(out.report.agent.setup.serverWrites, 0);
+    assert.equal(out.report.agent.testData.cleanupSkipped, "browser_only");
+    assert.equal(out.report.agent.testData.leftover, 0);
+  });
+
+  it("T13 (§8 a-4·c-5) 버튼 글자 '예약 완료하기'와 번호 오류 문구, 쓰기 0 → 기록을 만든 것으로 치지 않는다 — 옛 코드는 created", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `예약 이름 휴대폰 예약 완료하기${state.err ? "\n휴대폰 번호가 잘못되었어요" : ""}`, buttons: ["예약 완료하기"] }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "예약 완료하기") state.err = true;
+      return null;
+    };
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+        { type: "click", target: { role: "button", name: "예약 완료하기" } },
+        { type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    assert.equal(out.report.agent.setup, undefined);
+    assert.equal(out.report.agent.testData.created, 0);
+  });
+
+  it("T14 (§8 d) 프롬프트의 기기 시각은 한국 시각 표기 — 01:35 KST가 10-18 UTC로 보이지 않는다", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": userMustScript });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, nowMs: Date.parse("2026-10-18T16:35:00Z") });
+    const p = prompts.find((x) => /Device clock now:/.test(x));
+    assert.match(p, /Device clock now: 2026-10-19 01:35 \(Asia\/Seoul, UTC\+9\)/);
+  });
 });
 
 describe("2026-10-19 '취소'는 삭제 범주(내 기록 게이트) — 옛 코드는 자유 클릭", () => {

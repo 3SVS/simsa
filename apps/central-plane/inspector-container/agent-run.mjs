@@ -56,6 +56,8 @@ export async function runAgentInspection(o) {
   const nd = await importPure("nondev-report.js");
   const locale = o.locale === "en" ? "en" : "ko";
   const t0 = Date.now();
+  /** (§8 d) "지금" — 테스트가 o.nowMs로 고정할 수 있다(한국 날짜·프롬프트 시각 계산용). */
+  const nowDate = () => (Number.isFinite(o.nowMs) ? new Date(o.nowMs) : new Date());
   const secrets = () => [o.credentials?.username, o.credentials?.password, ...(o.live?.typedSecrets?.() ?? [])].filter(Boolean);
   const red = (s) => pure.redactSecrets(String(s ?? ""), secrets());
   const plog = (msg) => {
@@ -112,7 +114,10 @@ export async function runAgentInspection(o) {
   /** 2026-10-19 given 셋업: 이 런에서 만든 기록(뒤 기준의 given을 채운다). */
   let setup = null;
   let setupAttempted = false;
+  // (2026-10-20 격차 §8 c-5) 지울 대상 = 서버에 쓴 기록 수. 브라우저에만 남은 기록은 따로 센다(브라우저가 닫히면 사라진다).
+  //  종전엔 둘을 합쳐 created 31(서버 대상은 9)로 적었다.
   let recordsCreated = 0;
+  let browserRecords = 0;
   let cleanup = null;
   /** (2026-10-20 격차 §8 a-3) 측정용 기준별 기록 — 시작 상태·턴별 생각·판정 이력(재확인 사유 포함). o.trace일 때만 리포트에 싣는다. */
   const acTraces = {};
@@ -214,7 +219,10 @@ export async function runAgentInspection(o) {
       /** 기준 결과에서 셋업 재료를 꺼내 둔다(첫 공급자만). */
       const harvest = (r, acId) => {
         const s = r._setup;
-        if (s?.created) recordsCreated += 1;
+        if (s?.created) {
+          if (s.serverWrites > 0) recordsCreated += 1;
+          else browserRecords += 1;
+        }
         if (!setup && s?.created) {
           setup = { byAc: acId, date: s.date, time: s.time, excerpt: s.excerpt, serverWrites: s.serverWrites, recipe: s.recipe, storageState: s.storageState };
           plog(`setup:from ${acId} date=${s.date ?? "?"} time=${s.time ?? "?"} writes=${s.serverWrites}`);
@@ -264,8 +272,8 @@ export async function runAgentInspection(o) {
               const setupAc = {
                 id: "SETUP-1", title: locale === "en" ? "Create one booking for later checks" : "뒤 기준을 위한 예약 1건 만들기", given: "",
                 when: locale === "en"
-                  ? `Make ONE booking with the test data for the Korea date ${pure.kstDateString()} at the earliest free time today; if today has no free time, the nearest later day. Then judge pass only if a confirmation shows the booking.`
-                  : `시험 데이터로 오늘(한국 날짜 ${pure.kstDateString()}) 남은 가장 이른 시간에 예약을 1건 만든다. 오늘 빈 시간이 없으면 가장 가까운 날. 완료 화면에 예약이 보이면 pass.`,
+                  ? `Make ONE booking with the test data for the Korea date ${pure.kstDateString(nowDate())} at the earliest free time today; if today has no free time, the nearest later day. Then judge pass only if a confirmation shows the booking.`
+                  : `시험 데이터로 오늘(한국 날짜 ${pure.kstDateString(nowDate())}) 남은 가장 이른 시간에 예약을 1건 만든다. 오늘 빈 시간이 없으면 가장 가까운 날. 완료 화면에 예약이 보이면 pass.`,
                 then: locale === "en" ? "A confirmation shows the booking (date, time, name)." : "완료 화면에 예약(날짜·시간·이름)이 보인다.", priority: "should", confirmed: true,
               };
               const s = await runOneAc({ ...acArgsBase(), ac: setupAc, setupMode: true });
@@ -280,7 +288,7 @@ export async function runAgentInspection(o) {
           }
         }
         // "오늘" 기록이어야 하는데 만든 날짜가 오늘이 아니면(야간 실행) 정직하게 전제 미충족(Bae Q2).
-        if (pre.needsRecord && pre.needsToday && setup?.date && setup.date !== pure.kstDateString()) {
+        if (pre.needsRecord && pre.needsToday && setup?.date && setup.date !== pure.kstDateString(nowDate())) {
           results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("precondition_not_met", locale), reasonCode: "precondition_not_met", evidence: [], steps: 0 });
           syncProgress();
           plog(`ac ${ac.id} → not_verified(precondition_not_met) today≠${setup.date}`);
@@ -327,7 +335,7 @@ export async function runAgentInspection(o) {
 
       // (2026-10-19 (b) 정리) 서버에 남은 내 기록을 지우려 한다 — 내 번호(+런 표지)가 붙은 기록만, 행동 예산의 15%(≤8) 안에서.
       //  브라우저에만 저장된 기록(서버 쓰기 0)은 그 브라우저가 닫히면 사라지므로 잔여로 세지 않는다.
-      if (recordsCreated > 0 && setup && setup.serverWrites > 0 && o.readOnly !== true) {
+      if (recordsCreated > 0 && setup && o.readOnly !== true) {
         const budget = Math.min(cleanupBudget(), caps.maxActions - actionsUsed);
         if (budget < 4) cleanup = { created: recordsCreated, cleaned: 0, leftover: recordsCreated, cleanupSkipped: "budget" };
         else if (timeLeft() < 60_000 || llmCalls.budgetExhausted) cleanup = { created: recordsCreated, cleaned: 0, leftover: recordsCreated, cleanupSkipped: "timeout" };
@@ -354,7 +362,9 @@ export async function runAgentInspection(o) {
           plog(`cleanup → ${c.status}${c.reasonCode ? `(${c.reasonCode})` : ""} leftover=${cleanup.leftover}`);
         }
       } else if (recordsCreated > 0) {
-        cleanup = { created: recordsCreated, cleaned: 0, leftover: 0, cleanupSkipped: setup?.serverWrites === 0 ? "browser_only" : "no_setup" };
+        cleanup = { created: recordsCreated, cleaned: 0, leftover: recordsCreated, cleanupSkipped: "no_setup" };
+      } else if (browserRecords > 0) {
+        cleanup = { created: browserRecords, cleaned: 0, leftover: 0, cleanupSkipped: "browser_only" };
       }
     }
   } catch (err) {
@@ -372,7 +382,11 @@ export async function runAgentInspection(o) {
   // C8: 이번 확인이 앱에 남겼을 수 있는 기록의 표지 — 사용자가 찾아 지울 수 있게 리포트에 적는다.
   if (usedTestData) {
     // 시간 초과로 정리에 못 갔으면 만든 만큼 남은 것으로 적는다(정직).
-    const td = cleanup ?? (recordsCreated > 0 ? { created: recordsCreated, cleaned: 0, leftover: setup?.serverWrites > 0 ? recordsCreated : 0, cleanupSkipped: "timeout" } : { created: 0, cleaned: 0, leftover: 0 });
+    const td =
+      cleanup ??
+      (recordsCreated > 0 ? { created: recordsCreated, cleaned: 0, leftover: recordsCreated, cleanupSkipped: "timeout" }
+      : browserRecords > 0 ? { created: browserRecords, cleaned: 0, leftover: 0, cleanupSkipped: "browser_only" }
+      : { created: 0, cleaned: 0, leftover: 0 });
     report.agent.testData = { names: [usedTestData.name, usedTestData.altName], phone: usedTestData.phone, memo: usedTestData.memo, runTag: usedTestData.runTag, ...td };
     if (td.leftover > 0) report.notes.push(pure.testDataLeftoverNote(td.leftover, usedTestData, locale));
     else report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
@@ -502,7 +516,8 @@ export async function runAgentInspection(o) {
     let disagreements = 0;
     let validationNudges = 0;
     let escalations = 0;
-    let autoProbed = false;
+    let autoProbes = 0;
+    let probeBefore = null;
     let turnTier = "cheap";
     if (reproduceOf) {
       history.push(`(an earlier attempt concluded FAIL: "${red(reproduceOf.reason)}". Re-check independently and carefully in this fresh browser — do every required step (choose service/date/time, valid inputs), then look. Judge fail only if you SEE it fail again.)`);
@@ -533,7 +548,7 @@ export async function runAgentInspection(o) {
       try {
         lastPrompt = pure.agentTurnPrompt({
           ac, intent: o.intent, observation: obs, history, testData: data, hasCredentials, loginGate: lastGate,
-          stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: new Date().toISOString(), setup,
+          stepsLeft: Math.min(maxSteps - steps, caps.maxActions - actionsUsed), nowIso: pure.kstClockLabel(clockIso ? new Date(clockIso) : nowDate()), setup,
         });
         // (G1) 실패 재현 런은 행동도 강한 모델이 고른다. 셋업·정리 미니런은 늘 싼 모델(판정이 아니라 길 찾기).
         turnTier = (escalate || reproduceOf) && !setupMode && !cleanupMode ? "strong" : "cheap";
@@ -639,6 +654,7 @@ export async function runAgentInspection(o) {
       }
       const desc = red(pure.describeAction(a, locale));
       let res;
+      probeBefore = null;
       // S2-min: 동의 없는 런은 입력·고르기를 하지 않는다(시험 데이터를 만들지 않는다).
       if (o.readOnly === true && (a.type === "fill" || a.type === "select")) {
         history.push(`${desc} → BLOCKED (read-only run: the owner did not allow test data; judge not_verified with reasonCode write_not_allowed if this criterion needs it)`);
@@ -691,32 +707,38 @@ export async function runAgentInspection(o) {
         res = p ? { ok: true, note: pure.describeStorageProbe(p) } : { ok: false, note: "storage probe unavailable" };
         if (p && stateChange) verified = true;
       } else {
+        // (2026-10-20 격차 §8 b-3) 입력 뒤 클릭은 기록이 확인될 때까지 기준당 3번까지 잰다. 종전엔 첫 클릭 한 번만 쟀는데 v0는 첫
+        //  클릭이 "시간 예약하기"(시간 고르기 창 열기)라 쓰기 0 → 셋업 없음, 진짜 제출은 재지 않았다(같은 런 A4는 pass).
+        //  제출 전 화면 글자를 남겨 둔다 — 완료 문구를 "새로 나타난 글자"로만 인정하기 위해(§8 a-4).
+        probeBefore = a.type === "click" && filled && !setupInfo.created && autoProbes < MAX_AUTO_PROBES && driver.storageProbe && !cleanupMode ? await driver.bodyText().catch(() => "") : null;
         res = await driver.act(a);
       }
       if (res?.ok) {
         if (a.type === "fill" || a.type === "select") filled = true;
-        else if (a.type === "click" && filled && !stateChange) {
+        else if (a.type === "click" && filled && (!stateChange || probeBefore !== null)) {
           stateChange = true;
-          // (H2) 핵심 기준: 처음 상태를 바꾼 직후 저장 위치를 자동으로 잰다(LLM 호출 없음). 서버 쓰기 0이면 다른 손님·사장님이
+          // (H2) 핵심 기준: 상태를 바꾼 직후 저장 위치를 자동으로 잰다(LLM 호출 없음). 서버 쓰기 0이면 다른 손님·사장님이
           //  볼 수 있는지를 새 브라우저로 확인하라고 알린다 — Claude 앱(브라우저에만 저장)을 놓친 실측 교정.
-          // (2026-10-19 given 셋업) 어느 기준이든 첫 제출 직후를 셋업 재료로 거둔다: 저장 위치·화면 발췌(날짜·시간)·폼까지의 경로·브라우저 상태.
-          if (!autoProbed && driver.storageProbe && !cleanupMode) {
-            autoProbed = true;
+          // (2026-10-19 given 셋업) 어느 기준이든 제출 직후를 셋업 재료로 거둔다: 저장 위치·화면 발췌(날짜·시간)·폼까지의 경로·브라우저 상태.
+          if (probeBefore !== null) {
+            autoProbes += 1;
             await driver.waitAfterSubmit?.().catch(() => {});
             const probe = await driver.storageProbe().catch(() => null);
             const after = await driver.bodyText().catch(() => "");
-            const facts = pure.extractBookingFacts(after);
-            const confirmed = /완료|예약되|예약이 접수|확정|confirmed|booked|reserved|success/i.test(after);
-            if (probe && (probe.serverWrites.length > 0 || probe.localChanged || confirmed)) {
+            const judged = pure.judgeSubmitOutcome(probeBefore, after, probe);
+            if (judged.created) {
+              const facts = pure.extractBookingFacts(judged.newText || after);
               setupInfo.created = true;
               setupInfo.date = facts.date;
               setupInfo.time = facts.time;
               setupInfo.excerpt = after.slice(0, 600);
               setupInfo.serverWrites = probe.serverWrites.length;
               setupInfo.recipe = [...actions, desc];
-              if (probe.serverWrites.length > 0 && driver.captureState) setupInfo.storageState = await driver.captureState().catch(() => null);
+              // (§8 a-1) 브라우저에만 저장하는 앱도 상태를 남긴다 — "새로고침해도 남는다"류가 그 브라우저에서 시작할 수 있게.
+              if (driver.captureState) setupInfo.storageState = await driver.captureState().catch(() => null);
             }
-            if (probe && ac.id === pure.CORE_OUTCOME_AC_ID) {
+            // 기록이 확인된 클릭에서만 알린다 — 시간 고르기 창을 연 클릭에 "서버에 안 갔다"를 알리면 오도한다.
+            if (probe && judged.created && ac.id === pure.CORE_OUTCOME_AC_ID) {
               const line = pure.describeStorageProbe(probe);
               corpus += `\n${line}`;
               history.push(`(automatic check after your submit: ${line}${probe.serverWrites.length === 0 ? " — nothing reached a server; verify with new_session whether another visitor / the owner can see it" : ""})`);
@@ -787,6 +809,8 @@ export async function runAgentInspection(o) {
 const MOBILE_CHECK_MAX = 8;
 /** (H3) 기준 하나에서 강한 모델로 올리는 행동 턴 상한. */
 const MAX_ESCALATIONS_PER_AC = 3;
+/** (2026-10-20 §8 b-3) 기준 하나에서 입력 뒤 클릭의 저장 자동 탐침 상한(기록이 확인되면 멈춘다). */
+const MAX_AUTO_PROBES = 3;
 
 function normUrl(u) {
   try {

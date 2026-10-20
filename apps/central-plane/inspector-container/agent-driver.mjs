@@ -210,6 +210,50 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
 
   const bodyText = async () => (await page.locator("body").innerText({ timeout: 4000 }).catch(() => "")).replace(/\s+\n/g, "\n").trim();
 
+  /**
+   * (2026-10-20 격차 §8 c-1) 내 기록 행의 버튼을 결정론으로 고른다. 종전엔 표지 검사·클릭 모두 "보이는 첫 '취소'"(=목록 첫 행,
+   * 남의 기록)를 봐서 bolt에서 18/18 차단됐다. 이름이 맞는 보이는 버튼을 전부 돌며, 버튼에서 위로 올라가 번호가 처음 나오는
+   * 상자를 그 행으로 본다. 후보 = 행에 내 표지가 있고 · 행의 번호가 **전부 내 번호**이고(남의 번호가 섞이면 행 범위가 넓은 것 →
+   * 거부) · 행 안에 같은 이름 버튼이 1개. 후보가 없으면 null(누르지 않는다 — 남은 것은 leftover로 정직하게).
+   */
+  async function pickOwnRecord(target, markers) {
+    const mine = markers.map((m) => String(m ?? "").replace(/\D/g, "")).filter((d) => d.length >= 10);
+    const lists = [];
+    const all = locateAll(target);
+    if (all) lists.push(all);
+    const name = target.name ?? target.text ?? target.label;
+    if (name) for (const role of ["button", "link"]) lists.push(page.getByRole(role, { name, exact: false }));
+    for (const list of lists) {
+      const count = await list.count().catch(() => 0);
+      for (let i = 0; i < Math.min(count, 50); i += 1) {
+        const el = list.nth(i);
+        if (!(await el.isVisible().catch(() => false))) continue;
+        const row = await el
+          .evaluate((node) => {
+            const PHONE = /01\d[-\s]?\d{3,4}[-\s]?\d{4}/g;
+            const label = (node.innerText || node.textContent || "").trim();
+            let box = node.parentElement;
+            for (let up = 0; box && up < 8; up += 1, box = box.parentElement) {
+              const text = box.innerText || box.textContent || "";
+              const phones = text.match(PHONE) ?? [];
+              if (phones.length === 0) continue;
+              const same = [...box.querySelectorAll("button, a, [role=button]")].filter((b) => (b.innerText || b.textContent || "").trim() === label).length;
+              return { text: text.slice(0, 2000), phones: phones.map((p) => p.replace(/\D/g, "")), same };
+            }
+            return null;
+          })
+          .catch(() => null);
+        if (!row) continue;
+        const hasMarker = markers.some((m) => m && row.text.includes(m));
+        const onlyMine = row.phones.every((p) => mine.includes(p));
+        if (hasMarker && onlyMine && row.same === 1) return el;
+      }
+    }
+    return null;
+  }
+  /** ownsRecordNear가 고른 내 행의 버튼 — 바로 다음 ownRecord 클릭이 같은 요소를 누른다(검사·클릭 대상 일치). */
+  let ownPick = null;
+
   return {
     async start(_targetUrl) {
       await openContext(null);
@@ -253,7 +297,11 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
       try {
         switch (action.type) {
           case "click": {
-            const l = await resolveTarget(action.target);
+            // (§8 c-1) 허용된 내 기록 취소는 표지를 검사한 바로 그 요소만 누른다 — 첫 일치로 되돌아가지 않는다.
+            const pick = ownPick;
+            ownPick = null;
+            if (action.acceptDialog === true && !(pick && pick.key === JSON.stringify(action.target))) return { ok: false, note: "own_record_target_lost" };
+            const l = action.acceptDialog === true ? pick.el : await resolveTarget(action.target);
             if (!l) return { ok: false, note: "target_not_found" };
             dialogPolicy = action.acceptDialog === true ? "accept" : "dismiss";
             try {
@@ -474,14 +522,11 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     /** 이 화면에 우리가 만든 기록(시험 데이터 표지)이 그 대상 근처에 있는가 — 내 기록만 취소·삭제 허용. */
     async ownsRecordNear(target, markers) {
       try {
-        const l = await resolveTarget(target);
-        if (!l) return false;
-        const near = await l.evaluate((el) => {
-          const box = el.closest("li, tr, article, section, [role=listitem], [role=row], div");
-          return box ? box.textContent || "" : "";
-        });
-        return markers.some((m) => m && near.includes(m));
+        const el = await pickOwnRecord(target, markers);
+        ownPick = el ? { key: JSON.stringify(target), el } : null;
+        return Boolean(el);
       } catch {
+        ownPick = null;
         return false;
       }
     },

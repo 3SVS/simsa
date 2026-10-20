@@ -129,7 +129,9 @@ export function classifyPrecondition(ac: Pick<AgentAc, "given" | "when" | "then"
     adminScreen: RE_ADMIN.test(all),
     cancels: RE_CANCELS.test(when),
     needsToday: RE_TODAY.test(given) || RE_TODAY.test(ac.then ?? ""),
-    sameSession: RE_SAME_SESSION.test(when) && !RE_OTHER_SESSION.test(when),
+    // (2026-10-20 격차 §8 a-1) 새로고침이 있으면 만든 브라우저에서 시작한다(새 브라우저 확인은 에이전트가 new_session으로 한다).
+    //  "새로고침하거나 새 브라우저로"를 새 브라우저로 시작시키면 브라우저에만 저장하는 앱에서는 기록이 처음부터 없다.
+    sameSession: RE_SAME_SESSION.test(when),
   };
 }
 
@@ -158,6 +160,32 @@ export interface SetupContext {
   recipe: readonly string[];
 }
 
+const RE_SUBMIT_DONE = /완료|예약되|예약이 접수|확정|confirmed|booked|reserved|success/i;
+const RE_SUBMIT_ERROR = /잘못|올바르지|올바른|오류|에러|실패|다시 입력|필수|입력해 ?주|invalid|error|failed|required|please (enter|fill)/i;
+/** 버튼 글자처럼 보이는 짧은 줄("예약 완료하기", "예약 확정") — 완료 문구로 치지 않는다. */
+const RE_BUTTON_LIKE = /(하기|확정|확인|submit|confirm|book now|reserve)$/i;
+
+/**
+ * (2026-10-20 격차 §8 a-4·c-5) 입력 뒤 클릭이 기록을 만들었는가 — 결정론. 종전엔 클릭 뒤 화면 **전체**에서 /완료|…/를 찾아
+ * 버튼 글자 "예약 **완료**하기"에도 맞았고 오류 문구는 보지 않았다(bolt r2: "휴대폰 번호가 잘못" + 쓰기 0인데 created).
+ * 이제 클릭 전후 글자를 비교해 **새로 나타난 줄**만 본다: 새 줄에 오류 문구가 있으면 무효, 서버 쓰기가 있거나 새 줄에 완료 문구가
+ * 있으면(버튼처럼 보이는 짧은 줄 제외) 만든 것. 브라우저 저장소 변화만으로는 만든 것으로 치지 않는다(시간 고르기도 저장소를 바꾼다).
+ */
+export function judgeSubmitOutcome(
+  before: string,
+  after: string,
+  probe: { serverWrites: readonly string[]; localChanged: boolean } | null,
+): { created: boolean; newText: string; why: "server_write" | "confirmation" | "error_shown" | "no_change" | "no_probe" } {
+  if (!probe) return { created: false, newText: "", why: "no_probe" };
+  const seen = new Set(String(before ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+  const fresh = String(after ?? "").split("\n").map((l) => l.trim()).filter((l) => l && !seen.has(l));
+  const newText = fresh.join("\n");
+  if (RE_SUBMIT_ERROR.test(newText)) return { created: false, newText, why: "error_shown" };
+  if (probe.serverWrites.length > 0) return { created: true, newText, why: "server_write" };
+  const confirmed = fresh.some((l) => RE_SUBMIT_DONE.test(l) && !(l.length <= 12 && RE_BUTTON_LIKE.test(l)));
+  return confirmed ? { created: true, newText, why: "confirmation" } : { created: false, newText, why: "no_change" };
+}
+
 /** 제출 직후 화면 글자에서 날짜·시간을 읽는다(결정론). */
 export function extractBookingFacts(text: string, nowKst: Date = kstNow()): { date: string | null; time: string | null } {
   const t = text ?? "";
@@ -180,12 +208,21 @@ export function kstDateString(now: Date = new Date()): string {
   return kstNow(now).toISOString().slice(0, 10);
 }
 
+/**
+ * (2026-10-20 격차 §8 d) 프롬프트의 기기 시각 — 한국 시각으로 적는다. 종전엔 UTC 'Z' 문자열이라 01:35 KST에 "10-18"로 보였고,
+ * 시계 변형 런에서도 가짜 시각이 아니라 실제 시각을 보여 줘 "00:30으로 옮겼다"는 안내와 어긋났다.
+ */
+export function kstClockLabel(now: Date = new Date()): string {
+  return `${kstNow(now).toISOString().slice(0, 16).replace("T", " ")} (Asia/Seoul, UTC+9)`;
+}
+
 /** 뒤 기준의 프롬프트와 관찰 기록(corpus)에 같은 문장으로 들어간다 — 인용 접지가 되게. */
 export function setupContextLines(setup: SetupContext, testData: ReturnType<typeof koreanTestData>): string[] {
   const where = setup.serverWrites > 0 ? `server write requests = ${setup.serverWrites}` : "saved only in that browser (no server write seen)";
   return [
     `Setup done earlier in this run (by ${setup.byAc}): a booking exists — name=${testData.name}, phone=${testData.phone}${setup.date ? `, date=${setup.date}` : ""}${setup.time ? `, time=${setup.time}` : ""} (${where}). Do NOT create it again; perform WHEN from here.`,
-    ...(setup.recipe.length ? [`Known path to the booking form (worked earlier): ${setup.recipe.slice(0, 8).join(" → ")}`] : []),
+    // (§8 a-4) 경로를 8걸음에서 자르면 bolt(11~14걸음)는 폼에 못 닿았다.
+    ...(setup.recipe.length ? [`Known path to the booking form (worked earlier): ${setup.recipe.slice(0, 14).join(" → ")}`] : []),
   ];
 }
 

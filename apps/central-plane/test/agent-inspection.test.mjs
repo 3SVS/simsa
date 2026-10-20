@@ -355,7 +355,10 @@ describe("2026-10-19 given 셋업 — 순수 함수(옛 코드에는 없다)", (
     assert.equal(P.classifyPrecondition(ac("A7", "관리 화면에 예약이 1건 보인다", "그 예약을 취소한다")).cancels, true);
     const a5 = P.classifyPrecondition(ac("A5", "예약을 마쳤다", "새로고침하거나 새 브라우저로 다시 연다"));
     assert.equal(a5.needsRecord, true);
-    assert.equal(a5.sameSession, false, "새 브라우저가 함께 있으면 새 브라우저가 이긴다");
+    // (§8 a-1) 새로고침이 있으면 기록을 만든 브라우저에서 시작한다 — 새 브라우저 확인은 에이전트가 new_session으로. 옛 스펙
+    //  ("새 브라우저가 이긴다")은 브라우저에만 저장하는 앱의 A5를 기록 없는 빈 브라우저에서 시작시켜 6/6 확인 못 함을 만들었다.
+    assert.equal(a5.sameSession, true);
+    assert.equal(a5.otherSession, true);
     assert.equal(P.classifyPrecondition(ac("A5b", "예약을 마쳤다", "새로고침한다")).sameSession, true);
     assert.equal(P.classifyPrecondition(ac("A1", "예약 화면에서 날짜를 골랐다", "시간 목록을 본다")).needsRecord, false);
     assert.equal(P.classifyPrecondition(ac("CORE-1", "예약이 있다", "w")).needsRecord, false);
