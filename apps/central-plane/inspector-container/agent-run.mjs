@@ -705,7 +705,11 @@ export async function runAgentInspection(o) {
             review = pure.parseJudgeReview(
               await callLlm(
                 "You review browser test verdicts. Reply with JSON only.",
-                pure.judgeReviewPrompt({ ac, verdict: f.status, reason: f.reason, evidence: f.evidence, actions, observationTail: corpus, history }),
+                pure.judgeReviewPrompt({
+                  ac, verdict: f.status, reason: f.reason, evidence: f.evidence, actions, observationTail: corpus, history,
+                  // (2026-10-21 a-3) 재확인도 셋업 사실을 안다 — 모르고 "선행 예약 증거 없음"으로 기각하던 것.
+                  ...(setup ? { setupLines: pure.setupContextLines(setup, data, ac), setupExcerpt: setup.excerpt } : {}),
+                }),
                 300,
               ),
             );

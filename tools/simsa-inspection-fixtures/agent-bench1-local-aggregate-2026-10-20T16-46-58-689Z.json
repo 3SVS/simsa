@@ -1,0 +1,1832 @@
+{
+  "label": "로컬 실행(브랜치 코드) — 프로덕션 아님 · AC=사전 등록 A1~A10 주입",
+  "acMode": "prereg",
+  "repeat": 3,
+  "concurrency": 2,
+  "runs": [
+    {
+      "label": "로컬 실행(브랜치 코드) — 프로덕션 아님 · AC=사전 등록 A1~A10 주입",
+      "acMode": "prereg",
+      "run": 1,
+      "oppositeErrors": 0,
+      "appMatch": 5,
+      "apps": 6,
+      "mustIdentified": 0,
+      "mustTotal": 13,
+      "costPerRunMean": 0.3646,
+      "costPerRunMax": 0.5215,
+      "errors": 0,
+      "statusCounts": {
+        "pass": 20,
+        "fail": 11,
+        "not_verified": 35
+      },
+      "notVerifiedShare": 0.5303,
+      "notVerifiedByReason": {
+        "judge_disagreed": 9,
+        "precondition_blocked_by_defect": 4,
+        "-": 22
+      }
+    },
+    {
+      "label": "로컬 실행(브랜치 코드) — 프로덕션 아님 · AC=사전 등록 A1~A10 주입",
+      "acMode": "prereg",
+      "run": 2,
+      "oppositeErrors": 0,
+      "appMatch": 5,
+      "apps": 6,
+      "mustIdentified": 1,
+      "mustTotal": 13,
+      "costPerRunMean": 0.3599,
+      "costPerRunMax": 0.4693,
+      "errors": 0,
+      "statusCounts": {
+        "pass": 17,
+        "fail": 11,
+        "not_verified": 38
+      },
+      "notVerifiedShare": 0.5758,
+      "notVerifiedByReason": {
+        "-": 19,
+        "precondition_blocked_by_defect": 4,
+        "evidence_missing": 2,
+        "judge_disagreed": 6,
+        "not_reached": 2,
+        "precondition_not_met": 5
+      }
+    },
+    {
+      "label": "로컬 실행(브랜치 코드) — 프로덕션 아님 · AC=사전 등록 A1~A10 주입",
+      "acMode": "prereg",
+      "run": 3,
+      "oppositeErrors": 0,
+      "appMatch": 5,
+      "apps": 6,
+      "mustIdentified": 0,
+      "mustTotal": 13,
+      "costPerRunMean": 0.4003,
+      "costPerRunMax": 0.639,
+      "errors": 0,
+      "statusCounts": {
+        "pass": 22,
+        "fail": 8,
+        "not_verified": 36
+      },
+      "notVerifiedShare": 0.5455,
+      "notVerifiedByReason": {
+        "judge_disagreed": 9,
+        "fail_not_reproduced": 1,
+        "precondition_blocked_by_defect": 4,
+        "-": 16,
+        "not_reached": 1,
+        "precondition_not_met": 4,
+        "evidence_missing": 1
+      }
+    }
+  ],
+  "aggregate": {
+    "oppositeErrors": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "appMatch": {
+      "mean": 5,
+      "min": 5,
+      "max": 5
+    },
+    "mustIdentified": {
+      "mean": 0.3333,
+      "min": 0,
+      "max": 1
+    },
+    "costPerRunMean": {
+      "mean": 0.3749,
+      "min": 0.3599,
+      "max": 0.4003
+    },
+    "costPerRunMax": {
+      "mean": 0.5433,
+      "min": 0.4693,
+      "max": 0.639
+    },
+    "errors": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "notVerifiedShare": {
+      "mean": 0.5505,
+      "min": 0.5303,
+      "max": 0.5758
+    },
+    "notVerifiedPooled": {
+      "cells": 198,
+      "notVerified": 109,
+      "share": 0.5505
+    },
+    "oppositeZeroAllRuns": true,
+    "runs": 3
+  },
+  "compare": {
+    "runs": 3,
+    "apps": [
+      {
+        "app": "chatgpt",
+        "questionIdentical": true,
+        "acCounts": [
+          11,
+          11,
+          11
+        ],
+        "decisions": [
+          "Needs Fix",
+          "Needs Fix",
+          "Needs Fix"
+        ],
+        "decisionIdentical": true,
+        "acs": [
+          {
+            "app": "chatgpt",
+            "acId": "CORE-1",
+            "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "fail"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A1",
+            "title": "10:00~19:00, 30분 단위로 시간 선택",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A2",
+            "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A4",
+            "title": "예약하면 완료 화면에 예약 내용이 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "fail",
+              "not_verified"
+            ],
+            "identical": false
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A3",
+            "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A5",
+            "title": "새로고침해도 예약이 남는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A6",
+            "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A7",
+            "title": "취소하면 그 시간을 다시 예약할 수 있다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A8",
+            "title": "가격이 원 단위로 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A9",
+            "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "fail"
+            ],
+            "identical": true
+          },
+          {
+            "app": "chatgpt",
+            "acId": "A10",
+            "title": "모든 글이 한국어다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          }
+        ]
+      },
+      {
+        "app": "gemini",
+        "questionIdentical": true,
+        "acCounts": [
+          11,
+          11,
+          11
+        ],
+        "decisions": [
+          "Needs Fix",
+          "Needs Fix",
+          "Needs Fix"
+        ],
+        "decisionIdentical": true,
+        "acs": [
+          {
+            "app": "gemini",
+            "acId": "CORE-1",
+            "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A1",
+            "title": "10:00~19:00, 30분 단위로 시간 선택",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "fail"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A2",
+            "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "gemini",
+            "acId": "A4",
+            "title": "예약하면 완료 화면에 예약 내용이 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A3",
+            "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A5",
+            "title": "새로고침해도 예약이 남는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A6",
+            "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A7",
+            "title": "취소하면 그 시간을 다시 예약할 수 있다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A8",
+            "title": "가격이 원 단위로 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A9",
+            "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "gemini",
+            "acId": "A10",
+            "title": "모든 글이 한국어다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "pass",
+              "fail"
+            ],
+            "identical": false
+          }
+        ]
+      },
+      {
+        "app": "v0",
+        "questionIdentical": true,
+        "acCounts": [
+          11,
+          11,
+          11
+        ],
+        "decisions": [
+          "Needs Fix",
+          "Needs Fix",
+          "Needs Fix"
+        ],
+        "decisionIdentical": true,
+        "acs": [
+          {
+            "app": "v0",
+            "acId": "CORE-1",
+            "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A1",
+            "title": "10:00~19:00, 30분 단위로 시간 선택",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A2",
+            "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A4",
+            "title": "예약하면 완료 화면에 예약 내용이 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A3",
+            "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A5",
+            "title": "새로고침해도 예약이 남는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A6",
+            "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A7",
+            "title": "취소하면 그 시간을 다시 예약할 수 있다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A8",
+            "title": "가격이 원 단위로 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "v0",
+            "acId": "A9",
+            "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "not_verified"
+            ],
+            "identical": false
+          },
+          {
+            "app": "v0",
+            "acId": "A10",
+            "title": "모든 글이 한국어다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "fail"
+            ],
+            "identical": true
+          }
+        ]
+      },
+      {
+        "app": "bolt",
+        "questionIdentical": true,
+        "acCounts": [
+          11,
+          11,
+          11
+        ],
+        "decisions": [
+          "Not Verified",
+          "Not Verified",
+          "Not Verified"
+        ],
+        "decisionIdentical": true,
+        "acs": [
+          {
+            "app": "bolt",
+            "acId": "CORE-1",
+            "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A1",
+            "title": "10:00~19:00, 30분 단위로 시간 선택",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "bolt",
+            "acId": "A2",
+            "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "bolt",
+            "acId": "A4",
+            "title": "예약하면 완료 화면에 예약 내용이 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A3",
+            "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A5",
+            "title": "새로고침해도 예약이 남는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A6",
+            "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A7",
+            "title": "취소하면 그 시간을 다시 예약할 수 있다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A8",
+            "title": "가격이 원 단위로 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A9",
+            "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "bolt",
+            "acId": "A10",
+            "title": "모든 글이 한국어다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "pass"
+            ],
+            "identical": false
+          }
+        ]
+      },
+      {
+        "app": "claude",
+        "questionIdentical": true,
+        "acCounts": [
+          11,
+          11,
+          11
+        ],
+        "decisions": [
+          "Needs Fix",
+          "Needs Fix",
+          "Needs Fix"
+        ],
+        "decisionIdentical": true,
+        "acs": [
+          {
+            "app": "claude",
+            "acId": "CORE-1",
+            "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "fail"
+            ],
+            "identical": true
+          },
+          {
+            "app": "claude",
+            "acId": "A1",
+            "title": "10:00~19:00, 30분 단위로 시간 선택",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "fail"
+            ],
+            "identical": true
+          },
+          {
+            "app": "claude",
+            "acId": "A2",
+            "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "not_verified"
+            ],
+            "identical": false
+          },
+          {
+            "app": "claude",
+            "acId": "A4",
+            "title": "예약하면 완료 화면에 예약 내용이 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "claude",
+            "acId": "A3",
+            "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "claude",
+            "acId": "A5",
+            "title": "새로고침해도 예약이 남는다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "not_verified"
+            ],
+            "identical": false
+          },
+          {
+            "app": "claude",
+            "acId": "A6",
+            "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "claude",
+            "acId": "A7",
+            "title": "취소하면 그 시간을 다시 예약할 수 있다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "claude",
+            "acId": "A8",
+            "title": "가격이 원 단위로 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "claude",
+            "acId": "A9",
+            "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "claude",
+            "acId": "A10",
+            "title": "모든 글이 한국어다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "fail",
+              "fail"
+            ],
+            "identical": false
+          }
+        ]
+      },
+      {
+        "app": "lovable",
+        "questionIdentical": true,
+        "acCounts": [
+          11,
+          11,
+          11
+        ],
+        "decisions": [
+          "Not Verified",
+          "Not Verified",
+          "Not Verified"
+        ],
+        "decisionIdentical": true,
+        "acs": [
+          {
+            "app": "lovable",
+            "acId": "CORE-1",
+            "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "lovable",
+            "acId": "A1",
+            "title": "10:00~19:00, 30분 단위로 시간 선택",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "lovable",
+            "acId": "A2",
+            "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "lovable",
+            "acId": "A4",
+            "title": "예약하면 완료 화면에 예약 내용이 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "pass",
+              "not_verified"
+            ],
+            "identical": false
+          },
+          {
+            "app": "lovable",
+            "acId": "A3",
+            "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "not_verified",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "lovable",
+            "acId": "A5",
+            "title": "새로고침해도 예약이 남는다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "pass",
+              "pass"
+            ],
+            "identical": false
+          },
+          {
+            "app": "lovable",
+            "acId": "A6",
+            "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "lovable",
+            "acId": "A7",
+            "title": "취소하면 그 시간을 다시 예약할 수 있다",
+            "comparable": true,
+            "statuses": [
+              "not_verified",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": true
+          },
+          {
+            "app": "lovable",
+            "acId": "A8",
+            "title": "가격이 원 단위로 보인다",
+            "comparable": true,
+            "statuses": [
+              "pass",
+              "pass",
+              "pass"
+            ],
+            "identical": true
+          },
+          {
+            "app": "lovable",
+            "acId": "A9",
+            "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "fail",
+              "not_verified"
+            ],
+            "identical": false
+          },
+          {
+            "app": "lovable",
+            "acId": "A10",
+            "title": "모든 글이 한국어다",
+            "comparable": true,
+            "statuses": [
+              "fail",
+              "not_verified",
+              "not_verified"
+            ],
+            "identical": false
+          }
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "app": "chatgpt",
+        "acId": "CORE-1",
+        "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A1",
+        "title": "10:00~19:00, 30분 단위로 시간 선택",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A2",
+        "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A4",
+        "title": "예약하면 완료 화면에 예약 내용이 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "fail",
+          "not_verified"
+        ],
+        "identical": false
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A3",
+        "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A5",
+        "title": "새로고침해도 예약이 남는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A6",
+        "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A7",
+        "title": "취소하면 그 시간을 다시 예약할 수 있다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A8",
+        "title": "가격이 원 단위로 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A9",
+        "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "identical": true
+      },
+      {
+        "app": "chatgpt",
+        "acId": "A10",
+        "title": "모든 글이 한국어다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "gemini",
+        "acId": "CORE-1",
+        "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A1",
+        "title": "10:00~19:00, 30분 단위로 시간 선택",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A2",
+        "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "gemini",
+        "acId": "A4",
+        "title": "예약하면 완료 화면에 예약 내용이 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A3",
+        "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A5",
+        "title": "새로고침해도 예약이 남는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A6",
+        "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A7",
+        "title": "취소하면 그 시간을 다시 예약할 수 있다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A8",
+        "title": "가격이 원 단위로 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A9",
+        "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "gemini",
+        "acId": "A10",
+        "title": "모든 글이 한국어다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "pass",
+          "fail"
+        ],
+        "identical": false
+      },
+      {
+        "app": "v0",
+        "acId": "CORE-1",
+        "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A1",
+        "title": "10:00~19:00, 30분 단위로 시간 선택",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A2",
+        "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A4",
+        "title": "예약하면 완료 화면에 예약 내용이 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A3",
+        "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A5",
+        "title": "새로고침해도 예약이 남는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A6",
+        "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A7",
+        "title": "취소하면 그 시간을 다시 예약할 수 있다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A8",
+        "title": "가격이 원 단위로 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "v0",
+        "acId": "A9",
+        "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "not_verified"
+        ],
+        "identical": false
+      },
+      {
+        "app": "v0",
+        "acId": "A10",
+        "title": "모든 글이 한국어다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "CORE-1",
+        "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A1",
+        "title": "10:00~19:00, 30분 단위로 시간 선택",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "bolt",
+        "acId": "A2",
+        "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "bolt",
+        "acId": "A4",
+        "title": "예약하면 완료 화면에 예약 내용이 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A3",
+        "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A5",
+        "title": "새로고침해도 예약이 남는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A6",
+        "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A7",
+        "title": "취소하면 그 시간을 다시 예약할 수 있다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A8",
+        "title": "가격이 원 단위로 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A9",
+        "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "bolt",
+        "acId": "A10",
+        "title": "모든 글이 한국어다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "claude",
+        "acId": "CORE-1",
+        "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "identical": true
+      },
+      {
+        "app": "claude",
+        "acId": "A1",
+        "title": "10:00~19:00, 30분 단위로 시간 선택",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "identical": true
+      },
+      {
+        "app": "claude",
+        "acId": "A2",
+        "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "not_verified"
+        ],
+        "identical": false
+      },
+      {
+        "app": "claude",
+        "acId": "A4",
+        "title": "예약하면 완료 화면에 예약 내용이 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "claude",
+        "acId": "A3",
+        "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "claude",
+        "acId": "A5",
+        "title": "새로고침해도 예약이 남는다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "not_verified"
+        ],
+        "identical": false
+      },
+      {
+        "app": "claude",
+        "acId": "A6",
+        "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "claude",
+        "acId": "A7",
+        "title": "취소하면 그 시간을 다시 예약할 수 있다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "claude",
+        "acId": "A8",
+        "title": "가격이 원 단위로 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "claude",
+        "acId": "A9",
+        "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "claude",
+        "acId": "A10",
+        "title": "모든 글이 한국어다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "fail",
+          "fail"
+        ],
+        "identical": false
+      },
+      {
+        "app": "lovable",
+        "acId": "CORE-1",
+        "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "lovable",
+        "acId": "A1",
+        "title": "10:00~19:00, 30분 단위로 시간 선택",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "lovable",
+        "acId": "A2",
+        "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "lovable",
+        "acId": "A4",
+        "title": "예약하면 완료 화면에 예약 내용이 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "pass",
+          "not_verified"
+        ],
+        "identical": false
+      },
+      {
+        "app": "lovable",
+        "acId": "A3",
+        "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "not_verified",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "lovable",
+        "acId": "A5",
+        "title": "새로고침해도 예약이 남는다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "pass",
+          "pass"
+        ],
+        "identical": false
+      },
+      {
+        "app": "lovable",
+        "acId": "A6",
+        "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "lovable",
+        "acId": "A7",
+        "title": "취소하면 그 시간을 다시 예약할 수 있다",
+        "comparable": true,
+        "statuses": [
+          "not_verified",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": true
+      },
+      {
+        "app": "lovable",
+        "acId": "A8",
+        "title": "가격이 원 단위로 보인다",
+        "comparable": true,
+        "statuses": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "identical": true
+      },
+      {
+        "app": "lovable",
+        "acId": "A9",
+        "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "fail",
+          "not_verified"
+        ],
+        "identical": false
+      },
+      {
+        "app": "lovable",
+        "acId": "A10",
+        "title": "모든 글이 한국어다",
+        "comparable": true,
+        "statuses": [
+          "fail",
+          "not_verified",
+          "not_verified"
+        ],
+        "identical": false
+      }
+    ],
+    "totals": {
+      "appsQuestionIdentical": 6,
+      "appsDecisionIdentical": 6,
+      "apps": 6,
+      "acCellsCompared": 66,
+      "acCellsDisagreeing": 19,
+      "acCellsIncomparable": 0
+    }
+  }
+}

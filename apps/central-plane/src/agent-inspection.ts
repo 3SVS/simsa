@@ -245,7 +245,11 @@ export function setupContextLines(
   const secondCustomer = Boolean(pre?.otherSession && !pre.sameSession && !pre.adminScreen && !pre.cancels);
   const tail = secondCustomer
     ? ` You are now a DIFFERENT customer in a fresh browser. Try to book that SAME date and time as the second customer (name=${testData.altName}, phone=${testData.phone}). If the app accepts it, that is a double booking (fail); if that time is blocked or unavailable, it holds (pass).${setup.serverWrites > 0 ? "" : " The first booking was saved only in the first browser, so this browser may show the time as free — if the second booking is accepted, that IS a double booking."}`
-    : " Do NOT create it again; perform WHEN from here.";
+    : pre?.adminScreen && setup.serverWrites === 0
+      ? // (2026-10-21) 브라우저에만 저장하는 앱의 사장님 화면: 비어 있는 것 자체가 결함이다 — 에이전트가 "목록이 비어 시간순을
+        //  확인 못 함"으로 끝냈다(gemini·claude A6 6/6, 정답지 must 실패).
+        " Do NOT create it again. That booking was saved only in the first browser; this owner/admin screen is opened in a fresh browser. If the owner screen does not show that booking, the owner cannot see customers' bookings — that IS a fail of this criterion (quote what the owner screen shows)."
+      : " Do NOT create it again; perform WHEN from here.";
   return [
     head + tail,
     // (§8 a-4) 경로를 8걸음에서 자르면 bolt(11~14걸음)는 폼에 못 닿았다.
@@ -1468,6 +1472,13 @@ export function judgeReviewPrompt(args: {
   actions: string[];
   observationTail: string;
   history?: string[];
+  /**
+   * (2026-10-21 격차 §8 a-3 확정) 이 기준이 시작되기 전에 실행기가 만들어 둔 기록. 재확인이 이것을 모르고 "그 시간이 이미 예약돼
+   * 있었다는 증거가 없다"며 A3 이중 예약 실패 5/6·A6 사장님 화면을 기각했다(드라이버 수정 뒤 측정의 기각 사유 원문).
+   */
+  setupLines?: string[];
+  /** 그 기록을 만들 때의 완료 화면 발췌 */
+  setupExcerpt?: string;
 }): string {
   return [
     "You are a skeptical reviewer of a browser test. Decide whether the tester's verdict is justified by what was actually observed. Be strict:",
@@ -1477,7 +1488,16 @@ export function judgeReviewPrompt(args: {
     'Reply JSON only: {"agree": true|false, "why": "<one sentence>"}',
     "",
     `Criterion ${args.ac.id} (${args.ac.priority}): ${args.ac.title}`,
+    `Given: ${args.ac.given}`,
     `Then: ${args.ac.then}`,
+    ...(args.setupLines?.length
+      ? [
+          "Already established BEFORE this criterion started (done by the test runner, not by this tester — treat it as a fact, do not ask the tester to prove it again):",
+          ...args.setupLines,
+          ...(args.setupExcerpt ? [`Confirmation screen when that record was made: "${args.setupExcerpt.replace(/\s+/g, " ").slice(0, 300)}"`] : []),
+          "This criterion was then checked in a FRESH browser (a different visitor) unless the actions show a reload of the same browser.",
+        ]
+      : []),
     `Tester's verdict: ${args.verdict} — ${args.reason}`,
     `Quoted evidence: ${args.evidence.map((e) => `"${e}"`).join(" ")}`,
     `Actions taken: ${args.actions.join(" → ") || "(none)"}`,

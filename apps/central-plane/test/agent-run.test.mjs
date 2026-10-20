@@ -1093,6 +1093,37 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     assert.ok(!out.report.agent.defects.some((d) => d.acId === "A6"), "결함으로 세지 않는다");
   });
 
+  it("T21 (10-21 a-3 확정) 재확인 프롬프트가 셋업 사실(이 기준 전에 만들어 둔 기록·완료 화면)을 받는다 — 옛 코드는 몰라서 '선행 예약 증거 없음'으로 기각", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      A3: [
+        { type: "new_session" },
+        { type: "click", target: { role: "button", name: "10:30" } },
+        { type: "judge", verdict: "fail", reason: "이미 예약된 10:30이 다른 손님에게도 예약 가능으로 보여서 같은 시간이 또 예약돼요", evidenceQuote: "10:30 예약 가능" },
+      ],
+    });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    const review = prompts.find((p) => /skeptical reviewer/.test(p) && /Criterion A3 \(/.test(p));
+    assert.ok(review, "A3 재확인이 돌았다");
+    assert.match(review, /Already established BEFORE this criterion started/);
+    assert.match(review, /Setup done earlier in this run \(by CORE-1\): a booking exists/);
+    assert.match(review, /Confirmation screen when that record was made: "예약이 완료되었어요/);
+    assert.match(review, /Given: 어떤 날짜·시간에 예약이 하나 있다/);
+  });
+
+  it("T22 (10-21) 브라우저에만 저장하는 앱의 사장님 화면 기준: 비어 있으면 그것이 실패라고 알린다 · 서버 저장 앱엔 그 문장이 없다", async () => {
+    const P = await import("../dist/agent-inspection.js");
+    const setupOf = (serverWrites) => ({ byAc: "CORE-1", date: "2026-10-21", time: "10:30", excerpt: "", serverWrites, recipe: [] });
+    const browserOnly = P.setupContextLines(setupOf(0), TD, A6).join("\n");
+    assert.match(browserOnly, /owner cannot see customers' bookings — that IS a fail/);
+    const serverBacked = P.setupContextLines(setupOf(1), TD, A6).join("\n");
+    assert.doesNotMatch(serverBacked, /owner cannot see/);
+    assert.match(serverBacked, /Do NOT create it again; perform WHEN from here/);
+  });
+
   it("T20 (10-21) 서버에 저장하는 앱의 관리 화면 기준은 내 번호를 화면에서 봐야 pass — 이전 런 기록만 보이면 own_record_not_seen · 내 기록이 보이면 그대로 pass", async () => {
     const run = async ({ listMine }) => {
       const { site, shared } = serverSalon();
