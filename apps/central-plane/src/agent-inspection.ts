@@ -93,6 +93,9 @@ export const AC_REASON_CODES = [
   "setup_skipped_budget",
   // 2026-10-20 격차 §8 b-1: 전제를 만들려다 앱의 핵심 결함(재현된 CORE-1 실패) 때문에 못 만들었다 — 이 기준 자체의 실패라 하지 않는다.
   "precondition_blocked_by_defect",
+  // 2026-10-21 거짓 pass 가드(기준 3 위반 bolt r2 A6): 실행기만 고른다.
+  "clock_shifted",
+  "own_record_not_seen",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -491,7 +494,7 @@ export function sanitizeAgentReasonCode(
   if (!code) return undefined;
   if (code === "app_missing" || code === "budget" || code === "evidence_missing" || code === "judge_disagreed" || code === "guessed_address") return undefined;
   // 셋업 사유는 실행기가 정한다 — 에이전트가 고르면 뒷받침이 없다.
-  if (code === "precondition_not_met" || code === "setup_not_consented" || code === "setup_skipped_budget" || code === "precondition_blocked_by_defect") return undefined;
+  if (code === "precondition_not_met" || code === "setup_not_consented" || code === "setup_skipped_budget" || code === "precondition_blocked_by_defect" || code === "clock_shifted" || code === "own_record_not_seen") return undefined;
   if ((code === "login_required" || code === "login_failed") && !ctx.loginGate) return undefined;
   if ((code === "oauth_unsupported") && ctx.loginGate !== "oauth") return undefined;
   if ((code === "sms_unsupported") && ctx.loginGate !== "sms") return undefined;
@@ -660,6 +663,8 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     setup_not_consented: "테스트 데이터 생성 미동의 — 이 기준의 전제(예약 1건)를 만들 수 없어 확인하지 않았어요. 동의해 주시면 끝까지 해 봐요",
     setup_skipped_budget: "이 기준의 전제(예약 1건)를 만들면 확인이 끝난 뒤 지울 여유가 없어서, 만들지 않고 확인하지 않았어요 — 치울 수 없는 것은 만들지 않아요",
     precondition_blocked_by_defect: "앱의 핵심 일(예약 만들기)이 되지 않아 이 기준의 전제를 만들 수 없었어요 — 핵심 일을 고치면 다시 확인할 수 있어요",
+    clock_shifted: "확인하려고 기기 시계를 다른 시각으로 옮긴 뒤에 본 결과라, 지금 시각에서도 된다고 말할 수 없어요",
+    own_record_not_seen: "이번 확인이 만든 기록을 화면에서 찾지 못해, 보인 목록이 이번 기록 때문인지 알 수 없어요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -683,6 +688,8 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     setup_not_consented: "Test data not allowed — we couldn't create what this criterion assumes (one booking), so it wasn't checked. Allow test data and we'll go all the way",
     setup_skipped_budget: "Creating what this criterion assumes (one booking) would leave no room to clean it up afterwards, so we didn't create it and didn't check — we don't create what we can't clean up",
     precondition_blocked_by_defect: "The app's core task (making a booking) doesn't work, so we couldn't create what this criterion assumes — fix the core task and it can be checked",
+    clock_shifted: "This was seen after moving the device clock to another time, so it doesn't show the app works at the current time",
+    own_record_not_seen: "We couldn't find the record this check created on screen, so the list we saw may not reflect this check",
   },
 };
 
@@ -1672,7 +1679,9 @@ export function defectsOf(acTable: readonly AgentAcRow[]): Array<{ acId: string;
           r.reasonCode !== "setup_not_consented" &&
           r.reasonCode !== "setup_skipped_budget" &&
           // 결함은 CORE-1 행에 한 번만 센다 — 그 결함 때문에 못 본 기준까지 결함으로 세지 않는다.
-          r.reasonCode !== "precondition_blocked_by_defect"),
+          r.reasonCode !== "precondition_blocked_by_defect" &&
+          r.reasonCode !== "clock_shifted" &&
+          r.reasonCode !== "own_record_not_seen"),
     )
     .map((r) => ({ acId: r.id, priority: r.priority, status: r.status, defectClass: classifyDefect(r) }));
 }

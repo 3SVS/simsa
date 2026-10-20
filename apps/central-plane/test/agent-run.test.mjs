@@ -1071,6 +1071,59 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     assert.match(later, /THE APP ANSWERED WITH A POPUP/);
   });
 
+  // 10-19 KST 낮 — serverSalon 완료 화면 날짜(2026-10-19)가 "오늘"이 되게.
+  const NOW_1019 = Date.parse("2026-10-19T03:00:00Z");
+
+  it("T19 (10-21 기준 3 위반 bolt r2 A6) 에이전트가 시계를 옮긴 뒤 낸 pass는 받지 않는다(clock_shifted) — 옛 코드는 pass", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      A6: [
+        { type: "set_clock", iso: "2026-10-19T10:00:00+09:00" },
+        { type: "goto", path: "/admin" },
+        { type: "judge", verdict: "pass", reason: "관리 화면에 오늘 예약이 시간순으로 보여요", evidenceQuote: "오늘 예약" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", nowMs: NOW_1019 });
+    const row = out.report.acTable.find((r) => r.id === "A6");
+    assert.equal(row.status, "not_verified", JSON.stringify(row));
+    assert.equal(row.reasonCode, "clock_shifted");
+    assert.ok(!out.report.agent.defects.some((d) => d.acId === "A6"), "결함으로 세지 않는다");
+  });
+
+  it("T20 (10-21) 서버에 저장하는 앱의 관리 화면 기준은 내 번호를 화면에서 봐야 pass — 이전 런 기록만 보이면 own_record_not_seen · 내 기록이 보이면 그대로 pass", async () => {
+    const run = async ({ listMine }) => {
+      const { site, shared } = serverSalon();
+      // 서버에 쓰긴 하지만(쓰기 1) 관리 목록에 내 기록이 나오는지는 listMine으로 정한다.
+      const onAct = (action, state) => {
+        if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) {
+          if (listMine) shared.bookings.push({ name: TD.name, phone: TD.phone, time: "10:30" });
+          (state.serverWrites ??= []).push("POST /api/bookings");
+          state.path = "/done";
+        }
+        return null;
+      };
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm({
+        "AC-U": userMustScript,
+        "CORE-1": book,
+        A6: [
+          { type: "goto", path: "/admin" },
+          { type: "judge", verdict: "pass", reason: "관리 화면에 오늘 예약이 시간순으로 보여요", evidenceQuote: "오늘 예약" },
+        ],
+      });
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", nowMs: NOW_1019 });
+      return out.report.acTable.find((r) => r.id === "A6");
+    };
+    const notMine = await run({ listMine: false });
+    assert.equal(notMine.status, "not_verified", JSON.stringify(notMine));
+    assert.equal(notMine.reasonCode, "own_record_not_seen");
+    const mine = await run({ listMine: true });
+    assert.equal(mine.status, "pass", JSON.stringify(mine));
+  });
+
   it("T14 (§8 d) 프롬프트의 기기 시각은 한국 시각 표기 — 01:35 KST가 10-18 UTC로 보이지 않는다", async () => {
     const { site, onAct } = serverSalon();
     const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });

@@ -324,6 +324,8 @@ export async function runAgentInspection(o) {
         //  날짜를 보여 주면(bolt) 첫 기록이 한국의 어제가 된다. "앱 표시 날짜를 오늘로 보자"는 알려진 결함(관리 화면 '오늘'=UTC)을
         //  pass로 만들어 기각. 그래도 오늘 기록이 없으면 정직하게 전제 미충족(Bae Q2).
         const kstToday = pure.kstDateString(nowDate());
+        // 날짜를 못 읽은 셋업(date=null)은 여기서 막지 않는다 — 막으면 확정 화면에 날짜가 없는 앱의 "오늘" 기준이 전부 확인 못 함이
+        //  된다. 그 경우의 거짓 pass(bolt r2 A6)는 판정 쪽 가드(에이전트 시계 이동 pass 불인정 · 서버 저장 앱은 내 번호를 봐야 pass)가 막는다.
         if (pre.needsRecord && pre.needsToday && setup?.date && setup.date !== kstToday) {
           if (!todaySetupTried && o.readOnly !== true && timeLeft() > 150_000 && caps.maxActions - actionsUsed >= SETUP_STEPS && !llmCalls.budgetExhausted) {
             todaySetupTried = true;
@@ -568,6 +570,15 @@ export async function runAgentInspection(o) {
     let autoProbes = 0;
     let probeBefore = null;
     let turnTier = "cheap";
+    /** (2026-10-21) 에이전트가 이 기준 안에서 시계를 옮겼는가 · 앱 화면에서 내 기록 표지를 봤는가 — 거짓 pass 가드. */
+    let clockShifted = false;
+    let seenOwnRecord = false;
+    // "내 기록이 보여야 하는" 기준: 관리 화면·새로고침·취소. 이전 런이 남긴 남의 기록으로 pass하지 못하게.
+    //  서버에 저장하는 앱만 — 브라우저에만 저장하는 앱의 목록은 이 브라우저 기록뿐이라 섞일 수 없고, 이름만 보여 주기도 한다.
+    const ownRecordVisibleAc = (() => {
+      const p = pure.classifyPrecondition(ac);
+      return Boolean(setup && setup.serverWrites > 0) && p.needsRecord && (p.adminScreen || p.sameSession || p.cancels);
+    })();
     if (reproduceOf) {
       history.push(`(an earlier attempt concluded FAIL: "${red(reproduceOf.reason)}". Re-check independently and carefully in this fresh browser — do every required step (choose service/date/time, valid inputs), then look. Judge fail only if you SEE it fail again.)`);
     }
@@ -581,6 +592,11 @@ export async function runAgentInspection(o) {
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
       const obs = redObs(obsRaw);
+      // 앱 화면(관찰)에서 내 기록 표지(번호)를 실제로 봤는가 — 셋업 문장(corpus 머리)은 세지 않는다.
+      if (!seenOwnRecord) {
+        const t = String(obsRaw?.text ?? "");
+        seenOwnRecord = markers.some((m) => m && t.includes(m));
+      }
       if (setup && trace.setupVisibleAtStart === null) {
         // 기준을 시작한 화면에 만들어 둔 기록(번호·시간)이 보였는가 — 새 브라우저에서 기록이 안 보이는 구조(§8 a-1)를 재기 위해.
         const t = String(obsRaw?.text ?? "");
@@ -674,6 +690,13 @@ export async function runAgentInspection(o) {
         }
         const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale, onGuessedAddress });
         if (loginFailed && f.reasonCode === "login_required") f.reason = pure.reasonText("login_failed", locale);
+        // (2026-10-21 거짓 pass 가드) ① 에이전트가 시계를 옮긴 뒤의 pass(시계 변형 런은 실행기가 따로 한다)
+        //  ② "내 기록이 보여야 하는" 기준인데 앱 화면에서 내 번호를 한 번도 못 본 pass — 이전 런이 남긴 기록일 수 있다.
+        if (f.status === "pass" && !cleanupMode && !setupMode && (clockShifted || (ownRecordVisibleAc && !seenOwnRecord))) {
+          const code = clockShifted ? "clock_shifted" : "own_record_not_seen";
+          judgeLog(a, code);
+          return finish({ status: "not_verified", reason: pure.reasonText(code, locale), reasonCode: code, evidence: [] });
+        }
         // A3: 근거가 붙은 pass/fail은 다른 눈으로 한 번 더. 동의하지 않거나 답이 깨지면 결과로 치지 않는다.
         // (H3) 재확인은 판정을 바꾸는 must 기준에만.
         if ((f.status === "pass" || f.status === "fail") && ac.priority === "must") {
@@ -750,6 +773,9 @@ export async function runAgentInspection(o) {
         res = { ok: true, note: "fresh browser opened" };
       } else if (a.type === "set_clock") {
         res = await driver.setClock(a.iso);
+        // (2026-10-21 기준 3 위반, bolt r2 A6) 에이전트가 시계를 낮(KST 10:00)으로 옮겨 밤에만 보이는 날짜 결함이 사라진 화면을
+        //  보고 pass했다. 시계를 옮긴 뒤의 관찰은 "지금"의 증거가 아니다 — 이 기준의 pass는 받지 않는다(실패 탐지용으로만).
+        if (res?.ok) clockShifted = true;
       } else if (a.type === "probe_storage") {
         // A2 탐침: 결과 문장은 관찰 기록(corpus)에 그대로 들어가 판정 근거로 인용할 수 있다.
         const p = driver.storageProbe ? await driver.storageProbe().catch(() => null) : null;
