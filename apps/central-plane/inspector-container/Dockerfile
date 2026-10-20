@@ -47,9 +47,9 @@ RUN npm install --no-package-lock --loglevel=error
 
 # Canonical Simsa modules — compiled in-image from apps/central-plane/src so
 # the container always runs the exact logic the repo ships.
-# 2026-10-21 v2 S1·S2: 증거물 저장소·기계 검증기(evidence-chain) · 정찰 판단(recon) — S4에서 실행기가 쓴다.
-COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts apps/central-plane/src/agent-inspection.ts apps/central-plane/src/evidence-chain.ts apps/central-plane/src/recon.ts ./src/
-RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts src/agent-inspection.ts src/evidence-chain.ts src/recon.ts \
+# 2026-10-21 v2 S1·S2·S3: 증거물 저장소·기계 검증기(evidence-chain) · 정찰 판단(recon) · AC 선행 조건(ac-semantics) · 가설·계획(v2-plan) — S4에서 실행기가 쓴다.
+COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts apps/central-plane/src/agent-inspection.ts apps/central-plane/src/evidence-chain.ts apps/central-plane/src/recon.ts apps/central-plane/src/ac-semantics.ts apps/central-plane/src/v2-plan.ts ./src/
+RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts src/agent-inspection.ts src/evidence-chain.ts src/recon.ts src/ac-semantics.ts src/v2-plan.ts \
     --outDir dist --module nodenext --moduleResolution nodenext \
     --target es2022 --skipLibCheck
 
