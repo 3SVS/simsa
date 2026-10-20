@@ -22,9 +22,13 @@ import { Hono } from "hono";
 import type { Env } from "../env.js";
 import { anthropicEndpoint, OPENAI_FALLBACK_MODEL } from "../workspace/anthropic-fetch.js";
 
+type Vendor = "anthropic" | "openai" | "gemini";
+
 type ProbeResult = {
-  vendor: "anthropic" | "openai" | "gemini";
+  vendor: Vendor;
   path: "gateway" | "direct";
+  /** 잰 모델(2026-10-21 v2 S0 — 후보 모델을 고를 수 있게 되면서 결과에 남긴다). */
+  model?: string;
   status: number | "network_error" | "no_key";
   ms: number;
   /** 실패 본문의 앞부분 — 원인 분류에 필요한 최소치만. */
@@ -50,6 +54,36 @@ type ProbeResult = {
 };
 
 const PROMPT = "Reply with the single word: ok";
+
+/** 기본 모델(종전 프로브와 같다). */
+const DEFAULT_MODELS: Record<Vendor, string> = { anthropic: "claude-haiku-4-5-20251001", openai: OPENAI_FALLBACK_MODEL, gemini: "gemini-2.5-flash" };
+
+/**
+ * (2026-10-21 v2 S0, V-5 "프로덕션에서 실제로 닿는 가장 강한 모델") 프로덕션 키로 부를 수 있는 후보 모델 — **닫힌 목록**.
+ * 요청이 임의 모델을 부르지 못하게 한다(비용·키 오남용). 후보를 늘리려면 이 목록을 고치는 PR로.
+ */
+export const PROBE_MODEL_ALLOWLIST: Record<Vendor, readonly string[]> = {
+  anthropic: ["claude-haiku-4-5-20251001", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"],
+  openai: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.1-pro-preview", "gemini-3.8-flash"],
+};
+const MAX_PROBE_MODELS = 8;
+
+/** "vendor:model,…" → 목록. 허용 목록 밖·형식 오류·상한 초과면 null. */
+export function parseProbeModels(raw: string | undefined): Array<{ vendor: Vendor; model: string }> | null | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const parts = raw.split(",").map((x) => x.trim()).filter(Boolean);
+  if (parts.length === 0 || parts.length > MAX_PROBE_MODELS) return null;
+  const out: Array<{ vendor: Vendor; model: string }> = [];
+  for (const part of parts) {
+    const m = /^(anthropic|openai|gemini):([A-Za-z0-9._-]{1,64})$/.exec(part);
+    if (!m) return null;
+    const vendor = m[1] as Vendor;
+    if (!PROBE_MODEL_ALLOWLIST[vendor].includes(m[2]!)) return null;
+    out.push({ vendor, model: m[2]! });
+  }
+  return out;
+}
 /** 추론형 모델이 예산을 추론에 다 써서 본문을 비우지 않도록 넉넉히. 그래도 응답은 한 단어다. */
 const MAX_OUT = 512;
 
@@ -71,16 +105,16 @@ async function timed(fn: () => Promise<Probed>): Promise<Probed & { ms: number }
   }
 }
 
-async function probeAnthropic(env: Env, useGateway: boolean): Promise<ProbeResult> {
+async function probeAnthropic(env: Env, useGateway: boolean, model = DEFAULT_MODELS.anthropic): Promise<ProbeResult> {
   const key = env.ANTHROPIC_API_KEY;
   const path = useGateway ? "gateway" : "direct";
-  if (!key) return { vendor: "anthropic", path, status: "no_key", ms: 0 };
+  if (!key) return { vendor: "anthropic", path, model, status: "no_key", ms: 0 };
   const url = useGateway ? anthropicEndpoint(env.CF_AI_GATEWAY_ANTHROPIC_URL) : anthropicEndpoint();
   const out = await timed(async () => {
     const r = await fetch(url, {
       method: "POST",
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json", "user-agent": "simsa-central-plane/1.0" },
-      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: MAX_OUT, messages: [{ role: "user", content: PROMPT }] }),
+      body: JSON.stringify({ model, max_tokens: MAX_OUT, messages: [{ role: "user", content: PROMPT }] }),
     });
     if (!r.ok) {
       return {
@@ -93,35 +127,34 @@ async function probeAnthropic(env: Env, useGateway: boolean): Promise<ProbeResul
     const text = (j?.content ?? []).find((b) => b.type === "text")?.text ?? "";
     return { status: r.status, usable: text.trim().length > 0, textChars: text.length };
   });
-  return { vendor: "anthropic", path, ...out };
+  return { vendor: "anthropic", path, model, ...out };
 }
 
-async function probeOpenAi(env: Env): Promise<ProbeResult> {
+async function probeOpenAi(env: Env, model = DEFAULT_MODELS.openai): Promise<ProbeResult> {
   const key = env.OPENAI_API_KEY;
   const base = (env.CF_AI_GATEWAY_OPENAI_URL ?? "").trim().replace(/\/$/, "");
   const path = base ? "gateway" : "direct";
-  if (!key) return { vendor: "openai", path, status: "no_key", ms: 0 };
+  if (!key) return { vendor: "openai", path, model, status: "no_key", ms: 0 };
   const url = base ? `${base}/chat/completions` : "https://api.openai.com/v1/chat/completions";
   const out = await timed(async () => {
     const r = await fetch(url, {
       method: "POST",
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: OPENAI_FALLBACK_MODEL, max_completion_tokens: MAX_OUT, messages: [{ role: "user", content: PROMPT }] }),
+      body: JSON.stringify({ model, max_completion_tokens: MAX_OUT, messages: [{ role: "user", content: PROMPT }] }),
     });
     if (!r.ok) return { status: r.status, detail: (await r.text().catch(() => "")).slice(0, 120) };
     const j = (await r.json().catch(() => null)) as { choices?: Array<{ message?: { content?: string } }> } | null;
     const text = j?.choices?.[0]?.message?.content ?? "";
     return { status: r.status, usable: text.trim().length > 0, textChars: text.length };
   });
-  return { vendor: "openai", path, ...out };
+  return { vendor: "openai", path, model, ...out };
 }
 
-async function probeGemini(env: Env): Promise<ProbeResult> {
+async function probeGemini(env: Env, model = DEFAULT_MODELS.gemini): Promise<ProbeResult> {
   const key = env.GEMINI_API_KEY;
   const base = (env.CF_AI_GATEWAY_GOOGLE_URL ?? "").trim().replace(/\/$/, "");
   const path = base ? "gateway" : "direct";
-  if (!key) return { vendor: "gemini", path, status: "no_key", ms: 0 };
-  const model = "gemini-2.5-flash";
+  if (!key) return { vendor: "gemini", path, model, status: "no_key", ms: 0 };
   const url = base
     ? `${base}/v1beta/models/${model}:generateContent`
     : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -136,7 +169,7 @@ async function probeGemini(env: Env): Promise<ProbeResult> {
     const text = (j?.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
     return { status: r.status, usable: text.trim().length > 0, textChars: text.length };
   });
-  return { vendor: "gemini", path, ...out };
+  return { vendor: "gemini", path, model, ...out };
 }
 
 export function createLlmProbeRoutes(): Hono<{ Bindings: Env }> {
@@ -152,12 +185,18 @@ export function createLlmProbeRoutes(): Hono<{ Bindings: Env }> {
     if (!m || m[1] !== expected) return c.json({ ok: false, error: "unauthorized" }, 401);
 
     const n = Math.min(Math.max(parseInt(c.req.query("n") ?? "1", 10) || 1, 1), 4);
-    const one = () => [
-      probeAnthropic(c.env, true),
-      probeAnthropic(c.env, false),
-      probeOpenAi(c.env),
-      probeGemini(c.env),
-    ];
+    const picked = parseProbeModels(c.req.query("models"));
+    if (picked === null) return c.json({ ok: false, error: "model_not_allowed", allowlist: PROBE_MODEL_ALLOWLIST }, 400);
+    const one = () =>
+      picked === undefined
+        ? [probeAnthropic(c.env, true), probeAnthropic(c.env, false), probeOpenAi(c.env), probeGemini(c.env)]
+        : picked.flatMap(({ vendor, model }) =>
+            vendor === "anthropic"
+              ? [probeAnthropic(c.env, true, model), probeAnthropic(c.env, false, model)]
+              : vendor === "openai"
+                ? [probeOpenAi(c.env, model)]
+                : [probeGemini(c.env, model)],
+          );
     const rounds = Array.from({ length: n }, () => one()).flat();
     const results = await Promise.all(rounds);
 
@@ -166,7 +205,8 @@ export function createLlmProbeRoutes(): Hono<{ Bindings: Env }> {
     // 경우가 정확히 폴백이 조용히 망가지는 지점이다.
     const summary: Record<string, { ok: number; usable: number; total: number; statuses: Record<string, number>; avgMs: number }> = {};
     for (const r of results) {
-      const k = `${r.vendor}:${r.path}`;
+      // 모델을 고른 런은 모델별로 센다(기본 런은 종전 키 그대로).
+      const k = picked === undefined ? `${r.vendor}:${r.path}` : `${r.vendor}:${r.path}:${r.model}`;
       const s = (summary[k] ??= { ok: 0, usable: 0, total: 0, statuses: {}, avgMs: 0 });
       s.total += 1;
       if (r.status === 200) s.ok += 1;

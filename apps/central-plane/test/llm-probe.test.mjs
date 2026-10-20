@@ -132,3 +132,67 @@ describe("/internal/llm-probe — 전용 토큰 (관측/콜백 분리)", () => {
     assert.equal((await post(env, { token: TOKEN })).status, 200);
   });
 });
+
+describe("2026-10-21 v2 S0(V-5) — 후보 모델 지정 (허용 목록만)", () => {
+  /** 외부를 때리지 않게 fetch를 바꿔 끼우고, 보낸 모델 이름을 모은다. */
+  async function withFetch(fn) {
+    const sent = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init?.body ?? "{}");
+      const u = String(url);
+      const model = body.model ?? /models\/([^:]+):/.exec(u)?.[1] ?? "?";
+      sent.push(model);
+      const payload = u.includes("generativelanguage") || u.includes(":generateContent")
+        ? { candidates: [{ content: { parts: [{ text: "ok" }] } }] }
+        : u.includes("chat/completions")
+          ? { choices: [{ message: { content: "ok" } }] }
+          : { content: [{ type: "text", text: "ok" }] };
+      return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    try {
+      return await fn(sent);
+    } finally {
+      globalThis.fetch = real;
+    }
+  }
+
+  it("models를 주면 그 모델로만 잰다 — 결과·요약에 모델 이름이 붙는다", async () => {
+    await withFetch(async (sent) => {
+      const res = await post(envWith(), { query: "?models=anthropic:claude-opus-5-5,openai:gpt-5.6-sol,gemini:gemini-3.1-pro-preview" });
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.deepEqual([...new Set(sent)].sort(), ["claude-opus-5-5", "gemini-3.1-pro-preview", "gpt-5.6-sol"]);
+      assert.ok(body.results.every((r) => typeof r.model === "string"));
+      assert.ok(body.summary["anthropic:gateway:claude-opus-5-5"], JSON.stringify(Object.keys(body.summary)));
+      assert.ok(body.summary["anthropic:direct:claude-opus-5-5"]);
+      assert.equal(body.summary["anthropic:gateway:claude-opus-5-5"].usable, 1);
+    });
+  });
+
+  it("허용 목록 밖 모델이면 400이고 아무것도 호출하지 않는다 — 프로덕션 키로 임의 모델을 부르지 못한다", async () => {
+    await withFetch(async (sent) => {
+      const res = await post(envWith(), { query: "?models=openai:gpt-9-ultra" });
+      assert.equal(res.status, 400);
+      assert.equal((await res.json()).error, "model_not_allowed");
+      assert.equal(sent.length, 0);
+    });
+  });
+
+  it("한 번에 8개를 넘으면 400 (예산 보호)", async () => {
+    const list = Array.from({ length: 9 }, () => "openai:gpt-5.4").join(",");
+    await withFetch(async (sent) => {
+      const res = await post(envWith(), { query: `?models=${list}` });
+      assert.equal(res.status, 400);
+      assert.equal(sent.length, 0);
+    });
+  });
+
+  it("models가 없으면 종전과 같은 기본 모델 3벤더 4항목", async () => {
+    await withFetch(async (sent) => {
+      const body = await (await post(envWith())).json();
+      assert.equal(body.results.length, 4);
+      assert.deepEqual([...new Set(sent)].sort(), ["claude-haiku-4-5-20251001", "gemini-2.5-flash", "gpt-5.4"]);
+    });
+  });
+});

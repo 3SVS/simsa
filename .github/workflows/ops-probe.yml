@@ -35,6 +35,14 @@ on:
         default: 'envelope-fill-rate'
         type: choice
         options: [latest-visual-check-fill, envelope-fill-rate, repair-fill-rate, agent-llm-usage-48h]
+      models:
+        description: 'llm-probe 전용(v2 S0): 후보 모델 "vendor:model,…" — 서버 허용 목록 밖이면 400. 비우면 기본 3벤더'
+        required: false
+        default: ''
+      n:
+        description: 'llm-probe 전용: 동시 횟수 1~4'
+        required: false
+        default: '1'
 
 jobs:
   probe:
@@ -45,13 +53,19 @@ jobs:
       TOKEN: ${{ secrets.LLM_PROBE_TOKEN }}
       INTERNAL_TOKEN: ${{ secrets.INTERNAL_CALLBACK_TOKEN }}
       BASE: https://conclave-ai.seunghunbae.workers.dev
+      # 입력은 셸에 직접 끼우지 않고 env로 받아 글자 집합을 검사한다(워크플로 주입 방지).
+      MODELS: ${{ inputs.models }}
+      N: ${{ inputs.n }}
     steps:
       - name: Probe
         run: |
           set -uo pipefail
+          [[ "$MODELS" =~ ^[A-Za-z0-9._:,-]*$ ]] || { echo "::error::models 형식 오류"; exit 1; }
+          [[ "$N" =~ ^[1-4]$ ]] || N=1
+          q="n=$N"; [ -n "$MODELS" ] && q="$q&models=$MODELS"
           case "${{ inputs.target }}" in
             builder-selfcheck) req=(-X GET "$BASE/internal/builder/selfcheck") ;;
-            llm-probe)         req=(-X POST "$BASE/internal/llm-probe?n=1") ;;
+            llm-probe)         req=(-X POST "$BASE/internal/llm-probe?$q") ;;
             probe-mail)        req=(-X GET "$BASE/internal/probe-mail?runId=${{ inputs.run_id }}"); TOKEN="$INTERNAL_TOKEN" ;;
           esac
           code=$(curl -sS -m 150 -o /tmp/out.json -w '%{http_code} %{time_total}' -H "Authorization: Bearer $TOKEN" "${req[@]}")
