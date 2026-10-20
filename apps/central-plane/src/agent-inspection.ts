@@ -91,6 +91,8 @@ export const AC_REASON_CODES = [
   "precondition_not_met",
   "setup_not_consented",
   "setup_skipped_budget",
+  // 2026-10-20 격차 §8 b-1: 전제를 만들려다 앱의 핵심 결함(재현된 CORE-1 실패) 때문에 못 만들었다 — 이 기준 자체의 실패라 하지 않는다.
+  "precondition_blocked_by_defect",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
@@ -217,10 +219,22 @@ export function kstClockLabel(now: Date = new Date()): string {
 }
 
 /** 뒤 기준의 프롬프트와 관찰 기록(corpus)에 같은 문장으로 들어간다 — 인용 접지가 되게. */
-export function setupContextLines(setup: SetupContext, testData: ReturnType<typeof koreanTestData>): string[] {
+export function setupContextLines(
+  setup: SetupContext,
+  testData: ReturnType<typeof koreanTestData>,
+  ac?: Pick<AgentAc, "given" | "when" | "then" | "id"> | null,
+): string[] {
   const where = setup.serverWrites > 0 ? `server write requests = ${setup.serverWrites}` : "saved only in that browser (no server write seen)";
+  const head = `Setup done earlier in this run (by ${setup.byAc}): a booking exists — name=${testData.name}, phone=${testData.phone}${setup.date ? `, date=${setup.date}` : ""}${setup.time ? `, time=${setup.time}` : ""} (${where}).`;
+  // (2026-10-20 격차 §8 a-2) "다른 손님이 같은 시간을 고른다"류에 "다시 만들지 말라"만 주면 두 번째 손님 예약 시도가 막혀 이중 예약을
+  //  볼 길이 없었다(gemini·claude A3 6/6 확인 못 함). 그런 기준엔 두 번째 손님으로 같은 시간을 예약해 보라고 한다.
+  const pre = ac ? classifyPrecondition(ac) : null;
+  const secondCustomer = Boolean(pre?.otherSession && !pre.sameSession && !pre.adminScreen && !pre.cancels);
+  const tail = secondCustomer
+    ? ` You are now a DIFFERENT customer in a fresh browser. Try to book that SAME date and time as the second customer (name=${testData.altName}, phone=${testData.phone}). If the app accepts it, that is a double booking (fail); if that time is blocked or unavailable, it holds (pass).${setup.serverWrites > 0 ? "" : " The first booking was saved only in the first browser, so this browser may show the time as free — if the second booking is accepted, that IS a double booking."}`
+    : " Do NOT create it again; perform WHEN from here.";
   return [
-    `Setup done earlier in this run (by ${setup.byAc}): a booking exists — name=${testData.name}, phone=${testData.phone}${setup.date ? `, date=${setup.date}` : ""}${setup.time ? `, time=${setup.time}` : ""} (${where}). Do NOT create it again; perform WHEN from here.`,
+    head + tail,
     // (§8 a-4) 경로를 8걸음에서 자르면 bolt(11~14걸음)는 폼에 못 닿았다.
     ...(setup.recipe.length ? [`Known path to the booking form (worked earlier): ${setup.recipe.slice(0, 14).join(" → ")}`] : []),
   ];
@@ -467,7 +481,7 @@ export function sanitizeAgentReasonCode(
   if (!code) return undefined;
   if (code === "app_missing" || code === "budget" || code === "evidence_missing" || code === "judge_disagreed" || code === "guessed_address") return undefined;
   // 셋업 사유는 실행기가 정한다 — 에이전트가 고르면 뒷받침이 없다.
-  if (code === "precondition_not_met" || code === "setup_not_consented" || code === "setup_skipped_budget") return undefined;
+  if (code === "precondition_not_met" || code === "setup_not_consented" || code === "setup_skipped_budget" || code === "precondition_blocked_by_defect") return undefined;
   if ((code === "login_required" || code === "login_failed") && !ctx.loginGate) return undefined;
   if ((code === "oauth_unsupported") && ctx.loginGate !== "oauth") return undefined;
   if ((code === "sms_unsupported") && ctx.loginGate !== "sms") return undefined;
@@ -635,6 +649,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     precondition_not_met: "이 기준의 전제(예: 예약 1건이 미리 있어야 함)를 이번 확인에서 만들지 못해 확인하지 않았어요 — 고장으로 치지 않아요",
     setup_not_consented: "테스트 데이터 생성 미동의 — 이 기준의 전제(예약 1건)를 만들 수 없어 확인하지 않았어요. 동의해 주시면 끝까지 해 봐요",
     setup_skipped_budget: "이 기준의 전제(예약 1건)를 만들면 확인이 끝난 뒤 지울 여유가 없어서, 만들지 않고 확인하지 않았어요 — 치울 수 없는 것은 만들지 않아요",
+    precondition_blocked_by_defect: "앱의 핵심 일(예약 만들기)이 되지 않아 이 기준의 전제를 만들 수 없었어요 — 핵심 일을 고치면 다시 확인할 수 있어요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -657,6 +672,7 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     precondition_not_met: "This criterion assumes something already exists (e.g. one booking) and we couldn't create it in this check, so it wasn't checked — not counted as a defect",
     setup_not_consented: "Test data not allowed — we couldn't create what this criterion assumes (one booking), so it wasn't checked. Allow test data and we'll go all the way",
     setup_skipped_budget: "Creating what this criterion assumes (one booking) would leave no room to clean it up afterwards, so we didn't create it and didn't check — we don't create what we can't clean up",
+    precondition_blocked_by_defect: "The app's core task (making a booking) doesn't work, so we couldn't create what this criterion assumes — fix the core task and it can be checked",
   },
 };
 
@@ -1282,12 +1298,13 @@ export function agentSystemPrompt(locale: ReportLocale = "ko", opts: { readOnly?
     "4c. If a result might be canned (same output whatever the input), submit twice with clearly different inputs and compare.",
     "5. Never pay, delete other people's data, send messages or publish. You may cancel/delete ONLY a record you created in this run (set ownRecord:true on that click).",
     "6. If a login wall blocks you: use login if a test account is available; if not, judge not_verified with reasonCode login_required. Kakao/Google/social-only login → oauth_unsupported; text-message code → sms_unsupported. If the feature asks for the user's own API key → api_key_required.",
+    "6c. If you filled the form and submitted, and the app answers that it is not connected / not set up (e.g. '사이트 연결 설정', 'Supabase', 'environment variable', 'not configured') and no result is created, that is NOT a blocker: the user cannot get the outcome — judge fail and quote that message.",
     "7. Be efficient: at most 14 actions per criterion. Do not give up early: if a submit did nothing, read the visible messages (e.g. '시간을 골라 주세요', required-field errors), fix the inputs (choose a service/date/time first) and try again.",
     "6b. If part of a criterion is behind a login you cannot pass: judge the PUBLIC part. If the public part fully worked, use verdict pass with \"scope\":\"public\" and say in reason what remains behind login. Never fail a criterion only because of a login wall.",
     "3b. Persistence means the CREATED RECORD is found again somewhere else: a list/admin/history view, a new_session visit, or probe_storage showing a server write. A confirmation screen that survives (or disappears on) reload proves nothing either way.",
     "8. Never invent addresses. Use goto only for an address you saw as a link on screen or that the criterion itself names. A 'not found' page at a guessed address is NOT a defect of the app.",
     "9. Selecting a time/date/service means clicking that option on the page (buttons, chips, radio) — check the observation that it became selected before submitting.",
-    "10. If the prompt says 'Setup done earlier in this run: a booking exists', that record is already there (same name/phone). Do NOT create another one; start from WHEN (e.g. open a new_session as the other customer, open the admin screen, cancel that record) and look for THAT record by its phone number.",
+    "10. If the prompt says 'Setup done earlier in this run: a booking exists', that record is already there (same name/phone). Do NOT re-create it as the first customer; start from WHEN (e.g. open the admin screen, cancel that record, reload) and look for THAT record by its phone number. When WHEN is about a DIFFERENT customer trying the same date/time, follow the 'Setup done' line: book that same date/time as the second customer — that is the test, not a re-creation.",
     locale === "en" ? "Write `reason` in English." : "Write `reason` in Korean (한국어, 쉬운 말).",
   ].join("\n");
 }
@@ -1321,7 +1338,7 @@ export function agentTurnPrompt(args: {
     `App intent: ${args.intent}`,
     `Criterion ${args.ac.id} (${args.ac.priority}): ${args.ac.title}`,
     `Given: ${args.ac.given}`,
-    ...(args.setup ? setupContextLines(args.setup, args.testData) : []),
+    ...(args.setup ? setupContextLines(args.setup, args.testData, args.ac) : []),
     `When: ${args.ac.when}`,
     `Then: ${args.ac.then}`,
     ...(args.ac.steps?.length ? [`Suggested steps: ${args.ac.steps.join(" → ")}`] : []),
@@ -1643,7 +1660,9 @@ export function defectsOf(acTable: readonly AgentAcRow[]): Array<{ acId: string;
           // 셋업을 못 한 것은 앱 결함이 아니다(우리가 못 만든 것·동의 없음·치울 여유 없음).
           r.reasonCode !== "precondition_not_met" &&
           r.reasonCode !== "setup_not_consented" &&
-          r.reasonCode !== "setup_skipped_budget"),
+          r.reasonCode !== "setup_skipped_budget" &&
+          // 결함은 CORE-1 행에 한 번만 센다 — 그 결함 때문에 못 본 기준까지 결함으로 세지 않는다.
+          r.reasonCode !== "precondition_blocked_by_defect"),
     )
     .map((r) => ({ acId: r.id, priority: r.priority, status: r.status, defectClass: classifyDefect(r) }));
 }

@@ -294,6 +294,7 @@ export async function benchOne(app, { locale = "ko", acMode = "prereg", runTag =
     out.testData = r.report.agent.testData ?? null;
     out.setup = r.report.agent.setup ?? null;
     out.trace = r.report.agent.trace ?? null;
+    out.setupAttempt = r.report.agent.setupAttempt ?? null;
   } catch (err) {
     out.error = `agent_failed: ${String(err?.message ?? err).slice(0, 200)}`;
   } finally {

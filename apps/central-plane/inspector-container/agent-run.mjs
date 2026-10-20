@@ -114,6 +114,12 @@ export async function runAgentInspection(o) {
   /** 2026-10-19 given 셋업: 이 런에서 만든 기록(뒤 기준의 given을 채운다). */
   let setup = null;
   let setupAttempted = false;
+  /** (§8 b-1) SETUP-1 시도 결과(리포트에 남긴다) · 그 실패가 재현돼 CORE-1 실패로 확정됐는가. */
+  let setupAttempt = null;
+  let coreBlockedBySetup = false;
+  /** (§8 d) 한국 날짜 오늘로 다시 만든 기록 — "오늘" 전제 기준만 쓴다. */
+  let todaySetup = null;
+  let todaySetupTried = false;
   // (2026-10-20 격차 §8 c-5) 지울 대상 = 서버에 쓴 기록 수. 브라우저에만 남은 기록은 따로 센다(브라우저가 닫히면 사라진다).
   //  종전엔 둘을 합쳐 created 31(서버 대상은 9)로 적었다.
   let recordsCreated = 0;
@@ -235,6 +241,37 @@ export async function runAgentInspection(o) {
         const { _setup: _s, _trace: _t, _cleanup: _c, ...row } = r;
         return row;
       };
+      /** 셋업 미니런 기준(SETUP-1 = 첫 시도, SETUP-2 = 한국 날짜 오늘로 다시). */
+      const makeSetupAc = (id) => ({
+        id, title: locale === "en" ? "Create one booking for later checks" : "뒤 기준을 위한 예약 1건 만들기", given: "",
+        when: locale === "en"
+          ? `Make ONE booking with the test data for the Korea date ${pure.kstDateString(nowDate())} at the earliest free time today; if today has no free time, the nearest later day. Then judge pass only if a confirmation shows the booking.`
+          : `시험 데이터로 오늘(한국 날짜 ${pure.kstDateString(nowDate())}) 남은 가장 이른 시간에 예약을 1건 만든다. 오늘 빈 시간이 없으면 가장 가까운 날. 완료 화면에 예약이 보이면 pass.`,
+        then: locale === "en" ? "A confirmation shows the booking (date, time, name)." : "완료 화면에 예약(날짜·시간·이름)이 보인다.", priority: "should", confirmed: true,
+      });
+      /**
+       * (2026-10-20 격차 §8 b-1) SETUP-1이 "결과를 얻을 수 없다"로 실패하면 그것은 핵심 일(CORE-1)의 실패 관찰이다. 단, 셋업은 싼
+       * 모델·should라 오탐 방지 관문을 하나도 거치지 않았으므로, must 관문(새 브라우저 + 강한 모델 재현 + 재확인)을 통과해 **다시 실패할
+       * 때만** CORE-1을 실패로 확정한다. 같은 런에 상태를 바꾸고 통과한 must가 있으면(정상 흐름이 확인됨) 승격하지 않는다.
+       */
+      const promoteSetupFailure = async (s) => {
+        if (s.status !== "fail" || !pure.failReasonIsOutcome(s.reason)) return;
+        const coreAc = acs.find((x) => x.id === pure.CORE_OUTCOME_AC_ID);
+        const coreIdx = results.findIndex((r) => r.id === pure.CORE_OUTCOME_AC_ID);
+        if (!coreAc || coreIdx < 0 || results[coreIdx].status === "pass") return;
+        const mustIds = new Set(acs.filter((x) => x.priority === "must").map((x) => x.id));
+        if (results.some((r) => mustIds.has(r.id) && r.status === "pass" && r.exercised?.stateChange)) return;
+        if (timeLeft() < 60_000 || llmCalls.budgetExhausted) return;
+        const rep = await runOneAc({ ...acArgsBase(), ac: coreAc, reproduceOf: s });
+        keepTrace(rep, `${coreAc.id}#setup-repro`);
+        harvest(rep, coreAc.id);
+        plog(`setup:fail-repro ${coreAc.id} → ${rep.status}`);
+        if (rep.status !== "fail") return;
+        results[coreIdx] = strip({ ...rep, evidence: [...(s.evidence ?? []), ...rep.evidence].slice(0, 4), reproduced: true });
+        coreBlockedBySetup = true;
+        setupAttempt = { ...setupAttempt, promoted: true };
+        syncProgress();
+      };
       for (const ac of acs) {
         // (H3) 남은 예산(행동·시간)이 40% 아래면 should 기준은 건너뛴다 — must 기준과 핵심 탐침에 예산을 쓴다.
         const budgetLeft = Math.min(1 - actionsUsed / Math.max(1, caps.maxActions), Number.isFinite(timeLeft()) ? timeLeft() / Math.max(1, runBudgetMs) : 1);
@@ -269,32 +306,43 @@ export async function runAgentInspection(o) {
               continue;
             }
             if (timeLeft() > 150_000 && actionsLeft >= SETUP_STEPS && !llmCalls.budgetExhausted) {
-              const setupAc = {
-                id: "SETUP-1", title: locale === "en" ? "Create one booking for later checks" : "뒤 기준을 위한 예약 1건 만들기", given: "",
-                when: locale === "en"
-                  ? `Make ONE booking with the test data for the Korea date ${pure.kstDateString(nowDate())} at the earliest free time today; if today has no free time, the nearest later day. Then judge pass only if a confirmation shows the booking.`
-                  : `시험 데이터로 오늘(한국 날짜 ${pure.kstDateString(nowDate())}) 남은 가장 이른 시간에 예약을 1건 만든다. 오늘 빈 시간이 없으면 가장 가까운 날. 완료 화면에 예약이 보이면 pass.`,
-                then: locale === "en" ? "A confirmation shows the booking (date, time, name)." : "완료 화면에 예약(날짜·시간·이름)이 보인다.", priority: "should", confirmed: true,
-              };
-              const s = await runOneAc({ ...acArgsBase(), ac: setupAc, setupMode: true });
+              const s = await runOneAc({ ...acArgsBase(), ac: makeSetupAc("SETUP-1"), setupMode: true });
               keepTrace(s, "SETUP-1");
               harvest(s, "SETUP-1");
               plog(`setup:run → ${s.status} created=${Boolean(s._setup?.created)}`);
+              // (2026-10-20 격차 §8 b-1) 셋업 결과를 버리지 않는다 — chatgpt r1·r2에서 런의 유일한 실패 관찰이 사라졌다.
+              setupAttempt = { status: s.status, ...(s.reasonCode ? { reasonCode: s.reasonCode } : {}), reason: s.reason, steps: s.steps, actions: (s.actions ?? []).slice(-14) };
+              await promoteSetupFailure(s);
             }
           }
           if (!setup) {
-            skip("precondition_not_met");
+            skip(coreBlockedBySetup ? "precondition_blocked_by_defect" : "precondition_not_met");
             continue;
           }
         }
-        // "오늘" 기록이어야 하는데 만든 날짜가 오늘이 아니면(야간 실행) 정직하게 전제 미충족(Bae Q2).
-        if (pre.needsRecord && pre.needsToday && setup?.date && setup.date !== pure.kstDateString(nowDate())) {
-          results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("precondition_not_met", locale), reasonCode: "precondition_not_met", evidence: [], steps: 0 });
-          syncProgress();
-          plog(`ac ${ac.id} → not_verified(precondition_not_met) today≠${setup.date}`);
-          continue;
+        // "오늘" 기록이어야 하는데 만든 날짜가 한국 날짜 오늘이 아니면 — (§8 d) 한국 날짜 오늘로 런당 1번 더 만들어 본다. 앱이 UTC로
+        //  날짜를 보여 주면(bolt) 첫 기록이 한국의 어제가 된다. "앱 표시 날짜를 오늘로 보자"는 알려진 결함(관리 화면 '오늘'=UTC)을
+        //  pass로 만들어 기각. 그래도 오늘 기록이 없으면 정직하게 전제 미충족(Bae Q2).
+        const kstToday = pure.kstDateString(nowDate());
+        if (pre.needsRecord && pre.needsToday && setup?.date && setup.date !== kstToday) {
+          if (!todaySetupTried && o.readOnly !== true && timeLeft() > 150_000 && caps.maxActions - actionsUsed >= SETUP_STEPS && !llmCalls.budgetExhausted) {
+            todaySetupTried = true;
+            const s2 = await runOneAc({ ...acArgsBase(), ac: makeSetupAc("SETUP-2"), setupMode: true });
+            keepTrace(s2, "SETUP-2");
+            harvest(s2, "SETUP-2");
+            const i = s2._setup;
+            if (i?.created && i.date === kstToday) todaySetup = { byAc: "SETUP-2", date: i.date, time: i.time, excerpt: i.excerpt, serverWrites: i.serverWrites, recipe: i.recipe, storageState: i.storageState };
+            plog(`setup:today → ${s2.status} created=${Boolean(i?.created)} date=${i?.date ?? "?"}`);
+          }
+          if (!todaySetup) {
+            results.push({ id: ac.id, status: "not_verified", reason: pure.reasonText("precondition_not_met", locale), reasonCode: "precondition_not_met", evidence: [], steps: 0 });
+            syncProgress();
+            plog(`ac ${ac.id} → not_verified(precondition_not_met) today≠${setup.date}`);
+            continue;
+          }
         }
-        const acArgs = { ...acArgsBase(), ac, setup: pre.needsRecord ? setup : null, sameSession: pre.needsRecord && pre.sameSession };
+        const acSetup = !pre.needsRecord ? null : pre.needsToday && todaySetup ? todaySetup : setup;
+        const acArgs = { ...acArgsBase(), ac, setup: acSetup, sameSession: pre.needsRecord && pre.sameSession };
         let r = await runOneAc(acArgs);
         keepTrace(r, ac.id);
         harvest(r, ac.id);
@@ -392,6 +440,7 @@ export async function runAgentInspection(o) {
     else report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
   }
   if (o.trace === true) report.agent.trace = acTraces;
+  if (setupAttempt) report.agent.setupAttempt = setupAttempt;
   if (setup) report.agent.setup = { byAc: setup.byAc, date: setup.date, time: setup.time, serverWrites: setup.serverWrites, recipeSteps: setup.recipe.length };
   if (singleFileFix) {
     report.agent.singleFileFix = singleFileFix;
@@ -523,7 +572,7 @@ export async function runAgentInspection(o) {
       history.push(`(an earlier attempt concluded FAIL: "${red(reproduceOf.reason)}". Re-check independently and carefully in this fresh browser — do every required step (choose service/date/time, valid inputs), then look. Judge fail only if you SEE it fail again.)`);
     }
     // (2026-10-19) 만들어 둔 기록은 관찰 기록에도 같은 문장으로 넣는다 — 판정이 그 사실을 인용할 수 있게(접지).
-    if (setup) corpus += `\n${pure.setupContextLines(setup, data).join("\n")}`;
+    if (setup) corpus += `\n${pure.setupContextLines(setup, data, ac).join("\n")}`;
     // (F5) 진전 없는 행동 감지 → 다음 턴은 강한 모델. (F6) 짐작한 주소로의 이동은 막는다.
     let stuck = 0;
     let lastDesc = "";
@@ -615,7 +664,7 @@ export async function runAgentInspection(o) {
         if (pure.isPrematureGiveUp(a, steps, maxSteps) && nudges < 2) {
           judgeLog(a, "nudged_premature");
           nudges += 1;
-          history.push(`(not accepted: you still have ${maxSteps - steps} actions. Actually perform the steps of the criterion — choose options, fill fields, submit, then look. Only stop early when a real blocker is on screen: a login wall (login_required) or the app asking for the user's own API key (api_key_required).)`);
+          history.push(`(not accepted: you still have ${maxSteps - steps} actions. Actually perform the steps of the criterion — choose options, fill fields, submit, then look. Only stop early when a real blocker is on screen: a login wall (login_required) or the app asking for the user's own API key (api_key_required). If you submitted and the app says it is not connected/set up and nothing was created, that is a FAIL to judge (rule 6c), not a reason to stop.)`);
           continue;
         }
         // (H1) 실패는 "사용자가 얻을 수 없는 결과"를 말해야 한다 — 화면 구성 해석이면 확인 못 함.

@@ -629,7 +629,7 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     { type: "judge", verdict: "pass", reason: "완료 화면에 예약이 보여요", evidenceQuote: "예약이 완료되었어요 $NAME" },
   ];
 
-  it("T2 CORE-1이 만든 기록을 A3 프롬프트·관찰 기록에 주입하고(다시 만들지 말 것), A3는 새 브라우저에서 이중 예약을 잡아 fail", async () => {
+  it("T2 CORE-1이 만든 기록을 A3 프롬프트·관찰 기록에 주입하고(두 번째 손님으로 같은 시간 예약해 보기), A3는 새 브라우저에서 이중 예약을 잡아 fail", async () => {
     const { site, onAct } = serverSalon();
     const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
     const { llm, prompts } = makeScriptedLlm({
@@ -645,7 +645,9 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     const a3Prompt = prompts.find((p) => /Criterion A3 \(/.test(p));
     assert.ok(a3Prompt, "A3가 실행됐다");
     assert.match(a3Prompt, /Setup done earlier in this run \(by CORE-1\): a booking exists — name=심사테스트, phone=010-/);
-    assert.match(a3Prompt, /Do NOT create it again/);
+    // (§8 a-2) "다른 손님이 같은 시간"류엔 "다시 만들지 말라"가 아니라 두 번째 손님으로 같은 시간을 예약해 보라고 한다.
+    assert.doesNotMatch(a3Prompt, /Do NOT create it again/);
+    assert.match(a3Prompt, /Try to book that SAME date and time as the second customer \(name=심사테스트둘/);
     assert.match(a3Prompt, /Known path to the booking form/);
     const row = out.report.acTable.find((r) => r.id === "A3");
     assert.equal(row.status, "fail");
@@ -913,6 +915,84 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
     assert.equal(out.report.agent.setup, undefined);
     assert.equal(out.report.agent.testData.created, 0);
+  });
+
+  /** chatgpt 모양: 제출해도 쓰기 0, "사이트 연결 설정"만 뜬다(정답지 A4 — 앱의 진짜 결함). */
+  function unconnectedSalon() {
+    const site = {
+      "/": (state) => ({ status: 200, text: `동네 미용실 예약 이름 휴대폰 예약하기${state.err ? "\n관리자에게 사이트 연결 설정을 먼저 요청해주세요" : ""}`, buttons: ["예약하기"] }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) state.err = true;
+      return null;
+    };
+    return { site, onAct };
+  }
+  const submitThenFail = [
+    { type: "fill", target: { label: "이름" }, value: "$NAME" },
+    { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+    { type: "click", target: { role: "button", name: "예약하기" } },
+    { type: "judge", verdict: "fail", reason: "예약하기를 눌러도 사이트 연결 설정이 필요하다는 안내만 나오고 예약이 저장되지 않아요", evidenceQuote: "사이트 연결 설정을 먼저 요청해주세요" },
+  ];
+
+  it("T15 (§8 b-1) SETUP-1 실패(결과 결함)가 새 브라우저 강한 모델 재현에서도 실패하면 CORE-1 실패로 확정 · 의존 기준은 precondition_blocked_by_defect — 옛 코드는 Not Verified", async () => {
+    const { site, onAct } = unconnectedSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm(
+      {
+        "AC-U": userMustScript,
+        "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "폼을 끝까지 못 갔어요", evidenceQuote: "", reasonCode: "not_reached" }],
+        "SETUP-1": submitThenFail,
+      },
+      { reproduce: { "CORE-1": submitThenFail } },
+    );
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    assert.match(prompts[0], /6c\. If you filled the form and submitted, and the app answers that it is not connected/, "판정 원칙에 연결 설정=fail(§8 b-2)");
+    const core = out.report.acTable.find((r) => r.id === "CORE-1");
+    assert.equal(core.status, "fail", JSON.stringify(core));
+    assert.equal(out.decision, "Needs Fix");
+    for (const id of ["A3", "A6"]) assert.equal(out.report.acTable.find((r) => r.id === id).reasonCode, "precondition_blocked_by_defect", id);
+    assert.ok(!out.report.agent.defects.some((d) => d.acId === "A3" || d.acId === "A6"), "결함은 CORE-1에 한 번만");
+    assert.equal(out.report.agent.setupAttempt.status, "fail");
+    assert.equal(out.report.agent.setupAttempt.promoted, true);
+  });
+
+  it("T15b (§8 b-1 반대 방향) 재현이 실패하지 않거나 SETUP-1이 확인 못 함이면 승격하지 않는다", async () => {
+    for (const [setupScript, reproduce] of [
+      [submitThenFail, [{ type: "judge", verdict: "not_verified", reason: "다시 해 보니 확인 못 함", evidenceQuote: "" }]],
+      [[{ type: "judge", verdict: "not_verified", reason: "폼을 못 찾았어요", evidenceQuote: "", reasonCode: "not_reached" }], submitThenFail],
+    ]) {
+      const { site, onAct } = unconnectedSalon();
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm(
+        { "AC-U": userMustScript, "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "", reasonCode: "not_reached" }], "SETUP-1": setupScript },
+        { reproduce: { "CORE-1": reproduce } },
+      );
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench" });
+      assert.notEqual(out.report.acTable.find((r) => r.id === "CORE-1").status, "fail");
+      assert.equal(out.report.acTable.find((r) => r.id === "A3").reasonCode, "precondition_not_met");
+      assert.notEqual(out.report.agent.setupAttempt.promoted, true);
+    }
+  });
+
+  it("T16 (§8 d) 첫 기록이 한국의 어제(UTC 날짜 앱)면 한국 날짜 오늘로 SETUP-2를 한 번 더 만들고 '오늘' 기준(A6)을 실행한다 — 옛 코드는 0걸음 precondition_not_met", async () => {
+    const { site, onAct, shared } = serverSalon();
+    site["/done"] = () => ({ status: 200, text: `예약이 완료되었어요 ${TD.name} ${shared.bookings.length <= 2 ? "2026-10-18" : "2026-10-19"} 10:30` });
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      "SETUP-2": [{ type: "goto", path: "/" }, ...book],
+      A6: [{ type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", nowMs: Date.parse("2026-10-18T16:35:00Z") });
+    assert.equal(out.report.agent.setup.date, "2026-10-18", "첫 기록은 UTC 날짜");
+    assert.ok(prompts.some((p) => /Criterion SETUP-2 \(/.test(p) && /한국 날짜 2026-10-19/.test(p)), "한국 날짜 오늘로 다시 만든다");
+    const a6 = prompts.find((p) => /Criterion A6 \(/.test(p));
+    assert.ok(a6, "A6가 실행됐다");
+    assert.match(a6, /by SETUP-2\): a booking exists .*date=2026-10-19/);
+    assert.notEqual(out.report.acTable.find((r) => r.id === "A6").reasonCode, "precondition_not_met");
+    assert.equal(out.report.agent.testData.created, 2, "서버 기록 2건 모두 정리 대상");
   });
 
   it("T14 (§8 d) 프롬프트의 기기 시각은 한국 시각 표기 — 01:35 KST가 10-18 UTC로 보이지 않는다", async () => {
