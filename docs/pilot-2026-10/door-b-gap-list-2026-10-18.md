@@ -129,3 +129,30 @@ HANDOFF §3-3 통과 기준은 그대로: 셋 중 하나라도 빠지면 "완료
 옛 코드에서 실패할 테스트 10건(분류·프롬프트 주입·정직 스킵·미동의 사유·정리 leftover·`취소` 분류·seed 결정론·dialog accept·집계 필드·F1 회귀 잠금)과 전수검색 목록은 조사 보고 원문(세션)에서 옮김 — 구현 PR 본문에 재기록.
 
 **열린 질문:** Q1 동의 문구에 "확인이 끝나면 그 기록을 취소해 지우려 해요" 추가(권고 예) · Q2 야간(오늘 슬롯 없음)은 `precondition_not_met`(권고) vs 가장 가까운 날로 완화; 벤치 통과 판정은 KST 주간 실행 조건 · Q3 free 티어 정리 예산 캡 6행동 — 캡 유지+"남음 n건" 표시(권고) vs 정리 끔.
+
+## 8. PR #609 불합격 원인 조사 (simsa-diagnose ×3, Opus, 2026-10-20 — 코드 변경 0)
+
+원자료: wt-pr4 `agent-bench1-local-result-2026-10-18T16-31-58-813Z-r{1,2,3}.json` · 기준선 wt-bench-acs `…14-03-39-871Z-r{1,2,3}.json`. 줄 번호는 PR #609 HEAD `80c282a` 기준.
+
+**기각된 가설:** 프롬프트 길이·토큰(셋업 266자, 입력 p90 3,178·출력 최대 279, 절단 0) · 턴 소진(26셀 최대 11/14걸음, `not_reached`/budget 0). 실제 모양 = **스스로 멈춤**. gemini/claude A3·A5의 `evidence_missing`은 0건(전부 사유 코드 없는 자체 중단) — HANDOFF §5 기술 정정.
+
+| # | 원인 | 확정도 | 근거 | 수정안 |
+|---|---|---|---|---|
+| a-1 | A5가 기록 없는 새 브라우저에서 시작 — "새로고침하거나 새 브라우저" when이 `sameSession:false`, storageState는 `serverWrites>0`일 때만 저장 → browser_only 앱(gemini·claude) A5 6/6 NV(정답 pass) | 확정 | `agent-inspection.ts:132` · `agent-run.mjs:666` · 테스트가 스펙으로 굳힘 `test/agent-inspection.test.mjs:358` | 새로고침 있으면 sameSession, 새 브라우저는 에이전트 `new_session`으로 · 셋업 created면 항상 captureState |
+| a-2 | A3(이중 예약)에 "Do NOT create it again" 고정 문장 — 두 번째 손님 예약 시도를 막음 | 문장 주입 확정 · 그 때문에 멈췄는지 [추정](thought 미기록) | `agent-inspection.ts:187` · 시스템 규칙 10 `:1253` | otherSession이면 "다른 손님으로 같은 시간 예약해 보라, 받아들여지면 fail" 문장으로 분기 |
+| a-3 | 재확인(judge)이 셋업 맥락 없이 판정 — 셋업 문장은 관찰 머리라 끝 2,500자 절단에 잘림, "fresh browser = 다른 손님" 미전달 → lovable A3 3/3 행동 0 기각 | 구조 확정 · **기각 사유 미확정**(`review.why` 결과에 안 남음) | `agent-inspection.ts:1392-1421` · `agent-run.mjs:577-589` · `finish :713-727` | **계측 먼저**: `judgeTrail`·턴별 thought·`startedWith`·`setupVisibleAtStart` → 사유 확인 뒤 프롬프트 수정 |
+| a-4 / c-5 | 셋업 성공 판정이 약함 — `/완료|…/`가 버튼 "예약 **완료**하기"에 일치, 오류 문구 무시 → bolt r2 거짓 셋업(목록에 r2bo 행 없음, "휴대폰 번호가 잘못") · created는 AC 단위 계수(31 중 서버 대상 9, bolt r1 실제 2·r3 실제 1) · recipe 8걸음 절단 | 확정 | `agent-run.mjs:658,215` · `agent-inspection.ts:188` | 제출 전후 본문 차이(버튼·입력 제외)로 완료 인정 + 오류 문구면 무효 · 서버 저장 여부 런 단위 · created=확인된 서버 쓰기 수 · recipe 14 |
+| b-1 | SETUP-1 결과가 판정에서 통째로 버려짐 — chatgpt r1·r2에서 **런의 유일한 실패 관찰**이 사라져 Needs Fix 3/3 → Not Verified 2/3 | 확정 | `agent-run.mjs:266-268` | (iii) `report.agent.setupAttempt` 기록 + SETUP fail(결과 결함)이면 must 관문(강한 모델→재확인→재현) 통과 시 CORE-1 fail 확정 · 같은 런 pass+stateChange must 있거나 SETUP nv면 승격 금지 · 의존 AC는 NV 유지+`precondition_blocked_by_defect` |
+| b-2 | CORE-1이 "사이트 연결 설정 필요"를 막힘으로 읽고 제출 전 멈춤(이른 포기 되돌림 2회 소진) | 규칙 공백 확정 · PR4 탓 아닌 런 간 변동 [추정, n=3] | 허용 막힘=로그인·API 키뿐 `agent-inspection.ts:1247` · `agent-run.mjs:560` | 판정 원칙 "앱이 연결/설정 필요라 하고 결과가 안 생기면 fail" + `missing_backend_config` 정규식(`:1586`)을 제출 직후 본문에 |
+| b-3 | v0 셋업 실패 = 실행기 한계 — 입력 뒤 **첫 클릭**에서만 1회 탐침, v0는 첫 클릭이 "시간 예약하기"(창 열기) → 같은 런 A4 pass인데 setup=null(v0 8셀) · 픽스처 `book`이 입력→제출 순서만 써서 가림 | 확정 | `agent-run.mjs:647-652` · `test/agent-run.test.mjs:625-630` | created false인 동안 입력 뒤 클릭마다 재탐침(AC당 ≤3) · must pass+stateChange AC를 셋업 공급자로 |
+| d | bolt '오늘' — 실행기 KST 계산은 맞음(`agent-inspection.ts:174-180`), bolt가 UTC 날짜로 기록·관리 화면 '오늘'도 UTC. **"앱 표시 날짜 기준" 안은 기각**(A6 알려진 결함이 pass → 기준 3 불합격; 기준선 23:07 실행 bolt A6 pass 3/3과 같은 함정) — 현 today≠ 가드가 오탐을 막았음 | 확정 | `agent-run.mjs:262-263,277` · 프롬프트 시각 UTC 'Z' `:500`·`agent-inspection.ts:1293` | 불일치 시 KST 오늘로 SETUP 1회 더 → A6 실행(관리 화면에 없으면 fail·timezone_date) · nowIso를 KST 표기, 시계 변형 런은 clockIso · `nowMs` 주입 seam |
+| c-1 | 정리 markerMatch 0 — 표지 검사·클릭 모두 **보이는 첫 '취소'**(=0행, 남의 기록)를 봄. 행 범위는 충분(bolt 행 div 1단계 위에 번호), 내 기록은 6·7·8행. **차단 자체는 옳았음** | 확정(읽기 전용 DOM 탐침) | `agent-driver.mjs:136-150,181,256,475-483` · `ActionTarget`에 행 지정 수단 없음 | 드라이버 결정론 `resolveOwnRecordTarget`: 이름 일치 버튼 전부 순회 → 행에 내 표지 있고 **다른 번호 없고** 같은 이름 버튼 1개 → 같은 핸들로 검사·클릭, 0개면 leftover |
+| c-2 | 로그 `markerMatch`는 허용 여부 전체(AND) — 35건 중 29건은 표지 검사 미호출 | 확정 | `agent-run.mjs:605-607` | `ownRecord`·`markerChecked`·후보 수·고른 순번·행 텍스트(번호 끝 4자리) 분리 기록 |
+| c-3 | ★**거짓 정리** — `cleaned = status==="pass" ? created : 0`. v0 r2 cleaned=1인데 취소 클릭 0, 앱에 취소 버튼 없음 → 실제 정리 0/9 | 확정 | `agent-run.mjs:334-335` | 허용된 취소 클릭 성공 + 재관찰에서 표지 행 감소일 때만 셈, 수단 없으면 `cleanupSkipped:"no_cancel_control"` |
+| c-4 | ★**안전 공백** — 영어 `Cancel`·`Cancel booking`·`×`·`✕`·`예약 지우기`가 `safe:true` → 표지 검사 없이 남의 기록 클릭 가능. **main(프로덕션 화면 검수 `inspector-run.mjs`·`signup-run.mjs`)에도 해당** | 확정(실행 출력) | `safety.mjs:16-29` + 사본 `tools/simsa-completion-loop-spike/lib/safety.mjs` · 사용처 `agent-run.mjs:603,749` · `inspector-run.mjs:398,526,763` · `signup-run.mjs:133,171` · `visual-run.mjs:139` | `\bcancel\b`·`×|✕`·`지우기`를 delete 범주로, 두 사본 같은 커밋 |
+
+**부수 발견:** `inspector-run.mjs:162`(옛 화면 검수 브라우저) timezoneId·locale 없음 — 컨테이너 기본 시간대 · 대시보드 UTC 날짜 표시 5곳(`IntentConfirmCard.tsx:163`, `projects/new/page.tsx:432,518`, `sources/[sourceId]/draft/page.tsx:112`, `sample-project.mjs:26`) KST 00~09시 어제 표시 [추정, 미확인] · lovable `/admin` 비밀번호 벽은 사유 `not_confirmed`로 오표기(실제 login_wall/도달 불가).
+
+**모크가 버그를 정답으로 굳힌 곳 3:** `test/agent-inspection.test.mjs:358`(새 브라우저가 이긴다) · `test/agent-run.test.mjs:625-630`(입력→제출 순서만) · `test/_agent-fakes.mjs:111-115`+`agent-run.test.mjs:703-707`(버튼 이름에 번호·저장소 전체 검색). 수정 PR은 이 셋을 실제 앱 모양으로 먼저 교정한다.
+
+**옛 코드에서 실패할 테스트안 18:** (a) T1 A5 sameSession · T2 localStorage 앱 A5 pass · T3 otherSession 문장 · T4 judgeReviewPrompt 셋업 맥락 · T5 judgeTrail.review.why · T6 버튼 문구 거짓 셋업 / (b·d) T-b1 chatgpt형 → Needs Fix · T-b2 승격 금지 반대 방향 · T-b3 v0형 클릭 순서 · T-d1 01:35 KST 주입 → A6 실행·pass 금지 · T-d2 프롬프트 KST 표기 / (c) 가짜 드라이버 교정 · 행 3개 중 내 행만 삭제 · Playwright setContent 행 범위 거부 · 취소 수단 없음 → cleaned 0 · `Cancel booking`/`×` → delete · 오류 문구+writes 0 → created false · `markerChecked` 분리.

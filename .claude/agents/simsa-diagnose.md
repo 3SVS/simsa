@@ -1,7 +1,7 @@
 ---
 name: simsa-diagnose
 description: Simsa(apps/central-plane·apps/dashboard) 고장·판정 불일치의 원인 조사 전담. 코드를 고치지 않고 원인·위치·수정안·테스트안을 보고한다. "원인 찾아줘", "왜 판정이 다르지", "격차 목록" 요청에 사용.
-model: fable
+model: opus
 effort: high
 tools: Read, Grep, Glob, Bash
 ---
