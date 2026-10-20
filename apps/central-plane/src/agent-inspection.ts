@@ -166,18 +166,22 @@ const RE_SUBMIT_DONE = /완료|예약되|예약이 접수|확정|confirmed|booke
 const RE_SUBMIT_ERROR = /잘못|올바르지|올바른|오류|에러|실패|다시 입력|필수|입력해 ?주|invalid|error|failed|required|please (enter|fill)/i;
 /** 버튼 글자처럼 보이는 짧은 줄("예약 완료하기", "예약 확정") — 완료 문구로 치지 않는다. */
 const RE_BUTTON_LIKE = /(하기|확정|확인|submit|confirm|book now|reserve)$/i;
+/** 제출 버튼처럼 보이는 클릭 글자 — 시간·날짜 칩("10:30", "10월 21일")과 구별한다. */
+const RE_SUBMIT_LABEL = /예약|신청|완료|확정|저장|등록|보내기|제출|submit|book|reserve|confirm|save|send/i;
 
 /**
  * (2026-10-20 격차 §8 a-4·c-5) 입력 뒤 클릭이 기록을 만들었는가 — 결정론. 종전엔 클릭 뒤 화면 **전체**에서 /완료|…/를 찾아
  * 버튼 글자 "예약 **완료**하기"에도 맞았고 오류 문구는 보지 않았다(bolt r2: "휴대폰 번호가 잘못" + 쓰기 0인데 created).
  * 이제 클릭 전후 글자를 비교해 **새로 나타난 줄**만 본다: 새 줄에 오류 문구가 있으면 무효, 서버 쓰기가 있거나 새 줄에 완료 문구가
- * 있으면(버튼처럼 보이는 짧은 줄 제외) 만든 것. 브라우저 저장소 변화만으로는 만든 것으로 치지 않는다(시간 고르기도 저장소를 바꾼다).
+ * 있으면(버튼처럼 보이는 짧은 줄 제외) 만든 것. 브라우저 저장소 변화는 **제출 버튼처럼 보이는 클릭**일 때만 만든 것으로 친다 —
+ * 완료 문구 없이 저장소에만 쓰는 앱(gemini·claude)이 있고(10-20 r1: 이 조건을 빼자 셋업 0), 시간 칩 클릭도 저장소를 바꿀 수 있어서.
  */
 export function judgeSubmitOutcome(
   before: string,
   after: string,
   probe: { serverWrites: readonly string[]; localChanged: boolean } | null,
-): { created: boolean; newText: string; why: "server_write" | "confirmation" | "error_shown" | "no_change" | "no_probe" } {
+  clickLabel = "",
+): { created: boolean; newText: string; why: "server_write" | "confirmation" | "local_change" | "error_shown" | "no_change" | "no_probe" } {
   if (!probe) return { created: false, newText: "", why: "no_probe" };
   const seen = new Set(String(before ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
   const fresh = String(after ?? "").split("\n").map((l) => l.trim()).filter((l) => l && !seen.has(l));
@@ -185,7 +189,9 @@ export function judgeSubmitOutcome(
   if (RE_SUBMIT_ERROR.test(newText)) return { created: false, newText, why: "error_shown" };
   if (probe.serverWrites.length > 0) return { created: true, newText, why: "server_write" };
   const confirmed = fresh.some((l) => RE_SUBMIT_DONE.test(l) && !(l.length <= 12 && RE_BUTTON_LIKE.test(l)));
-  return confirmed ? { created: true, newText, why: "confirmation" } : { created: false, newText, why: "no_change" };
+  if (confirmed) return { created: true, newText, why: "confirmation" };
+  if (probe.localChanged && RE_SUBMIT_LABEL.test(clickLabel)) return { created: true, newText, why: "local_change" };
+  return { created: false, newText, why: "no_change" };
 }
 
 /** 제출 직후 화면 글자에서 날짜·시간을 읽는다(결정론). */

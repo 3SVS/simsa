@@ -774,7 +774,10 @@ export async function runAgentInspection(o) {
             await driver.waitAfterSubmit?.().catch(() => {});
             const probe = await driver.storageProbe().catch(() => null);
             const after = await driver.bodyText().catch(() => "");
-            const judged = pure.judgeSubmitOutcome(probeBefore, after, probe);
+            const clickLabel = a.target?.name ?? a.target?.text ?? a.target?.label ?? "";
+            const judged = pure.judgeSubmitOutcome(probeBefore, after, probe, clickLabel);
+            // 탐침마다 판단 근거를 남긴다 — 10-20 r1에서 "셋업 0"이 저장소 변화 문제인지 버튼 글자 문제인지 원자료로 가를 수 없었다.
+            plog(`probe ${ac.id} #${autoProbes} click="${red(clickLabel).slice(0, 40)}" writes=${probe?.serverWrites.length ?? "?"} local=${probe?.localChanged ?? "?"} → ${judged.why}`);
             if (judged.created) {
               const facts = pure.extractBookingFacts(judged.newText || after);
               setupInfo.created = true;

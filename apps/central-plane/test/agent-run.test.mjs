@@ -995,6 +995,40 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     assert.equal(out.report.agent.testData.created, 2, "서버 기록 2건 모두 정리 대상");
   });
 
+  it("T17 (10-20 r1 회귀) 완료 문구 없이 저장소에만 쓰는 앱: 제출 버튼 클릭의 저장소 변화는 기록 · 시간 칩 클릭의 저장소 변화는 기록 아님", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `동네 미용실 예약 이름 휴대폰 10:30 예약하기${state.store.booking ? " 10:30 선택됨" : ""}`, buttons: ["10:30", "예약하기"] }),
+    };
+    const run = async (clicks) => {
+      const onAct = (action, state) => {
+        // 시간 칩도, 제출도 저장소를 바꾼다. 화면에는 완료 문구가 없다.
+        if (action.type === "click" && action.target.name === "10:30") state.store.slot = "10:30";
+        if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) state.store.booking = `${TD.name} 10:30`;
+        return null;
+      };
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const phases = [];
+      const { llm } = makeScriptedLlm({
+        "AC-U": userMustScript,
+        "CORE-1": [
+          { type: "fill", target: { label: "이름" }, value: "$NAME" },
+          { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+          ...clicks.map((name) => ({ type: "click", target: { role: "button", name } })),
+          { type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" },
+        ],
+      });
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench", onPhase: (l) => phases.push(l) });
+      return { out, phases };
+    };
+    const chipOnly = await run(["10:30"]);
+    assert.equal(chipOnly.out.report.agent.setup, undefined, "시간 칩 클릭은 기록이 아니다");
+    assert.ok(chipOnly.phases.some((l) => /probe CORE-1 #1 click="10:30" writes=0 local=true → no_change/.test(l)), chipOnly.phases.join("\n"));
+    const submitted = await run(["10:30", "예약하기"]);
+    assert.equal(submitted.out.report.agent.setup?.byAc, "CORE-1");
+    assert.equal(submitted.out.report.agent.setup.serverWrites, 0);
+    assert.ok(submitted.phases.some((l) => /probe CORE-1 #2 click="예약하기" writes=0 local=true → local_change/.test(l)), submitted.phases.join("\n"));
+  });
+
   it("T14 (§8 d) 프롬프트의 기기 시각은 한국 시각 표기 — 01:35 KST가 10-18 UTC로 보이지 않는다", async () => {
     const { site, onAct } = serverSalon();
     const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
