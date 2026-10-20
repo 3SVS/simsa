@@ -1,9 +1,25 @@
-# Simsa 라벨링 설계 v1 — 실패 지점을 데이터로 만드는 규약 (2026-10-20, 잠금 전 초안)
+# Simsa 라벨링 설계 v1 — 실패 지점을 데이터로 만드는 규약 (2026-10-20 작성 · **2026-10-21 잠금** `design lock approved`)
 
 > 근거: Bae 2026-10-20 — "Simsa의 본체는 평가·수리가 아니라, 다양한 에이전트로 만든 제품의 특징을 분석하고 실패 지점을 찾아 **데이터화**하는 것. 통계를 내서 에이전트 기업에 팔고 국가 기준까지 올린다. 라벨링은 설계부터 엄청 세세하게."
 > 상위 문서: `docs/simsa-index-design-2026-10-18.md`(지수·D1~D11, 축은 §5.1) · `docs/simsa-dataset-spec-2026-10-18.md`(명세 v0 — 이 문서가 §1 ⑤·§2·§3을 대체·확장한다) · `docs/EVIDENCE-RULE.md`(사전 등록 R8).
-> 상태 태그: **[LOCKED 후보]** `design lock approved` 시 잠금 · **[PILOT]** 절차는 잠그고 수치는 첫 100행 전에만 조정 · **[OPEN]** Bae 결정 필요. 코드 태그: [있음] 파일 인용 · [신규].
+> 상태 태그: **[LOCKED]** `design lock approved` 시 잠금 · **[PILOT]** 절차는 잠그고 수치는 첫 100행 전에만 조정 · **[OPEN]** Bae 결정 필요. 코드 태그: [있음] 파일 인용 · [신규].
 > 이 문서는 **설계**다. 구현(스키마 코드·라벨링 뷰)은 잠금 뒤 `train L start approved.`로만.
+
+## 0.0 라벨러 결정 (Bae 2026-10-21, 잠금과 함께) — 이 문서 전체에 우선
+
+> Bae: "라벨러는 우리 Simsa 에이전트지. 근데 필요시 사용자에게도 질문을 해서 확보하는 것도 추천해."
+
+이 문서의 "사람 라벨러"·"사람 판정"은 아래로 읽는다(L-O1 해소):
+
+| 원래 표현 | 2026-10-21부터 |
+|---|---|
+| 라벨러(사람) | **Simsa 라벨링 에이전트** — 검수 엔진과 **분리된 모드**: 강한 모델만 · 기준당 예산 넉넉히 · S1·S2 재현 3회 · 증거(스크린샷+인용) 필수 · §3 실패 사건 필드 전부 · **검수 엔진 판정을 보지 않는다**(블라인드, §5-1) |
+| 두 번째 라벨러 · 이중 라벨 · κ | **서로 다른 벤더 모델 두 패스**(예: OpenAI 패스 ↔ Anthropic/Gemini 패스)의 독립 라벨 일치도. 같은 모델 두 번은 이중 라벨로 치지 않는다(오류가 같이 움직인다) |
+| 판정자(adjudication, Bae) | 두 패스 불일치 → **사용자 질문(§8.5)** → 그래도 남으면 라벨링 에이전트 3번째 패스(다른 벤더) + "미확정"으로 보관 |
+| 캘리브레이션 · 골드 문항 | **사전 등록 정답지**(지수용 앱 — `docs/pilot-2026-10/bench1-answer-key-*.md` 같은, 런 전에 기록된 정답)가 골드 세트다. 라벨링 에이전트는 골드 일치율이 문턱(§6, [PILOT])을 넘는 버전만 실데이터에 쓴다 — 에이전트 버전(`labeler_sha`·모델 id)을 라벨에 단다 |
+| 사용자 | **필요할 때 묻는다**(§8.5): 라벨링 에이전트가 `cannot_verify`인 셀, 두 패스가 엇갈린 셀, 의도 일치(I1) |
+
+**자기 채점 위험 [LOCKED — 완화 규칙]**: 검수 엔진과 라벨링 에이전트가 같은 계열이면 같은 곳을 같이 놓친다(오류 상관). 그래서 ① 라벨링 에이전트의 정확도는 **사전 등록 정답지로만** 잰다(검수 엔진과의 일치율은 정확도가 아니다) ② 두 패스는 다른 벤더 ③ 판매·공개 산출물에 "라벨 출처(에이전트 패스 수·벤더·골드 일치율·사용자 확인 비율)"를 함께 싣는다. 사람 감사 표본(예: 월 20 AC)은 Bae가 원할 때 추가하는 선택 장치로 둔다 [OPEN — 강제 아님].
 
 ## 0. 한 줄 · 왜 지금
 
@@ -54,12 +70,12 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 
 | 필드 | 값(닫힌 어휘) | 규칙 | 상태 |
 |---|---|---|---|
-| H1 `verdict` | `pass` · `fail` · `cannot_verify` · `not_applicable` | 루브릭 §4. `not_applicable` = 이 앱에 그 기능 자체가 없는 게 기획상 맞음(드묾 — 사유 필수) | [LOCKED 후보] |
-| H2 `cannot_verify_reason` | `login_wall` · `payment_wall` · `sms_or_oauth` · `needs_own_api_key` · `precondition_unbuildable`(전제를 만들 수 없음) · `app_down` · `criterion_ambiguous`(AC 문장이 모호) · `time_window`(시간대 밖) · `labeler_limit`(라벨러가 못 함 — 기기·권한) | H1=cannot_verify면 필수 1개. 기계 reasonCode와 1:1 대응표를 둔다(§7) | [LOCKED 후보] |
-| H3 `confidence` | `sure` · `mostly` · `unsure` | `unsure`면 자동으로 이중 라벨 대상 | [LOCKED 후보] |
-| H4 `scope` | `full` · `public_only`(로그인 뒤는 못 봄) | 기계 `scope:"public"`과 같은 뜻 | [LOCKED 후보] |
-| H5 `evidence` | 스크린샷 ref ≥1 + 화면 글자 인용 1줄 | **pass·fail 모두 필수** — 증거 없는 라벨은 데이터셋에 넣지 않는다 | [LOCKED 후보] |
-| H6 `steps_taken` | 라벨러가 실제로 한 행동 목록(짧게) | 재현·감사용 | [LOCKED 후보] |
+| H1 `verdict` | `pass` · `fail` · `cannot_verify` · `not_applicable` | 루브릭 §4. `not_applicable` = 이 앱에 그 기능 자체가 없는 게 기획상 맞음(드묾 — 사유 필수) | [LOCKED] |
+| H2 `cannot_verify_reason` | `login_wall` · `payment_wall` · `sms_or_oauth` · `needs_own_api_key` · `precondition_unbuildable`(전제를 만들 수 없음) · `app_down` · `criterion_ambiguous`(AC 문장이 모호) · `time_window`(시간대 밖) · `labeler_limit`(라벨러가 못 함 — 기기·권한) | H1=cannot_verify면 필수 1개. 기계 reasonCode와 1:1 대응표를 둔다(§7) | [LOCKED] |
+| H3 `confidence` | `sure` · `mostly` · `unsure` | `unsure`면 자동으로 이중 라벨 대상 | [LOCKED] |
+| H4 `scope` | `full` · `public_only`(로그인 뒤는 못 봄) | 기계 `scope:"public"`과 같은 뜻 | [LOCKED] |
+| H5 `evidence` | 스크린샷 ref ≥1 + 화면 글자 인용 1줄 | **pass·fail 모두 필수** — 증거 없는 라벨은 데이터셋에 넣지 않는다 | [LOCKED] |
+| H6 `steps_taken` | 라벨러가 실제로 한 행동 목록(짧게) | 재현·감사용 | [LOCKED] |
 | H7 `seconds_spent` | 자동 | 비용·피로 측정 | [신규] |
 | H8 `memo` | 자유 1~2줄 | 새 분류 후보의 원천(§3.3) | [있음] v0 |
 
@@ -69,16 +85,16 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 
 | 필드 | 값(닫힌 어휘) | 질문 | 상태 |
 |---|---|---|---|
-| **W1 여정 단계** | `entry`(첫 화면 열기) · `navigate`(메뉴·화면 이동) · `select`(날짜·옵션 고르기) · `input`(입력) · `submit`(제출) · `result`(결과 화면) · `persist`(새로고침 뒤) · `share`(다른 사람·새 브라우저) · `admin`(사장님·관리 화면) · `modify`(수정·취소) · `notify`(알림·메일) · `integration`(외부 연동 화면) | 어느 단계에서 깨졌나 | [LOCKED 후보] |
-| W2 화면 | 정규화한 경로(`/admin`, `/book/:id`) + 화면 이름 1개 | 어느 화면 | [LOCKED 후보] |
-| W3 행동 | `click` · `fill` · `select` · `reload` · `new_browser` · `time_change` · `role_switch` · `none`(열자마자) | 무엇을 했을 때 | [LOCKED 후보] |
-| **Y 증상** | `no_response` · `error_message` · `blank_screen` · `wrong_result` · `not_saved` · `not_visible_to_others` · `wrong_date_time` · `broken_text`(한글 깨짐·정렬) · `integration_failed` · `fake_result`(입력과 무관한 결과) · `setup_required_message` · `secret_exposed` · `double_booking`류 `rule_violated`(기획 규칙 위반) · `other` | 사용자가 **본** 것 | [LOCKED 후보] |
+| **W1 여정 단계** | `entry`(첫 화면 열기) · `navigate`(메뉴·화면 이동) · `select`(날짜·옵션 고르기) · `input`(입력) · `submit`(제출) · `result`(결과 화면) · `persist`(새로고침 뒤) · `share`(다른 사람·새 브라우저) · `admin`(사장님·관리 화면) · `modify`(수정·취소) · `notify`(알림·메일) · `integration`(외부 연동 화면) | 어느 단계에서 깨졌나 | [LOCKED] |
+| W2 화면 | 정규화한 경로(`/admin`, `/book/:id`) + 화면 이름 1개 | 어느 화면 | [LOCKED] |
+| W3 행동 | `click` · `fill` · `select` · `reload` · `new_browser` · `time_change` · `role_switch` · `none`(열자마자) | 무엇을 했을 때 | [LOCKED] |
+| **Y 증상** | `no_response` · `error_message` · `blank_screen` · `wrong_result` · `not_saved` · `not_visible_to_others` · `wrong_date_time` · `broken_text`(한글 깨짐·정렬) · `integration_failed` · `fake_result`(입력과 무관한 결과) · `setup_required_message` · `secret_exposed` · `double_booking`류 `rule_violated`(기획 규칙 위반) · `other` | 사용자가 **본** 것 | [LOCKED] |
 | **C 원인 층** | `ui` · `client_state` · `backend_missing`(서버·DB 연결 안 됨) · `browser_only_storage` · `auth` · `external_integration` · `timezone` · `encoding_locale` · `routing_deploy` · `spec_not_implemented`(기획 요구를 안 만듦) · `unknown` | 왜 — **관찰 근거가 있을 때만**, 없으면 `unknown` | [PILOT] — 사람에게 어려운 칸. 첫 100행에서 `unknown` 비율이 50%를 넘으면 필수에서 선택으로 내린다 |
 | K 결함 분류 | taxonomy v1 `DEFECT_CLASSES` 14개 [있음] `agent-inspection.ts:1415` | 기계 분류와 같은 어휘 | [LOCKED] (v0 명세 §3.1 그대로) |
-| **S 심각도** | `S1` 핵심 일 불가(모든 사용자) · `S2` 핵심 일이 일부 조건·역할에서 불가(다른 손님·사장님·새로고침·특정 시각) · `S3` 되지만 틀린 결과·불편(우회 가능) · `S4` 외관·문구 | 얼마나 아픈가 | [LOCKED 후보] |
+| **S 심각도** | `S1` 핵심 일 불가(모든 사용자) · `S2` 핵심 일이 일부 조건·역할에서 불가(다른 손님·사장님·새로고침·특정 시각) · `S3` 되지만 틀린 결과·불편(우회 가능) · `S4` 외관·문구 | 얼마나 아픈가 | [LOCKED] |
 | **R 재현성** | `always`(3/3) · `sometimes`(k/3, k 기록) · `once` · `conditional`(조건 기록: 시각·기기·순서) | 라벨러가 **3번** 해 본다(S1·S2만 필수) | [PILOT] — 3회가 비싸면 S1만 |
-| **A 귀속** | `builder`(빌더가 만든 앱의 결함) · `spec_ambiguous`(기획 문장이 모호해 다르게 만든 것) · `prompt_gap`(프롬프트에 없던 요구) · `external`(외부 서비스 장애) · `equipment_suspect`(측정 장비 의심 — v0 §2-7) | 누구 탓 | [LOCKED 후보] — **판매 데이터는 `builder`만 실패율 분자에 넣는다** |
-| P 포템킨 | `yes`/`no` — 겉으로는 된 것처럼 보이는가(완료 화면은 나오는데 저장 안 됨 등) | 첫 공개 주제(v0 §3.1) | [LOCKED 후보] |
+| **A 귀속** | `builder`(빌더가 만든 앱의 결함) · `spec_ambiguous`(기획 문장이 모호해 다르게 만든 것) · `prompt_gap`(프롬프트에 없던 요구) · `external`(외부 서비스 장애) · `equipment_suspect`(측정 장비 의심 — v0 §2-7) | 누구 탓 | [LOCKED] — **판매 데이터는 `builder`만 실패율 분자에 넣는다** |
+| P 포템킨 | `yes`/`no` — 겉으로는 된 것처럼 보이는가(완료 화면은 나오는데 저장 안 됨 등) | 첫 공개 주제(v0 §3.1) | [LOCKED] |
 | X 고칠 범위 추정 | `config_only` · `small_code` · `structural` · `unknown` | 선택 칸 | [PILOT] 선택 |
 
 ### 3.1 한 AC에 실패 사건이 여럿일 때
@@ -91,7 +107,7 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 | I1 | `as_intended` · `works_but_different` · `not_the_app`(전혀 다른 것) | 사용자 수용 라벨 `user_verdict`[있음 0069]와 같은 축, **사람 라벨러 판단**으로 따로 둔다(사용자 답과 비교) |
 | I2 | 어긋난 점 1~3개(자유, 나중에 분류) | 기존 벤치마크가 못 재는 축(v0 §5-3) |
 
-### 3.3 새 분류 승격 규칙 [LOCKED 후보]
+### 3.3 새 분류 승격 규칙 [LOCKED]
 `other` + 메모가 **같은 유형으로 10건** 쌓이면 다음 taxonomy 버전 후보로 올린다(v0 §3.1과 같은 규칙을 Y·C·W1에도 적용). 버전을 올려도 이전 라벨은 지우지 않고, 새 버전으로 **다시 라벨링한 행**만 새 버전 집계에 넣는다.
 
 ## 4. 판정 루브릭 — 경계는 규칙보다 사례로
@@ -107,8 +123,8 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 
 ## 5. 라벨러 절차
 
-1. **블라인드 강제** [LOCKED 후보]: 라벨러 화면에는 앱 주소 · 기획 원문 · AC 문장 · 테스트 데이터 규칙만 있다. 기계 판정·기계 증거·다른 라벨러 라벨은 **다른 파일(권한 분리)**에 있다 — 같은 시트의 숨김 열 금지(v0 §2-5를 바꾼다). 라벨 확정 뒤에만 비교 화면이 열린다.
-2. **환경 고정** [LOCKED 후보]: 데스크톱 크롬 새 프로필(시크릿) · 1280×800 · KST · 한국어 OS 로케일. 모바일 판정이 필요한 AC는 Chrome 모바일 에뮬레이션 390×844.
+1. **블라인드 강제** [LOCKED]: 라벨러 화면에는 앱 주소 · 기획 원문 · AC 문장 · 테스트 데이터 규칙만 있다. 기계 판정·기계 증거·다른 라벨러 라벨은 **다른 파일(권한 분리)**에 있다 — 같은 시트의 숨김 열 금지(v0 §2-5를 바꾼다). 라벨 확정 뒤에만 비교 화면이 열린다.
+2. **환경 고정** [LOCKED]: 데스크톱 크롬 새 프로필(시크릿) · 1280×800 · KST · 한국어 OS 로케일. 모바일 판정이 필요한 AC는 Chrome 모바일 에뮬레이션 390×844.
 3. **순서**: 앱 카드 확인 → AC를 기획 순서대로(CORE-1 먼저) → AC마다 H1~H8 → fail이면 F → 앱 끝에 I1·I2.
 4. **시간 상한**: AC당 5분, 넘으면 `cannot_verify / labeler_limit` + 메모(무한 탐색 방지). 앱당 목표 30~45분 [추정].
 5. **증거**: 스크린샷은 라벨 도구가 자동 이름(`app_id/ac_id/label_id-n.png`), 화면 속 개인정보는 가린다.
@@ -121,15 +137,15 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 | 라벨러 자격 | **캘리브레이션 세트 20 AC**(정답 확정본)에서 H1 일치 ≥ 90% · S 일치 ≥ 80%여야 실데이터 라벨링 시작 | [PILOT] 수치 |
 | 이중 라벨 | 첫 100 AC는 **100% 이중**, 이후 무작위 20% + H3=`unsure` 전부 + 기계·사람 불일치 전부 | [PILOT] 비율 |
 | 일치도 목표 | H1 Cohen's κ ≥ 0.7 · W1 일치율 ≥ 0.7 · Y κ ≥ 0.6 · S 가중 κ ≥ 0.6 · A κ ≥ 0.6 · C는 보고만(목표 없음) | [PILOT] 수치 — 첫 100행 전에만 조정 |
-| 미달 시 | 루브릭·사례를 고치고 **그 구간 재라벨**. 공개·판매 데이터에는 목표를 넘은 필드만 넣는다(나머지는 내부) | [LOCKED 후보] |
-| 판정(adjudication) | 불일치는 제3자(v0: Bae)가 확정. 원래 두 라벨 보관, 확정 사유 1줄 | [LOCKED 후보] (v0 §2-4) |
+| 미달 시 | 루브릭·사례를 고치고 **그 구간 재라벨**. 공개·판매 데이터에는 목표를 넘은 필드만 넣는다(나머지는 내부) | [LOCKED] |
+| 판정(adjudication) | 불일치는 제3자(v0: Bae)가 확정. 원래 두 라벨 보관, 확정 사유 1줄 | [LOCKED] (v0 §2-4) |
 | 골드 문항 | 라벨 큐에 정답 아는 AC를 **10%** 섞어 라벨러 표류 감시. 골드 일치 < 85%가 2주 이어지면 재캘리브레이션 | [PILOT] |
-| 루브릭 버전 | `rubric_version`을 라벨에 단다. 루브릭이 바뀌면 이전 라벨의 버전은 그대로 | [LOCKED 후보] |
+| 루브릭 버전 | `rubric_version`을 라벨에 단다. 루브릭이 바뀌면 이전 라벨의 버전은 그대로 | [LOCKED] |
 
 ## 7. 기계 라벨과의 관계
 
 - **데이터셋의 정답 = 사람 확정 라벨.** 기계 판정은 "후보 라벨"로 같은 스키마에 나란히 저장한다: `machine_verdict` · `machine_reason_code` · `machine_defect_class` · `engine_sha` · `models`(cheap/strong id) · `trace_ref`(벤치 trace, PR #609 1단계) · `run_at`.
-- **대응표**(H2 ↔ 기계 reasonCode, [LOCKED 후보]): `login_wall`↔`login_required` · `sms_or_oauth`↔`oauth_unsupported`/`sms_unsupported` · `needs_own_api_key`↔`api_key_required` · `precondition_unbuildable`↔`precondition_not_met`/`precondition_blocked_by_defect` · `app_down`↔`app_missing` · `time_window`↔(야간 `precondition_not_met`). 기계 전용 사유(`judge_disagreed`·`not_reached`·`evidence_missing`·`input_rejected`·`ui_interpretation`)는 **기계가 못 본 것**이라 대응하지 않는다 — 사람이 판정하면 그 셀은 라벨이 생긴다(= 라벨 채움률이 오른다).
+- **대응표**(H2 ↔ 기계 reasonCode, [LOCKED]): `login_wall`↔`login_required` · `sms_or_oauth`↔`oauth_unsupported`/`sms_unsupported` · `needs_own_api_key`↔`api_key_required` · `precondition_unbuildable`↔`precondition_not_met`/`precondition_blocked_by_defect` · `app_down`↔`app_missing` · `time_window`↔(야간 `precondition_not_met`). 기계 전용 사유(`judge_disagreed`·`not_reached`·`evidence_missing`·`input_rejected`·`ui_interpretation`)는 **기계가 못 본 것**이라 대응하지 않는다 — 사람이 판정하면 그 셀은 라벨이 생긴다(= 라벨 채움률이 오른다).
 - **혼동행렬**이 엔진 개선의 백로그다. 기계 pass/사람 fail = 거짓 통과(가장 위험, 지수 발표 문턱 반대율 0), 기계 not_verified/사람 fail = 놓친 결함(must 짚음).
 - 측정 장비 의심: 기계 fail인데 사람이 재현 못 하면 `A=equipment_suspect` 후보 → 사람 재현 전엔 확정 금지(v0 §2-7).
 
@@ -141,7 +157,7 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 | A. 실유저 제출 | 첫 30앱 100% → 이후 빌더 × X4(서비스) 층화 무작위 30% + 기계 fail 전부 + 사용자 `still_broken` 전부 | 층화 무작위 행 = 1/추출률, 과대표집 행(기계 fail·still_broken)은 **별도 표시**하고 실패율 계산에서 가중 보정 |
 | C. 유료 사람 검수 | 100%(사람이 직접 함) | 1 |
 
-- **실패만 골라 라벨링하면 실패율이 부풀려진다** — 과대표집 행은 `sampling_reason`을 반드시 적고, 공개 실패율은 층화 무작위 행에서만 낸다 [LOCKED 후보].
+- **실패만 골라 라벨링하면 실패율이 부풀려진다** — 과대표집 행은 `sampling_reason`을 반드시 적고, 공개 실패율은 층화 무작위 행에서만 낸다 [LOCKED].
 - 표본 크기: 셀별 실패율 ±10%p(95%)에 셀당 약 100앱(v0 §5). 1회차는 셀을 합쳐(한 축씩) 말한다.
 
 ## 8.5 사용자 마이크로 라벨 — 비개발자에게 귀찮지 않게 묻기 (Bae 2026-10-20)
@@ -150,7 +166,7 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 
 사용자는 **자기 앱을 가장 잘 아는 라벨러**다(의도·실제 사용 경험). 전문 라벨러가 모든 앱을 볼 수 없으므로, 사용자 답은 ① 라벨 채움률(기계 not_verified 셀) ② 앱 카드 정확도(빌더·수정 횟수·분야) ③ 전문 라벨 표본 선택의 신호가 된다.
 
-### 원칙 [LOCKED 후보]
+### 원칙 [LOCKED]
 1. **한 번 누르기**: 모든 질문은 칩·버튼 1번으로 끝난다. 자유 입력은 선택("한마디 남기기").
 2. **결과를 막지 않는다**: 질문은 결과를 보여 준 **뒤**, 결과 옆에 둔다. 답하지 않아도 모든 기능이 그대로다(건너뛰기 항상 보임).
 3. **한 번에 최대 3개**, 런당 총 5개 이내. 같은 질문은 같은 앱에 다시 묻지 않는다(답 바뀜은 사용자가 고칠 수 있게만).
@@ -172,7 +188,7 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 | ④ 수리 뒤 재검수 | (기존) 해결됐나요 | — | `resolved` | [있음] |
 | ⑤ 처음 한 번(설정) — 선택 | 나이대 · 성별 · 앱 만들어 본 경험 (모두 "응답 안 함" 기본) | 칩 | X7·X8·X9 (집계 전용, index-design §5.1 규칙) | [신규] |
 
-### 사용자 라벨을 쓰는 규칙 [LOCKED 후보]
+### 사용자 라벨을 쓰는 규칙 [LOCKED]
 1. **출처 분리**: 사용자 답은 `source=user`로 저장하고 전문 라벨(`source=expert`)을 **덮어쓰지 않는다**. 데이터셋 정답은 전문 라벨 우선, 없으면 "사용자 답만 있음"으로 표시한 채 별도 집계.
 2. **신뢰도는 재서 쓴다**: 전문 라벨과 겹치는 행에서 사용자 답의 일치율을 낸다(U1 ↔ H1). 일치율이 기준([PILOT] 80%) 아래인 질문은 판매·공개 집계에 쓰지 않고 표본 선택 신호로만 쓴다.
 3. **표본 신호**: 사용자 "아니요, 돼요"(기계 fail 반박)와 "안 돼요"(기계 pass·not_verified인데 사용자는 실패)는 **전문 라벨 우선 큐**로 간다 — 엔진의 거짓 판정을 찾는 가장 싼 경로다.
@@ -225,23 +241,31 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 
 | # | 결정 | 상태 |
 |---|---|---|
-| L-D1 | 라벨 단위 다섯 층(앱·여정·기준·사람 판정·실패 사건) | [LOCKED 후보] |
-| L-D2 | 사람 판정 H1~H8, 증거 필수 | [LOCKED 후보] |
-| L-D3 | 실패 사건 W1·W2·W3·Y·K·S·A·P 필수, C·R·X는 PILOT | [LOCKED 후보] / C·R·X [PILOT] |
-| L-D4 | 판매 실패율 분자 = `A=builder`만, 공개 실패율 = 층화 무작위 행만 | [LOCKED 후보] |
-| L-D5 | 블라인드는 파일·권한 분리로 강제(숨김 열 금지) | [LOCKED 후보] |
-| L-D6 | 필드별 일치도 목표와 미달 시 재라벨·비공개 | 규칙 [LOCKED 후보] · 수치 [PILOT] |
-| L-D7 | 버전 4개(스키마·택소노미·축·루브릭) append-only | [LOCKED 후보] |
-| L-D8 | 평가 환경 묶음은 지수용 앱으로만 | [LOCKED 후보] |
-| L-D9 | 사용자 마이크로 라벨(§8.5): 한 번 누르기·결과 뒤·최대 3개, 출처 분리(전문 라벨 덮어쓰기 금지), 신뢰도 측정 후 사용, 불일치는 전문 라벨 우선 큐 | 원칙 [LOCKED 후보] · 응답률·일치율 수치 [PILOT] |
+| L-D1 | 라벨 단위 다섯 층(앱·여정·기준·사람 판정·실패 사건) | [LOCKED] |
+| L-D2 | 사람 판정 H1~H8, 증거 필수 | [LOCKED] |
+| L-D3 | 실패 사건 W1·W2·W3·Y·K·S·A·P 필수, C·R·X는 PILOT | [LOCKED] / C·R·X [PILOT] |
+| L-D4 | 판매 실패율 분자 = `A=builder`만, 공개 실패율 = 층화 무작위 행만 | [LOCKED] |
+| L-D5 | 블라인드는 파일·권한 분리로 강제(숨김 열 금지) | [LOCKED] |
+| L-D6 | 필드별 일치도 목표와 미달 시 재라벨·비공개 | 규칙 [LOCKED] · 수치 [PILOT] |
+| L-D7 | 버전 4개(스키마·택소노미·축·루브릭) append-only | [LOCKED] |
+| L-D8 | 평가 환경 묶음은 지수용 앱으로만 | [LOCKED] |
+| L-D9 | 사용자 마이크로 라벨(§8.5): 한 번 누르기·결과 뒤·최대 3개, 출처 분리(전문 라벨 덮어쓰기 금지), 신뢰도 측정 후 사용, 불일치는 전문 라벨 우선 큐 | 원칙 [LOCKED] · 응답률·일치율 수치 [PILOT] |
 
 ## 14. 열린 질문 (Bae)
 
 | # | 질문 | 제안 |
 |---|---|---|
-| L-O1 | 라벨러 — Bae 외 누구, 몇 명 (v0 L1) | 3SVS 구성원 1명 + 11/2 전 외부 단기 1명(1회차 40앱 시간 때문) |
+| ~~L-O1~~ | ~~라벨러 — Bae 외 누구~~ | **해소 2026-10-21**: Simsa 라벨링 에이전트 + 필요시 사용자 질문(§0.0) |
 | L-O2 | 원인 층(C)을 사람에게 필수로 받나 | PILOT: 필수로 시작, 첫 100행에서 `unknown` > 50%면 선택 |
 | L-O3 | 재현 3회(R)를 S1·S2 전부에 하나, S1만인가 | S1·S2 전부(지수 신뢰도), 시간이 넘치면 S1만 |
 | L-O4 | 비공개 라벨 저장 위치 | 3SVS 구글 드라이브 비공개 폴더(시트) → 100행 넘으면 D1 별도 테이블(관리자 전용) |
 | L-O5 | X9(제작 경험)를 축에 넣나 (index-design §5.1) | 넣는다 — 선택 자기신고·집계 전용 |
 | L-O6 | 사용자 마이크로 라벨에 보상을 주나 | 처음엔 보상 없이 "더 정확해졌어요" 피드백만 → 응답률이 30% 아래면 검수 1회 크레딧 시험 |
+
+## 15. 게이트 레지스트리
+
+| 시각 (KST) | 문구 | 범위 |
+|---|---|---|
+| 2026-10-21 ~01:00 | `design lock approved` (Bae) | L-D1~L-D9 [LOCKED 후보] → [LOCKED]. 같은 메시지의 라벨러 결정 → §0.0. 구현 착수 아님(`train L start approved.` 필요) |
+| 2026-10-21 ~01:00 | 같은 메시지: "벤치 #2는 제안대로" | 벤치 #2 = 동네 가게 찾기 + 리뷰 게시판(지도 연동 쌍 · 게시판 공유 · 한글 검색·정렬 · 한글 파일명 업로드) — 사양·정답지 작성 범위 |
+| 2026-10-21 ~01:00 | 같은 메시지: "결제 테스트 모드 허용 설계도 해야지 — 우선순위는 아님" | 설계 백로그(착수 시점 미정) |
