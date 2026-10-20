@@ -11,6 +11,7 @@
  */
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
+import { controlPreference } from "./click-target.mjs";
 
 const VIEWPORT = { width: 1280, height: 800 };
 const NAV_TIMEOUT = 20_000;
@@ -38,6 +39,11 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   /** 로그인 때 채운 칸 — 이후 모든 스크린샷에서 가린다. */
   const maskSelectors = new Set(["input[type=password]"]);
   let dialogSeen = false;
+  /**
+   * (2026-10-21 §8 후속) 앱이 alert/confirm으로 답한 글자. 종전엔 닫기만 하고 글자를 버려, gemini의 "시술 메뉴를 최소 하나 이상
+   * 선택해주세요."가 에이전트에게 "NO VISIBLE CHANGE"로만 보였다(3런 내내 시술 없이 제출 반복). 행동 하나 동안만 모은다.
+   */
+  const dialogMessages = [];
   /** "dismiss"(기본) | "accept" — 허용된 내 기록 클릭(acceptDialog) 동안만 accept. */
   let dialogPolicy = "dismiss";
   const writes = [];
@@ -94,6 +100,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     //  보였다(bolt·gemini 실측). 허용된 내 기록 클릭(acceptDialog) 동안만 accept, 그 밖엔 종전대로 dismiss.
     p.on("dialog", (d) => {
       dialogSeen = true;
+      if (dialogMessages.length < 5) dialogMessages.push(`${d.type()}: ${String(d.message() ?? "").replace(/\s+/g, " ").slice(0, 200)}`);
       (dialogPolicy === "accept" ? d.accept() : d.dismiss()).catch(() => {});
     });
     p.setDefaultTimeout(ACT_TIMEOUT);
@@ -137,17 +144,29 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     const count = await all.count().catch(() => 0);
     let visible = 0;
     let chosen = null;
+    let chosenScore = -Infinity;
+    let chosenIdx = -1;
     let tag = "";
     for (let i = 0; i < Math.min(count, 20); i += 1) {
       const el = all.nth(i);
       if (!(await el.isVisible().catch(() => false))) continue;
       visible += 1;
-      if (chosen) continue;
-      if (editable && !(await el.isEditable().catch(() => false))) continue;
-      chosen = el;
-      tag = await el.evaluate((e) => e.tagName.toLowerCase()).catch(() => "?");
+      if (editable) {
+        if (chosen || !(await el.isEditable().catch(() => false))) continue;
+        chosen = el;
+        chosenIdx = i;
+        continue;
+      }
+      // (§8 후속) 누르기 대상: 같은 이름이 여럿이면 제출 버튼·폼 안을 nav 탭보다 앞에(동점이면 앞쪽 — 종전 동작).
+      const s = count > 1 ? await controlPreference(el) : 0;
+      if (s > chosenScore) {
+        chosen = el;
+        chosenScore = s;
+        chosenIdx = i;
+      }
     }
-    return { el: chosen, diag: `matched=${count} visible=${visible} chosen=${chosen ? tag : "none"}` };
+    if (chosen) tag = await chosen.evaluate((e) => `${e.tagName.toLowerCase()}${e.getAttribute("type") ? `[type=${e.getAttribute("type")}]` : ""}${e.closest("nav, header") ? "@nav" : e.closest("form") ? "@form" : ""}`).catch(() => "?");
+    return { el: chosen, diag: `matched=${count} visible=${visible} chosen=${chosen ? `${tag}#${chosenIdx}` : "none"}` };
   }
 
   /** 이름만 준 경우: 버튼 → 링크 → 아무 글자 순서(누를 수 있는 것 우선 — click-target.mjs와 같은 원칙). */
@@ -253,6 +272,8 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   }
   /** ownsRecordNear가 고른 내 행의 버튼 — 바로 다음 ownRecord 클릭이 같은 요소를 누른다(검사·클릭 대상 일치). */
   let ownPick = null;
+  /** 행동 하나 동안 앱이 띄운 팝업 글자 — 결과 문장 끝에 붙인다(관찰·판정 근거가 된다). */
+  const popupNote = () => (dialogMessages.length ? ` | app popup: "${dialogMessages.join(" / ")}"` : "");
 
   return {
     async start(_targetUrl) {
@@ -301,9 +322,11 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
             const pick = ownPick;
             ownPick = null;
             if (action.acceptDialog === true && !(pick && pick.key === JSON.stringify(action.target))) return { ok: false, note: "own_record_target_lost" };
-            const l = action.acceptDialog === true ? pick.el : await resolveTarget(action.target);
+            const resolved = action.acceptDialog === true ? { el: pick.el, diag: "own_record" } : await resolveTargetDiag(action.target);
+            const l = resolved.el;
             if (!l) return { ok: false, note: "target_not_found" };
             dialogPolicy = action.acceptDialog === true ? "accept" : "dismiss";
+            dialogMessages.length = 0;
             try {
               await l.click({ timeout: ACT_TIMEOUT });
               await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {});
@@ -311,7 +334,9 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
             } finally {
               dialogPolicy = "dismiss";
             }
-            return { ok: true, note: `clicked → ${page.url()}` };
+            // 같은 이름이 여럿이었으면 무엇을 눌렀는지 남긴다(§8 후속: claude는 "예약하기"가 nav 탭·제출 버튼 2개였다).
+            const which = /matched=([2-9]|\d{2,})/.test(resolved.diag) ? ` [${resolved.diag}]` : "";
+            return { ok: true, note: `clicked → ${page.url()}${which}${popupNote()}`, ...(dialogMessages.length ? { dialog: [...dialogMessages] } : {}) };
           }
           case "fill": {
             const { el: l, diag } = await resolveTargetDiag(action.target, true);
@@ -347,9 +372,10 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
             return { ok: true, note: "selected" };
           }
           case "press":
+            dialogMessages.length = 0;
             await page.keyboard.press(action.key === "Space" ? " " : action.key);
             await page.waitForTimeout(700);
-            return { ok: true, note: "pressed" };
+            return { ok: true, note: `pressed${popupNote()}`, ...(dialogMessages.length ? { dialog: [...dialogMessages] } : {}) };
           case "goto": {
             const r = await this.goto(action.path);
             return { ok: true, note: `opened (HTTP ${r.status ?? "?"})` };

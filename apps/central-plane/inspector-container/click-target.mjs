@@ -7,14 +7,43 @@
  * 요소를 먼저 누르고, 없을 때만 종전대로 글자로 찾는다(기존 동작 보존).
  */
 
-/** @param {import("playwright").Locator} loc */
+/**
+ * (2026-10-21 §8 후속) 같은 이름의 보이는 컨트롤이 여럿일 때의 선호 점수. 벤치 #1 claude 앱은 "예약하기"가 상단 화면 전환 탭
+ * (`nav`, aria-current=page, 문서 앞쪽)과 폼 제출 버튼(type=submit) 두 개였고, 첫 요소를 누르던 해석이 3런 내내 탭만 눌러
+ * 제출에 한 번도 닿지 못했다. 점수: 제출 버튼·폼 안 +2, nav/header 안·aria-current -2. 동점이면 문서 순서(종전 동작).
+ * agent-driver.mjs의 pickVisible도 이 점수를 쓴다(같은 결함, 같은 고침).
+ * @param {import("playwright").Locator} el
+ */
+export async function controlPreference(el) {
+  return el
+    .evaluate((e) => {
+      let s = 0;
+      const type = (e.getAttribute("type") || "").toLowerCase();
+      if (type === "submit" || e.closest("form")) s += 2;
+      if (e.closest("nav, header, [role=navigation], [role=tablist]") || e.hasAttribute("aria-current")) s -= 2;
+      return s;
+    })
+    .catch(() => 0);
+}
+
+/**
+ * 보이는 일치 중 선호 점수가 가장 높은 것(동점이면 앞쪽). 하나뿐이면 그것.
+ * @param {import("playwright").Locator} loc
+ */
 async function firstVisible(loc) {
   const n = await loc.count().catch(() => 0);
+  let best = null;
+  let bestScore = -Infinity;
   for (let i = 0; i < Math.min(n, 5); i++) {
     const el = loc.nth(i);
-    if (await el.isVisible().catch(() => false)) return el;
+    if (!(await el.isVisible().catch(() => false))) continue;
+    const s = n > 1 ? await controlPreference(el) : 0;
+    if (s > bestScore) {
+      best = el;
+      bestScore = s;
+    }
   }
-  return null;
+  return best;
 }
 
 /**

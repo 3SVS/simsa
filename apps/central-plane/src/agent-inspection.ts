@@ -168,6 +168,10 @@ const RE_SUBMIT_ERROR = /잘못|올바르지|올바른|오류|에러|실패|다�
 const RE_BUTTON_LIKE = /(하기|확정|확인|submit|confirm|book now|reserve)$/i;
 /** 제출 버튼처럼 보이는 클릭 글자 — 시간·날짜 칩("10:30", "10월 21일")과 구별한다. */
 const RE_SUBMIT_LABEL = /예약|신청|완료|확정|저장|등록|보내기|제출|submit|book|reserve|confirm|save|send/i;
+/** 제출처럼 보이는 클릭 글자인가 — 저장 자동 탐침 예산은 이런 클릭에만 쓴다(시간·시술 칩 제외, 2026-10-21). */
+export function looksLikeSubmitLabel(label: string): boolean {
+  return RE_SUBMIT_LABEL.test(label ?? "");
+}
 
 /**
  * (2026-10-20 격차 §8 a-4·c-5) 입력 뒤 클릭이 기록을 만들었는가 — 결정론. 종전엔 클릭 뒤 화면 **전체**에서 /완료|…/를 찾아

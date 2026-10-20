@@ -1022,11 +1022,53 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     };
     const chipOnly = await run(["10:30"]);
     assert.equal(chipOnly.out.report.agent.setup, undefined, "시간 칩 클릭은 기록이 아니다");
-    assert.ok(chipOnly.phases.some((l) => /probe CORE-1 #1 click="10:30" writes=0 local=true → no_change/.test(l)), chipOnly.phases.join("\n"));
+    // (2026-10-21) 칩 클릭은 탐침 예산을 쓰지 않는다(탐침 자체를 안 한다).
+    assert.ok(!chipOnly.phases.some((l) => /probe CORE-1 .*click="10:30"/.test(l)), chipOnly.phases.join("\n"));
     const submitted = await run(["10:30", "예약하기"]);
     assert.equal(submitted.out.report.agent.setup?.byAc, "CORE-1");
     assert.equal(submitted.out.report.agent.setup.serverWrites, 0);
-    assert.ok(submitted.phases.some((l) => /probe CORE-1 #2 click="예약하기" writes=0 local=true → local_change/.test(l)), submitted.phases.join("\n"));
+    assert.ok(submitted.phases.some((l) => /probe CORE-1 #1 click="예약하기" writes=0 local=true → local_change/.test(l)), submitted.phases.join("\n"));
+  });
+
+  it("T18 (10-21 gemini 재연) 칩·실패 제출이 앞에 여러 번 있어도 진짜 성공 제출을 잰다 · 앱 팝업 글자가 기록에 남고 'NO VISIBLE CHANGE'로 덮이지 않는다 — 옛 코드는 칩·실패 클릭에 탐침 3번을 다 써서 셋업 없음", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `미용실 예약 이름 휴대폰 10:30 여성 커트 예약 완료하기${state.slot ? " [10:30 선택됨]" : ""}${state.service ? " [커트 선택됨]" : ""}${state.done ? "\n예약이 확정되었습니다" : ""}`, buttons: ["10:30", "여성 커트", "예약 완료하기"] }),
+    };
+    const onAct = (action, state) => {
+      if (action.type !== "click") return null;
+      if (action.target.name === "여성 커트") state.service = true;
+      if (action.target.name === "10:30") state.slot = true;
+      if (action.target.name === "예약 완료하기" && state.fills.length > 0) {
+        // gemini 모양: 시술을 안 고르면 alert만 띄우고 아무것도 안 바뀐다.
+        if (!state.service) return { ok: true, note: 'clicked → / | app popup: "alert: 시술 메뉴를 최소 하나 이상 선택해주세요."', dialog: ["alert: 시술 메뉴를 최소 하나 이상 선택해주세요."] };
+        state.store.bookings = `${TD.name} 10:30`;
+        state.done = true;
+      }
+      return null;
+    };
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const phases = [];
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+        { type: "click", target: { role: "button", name: "10:30" } },
+        { type: "click", target: { role: "button", name: "예약 완료하기" } },
+        { type: "click", target: { role: "button", name: "여성 커트" } },
+        { type: "click", target: { role: "button", name: "예약 완료하기" } },
+        { type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench", onPhase: (l) => phases.push(l) });
+    assert.equal(out.report.agent.setup?.byAc, "CORE-1", phases.filter((l) => /probe/.test(l)).join("\n"));
+    // 칩(10:30·여성 커트)은 재지 않고, 실패 제출(#1)과 성공 제출(#2)만 잰다. 옛 코드는 10:30·완료·여성 커트에 3번을 다 썼다.
+    assert.ok(!phases.some((l) => /probe CORE-1 .*click="(10:30|여성 커트)"/.test(l)), phases.join("\n"));
+    assert.ok(phases.some((l) => /probe CORE-1 #2 click="예약 완료하기" .*→ (local_change|confirmation)/.test(l)), phases.join("\n"));
+    const corePrompts = prompts.filter((p) => /Criterion CORE-1 \(/.test(p));
+    const later = corePrompts.at(-1);
+    assert.match(later, /시술 메뉴를 최소 하나 이상 선택해주세요/, "팝업 글자가 다음 턴 기록에 보인다");
+    assert.match(later, /THE APP ANSWERED WITH A POPUP/);
   });
 
   it("T14 (§8 d) 프롬프트의 기기 시각은 한국 시각 표기 — 01:35 KST가 10-18 UTC로 보이지 않는다", async () => {

@@ -48,6 +48,11 @@ const PAGES = {
   "/admin": `<!doctype html><html><body><h1>오늘 예약</h1><div class="row" style="display:flex;justify-content:space-between"><div><p>10:00</p><p>심사테스트 010-1111-2222</p></div><button onclick="this.closest('.row').remove()">취소</button></div><div class="row" style="display:flex;justify-content:space-between"><div><p>10:30</p><p>심사테스트 010-3333-4444</p></div><button onclick="this.closest('.row').remove()">취소</button></div><div class="row" style="display:flex;justify-content:space-between"><div><p>13:00</p><p>심사테스트 010-2245-9715</p></div><button onclick="this.closest('.row').remove()">취소</button></div></body></html>`,
   // 행 구분 없이 한 상자에 번호·버튼이 섞인 화면 — 행 범위가 넓으면 남의 번호가 섞여 거부돼야 한다.
   "/admin-flat": `<!doctype html><html><body><div><p>10:00 심사테스트 010-1111-2222</p><button>취소</button><p>13:00 심사테스트 010-2245-9715</p><button>취소</button></div></body></html>`,
+  // (10-21 gemini 모양) 시술을 안 고르면 alert만 — 화면은 그대로.
+  "/popup": `<!doctype html><html><body><button onclick="alert('시술 메뉴를 최소 하나 이상 선택해주세요.')">예약 완료하기</button></body></html>`,
+  // (10-21 claude 모양) "예약하기"가 nav 탭(앞쪽, aria-current)과 폼 제출 버튼 두 개.
+  "/twobtn": `<!doctype html><html><body><nav><button aria-current="page" onclick="">예약하기</button><button>내 예약</button></nav>
+    <form onsubmit="event.preventDefault(); localStorage.setItem('b','1'); document.getElementById('o').textContent='예약이 완료되었습니다';"><label>이름<input></label><button type="submit">예약하기</button></form><p id="o"></p></body></html>`,
 };
 
 describe("agent 드라이버 — 실제 브라우저", { skip }, () => {
@@ -144,5 +149,19 @@ describe("agent 드라이버 — 실제 브라우저", { skip }, () => {
     assert.equal(r.ok, false);
     assert.equal(r.note, "own_record_target_lost");
     assert.match(await driver.bodyText(), /010-1111-2222[\s\S]*010-2245-9715/, "아무것도 지우지 않았다");
+  });
+  it("(10-21 gemini) 앱이 alert로 답하면 그 글자를 결과에 싣는다 — 옛 코드는 'clicked → url'만(글자 버림)", async () => {
+    await driver.goto(base + "/popup");
+    const r = await driver.act({ type: "click", target: { role: "button", name: "예약 완료하기" } });
+    assert.equal(r.ok, true, r.note);
+    assert.match(r.note, /app popup: "alert: 시술 메뉴를 최소 하나 이상 선택해주세요\."/);
+    assert.deepEqual(r.dialog, ["alert: 시술 메뉴를 최소 하나 이상 선택해주세요."]);
+  });
+  it("(10-21 claude) 같은 이름 '예약하기'가 nav 탭과 폼 제출 버튼이면 제출 버튼을 누른다 — 옛 코드는 앞쪽 nav 탭", async () => {
+    await driver.goto(base + "/twobtn");
+    const r = await driver.act({ type: "click", target: { role: "button", name: "예약하기" } });
+    assert.equal(r.ok, true, r.note);
+    assert.match(r.note, /matched=2 .*chosen=button\[type=submit\]@form/);
+    assert.match(await driver.bodyText(), /예약이 완료되었습니다/);
   });
 });

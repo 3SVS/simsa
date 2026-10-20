@@ -759,7 +759,10 @@ export async function runAgentInspection(o) {
         // (2026-10-20 격차 §8 b-3) 입력 뒤 클릭은 기록이 확인될 때까지 기준당 3번까지 잰다. 종전엔 첫 클릭 한 번만 쟀는데 v0는 첫
         //  클릭이 "시간 예약하기"(시간 고르기 창 열기)라 쓰기 0 → 셋업 없음, 진짜 제출은 재지 않았다(같은 런 A4는 pass).
         //  제출 전 화면 글자를 남겨 둔다 — 완료 문구를 "새로 나타난 글자"로만 인정하기 위해(§8 a-4).
-        probeBefore = a.type === "click" && filled && !setupInfo.created && autoProbes < MAX_AUTO_PROBES && driver.storageProbe && !cleanupMode ? await driver.bodyText().catch(() => "") : null;
+        //  (2026-10-21) 탐침은 **제출처럼 보이는 클릭에만** 쓴다 — gemini에서 시간·시술 칩 클릭이 3번을 다 써서, 시술을 고른 뒤의
+        //  진짜 성공 제출은 한 번도 재지 못했다(3런 전부). 칩("10:30", "여성 커트 20,000원")은 재지 않는다.
+        const clickLabel0 = a.type === "click" ? (a.target?.name ?? a.target?.text ?? a.target?.label ?? "") : "";
+        probeBefore = a.type === "click" && filled && !setupInfo.created && autoProbes < MAX_AUTO_PROBES && pure.looksLikeSubmitLabel(clickLabel0) && driver.storageProbe && !cleanupMode ? await driver.bodyText().catch(() => "") : null;
         res = await driver.act(a);
       }
       if (res?.ok) {
@@ -815,7 +818,10 @@ export async function runAgentInspection(o) {
         const sigAfter = await driver.signature().catch(() => null);
         if (sigAfter === sigBefore) {
           stuck += 1;
-          res = { ...res, ok: res.ok, note: `${res.note ?? ""} — NO VISIBLE CHANGE (look for a required choice above, a validation message, or a disabled button; do not repeat the same action)` };
+          // (2026-10-21 §8 후속) 앱이 팝업(alert)으로 답했으면 "변화 없음"이 아니다 — 그 글자가 다음 수의 단서다(gemini: 시술 미선택).
+          res = res.dialog?.length
+            ? { ...res, note: `${res.note ?? ""} — THE APP ANSWERED WITH A POPUP (read it: it usually names the missing choice or the input it rejected; fix that, then retry)` }
+            : { ...res, ok: res.ok, note: `${res.note ?? ""} — NO VISIBLE CHANGE (look for a required choice above, a validation message, or a disabled button; do not repeat the same action)` };
           if ((stuck >= 2 || desc === lastDesc) && escalations < MAX_ESCALATIONS_PER_AC) {
             escalate = true;
             escalations += 1;
@@ -862,7 +868,7 @@ const MOBILE_CHECK_MAX = 8;
 /** (H3) 기준 하나에서 강한 모델로 올리는 행동 턴 상한. */
 const MAX_ESCALATIONS_PER_AC = 3;
 /** (2026-10-20 §8 b-3) 기준 하나에서 입력 뒤 클릭의 저장 자동 탐침 상한(기록이 확인되면 멈춘다). */
-const MAX_AUTO_PROBES = 3;
+const MAX_AUTO_PROBES = 5;
 
 function normUrl(u) {
   try {
