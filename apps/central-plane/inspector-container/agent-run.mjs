@@ -114,6 +114,8 @@ export async function runAgentInspection(o) {
   let setupAttempted = false;
   let recordsCreated = 0;
   let cleanup = null;
+  /** (2026-10-20 격차 §8 a-3) 측정용 기준별 기록 — 시작 상태·턴별 생각·판정 이력(재확인 사유 포함). o.trace일 때만 리포트에 싣는다. */
+  const acTraces = {};
   const setupPolicy = o.setupPolicy === "bench" ? "bench" : "user";
   const SETUP_STEPS = 14;
   const cleanupBudget = () => Math.min(8, Math.floor(caps.maxActions * 0.15));
@@ -218,8 +220,11 @@ export async function runAgentInspection(o) {
           plog(`setup:from ${acId} date=${s.date ?? "?"} time=${s.time ?? "?"} writes=${s.serverWrites}`);
         }
       };
+      const keepTrace = (r, key) => {
+        if (o.trace === true && r?._trace) acTraces[key] = r._trace;
+      };
       const strip = (r) => {
-        const { _setup: _s, ...row } = r;
+        const { _setup: _s, _trace: _t, _cleanup: _c, ...row } = r;
         return row;
       };
       for (const ac of acs) {
@@ -264,6 +269,7 @@ export async function runAgentInspection(o) {
                 then: locale === "en" ? "A confirmation shows the booking (date, time, name)." : "완료 화면에 예약(날짜·시간·이름)이 보인다.", priority: "should", confirmed: true,
               };
               const s = await runOneAc({ ...acArgsBase(), ac: setupAc, setupMode: true });
+              keepTrace(s, "SETUP-1");
               harvest(s, "SETUP-1");
               plog(`setup:run → ${s.status} created=${Boolean(s._setup?.created)}`);
             }
@@ -282,11 +288,13 @@ export async function runAgentInspection(o) {
         }
         const acArgs = { ...acArgsBase(), ac, setup: pre.needsRecord ? setup : null, sameSession: pre.needsRecord && pre.sameSession };
         let r = await runOneAc(acArgs);
+        keepTrace(r, ac.id);
         harvest(r, ac.id);
         // (G1) prod bench1 run 2: 사람에겐 되는 앱에 "제출해도 완료 화면이 안 나와요" 같은 거짓 실패가 나왔다. 실패는 고침 지시를
         //  만드는 가장 해로운 출력이다 — 새 브라우저에서 강한 모델이 행동까지 골라 **다시 재현될 때만** 실패로 남긴다.
         if (r.status === "fail" && ac.priority === "must" && timeLeft() > 60_000 && !llmCalls.budgetExhausted) {
           const rep = await runOneAc({ ...acArgs, reproduceOf: r });
+          keepTrace(rep, `${ac.id}#repro`);
           plog(`ac ${ac.id} fail-repro → ${rep.status}`);
           if (rep.status === "fail") {
             r = { ...r, evidence: [...r.evidence, ...rep.evidence].slice(0, 4), reproduced: true };
@@ -298,6 +306,7 @@ export async function runAgentInspection(o) {
         if (r.status === "pass" && ac.priority === "must" && pure.isTimeRelated(ac) && timeLeft() > 90_000 && !llmCalls.budgetExhausted) {
           const iso = pure.kstEarlyMorningIso(Date.now());
           const v = await runOneAc({ ...acArgs, clockIso: iso });
+          keepTrace(v, `${ac.id}#clock`);
           r = pure.mergeClockVariant(r, v, iso, locale);
           plog(`ac ${ac.id} clock-variant → ${v.status}`);
         }
@@ -331,8 +340,17 @@ export async function runAgentInspection(o) {
             then: locale === "en" ? `No booking with phone ${data.phone} remains in the list.` : `목록에 번호 ${data.phone}인 예약이 남아 있지 않다.`, priority: "should", confirmed: true,
           };
           const c = await runOneAc({ ...acArgsBase(), ac: cleanupAc, setup, cleanupMode: true, maxStepsOverride: budget });
-          const gate = c.reasonCode === "login_required" ? "login_wall" : c.status === "pass" ? null : "not_confirmed";
-          cleanup = { created: recordsCreated, cleaned: c.status === "pass" ? recordsCreated : 0, leftover: c.status === "pass" ? 0 : recordsCreated, ...(gate ? { cleanupSkipped: gate } : {}) };
+          keepTrace(c, "CLEANUP-1");
+          // (2026-10-20 격차 §8 c-3) 지운 수는 판정이 아니라 **허용된 내 기록 취소 클릭이 성공한 수**로 센다 — 취소 버튼이 없는 앱에서
+          //  "목록에 없음"을 보고 pass가 나와 cleaned=1이 적혔다(v0 r2, 실제 0). 클릭은 했지만 pass가 아니면 지웠다고 하지 않는다(안전 쪽).
+          const okClicks = c._cleanup?.allowedOk ?? 0;
+          const cleaned = c.status === "pass" ? Math.min(okClicks, recordsCreated) : 0;
+          const gate =
+            c.reasonCode === "login_required" ? "login_wall"
+            : (c._cleanup?.attempts ?? 0) === 0 ? "no_cancel_click"
+            : cleaned < recordsCreated ? "not_confirmed"
+            : null;
+          cleanup = { created: recordsCreated, cleaned, leftover: recordsCreated - cleaned, ...(gate ? { cleanupSkipped: gate } : {}) };
           plog(`cleanup → ${c.status}${c.reasonCode ? `(${c.reasonCode})` : ""} leftover=${cleanup.leftover}`);
         }
       } else if (recordsCreated > 0) {
@@ -359,6 +377,7 @@ export async function runAgentInspection(o) {
     if (td.leftover > 0) report.notes.push(pure.testDataLeftoverNote(td.leftover, usedTestData, locale));
     else report.notes.push(locale === "en" ? `This check may have created test records in your app (names ${usedTestData.name}/${usedTestData.altName}, phone ${usedTestData.phone}). You can delete them.` : `이번 확인이 앱에 시험 기록을 남겼을 수 있어요(이름 ${usedTestData.name}/${usedTestData.altName}, 번호 ${usedTestData.phone}). 지우셔도 돼요.`);
   }
+  if (o.trace === true) report.agent.trace = acTraces;
   if (setup) report.agent.setup = { byAc: setup.byAc, date: setup.date, time: setup.time, serverWrites: setup.serverWrites, recipeSteps: setup.recipe.length };
   if (singleFileFix) {
     report.agent.singleFileFix = singleFileFix;
@@ -426,10 +445,22 @@ export async function runAgentInspection(o) {
   }
 
   async function runOneAc({ ac, o, pure, driver, callLlm, locale, data, hasCredentials, loginFailed, handoverState, deadline, shot, plog, clockIso = null, reproduceOf = null, setup = null, sameSession = false, setupMode = false, cleanupMode = false, maxStepsOverride = null }) {
+    // (2026-10-20 격차 §8 a-3) 측정용 기록 — 판정 이력(되돌림·재확인 사유)과 턴별 생각. 결과 행에는 안 들어간다(strip).
+    const trace = { startedWith: "fresh", setupVisibleAtStart: null, turns: [], judgeTrail: [] };
+    const TRACE_TEXT_MAX = 240;
+    const judgeLog = (a, outcome, extra = {}) => {
+      trace.judgeTrail.push({
+        step: steps, tier: turnTier, verdict: a.verdict, reason: red(String(a.reason ?? "")).slice(0, TRACE_TEXT_MAX),
+        ...(a.reasonCode ? { reasonCode: a.reasonCode } : {}), outcome, ...extra,
+      });
+    };
+    /** (§8 c-3) 정리 미니런의 취소 클릭 집계 — 지운 수를 판정이 아니라 클릭으로 센다. */
+    const cleanupClicks = { attempts: 0, allowedOk: 0 };
     async function startFresh() {
       if (driver.newSession) {
         // (2026-10-19) "새로고침해도 남는다"류는 기록을 만든 브라우저를 이어 쓴다(그 브라우저 저장소·쿠키 복원). 그 밖은 새 브라우저.
         const restore = sameSession && setup?.storageState ? setup.storageState : handoverState ?? null;
+        trace.startedWith = restore ? (restore === handoverState ? "handover" : "restored_setup") : "fresh";
         await driver.newSession(o.targetUrl, restore).catch(() => driver.goto(o.targetUrl));
         if (!handoverState && o.credentials && hasCredentials && !loginFailed) {
           await driver.login(o.credentials).catch(() => null);
@@ -486,6 +517,11 @@ export async function runAgentInspection(o) {
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obsRaw = await driver.observe();
       const obs = redObs(obsRaw);
+      if (setup && trace.setupVisibleAtStart === null) {
+        // 기준을 시작한 화면에 만들어 둔 기록(번호·시간)이 보였는가 — 새 브라우저에서 기록이 안 보이는 구조(§8 a-1)를 재기 위해.
+        const t = String(obsRaw?.text ?? "");
+        trace.setupVisibleAtStart = Boolean(t.includes(data.phone) || (setup.time && t.includes(setup.time)));
+      }
       lastGate = pure.detectLoginGate(obsRaw);
       for (const l of await driver.links().catch(() => [])) {
         const abs = pure.resolveSameOrigin(String(l.href ?? ""), o.targetUrl);
@@ -508,6 +544,10 @@ export async function runAgentInspection(o) {
         return finish({ status: "not_verified", reason: pure.reasonText(code, locale), reasonCode: code, evidence: [] });
       }
       let parsed = pure.parseAgentAction(text, o.targetUrl);
+      if (o.trace === true) {
+        const thought = /"thought"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(String(text ?? ""))?.[1] ?? "";
+        trace.turns.push({ step: steps + 1, tier: turnTier, type: parsed.ok ? parsed.action.type : "invalid", thought: red(thought).slice(0, TRACE_TEXT_MAX) });
+      }
       // (F2) 싼 모델은 길 찾기(행동)만 — 판정은 강한 모델이 한다. 진단: 행동·판정 모두 gpt-5.4-mini가 냈고(런당 41~67회),
       //  강한 모델(gpt-5.4)은 재확인 3~6회뿐이었다. 싼 모델이 judge를 내면 같은 관찰로 강한 모델에 다시 묻는다
       //  (강한 모델이 "더 해 보라"며 행동을 내면 그 행동을 따른다).
@@ -549,19 +589,23 @@ export async function runAgentInspection(o) {
         // (G1) 앱이 우리 입력 형식을 거절한 것이면 고장이 아니다 — 입력을 고쳐 다시(두 번까지), 그래도면 input_rejected.
         if (a.verdict === "fail" && pure.looksLikeInputValidation(`${a.reason} ${a.evidenceQuote}`)) {
           if (validationNudges < 2 && steps < maxSteps - 2) {
+            judgeLog(a, "nudged_input_rejected");
             validationNudges += 1;
             history.push("(not accepted: that message looks like the app rejecting OUR input format — not an app defect. Correct the input and retry: e.g. phone as 01012345678 or 010-1234-5678, a full Korean name, required choices selected.)");
             continue;
           }
+          judgeLog(a, "input_rejected");
           return finish({ status: "not_verified", reason: pure.reasonText("input_rejected", locale), reasonCode: "input_rejected", evidence: [] });
         }
         if (pure.isPrematureGiveUp(a, steps, maxSteps) && nudges < 2) {
+          judgeLog(a, "nudged_premature");
           nudges += 1;
           history.push(`(not accepted: you still have ${maxSteps - steps} actions. Actually perform the steps of the criterion — choose options, fill fields, submit, then look. Only stop early when a real blocker is on screen: a login wall (login_required) or the app asking for the user's own API key (api_key_required).)`);
           continue;
         }
         // (H1) 실패는 "사용자가 얻을 수 없는 결과"를 말해야 한다 — 화면 구성 해석이면 확인 못 함.
         if (a.verdict === "fail" && !pure.failReasonIsOutcome(a.reason)) {
+          judgeLog(a, "ui_interpretation");
           return finish({ status: "not_verified", reason: pure.reasonText("ui_interpretation", locale), reasonCode: "ui_interpretation", evidence: [] });
         }
         const f = pure.finalizeJudge(a, { corpus, loginGate: lastGate, hasCredentials, locale, onGuessedAddress });
@@ -583,12 +627,14 @@ export async function runAgentInspection(o) {
           }
           if (!review || !review.agree) {
             history.push(`(review disagreed: ${review?.why ?? "no answer"} — gather the missing proof, then judge again)`);
+            judgeLog(a, "review_disagreed", { finalStatus: f.status, review: { agree: false, why: red(String(review?.why ?? "no answer")).slice(0, TRACE_TEXT_MAX) } });
             // (F4) 진단: 재확인 불일치 11건이 그 자리에서 기준을 끝냈다. 단계가 남았으면 불일치 이유를 들고 한 번 더 해 본다.
             disagreements += 1;
             if (disagreements < 2 && steps < maxSteps - 2) continue;
             return finish({ status: "not_verified", reason: pure.reasonText("judge_disagreed", locale), reasonCode: "judge_disagreed", evidence: [] });
           }
         }
+        judgeLog(a, "final", { finalStatus: f.status, ...(f.reasonCode ? { finalReasonCode: f.reasonCode } : {}) });
         return finish(f);
       }
       const desc = red(pure.describeAction(a, locale));
@@ -602,9 +648,14 @@ export async function runAgentInspection(o) {
         const label = a.target.name ?? a.target.text ?? a.target.label ?? a.target.placeholder ?? "";
         const safety = classifyActionSafety(label);
         if (!safety.safe && safety.category !== "empty/unknown") {
-          const allowed = safety.category === "delete" && a.type === "click" && a.ownRecord === true && (await driver.ownsRecordNear(a.target, markers));
+          // (2026-10-20 격차 §8 c-2) 표지 검사는 ownRecord 취소 클릭에서만 한다 — 로그의 markerMatch가 "허용 여부 전체"로 섞이지 않게
+          //  markerChecked(검사했나)와 markerMatch(검사 결과)를 나눠 적는다.
+          const markerChecked = safety.category === "delete" && a.type === "click" && a.ownRecord === true;
+          const markerMatch = markerChecked ? await driver.ownsRecordNear(a.target, markers) : null;
+          const allowed = markerMatch === true;
+          if (cleanupMode && safety.category === "delete") cleanupClicks.attempts += 1;
           // (2026-10-19 Bae) 취소·삭제 클릭은 대상·표지 일치 여부를 위상 로그에 남긴다 — 측정 기록이 "무엇을 지웠나"를 보여 줄 수 있게.
-          plog(`cancel-click ${ac.id} target="${red(label).slice(0, 60)}" ownRecord=${a.ownRecord === true} markerMatch=${allowed} → ${allowed ? "allowed" : "blocked"}`);
+          plog(`cancel-click ${ac.id} target="${red(label).slice(0, 60)}" ownRecord=${a.ownRecord === true} markerChecked=${markerChecked} markerMatch=${markerMatch} → ${allowed ? "allowed" : "blocked"}`);
           if (!allowed) {
             history.push(`${desc} → BLOCKED (unsafe: ${safety.category}; only records you created may be cancelled — set ownRecord:true on a row that shows phone ${data.phone})`);
             continue;
@@ -699,6 +750,7 @@ export async function runAgentInspection(o) {
           stuck = 0;
         }
       }
+      if (cleanupMode && a.acceptDialog === true && res.ok) cleanupClicks.allowedOk += 1;
       lastDesc = desc;
       actions.push(desc);
       history.push(`${desc} → ${res.ok ? "ok" : "failed"}: ${red(res.note ?? "")}`);
@@ -725,6 +777,8 @@ export async function runAgentInspection(o) {
         ...(screenshot ? { screenshot } : {}),
         // 실행기 내부용 — results에 넣기 전에 strip된다(리포트에는 agent.setup 요약만).
         _setup: setupInfo,
+        _trace: trace,
+        ...(cleanupMode ? { _cleanup: cleanupClicks } : {}),
       };
     }
   }

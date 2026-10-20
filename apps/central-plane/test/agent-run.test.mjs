@@ -733,6 +733,72 @@ describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들
     }
   });
 
+  it("T8 (§8 c-3) 취소 버튼을 한 번도 못 눌렀는데 정리가 pass면 지운 수 0 · leftover=만든 수 · no_cancel_click — 옛 코드는 cleaned=1", async () => {
+    const { site, onAct, shared } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      // v0 r2 모양: 취소 수단이 없는 화면을 보고 "목록에 없다"로 pass.
+      "CLEANUP-1": [{ type: "judge", verdict: "pass", reason: "목록에 내 번호 예약이 없어요", evidenceQuote: "동네 미용실 예약" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    const td = out.report.agent.testData;
+    assert.equal(td.created, 1);
+    assert.equal(td.cleaned, 0);
+    assert.equal(td.leftover, 1);
+    assert.equal(td.cleanupSkipped, "no_cancel_click");
+    assert.ok(shared.bookings.some((b) => b.phone === TD.phone), "실제로 남아 있다");
+    assert.ok(out.report.notes.some((n) => /테스트 데이터 1건 남음/.test(n)), JSON.stringify(out.report.notes));
+  });
+
+  it("T9 (§8 a-3) trace 켠 런은 재확인 기각 사유·턴별 생각·시작 상태를 기준별로 남긴다 · 끈 런(프로덕션)은 agent.trace 없음", async () => {
+    const script = { "AC-U": userMustScript, "CORE-1": book, A3: [{ type: "new_session" }, { type: "judge", verdict: "pass", reason: "다른 손님에겐 10:30이 막혀 있어요", evidenceQuote: "10:30" }] };
+    const run = async (trace) => {
+      const { site, onAct } = serverSalon();
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm(script, { review: (id) => id !== "A3" });
+      return runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", trace });
+    };
+    const on = await run(true);
+    const t = on.report.agent.trace.A3;
+    assert.ok(t, JSON.stringify(Object.keys(on.report.agent.trace)));
+    const disagreed = t.judgeTrail.find((j) => j.outcome === "review_disagreed");
+    assert.ok(disagreed, JSON.stringify(t.judgeTrail));
+    assert.equal(disagreed.review.why, "fake review");
+    assert.equal(disagreed.finalStatus, "pass");
+    assert.equal(t.startedWith, "fresh");
+    assert.equal(typeof t.setupVisibleAtStart, "boolean");
+    assert.ok(t.turns.length >= 1 && t.turns.every((x) => typeof x.thought === "string"));
+    assert.equal(on.report.acTable.find((r) => r.id === "A3").status, "not_verified");
+    assert.ok(!on.report.acTable.some((r) => "_trace" in r), "결과 행에는 안 들어간다");
+    const off = await run(undefined);
+    assert.equal(off.report.agent.trace, undefined);
+  });
+
+  it("T10 (§8 c-2) 표지 검사는 ownRecord 취소에서만 — 로그가 markerChecked와 markerMatch를 나눠 적는다", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      "CLEANUP-1": [
+        { type: "goto", path: "/admin" },
+        { type: "click", target: { role: "button", name: "취소 010-1111-2222" } },
+        { type: "click", target: { role: "button", name: "취소 $PHONE" }, ownRecord: true },
+        { type: "judge", verdict: "pass", reason: "내 예약이 목록에서 사라졌어요", evidenceQuote: "오늘 예약" },
+      ],
+    });
+    const phases = [];
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", onPhase: (l) => phases.push(l) });
+    const lines = phases.filter((l) => /cancel-click CLEANUP-1/.test(l));
+    assert.equal(lines.length, 2, lines.join("\n"));
+    assert.match(lines[0], /ownRecord=false markerChecked=false markerMatch=null → blocked/);
+    assert.match(lines[1], /ownRecord=true markerChecked=true markerMatch=true → allowed/);
+    assert.equal(out.report.agent.testData.cleaned, 1);
+    assert.equal(out.report.agent.testData.leftover, 0);
+  });
+
   it("T7 seed가 같으면 번호가 같고(재현), 메모에 런 표지가 남는다 — 옛 코드는 Date.now만", async () => {
     const run = async () => {
       const { site, onAct } = serverSalon();

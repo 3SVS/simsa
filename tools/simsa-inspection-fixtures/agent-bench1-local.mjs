@@ -272,6 +272,8 @@ export async function benchOne(app, { locale = "ko", acMode = "prereg", runTag =
       setupPolicy: "bench",
       testDataSeed: stableSeed(`${runTag}:${app.id}`),
       runTag: `${runTag}${app.id.slice(0, 2)}`,
+      // (2026-10-20 격차 §8 a-3) 측정 기록에 기준별 판정 이력·턴별 생각·시작 상태를 남긴다(프로덕션 리포트에는 없음).
+      trace: true,
       llm: localProxyLlm(agentEvents),
       driver,
       onPhase: (l) => phases.push(l),
@@ -291,6 +293,7 @@ export async function benchOne(app, { locale = "ko", acMode = "prereg", runTag =
     // (2026-10-19 PR4) 셋업·정리 결과 — 측정 기록의 "만든 것·남은 것".
     out.testData = r.report.agent.testData ?? null;
     out.setup = r.report.agent.setup ?? null;
+    out.trace = r.report.agent.trace ?? null;
   } catch (err) {
     out.error = `agent_failed: ${String(err?.message ?? err).slice(0, 200)}`;
   } finally {
