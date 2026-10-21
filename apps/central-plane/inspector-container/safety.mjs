@@ -30,6 +30,10 @@ const FORBIDDEN_PATTERNS = [
   { category: "publish", re: /발행/ },
   { category: "deploy", re: /배포/ },
   { category: "auth bypass / logout", re: /로그아웃/ },
+  // 2026-10-20 격차 §8 c-4: 예약·기록 취소 버튼 — 화면 점검이 남의 기록을 취소하지 않게.
+  // 내 기록 취소는 agent-run의 ownRecord+표지 게이트로만 허용된다(delete 범주).
+  { category: "delete", re: /\bcancel\b|[×✕✖❌]/i },
+  { category: "delete", re: /취소|지우기|제거/ },
 ];
 
 /**

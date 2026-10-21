@@ -16,12 +16,15 @@ const FORBIDDEN_PATTERNS = [
   { category: "deploy", re: /\b(deploy|ship|promote to production)\b/i },
   { category: "destructive data mutation", re: /\b(clear all|delete all|truncate|format)\b/i },
   { category: "auth bypass / logout", re: /\b(logout|log out|sign out)\b/i },
-  // Korean forms — kept in step with apps/central-plane/inspector-container/safety.mjs (same commit).
+  // Korean forms — kept identical to apps/central-plane/inspector-container/safety.mjs.
   { category: "payment", re: /결제|구매/ },
-  { category: "delete", re: /삭제|취소/ },
+  { category: "delete", re: /삭제/ },
   { category: "publish", re: /발행/ },
   { category: "deploy", re: /배포/ },
   { category: "auth bypass / logout", re: /로그아웃/ },
+  // 2026-10-20 격차 §8 c-4: 예약·기록 취소 버튼 — 화면 점검이 남의 기록을 취소하지 않게.
+  { category: "delete", re: /\bcancel\b|[×✕✖❌]/i },
+  { category: "delete", re: /취소|지우기|제거/ },
 ];
 
 /**

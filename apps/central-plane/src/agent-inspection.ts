@@ -20,6 +20,7 @@
  *   - 고침 지시(agentPrompt·builderPrompt의 재료인 findings)는 **실제로 관찰된 실패에서만** 만든다.
  */
 import { classifyFindings, type NonDevFinding, type NonDevReport, type ReportLocale, type VisualCheckInput } from "./nondev-report.js";
+import { classifyPrecondition, type AcPrecondition } from "./ac-semantics.js";
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -101,44 +102,8 @@ export type AcReasonCode = (typeof AC_REASON_CODES)[number];
 
 // ─── given 셋업 (2026-10-19) ────────────────────────────────────────────────────
 
-export interface AcPrecondition {
-  /** given이 "기록(예약 등)이 이미 있다"를 전제한다 — 실행기가 먼저 만들어야 한다. */
-  needsRecord: boolean;
-  /** 다른 손님·새 브라우저에서 본다. */
-  otherSession: boolean;
-  /** 관리 화면·사장님 화면에 들어간다. */
-  adminScreen: boolean;
-  /** 취소·삭제한다(내 기록만). */
-  cancels: boolean;
-  /** "오늘"의 기록이어야 한다 — 야간엔 당일 슬롯이 없을 수 있다. */
-  needsToday: boolean;
-  /** when이 새로고침·다시 열기 — 만든 쪽 브라우저를 이어 써야 한다(새 브라우저가 아니라). */
-  sameSession: boolean;
-}
-
-const RE_NEEDS_RECORD = /예약(이|을|은)? ?(하나|1건|한 ?건|이미|있|마쳤|되어 ?있|해 ?둔)|1건 이상|기록이 ?있|이미 예약|a booking (has been |was |is )?(made|exists|placed)|there is (a|an|one) (booking|record|reservation)|an existing (booking|record)|one booking/i;
-const RE_OTHER_SESSION = /새 브라우저|다른 (손님|방문자|사람|기기)|another (customer|visitor|person|device)|new browser|different (customer|visitor)/i;
-const RE_ADMIN = /관리 화면|관리자|사장님|운영자|admin|owner('s)? (screen|page|view)|dashboard/i;
-const RE_CANCELS = /취소|삭제|cancel|delete|remove/i;
-const RE_TODAY = /오늘|today/i;
-const RE_SAME_SESSION = /새로고침|다시 열|reload|refresh|reopen/i;
-
-/** AC의 given/when/then 문장에서 선행 조건을 읽는다(결정론·KO/EN). */
-export function classifyPrecondition(ac: Pick<AgentAc, "given" | "when" | "then" | "id">): AcPrecondition {
-  const given = ac.given ?? "";
-  const when = ac.when ?? "";
-  const all = `${given} ${when} ${ac.then ?? ""}`;
-  return {
-    needsRecord: ac.id !== CORE_OUTCOME_AC_ID && RE_NEEDS_RECORD.test(given),
-    otherSession: RE_OTHER_SESSION.test(when) || RE_OTHER_SESSION.test(given),
-    adminScreen: RE_ADMIN.test(all),
-    cancels: RE_CANCELS.test(when),
-    needsToday: RE_TODAY.test(given) || RE_TODAY.test(ac.then ?? ""),
-    // (2026-10-20 격차 §8 a-1) 새로고침이 있으면 만든 브라우저에서 시작한다(새 브라우저 확인은 에이전트가 new_session으로 한다).
-    //  "새로고침하거나 새 브라우저로"를 새 브라우저로 시작시키면 브라우저에만 저장하는 앱에서는 기록이 처음부터 없다.
-    sameSession: RE_SAME_SESSION.test(when),
-  };
-}
+// (2026-10-21) 선행 조건 판단은 ac-semantics.ts가 단일 출처다(v2 계획과 공유 — 같은 정규식을 두 곳에 두지 않는다).
+export { classifyPrecondition, type AcPrecondition };
 
 /**
  * 셋업이 필요한 기준은 뒤로(같은 우선순위 안에서, 안정). 앞선 기준(CORE-1·A1·A2·A4)이 기록을 만들어 두면 뒤의 given 기준이
