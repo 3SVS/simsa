@@ -20,6 +20,7 @@
  *   - 고침 지시(agentPrompt·builderPrompt의 재료인 findings)는 **실제로 관찰된 실패에서만** 만든다.
  */
 import { classifyFindings, type NonDevFinding, type NonDevReport, type ReportLocale, type VisualCheckInput } from "./nondev-report.js";
+import { classifyPrecondition, type AcPrecondition } from "./ac-semantics.js";
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -87,8 +88,146 @@ export const AC_REASON_CODES = [
   "fail_not_reproduced",
   "input_rejected",
   "ui_interpretation",
+  // 2026-10-19 given 셋업(격차 §3-10·§7): 실행기만 고른다(에이전트가 고르면 지운다).
+  "precondition_not_met",
+  "setup_not_consented",
+  "setup_skipped_budget",
+  // 2026-10-20 격차 §8 b-1: 전제를 만들려다 앱의 핵심 결함(재현된 CORE-1 실패) 때문에 못 만들었다 — 이 기준 자체의 실패라 하지 않는다.
+  "precondition_blocked_by_defect",
+  // 2026-10-21 거짓 pass 가드(기준 3 위반 bolt r2 A6): 실행기만 고른다.
+  "clock_shifted",
+  "own_record_not_seen",
 ] as const;
 export type AcReasonCode = (typeof AC_REASON_CODES)[number];
+
+// ─── given 셋업 (2026-10-19) ────────────────────────────────────────────────────
+
+// (2026-10-21) 선행 조건 판단은 ac-semantics.ts가 단일 출처다(v2 계획과 공유 — 같은 정규식을 두 곳에 두지 않는다).
+export { classifyPrecondition, type AcPrecondition };
+
+/**
+ * 셋업이 필요한 기준은 뒤로(같은 우선순위 안에서, 안정). 앞선 기준(CORE-1·A1·A2·A4)이 기록을 만들어 두면 뒤의 given 기준이
+ * 그것을 재사용한다. CORE-1이 맨 앞인 것은 그대로다.
+ */
+export function orderAcsByPrecondition(acs: readonly AgentAc[]): AgentAc[] {
+  const rank = { must: 0, should: 1, could: 2 } as const;
+  return [...acs]
+    .map((ac, i) => ({ ac, i, core: ac.id === CORE_OUTCOME_AC_ID ? 0 : 1, needs: classifyPrecondition(ac).needsRecord ? 1 : 0 }))
+    .sort((a, b) => a.core - b.core || rank[a.ac.priority] - rank[b.ac.priority] || a.needs - b.needs || a.i - b.i)
+    .map((x) => x.ac);
+}
+
+/** 런 안에서 만들어 둔 기록 — 뒤 기준의 given을 채운다. */
+export interface SetupContext {
+  /** 만든 기준 id(CORE-1·A4·SETUP-1). */
+  byAc: string;
+  date: string | null;
+  time: string | null;
+  /** 제출 직후 화면 발췌(접지 인용용). */
+  excerpt: string;
+  serverWrites: number;
+  /** 폼까지 갔던 행동 목록(뒤 기준이 길을 다시 찾지 않게). */
+  recipe: readonly string[];
+}
+
+const RE_SUBMIT_DONE = /완료|예약되|예약이 접수|확정|confirmed|booked|reserved|success/i;
+const RE_SUBMIT_ERROR = /잘못|올바르지|올바른|오류|에러|실패|다시 입력|필수|입력해 ?주|invalid|error|failed|required|please (enter|fill)/i;
+/** 버튼 글자처럼 보이는 짧은 줄("예약 완료하기", "예약 확정") — 완료 문구로 치지 않는다. */
+const RE_BUTTON_LIKE = /(하기|확정|확인|submit|confirm|book now|reserve)$/i;
+/** 제출 버튼처럼 보이는 클릭 글자 — 시간·날짜 칩("10:30", "10월 21일")과 구별한다. */
+const RE_SUBMIT_LABEL = /예약|신청|완료|확정|저장|등록|보내기|제출|submit|book|reserve|confirm|save|send/i;
+/** 제출처럼 보이는 클릭 글자인가 — 저장 자동 탐침 예산은 이런 클릭에만 쓴다(시간·시술 칩 제외, 2026-10-21). */
+export function looksLikeSubmitLabel(label: string): boolean {
+  return RE_SUBMIT_LABEL.test(label ?? "");
+}
+
+/**
+ * (2026-10-20 격차 §8 a-4·c-5) 입력 뒤 클릭이 기록을 만들었는가 — 결정론. 종전엔 클릭 뒤 화면 **전체**에서 /완료|…/를 찾아
+ * 버튼 글자 "예약 **완료**하기"에도 맞았고 오류 문구는 보지 않았다(bolt r2: "휴대폰 번호가 잘못" + 쓰기 0인데 created).
+ * 이제 클릭 전후 글자를 비교해 **새로 나타난 줄**만 본다: 새 줄에 오류 문구가 있으면 무효, 서버 쓰기가 있거나 새 줄에 완료 문구가
+ * 있으면(버튼처럼 보이는 짧은 줄 제외) 만든 것. 브라우저 저장소 변화는 **제출 버튼처럼 보이는 클릭**일 때만 만든 것으로 친다 —
+ * 완료 문구 없이 저장소에만 쓰는 앱(gemini·claude)이 있고(10-20 r1: 이 조건을 빼자 셋업 0), 시간 칩 클릭도 저장소를 바꿀 수 있어서.
+ */
+export function judgeSubmitOutcome(
+  before: string,
+  after: string,
+  probe: { serverWrites: readonly string[]; localChanged: boolean } | null,
+  clickLabel = "",
+): { created: boolean; newText: string; why: "server_write" | "confirmation" | "local_change" | "error_shown" | "no_change" | "no_probe" } {
+  if (!probe) return { created: false, newText: "", why: "no_probe" };
+  const seen = new Set(String(before ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+  const fresh = String(after ?? "").split("\n").map((l) => l.trim()).filter((l) => l && !seen.has(l));
+  const newText = fresh.join("\n");
+  if (RE_SUBMIT_ERROR.test(newText)) return { created: false, newText, why: "error_shown" };
+  if (probe.serverWrites.length > 0) return { created: true, newText, why: "server_write" };
+  const confirmed = fresh.some((l) => RE_SUBMIT_DONE.test(l) && !(l.length <= 12 && RE_BUTTON_LIKE.test(l)));
+  if (confirmed) return { created: true, newText, why: "confirmation" };
+  if (probe.localChanged && RE_SUBMIT_LABEL.test(clickLabel)) return { created: true, newText, why: "local_change" };
+  return { created: false, newText, why: "no_change" };
+}
+
+/** 제출 직후 화면 글자에서 날짜·시간을 읽는다(결정론). */
+export function extractBookingFacts(text: string, nowKst: Date = kstNow()): { date: string | null; time: string | null } {
+  const t = text ?? "";
+  let date: string | null = null;
+  const iso = /(\d{4})[-./]\s?(\d{1,2})[-./]\s?(\d{1,2})/.exec(t);
+  const kor = /(\d{1,2})월\s?(\d{1,2})일/.exec(t);
+  if (iso) date = `${iso[1]}-${iso[2]!.padStart(2, "0")}-${iso[3]!.padStart(2, "0")}`;
+  else if (kor) date = `${nowKst.getUTCFullYear()}-${kor[1]!.padStart(2, "0")}-${kor[2]!.padStart(2, "0")}`;
+  const hm = /(?:오전|오후|AM|PM)?\s?(\d{1,2}):(\d{2})/i.exec(t);
+  const time = hm ? `${hm[1]!.padStart(2, "0")}:${hm[2]}` : null;
+  return { date, time };
+}
+
+function kstNow(now: Date = new Date()): Date {
+  return new Date(now.getTime() + 9 * 3600_000);
+}
+
+/** 한국 날짜 YYYY-MM-DD. */
+export function kstDateString(now: Date = new Date()): string {
+  return kstNow(now).toISOString().slice(0, 10);
+}
+
+/**
+ * (2026-10-20 격차 §8 d) 프롬프트의 기기 시각 — 한국 시각으로 적는다. 종전엔 UTC 'Z' 문자열이라 01:35 KST에 "10-18"로 보였고,
+ * 시계 변형 런에서도 가짜 시각이 아니라 실제 시각을 보여 줘 "00:30으로 옮겼다"는 안내와 어긋났다.
+ */
+export function kstClockLabel(now: Date = new Date()): string {
+  return `${kstNow(now).toISOString().slice(0, 16).replace("T", " ")} (Asia/Seoul, UTC+9)`;
+}
+
+/** 뒤 기준의 프롬프트와 관찰 기록(corpus)에 같은 문장으로 들어간다 — 인용 접지가 되게. */
+export function setupContextLines(
+  setup: SetupContext,
+  testData: ReturnType<typeof koreanTestData>,
+  ac?: Pick<AgentAc, "given" | "when" | "then" | "id"> | null,
+): string[] {
+  const where = setup.serverWrites > 0 ? `server write requests = ${setup.serverWrites}` : "saved only in that browser (no server write seen)";
+  const head = `Setup done earlier in this run (by ${setup.byAc}): a booking exists — name=${testData.name}, phone=${testData.phone}${setup.date ? `, date=${setup.date}` : ""}${setup.time ? `, time=${setup.time}` : ""} (${where}).`;
+  // (2026-10-20 격차 §8 a-2) "다른 손님이 같은 시간을 고른다"류에 "다시 만들지 말라"만 주면 두 번째 손님 예약 시도가 막혀 이중 예약을
+  //  볼 길이 없었다(gemini·claude A3 6/6 확인 못 함). 그런 기준엔 두 번째 손님으로 같은 시간을 예약해 보라고 한다.
+  const pre = ac ? classifyPrecondition(ac) : null;
+  const secondCustomer = Boolean(pre?.otherSession && !pre.sameSession && !pre.adminScreen && !pre.cancels);
+  const tail = secondCustomer
+    ? ` You are now a DIFFERENT customer in a fresh browser. Try to book that SAME date and time as the second customer (name=${testData.altName}, phone=${testData.phone}). If the app accepts it, that is a double booking (fail); if that time is blocked or unavailable, it holds (pass).${setup.serverWrites > 0 ? "" : " The first booking was saved only in the first browser, so this browser may show the time as free — if the second booking is accepted, that IS a double booking."}`
+    : pre?.adminScreen && setup.serverWrites === 0
+      ? // (2026-10-21) 브라우저에만 저장하는 앱의 사장님 화면: 비어 있는 것 자체가 결함이다 — 에이전트가 "목록이 비어 시간순을
+        //  확인 못 함"으로 끝냈다(gemini·claude A6 6/6, 정답지 must 실패).
+        " Do NOT create it again. That booking was saved only in the first browser; this owner/admin screen is opened in a fresh browser. If the owner screen does not show that booking, the owner cannot see customers' bookings — that IS a fail of this criterion (quote what the owner screen shows)."
+      : " Do NOT create it again; perform WHEN from here.";
+  return [
+    head + tail,
+    // (§8 a-4) 경로를 8걸음에서 자르면 bolt(11~14걸음)는 폼에 못 닿았다.
+    ...(setup.recipe.length ? [`Known path to the booking form (worked earlier): ${setup.recipe.slice(0, 14).join(" → ")}`] : []),
+  ];
+}
+
+/** 런 끝 정리 결과의 사람 문구. */
+export function testDataLeftoverNote(leftover: number, testData: ReturnType<typeof koreanTestData>, locale: ReportLocale): string {
+  return locale === "en"
+    ? `${leftover} test record(s) left in your app (name '${testData.name}', phone ${testData.phone}) — we could not remove them; please delete them from the admin screen.`
+    : `테스트 데이터 ${leftover}건 남음(이름 '${testData.name}', 번호 ${testData.phone}) — 지우지 못했어요. 관리 화면에서 지워 주세요.`;
+}
 
 export interface AcResult {
   id: string;
@@ -323,6 +462,8 @@ export function sanitizeAgentReasonCode(
 ): AcReasonCode | undefined {
   if (!code) return undefined;
   if (code === "app_missing" || code === "budget" || code === "evidence_missing" || code === "judge_disagreed" || code === "guessed_address") return undefined;
+  // 셋업 사유는 실행기가 정한다 — 에이전트가 고르면 뒷받침이 없다.
+  if (code === "precondition_not_met" || code === "setup_not_consented" || code === "setup_skipped_budget" || code === "precondition_blocked_by_defect" || code === "clock_shifted" || code === "own_record_not_seen") return undefined;
   if ((code === "login_required" || code === "login_failed") && !ctx.loginGate) return undefined;
   if ((code === "oauth_unsupported") && ctx.loginGate !== "oauth") return undefined;
   if ((code === "sms_unsupported") && ctx.loginGate !== "sms") return undefined;
@@ -487,6 +628,12 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     fail_not_reproduced: "처음엔 안 되는 것처럼 보였지만 새 브라우저에서 꼼꼼히 다시 해 보니 같은 실패가 나오지 않아 고장으로 치지 않았어요",
     input_rejected: "앱이 우리가 넣은 시험 입력의 형식을 계속 받지 않아 이 단계를 끝내지 못했어요 — 고장으로 치지 않았어요",
     ui_interpretation: "화면 구성(단계 순서·입력칸 위치 등)에 대한 해석이라 고장으로 치지 않았어요 — 결과를 얻을 수 없는 경우만 고장으로 봐요",
+    precondition_not_met: "이 기준의 전제(예: 예약 1건이 미리 있어야 함)를 이번 확인에서 만들지 못해 확인하지 않았어요 — 고장으로 치지 않아요",
+    setup_not_consented: "테스트 데이터 생성 미동의 — 이 기준의 전제(예약 1건)를 만들 수 없어 확인하지 않았어요. 동의해 주시면 끝까지 해 봐요",
+    setup_skipped_budget: "이 기준의 전제(예약 1건)를 만들면 확인이 끝난 뒤 지울 여유가 없어서, 만들지 않고 확인하지 않았어요 — 치울 수 없는 것은 만들지 않아요",
+    precondition_blocked_by_defect: "앱의 핵심 일(예약 만들기)이 되지 않아 이 기준의 전제를 만들 수 없었어요 — 핵심 일을 고치면 다시 확인할 수 있어요",
+    clock_shifted: "확인하려고 기기 시계를 다른 시각으로 옮긴 뒤에 본 결과라, 지금 시각에서도 된다고 말할 수 없어요",
+    own_record_not_seen: "이번 확인이 만든 기록을 화면에서 찾지 못해, 보인 목록이 이번 기록 때문인지 알 수 없어요",
   },
   en: {
     login_required: "Sign-in needed — give us a test account and we'll check behind the login",
@@ -506,6 +653,12 @@ const REASON_TEXT: Record<ReportLocale, Record<AcReasonCode, string>> = {
     fail_not_reproduced: "A first attempt looked broken, but repeating it carefully in a fresh browser did not reproduce the failure — so we don't call it a defect",
     input_rejected: "The app kept rejecting our test input format, so we couldn't complete this step — not counted as a defect",
     ui_interpretation: "That was a reading of the screen layout (step order, where fields appear), not a defect — only an outcome the user can't get counts as broken",
+    precondition_not_met: "This criterion assumes something already exists (e.g. one booking) and we couldn't create it in this check, so it wasn't checked — not counted as a defect",
+    setup_not_consented: "Test data not allowed — we couldn't create what this criterion assumes (one booking), so it wasn't checked. Allow test data and we'll go all the way",
+    setup_skipped_budget: "Creating what this criterion assumes (one booking) would leave no room to clean it up afterwards, so we didn't create it and didn't check — we don't create what we can't clean up",
+    precondition_blocked_by_defect: "The app's core task (making a booking) doesn't work, so we couldn't create what this criterion assumes — fix the core task and it can be checked",
+    clock_shifted: "This was seen after moving the device clock to another time, so it doesn't show the app works at the current time",
+    own_record_not_seen: "We couldn't find the record this check created on screen, so the list we saw may not reflect this check",
   },
 };
 
@@ -1071,18 +1224,34 @@ export function probableCause(text: string, locale: ReportLocale = "ko"): string
 /** S2-min: 시험 데이터 이름은 사용자가 동의한 표지 "심사테스트"로 시작한다(찾아 지우기 쉽게). */
 export const TEST_DATA_NAME = "심사테스트";
 
-export function koreanTestData(seed: number): { name: string; altName: string; phone: string; email: string; memo: string } {
+/**
+ * 2026-10-19(격차 §3-3): seed는 호출자가 정한다(프로덕션 = runId 해시, 하네스 = 런·앱 해시) — 재현 가능하고 런마다 다르다.
+ * runTag는 메모에 남겨 어느 런이 만든 기록인지 알 수 있게 한다(이름은 동의 문구의 '심사테스트' 그대로).
+ */
+export function koreanTestData(seed: number, runTag?: string): { name: string; altName: string; phone: string; email: string; memo: string; runTag: string } {
   const names = [TEST_DATA_NAME];
   const n = Math.abs(Math.floor(seed)) || 1;
   const p1 = String(1000 + (n % 9000)).padStart(4, "0");
   const p2 = String(1000 + ((n * 7) % 9000)).padStart(4, "0");
+  const tag = (runTag ?? "").replace(/[^A-Za-z0-9가-힣-]/g, "").slice(0, 12) || n.toString(36);
   return {
     name: names[n % names.length]!,
     altName: `${TEST_DATA_NAME}둘`,
     phone: `010-${p1}-${p2}`,
     email: `simsa.check+${n}@example.com`,
-    memo: "심사 자동 확인용 예약입니다(테스트)",
+    memo: `심사 자동 확인용 예약입니다(테스트 ${tag})`,
+    runTag: tag,
   };
+}
+
+/** 문자열 → 안정 해시(양의 정수). runId·런 번호에서 seed를 만든다. */
+export function stableSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h % 100000 || 1;
 }
 
 export function agentSystemPrompt(locale: ReportLocale = "ko", opts: { readOnly?: boolean } = {}): string {
@@ -1115,11 +1284,13 @@ export function agentSystemPrompt(locale: ReportLocale = "ko", opts: { readOnly?
     "4c. If a result might be canned (same output whatever the input), submit twice with clearly different inputs and compare.",
     "5. Never pay, delete other people's data, send messages or publish. You may cancel/delete ONLY a record you created in this run (set ownRecord:true on that click).",
     "6. If a login wall blocks you: use login if a test account is available; if not, judge not_verified with reasonCode login_required. Kakao/Google/social-only login → oauth_unsupported; text-message code → sms_unsupported. If the feature asks for the user's own API key → api_key_required.",
+    "6c. If you filled the form and submitted, and the app answers that it is not connected / not set up (e.g. '사이트 연결 설정', 'Supabase', 'environment variable', 'not configured') and no result is created, that is NOT a blocker: the user cannot get the outcome — judge fail and quote that message.",
     "7. Be efficient: at most 14 actions per criterion. Do not give up early: if a submit did nothing, read the visible messages (e.g. '시간을 골라 주세요', required-field errors), fix the inputs (choose a service/date/time first) and try again.",
     "6b. If part of a criterion is behind a login you cannot pass: judge the PUBLIC part. If the public part fully worked, use verdict pass with \"scope\":\"public\" and say in reason what remains behind login. Never fail a criterion only because of a login wall.",
     "3b. Persistence means the CREATED RECORD is found again somewhere else: a list/admin/history view, a new_session visit, or probe_storage showing a server write. A confirmation screen that survives (or disappears on) reload proves nothing either way.",
     "8. Never invent addresses. Use goto only for an address you saw as a link on screen or that the criterion itself names. A 'not found' page at a guessed address is NOT a defect of the app.",
     "9. Selecting a time/date/service means clicking that option on the page (buttons, chips, radio) — check the observation that it became selected before submitting.",
+    "10. If the prompt says 'Setup done earlier in this run: a booking exists', that record is already there (same name/phone). Do NOT re-create it as the first customer; start from WHEN (e.g. open the admin screen, cancel that record, reload) and look for THAT record by its phone number. When WHEN is about a DIFFERENT customer trying the same date/time, follow the 'Setup done' line: book that same date/time as the second customer — that is the test, not a re-creation.",
     locale === "en" ? "Write `reason` in English." : "Write `reason` in Korean (한국어, 쉬운 말).",
   ].join("\n");
 }
@@ -1145,12 +1316,15 @@ export function agentTurnPrompt(args: {
   loginGate: LoginGate;
   stepsLeft: number;
   nowIso: string;
+  /** 2026-10-19: 앞서 만든 기록 — given을 채운다(없으면 생략). */
+  setup?: SetupContext | null;
 }): string {
   const o = args.observation;
   return [
     `App intent: ${args.intent}`,
     `Criterion ${args.ac.id} (${args.ac.priority}): ${args.ac.title}`,
     `Given: ${args.ac.given}`,
+    ...(args.setup ? setupContextLines(args.setup, args.testData, args.ac) : []),
     `When: ${args.ac.when}`,
     `Then: ${args.ac.then}`,
     ...(args.ac.steps?.length ? [`Suggested steps: ${args.ac.steps.join(" → ")}`] : []),
@@ -1263,6 +1437,13 @@ export function judgeReviewPrompt(args: {
   actions: string[];
   observationTail: string;
   history?: string[];
+  /**
+   * (2026-10-21 격차 §8 a-3 확정) 이 기준이 시작되기 전에 실행기가 만들어 둔 기록. 재확인이 이것을 모르고 "그 시간이 이미 예약돼
+   * 있었다는 증거가 없다"며 A3 이중 예약 실패 5/6·A6 사장님 화면을 기각했다(드라이버 수정 뒤 측정의 기각 사유 원문).
+   */
+  setupLines?: string[];
+  /** 그 기록을 만들 때의 완료 화면 발췌 */
+  setupExcerpt?: string;
 }): string {
   return [
     "You are a skeptical reviewer of a browser test. Decide whether the tester's verdict is justified by what was actually observed. Be strict:",
@@ -1272,7 +1453,16 @@ export function judgeReviewPrompt(args: {
     'Reply JSON only: {"agree": true|false, "why": "<one sentence>"}',
     "",
     `Criterion ${args.ac.id} (${args.ac.priority}): ${args.ac.title}`,
+    `Given: ${args.ac.given}`,
     `Then: ${args.ac.then}`,
+    ...(args.setupLines?.length
+      ? [
+          "Already established BEFORE this criterion started (done by the test runner, not by this tester — treat it as a fact, do not ask the tester to prove it again):",
+          ...args.setupLines,
+          ...(args.setupExcerpt ? [`Confirmation screen when that record was made: "${args.setupExcerpt.replace(/\s+/g, " ").slice(0, 300)}"`] : []),
+          "This criterion was then checked in a FRESH browser (a different visitor) unless the actions show a reload of the same browser.",
+        ]
+      : []),
     `Tester's verdict: ${args.verdict} — ${args.reason}`,
     `Quoted evidence: ${args.evidence.map((e) => `"${e}"`).join(" ")}`,
     `Actions taken: ${args.actions.join(" → ") || "(none)"}`,
@@ -1460,7 +1650,24 @@ export function classifyDefect(row: { status: AcStatus; reason: string; reasonCo
 /** 리포트에 싣는 결함 목록(실패 + 막혀서 확인 못 함). */
 export function defectsOf(acTable: readonly AgentAcRow[]): Array<{ acId: string; priority: AcPriority; status: AcStatus; defectClass: DefectClass }> {
   return acTable
-    .filter((r) => r.status === "fail" || (r.status === "not_verified" && r.reasonCode && r.reasonCode !== "budget" && r.reasonCode !== "not_reached" && r.reasonCode !== "evidence_missing" && r.reasonCode !== "judge_disagreed"))
+    .filter(
+      (r) =>
+        r.status === "fail" ||
+        (r.status === "not_verified" &&
+          r.reasonCode &&
+          r.reasonCode !== "budget" &&
+          r.reasonCode !== "not_reached" &&
+          r.reasonCode !== "evidence_missing" &&
+          r.reasonCode !== "judge_disagreed" &&
+          // 셋업을 못 한 것은 앱 결함이 아니다(우리가 못 만든 것·동의 없음·치울 여유 없음).
+          r.reasonCode !== "precondition_not_met" &&
+          r.reasonCode !== "setup_not_consented" &&
+          r.reasonCode !== "setup_skipped_budget" &&
+          // 결함은 CORE-1 행에 한 번만 센다 — 그 결함 때문에 못 본 기준까지 결함으로 세지 않는다.
+          r.reasonCode !== "precondition_blocked_by_defect" &&
+          r.reasonCode !== "clock_shifted" &&
+          r.reasonCode !== "own_record_not_seen"),
+    )
     .map((r) => ({ acId: r.id, priority: r.priority, status: r.status, defectClass: classifyDefect(r) }));
 }
 

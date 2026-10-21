@@ -343,3 +343,56 @@ describe("2026-10-18 재검수는 11번째 AC를 잃지 않는다(옛 코드: ac
     assert.equal(P.acsFromAgentReport(JSON.stringify(rep)).length, 11);
   });
 });
+
+describe("2026-10-19 given 셋업 — 순수 함수(옛 코드에는 없다)", () => {
+  const ac = (id, given, when, then = "t") => ({ id, title: id, given, when, then, priority: "must", confirmed: true });
+  it("classifyPrecondition: A3(기록+새 브라우저) · A6(관리·오늘) · A7(취소) · A5(새로고침=같은 브라우저) · CORE-1은 셋업 대상 아님", () => {
+    assert.deepEqual(P.classifyPrecondition(ac("A3", "어떤 날짜·시간에 예약이 하나 있다", "다른 손님(새 브라우저)이 같은 날짜·시간을 고르려 한다")), { needsRecord: true, otherSession: true, adminScreen: false, cancels: false, needsToday: false, sameSession: false });
+    const a6 = P.classifyPrecondition(ac("A6", "오늘 날짜에 예약이 1건 이상 있다", "사장님이 관리 화면을 연다", "오늘 예약 목록이 시간순으로 보인다"));
+    assert.equal(a6.needsRecord, true);
+    assert.equal(a6.adminScreen, true);
+    assert.equal(a6.needsToday, true);
+    assert.equal(P.classifyPrecondition(ac("A7", "관리 화면에 예약이 1건 보인다", "그 예약을 취소한다")).cancels, true);
+    const a5 = P.classifyPrecondition(ac("A5", "예약을 마쳤다", "새로고침하거나 새 브라우저로 다시 연다"));
+    assert.equal(a5.needsRecord, true);
+    // (§8 a-1) 새로고침이 있으면 기록을 만든 브라우저에서 시작한다 — 새 브라우저 확인은 에이전트가 new_session으로. 옛 스펙
+    //  ("새 브라우저가 이긴다")은 브라우저에만 저장하는 앱의 A5를 기록 없는 빈 브라우저에서 시작시켜 6/6 확인 못 함을 만들었다.
+    assert.equal(a5.sameSession, true);
+    assert.equal(a5.otherSession, true);
+    assert.equal(P.classifyPrecondition(ac("A5b", "예약을 마쳤다", "새로고침한다")).sameSession, true);
+    assert.equal(P.classifyPrecondition(ac("A1", "예약 화면에서 날짜를 골랐다", "시간 목록을 본다")).needsRecord, false);
+    assert.equal(P.classifyPrecondition(ac("CORE-1", "예약이 있다", "w")).needsRecord, false);
+    assert.equal(P.classifyPrecondition(ac("B1", "A booking has been made for today", "another customer opens the site")).needsRecord, true);
+  });
+  it("orderAcsByPrecondition: CORE-1 → must(기록 불필요) → must(기록 필요) → should, 안정", () => {
+    const acs = [ac("A3", "예약이 하나 있다", "w"), { ...ac("CORE-1", "", "w") }, ac("A1", "예약 화면", "w"), { ...ac("A9", "", "w"), priority: "should" }, ac("A2", "", "w")];
+    assert.deepEqual(P.orderAcsByPrecondition(acs).map((a) => a.id), ["CORE-1", "A1", "A2", "A3", "A9"]);
+  });
+  it("extractBookingFacts: ISO·한국식 날짜와 시각", () => {
+    assert.deepEqual(P.extractBookingFacts("예약이 완료되었어요 2026-10-19 오전 10:30 심사테스트"), { date: "2026-10-19", time: "10:30" });
+    assert.deepEqual(P.extractBookingFacts("10월 19일 14:00 예약 완료", new Date("2026-10-19T03:00:00Z")), { date: "2026-10-19", time: "14:00" });
+    assert.deepEqual(P.extractBookingFacts("예약되었습니다"), { date: null, time: null });
+  });
+  it("koreanTestData(seed, runTag): 같은 seed = 같은 번호, 메모에 표지 · stableSeed는 결정론", () => {
+    assert.equal(P.koreanTestData(4242, "r1").phone, P.koreanTestData(4242, "r2").phone);
+    assert.match(P.koreanTestData(4242, "r3k9").memo, /테스트 r3k9\)/);
+    assert.equal(P.stableSeed("vc_abc"), P.stableSeed("vc_abc"));
+    assert.notEqual(P.stableSeed("vc_abc"), P.stableSeed("vc_abd"));
+  });
+  it("셋업 사유 코드는 에이전트가 고르면 지워지고(실행기 전용), 결함 목록에서 빠진다", () => {
+    for (const c of ["precondition_not_met", "setup_not_consented", "setup_skipped_budget"]) {
+      assert.equal(P.sanitizeAgentReasonCode(c, { loginGate: null, readOnly: false }), undefined, c);
+      assert.deepEqual(P.defectsOf([{ id: "A3", priority: "must", status: "not_verified", reasonCode: c, reason: "r", evidence: [] }]), [], c);
+      assert.match(P.reasonText(c, "ko"), /.+/);
+      assert.match(P.reasonText(c, "en"), /.+/);
+    }
+    assert.match(P.reasonText("setup_not_consented", "ko"), /테스트 데이터 생성 미동의/);
+  });
+  it("setupContextLines는 프롬프트와 관찰 기록에 같은 문장으로 — 인용 접지", () => {
+    const td = P.koreanTestData(1, "t");
+    const lines = P.setupContextLines({ byAc: "CORE-1", date: "2026-10-19", time: "10:30", excerpt: "", serverWrites: 2, recipe: ["이름 입력", "예약하기 클릭"] }, td);
+    assert.match(lines[0], /Setup done earlier in this run \(by CORE-1\)/);
+    assert.match(lines[0], /date=2026-10-19, time=10:30 \(server write requests = 2\)/);
+    assert.match(lines[1], /Known path to the booking form.*이름 입력 → 예약하기 클릭/);
+  });
+});

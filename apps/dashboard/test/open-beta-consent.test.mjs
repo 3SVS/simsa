@@ -14,7 +14,7 @@ describe("시험 데이터 동의", () => {
   it("문장이 서버(WRITE_CONSENT_COPY)와 글자 그대로 같다", () => {
     const ui = read("src", "components", "WriteConsentCheckbox.tsx");
     const server = read("..", "central-plane", "src", "routes", "workspace-visual-check-runs.ts");
-    for (const s of ["이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요", "This app is mine, and it's OK to create test data (name '심사테스트') to check it"]) {
+    for (const s of ["이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요 — 확인이 끝나면 그 기록을 취소해 지우려 해요", "This app is mine, and it's OK to create test data (name '심사테스트') to check it — we'll try to cancel and remove it when the check is done"]) {
       assert.ok(ui.includes(s), `UI: ${s}`);
       assert.ok(server.includes(s), `server: ${s}`);
     }
@@ -56,5 +56,13 @@ describe("첫 자동 검사에도 동의 · 읽기 전용 결과에서 한 번 �
     const detail = read("src", "app", "projects", "[id]", "visual-checks", "[runId]", "page.tsx");
     assert.ok(detail.includes("recheck.run({ writeConsent: true })"));
     assert.ok(detail.includes("...buildRecheckBody(check, userKey, locale"));
+  });
+});
+
+describe("2026-10-19 given 셋업 미동의도 같은 버튼으로 푼다", () => {
+  it("reportNeedsWriteConsent: setup_not_consented → true", async () => {
+    const { reportNeedsWriteConsent } = await import("../src/lib/write-consent.mjs");
+    assert.equal(reportNeedsWriteConsent({ engine: "agent", acTable: [{ id: "A3", status: "not_verified", reasonCode: "setup_not_consented" }] }), true);
+    assert.equal(reportNeedsWriteConsent({ engine: "agent", acTable: [{ id: "A3", status: "not_verified", reasonCode: "precondition_not_met" }] }), false);
   });
 });

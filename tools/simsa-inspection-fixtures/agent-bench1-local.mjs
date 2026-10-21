@@ -38,6 +38,7 @@ const { anthropicMessages, OPENAI_FALLBACK_MODEL } = await imp("dist/workspace/a
 const { priceTokens } = await imp("dist/workspace/llm-pricing.js");
 const { agentAcsFromDevSpec } = await imp("dist/acceptance-plan.js");
 const { inspectAgentModelFor } = await imp("dist/workspace/inspection-agent.js");
+const { stableSeed } = await imp("dist/agent-inspection.js");
 const { runAgentInspection } = await imp("inspector-container/agent-run.mjs");
 const { createPlaywrightDriver } = await imp("inspector-container/agent-driver.mjs");
 const { isNoiseResource } = await imp("dist/nondev-report.js");
@@ -198,7 +199,7 @@ async function renderedText(url) {
   }
 }
 
-export async function benchOne(app, { locale = "ko", acMode = "prereg" } = {}) {
+export async function benchOne(app, { locale = "ko", acMode = "prereg", runTag = "r1" } = {}) {
   const t0 = Date.now();
   const kst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 16);
   const genEvents = [];
@@ -267,6 +268,12 @@ export async function benchOne(app, { locale = "ko", acMode = "prereg" } = {}) {
       // 주입된 사전 등록 조건은 사용자가 직접 적어 확인한 기준과 같은 자리(interview).
       acSource: acMode === "prereg" ? "interview" : acs.length ? "confirmed_inferred" : "inferred_at_run",
       loginMode: "none",
+      // (2026-10-19 given 셋업) 벤치 앱 = 정리 예산이 모자라도 셋업하고 "남음 n건"으로 표시. seed·표지는 런·앱에서(재현 가능, 런마다 다름).
+      setupPolicy: "bench",
+      testDataSeed: stableSeed(`${runTag}:${app.id}`),
+      runTag: `${runTag}${app.id.slice(0, 2)}`,
+      // (2026-10-20 격차 §8 a-3) 측정 기록에 기준별 판정 이력·턴별 생각·시작 상태를 남긴다(프로덕션 리포트에는 없음).
+      trace: true,
       llm: localProxyLlm(agentEvents),
       driver,
       onPhase: (l) => phases.push(l),
@@ -283,12 +290,19 @@ export async function benchOne(app, { locale = "ko", acMode = "prereg" } = {}) {
     out.basis = r.report.agent.basis;
     out.builder = r.report.agent.builder;
     out.defects = r.report.agent.defects;
+    // (2026-10-19 PR4) 셋업·정리 결과 — 측정 기록의 "만든 것·남은 것".
+    out.testData = r.report.agent.testData ?? null;
+    out.setup = r.report.agent.setup ?? null;
+    out.trace = r.report.agent.trace ?? null;
+    out.setupAttempt = r.report.agent.setupAttempt ?? null;
   } catch (err) {
     out.error = `agent_failed: ${String(err?.message ?? err).slice(0, 200)}`;
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
   out.phasesTail = phases.slice(-6);
+  // (2026-10-19) 셋업·정리·취소 클릭의 위상 로그 전체 — 측정 기록이 "무엇을 만들고 무엇을 지웠나"를 보여 준다.
+  out.phases = phases.filter((l) => /setup:|cleanup|cancel-click|probe [A-Z0-9-]+ #|ac [A-Z0-9-]+ →/.test(l));
   out.costUsd = { generation: Number(costOf(genEvents).toFixed(4)), agent: Number(costOf(agentEvents).toFixed(4)) };
   out.costUsdTotal = Number((out.costUsd.generation + out.costUsd.agent).toFixed(4));
   out.models = [...new Set([...genEvents, ...agentEvents].map((e) => e.modelActual))];
@@ -341,7 +355,7 @@ async function main() {
         while (i < apps.length) {
           const app = apps[i++];
           console.log(`▶ [${k}/${repeat}] ${app.id} ${app.url}`);
-          const r = await benchOne(app, { acMode }).catch((err) => ({ app: app.id, acMode, error: String(err?.message ?? err).slice(0, 300) }));
+          const r = await benchOne(app, { acMode, runTag: `r${k}` }).catch((err) => ({ app: app.id, acMode, error: String(err?.message ?? err).slice(0, 300) }));
           results.push(r);
           console.log(`  [${k}/${repeat}] ${app.id}: ${r.decision ?? r.error} side=${r.side} match=${r.match} opposite=${r.opposite} must=${(r.mustIdentified ?? []).join(",")}/${(r.mustFailedExpected ?? []).join(",")} $${costOfResult(r) ?? "?"} ${r.durationSec}s`);
         }

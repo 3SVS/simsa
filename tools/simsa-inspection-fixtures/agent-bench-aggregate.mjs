@@ -21,6 +21,19 @@ export function summarize(apps, results) {
   const scored = results.filter((r) => r.decision);
   const totalMust = apps.reduce((s, a) => s + a.mustFailed.length, 0);
   const costs = results.map(costOfResult).filter((c) => typeof c === "number");
+  // (2026-10-19 PR4 통과 기준) AC 셀의 status 분포와 not_verified 비율 — 3회 합산 ≤ 30%가 목표.
+  const statusCounts = { pass: 0, fail: 0, not_verified: 0 };
+  const notVerifiedByReason = {};
+  for (const r of results) {
+    for (const x of r.acTable ?? []) {
+      if (x?.status in statusCounts) statusCounts[x.status] += 1;
+      if (x?.status === "not_verified") {
+        const k = x.reasonCode ?? "-";
+        notVerifiedByReason[k] = (notVerifiedByReason[k] ?? 0) + 1;
+      }
+    }
+  }
+  const acCells = statusCounts.pass + statusCounts.fail + statusCounts.not_verified;
   return {
     oppositeErrors: scored.filter((r) => r.opposite).length,
     appMatch: scored.filter((r) => r.match).length,
@@ -30,17 +43,25 @@ export function summarize(apps, results) {
     costPerRunMean: costs.length ? Number((costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(4)) : null,
     costPerRunMax: costs.length ? Math.max(...costs) : null,
     errors: results.filter((r) => r.error).length,
+    statusCounts,
+    notVerifiedShare: acCells ? Number((statusCounts.not_verified / acCells).toFixed(4)) : null,
+    notVerifiedByReason,
   };
 }
 
 /** 여러 런의 평균·최소·최대. */
 export function aggregate(runs) {
-  const keys = ["oppositeErrors", "appMatch", "mustIdentified", "costPerRunMean", "costPerRunMax", "errors"];
+  const keys = ["oppositeErrors", "appMatch", "mustIdentified", "costPerRunMean", "costPerRunMax", "errors", "notVerifiedShare"];
   const out = {};
   for (const k of keys) {
     const v = runs.map((r) => r[k]).filter((x) => typeof x === "number");
     out[k] = v.length ? { mean: Number((v.reduce((a, b) => a + b, 0) / v.length).toFixed(4)), min: Math.min(...v), max: Math.max(...v) } : null;
   }
+  // 3회 합산 not_verified 비율(통과 기준은 런 평균이 아니라 합산으로 본다) + 반대 판정이 모든 런에서 0인가.
+  const sum = (k) => runs.reduce((s, r) => s + (r.statusCounts?.[k] ?? 0), 0);
+  const total = sum("pass") + sum("fail") + sum("not_verified");
+  out.notVerifiedPooled = total ? { cells: total, notVerified: sum("not_verified"), share: Number((sum("not_verified") / total).toFixed(4)) } : null;
+  out.oppositeZeroAllRuns = runs.length > 0 && runs.every((r) => r.oppositeErrors === 0);
   out.runs = runs.length;
   return out;
 }

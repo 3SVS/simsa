@@ -108,8 +108,11 @@ export function makeFakeDriver(site, { origin = "https://salon.example", onAct =
       }
       return { outcome: effect };
     },
-    async ownsRecordNear(_t, markers) {
-      return markers.some((m) => JSON.stringify(state.store).includes(m));
+    async ownsRecordNear(target, markers) {
+      // 진짜 드라이버는 대상 근처(li/tr/div) 글자에서 표지를 찾는다. 가짜: 대상 이름에 번호가 있으면 그 번호로, 없으면 저장소 전체로.
+      const label = target?.name ?? target?.text ?? "";
+      if (/\d{3}-?\d{4}-?\d{4}/.test(label)) return markers.some((m) => m && label.includes(m));
+      return markers.some((m) => m && JSON.stringify(state.store).includes(m));
     },
     async liveFrame() {
       return Buffer.from("jpeg");
@@ -150,7 +153,8 @@ export function makeScriptedLlm(scripts, { inferred = null, review = () => true,
       replay.set(id, i + 1);
       const next = list[i] ?? { type: "judge", verdict: "not_verified", reason: "재현 대본 끝", evidenceQuote: "", reasonCode: "not_reached" };
       const name = /name=([^,\s]+),/.exec(user)?.[1] ?? "김서연";
-      return JSON.stringify({ thought: "r", action: next }).split("$NAME").join(name);
+      const phone = /phone=([0-9-]+)/.exec(user)?.[1] ?? "010-0000-0000";
+      return JSON.stringify({ thought: "r", action: next }).split("$NAME").join(name).split("$PHONE").join(phone);
     }
     if (tier === "strong") {
       const override = strong?.[id];
@@ -164,7 +168,9 @@ export function makeScriptedLlm(scripts, { inferred = null, review = () => true,
     const next = list[i] ?? { type: "judge", verdict: "not_verified", reason: "대본 끝", evidenceQuote: "" };
     // "$NAME"은 실행기가 준 한국어 시험 데이터의 이름(진짜 모델이 하듯 프롬프트에서 읽는다).
     const name = /name=([^,\s]+),/.exec(user)?.[1] ?? "김서연";
-    const out = JSON.stringify({ thought: "t", action: next }).split("$NAME").join(name);
+    // "$PHONE"도 같은 식으로(시험 데이터 번호 — 내 기록 표지).
+    const phone = /phone=([0-9-]+)/.exec(user)?.[1] ?? "010-0000-0000";
+    const out = JSON.stringify({ thought: "t", action: next }).split("$NAME").join(name).split("$PHONE").join(phone);
     lastById.set(id, out);
     return out;
   };

@@ -130,7 +130,7 @@ describe("공개 스위치 · 하루 예산 · 동의", { skip: SQLITE_SKIP }, (
   });
 
   it("동의 문구 KO/EN 고정(요청 화면과 같은 문장)", () => {
-    assert.equal(WRITE_CONSENT_COPY.ko, "이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요");
+    assert.equal(WRITE_CONSENT_COPY.ko, "이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요 — 확인이 끝나면 그 기록을 취소해 지우려 해요");
     assert.match(WRITE_CONSENT_COPY.en, /test data \(name '심사테스트'\)/);
   });
 });

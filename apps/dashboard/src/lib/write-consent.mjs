@@ -4,7 +4,8 @@
  */
 export function reportNeedsWriteConsent(report) {
   if (!report || typeof report !== "object" || report.engine !== "agent" || !Array.isArray(report.acTable)) return false;
-  return report.acTable.some((r) => r && r.status === "not_verified" && r.reasonCode === "write_not_allowed");
+  // 2026-10-19: given 셋업(전제 기록 만들기)을 동의가 없어 못 한 기준도 같은 버튼으로 푼다.
+  return report.acTable.some((r) => r && r.status === "not_verified" && (r.reasonCode === "write_not_allowed" || r.reasonCode === "setup_not_consented"));
 }
 
 export const RECHECK_WITH_CONSENT = {

@@ -6,8 +6,8 @@
  * 문장은 central-plane WRITE_CONSENT_COPY와 같아야 한다(테스트 고정).
  */
 export const WRITE_CONSENT_TEXT = {
-  ko: "이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요",
-  en: "This app is mine, and it's OK to create test data (name '심사테스트') to check it",
+  ko: "이 앱은 제 것이고, 확인을 위해 시험 데이터(이름 '심사테스트')를 만들어도 괜찮아요 — 확인이 끝나면 그 기록을 취소해 지우려 해요",
+  en: "This app is mine, and it's OK to create test data (name '심사테스트') to check it — we'll try to cancel and remove it when the check is done",
 } as const;
 
 const HINT = {

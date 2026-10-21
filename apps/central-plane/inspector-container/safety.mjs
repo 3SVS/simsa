@@ -24,7 +24,9 @@ const FORBIDDEN_PATTERNS = [
   // Korean forms of the same forbidden intents (the spike handles these via
   // the planner's forbidden list; the runner double-checks at click time).
   { category: "payment", re: /결제|구매/ },
-  { category: "delete", re: /삭제/ },
+  // 2026-10-19: '취소'도 되돌릴 수 없는 삭제다(예약 취소) — 내 기록(ownRecord)에만 허용된다. 모달의 "취소"(닫기)도 막히지만
+  //  그건 Escape·back으로 대신할 수 있다. 남의 예약을 취소할 수 있던 공백(격차 §7 발견 ③).
+  { category: "delete", re: /삭제|취소/ },
   { category: "publish", re: /발행/ },
   { category: "deploy", re: /배포/ },
   { category: "auth bypass / logout", re: /로그아웃/ },

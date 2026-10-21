@@ -42,7 +42,8 @@ function salonSite({ manyLinks = 0, buttons = [], buttonEffects = {} } = {}) {
 
 function salonOnAct(action, state) {
   if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) {
-    state.store.booking = { name: state.fills[0] };
+    // 2026-10-19: 내 기록 표지는 번호 — 번호를 채웠으면 함께 저장한다(ownsRecordNear가 번호로 본다).
+    state.store.booking = { name: state.fills[0], ...(state.fills[1] ? { phone: state.fills[1] } : {}) };
     state.path = "/done";
   }
   return null;
@@ -544,7 +545,9 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     const { llm, prompts } = makeScriptedLlm({
       "AC-001": [
         { type: "click", target: { role: "button", name: "예약 삭제" } },
-        ...bookScript.slice(0, 2),
+        bookScript[0],
+        { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+        bookScript[1],
         { type: "click", target: { role: "button", name: "예약 삭제" }, ownRecord: true },
         { type: "judge", verdict: "pass", reason: "r", evidenceQuote: "예약이 완료되었어요" },
       ],
@@ -577,5 +580,599 @@ describe("agent 실행기 — 시험 계정 로그인 + 점검 + AC", () => {
     assert.equal(out.decision, "Needs Fix");
     assert.equal(prompts.length, 0, "없는 앱에 LLM을 쓰지 않는다");
     assert.ok(out.report.findings.some((f) => f.code === "page_not_found"));
+  });
+});
+
+// ─── 2026-10-19 given 셋업(격차 §3-10·§7, Bae 요구 a~e) — 옛 코드에서 실패한다 ──────────────────────────────────────
+
+const { koreanTestData } = await import("../dist/agent-inspection.js");
+
+describe("given 셋업: 전제(기록이 있다)를 먼저 만들고, 못 만들면 정직하게 건너뛴다", () => {
+  const SEED = 4242;
+  const TD = koreanTestData(SEED, "t1");
+  const A3 = { id: "A3", title: "이미 예약된 시간은 다른 손님이 고를 수 없다", given: "어떤 날짜·시간에 예약이 하나 있다", when: "다른 손님(새 브라우저)이 같은 날짜·시간을 고르려 한다", then: "그 시간은 고를 수 없다(이중 예약이 되지 않는다)", priority: "must", confirmed: true };
+  const A6 = { id: "A6", title: "관리 화면에 오늘 예약이 시간순으로 보인다", given: "오늘 날짜에 예약이 1건 이상 있다", when: "사장님이 관리 화면을 연다", then: "오늘 예약 목록이 시간순으로 보인다", priority: "must", confirmed: true };
+  const A7 = { id: "A7", title: "취소하면 그 시간을 다시 예약할 수 있다", given: "관리 화면에 예약이 1건 보인다", when: "그 예약을 취소한다", then: "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다", priority: "must", confirmed: true };
+
+  /** 서버에 저장하는 예약 앱(세션 간 공유) — 이중 예약을 허용하는 결함. 관리 화면에 이전 런의 기록도 있다. */
+  function serverSalon({ adminPassword = false } = {}) {
+    const shared = { bookings: [{ name: "심사테스트", phone: "010-1111-2222", time: "10:00" }] };
+    const site = {
+      "/": () => ({ status: 200, text: "동네 미용실 예약 10:30 예약 가능 예약하기", links: ["/", "/admin"], buttons: ["예약하기", "10:30"] }),
+      "/done": () => ({ status: 200, text: `예약이 완료되었어요 ${TD.name} 2026-10-19 10:30` }),
+      "/admin": () =>
+        adminPassword
+          ? { status: 200, text: "관리자 로그인 비밀번호를 입력하세요", password: true }
+          : { status: 200, text: `오늘 예약 ${shared.bookings.map((b) => `${b.time} ${b.name} ${b.phone}`).join(" / ")}`, buttons: shared.bookings.map((b) => `취소 ${b.phone}`) },
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) {
+        shared.bookings.push({ name: TD.name, phone: TD.phone, time: "10:30" });
+        (state.serverWrites ??= []).push("POST /api/bookings");
+        state.path = "/done";
+      }
+      if (action.type === "click" && /^취소 /.test(action.target.name ?? "")) {
+        const phone = action.target.name.slice(3);
+        const before = shared.bookings.length;
+        shared.bookings = shared.bookings.filter((b) => b.phone !== phone);
+        (state.serverWrites ??= []).push("DELETE /api/bookings");
+        return { ok: true, note: before === shared.bookings.length ? "nothing removed" : "removed", acceptDialog: action.acceptDialog === true };
+      }
+      return null;
+    };
+    return { site, onAct, shared };
+  }
+  const book = [
+    { type: "fill", target: { label: "이름" }, value: "$NAME" },
+    { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+    { type: "click", target: { role: "button", name: "예약하기" } },
+    { type: "judge", verdict: "pass", reason: "완료 화면에 예약이 보여요", evidenceQuote: "예약이 완료되었어요 $NAME" },
+  ];
+
+  it("T2 CORE-1이 만든 기록을 A3 프롬프트·관찰 기록에 주입하고(두 번째 손님으로 같은 시간 예약해 보기), A3는 새 브라우저에서 이중 예약을 잡아 fail", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      A3: [
+        { type: "new_session" },
+        { type: "click", target: { role: "button", name: "10:30" } },
+        { type: "judge", verdict: "fail", reason: "이미 예약된 10:30이 다른 손님에게도 예약 가능으로 보여서 같은 시간이 또 예약돼요", evidenceQuote: "10:30 예약 가능" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    const a3Prompt = prompts.find((p) => /Criterion A3 \(/.test(p));
+    assert.ok(a3Prompt, "A3가 실행됐다");
+    assert.match(a3Prompt, /Setup done earlier in this run \(by CORE-1\): a booking exists — name=심사테스트, phone=010-/);
+    // (§8 a-2) "다른 손님이 같은 시간"류엔 "다시 만들지 말라"가 아니라 두 번째 손님으로 같은 시간을 예약해 보라고 한다.
+    assert.doesNotMatch(a3Prompt, /Do NOT create it again/);
+    assert.match(a3Prompt, /Try to book that SAME date and time as the second customer \(name=심사테스트둘/);
+    assert.match(a3Prompt, /Known path to the booking form/);
+    const row = out.report.acTable.find((r) => r.id === "A3");
+    assert.equal(row.status, "fail");
+    assert.equal(out.report.agent.setup.byAc, "CORE-1");
+    assert.equal(out.report.agent.setup.serverWrites, 1);
+    assert.equal(out.decision, "Needs Fix");
+  });
+
+  it("T3 아무 기준도 기록을 못 만들었고 SETUP-1도 실패하면 given 기준은 0걸음에 precondition_not_met(결함 목록 제외)", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "폼을 못 찾았어요", evidenceQuote: "", reasonCode: "not_reached" }],
+      // SETUP-1 대본 없음 → not_verified(대본 끝) → 기록 없음
+      A3: [{ type: "judge", verdict: "fail", reason: "틀린 판정이 나오면 안 된다", evidenceQuote: "" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3, A6, A7], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench" });
+    assert.ok(prompts.some((p) => /Criterion SETUP-1 \(/.test(p)), "런당 1회 SETUP-1을 시도한다");
+    assert.equal(prompts.filter((p) => /Criterion SETUP-1 \(/.test(p)).length <= 14, true);
+    for (const id of ["A3", "A6", "A7"]) {
+      const row = out.report.acTable.find((r) => r.id === id);
+      assert.equal(row.status, "not_verified", id);
+      assert.equal(row.reasonCode, "precondition_not_met", id);
+    }
+    assert.ok(!prompts.some((p) => /Criterion A3 \(/.test(p)), "A3 대본은 실행되지 않는다(0걸음)");
+    assert.ok(!out.report.agent.defects.some((d) => d.acId === "A3"), "전제 미충족은 앱 결함이 아니다");
+    assert.notEqual(out.decision, "Needs Fix");
+  });
+
+  it("T4 동의 없는 런(readOnly)은 셋업을 시도하지 않고 setup_not_consented — 대시보드가 '허용하고 다시 확인'으로 푼다", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": userMustScript });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, readOnly: true, testDataSeed: SEED });
+    const row = out.report.acTable.find((r) => r.id === "A3");
+    assert.equal(row.reasonCode, "setup_not_consented");
+    assert.match(row.reason, /테스트 데이터 생성 미동의/);
+    assert.ok(!prompts.some((p) => /Criterion SETUP-1 \(/.test(p)), "동의 없이는 만들지 않는다");
+  });
+
+  it("T4b 실유저(user) 정책: 치울 예산이 없으면 만들지 않는다(setup_skipped_budget) · 벤치(bench) 정책은 만든다", async () => {
+    for (const [policy, code] of [["user", "setup_skipped_budget"], ["bench", "precondition_not_met"]]) {
+      const { site, onAct } = serverSalon();
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm, prompts } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": userMustScript });
+      // maxActions 20 → 정리 예산 floor(20*0.15)=3 < 4 → user는 셋업 금지
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: policy, caps: { maxActions: 20, maxAcs: 11, maxScreens: 5 } });
+      const row = out.report.acTable.find((r) => r.id === "A3");
+      assert.equal(row.reasonCode, code, policy);
+      assert.equal(prompts.some((p) => /Criterion SETUP-1 \(/.test(p)), policy === "bench", `${policy}: SETUP-1 시도 여부`);
+    }
+  });
+
+  it("T5 런 끝 정리: 내 번호 기록만 취소(이전 런 기록은 BLOCKED) → leftover 0 · 관리 화면이 비밀번호면 leftover=만든 수 + 노트", async () => {
+    const cleanupScript = [
+      { type: "goto", path: "/admin" },
+      { type: "click", target: { role: "button", name: "취소 010-1111-2222" }, ownRecord: true },
+      { type: "click", target: { role: "button", name: "취소 $PHONE" }, ownRecord: true },
+      { type: "judge", verdict: "pass", reason: "내 예약이 목록에서 사라졌어요", evidenceQuote: "오늘 예약" },
+    ];
+    {
+      const { site, onAct, shared } = serverSalon();
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": book, "CLEANUP-1": cleanupScript });
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+      const td = out.report.agent.testData;
+      assert.equal(td.created, 1);
+      assert.equal(td.cleaned, 1);
+      assert.equal(td.leftover, 0);
+      assert.equal(td.runTag, "t1");
+      assert.ok(shared.bookings.some((b) => b.phone === "010-1111-2222"), "이전 런(다른 번호) 기록은 남는다");
+      assert.ok(!shared.bookings.some((b) => b.phone === TD.phone), "내 기록은 지워졌다");
+      assert.ok(!out.report.notes.some((n) => /테스트 데이터 \d+건 남음/.test(n)));
+    }
+    {
+      const { site, onAct } = serverSalon({ adminPassword: true });
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": book, "CLEANUP-1": [{ type: "goto", path: "/admin" }, { type: "judge", verdict: "not_verified", reason: "로그인 필요", evidenceQuote: "", reasonCode: "login_required" }] });
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+      const td = out.report.agent.testData;
+      assert.equal(td.leftover, 1);
+      assert.equal(td.cleanupSkipped, "login_wall");
+      assert.ok(out.report.notes.some((n) => /테스트 데이터 1건 남음\(이름 '심사테스트', 번호 010-/.test(n)), JSON.stringify(out.report.notes));
+    }
+  });
+
+  it("T8 (§8 c-3) 취소 버튼을 한 번도 못 눌렀는데 정리가 pass면 지운 수 0 · leftover=만든 수 · no_cancel_click — 옛 코드는 cleaned=1", async () => {
+    const { site, onAct, shared } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      // v0 r2 모양: 취소 수단이 없는 화면을 보고 "목록에 없다"로 pass.
+      "CLEANUP-1": [{ type: "judge", verdict: "pass", reason: "목록에 내 번호 예약이 없어요", evidenceQuote: "동네 미용실 예약" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    const td = out.report.agent.testData;
+    assert.equal(td.created, 1);
+    assert.equal(td.cleaned, 0);
+    assert.equal(td.leftover, 1);
+    assert.equal(td.cleanupSkipped, "no_cancel_click");
+    assert.ok(shared.bookings.some((b) => b.phone === TD.phone), "실제로 남아 있다");
+    assert.ok(out.report.notes.some((n) => /테스트 데이터 1건 남음/.test(n)), JSON.stringify(out.report.notes));
+  });
+
+  it("T9 (§8 a-3) trace 켠 런은 재확인 기각 사유·턴별 생각·시작 상태를 기준별로 남긴다 · 끈 런(프로덕션)은 agent.trace 없음", async () => {
+    const script = { "AC-U": userMustScript, "CORE-1": book, A3: [{ type: "new_session" }, { type: "judge", verdict: "pass", reason: "다른 손님에겐 10:30이 막혀 있어요", evidenceQuote: "10:30" }] };
+    const run = async (trace) => {
+      const { site, onAct } = serverSalon();
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm(script, { review: (id) => id !== "A3" });
+      return runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", trace });
+    };
+    const on = await run(true);
+    const t = on.report.agent.trace.A3;
+    assert.ok(t, JSON.stringify(Object.keys(on.report.agent.trace)));
+    const disagreed = t.judgeTrail.find((j) => j.outcome === "review_disagreed");
+    assert.ok(disagreed, JSON.stringify(t.judgeTrail));
+    assert.equal(disagreed.review.why, "fake review");
+    assert.equal(disagreed.finalStatus, "pass");
+    assert.equal(t.startedWith, "fresh");
+    assert.equal(typeof t.setupVisibleAtStart, "boolean");
+    assert.ok(t.turns.length >= 1 && t.turns.every((x) => typeof x.thought === "string"));
+    assert.equal(on.report.acTable.find((r) => r.id === "A3").status, "not_verified");
+    assert.ok(!on.report.acTable.some((r) => "_trace" in r), "결과 행에는 안 들어간다");
+    const off = await run(undefined);
+    assert.equal(off.report.agent.trace, undefined);
+  });
+
+  it("T10 (§8 c-2) 표지 검사는 ownRecord 취소에서만 — 로그가 markerChecked와 markerMatch를 나눠 적는다", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      "CLEANUP-1": [
+        { type: "goto", path: "/admin" },
+        { type: "click", target: { role: "button", name: "취소 010-1111-2222" } },
+        { type: "click", target: { role: "button", name: "취소 $PHONE" }, ownRecord: true },
+        { type: "judge", verdict: "pass", reason: "내 예약이 목록에서 사라졌어요", evidenceQuote: "오늘 예약" },
+      ],
+    });
+    const phases = [];
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", onPhase: (l) => phases.push(l) });
+    const lines = phases.filter((l) => /cancel-click CLEANUP-1/.test(l));
+    assert.equal(lines.length, 2, lines.join("\n"));
+    assert.match(lines[0], /ownRecord=false markerChecked=false markerMatch=null → blocked/);
+    assert.match(lines[1], /ownRecord=true markerChecked=true markerMatch=true → allowed/);
+    assert.equal(out.report.agent.testData.cleaned, 1);
+    assert.equal(out.report.agent.testData.leftover, 0);
+  });
+
+  it("T7 seed가 같으면 번호가 같고(재현), 메모에 런 표지가 남는다 — 옛 코드는 Date.now만", async () => {
+    const run = async () => {
+      const { site, onAct } = serverSalon();
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": userMustScript });
+      return runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 120_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "r3k9" });
+    };
+    const [a, b] = [await run(), await run()];
+    assert.equal(a.report.agent.testData.phone, b.report.agent.testData.phone);
+    assert.equal(a.report.agent.testData.phone, koreanTestData(SEED).phone);
+    assert.match(a.report.agent.testData.memo, /테스트 r3k9/);
+  });
+
+  it("T10 회귀 잠금(F1): 기준마다 새 브라우저는 그대로 — 셋업이 있어도 '새로고침'류만 만든 쪽 브라우저를 잇는다", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const A5 = { id: "A5", title: "새로고침해도 예약이 남는다", given: "예약을 마쳤다", when: "새로고침하거나 새 브라우저로 다시 연다", then: "예약이 남아 있다", priority: "must", confirmed: true };
+    const { llm } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": book, A3: [{ type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" }] });
+    const sessionsBefore = driver.state.session;
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3, A5], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench" });
+    assert.ok(driver.state.session - sessionsBefore >= 3, "기준마다 newSession");
+  });
+
+  /** v0 모양: 입력 → "시간 예약하기"(시간 고르기 화면만 연다, 쓰기 0) → "11:00" → "예약하기"(쓰기 1). */
+  function pickerSalon() {
+    const site = {
+      "/": { status: 200, text: "동네 미용실 예약 이름 휴대폰 시간 예약하기", buttons: ["시간 예약하기"] },
+      "/pick": { status: 200, text: "시간을 고르세요 11:00 예약하기", buttons: ["11:00", "예약하기"] },
+      "/done": () => ({ status: 200, text: `예약이 완료되었어요 ${TD.name} 2026-10-19 11:00` }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "시간 예약하기") state.path = "/pick";
+      if (action.type === "click" && action.target.name === "예약하기" && state.path === "/pick" && state.fills.length > 0) {
+        (state.serverWrites ??= []).push("POST /api/bookings");
+        state.path = "/done";
+      }
+      return null;
+    };
+    return { site, onAct };
+  }
+
+  it("T11 (§8 b-3) 입력 뒤 첫 클릭이 시간 고르기 창을 열어도, 진짜 제출에서 기록을 잡아 셋업 공급자가 된다 — 옛 코드는 첫 클릭만 재서 셋업 없음", async () => {
+    const { site, onAct } = pickerSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+        { type: "click", target: { role: "button", name: "시간 예약하기" } },
+        { type: "click", target: { role: "button", name: "11:00" } },
+        { type: "click", target: { role: "button", name: "예약하기" } },
+        { type: "judge", verdict: "pass", reason: "완료 화면에 예약이 보여요", evidenceQuote: "예약이 완료되었어요 $NAME" },
+      ],
+      A3: [{ type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    assert.equal(out.report.agent.setup?.byAc, "CORE-1", JSON.stringify(out.report.agent.setup));
+    assert.equal(out.report.agent.setup.serverWrites, 1);
+    assert.equal(out.report.agent.setup.time, "11:00", "완료 화면의 새 줄에서 읽는다");
+    assert.ok(prompts.some((p) => /Criterion A3 \(/.test(p)), "A3가 실행됐다(0걸음 스킵 아님)");
+    assert.notEqual(out.report.acTable.find((r) => r.id === "A3").reasonCode, "precondition_not_met");
+  });
+
+  it("T12 (§8 a-1) 브라우저에만 저장하는 앱: '새로고침하거나 새 브라우저' A5는 기록을 만든 브라우저 상태로 시작해 pass — 옛 코드는 빈 브라우저라 확인 못 함", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `동네 미용실 예약 이름 휴대폰 예약하기${state.store.booking ? ` 내 예약: ${state.store.booking}` : ""}`, buttons: ["예약하기"] }),
+      "/done": (state) => ({ status: 200, text: `예약이 완료되었어요 ${state.store.booking ?? ""}` }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) {
+        state.store.booking = `${TD.name} 10:00`;
+        state.path = "/done";
+      }
+      return null;
+    };
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const A5 = { id: "A5", title: "새로고침해도 예약이 남는다", given: "예약을 마쳤다", when: "새로고침하거나 새 브라우저로 다시 연다", then: "예약이 남아 있다", priority: "must", confirmed: true };
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      A5: [{ type: "judge", verdict: "pass", reason: "다시 열어도 내 예약이 그대로 남아 있어요", evidenceQuote: `내 예약: ${TD.name} 10:00` }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A5], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", trace: true });
+    const t = out.report.agent.trace.A5;
+    assert.equal(t.startedWith, "restored_setup");
+    assert.equal(t.setupVisibleAtStart, true);
+    assert.equal(out.report.acTable.find((r) => r.id === "A5").status, "pass");
+    assert.equal(out.report.agent.setup.serverWrites, 0);
+    assert.equal(out.report.agent.testData.cleanupSkipped, "browser_only");
+    assert.equal(out.report.agent.testData.leftover, 0);
+  });
+
+  it("T13 (§8 a-4·c-5) 버튼 글자 '예약 완료하기'와 번호 오류 문구, 쓰기 0 → 기록을 만든 것으로 치지 않는다 — 옛 코드는 created", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `예약 이름 휴대폰 예약 완료하기${state.err ? "\n휴대폰 번호가 잘못되었어요" : ""}`, buttons: ["예약 완료하기"] }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "예약 완료하기") state.err = true;
+      return null;
+    };
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+        { type: "click", target: { role: "button", name: "예약 완료하기" } },
+        { type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    assert.equal(out.report.agent.setup, undefined);
+    assert.equal(out.report.agent.testData.created, 0);
+  });
+
+  /** chatgpt 모양: 제출해도 쓰기 0, "사이트 연결 설정"만 뜬다(정답지 A4 — 앱의 진짜 결함). */
+  function unconnectedSalon() {
+    const site = {
+      "/": (state) => ({ status: 200, text: `동네 미용실 예약 이름 휴대폰 예약하기${state.err ? "\n관리자에게 사이트 연결 설정을 먼저 요청해주세요" : ""}`, buttons: ["예약하기"] }),
+    };
+    const onAct = (action, state) => {
+      if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) state.err = true;
+      return null;
+    };
+    return { site, onAct };
+  }
+  const submitThenFail = [
+    { type: "fill", target: { label: "이름" }, value: "$NAME" },
+    { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+    { type: "click", target: { role: "button", name: "예약하기" } },
+    { type: "judge", verdict: "fail", reason: "예약하기를 눌러도 사이트 연결 설정이 필요하다는 안내만 나오고 예약이 저장되지 않아요", evidenceQuote: "사이트 연결 설정을 먼저 요청해주세요" },
+  ];
+
+  it("T15 (§8 b-1) SETUP-1 실패(결과 결함)가 새 브라우저 강한 모델 재현에서도 실패하면 CORE-1 실패로 확정 · 의존 기준은 precondition_blocked_by_defect — 옛 코드는 Not Verified", async () => {
+    const { site, onAct } = unconnectedSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm(
+      {
+        "AC-U": userMustScript,
+        "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "폼을 끝까지 못 갔어요", evidenceQuote: "", reasonCode: "not_reached" }],
+        "SETUP-1": submitThenFail,
+      },
+      { reproduce: { "CORE-1": submitThenFail } },
+    );
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    assert.match(prompts[0], /6c\. If you filled the form and submitted, and the app answers that it is not connected/, "판정 원칙에 연결 설정=fail(§8 b-2)");
+    const core = out.report.acTable.find((r) => r.id === "CORE-1");
+    assert.equal(core.status, "fail", JSON.stringify(core));
+    assert.equal(out.decision, "Needs Fix");
+    for (const id of ["A3", "A6"]) assert.equal(out.report.acTable.find((r) => r.id === id).reasonCode, "precondition_blocked_by_defect", id);
+    assert.ok(!out.report.agent.defects.some((d) => d.acId === "A3" || d.acId === "A6"), "결함은 CORE-1에 한 번만");
+    assert.equal(out.report.agent.setupAttempt.status, "fail");
+    assert.equal(out.report.agent.setupAttempt.promoted, true);
+  });
+
+  it("T15b (§8 b-1 반대 방향) 재현이 실패하지 않거나 SETUP-1이 확인 못 함이면 승격하지 않는다", async () => {
+    for (const [setupScript, reproduce] of [
+      [submitThenFail, [{ type: "judge", verdict: "not_verified", reason: "다시 해 보니 확인 못 함", evidenceQuote: "" }]],
+      [[{ type: "judge", verdict: "not_verified", reason: "폼을 못 찾았어요", evidenceQuote: "", reasonCode: "not_reached" }], submitThenFail],
+    ]) {
+      const { site, onAct } = unconnectedSalon();
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm(
+        { "AC-U": userMustScript, "CORE-1": [{ type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "", reasonCode: "not_reached" }], "SETUP-1": setupScript },
+        { reproduce: { "CORE-1": reproduce } },
+      );
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench" });
+      assert.notEqual(out.report.acTable.find((r) => r.id === "CORE-1").status, "fail");
+      assert.equal(out.report.acTable.find((r) => r.id === "A3").reasonCode, "precondition_not_met");
+      assert.notEqual(out.report.agent.setupAttempt.promoted, true);
+    }
+  });
+
+  it("T16 (§8 d) 첫 기록이 한국의 어제(UTC 날짜 앱)면 한국 날짜 오늘로 SETUP-2를 한 번 더 만들고 '오늘' 기준(A6)을 실행한다 — 옛 코드는 0걸음 precondition_not_met", async () => {
+    const { site, onAct, shared } = serverSalon();
+    site["/done"] = () => ({ status: 200, text: `예약이 완료되었어요 ${TD.name} ${shared.bookings.length <= 2 ? "2026-10-18" : "2026-10-19"} 10:30` });
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      "SETUP-2": [{ type: "goto", path: "/" }, ...book],
+      A6: [{ type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" }],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", nowMs: Date.parse("2026-10-18T16:35:00Z") });
+    assert.equal(out.report.agent.setup.date, "2026-10-18", "첫 기록은 UTC 날짜");
+    assert.ok(prompts.some((p) => /Criterion SETUP-2 \(/.test(p) && /한국 날짜 2026-10-19/.test(p)), "한국 날짜 오늘로 다시 만든다");
+    const a6 = prompts.find((p) => /Criterion A6 \(/.test(p));
+    assert.ok(a6, "A6가 실행됐다");
+    assert.match(a6, /by SETUP-2\): a booking exists .*date=2026-10-19/);
+    assert.notEqual(out.report.acTable.find((r) => r.id === "A6").reasonCode, "precondition_not_met");
+    assert.equal(out.report.agent.testData.created, 2, "서버 기록 2건 모두 정리 대상");
+  });
+
+  it("T17 (10-20 r1 회귀) 완료 문구 없이 저장소에만 쓰는 앱: 제출 버튼 클릭의 저장소 변화는 기록 · 시간 칩 클릭의 저장소 변화는 기록 아님", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `동네 미용실 예약 이름 휴대폰 10:30 예약하기${state.store.booking ? " 10:30 선택됨" : ""}`, buttons: ["10:30", "예약하기"] }),
+    };
+    const run = async (clicks) => {
+      const onAct = (action, state) => {
+        // 시간 칩도, 제출도 저장소를 바꾼다. 화면에는 완료 문구가 없다.
+        if (action.type === "click" && action.target.name === "10:30") state.store.slot = "10:30";
+        if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) state.store.booking = `${TD.name} 10:30`;
+        return null;
+      };
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const phases = [];
+      const { llm } = makeScriptedLlm({
+        "AC-U": userMustScript,
+        "CORE-1": [
+          { type: "fill", target: { label: "이름" }, value: "$NAME" },
+          { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+          ...clicks.map((name) => ({ type: "click", target: { role: "button", name } })),
+          { type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" },
+        ],
+      });
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench", onPhase: (l) => phases.push(l) });
+      return { out, phases };
+    };
+    const chipOnly = await run(["10:30"]);
+    assert.equal(chipOnly.out.report.agent.setup, undefined, "시간 칩 클릭은 기록이 아니다");
+    // (2026-10-21) 칩 클릭은 탐침 예산을 쓰지 않는다(탐침 자체를 안 한다).
+    assert.ok(!chipOnly.phases.some((l) => /probe CORE-1 .*click="10:30"/.test(l)), chipOnly.phases.join("\n"));
+    const submitted = await run(["10:30", "예약하기"]);
+    assert.equal(submitted.out.report.agent.setup?.byAc, "CORE-1");
+    assert.equal(submitted.out.report.agent.setup.serverWrites, 0);
+    assert.ok(submitted.phases.some((l) => /probe CORE-1 #1 click="예약하기" writes=0 local=true → local_change/.test(l)), submitted.phases.join("\n"));
+  });
+
+  it("T18 (10-21 gemini 재연) 칩·실패 제출이 앞에 여러 번 있어도 진짜 성공 제출을 잰다 · 앱 팝업 글자가 기록에 남고 'NO VISIBLE CHANGE'로 덮이지 않는다 — 옛 코드는 칩·실패 클릭에 탐침 3번을 다 써서 셋업 없음", async () => {
+    const site = {
+      "/": (state) => ({ status: 200, text: `미용실 예약 이름 휴대폰 10:30 여성 커트 예약 완료하기${state.slot ? " [10:30 선택됨]" : ""}${state.service ? " [커트 선택됨]" : ""}${state.done ? "\n예약이 확정되었습니다" : ""}`, buttons: ["10:30", "여성 커트", "예약 완료하기"] }),
+    };
+    const onAct = (action, state) => {
+      if (action.type !== "click") return null;
+      if (action.target.name === "여성 커트") state.service = true;
+      if (action.target.name === "10:30") state.slot = true;
+      if (action.target.name === "예약 완료하기" && state.fills.length > 0) {
+        // gemini 모양: 시술을 안 고르면 alert만 띄우고 아무것도 안 바뀐다.
+        if (!state.service) return { ok: true, note: 'clicked → / | app popup: "alert: 시술 메뉴를 최소 하나 이상 선택해주세요."', dialog: ["alert: 시술 메뉴를 최소 하나 이상 선택해주세요."] };
+        state.store.bookings = `${TD.name} 10:30`;
+        state.done = true;
+      }
+      return null;
+    };
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const phases = [];
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": [
+        { type: "fill", target: { label: "이름" }, value: "$NAME" },
+        { type: "fill", target: { label: "휴대폰" }, value: "$PHONE" },
+        { type: "click", target: { role: "button", name: "10:30" } },
+        { type: "click", target: { role: "button", name: "예약 완료하기" } },
+        { type: "click", target: { role: "button", name: "여성 커트" } },
+        { type: "click", target: { role: "button", name: "예약 완료하기" } },
+        { type: "judge", verdict: "not_verified", reason: "x", evidenceQuote: "" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, setupPolicy: "bench", onPhase: (l) => phases.push(l) });
+    assert.equal(out.report.agent.setup?.byAc, "CORE-1", phases.filter((l) => /probe/.test(l)).join("\n"));
+    // 칩(10:30·여성 커트)은 재지 않고, 실패 제출(#1)과 성공 제출(#2)만 잰다. 옛 코드는 10:30·완료·여성 커트에 3번을 다 썼다.
+    assert.ok(!phases.some((l) => /probe CORE-1 .*click="(10:30|여성 커트)"/.test(l)), phases.join("\n"));
+    assert.ok(phases.some((l) => /probe CORE-1 #2 click="예약 완료하기" .*→ (local_change|confirmation)/.test(l)), phases.join("\n"));
+    const corePrompts = prompts.filter((p) => /Criterion CORE-1 \(/.test(p));
+    const later = corePrompts.at(-1);
+    assert.match(later, /시술 메뉴를 최소 하나 이상 선택해주세요/, "팝업 글자가 다음 턴 기록에 보인다");
+    assert.match(later, /THE APP ANSWERED WITH A POPUP/);
+  });
+
+  // 10-19 KST 낮 — serverSalon 완료 화면 날짜(2026-10-19)가 "오늘"이 되게.
+  const NOW_1019 = Date.parse("2026-10-19T03:00:00Z");
+
+  it("T19 (10-21 기준 3 위반 bolt r2 A6) 에이전트가 시계를 옮긴 뒤 낸 pass는 받지 않는다(clock_shifted) — 옛 코드는 pass", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      A6: [
+        { type: "set_clock", iso: "2026-10-19T10:00:00+09:00" },
+        { type: "goto", path: "/admin" },
+        { type: "judge", verdict: "pass", reason: "관리 화면에 오늘 예약이 시간순으로 보여요", evidenceQuote: "오늘 예약" },
+      ],
+    });
+    const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", nowMs: NOW_1019 });
+    const row = out.report.acTable.find((r) => r.id === "A6");
+    assert.equal(row.status, "not_verified", JSON.stringify(row));
+    assert.equal(row.reasonCode, "clock_shifted");
+    assert.ok(!out.report.agent.defects.some((d) => d.acId === "A6"), "결함으로 세지 않는다");
+  });
+
+  it("T21 (10-21 a-3 확정) 재확인 프롬프트가 셋업 사실(이 기준 전에 만들어 둔 기록·완료 화면)을 받는다 — 옛 코드는 몰라서 '선행 예약 증거 없음'으로 기각", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({
+      "AC-U": userMustScript,
+      "CORE-1": book,
+      A3: [
+        { type: "new_session" },
+        { type: "click", target: { role: "button", name: "10:30" } },
+        { type: "judge", verdict: "fail", reason: "이미 예약된 10:30이 다른 손님에게도 예약 가능으로 보여서 같은 시간이 또 예약돼요", evidenceQuote: "10:30 예약 가능" },
+      ],
+    });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A3], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench" });
+    const review = prompts.find((p) => /skeptical reviewer/.test(p) && /Criterion A3 \(/.test(p));
+    assert.ok(review, "A3 재확인이 돌았다");
+    assert.match(review, /Already established BEFORE this criterion started/);
+    assert.match(review, /Setup done earlier in this run \(by CORE-1\): a booking exists/);
+    assert.match(review, /Confirmation screen when that record was made: "예약이 완료되었어요/);
+    assert.match(review, /Given: 어떤 날짜·시간에 예약이 하나 있다/);
+  });
+
+  it("T22 (10-21) 브라우저에만 저장하는 앱의 사장님 화면 기준: 비어 있으면 그것이 실패라고 알린다 · 서버 저장 앱엔 그 문장이 없다", async () => {
+    const P = await import("../dist/agent-inspection.js");
+    const setupOf = (serverWrites) => ({ byAc: "CORE-1", date: "2026-10-21", time: "10:30", excerpt: "", serverWrites, recipe: [] });
+    const browserOnly = P.setupContextLines(setupOf(0), TD, A6).join("\n");
+    assert.match(browserOnly, /owner cannot see customers' bookings — that IS a fail/);
+    const serverBacked = P.setupContextLines(setupOf(1), TD, A6).join("\n");
+    assert.doesNotMatch(serverBacked, /owner cannot see/);
+    assert.match(serverBacked, /Do NOT create it again; perform WHEN from here/);
+  });
+
+  it("T20 (10-21) 서버에 저장하는 앱의 관리 화면 기준은 내 번호를 화면에서 봐야 pass — 이전 런 기록만 보이면 own_record_not_seen · 내 기록이 보이면 그대로 pass", async () => {
+    const run = async ({ listMine }) => {
+      const { site, shared } = serverSalon();
+      // 서버에 쓰긴 하지만(쓰기 1) 관리 목록에 내 기록이 나오는지는 listMine으로 정한다.
+      const onAct = (action, state) => {
+        if (action.type === "click" && action.target.name === "예약하기" && state.fills.length > 0) {
+          if (listMine) shared.bookings.push({ name: TD.name, phone: TD.phone, time: "10:30" });
+          (state.serverWrites ??= []).push("POST /api/bookings");
+          state.path = "/done";
+        }
+        return null;
+      };
+      const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+      const { llm } = makeScriptedLlm({
+        "AC-U": userMustScript,
+        "CORE-1": book,
+        A6: [
+          { type: "goto", path: "/admin" },
+          { type: "judge", verdict: "pass", reason: "관리 화면에 오늘 예약이 시간순으로 보여요", evidenceQuote: "오늘 예약" },
+        ],
+      });
+      const out = await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust, A6], acSource: "interview", llm, driver, testDataSeed: SEED, runTag: "t1", setupPolicy: "bench", nowMs: NOW_1019 });
+      return out.report.acTable.find((r) => r.id === "A6");
+    };
+    const notMine = await run({ listMine: false });
+    assert.equal(notMine.status, "not_verified", JSON.stringify(notMine));
+    assert.equal(notMine.reasonCode, "own_record_not_seen");
+    const mine = await run({ listMine: true });
+    assert.equal(mine.status, "pass", JSON.stringify(mine));
+  });
+
+  it("T14 (§8 d) 프롬프트의 기기 시각은 한국 시각 표기 — 01:35 KST가 10-18 UTC로 보이지 않는다", async () => {
+    const { site, onAct } = serverSalon();
+    const driver = makeFakeDriver(site, { origin: ORIGIN, onAct });
+    const { llm, prompts } = makeScriptedLlm({ "AC-U": userMustScript, "CORE-1": userMustScript });
+    await runAgentInspection({ targetUrl: ORIGIN + "/", intent: "i", budgetMs: 600_000, acs: [userMust], acSource: "interview", llm, driver, testDataSeed: SEED, nowMs: Date.parse("2026-10-18T16:35:00Z") });
+    const p = prompts.find((x) => /Device clock now:/.test(x));
+    assert.match(p, /Device clock now: 2026-10-19 01:35 \(Asia\/Seoul, UTC\+9\)/);
+  });
+});
+
+describe("2026-10-19 '취소'는 삭제 범주(내 기록 게이트) — 옛 코드는 자유 클릭", () => {
+  it("취소·예약 취소 → delete, 이미지 사본(spike)도 같다", async () => {
+    const { classifyActionSafety } = await import("../inspector-container/safety.mjs");
+    const spike = await import("../../../tools/simsa-completion-loop-spike/lib/safety.mjs");
+    for (const t of ["취소", "예약 취소", "삭제"]) {
+      assert.deepEqual(classifyActionSafety(t), { safe: false, category: "delete" }, t);
+      assert.deepEqual(spike.classifyActionSafety(t), { safe: false, category: "delete" }, `spike ${t}`);
+    }
+    assert.equal(classifyActionSafety("예약하기").safe, true);
   });
 });

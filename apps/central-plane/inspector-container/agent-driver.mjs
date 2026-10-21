@@ -11,6 +11,7 @@
  */
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
+import { controlPreference } from "./click-target.mjs";
 
 const VIEWPORT = { width: 1280, height: 800 };
 const NAV_TIMEOUT = 20_000;
@@ -38,6 +39,13 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   /** 로그인 때 채운 칸 — 이후 모든 스크린샷에서 가린다. */
   const maskSelectors = new Set(["input[type=password]"]);
   let dialogSeen = false;
+  /**
+   * (2026-10-21 §8 후속) 앱이 alert/confirm으로 답한 글자. 종전엔 닫기만 하고 글자를 버려, gemini의 "시술 메뉴를 최소 하나 이상
+   * 선택해주세요."가 에이전트에게 "NO VISIBLE CHANGE"로만 보였다(3런 내내 시술 없이 제출 반복). 행동 하나 동안만 모은다.
+   */
+  const dialogMessages = [];
+  /** "dismiss"(기본) | "accept" — 허용된 내 기록 클릭(acceptDialog) 동안만 accept. */
+  let dialogPolicy = "dismiss";
   const writes = [];
   let storageMark = { at: Date.now(), local: "", session: "" };
   const readStorage = async () =>
@@ -88,9 +96,12 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         writes.push({ at: Date.now(), line: `${r.method()} ${r.url().slice(0, 140)}` });
       }
     });
+    // 2026-10-19(격차 §7 발견 ③): confirm()을 늘 dismiss하면 confirm으로 묻는 앱에서 "취소"가 절대 실행되지 않아 앱 결함처럼
+    //  보였다(bolt·gemini 실측). 허용된 내 기록 클릭(acceptDialog) 동안만 accept, 그 밖엔 종전대로 dismiss.
     p.on("dialog", (d) => {
       dialogSeen = true;
-      d.dismiss().catch(() => {});
+      if (dialogMessages.length < 5) dialogMessages.push(`${d.type()}: ${String(d.message() ?? "").replace(/\s+/g, " ").slice(0, 200)}`);
+      (dialogPolicy === "accept" ? d.accept() : d.dismiss()).catch(() => {});
     });
     p.setDefaultTimeout(ACT_TIMEOUT);
   }
@@ -133,17 +144,29 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     const count = await all.count().catch(() => 0);
     let visible = 0;
     let chosen = null;
+    let chosenScore = -Infinity;
+    let chosenIdx = -1;
     let tag = "";
     for (let i = 0; i < Math.min(count, 20); i += 1) {
       const el = all.nth(i);
       if (!(await el.isVisible().catch(() => false))) continue;
       visible += 1;
-      if (chosen) continue;
-      if (editable && !(await el.isEditable().catch(() => false))) continue;
-      chosen = el;
-      tag = await el.evaluate((e) => e.tagName.toLowerCase()).catch(() => "?");
+      if (editable) {
+        if (chosen || !(await el.isEditable().catch(() => false))) continue;
+        chosen = el;
+        chosenIdx = i;
+        continue;
+      }
+      // (§8 후속) 누르기 대상: 같은 이름이 여럿이면 제출 버튼·폼 안을 nav 탭보다 앞에(동점이면 앞쪽 — 종전 동작).
+      const s = count > 1 ? await controlPreference(el) : 0;
+      if (s > chosenScore) {
+        chosen = el;
+        chosenScore = s;
+        chosenIdx = i;
+      }
     }
-    return { el: chosen, diag: `matched=${count} visible=${visible} chosen=${chosen ? tag : "none"}` };
+    if (chosen) tag = await chosen.evaluate((e) => `${e.tagName.toLowerCase()}${e.getAttribute("type") ? `[type=${e.getAttribute("type")}]` : ""}${e.closest("nav, header") ? "@nav" : e.closest("form") ? "@form" : ""}`).catch(() => "?");
+    return { el: chosen, diag: `matched=${count} visible=${visible} chosen=${chosen ? `${tag}#${chosenIdx}` : "none"}` };
   }
 
   /** 이름만 준 경우: 버튼 → 링크 → 아무 글자 순서(누를 수 있는 것 우선 — click-target.mjs와 같은 원칙). */
@@ -206,6 +229,52 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
 
   const bodyText = async () => (await page.locator("body").innerText({ timeout: 4000 }).catch(() => "")).replace(/\s+\n/g, "\n").trim();
 
+  /**
+   * (2026-10-20 격차 §8 c-1) 내 기록 행의 버튼을 결정론으로 고른다. 종전엔 표지 검사·클릭 모두 "보이는 첫 '취소'"(=목록 첫 행,
+   * 남의 기록)를 봐서 bolt에서 18/18 차단됐다. 이름이 맞는 보이는 버튼을 전부 돌며, 버튼에서 위로 올라가 번호가 처음 나오는
+   * 상자를 그 행으로 본다. 후보 = 행에 내 표지가 있고 · 행의 번호가 **전부 내 번호**이고(남의 번호가 섞이면 행 범위가 넓은 것 →
+   * 거부) · 행 안에 같은 이름 버튼이 1개. 후보가 없으면 null(누르지 않는다 — 남은 것은 leftover로 정직하게).
+   */
+  async function pickOwnRecord(target, markers) {
+    const mine = markers.map((m) => String(m ?? "").replace(/\D/g, "")).filter((d) => d.length >= 10);
+    const lists = [];
+    const all = locateAll(target);
+    if (all) lists.push(all);
+    const name = target.name ?? target.text ?? target.label;
+    if (name) for (const role of ["button", "link"]) lists.push(page.getByRole(role, { name, exact: false }));
+    for (const list of lists) {
+      const count = await list.count().catch(() => 0);
+      for (let i = 0; i < Math.min(count, 50); i += 1) {
+        const el = list.nth(i);
+        if (!(await el.isVisible().catch(() => false))) continue;
+        const row = await el
+          .evaluate((node) => {
+            const PHONE = /01\d[-\s]?\d{3,4}[-\s]?\d{4}/g;
+            const label = (node.innerText || node.textContent || "").trim();
+            let box = node.parentElement;
+            for (let up = 0; box && up < 8; up += 1, box = box.parentElement) {
+              const text = box.innerText || box.textContent || "";
+              const phones = text.match(PHONE) ?? [];
+              if (phones.length === 0) continue;
+              const same = [...box.querySelectorAll("button, a, [role=button]")].filter((b) => (b.innerText || b.textContent || "").trim() === label).length;
+              return { text: text.slice(0, 2000), phones: phones.map((p) => p.replace(/\D/g, "")), same };
+            }
+            return null;
+          })
+          .catch(() => null);
+        if (!row) continue;
+        const hasMarker = markers.some((m) => m && row.text.includes(m));
+        const onlyMine = row.phones.every((p) => mine.includes(p));
+        if (hasMarker && onlyMine && row.same === 1) return el;
+      }
+    }
+    return null;
+  }
+  /** ownsRecordNear가 고른 내 행의 버튼 — 바로 다음 ownRecord 클릭이 같은 요소를 누른다(검사·클릭 대상 일치). */
+  let ownPick = null;
+  /** 행동 하나 동안 앱이 띄운 팝업 글자 — 결과 문장 끝에 붙인다(관찰·판정 근거가 된다). */
+  const popupNote = () => (dialogMessages.length ? ` | app popup: "${dialogMessages.join(" / ")}"` : "");
+
   return {
     async start(_targetUrl) {
       await openContext(null);
@@ -249,12 +318,25 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
       try {
         switch (action.type) {
           case "click": {
-            const l = await resolveTarget(action.target);
+            // (§8 c-1) 허용된 내 기록 취소는 표지를 검사한 바로 그 요소만 누른다 — 첫 일치로 되돌아가지 않는다.
+            const pick = ownPick;
+            ownPick = null;
+            if (action.acceptDialog === true && !(pick && pick.key === JSON.stringify(action.target))) return { ok: false, note: "own_record_target_lost" };
+            const resolved = action.acceptDialog === true ? { el: pick.el, diag: "own_record" } : await resolveTargetDiag(action.target);
+            const l = resolved.el;
             if (!l) return { ok: false, note: "target_not_found" };
-            await l.click({ timeout: ACT_TIMEOUT });
-            await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {});
-            await page.waitForTimeout(900);
-            return { ok: true, note: `clicked → ${page.url()}` };
+            dialogPolicy = action.acceptDialog === true ? "accept" : "dismiss";
+            dialogMessages.length = 0;
+            try {
+              await l.click({ timeout: ACT_TIMEOUT });
+              await page.waitForLoadState("domcontentloaded", { timeout: 6000 }).catch(() => {});
+              await page.waitForTimeout(900);
+            } finally {
+              dialogPolicy = "dismiss";
+            }
+            // 같은 이름이 여럿이었으면 무엇을 눌렀는지 남긴다(§8 후속: claude는 "예약하기"가 nav 탭·제출 버튼 2개였다).
+            const which = /matched=([2-9]|\d{2,})/.test(resolved.diag) ? ` [${resolved.diag}]` : "";
+            return { ok: true, note: `clicked → ${page.url()}${which}${popupNote()}`, ...(dialogMessages.length ? { dialog: [...dialogMessages] } : {}) };
           }
           case "fill": {
             const { el: l, diag } = await resolveTargetDiag(action.target, true);
@@ -290,9 +372,10 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
             return { ok: true, note: "selected" };
           }
           case "press":
+            dialogMessages.length = 0;
             await page.keyboard.press(action.key === "Space" ? " " : action.key);
             await page.waitForTimeout(700);
-            return { ok: true, note: "pressed" };
+            return { ok: true, note: `pressed${popupNote()}`, ...(dialogMessages.length ? { dialog: [...dialogMessages] } : {}) };
           case "goto": {
             const r = await this.goto(action.path);
             return { ok: true, note: `opened (HTTP ${r.status ?? "?"})` };
@@ -465,14 +548,11 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     /** 이 화면에 우리가 만든 기록(시험 데이터 표지)이 그 대상 근처에 있는가 — 내 기록만 취소·삭제 허용. */
     async ownsRecordNear(target, markers) {
       try {
-        const l = await resolveTarget(target);
-        if (!l) return false;
-        const near = await l.evaluate((el) => {
-          const box = el.closest("li, tr, article, section, [role=listitem], [role=row], div");
-          return box ? box.textContent || "" : "";
-        });
-        return markers.some((m) => m && near.includes(m));
+        const el = await pickOwnRecord(target, markers);
+        ownPick = el ? { key: JSON.stringify(target), el } : null;
+        return Boolean(el);
       } catch {
+        ownPick = null;
         return false;
       }
     },
