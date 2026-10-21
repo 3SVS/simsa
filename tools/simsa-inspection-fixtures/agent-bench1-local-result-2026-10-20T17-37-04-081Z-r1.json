@@ -1,0 +1,5541 @@
+{
+  "label": "로컬 실행(브랜치 코드) — 프로덕션 아님 · AC=사전 등록 A1~A10 주입",
+  "acMode": "prereg",
+  "prompt": "우리 동네 1인 미용실 예약 웹사이트를 만들어줘. 손님이 날짜와 시간(오전 10시부터 오후 7시까지, 30분 단위)을 고르고 이름과 휴대폰 번호를 넣으면 예약이 돼. 이미 예약된 시간은 다른 손님이 고를 수 없어야 해. 예약하면 예약 완료 화면에 예약 내용이 보이고, 새로고침해도 예약이 사라지지 않아야 해. 사장님은 관리 화면에서 오늘 예약 목록을 시간순으로 보고 예약을 취소할 수 있어. 가격은 커트 15,000원, 펌 60,000원처럼 원 단위로 보여줘. 휴대폰으로 보기 편하게, 모든 글은 한국어로 해줘.",
+  "run": 1,
+  "summary": {
+    "label": "로컬 실행(브랜치 코드) — 프로덕션 아님 · AC=사전 등록 A1~A10 주입",
+    "acMode": "prereg",
+    "run": 1,
+    "oppositeErrors": 0,
+    "appMatch": 5,
+    "apps": 6,
+    "mustIdentified": 4,
+    "mustTotal": 13,
+    "costPerRunMean": 0.3424,
+    "costPerRunMax": 0.7125,
+    "errors": 0,
+    "statusCounts": {
+      "pass": 12,
+      "fail": 14,
+      "not_verified": 40
+    },
+    "notVerifiedShare": 0.6061,
+    "notVerifiedByReason": {
+      "judge_disagreed": 1,
+      "precondition_blocked_by_defect": 4,
+      "evidence_missing": 1,
+      "-": 13,
+      "not_reached": 1,
+      "budget": 12,
+      "agent_error": 1,
+      "precondition_not_met": 5,
+      "fail_not_reproduced": 1,
+      "own_record_not_seen": 1
+    }
+  },
+  "results": [
+    {
+      "app": "chatgpt",
+      "url": "https://cosmic-crostata-7c1265.netlify.app/",
+      "startedKst": "2026-10-21 02:37",
+      "expected": "broken",
+      "acMode": "prereg",
+      "inference": {
+        "mode": "prereg"
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10,
+        "source": "prereg"
+      },
+      "decision": "Needs Fix",
+      "works": false,
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 기준 2개가 실제로 해 보니 되지 않았어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "fail",
+          "reason": "필수 정보를 넣고 예약했지만 연결 설정 미완료 안내만 보이고 실제 예약이 만들어지지 않았습니다.",
+          "evidence": [
+            "사이트 연결 설정이 아직 필요합니다.",
+            "관리자에게 사이트 연결 설정을 먼저 요청해주세요."
+          ],
+          "actions": [
+            "\"커트 15,000원\" 누르기",
+            "\"10:00\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-2245-9715\" 입력",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "10:00~19:00, 30분 단위로 시간 선택",
+          "then": "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다",
+          "status": "pass",
+          "reason": "날짜를 고른 예약 화면에서 10:00부터 19:00까지 30분 단위 시간이 보입니다.",
+          "evidence": [
+            "10:00 10:30 11:00 11:30 12:00 12:30 13:00 13:30 14:00 14:30 15:00 15:30 16:00 16:30 17:00 17:30 18:00 18:30 19:00"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A2",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+          "then": "예약되지 않고 무엇이 잘못됐는지 알려 준다",
+          "status": "not_verified",
+          "reason": "두 번 따져 본 판단이 서로 달라서 결과로 치지 않았어요",
+          "reasonCode": "judge_disagreed",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"\" 입력",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A4",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약하면 완료 화면에 예약 내용이 보인다",
+          "then": "완료 화면에 날짜·시간·이름이 보인다",
+          "status": "fail",
+          "reason": "예약을 완료해도 완료 화면이 나오지 않고 예약 내용을 볼 수 없습니다.",
+          "evidence": [
+            "관리자에게 사이트 연결 설정을 먼저 요청해주세요.",
+            "관리자에게 사이트 연결 설정을 먼저 요청해주세요."
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-2245-9715\" 입력",
+            "\"커트 15,000원\" 누르기",
+            "\"10:00\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A3",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+          "then": "그 시간은 고를 수 없다(이중 예약이 되지 않는다)",
+          "status": "not_verified",
+          "reason": "앱의 핵심 일(예약 만들기)이 되지 않아 이 기준의 전제를 만들 수 없었어요 — 핵심 일을 고치면 다시 확인할 수 있어요",
+          "reasonCode": "precondition_blocked_by_defect",
+          "evidence": []
+        },
+        {
+          "id": "A5",
+          "priority": "must",
+          "confirmed": true,
+          "title": "새로고침해도 예약이 남는다",
+          "then": "예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)",
+          "status": "not_verified",
+          "reason": "앱의 핵심 일(예약 만들기)이 되지 않아 이 기준의 전제를 만들 수 없었어요 — 핵심 일을 고치면 다시 확인할 수 있어요",
+          "reasonCode": "precondition_blocked_by_defect",
+          "evidence": []
+        },
+        {
+          "id": "A6",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+          "then": "오늘 예약 목록이 시간순으로 보인다",
+          "status": "not_verified",
+          "reason": "앱의 핵심 일(예약 만들기)이 되지 않아 이 기준의 전제를 만들 수 없었어요 — 핵심 일을 고치면 다시 확인할 수 있어요",
+          "reasonCode": "precondition_blocked_by_defect",
+          "evidence": []
+        },
+        {
+          "id": "A7",
+          "priority": "must",
+          "confirmed": true,
+          "title": "취소하면 그 시간을 다시 예약할 수 있다",
+          "then": "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다",
+          "status": "not_verified",
+          "reason": "앱의 핵심 일(예약 만들기)이 되지 않아 이 기준의 전제를 만들 수 없었어요 — 핵심 일을 고치면 다시 확인할 수 있어요",
+          "reasonCode": "precondition_blocked_by_defect",
+          "evidence": []
+        },
+        {
+          "id": "A8",
+          "priority": "should",
+          "confirmed": true,
+          "title": "가격이 원 단위로 보인다",
+          "then": "커트 15,000원처럼 원 단위 형식으로 보인다",
+          "status": "pass",
+          "reason": "가격이 원 단위 형식으로 보입니다.",
+          "evidence": [
+            "커트 15,000원"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A9",
+          "priority": "should",
+          "confirmed": true,
+          "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+          "then": "글자·버튼이 잘리지 않고 예약까지 할 수 있다",
+          "status": "fail",
+          "reason": "예약을 누른 뒤 사이트 연결 설정이 필요하다는 안내가 떠서 예약이 실제로 완료되지 않았습니다.",
+          "evidence": [
+            "관리자에게 사이트 연결 설정을 먼저 요청해주세요."
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"예약하기\" 누르기",
+            "\"휴대폰 번호\"에 \"010-2245-9715\" 입력"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A10",
+          "priority": "should",
+          "confirmed": true,
+          "title": "모든 글이 한국어다",
+          "then": "영어 등 다른 언어 문구가 없다",
+          "status": "not_verified",
+          "reason": "판단의 근거를 실제 화면에서 찾지 못해 결과로 치지 않았어요.",
+          "reasonCode": "evidence_missing",
+          "evidence": [],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 2,
+        "screensBroken": 0,
+        "buttonsChecked": 9,
+        "buttonsNoReaction": 0,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 2,
+        "mobileOverflow": [],
+        "problems": []
+      },
+      "findings": [
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 앱의 핵심 일이 처음부터 끝까지 실제로 된다"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 예약하면 완료 화면에 예약 내용이 보인다"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 휴대폰 폭(390px)에서 쓸 수 있다"
+        }
+      ],
+      "agentPrompt": "웹 앱을 고치는 작업입니다. 아래 항목은 실제 브라우저에서 직접 해 보고 **실패한 것**입니다. 이것만 고치고 관련 없는 동작은 바꾸지 마세요. 고친 뒤 각 기준이 적힌 그대로 통과해야 합니다.\n\n앱 주소: https://cosmic-crostata-7c1265.netlify.app/\n의도: 동네 1인 미용실 예약 웹사이트 — 손님이 날짜·시간(10:00~19:00, 30분 단위)을 고르고 이름·휴대폰 번호를 넣으면 예약되고, 사장님은 관리 화면에서 오늘 예약을 시간순으로 보고 취소한다\n\n1. [CORE-1 · must] 앱의 핵심 일이 처음부터 끝까지 실제로 된다\n   기대: 결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다\n   재현 순서: \"커트 15,000원\" 누르기 → \"10:00\" 누르기 → \"이름\"에 \"심사테스트\" 입력 → \"휴대폰 번호\"에 \"010-2245-9715\" 입력 → \"예약하기\" 누르기\n   실제 결과: 필수 정보를 넣고 예약했지만 연결 설정 미완료 안내만 보이고 실제 예약이 만들어지지 않았습니다.\n   근거: \"사이트 연결 설정이 아직 필요합니다.\" / \"관리자에게 사이트 연결 설정을 먼저 요청해주세요.\"\n2. [A4 · must] 예약하면 완료 화면에 예약 내용이 보인다\n   기대: 완료 화면에 날짜·시간·이름이 보인다\n   재현 순서: \"이름\"에 \"심사테스트\" 입력 → \"휴대폰 번호\"에 \"010-2245-9715\" 입력 → \"커트 15,000원\" 누르기 → \"10:00\" 누르기 → \"예약하기\" 누르기\n   실제 결과: 예약을 완료해도 완료 화면이 나오지 않고 예약 내용을 볼 수 없습니다.\n   근거: \"관리자에게 사이트 연결 설정을 먼저 요청해주세요.\" / \"관리자에게 사이트 연결 설정을 먼저 요청해주세요.\"\n3. [A9 · should] 휴대폰 폭(390px)에서 쓸 수 있다\n   기대: 글자·버튼이 잘리지 않고 예약까지 할 수 있다\n   재현 순서: \"이름\"에 \"심사테스트\" 입력 → \"예약하기\" 누르기 → \"휴대폰 번호\"에 \"010-2245-9715\" 입력\n   실제 결과: 예약을 누른 뒤 사이트 연결 설정이 필요하다는 안내가 떠서 예약이 실제로 완료되지 않았습니다.\n   근거: \"관리자에게 사이트 연결 설정을 먼저 요청해주세요.\"\n\n고친 뒤 Simsa가 같은 기준으로 다시 확인합니다.",
+      "llmCalls": 69,
+      "basis": "must_failed",
+      "builder": "netlify_static",
+      "defects": [
+        {
+          "acId": "CORE-1",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "missing_backend_config"
+        },
+        {
+          "acId": "A4",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "missing_backend_config"
+        },
+        {
+          "acId": "A9",
+          "priority": "should",
+          "status": "fail",
+          "defectClass": "missing_backend_config"
+        }
+      ],
+      "testData": {
+        "names": [
+          "심사테스트",
+          "심사테스트둘"
+        ],
+        "phone": "010-2245-9715",
+        "memo": "심사 자동 확인용 예약입니다(테스트 r1ch)",
+        "runTag": "r1ch",
+        "created": 0,
+        "cleaned": 0,
+        "leftover": 0
+      },
+      "setup": null,
+      "trace": {
+        "CORE-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 기능이 아직 연결되지 않았습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "핵심 예약을 실제로 제출해 결과와 저장 여부를 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 화면에 연결 설정 필요 문구가 보여 실제 예약이 안 되는지 확인해야 합니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 화면에 연결 설정 오류가 있어 실제 예약 완료 여부를 확인해야 한다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "필수 입력을 채웠지만 아직 제출 결과를 확인 못 함."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "제출했지만 연결 설정 오류로 예약이 생성되지 않음"
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 완료 메시지나 저장 결과가 없어 추가 확인이 필요함"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "앱이 아직 연결 설정이 안 되어 있어 실제 예약 결과를 만들 수 없습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "fail",
+              "review": {
+                "agree": false,
+                "why": "The fail verdict is not justified because no booking flow was actually attempted, so the observation only shows a warning message on the page rather than proving that a reservation cannot be completed end-to-end."
+              }
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "예약을 제출했지만 사이트 연결 설정이 안 되어 결과가 만들어지지 않았습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "CORE-1#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 칸을 모두 채워 실제 제출 결과를 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 칸을 채우고 실제 제출까지 해봐야 합니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "필수 정보를 채우고 실제 제출해 실패 여부를 다시 확인합니다."
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "휴대폰 번호를 채우고 실제 제출 결과를 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 입력 후 제출 결과를 확인한다"
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "제출 후 설정 미연결 안내가 보여 결과가 만들어지지 않았습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 6,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "예약을 제출했지만 사이트 연결 설정이 안 되어 결과가 만들어지지 않았습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록이 10:00~19:00까지 30분 단위로 보인다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "날짜를 고른 예약 화면에서 10:00부터 19:00까지 30분 단위 시간이 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A1#clock": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록에 10:00부터 19:00까지 30분 단위 버튼이 보인다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "날짜를 고른 예약 화면에서 10:00부터 19:00까지 30분 단위 시간이 실제로 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "이름/휴대폰 없이 제출해 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "휴대폰 번호를 비우고 예약을 시도해 확인한다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약은 입력됐지만 연결 설정 오류가 보여 검증 불가입니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "이름만 넣고 번호를 비운 뒤 예약했지만 연결 설정 안내만 보입니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "필수 입력값 없이 예약 시도 후 안내 메시지를 확인하겠습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "이름이나 휴대폰 번호 문제를 알려주지 않았고 예약 기능 자체가 설정되지 않아 결과를 얻을 수 없습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "fail",
+              "review": {
+                "agree": false,
+                "why": "The evidence only shows a site-configuration warning after clicking and does not prove the required validation outcome for missing phone/name after a completed date/time selection, so the claimed fail is not justified."
+              }
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "예약을 해도 필수 입력 오류 안내가 아니라 사이트 설정 안내만 보여서, 이름이나 휴대폰 번호가 잘못됐을 때 무엇이 잘못됐는지 알려 주지 않습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "fail",
+              "review": {
+                "agree": false,
+                "why": "The fail verdict is not justified because the evidence does not show the prerequisite date/time selection was actually completed nor that missing name/phone validation was evaluated instead of a separate site-configuration warning."
+              }
+            }
+          ]
+        },
+        "A4": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약이 저장되지 않는 상태라 완료 화면을 만들 수 없는지 제출해본다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "휴대폰 번호를 입력하고 예약을 눌러 결과를 확인합니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약하려 했지만 사이트 연결 설정 오류가 보여 완료 화면을 확인 못함."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약은 시도했지만 연결 설정 문구만 보이고 완료 화면이 안 나와서 확인 불가입니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 버튼을 눌러 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 완료 화면이 안 나와서 확인이 필요함"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 6,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "예약을 완료해도 완료 화면이 나오지 않고 예약 내용을 볼 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A4#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "화면에 연결 미설정 안내가 있어도 실제 제출까지 해봐야 함"
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 입력 후 실제로 제출해 완료 화면이 나오는지 확인합니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "설정 메시지가 보여 제출 결과를 확인해야 함"
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "연결 설정 경고가 보여 제출 전 필수값을 채우고 실제로 완료되는지 확인해야 합니다."
+            },
+            {
+              "step": 5,
+              "tier": "strong",
+              "type": "click",
+              "thought": "제출해서 실제 완료 화면 여부를 확인합니다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "제출 후 설정 미완료 메시지만 보이고 완료 화면이 보이지 않습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 6,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "예약을 해도 완료 화면이 나오지 않고 예약 내용도 보이지 않습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "SETUP-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 기능이 연결 설정 미완료라 생성 여부를 확인할 수 없음"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "예약을 시도할 수는 있지만 화면에 연결 설정 미완료가 떠서 실제 예약이 생성되지 않습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "CORE-1#setup-repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "실제 제출까지 해 보고 연결 미설정으로 결과가 안 만들어지는지 확인합니다."
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "설정 미완료 문구가 보여 실제 생성 전 실패로 판단 가능"
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 입력과 제출을 실제로 해보고 결과를 확인해야 합니다."
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "필수 정보를 채워 실제 예약 제출을 시도해 보겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "휴대폰 번호를 채우고 실제 제출 결과를 확인합니다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 입력을 채운 상태에서 실제 제출을 해봐야 함"
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "제출 후 연결 미설정 안내가 보여 실제 결과가 만들어지지 않았습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "예약 화면에 연결 설정 미완료가 떠 있어 실제로 예약 결과를 만들 수 없습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "fail",
+              "review": {
+                "agree": false,
+                "why": "관찰에는 안내 문구만 보일 뿐 테스터가 날짜·시간·이름·휴대폰 번호를 실제로 입력하고 예약 시도를 완료했거나 예약이 생성되지 않음을 확인한 증거가 없어, 핵심 기능 실패가 입증되지 않았습니다."
+              }
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "필수 정보를 넣고 예약했지만 연결 설정 미완료 안내만 보이고 실제 예약이 만들어지지 않았습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A8": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "가격이 원 단위로 표시된다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "가격이 원 단위 형식으로 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A9": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "모바일 화면에서 예약 기능을 실제로 시도해 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 버튼을 눌러 결과를 확인한다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "휴대폰 번호를 채우고 예약을 시도한 뒤 결과를 확인하겠다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "작은 화면에서 예약 흐름을 진행해 보니 연결 설정 안내가 떠서 실제 예약이 안 됩니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "예약을 누른 뒤 사이트 연결 설정이 필요하다는 안내가 떠서 예약이 실제로 완료되지 않았습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A10": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "영어가 보이는지 화면을 확인했다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "화면에 영어 문구가 있어 모든 글이 한국어라는 조건을 만족하지 않습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified",
+              "finalReasonCode": "evidence_missing"
+            }
+          ]
+        }
+      },
+      "setupAttempt": {
+        "status": "fail",
+        "reason": "예약을 시도할 수는 있지만 화면에 연결 설정 미완료가 떠서 실제 예약이 생성되지 않습니다.",
+        "steps": 1,
+        "actions": [],
+        "promoted": true
+      },
+      "phasesTail": [
+        "+156.3s ac A7 → not_verified(precondition_blocked_by_defect) setup",
+        "+159.2s ac A8 → pass steps=1",
+        "+165.0s probe A9 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+167.6s ac A9 → fail steps=4",
+        "+170.4s ac A10 → not_verified(evidence_missing) steps=1",
+        "+170.7s single-file-fix skipped"
+      ],
+      "phases": [
+        "+38.7s probe CORE-1 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+57.7s probe CORE-1 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+61.3s ac CORE-1 → fail steps=7",
+        "+78.2s ac A1 → pass steps=1",
+        "+86.5s probe A2 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+98.7s ac A2 → not_verified(judge_disagreed) steps=5",
+        "+112.3s probe A4 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+129.2s probe A4 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+132.8s ac A4 → fail steps=6",
+        "+135.8s setup:run → fail created=false",
+        "+152.4s probe CORE-1 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+156.3s setup:fail-repro CORE-1 → fail",
+        "+156.3s ac A3 → not_verified(precondition_blocked_by_defect) setup",
+        "+156.3s ac A5 → not_verified(precondition_blocked_by_defect) setup",
+        "+156.3s ac A6 → not_verified(precondition_blocked_by_defect) setup",
+        "+156.3s ac A7 → not_verified(precondition_blocked_by_defect) setup",
+        "+159.2s ac A8 → pass steps=1",
+        "+165.0s probe A9 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+167.6s ac A9 → fail steps=4",
+        "+170.4s ac A10 → not_verified(evidence_missing) steps=1"
+      ],
+      "costUsd": {
+        "generation": 0,
+        "agent": 0.3337
+      },
+      "costUsdTotal": 0.3337,
+      "models": [
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-2026-03-05"
+      ],
+      "durationSec": 171,
+      "side": "broken",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7"
+      ],
+      "mustIdentified": [
+        "A4"
+      ]
+    },
+    {
+      "app": "gemini",
+      "url": "https://elaborate-crostata-d9b61c.netlify.app/",
+      "startedKst": "2026-10-21 02:37",
+      "expected": "broken_or_hold",
+      "acMode": "prereg",
+      "inference": {
+        "mode": "prereg"
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10,
+        "source": "prereg"
+      },
+      "decision": "Needs Fix",
+      "works": false,
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 기준 2개가 실제로 해 보니 되지 않았어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "아직 최종 예약 결과와 다른 화면에서의 공유 여부를 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-5697-6879\" 입력",
+            "\"10:30\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "다른 손님처럼 새 브라우저로 열기",
+            "다른 손님처럼 새 브라우저로 열기",
+            "\"10:30\" 누르기",
+            "시계를 2026-10-05T16:00:00.000Z로 맞추기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": true
+          }
+        },
+        {
+          "id": "A1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "10:00~19:00, 30분 단위로 시간 선택",
+          "then": "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다",
+          "status": "fail",
+          "reason": "시간 선택이 오후 7시까지가 아니라 오후 6시 30분까지만 보여서 조건과 다릅니다.",
+          "evidence": [
+            "2. 시간 선택 (오전 10:00 ~ 오후 19:00) 10:00 10:30 11:00 11:30 12:00 12:30 13:00 13:30 14:00 14:30 15:00 15:30 16:00 16:30 17:00 17:30 18:00 18:30",
+            "18:30"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A2",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+          "then": "예약되지 않고 무엇이 잘못됐는지 알려 준다",
+          "status": "pass",
+          "reason": "이름 없이 예약했을 때 예약되지 않았고 무엇이 잘못됐는지 안내가 보였습니다.",
+          "evidence": [
+            "alert: 성함을 입력해주세요."
+          ],
+          "actions": [
+            "\"예약 완료하기\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "Tab 키 누르기",
+            "\"10:00\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A4",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약하면 완료 화면에 예약 내용이 보인다",
+          "then": "완료 화면에 날짜·시간·이름이 보인다",
+          "status": "not_verified",
+          "reason": "시간 선택이 화면에서 확인되지 않아 완료 화면의 예약 내용 표시를 아직 검증하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-5697-6879\" 입력",
+            "\"예약 완료하기\" 누르기",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"예약 완료하기\" 누르기",
+            "\"10:30\" 누르기",
+            "\"10:30\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A3",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+          "then": "그 시간은 고를 수 없다(이중 예약이 되지 않는다)",
+          "status": "fail",
+          "reason": "다른 손님이 같은 시간으로 예약을 완료해서 이중 예약을 막지 못했습니다.",
+          "evidence": [
+            "예약 일시 2026-10-20 10:30 예약자 성함 심사테스트둘 휴대폰 번호 010-5697-6879",
+            "🎉 예약이 확정되었습니다!"
+          ],
+          "actions": [
+            "\"10:30\" 누르기",
+            "\"10:30\" 누르기",
+            "다른 손님처럼 새 브라우저로 열기",
+            "\"10:30\" 누르기",
+            "\"이름\"에 \"심사테스트둘\" 입력",
+            "\"10:30\" 누르기",
+            "\"10:30\" 누르기",
+            "\"남성 커트 15,000원\" 누르기",
+            "\"휴대폰 번호\"에 \"010-5697-6879\" 입력",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A5",
+          "priority": "must",
+          "confirmed": true,
+          "title": "새로고침해도 예약이 남는다",
+          "then": "예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)",
+          "status": "pass",
+          "reason": "새로고침한 뒤에도 같은 예약 정보가 화면에 그대로 남아 있습니다.",
+          "evidence": [
+            "예약 일시 2026-10-20 10:30 예약자 성함 심사테스트 휴대폰 번호 010-5697-6879 선택한 시술 남성 커트 총 결제 예정 금액 15,000원"
+          ],
+          "actions": [
+            "새로고침"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A6",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+          "then": "오늘 예약 목록이 시간순으로 보인다",
+          "status": "not_verified",
+          "reason": "정해진 단계 안에 이 기준을 확인할 화면까지 가지 못했어요",
+          "reasonCode": "not_reached",
+          "evidence": [],
+          "actions": [
+            "\"원장님 관리자\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A7",
+          "priority": "must",
+          "confirmed": true,
+          "title": "취소하면 그 시간을 다시 예약할 수 있다",
+          "then": "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A8",
+          "priority": "should",
+          "confirmed": true,
+          "title": "가격이 원 단위로 보인다",
+          "then": "커트 15,000원처럼 원 단위 형식으로 보인다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A9",
+          "priority": "should",
+          "confirmed": true,
+          "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+          "then": "글자·버튼이 잘리지 않고 예약까지 할 수 있다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A10",
+          "priority": "should",
+          "confirmed": true,
+          "title": "모든 글이 한국어다",
+          "then": "영어 등 다른 언어 문구가 없다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 7,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "손님 예약하기",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "10:00",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "10:30",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "11:00",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "11:30",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "12:00",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://elaborate-crostata-d9b61c.netlify.app/",
+            "label": "12:30",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 10:00~19:00, 30분 단위로 시간 선택"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 이미 예약된 시간은 다른 손님이 고를 수 없다"
+        }
+      ],
+      "agentPrompt": "웹 앱을 고치는 작업입니다. 아래 항목은 실제 브라우저에서 직접 해 보고 **실패한 것**입니다. 이것만 고치고 관련 없는 동작은 바꾸지 마세요. 고친 뒤 각 기준이 적힌 그대로 통과해야 합니다.\n\n앱 주소: https://elaborate-crostata-d9b61c.netlify.app/\n의도: 동네 1인 미용실 예약 웹사이트 — 손님이 날짜·시간(10:00~19:00, 30분 단위)을 고르고 이름·휴대폰 번호를 넣으면 예약되고, 사장님은 관리 화면에서 오늘 예약을 시간순으로 보고 취소한다\n\n1. [A1 · must] 10:00~19:00, 30분 단위로 시간 선택\n   기대: 오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다\n   실제 결과: 시간 선택이 오후 7시까지가 아니라 오후 6시 30분까지만 보여서 조건과 다릅니다.\n   근거: \"2. 시간 선택 (오전 10:00 ~ 오후 19:00) 10:00 10:30 11:00 11:30 12:00 12:30 13:00 13:30 14:00 14:30 15:00 15:30 16:00 16:30 17:00 17:30 18:00 18:30\" / \"18:30\"\n2. [A3 · must] 이미 예약된 시간은 다른 손님이 고를 수 없다\n   기대: 그 시간은 고를 수 없다(이중 예약이 되지 않는다)\n   재현 순서: \"10:30\" 누르기 → \"10:30\" 누르기 → 다른 손님처럼 새 브라우저로 열기 → \"10:30\" 누르기 → \"이름\"에 \"심사테스트둘\" 입력 → \"10:30\" 누르기 → \"10:30\" 누르기 → \"남성 커트 15,000원\" 누르기 → \"휴대폰 번호\"에 \"010-5697-6879\" 입력 → \"예약 완료하기\" 누르기\n   실제 결과: 다른 손님이 같은 시간으로 예약을 완료해서 이중 예약을 막지 못했습니다.\n   근거: \"예약 일시 2026-10-20 10:30 예약자 성함 심사테스트둘 휴대폰 번호 010-5697-6879\" / \"🎉 예약이 확정되었습니다!\"\n\n고친 뒤 Simsa가 같은 기준으로 다시 확인합니다.",
+      "llmCalls": 91,
+      "basis": "must_failed",
+      "builder": "netlify_static",
+      "defects": [
+        {
+          "acId": "A1",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "other"
+        },
+        {
+          "acId": "A3",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "not_shared_across_users"
+        }
+      ],
+      "testData": {
+        "names": [
+          "심사테스트",
+          "심사테스트둘"
+        ],
+        "phone": "010-5697-6879",
+        "memo": "심사 자동 확인용 예약입니다(테스트 r1ge)",
+        "runTag": "r1ge",
+        "created": 3,
+        "cleaned": 0,
+        "leftover": 0,
+        "cleanupSkipped": "browser_only"
+      },
+      "setup": {
+        "byAc": "CORE-1",
+        "date": "2026-10-20",
+        "time": "10:30",
+        "serverWrites": 0,
+        "recipeSteps": 6
+      },
+      "trace": {
+        "CORE-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약을 실제로 만들고 새로고침/다른 화면에서도 남는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "이름은 입력됐고, 이제 날짜·시간·휴대폰을 채워 예약을 완료해 보겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 완료 전 단계라 계속 진행해야 함"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "기본 예약 폼이 보이고 이름·휴대폰 입력은 완료됐으니 예약 제출을 시도하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시술 메뉴를 먼저 선택한 뒤 예약을 다시 시도하겠습니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이제 시술, 시간, 정보가 채워졌으니 예약을 완료해 본다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "new_session",
+              "thought": "예약은 만들어졌지만 서버 저장과 다른 방문자 확인이 아직 필요해요."
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "new_session",
+              "thought": "기존 예약 화면에서 새 고객으로 다시 시도합니다."
+            },
+            {
+              "step": 9,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "중복 선택까지 했으니 새 손님으로 다시 제출해서 실제 저장되는지 확인하겠습니다."
+            },
+            {
+              "step": 10,
+              "tier": "cheap",
+              "type": "set_clock",
+              "thought": "날짜가 어제라 오늘 예약이 되도록 고쳐야 함"
+            },
+            {
+              "step": 11,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시술 선택 후 예약을 완료하고 결과가 저장되는지 확인하겠습니다."
+            },
+            {
+              "step": 12,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약을 실제로 다시 제출해야 합니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 11,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "아직 예약 완료 뒤의 결과를 끝까지 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 12,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "아직 최종 예약 결과와 다른 화면에서의 공유 여부를 확인하지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록이 10:00~18:30까지만 보여서 19:00이 없다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "시간 선택이 오후 7시까지가 아니라 오후 6시 30분까지만 보여서 조건과 다릅니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A1#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "날짜를 고른 상태에서 시간 목록 끝이 18:30인지 다시 확인됨"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "시간 선택이 오후 7시까지가 아니라 오후 6시 30분까지만 보여 조건과 다릅니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름/휴대폰 없이 예약을 시도해 검증하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "필수 입력을 비우고 예약 시도해 보겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 선택부터 맞춘 뒤 이름 누락 검증"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 휴대폰이 비어 있는 상태를 제출해 오류가 나는지 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "press",
+              "thought": "이름과 휴대폰 번호 없이 제출해 보겠다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "click",
+              "thought": "시간을 먼저 고른 뒤 빈 이름/전화로 제출해 오류 안내를 확인한다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 휴대폰 번호가 비어 있으면 예약이 안 되는지 확인하겠습니다."
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름 없이 예약 시도해 오류를 확인하겠다."
+            },
+            {
+              "step": 9,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "이름 없이 제출 시 오류 안내가 보였으므로 기준 충족으로 판정"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 9,
+              "tier": "strong",
+              "verdict": "pass",
+              "reason": "이름 없이 예약했을 때 예약되지 않았고 무엇이 잘못됐는지 안내가 보였습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A2#clock": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름 없이 예약 시도 후 오류를 확인하겠다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름·휴대폰 없이 예약 시도해 오류를 확인한다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "click",
+              "thought": "시술과 시간을 먼저 선택해 이름/전화 오류를 확인한다"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 전화번호를 비워서 예약 시도하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 휴대폰 번호를 비운 채 예약하면 검증 메시지가 나오는지 확인하겠습니다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "click",
+              "thought": "시간을 먼저 선택해 이름 누락 검증을 진행한다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 휴대폰 없이 제출해 본다."
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 전화번호 없이 예약하면 경고가 나와야 합니다."
+            },
+            {
+              "step": 9,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "이름 검증은 확인됐고 전화번호 형식 오류도 확인해야 함"
+            },
+            {
+              "step": 10,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름만 넣고 전화번호 없이 제출해 보겠다."
+            },
+            {
+              "step": 11,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "이름만 있고 휴대폰이 비어 있어야 한다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 11,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "이름 없이도, 휴대폰 번호가 비었거나 형식이 맞지 않아도 예약되지 않았고 무엇이 잘못됐는지 안내가 나왔습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A4": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 완료 후 결과 화면을 확인해야 합니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "이름만 입력된 상태라 나머지 정보를 채우고 예약 완료 후 결과를 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 정보를 입력한 뒤 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시술을 먼저 선택한 뒤 다시 예약 결과를 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 완료 후 결과를 확인해야 합니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간을 아직 선택하지 않아 완료 화면을 못 봤다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간을 다시 고르고 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 8,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "시간 선택이 반영되지 않아 제출 결과를 확인해야 함"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 8,
+              "tier": "strong",
+              "verdict": "not_verified",
+              "reason": "시간 선택이 화면에서 확인되지 않아 완료 화면의 예약 내용 표시를 아직 검증하지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A3": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "같은 시간 버튼이 아직 보이므로 먼저 예약을 시도해 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "10:30이 아직 선택 가능해 보여서 먼저 예약을 시도해 본다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "new_session",
+              "thought": "새 손님으로 같은 시간 예약이 실제로 되는지 끝까지 제출해 본다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "같은 시간 선택이 막히는지 확인하려고 바로 10:30을 시도한다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "같은 시간 10:30이 아직 선택 가능해 보여서 새 손님으로 예약을 시도해 확인한다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "같은 시간 10:30을 선택해 예약이 막히는지 확인하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "같은 시간 버튼이 여전히 눌려 예약이 막히는지 확인해야 합니다."
+            },
+            {
+              "step": 8,
+              "tier": "strong",
+              "type": "click",
+              "thought": "같은 시간 예약이 실제로 되는지 제출까지 확인한다."
+            },
+            {
+              "step": 9,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "같은 시간 10:30이 막히는지 확인하려면 먼저 휴대폰 번호를 넣고 예약을 제출해 본다."
+            },
+            {
+              "step": 10,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "같은 시간 선택이 막히는지 예약 완료로 확인하겠습니다."
+            },
+            {
+              "step": 11,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "같은 시간 예약이 또 확정돼서 중복 예약이 됨"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 11,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "다른 손님이 같은 시간으로 예약을 완료해서 이중 예약을 막지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A3#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "새 브라우저에서 같은 시간으로 실제 예약을 끝까지 시도합니다."
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "같은 날짜·시간으로 두 번째 예약을 끝까지 시도해 수락되는지 확인합니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "click",
+              "thought": "같은 날짜/시간으로 실제 제출해 이중 예약 허용 여부를 확인하겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "click",
+              "thought": "필수 시술을 선택하고 같은 시간으로 제출해 이중 예약 여부를 확인합니다."
+            },
+            {
+              "step": 5,
+              "tier": "strong",
+              "type": "click",
+              "thought": "같은 시간으로 실제 제출해 결과를 확인해야 함"
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "같은 시간으로 두 번째 예약이 실제로 확정되어 이중 예약입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 6,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "다른 손님이 같은 날짜와 시간으로 예약을 완료해서 이중 예약을 막지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A5": {
+          "startedWith": "restored_setup",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "새로고침 뒤에도 예약 화면이 그대로 보인다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "새로고침 후 예약 확정 화면이 그대로 보여서 유지됨을 확인했다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "새로고침한 뒤에도 같은 예약 정보가 화면에 그대로 남아 있습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A5#clock": {
+          "startedWith": "restored_setup",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 확인 화면이 새로고침 안내와 함께 그대로 보입니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "새로고침 후에도 예약 확정 화면이 그대로 남아 있어 유지됨을 확인했다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "새로고침한 뒤에도 같은 예약 정보가 화면에 그대로 남아 있습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "SETUP-2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "오늘 남은 가장 이른 시간으로 예약을 진행한다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "남은 가장 이른 시간에 예약을 만들기 위해 이름과 전화번호를 입력하고 10:00을 선택해 완료하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "남은 가장 이른 시간대인 10:00으로 예약을 완료해야 함."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "남은 가장 이른 시간 예약을 완료해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "입력은 끝났고 이제 예약 완료를 눌러 결과를 확인해야 합니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시술 메뉴를 하나 선택한 뒤 다시 예약 완료를 시도하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시술과 정보는 입력됐고 시간만 선택 후 제출하면 됩니다."
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "필수 선택은 이미 되어 있어 예약만 제출하면 됨."
+            },
+            {
+              "step": 9,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 완료 화면에서 날짜·시간·이름이 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 9,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "예약 완료 화면에 날짜, 시간, 이름이 모두 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A6": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "관리 화면을 열어 오늘 예약 목록을 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "오늘 날짜로 조회했는데 목록이 비어 있어 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "관리 화면에서 오늘 예약이 보여야 하는데 비어 있어서 확인되지 않았습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "fail",
+              "review": {
+                "agree": false,
+                "why": "관리 화면이 기본 조회일 2026-10-20에서 '해당 날짜에 등록된 예약이 없습니다.'라고만 보였고, 실제 예약이 있는 2026-10-21로 조회해 보지 않아 오늘 예약 목록이 시간순으로 보이는지에 대한 실패를 입증하지 못했습니다."
+              }
+            }
+          ]
+        }
+      },
+      "setupAttempt": null,
+      "phasesTail": [
+        "+209.9s ac A5 clock-variant → pass",
+        "+209.9s ac A5 → pass steps=2",
+        "+219.6s probe SETUP-2 #1 click=\"예약 완료하기\" writes=0 local=false → no_change",
+        "+225.6s probe SETUP-2 #2 click=\"예약 완료하기\" writes=0 local=true → confirmation",
+        "+227.1s setup:today → pass created=true date=2026-10-21",
+        "+2686.9s ac A6 → not_verified(not_reached) steps=2"
+      ],
+      "phases": [
+        "+47.8s probe CORE-1 #1 click=\"예약 완료하기\" writes=0 local=false → no_change",
+        "+52.0s probe CORE-1 #2 click=\"예약 완료하기\" writes=0 local=true → confirmation",
+        "+64.0s setup:from CORE-1 date=2026-10-20 time=10:30 writes=0",
+        "+64.0s ac CORE-1 → not_verified steps=12",
+        "+76.3s ac A1 → fail steps=1",
+        "+122.4s probe A2 #1 click=\"예약 완료하기\" writes=0 local=false → no_change",
+        "+128.7s ac A2 → pass steps=9",
+        "+134.7s probe A4 #1 click=\"예약 완료하기\" writes=0 local=false → no_change",
+        "+138.4s probe A4 #2 click=\"예약 완료하기\" writes=0 local=false → no_change",
+        "+144.4s ac A4 → not_verified steps=8",
+        "+166.8s probe A3 #1 click=\"예약 완료하기\" writes=0 local=true → confirmation",
+        "+185.0s probe A3 #1 click=\"예약 완료하기\" writes=0 local=true → confirmation",
+        "+188.5s ac A3 → fail steps=11",
+        "+209.9s ac A5 → pass steps=2",
+        "+219.6s probe SETUP-2 #1 click=\"예약 완료하기\" writes=0 local=false → no_change",
+        "+225.6s probe SETUP-2 #2 click=\"예약 완료하기\" writes=0 local=true → confirmation",
+        "+227.1s setup:today → pass created=true date=2026-10-21",
+        "+2686.9s ac A6 → not_verified(not_reached) steps=2"
+      ],
+      "costUsd": {
+        "generation": 0,
+        "agent": 0.362
+      },
+      "costUsdTotal": 0.362,
+      "models": [
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-2026-03-05"
+      ],
+      "durationSec": 34389,
+      "side": "broken",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A3",
+        "A6"
+      ],
+      "mustIdentified": [
+        "A3"
+      ]
+    },
+    {
+      "app": "v0",
+      "url": "https://1-pi-three-qk0pjsjigw.vercel.app/",
+      "startedKst": "2026-10-21 02:39",
+      "expected": "broken_or_hold",
+      "acMode": "prereg",
+      "inference": {
+        "mode": "prereg"
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10,
+        "source": "prereg"
+      },
+      "decision": "Needs Fix",
+      "works": false,
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "기준은 통과했거나 확인 전이지만, 열리지 않는 화면이나 오류가 나는 버튼이 있어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "시간 버튼을 눌러도 예약이 안 되고 오류가 떠서 핵심 예약 완료를 끝까지 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"010-0000-0000\"에 \"010-3804-2628\" 입력",
+            "\"10월 21일 (수) 시간 예약하기\" 누르기",
+            "\"19:00\" 누르기",
+            "\"19:00\" 누르기",
+            "\"커트 깔끔한 기본 커트 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "10:00~19:00, 30분 단위로 시간 선택",
+          "then": "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다",
+          "status": "pass",
+          "reason": "날짜를 고른 화면에서 10시부터 19시까지 30분 간격의 시간을 실제로 볼 수 있습니다.",
+          "evidence": [
+            "10:00–19:00"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A2",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+          "then": "예약되지 않고 무엇이 잘못됐는지 알려 준다",
+          "status": "not_verified",
+          "reason": "확인 도중 오류가 나서 끝까지 보지 못했어요",
+          "reasonCode": "agent_error",
+          "evidence": [],
+          "actions": [
+            "\"휴대폰 번호 (010-0000-0000)\"에 \"010-3804-2628\" 입력",
+            "\"10월 21일 (수) 시간 예약하기\" 누르기",
+            "Tab 키 누르기",
+            "\"19:00\" 누르기",
+            "\"10월 21일 (수) 19:00 예약하기\" 누르기",
+            "\"10월 21일 (수) 19:00 예약하기\" 누르기",
+            "\"10월 21일 (수) 19:00 예약하기\" 누르기",
+            "\"커트 깔끔한 기본 커트 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A4",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약하면 완료 화면에 예약 내용이 보인다",
+          "then": "완료 화면에 날짜·시간·이름이 보인다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A3",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+          "then": "그 시간은 고를 수 없다(이중 예약이 되지 않는다)",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A5",
+          "priority": "must",
+          "confirmed": true,
+          "title": "새로고침해도 예약이 남는다",
+          "then": "예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A6",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+          "then": "오늘 예약 목록이 시간순으로 보인다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A7",
+          "priority": "must",
+          "confirmed": true,
+          "title": "취소하면 그 시간을 다시 예약할 수 있다",
+          "then": "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A8",
+          "priority": "should",
+          "confirmed": true,
+          "title": "가격이 원 단위로 보인다",
+          "then": "커트 15,000원처럼 원 단위 형식으로 보인다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A9",
+          "priority": "should",
+          "confirmed": true,
+          "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+          "then": "글자·버튼이 잘리지 않고 예약까지 할 수 있다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        },
+        {
+          "id": "A10",
+          "priority": "should",
+          "confirmed": true,
+          "title": "모든 글이 한국어다",
+          "then": "영어 등 다른 언어 문구가 없다",
+          "status": "not_verified",
+          "reason": "시간·횟수 한도 안에 확인을 끝내지 못했어요",
+          "reasonCode": "budget",
+          "evidence": []
+        }
+      ],
+      "sweep": {
+        "screensChecked": 2,
+        "screensBroken": 1,
+        "buttonsChecked": 0,
+        "buttonsNoReaction": 0,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "screen",
+            "where": "https://1-pi-three-qk0pjsjigw.vercel.app/",
+            "problem": "crash",
+            "detail": "1 uncaught error(s)"
+          }
+        ]
+      },
+      "findings": [
+        {
+          "code": "broken_route",
+          "what": "열리지 않거나 오류가 나는 화면이 있어요 (https://1-pi-three-qk0pjsjigw.vercel.app/)"
+        }
+      ],
+      "agentPrompt": "웹 앱을 고치는 작업입니다. 아래 항목은 실제 브라우저에서 직접 해 보고 **실패한 것**입니다. 이것만 고치고 관련 없는 동작은 바꾸지 마세요. 고친 뒤 각 기준이 적힌 그대로 통과해야 합니다.\n\n앱 주소: https://1-pi-three-qk0pjsjigw.vercel.app/\n의도: 동네 1인 미용실 예약 웹사이트 — 손님이 날짜·시간(10:00~19:00, 30분 단위)을 고르고 이름·휴대폰 번호를 넣으면 예약되고, 사장님은 관리 화면에서 오늘 예약을 시간순으로 보고 취소한다\n\n\n모든 화면을 돌아보다 발견한 고장 난 화면·버튼:\n- https://1-pi-three-qk0pjsjigw.vercel.app/: crash (1 uncaught error(s))\n\n고친 뒤 Simsa가 같은 기준으로 다시 확인합니다.",
+      "llmCalls": 27,
+      "basis": "sweep_broken",
+      "builder": "v0",
+      "defects": [
+        {
+          "acId": "A2",
+          "priority": "must",
+          "status": "not_verified",
+          "defectClass": "other"
+        }
+      ],
+      "testData": {
+        "names": [
+          "심사테스트",
+          "심사테스트둘"
+        ],
+        "phone": "010-3804-2628",
+        "memo": "심사 자동 확인용 예약입니다(테스트 r1v0)",
+        "runTag": "r1v0",
+        "created": 0,
+        "cleaned": 0,
+        "leftover": 0
+      },
+      "setup": null,
+      "trace": {
+        "CORE-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "필수 입력과 예약 시도를 해야 함"
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "전화번호를 채우고 예약을 제출해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약을 제출해 결과와 저장 여부를 확인한다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간 선택이 안 돼서 먼저 해결해야 합니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간 선택을 다시 확인하고 예약을 마저 시도합니다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "click",
+              "thought": "시술 선택이 빠져 있어 제출 전 보완"
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "시간 선택이 안 되어 제출 전 오류를 해결해야 함"
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 선택은 됐지만 제출 전 오류가 떠서 아직 예약 완료를 못 봤습니다."
+            },
+            {
+              "step": 9,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 선택이 안 되고 오류가 떠서 예약 완료를 확인 못함"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 7,
+              "tier": "strong",
+              "verdict": "not_verified",
+              "reason": "시간 버튼을 눌렀지만 선택되었다는 화면 변화가 없어 아직 예약을 끝까지 만들지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "예약 시간을 고르지 않은 상태에서 경고가 떠서 핵심 예약 완료를 아직 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 9,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "시간 버튼을 눌러도 예약이 안 되고 오류가 떠서 핵심 예약 완료를 끝까지 확인하지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록이 10:00부터 19:00까지 30분 단위로 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "날짜를 고른 화면에서 10시부터 19시까지 30분 간격의 시간을 실제로 볼 수 있습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A1#clock": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록이 보이지만 대부분 비활성화되어 있어 검증 필요"
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록에 10:00~19:00이 보이지만 일부가 비활성화라 아직 기준 충족 여부를 더 확인해야 합니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록이 보이지만 10:00~19:00이 30분 단위로 모두 고를 수 있는지 아직 끝까지 확인되지 않았어요."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "시간 목록은 보였지만 10:00~19:00 전체를 실제로 고를 수 있다고 확인하지 못했다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "시간 목록이 보이지만 10:00부터 19:00까지 30분 단위로 모두 선택 가능한지까지는 확인하지 못했어요.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "시간 목록은 보였지만 10:00~19:00이 전부 30분 단위로 실제로 선택 가능한지 끝까지 검증하지 못했어요.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "이름 없이 제출해서 오류 메시지를 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름 없이 제출해 오류 메시지를 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "press",
+              "thought": "이름을 비운 채 예약을 시도해야 합니다."
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "click",
+              "thought": "시간/시술을 먼저 골라야 검증 가능"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름이 비어 있어 예약 불가 여부를 확인하려고 제출해야 함"
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름 없이 예약을 눌러 검증하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "필수 입력 누락 상태에서 제출해도 오류 안내가 보이지 않습니다."
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름을 비운 채 예약 시도해 확인하겠습니다."
+            },
+            {
+              "step": 9,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "이름 없이 제출해도 안내가 없어 결과를 확인 못함"
+            },
+            {
+              "step": 10,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름이 비어 있으니 먼저 시술을 고르고 예약을 눌러 확인한다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 7,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "이름을 비운 채 예약 버튼을 눌렀지만 무엇이 잘못됐는지 알려 주는 안내가 보이지 않아 기준을 충족하지 못했습니다.",
+              "outcome": "nudged_input_rejected"
+            },
+            {
+              "step": 9,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "이름을 비우고 예약 버튼을 눌렀는데 무엇이 잘못됐는지 알려 주는 안내가 보이지 않아 기준을 만족하지 못했습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "fail",
+              "review": {
+                "agree": false,
+                "why": "The fail verdict is not justified because the tester never completed all required booking steps—no service was selected—and the evidence does not prove whether reservation was blocked or whether a validation message for missing name should "
+              }
+            }
+          ]
+        }
+      },
+      "setupAttempt": null,
+      "phasesTail": [
+        "+36.8s ac A1 → pass steps=1",
+        "+41.9s probe A2 #1 click=\"10월 21일 (수) 시간 예약하기\" writes=0 local=false → no_change",
+        "+48.1s probe A2 #2 click=\"10월 21일 (수) 19:00 예약하기\" writes=0 local=false → no_change",
+        "+50.0s probe A2 #3 click=\"10월 21일 (수) 19:00 예약하기\" writes=0 local=false → no_change",
+        "+54.0s probe A2 #4 click=\"10월 21일 (수) 19:00 예약하기\" writes=0 local=false → no_change",
+        "+2513.2s ac A2 → not_verified(agent_error) steps=10"
+      ],
+      "phases": [
+        "+12.3s probe CORE-1 #1 click=\"10월 21일 (수) 시간 예약하기\" writes=0 local=false → no_change",
+        "+24.2s ac CORE-1 → not_verified steps=9",
+        "+36.8s ac A1 → pass steps=1",
+        "+41.9s probe A2 #1 click=\"10월 21일 (수) 시간 예약하기\" writes=0 local=false → no_change",
+        "+48.1s probe A2 #2 click=\"10월 21일 (수) 19:00 예약하기\" writes=0 local=false → no_change",
+        "+50.0s probe A2 #3 click=\"10월 21일 (수) 19:00 예약하기\" writes=0 local=false → no_change",
+        "+54.0s probe A2 #4 click=\"10월 21일 (수) 19:00 예약하기\" writes=0 local=false → no_change",
+        "+2513.2s ac A2 → not_verified(agent_error) steps=10"
+      ],
+      "costUsd": {
+        "generation": 0,
+        "agent": 0.1036
+      },
+      "costUsdTotal": 0.1036,
+      "models": [
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-2026-03-05"
+      ],
+      "durationSec": 34216,
+      "side": "broken",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A6",
+        "A7"
+      ],
+      "mustIdentified": []
+    },
+    {
+      "app": "bolt",
+      "url": "https://hair-salon-booking-w-8vq8.bolt.host/",
+      "startedKst": "2026-10-21 12:10",
+      "expected": "broken_or_hold",
+      "acMode": "prereg",
+      "inference": {
+        "mode": "prereg"
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10,
+        "source": "prereg"
+      },
+      "decision": "Needs Fix",
+      "works": false,
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 기준 1개가 실제로 해 보니 되지 않았어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "예약을 아직 끝내지 못해서 실제로 저장되고 다른 화면에서도 보이는지 확인하지 못했어요.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "10:00~19:00, 30분 단위로 시간 선택",
+          "then": "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다",
+          "status": "fail",
+          "reason": "기기 시계를 한국 시간 새벽 0시 30분으로 옮겨 다시 해 보니: 날짜를 골라도 10:00부터 14:30까지는 선택할 수 없어서 10:00~19:00 전 구간을 30분 단위로 고를 수 없습니다.",
+          "evidence": [
+            "button \"10:00\" [disabled]"
+          ],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 21 수\" 누르기",
+            "시계를 한국 시간 00:30으로",
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 21 수\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A2",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+          "then": "예약되지 않고 무엇이 잘못됐는지 알려 준다",
+          "status": "not_verified",
+          "reason": "이름 입력칸과 예약 폼이 보이지만, 지금 화면에는 제출 버튼이나 입력칸이 없어 실제로 비워서 예약을 시도하고 결과를 확인할 수 없어요.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 21 수\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A4",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약하면 완료 화면에 예약 내용이 보인다",
+          "then": "완료 화면에 날짜·시간·이름이 보인다",
+          "status": "not_verified",
+          "reason": "예약 완료 화면이 아직 나오지 않아 날짜·시간·이름이 보이는지 확인하지 못했어요.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A3",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+          "then": "그 시간은 고를 수 없다(이중 예약이 되지 않는다)",
+          "status": "not_verified",
+          "reason": "이 기준의 전제(예: 예약 1건이 미리 있어야 함)를 이번 확인에서 만들지 못해 확인하지 않았어요 — 고장으로 치지 않아요",
+          "reasonCode": "precondition_not_met",
+          "evidence": []
+        },
+        {
+          "id": "A5",
+          "priority": "must",
+          "confirmed": true,
+          "title": "새로고침해도 예약이 남는다",
+          "then": "예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)",
+          "status": "not_verified",
+          "reason": "이 기준의 전제(예: 예약 1건이 미리 있어야 함)를 이번 확인에서 만들지 못해 확인하지 않았어요 — 고장으로 치지 않아요",
+          "reasonCode": "precondition_not_met",
+          "evidence": []
+        },
+        {
+          "id": "A6",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+          "then": "오늘 예약 목록이 시간순으로 보인다",
+          "status": "not_verified",
+          "reason": "이 기준의 전제(예: 예약 1건이 미리 있어야 함)를 이번 확인에서 만들지 못해 확인하지 않았어요 — 고장으로 치지 않아요",
+          "reasonCode": "precondition_not_met",
+          "evidence": []
+        },
+        {
+          "id": "A7",
+          "priority": "must",
+          "confirmed": true,
+          "title": "취소하면 그 시간을 다시 예약할 수 있다",
+          "then": "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다",
+          "status": "not_verified",
+          "reason": "이 기준의 전제(예: 예약 1건이 미리 있어야 함)를 이번 확인에서 만들지 못해 확인하지 않았어요 — 고장으로 치지 않아요",
+          "reasonCode": "precondition_not_met",
+          "evidence": []
+        },
+        {
+          "id": "A8",
+          "priority": "should",
+          "confirmed": true,
+          "title": "가격이 원 단위로 보인다",
+          "then": "커트 15,000원처럼 원 단위 형식으로 보인다",
+          "status": "pass",
+          "reason": "가격이 원 단위 형식으로 보입니다.",
+          "evidence": [
+            "15,000원~"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A9",
+          "priority": "should",
+          "confirmed": true,
+          "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+          "then": "글자·버튼이 잘리지 않고 예약까지 할 수 있다",
+          "status": "not_verified",
+          "reason": "모바일 폭에서도 입력과 예약 단계는 보였지만, 아직 예약 완료 화면이나 저장 결과를 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+            "\"10월 21 수\" 누르기",
+            "\"15:00\" 누르기",
+            "\"다음\" 누르기",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"홍길동\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-7093-7651\" 입력",
+            "\"휴대폰 번호\"에 \"010-7093-7651\" 입력",
+            "\"010-0000-0000\"에 \"010-7093-7651\" 입력",
+            "\"예약 완료하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A10",
+          "priority": "should",
+          "confirmed": true,
+          "title": "모든 글이 한국어다",
+          "then": "영어 등 다른 언어 문구가 없다",
+          "status": "fail",
+          "reason": "화면에 영어 문구가 보여서 모든 글이 한국어가 아니다.",
+          "evidence": [
+            "Made in Bolt"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 1,
+        "buttonsChecked": 0,
+        "buttonsNoReaction": 0,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 0,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "screen",
+            "where": "https://hair-salon-booking-w-8vq8.bolt.host/",
+            "problem": "blank"
+          }
+        ]
+      },
+      "findings": [
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 10:00~19:00, 30분 단위로 시간 선택"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 모든 글이 한국어다"
+        },
+        {
+          "code": "broken_route",
+          "what": "열리지 않거나 오류가 나는 화면이 있어요 (https://hair-salon-booking-w-8vq8.bolt.host/)"
+        }
+      ],
+      "agentPrompt": "웹 앱을 고치는 작업입니다. 아래 항목은 실제 브라우저에서 직접 해 보고 **실패한 것**입니다. 이것만 고치고 관련 없는 동작은 바꾸지 마세요. 고친 뒤 각 기준이 적힌 그대로 통과해야 합니다.\n\n앱 주소: https://hair-salon-booking-w-8vq8.bolt.host/\n의도: 동네 1인 미용실 예약 웹사이트 — 손님이 날짜·시간(10:00~19:00, 30분 단위)을 고르고 이름·휴대폰 번호를 넣으면 예약되고, 사장님은 관리 화면에서 오늘 예약을 시간순으로 보고 취소한다\n\n1. [A1 · must] 10:00~19:00, 30분 단위로 시간 선택\n   기대: 오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다\n   재현 순서: \"예약하기\" 누르기 → \"커트 기본 커트 + 스타일링 15,000원\" 누르기 → \"10월 21 수\" 누르기 → 시계를 한국 시간 00:30으로 → \"예약하기\" 누르기 → \"커트 기본 커트 + 스타일링 15,000원\" 누르기 → \"10월 21 수\" 누르기\n   실제 결과: 기기 시계를 한국 시간 새벽 0시 30분으로 옮겨 다시 해 보니: 날짜를 골라도 10:00부터 14:30까지는 선택할 수 없어서 10:00~19:00 전 구간을 30분 단위로 고를 수 없습니다.\n   근거: \"button \"10:00\" [disabled]\"\n2. [A10 · should] 모든 글이 한국어다\n   기대: 영어 등 다른 언어 문구가 없다\n   실제 결과: 화면에 영어 문구가 보여서 모든 글이 한국어가 아니다.\n   근거: \"Made in Bolt\"\n\n모든 화면을 돌아보다 발견한 고장 난 화면·버튼:\n- https://hair-salon-booking-w-8vq8.bolt.host/: blank\n\n고친 뒤 Simsa가 같은 기준으로 다시 확인합니다.",
+      "llmCalls": 61,
+      "basis": "must_failed",
+      "builder": "bolt",
+      "defects": [
+        {
+          "acId": "A1",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "other"
+        },
+        {
+          "acId": "A10",
+          "priority": "should",
+          "status": "fail",
+          "defectClass": "wrong_language"
+        }
+      ],
+      "testData": {
+        "names": [
+          "심사테스트",
+          "심사테스트둘"
+        ],
+        "phone": "010-7093-7651",
+        "memo": "심사 자동 확인용 예약입니다(테스트 r1bo)",
+        "runTag": "r1bo",
+        "created": 1,
+        "cleaned": 0,
+        "leftover": 1,
+        "cleanupSkipped": "not_confirmed"
+      },
+      "setup": {
+        "byAc": "A9",
+        "date": null,
+        "time": null,
+        "serverWrites": 1,
+        "recipeSteps": 12
+      },
+      "trace": {
+        "CORE-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 흐름을 시작한다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "메뉴 선택 화면만 보여서 예약 완료까지는 못 갔습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "메뉴만 보이고 예약 입력/제출 단계가 아직 안 나왔어요."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "현재는 날짜 선택 화면만 보이며 예약 완료 결과는 아직 확인 못 함"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "날짜 선택 화면만 보이고 예약 완료 결과는 아직 없음"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "지금은 시술 메뉴만 보이고 예약 입력/제출 결과를 아직 만들지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "아직 예약을 끝내지 못해서 결과가 만들어졌는지 확인할 수 없어요.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "예약을 아직 끝내지 못해서 실제로 저장되고 다른 화면에서도 보이는지 확인하지 못했어요.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간 목록을 열어 10:00~19:00, 30분 단위인지 확인한다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간 선택 목록을 먼저 열어보겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간 목록을 보고 10:00~19:00, 30분 단위인지 확인하려고 날짜를 먼저 선택해야 함"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록에 10:00~19:00이 30분 단위로 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "날짜를 고른 뒤 시간 목록에서 오전 10시부터 오후 7시까지 30분 단위 시간이 보였습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A1#clock": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간 목록을 열어보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간 목록이 아직 안 보여서 다음 단계로 진행한다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 선택 목록을 직접 확인한다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록에 10:00부터 19:00까지 30분 단위가 보입니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록에 10:00~19:00이 모두 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "날짜를 고른 뒤 시간 목록에서 오전 10시부터 오후 7시까지 30분 간격의 시간이 실제로 보였습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "pass",
+              "review": {
+                "agree": false,
+                "why": "The observation after choosing the date shows 10:00 through 19:00, but 10:00–14:30 are disabled, so it does not prove the user can actually select every 30-minute time from 10:00 to 19:00 as required."
+              }
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "날짜를 골라도 10:00부터 14:30까지는 선택할 수 없어서 10:00~19:00 전 구간을 30분 단위로 고를 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 폼을 열어 이름 없이 제출해 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름/휴대폰 입력 폼이 아직 안 보여서 예약 여부를 바로 확인할 수 없다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "날짜/시간은 고를 수 있지만 아직 이름·휴대폰 검증은 못 봄"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름 입력칸을 찾아야 합니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 전이라 시간만 보이는 상태라 아직 검증 전입니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "이름 없이 예약이 막히는지 확인하려고 제출 화면까지 진행한다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 3,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "이름이나 휴대폰 번호를 비우거나 잘못 넣고 예약해 본 결과와 오류 안내를 아직 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "이름이나 휴대폰 번호를 비워서 예약했을 때의 결과를 아직 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "이름 입력칸과 예약 폼이 보이지만, 지금 화면에는 제출 버튼이나 입력칸이 없어 실제로 비워서 예약을 시도하고 결과를 확인할 수 없어요.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A4": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 화면을 열어 완료 화면에서 예약 내용이 보이는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시술 선택 화면이라 아직 예약 완료 화면이 아니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "현재는 예약 입력 화면의 첫 단계만 보여서 아직 완료 화면을 확인할 수 없습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 완료 화면이 아직 없어, 먼저 메뉴 선택부터 진행합니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "날짜 선택 화면까지만 보이고 완료 화면은 아직 못 봤어요."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "아직 완료 화면까지 진행하지 못해서 날짜·시간·이름이 보이는지 확인할 수 없어요.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "아직 날짜·시간·이름·휴대폰 번호를 넣고 예약한 뒤 완료 화면을 보지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "예약 완료 화면이 아직 나오지 않아 날짜·시간·이름이 보이는지 확인하지 못했어요.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "SETUP-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 폼을 열어 오늘 가장 이른 남은 시간으로 예약해 본다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시술을 먼저 선택해야 예약 단계가 보일 것 같습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "오늘 날짜 선택 후 예약 정보를 입력해야 합니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "오늘 남은 가장 이른 시간 선택을 계속 진행한다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 완료 화면이 보이지 않고 시간 선택 화면에 머물러 있습니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "오늘 남은 시간대 선택 후 예약 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "남은 가장 이른 시간 예약을 먼저 진행한다."
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "오늘 남은 가장 이른 시간 예약이 보이지 않아 바로 제출은 못 했고, 날짜 선택 후 가능한 가장 이른 시간과 정보 입력이 필요합니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "예약 완료 화면이 아직 안 보여서 기준을 끝까지 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "필수 입력과 완료 화면까지 진행하지 못해서 아직 확인할 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A8": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "가격이 원 단위로 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "가격이 원 단위 형식으로 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A9": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 폭에서 예약 흐름이 가능한지 먼저 예약 폼을 열어보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 폭에서 예약 화면이 열렸고 다음 단계로 진행합니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 폭에서 예약 흐름이 잘리는지 확인하려면 날짜 선택 후 다음 단계로 진행해야 해요."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "모바일 폭에서 예약 흐름이 진행 중이지만 아직 완료되지 않음"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 폭에서 예약 흐름이 진행되는지 더 확인해야 함"
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 정보 입력 화면이 보이지만 아직 완료 여부는 확인 전입니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "모바일 폭에서 다음 단계로 예약 입력 폼이 보이고, 아직 예약 완료 전입니다."
+            },
+            {
+              "step": 8,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "이름/번호 입력란은 라벨이 아니라 placeholder로 보입니다. 예약을 끝까지 시도합니다."
+            },
+            {
+              "step": 9,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "모바일 화면에서 예약 입력 단계가 보이고, 이름 칸에 입력은 되었지만 휴대폰 번호 확인까지는 아직 안 했습니다."
+            },
+            {
+              "step": 10,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 입력 화면이 좁은 모바일 폭에서 일부 라벨이 이상하지만 입력은 가능해 보입니다. 남은 필드와 제출 후 결과를 확인하겠습니다."
+            },
+            {
+              "step": 11,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "휴대폰 번호를 입력해 제출 가능한지 끝까지 확인한다."
+            },
+            {
+              "step": 12,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 입력까지는 됐고 완료만 남았습니다."
+            },
+            {
+              "step": 13,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "모바일 화면에서 예약 흐름이 진행되고 있지만 완료 결과는 아직 못 봤어요."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 13,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "모바일 폭에서도 입력과 예약 단계는 보였지만, 아직 예약 완료 화면이나 저장 결과를 확인하지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A10": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "화면에 영어 버튼이 보여 언어를 확인해야 함"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "화면에 영어 문구가 보여서 모든 글이 한국어가 아니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "CLEANUP-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": false,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "관리 화면으로 들어가 예약을 찾아 취소해야 합니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "관리 화면에서 심사테스트 예약이 여러 건 보여서 모두 취소해야 한다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "010-7093-7651 예약이 여러 건 보이니 취소를 시도해 남아있는지 확인하겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "남은 심사테스트 예약이 여러 개 보여서, 하나씩 취소한 뒤 남아있는지 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "관리 화면에 010-7093-7651 예약이 여러 건 보여서 아직 삭제 전입니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "관리 화면에서 해당 번호 예약이 아직 여러 건 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 6,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "번호 010-7093-7651인 예약이 관리 화면에 아직 남아 있어서 모두 취소되지 않았습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        }
+      },
+      "setupAttempt": {
+        "status": "not_verified",
+        "reason": "필수 입력과 완료 화면까지 진행하지 못해서 아직 확인할 수 없습니다.",
+        "steps": 8,
+        "actions": [
+          "\"예약하기\" 누르기",
+          "\"커트 기본 커트 + 스타일링 15,000원\" 누르기",
+          "\"10월 21 수\" 누르기",
+          "\"15:00\" 누르기",
+          "\"15:00\" 누르기",
+          "\"15:00\" 누르기"
+        ]
+      },
+      "phasesTail": [
+        "+179.9s single-file-fix skipped",
+        "+187.0s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+188.1s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+189.3s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+190.8s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+192.6s cleanup → fail leftover=1"
+      ],
+      "phases": [
+        "+37.4s ac CORE-1 → not_verified steps=5",
+        "+87.2s ac A1 → fail steps=5",
+        "+106.6s ac A2 → not_verified steps=6",
+        "+120.3s ac A4 → not_verified steps=5",
+        "+141.9s setup:run → not_verified created=false",
+        "+141.9s ac A3 → not_verified(precondition_not_met) setup",
+        "+141.9s ac A5 → not_verified(precondition_not_met) setup",
+        "+141.9s ac A6 → not_verified(precondition_not_met) setup",
+        "+141.9s ac A7 → not_verified(precondition_not_met) setup",
+        "+146.7s ac A8 → pass steps=1",
+        "+172.2s probe A9 #1 click=\"예약 완료하기\" writes=1 local=false → server_write",
+        "+174.4s setup:from A9 date=? time=? writes=1",
+        "+174.4s ac A9 → not_verified steps=13",
+        "+179.2s ac A10 → fail steps=1",
+        "+187.0s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+188.1s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+189.3s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+190.8s cancel-click CLEANUP-1 target=\"취소\" ownRecord=false markerChecked=false markerMatch=null → blocked",
+        "+192.6s cleanup → fail leftover=1"
+      ],
+      "costUsd": {
+        "generation": 0,
+        "agent": 0.1778
+      },
+      "costUsdTotal": 0.1778,
+      "models": [
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-2026-03-05"
+      ],
+      "durationSec": 204,
+      "side": "broken",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A6",
+        "A7"
+      ],
+      "mustIdentified": []
+    },
+    {
+      "app": "claude",
+      "url": "https://dreamy-babka-5f07cd.netlify.app/",
+      "startedKst": "2026-10-21 12:10",
+      "expected": "broken_or_hold",
+      "acMode": "prereg",
+      "inference": {
+        "mode": "prereg"
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10,
+        "source": "prereg"
+      },
+      "decision": "Needs Fix",
+      "works": false,
+      "verdict": "작동 안 해요 — 고쳐야 해요",
+      "oneLine": "핵심 기준 6개가 실제로 해 보니 되지 않았어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "fail",
+          "reason": "예약이 이 브라우저에만 저장되어 다른 방문자나 사장님 화면에 공유되지 않습니다.",
+          "evidence": [
+            "storage probe: server write requests since this check started = 0; localStorage changed = yes; sessionStorage changed = no",
+            "예약이 완료되었습니다"
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-4248-5736\" 입력",
+            "\"예약하기\" 누르기",
+            "\"오후 12:30\" 누르기",
+            "\"예약하기\" 누르기",
+            "다른 손님처럼 새 브라우저로 열기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": true
+          }
+        },
+        {
+          "id": "A1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "10:00~19:00, 30분 단위로 시간 선택",
+          "then": "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다",
+          "status": "fail",
+          "reason": "시간 목록이 오후 7시까지가 아니라 오후 6시 30분까지만 보여서 조건과 다릅니다.",
+          "evidence": [
+            "button \"오후 6:30\": 6:30",
+            "button \"오후 6:30\": 6:30"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A2",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+          "then": "예약되지 않고 무엇이 잘못됐는지 알려 준다",
+          "status": "not_verified",
+          "reason": "이름 오류 안내는 보였지만 휴대폰 번호를 비우거나 형식에 맞지 않게 넣어 예약이 막히는지까지는 아직 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"오후 12:30\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A4",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약하면 완료 화면에 예약 내용이 보인다",
+          "then": "완료 화면에 날짜·시간·이름이 보인다",
+          "status": "not_verified",
+          "reason": "완료 화면을 끝까지 만들지 못해서 날짜·시간·이름이 보이는지 확인 못 했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-4248-5736\" 입력",
+            "\"예약하기\" 누르기",
+            "\"오후 12:30\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A3",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+          "then": "그 시간은 고를 수 없다(이중 예약이 되지 않는다)",
+          "status": "fail",
+          "reason": "다른 손님이 같은 날짜·시간으로 예약을 완료할 수 있어서 이중 예약이 막히지 않았습니다.",
+          "evidence": [
+            "예약이 완료되었습니다",
+            "예약이 완료되었습니다"
+          ],
+          "actions": [
+            "\"오후 12:30\" 누르기",
+            "\"이름\"에 \"심사테스트둘\" 입력",
+            "\"휴대폰 번호\"에 \"010-4248-5736\" 입력",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A5",
+          "priority": "must",
+          "confirmed": true,
+          "title": "새로고침해도 예약이 남는다",
+          "then": "예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)",
+          "status": "fail",
+          "reason": "새 브라우저에서 같은 시간이 여전히 선택 가능해서 예약이 다른 방문자에게 남아 있지 않아요.",
+          "evidence": [
+            "button \"오후 12:30\": 12:30",
+            "button \"오후 12:30\" [pressed]: 12:30"
+          ],
+          "actions": [
+            "새로고침",
+            "다른 손님처럼 새 브라우저로 열기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A6",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+          "then": "오늘 예약 목록이 시간순으로 보인다",
+          "status": "fail",
+          "reason": "관리 화면에서 오늘 예약이 보이지 않아 사장님이 손님 예약을 볼 수 없습니다.",
+          "evidence": [
+            "이 날은 아직 예약이 없어요.",
+            "이 날은 아직 예약이 없어요."
+          ],
+          "actions": [
+            "\"사장님 화면\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A7",
+          "priority": "must",
+          "confirmed": true,
+          "title": "취소하면 그 시간을 다시 예약할 수 있다",
+          "then": "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다",
+          "status": "fail",
+          "reason": "사장님 화면에 기존 예약이 보이지 않아 취소할 수 없고, 손님 예약이 다른 브라우저와 공유되지 않습니다.",
+          "evidence": [
+            "예약 0건",
+            "이 날은 아직 예약이 없어요."
+          ],
+          "actions": [
+            "\"사장님 화면\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A8",
+          "priority": "should",
+          "confirmed": true,
+          "title": "가격이 원 단위로 보인다",
+          "then": "커트 15,000원처럼 원 단위 형식으로 보인다",
+          "status": "pass",
+          "reason": "가격이 15,000원처럼 원 단위로 표시됩니다.",
+          "evidence": [
+            "가격\n15,000원"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A9",
+          "priority": "should",
+          "confirmed": true,
+          "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+          "then": "글자·버튼이 잘리지 않고 예약까지 할 수 있다",
+          "status": "pass",
+          "reason": "휴대폰 화면에서 예약 흐름을 끝까지 진행했고 예약 완료 화면이 정상적으로 보였습니다.",
+          "evidence": [
+            "예약이 완료되었습니다"
+          ],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"오후 12:30\" 누르기",
+            "\"휴대폰 번호\"에 \"010-4248-5736\" 입력",
+            "\"예약하기\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A10",
+          "priority": "should",
+          "confirmed": true,
+          "title": "모든 글이 한국어다",
+          "then": "영어 등 다른 언어 문구가 없다",
+          "status": "pass",
+          "reason": "화면에 영어 등 다른 언어 문구 없이 한국어만 보입니다.",
+          "evidence": [
+            "하루 미용실"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 7,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "예약하기",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "커트 15,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "펌 60,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "염색 50,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "클리닉 30,000원",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "오늘 21",
+            "problem": "no_reaction"
+          },
+          {
+            "kind": "button",
+            "where": "https://dreamy-babka-5f07cd.netlify.app/",
+            "label": "목 22",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 앱의 핵심 일이 처음부터 끝까지 실제로 된다"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 10:00~19:00, 30분 단위로 시간 선택"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 이미 예약된 시간은 다른 손님이 고를 수 없다"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 새로고침해도 예약이 남는다"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 관리 화면에 오늘 예약이 시간순으로 보인다"
+        },
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 취소하면 그 시간을 다시 예약할 수 있다"
+        }
+      ],
+      "agentPrompt": "웹 앱을 고치는 작업입니다. 아래 항목은 실제 브라우저에서 직접 해 보고 **실패한 것**입니다. 이것만 고치고 관련 없는 동작은 바꾸지 마세요. 고친 뒤 각 기준이 적힌 그대로 통과해야 합니다.\n\n앱 주소: https://dreamy-babka-5f07cd.netlify.app/\n의도: 동네 1인 미용실 예약 웹사이트 — 손님이 날짜·시간(10:00~19:00, 30분 단위)을 고르고 이름·휴대폰 번호를 넣으면 예약되고, 사장님은 관리 화면에서 오늘 예약을 시간순으로 보고 취소한다\n\n1. [CORE-1 · must] 앱의 핵심 일이 처음부터 끝까지 실제로 된다\n   기대: 결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다\n   재현 순서: \"이름\"에 \"심사테스트\" 입력 → \"휴대폰 번호\"에 \"010-4248-5736\" 입력 → \"예약하기\" 누르기 → \"오후 12:30\" 누르기 → \"예약하기\" 누르기 → 다른 손님처럼 새 브라우저로 열기\n   실제 결과: 예약이 이 브라우저에만 저장되어 다른 방문자나 사장님 화면에 공유되지 않습니다.\n   근거: \"storage probe: server write requests since this check started = 0; localStorage changed = yes; sessionStorage changed = no\" / \"예약이 완료되었습니다\"\n   추정 원인: 데이터가 방문자 브라우저 저장소(localStorage 등)에만 저장되고 서버에는 저장되지 않아요. 다른 사람·다른 기기에서 보이지 않으니 공용 데이터베이스(백엔드)에 저장하게 바꿔야 해요.\n2. [A1 · must] 10:00~19:00, 30분 단위로 시간 선택\n   기대: 오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다\n   실제 결과: 시간 목록이 오후 7시까지가 아니라 오후 6시 30분까지만 보여서 조건과 다릅니다.\n   근거: \"button \"오후 6:30\": 6:30\" / \"button \"오후 6:30\": 6:30\"\n3. [A3 · must] 이미 예약된 시간은 다른 손님이 고를 수 없다\n   기대: 그 시간은 고를 수 없다(이중 예약이 되지 않는다)\n   재현 순서: \"오후 12:30\" 누르기 → \"이름\"에 \"심사테스트둘\" 입력 → \"휴대폰 번호\"에 \"010-4248-5736\" 입력 → \"예약하기\" 누르기\n   실제 결과: 다른 손님이 같은 날짜·시간으로 예약을 완료할 수 있어서 이중 예약이 막히지 않았습니다.\n   근거: \"예약이 완료되었습니다\" / \"예약이 완료되었습니다\"\n4. [A5 · must] 새로고침해도 예약이 남는다\n   기대: 예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)\n   재현 순서: 새로고침 → 다른 손님처럼 새 브라우저로 열기\n   실제 결과: 새 브라우저에서 같은 시간이 여전히 선택 가능해서 예약이 다른 방문자에게 남아 있지 않아요.\n   근거: \"button \"오후 12:30\": 12:30\" / \"button \"오후 12:30\" [pressed]: 12:30\"\n5. [A6 · must] 관리 화면에 오늘 예약이 시간순으로 보인다\n   기대: 오늘 예약 목록이 시간순으로 보인다\n   재현 순서: \"사장님 화면\" 누르기\n   실제 결과: 관리 화면에서 오늘 예약이 보이지 않아 사장님이 손님 예약을 볼 수 없습니다.\n   근거: \"이 날은 아직 예약이 없어요.\" / \"이 날은 아직 예약이 없어요.\"\n6. [A7 · must] 취소하면 그 시간을 다시 예약할 수 있다\n   기대: 목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다\n   재현 순서: \"사장님 화면\" 누르기\n   실제 결과: 사장님 화면에 기존 예약이 보이지 않아 취소할 수 없고, 손님 예약이 다른 브라우저와 공유되지 않습니다.\n   근거: \"예약 0건\" / \"이 날은 아직 예약이 없어요.\"\n\n고친 뒤 Simsa가 같은 기준으로 다시 확인합니다.",
+      "llmCalls": 141,
+      "basis": "must_failed",
+      "builder": "netlify_static",
+      "defects": [
+        {
+          "acId": "CORE-1",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "client_only_storage"
+        },
+        {
+          "acId": "A1",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "other"
+        },
+        {
+          "acId": "A3",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "not_shared_across_users"
+        },
+        {
+          "acId": "A5",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "not_shared_across_users"
+        },
+        {
+          "acId": "A6",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "other"
+        },
+        {
+          "acId": "A7",
+          "priority": "must",
+          "status": "fail",
+          "defectClass": "not_shared_across_users"
+        }
+      ],
+      "testData": {
+        "names": [
+          "심사테스트",
+          "심사테스트둘"
+        ],
+        "phone": "010-4248-5736",
+        "memo": "심사 자동 확인용 예약입니다(테스트 r1cl)",
+        "runTag": "r1cl",
+        "created": 3,
+        "cleaned": 0,
+        "leftover": 0,
+        "cleanupSkipped": "browser_only"
+      },
+      "setup": {
+        "byAc": "CORE-1",
+        "date": null,
+        "time": null,
+        "serverWrites": 0,
+        "recipeSteps": 5
+      },
+      "trace": {
+        "CORE-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "핵심 예약을 진행해 결과가 실제로 만들어지는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약을 제출해 결과와 저장 여부를 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약을 완료해 결과가 생기는지 확인합니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 선택이 안 되어 예약이 아직 안 됨"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간과 날짜를 선택하고 다시 제출해야 함"
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간을 골라 둔 뒤 예약 제출이 안 된 상태라 다시 시도하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약은 완료됐고 화면에 결과가 보입니다."
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "저장된 예약이 서버에 안 올라가 다른 방문자에서 안 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "시간을 고르지 못해서 예약 결과까지 만들지 못했다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 8,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "예약이 이 브라우저에만 저장되어 다른 방문자나 사장님 화면에 공유되지 않습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "CORE-1#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "예약을 실제로 만들어 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "예약 생성부터 확인까지 진행하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "휴대폰 번호를 채우고 예약을 제출해 핵심 흐름을 계속 확인합니다."
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "click",
+              "thought": "예약 제출부터 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "strong",
+              "type": "new_session",
+              "thought": "다른 방문자에게 보이는지 확인"
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "click",
+              "thought": "새 세션에서 같은 시간 중복 선택 가능 여부를 확인해 핵심 공유/중복 처리를 검증한다."
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "type": "click",
+              "thought": "새 세션에서 같은 시간이 막혔는지 확인한다."
+            },
+            {
+              "step": 8,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "다른 방문자에게도 예약이 보이는지 확인하려면 같은 시간 선택 가능 여부를 봅니다."
+            },
+            {
+              "step": 9,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "다른 손님으로 같은 시간 예약이 실제로 되는지 끝까지 확인합니다."
+            },
+            {
+              "step": 10,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "둘째 손님 예약 제출까지 완료해 중복 처리 여부를 확인합니다."
+            },
+            {
+              "step": 11,
+              "tier": "strong",
+              "type": "click",
+              "thought": "같은 시간으로 두 번째 예약 제출까지 해봐야 함"
+            },
+            {
+              "step": 12,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "새 브라우저에서도 같은 시간 예약이 또 완료되어 중복 방지가 안 보였고 서버 저장도 없었습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 8,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "같은 시간 예약이 다른 새 브라우저에서 막히지 않아 예약이 공유되지 않았습니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "fail",
+              "review": {
+                "agree": false,
+                "why": "The tester did not actually complete a second reservation attempt or verify owner/other-visitor visibility; they only selected the same time in a fresh browser, which is not proof that double-booking was allowed."
+              }
+            },
+            {
+              "step": 12,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "같은 시간에 다른 손님 예약이 또 완료되어 중복 예약이 막히지 않았고, 서버에 저장되지 않아 다른 사람이나 사장님 화면에 공유된다고 볼 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록에 10:00~19:00, 30분 단위가 보이는지 확인했다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "시간 목록이 오후 7시까지가 아니라 오후 6시 30분까지만 보여서 조건과 다릅니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A1#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "날짜 선택 후 시간 목록 끝을 확인했다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "시간 목록에 오후 7시가 보이지 않고 오후 6시 30분까지만 보여서 조건과 다릅니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "필수 정보가 비어 있는지 확인하려고 예약 버튼을 눌러 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "필수 정보 없이 예약해 오류가 뜨는지 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "click",
+              "thought": "먼저 시간 선택 후 이름 없이 제출해 검증 메시지를 확인한다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 휴대폰 번호를 비운 상태로 예약을 시도하면 검증 메시지가 나와야 함."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름이 비어 있지 않으니 우선 휴대폰 번호를 비워 제출해 본다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "이름이 비어 있을 때 오류 안내는 보였지만 전화번호 비움/형식 오류까지 실제 제출 검증을 끝내지 못했다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "이름은 비어 있고 휴대폰도 아직 확인 전이라 예약이 막히는지 확인하겠습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 6,
+              "tier": "strong",
+              "verdict": "not_verified",
+              "reason": "이름을 비운 경우의 오류 안내만 확인했고, 휴대폰 번호를 비우거나 형식에 맞지 않게 넣는 경우까지 이 기준을 끝까지 확인하지 못했다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "이름 오류 안내는 보였지만 휴대폰 번호를 비우거나 형식에 맞지 않게 넣어 예약이 막히는지까지는 아직 확인하지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A4": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 정보를 입력하고 완료 화면에서 내용이 보이는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 내용을 채우고 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 버튼을 눌러 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간을 아직 선택하지 않아 오류가 보입니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간을 아직 선택하지 않아 안내가 보입니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 선택이 안 되어 예약이 막혔습니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간을 아직 선택하지 않은 상태라 완료 화면을 확인할 수 없습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "완료 화면이 아직 안 나왔고 시간 선택도 필요합니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "시간을 고르지 않아서 완료 화면을 아직 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "완료 화면을 끝까지 만들지 못해서 날짜·시간·이름이 보이는지 확인 못 했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A3": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": false,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "이 시간 슬롯이 막혀 있는지 새 손님으로 시도해 본다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "같은 시간대가 막혀 있는지 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "같은 시간 슬롯이 다른 브라우저에서 막히는지 확인해야 합니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "같은 시간 예약 가능 여부를 확인하려고 제출해야 한다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "같은 시간 예약이 막히는지 확인하려면 현재 선택 상태에서 예약을 제출해 봐야 함."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "같은 시간 예약이 또 받아들여졌습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "이미 예약된 시간인지 새 브라우저에서 아직 실제로 같은 시간 예약을 시도해 보지 못했다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "다른 손님이 같은 날짜·시간으로 예약을 완료할 수 있어서 이중 예약이 막히지 않았습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A3#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": false,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "같은 시간으로 두 번째 예약을 끝까지 시도해 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "같은 시간으로 실제 예약 제출을 시도해 이중 예약 여부를 확인한다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "같은 시간 선택 후 제출 결과를 확인합니다."
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "click",
+              "thought": "같은 시간으로 실제 예약 제출해 결과를 본다."
+            },
+            {
+              "step": 5,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "같은 시간으로 두 번째 예약이 실제로 완료되어 이중 예약 방지가 안 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 5,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "다른 손님이 같은 날짜·시간으로 예약을 완료할 수 있어서 이중 예약이 막히지 않았습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A5": {
+          "startedWith": "restored_setup",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 완료 화면이 이미 보이고 새로고침 유지 문구가 있다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "새로고침 후에도 예약 완료 화면이 그대로 보여 확인됨"
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "새로고침 후에도 기존 예약이 화면에 남아 있는지 확인하겠습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 3,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "새 브라우저에서 같은 시간이 여전히 선택 가능해서 예약이 다른 방문자에게 남아 있지 않아요.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A5#repro": {
+          "startedWith": "restored_setup",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "new_session",
+              "thought": "새 브라우저에서 같은 시간이 막히는지 확인해야 함"
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "click",
+              "thought": "새 브라우저에서 같은 시간이 막혔는지 확인해야 해요."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "새 브라우저에서 같은 시간이 마감으로 보이지 않는지 확인됐다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 3,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "새 브라우저에서 기존 예약 시간이 그대로 선택 가능해서 다른 방문자에게 예약이 남아 있지 않아요.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A6": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": false,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "사장님 화면으로 이동해 오늘 예약이 보이는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "오늘 예약이 안 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "관리 화면에서 오늘 예약이 보이지 않아 사장님이 손님 예약을 볼 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A6#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": false,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "관리 화면에서 오늘 예약이 보이는지 확인한다."
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "관리 화면에서 오늘 예약이 보이지 않습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "관리 화면에 오늘 예약이 보이지 않아 사장님이 손님 예약을 시간순으로 볼 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A7": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": false,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "사장님 화면에서 예약을 확인하고 취소한 뒤 같은 시간 재예약 가능 여부를 보겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "관리 화면에 예약이 안 보여서 취소할 대상이 없습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "사장님 화면에 기존 예약이 보이지 않아 취소할 수 없고, 손님 예약이 다른 브라우저와 공유되지 않습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A7#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": false,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "관리 화면에 기존 예약이 보이는지 먼저 확인"
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "관리 화면에 기존 예약이 없다고 보여 다른 브라우저와 공유되지 않습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "사장님 화면에 기존 예약이 보이지 않아 취소할 수 없고, 손님 예약이 다른 브라우저와 공유되지 않습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "A8": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "가격이 원 단위로 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "가격이 15,000원처럼 원 단위로 표시됩니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A9": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "휴대폰 폭에서 예약 폼이 보이고 입력과 예약까지 되는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "모바일 화면에서 예약 흐름을 진행해 보겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 폭 화면에서 예약 흐름을 계속 진행해 본다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "모바일 화면에서 예약 입력은 되었지만 제출 후 결과가 안 보여서 확인이 필요합니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 버튼을 눌러 결과를 확인합니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "휴대폰 폭에서도 예약이 완료되어 화면이 잘리지 않았습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "휴대폰 폭 화면에서 예약 화면은 보이지만, 잘리지 않고 실제로 예약이 완료되는지는 아직 실행하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "휴대폰 화면에서 예약 흐름을 끝까지 진행했고 예약 완료 화면이 정상적으로 보였습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A10": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "영어 문구가 보이는지 화면을 읽어 확인한다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "화면에 영어 등 다른 언어 문구 없이 한국어만 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        }
+      },
+      "setupAttempt": null,
+      "phasesTail": [
+        "+289.2s probe A9 #1 click=\"예약하기\" writes=0 local=true → confirmation",
+        "+290.6s ac A9 → pass steps=6",
+        "+295.2s ac A10 → pass steps=1",
+        "+332.7s probe CORE-1 #1 click=\"예약하기\" writes=0 local=true → local_change",
+        "+399.6s probe A5 #1 click=\"예약하기\" writes=0 local=false → confirmation",
+        "+425.0s single-file-fix {\"v\":[\"A1\"],\"s\":[\"CORE-1\",\"A3\",\"A5\",\"A6\",\"A7\"]}"
+      ],
+      "phases": [
+        "+45.2s probe CORE-1 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+53.8s probe CORE-1 #2 click=\"예약하기\" writes=0 local=true → confirmation",
+        "+68.4s setup:from CORE-1 date=? time=? writes=0",
+        "+84.5s probe CORE-1 #1 click=\"예약하기\" writes=0 local=true → confirmation",
+        "+111.3s ac CORE-1 → fail steps=8",
+        "+128.2s ac A1 → fail steps=1",
+        "+149.8s ac A2 → not_verified steps=7",
+        "+158.1s probe A4 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+167.3s ac A4 → not_verified steps=7",
+        "+182.0s probe A3 #1 click=\"예약하기\" writes=0 local=true → confirmation",
+        "+197.4s probe A3 #1 click=\"예약하기\" writes=0 local=true → confirmation",
+        "+200.7s ac A3 → fail steps=6",
+        "+235.1s ac A5 → fail steps=3",
+        "+253.8s ac A6 → fail steps=2",
+        "+273.3s ac A7 → fail steps=2",
+        "+278.0s ac A8 → pass steps=1",
+        "+289.2s probe A9 #1 click=\"예약하기\" writes=0 local=true → confirmation",
+        "+290.6s ac A9 → pass steps=6",
+        "+295.2s ac A10 → pass steps=1",
+        "+332.7s probe CORE-1 #1 click=\"예약하기\" writes=0 local=true → local_change",
+        "+399.6s probe A5 #1 click=\"예약하기\" writes=0 local=false → confirmation"
+      ],
+      "costUsd": {
+        "generation": 0,
+        "agent": 0.7125
+      },
+      "costUsdTotal": 0.7125,
+      "models": [
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-2026-03-05"
+      ],
+      "durationSec": 427,
+      "side": "broken",
+      "opposite": false,
+      "match": true,
+      "mustFailedExpected": [
+        "A3",
+        "A6"
+      ],
+      "mustIdentified": [
+        "A3",
+        "A6"
+      ]
+    },
+    {
+      "app": "lovable",
+      "url": "https://my-town-salon.lovable.app/",
+      "startedKst": "2026-10-21 12:13",
+      "expected": "works",
+      "acMode": "prereg",
+      "inference": {
+        "mode": "prereg"
+      },
+      "devSpec": {
+        "ok": true,
+        "acs": 10,
+        "source": "prereg"
+      },
+      "decision": "Not Verified",
+      "works": null,
+      "verdict": "확인 못 했어요",
+      "oneLine": "핵심 기준 중 6개를 확인하지 못해 아직 \"작동한다\"고 말할 수 없어요.",
+      "acTable": [
+        {
+          "id": "CORE-1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "앱의 핵심 일이 처음부터 끝까지 실제로 된다",
+          "then": "결과가 만들어지고, 새로고침해도 남아 있으며, 목적상 보여야 할 곳(새 브라우저의 다른 방문자, 사장님·관리자 등 다른 역할의 화면)에서도 보이고, 겹치거나 중복된 요청은 올바르게 처리된다",
+          "status": "not_verified",
+          "reason": "처음엔 안 되는 것처럼 보였지만 새 브라우저에서 꼼꼼히 다시 해 보니 같은 실패가 나오지 않아 고장으로 치지 않았어요",
+          "reasonCode": "fail_not_reproduced",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-6527-3689\" 입력",
+            "\"예약하기\" 누르기",
+            "\"오늘 21\" 누르기",
+            "\"10:00\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A1",
+          "priority": "must",
+          "confirmed": true,
+          "title": "10:00~19:00, 30분 단위로 시간 선택",
+          "then": "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다",
+          "status": "pass",
+          "reason": "날짜를 고른 화면에서 10시부터 19시까지 30분 간격 시간이 실제로 보입니다.",
+          "evidence": [
+            "10:00 예약됨"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A2",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이름·휴대폰 번호 없이는 예약되지 않는다",
+          "then": "예약되지 않고 무엇이 잘못됐는지 알려 준다",
+          "status": "not_verified",
+          "reason": "시간을 고를 수 없어서 이름·휴대폰 번호 검증 메시지까지 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"오늘 21\" 누르기",
+            "\"커트 15,000원\" 누르기",
+            "\"예약하기\" 누르기",
+            "\"이름\"에 \"\" 입력",
+            "Enter 키 누르기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A4",
+          "priority": "must",
+          "confirmed": true,
+          "title": "예약하면 완료 화면에 예약 내용이 보인다",
+          "then": "완료 화면에 날짜·시간·이름이 보인다",
+          "status": "not_verified",
+          "reason": "오늘 날짜에는 예약 가능한 시간이 없어 완료 화면을 확인할 수 없습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-6527-3689\" 입력",
+            "\"예약하기\" 누르기",
+            "\"오늘 21\" 누르기",
+            "\"오늘 21\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A3",
+          "priority": "must",
+          "confirmed": true,
+          "title": "이미 예약된 시간은 다른 손님이 고를 수 없다",
+          "then": "그 시간은 고를 수 없다(이중 예약이 되지 않는다)",
+          "status": "pass",
+          "reason": "다른 손님 화면에서 같은 날짜의 10:00 시간이 이미 예약됨으로 표시되고 비활성화되어 선택할 수 없습니다.",
+          "evidence": [
+            "button \"10:00 예약됨\" [disabled]"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A5",
+          "priority": "must",
+          "confirmed": true,
+          "title": "새로고침해도 예약이 남는다",
+          "then": "예약이 사라지지 않고 남아 있다(다른 방문자에게도 그 시간은 마감으로 보인다)",
+          "status": "not_verified",
+          "reason": "이번 확인이 만든 기록을 화면에서 찾지 못해, 보인 목록이 이번 기록 때문인지 알 수 없어요",
+          "reasonCode": "own_record_not_seen",
+          "evidence": [],
+          "actions": [
+            "새로고침"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A6",
+          "priority": "must",
+          "confirmed": true,
+          "title": "관리 화면에 오늘 예약이 시간순으로 보인다",
+          "then": "오늘 예약 목록이 시간순으로 보인다",
+          "status": "not_verified",
+          "reason": "이 기준의 전제(예: 예약 1건이 미리 있어야 함)를 이번 확인에서 만들지 못해 확인하지 않았어요 — 고장으로 치지 않아요",
+          "reasonCode": "precondition_not_met",
+          "evidence": []
+        },
+        {
+          "id": "A7",
+          "priority": "must",
+          "confirmed": true,
+          "title": "취소하면 그 시간을 다시 예약할 수 있다",
+          "then": "목록에서 사라지고 손님이 그 시간을 다시 고를 수 있다",
+          "status": "not_verified",
+          "reason": "취소 화면이나 관리 화면을 아직 못 찾아서 예약 삭제와 재예약 가능 여부를 끝까지 확인하지 못했다.",
+          "evidence": [],
+          "actions": [
+            "다른 손님처럼 새 브라우저로 열기"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A8",
+          "priority": "should",
+          "confirmed": true,
+          "title": "가격이 원 단위로 보인다",
+          "then": "커트 15,000원처럼 원 단위 형식으로 보인다",
+          "status": "pass",
+          "reason": "가격이 원 단위 형식으로 표시됩니다.",
+          "evidence": [
+            "커트 15,000원"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        },
+        {
+          "id": "A9",
+          "priority": "should",
+          "confirmed": true,
+          "title": "휴대폰 폭(390px)에서 쓸 수 있다",
+          "then": "글자·버튼이 잘리지 않고 예약까지 할 수 있다",
+          "status": "not_verified",
+          "reason": "휴대폰 화면에서 글자와 버튼이 잘린 모습은 보이지 않았지만, 오늘은 모든 시간이 예약됨이라 실제 예약 완료까지 확인하지 못했습니다.",
+          "evidence": [],
+          "actions": [
+            "\"이름\"에 \"심사테스트\" 입력",
+            "\"휴대폰 번호\"에 \"010-6527-3689\" 입력",
+            "\"예약하기\" 누르기",
+            "\"오늘 21\" 누르기",
+            "\"오늘 21\" 누르기"
+          ],
+          "exercised": {
+            "stateChange": true,
+            "verified": false
+          }
+        },
+        {
+          "id": "A10",
+          "priority": "should",
+          "confirmed": true,
+          "title": "모든 글이 한국어다",
+          "then": "영어 등 다른 언어 문구가 없다",
+          "status": "fail",
+          "reason": "화면에 영어 문구가 보여서 모든 글이 한국어가 아닙니다.",
+          "evidence": [
+            "Edit with Lovable"
+          ],
+          "exercised": {
+            "stateChange": false,
+            "verified": false
+          }
+        }
+      ],
+      "sweep": {
+        "screensChecked": 1,
+        "screensBroken": 0,
+        "buttonsChecked": 8,
+        "buttonsNoReaction": 1,
+        "buttonErrors": 0,
+        "buttonsSkippedUnsafe": 0,
+        "truncated": {
+          "screens": false,
+          "buttons": false,
+          "time": false
+        },
+        "mobileChecked": 1,
+        "mobileOverflow": [],
+        "problems": [
+          {
+            "kind": "button",
+            "where": "https://my-town-salon.lovable.app/",
+            "label": "오늘 21",
+            "problem": "no_reaction"
+          }
+        ]
+      },
+      "findings": [
+        {
+          "code": "ac_broken",
+          "what": "기준이 지켜지지 않아요: 모든 글이 한국어다"
+        }
+      ],
+      "agentPrompt": "웹 앱을 고치는 작업입니다. 아래 항목은 실제 브라우저에서 직접 해 보고 **실패한 것**입니다. 이것만 고치고 관련 없는 동작은 바꾸지 마세요. 고친 뒤 각 기준이 적힌 그대로 통과해야 합니다.\n\n앱 주소: https://my-town-salon.lovable.app/\n의도: 동네 1인 미용실 예약 웹사이트 — 손님이 날짜·시간(10:00~19:00, 30분 단위)을 고르고 이름·휴대폰 번호를 넣으면 예약되고, 사장님은 관리 화면에서 오늘 예약을 시간순으로 보고 취소한다\n\n1. [A10 · should] 모든 글이 한국어다\n   기대: 영어 등 다른 언어 문구가 없다\n   실제 결과: 화면에 영어 문구가 보여서 모든 글이 한국어가 아닙니다.\n   근거: \"Edit with Lovable\"\n\n고친 뒤 Simsa가 같은 기준으로 다시 확인합니다.",
+      "llmCalls": 79,
+      "basis": "must_not_verified",
+      "builder": "lovable",
+      "defects": [
+        {
+          "acId": "CORE-1",
+          "priority": "must",
+          "status": "not_verified",
+          "defectClass": "other"
+        },
+        {
+          "acId": "A10",
+          "priority": "should",
+          "status": "fail",
+          "defectClass": "wrong_language"
+        }
+      ],
+      "testData": {
+        "names": [
+          "심사테스트",
+          "심사테스트둘"
+        ],
+        "phone": "010-6527-3689",
+        "memo": "심사 자동 확인용 예약입니다(테스트 r1lo)",
+        "runTag": "r1lo",
+        "created": 1,
+        "cleaned": 0,
+        "leftover": 1,
+        "cleanupSkipped": "no_cancel_click"
+      },
+      "setup": {
+        "byAc": "SETUP-1",
+        "date": "2026-10-22",
+        "time": "10:00",
+        "serverWrites": 3,
+        "recipeSteps": 5
+      },
+      "trace": {
+        "CORE-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "핵심 예약을 직접 만들어 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "휴대폰 번호를 입력하고 예약을 제출해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름과 전화번호는 입력됐고, 이제 예약을 실제로 제출해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간을 먼저 선택해야 예약이 가능해 보여서 진행합니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간을 먼저 골라 예약이 되는지 확인하겠습니다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "오늘은 모든 시간이 이미 예약되어 핵심 예약을 끝까지 할 수 없으니 실패로 판단한다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 6,
+              "tier": "strong",
+              "verdict": "fail",
+              "reason": "오늘은 예약 가능한 시간이 없어 실제로 예약 결과를 만들 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "CORE-1#repro": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "strong",
+              "type": "click",
+              "thought": "Try a future date with open slots to complete booking flow."
+            },
+            {
+              "step": 2,
+              "tier": "strong",
+              "type": "click",
+              "thought": "핵심 예약을 끝까지 만들기 위해 가능한 시간과 서비스를 먼저 선택합니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "필수 정보 입력 후 예약을 만들어 본다"
+            },
+            {
+              "step": 4,
+              "tier": "strong",
+              "type": "fill",
+              "thought": "휴대폰 번호를 입력하고 예약을 완료해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "strong",
+              "type": "click",
+              "thought": "예약 제출부터 확인하겠습니다."
+            },
+            {
+              "step": 6,
+              "tier": "strong",
+              "type": "reload",
+              "thought": "예약 완료는 확인됐으니 새로고침 후 유지 여부를 확인합니다."
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "type": "new_session",
+              "thought": "예약 생성과 새로고침 후 유지까지 확인됨, 이제 다른 세션에서 같은 시간 중복/공유 여부를 확인해야 함."
+            },
+            {
+              "step": 8,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "새 세션에서 같은 시간 13:00이 예약됨으로 막혀 있어 중복 예약 방지가 실제로 보입니다."
+            },
+            {
+              "step": 9,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "이전 생성 예약이 다른 새 브라우저에도 반영되어 겹침 방지가 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 8,
+              "tier": "strong",
+              "verdict": "pass",
+              "reason": "다른 새 브라우저에서 같은 날짜의 같은 시간이 이미 막혀 보여서 방금 만든 예약이 저장되고 중복 예약도 올바르게 처리됩니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "pass",
+              "review": {
+                "agree": false,
+                "why": "The evidence only shows that 13:00 is marked booked in a fresh browser after submission, but it does not prove the specific reservation just created persisted through reload or that the full core flow was verified end-to-end as required."
+              }
+            },
+            {
+              "step": 9,
+              "tier": "strong",
+              "verdict": "pass",
+              "reason": "실제로 예약을 만든 뒤 새 브라우저에서 같은 시간이 예약됨으로 보여 핵심 예약 흐름과 중복 방지가 동작합니다.",
+              "outcome": "review_disagreed",
+              "finalStatus": "pass",
+              "review": {
+                "agree": false,
+                "why": "The only verified outcome is that 13:00 appears booked in a fresh browser after submission, which does not prove the specific reservation persisted across reload or satisfy the full end-to-end criterion beyond duplicate blocking."
+              }
+            }
+          ]
+        },
+        "A1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록에 10:00~19:00이 30분 단위로 보임"
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "날짜를 고른 화면에서 10시부터 19시까지 30분 간격 시간이 실제로 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A1#clock": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "시간 목록이 10:00~19:00까지 30분 단위로 보인다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "날짜를 고른 화면에서 오전 10시부터 오후 7시까지 30분 단위 시간이 실제로 보입니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified",
+              "finalReasonCode": "evidence_missing"
+            }
+          ]
+        },
+        "A2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름을 비우고 예약했을 때 오류가 나오는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "이름만 비워 두고 예약을 눌러 검증하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "오늘은 시간이 모두 예약됨이라 Given을 충족할 수 없어 검증 불가"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "필수 정보 없이 예약을 시도해 오류 안내를 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "이름만 비우고 예약 시도해 검증하겠습니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "press",
+              "thought": "이름만 비워 둔 상태에서 예약 시도 후 검증한다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "필수 입력 없이 예약 시도 상태라 오류 메시지를 확인하겠습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 3,
+              "tier": "strong",
+              "verdict": "not_verified",
+              "reason": "이 기준은 날짜와 시간을 고른 뒤 확인해야 하는데, 현재 보이는 오늘 날짜에는 선택 가능한 시간이 없어 진행할 수 없습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "시간을 고를 수 없어서 이름·휴대폰 번호 검증 메시지까지 확인하지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A4": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 정보를 입력하고 완료 화면의 내용을 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "이름은 입력됐고 휴대폰 번호를 넣어 예약한 뒤 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 버튼을 눌러 완료 화면의 예약 내용을 확인하겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약이 완료 화면으로 넘어가서 내용을 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간만 고르고 예약 후 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "시간과 날짜를 먼저 선택하고 예약 후 완료 화면을 확인하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "오늘은 시간대가 모두 예약됨이라 완료 화면까지 갈 수 없습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "예약 완료 화면이 아직 보이지 않아 날짜·시간·이름이 표시되는지 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "verdict": "not_verified",
+              "reason": "오늘 날짜에는 예약 가능한 시간이 없어 완료 화면을 확인할 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "SETUP-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "오늘은 전부 예약됨이라 가장 가까운 날로 진행해 예약을 만들겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "가장 이른 남은 시간인 13:30을 선택하고 예약을 완료해 보겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "필수 정보만 입력하고 예약을 완료해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "휴대폰 번호를 입력하고 예약을 완료해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 확인 화면이 아직 안 나와서 제출이 필요합니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "예약 완료 화면이 아직 안 보여서 한 번 더 제출해 확인하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "완료 화면에 예약 내용이 보입니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 7,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "예약 완료 화면에 날짜, 시간, 이름이 모두 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A3": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "10:00이 이미 예약됨으로 막혀 있어 같은 시간 중복 예약이 불가한지 확인이 필요하다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "다른 손님 화면에서 같은 날짜의 10:00 시간이 이미 예약됨으로 표시되고 비활성화되어 선택할 수 없습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A3#clock": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "10:00이 이미 예약됨으로 막혀 있는지 확인한다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "다른 손님 화면에서 같은 시간 10:00이 이미 예약됨으로 비활성화되어 선택할 수 없었습니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A5": {
+          "startedWith": "restored_setup",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "reload",
+              "thought": "새로고침 후 예약이 남아 있는지 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "새로고침 후 예약 시간이 이미 예약됨으로 남아 있어 지속됨을 확인했다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 2,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "새로고침한 뒤에도 예약한 시간이 그대로 마감으로 보여 예약이 남아 있습니다.",
+              "outcome": "own_record_not_seen"
+            }
+          ]
+        },
+        "SETUP-2": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "오늘 남은 시간이 없어 가장 가까운 날을 선택해 예약을 진행하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "남은 가장 이른 시간인 14:00을 골라 예약을 만들어 보겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "오늘은 이미 꽉 차 있어서 가장 가까운 날을 확인해야 함"
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "남은 가장 이른 시간으로 예약을 진행하겠습니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "예약 정보가 아직 입력되지 않았습니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "휴대폰 번호를 채우고 예약을 제출해 결과를 확인하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "예약 정보가 이미 선택되어 있어 완료 화면만 확인하면 됩니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 3,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "오늘 남은 시간이 없어 가까운 날을 봤지만, 예약 완료 화면까지 만들지 못했다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 7,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "예약하기 전 화면 아래에 예약 완료 정보가 보입니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A7": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "관리 화면이 아니라 예약 페이지가 보여서 취소 흐름을 바로 확인할 수 없습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "goto",
+              "thought": "목록에 이미 예약이 보이니 사장님 화면에서 취소를 먼저 찾겠다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "관리 화면과 취소 버튼이 안 보여서 이 화면만으로는 취소 여부를 확인할 수 없습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "new_session",
+              "thought": "관리 화면이 아니라 현재 예약표에서 10:00이 이미 예약됨으로 보입니다. 취소된 뒤 다시 예약 가능한지 확인하려면 관리 화면으로 가서 취소해야 하므로 다음 단계로 이동합니다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "목록에 예약이 보이므로 먼저 해당 예약을 취소한 뒤 같은 시간을 다시 선택해 본다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "지금 화면은 손님 예약 화면이라 취소 동작을 할 수 없어 확인 못 했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "취소 기능 화면이 안 보여서 예약을 실제로 취소할 수 없었습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "취소 화면이나 관리 화면을 아직 못 찾아서 예약 삭제와 재예약 가능 여부를 끝까지 확인하지 못했다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A8": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "원 단위 가격이 화면에 보인다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "pass",
+              "reason": "가격이 원 단위 형식으로 표시됩니다.",
+              "outcome": "final",
+              "finalStatus": "pass"
+            }
+          ]
+        },
+        "A9": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "휴대폰 폭에서 예약 흐름을 진행해 확인하겠습니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "fill",
+              "thought": "모바일 폭에서 예약 흐름을 계속 진행해 본다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "모바일 폭에서 예약 흐름을 끝까지 진행해 보겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 폭에서 예약 흐름이 가능하지만 아직 시간 선택과 제출 확인이 필요하다."
+            },
+            {
+              "step": 5,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "휴대폰 폭에서 예약 흐름이 막혀 있어 제출 전 상태로 보입니다."
+            },
+            {
+              "step": 6,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "휴대폰 폭에서 예약 흐름을 확인하겠습니다."
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "type": "judge",
+              "thought": "오늘은 모든 시간이 이미 예약됨이라 예약 완료를 끝까지 확인할 수 없다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 5,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "휴대폰 폭에서 예약 화면은 보이지만 아직 예약이 완료된 화면을 확인하지 못했습니다.",
+              "outcome": "nudged_premature"
+            },
+            {
+              "step": 7,
+              "tier": "strong",
+              "verdict": "not_verified",
+              "reason": "휴대폰 화면에서 글자와 버튼이 잘린 모습은 보이지 않았지만, 오늘은 모든 시간이 예약됨이라 실제 예약 완료까지 확인하지 못했습니다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        },
+        "A10": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": null,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "영어 문구가 보여서 기준을 충족하지 않습니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "verdict": "fail",
+              "reason": "화면에 영어 문구가 보여서 모든 글이 한국어가 아닙니다.",
+              "outcome": "final",
+              "finalStatus": "fail"
+            }
+          ]
+        },
+        "CLEANUP-1": {
+          "startedWith": "fresh",
+          "setupVisibleAtStart": true,
+          "turns": [
+            {
+              "step": 1,
+              "tier": "cheap",
+              "type": "goto",
+              "thought": "관리 화면을 아직 못 열었고 예약 목록/취소 경로가 보이지 않아 확인이 필요합니다."
+            },
+            {
+              "step": 2,
+              "tier": "cheap",
+              "type": "wait",
+              "thought": "관리 화면 경로가 화면에 없어서 먼저 예약 목록을 찾겠습니다."
+            },
+            {
+              "step": 3,
+              "tier": "cheap",
+              "type": "click",
+              "thought": "관리 화면이 필요해서 내 예약이 보이는 경로를 먼저 찾아보겠습니다."
+            },
+            {
+              "step": 4,
+              "tier": "cheap",
+              "type": "judge",
+              "thought": "삭제할 예약이 화면에 보이지 않아 현재는 확인이 필요합니다."
+            }
+          ],
+          "judgeTrail": [
+            {
+              "step": 4,
+              "tier": "cheap",
+              "verdict": "not_verified",
+              "reason": "관리 화면이나 내 예약을 아직 열지 못해서 번호 010-6527-3689 예약이 실제로 삭제됐는지 확인하지 못했다.",
+              "outcome": "final",
+              "finalStatus": "not_verified"
+            }
+          ]
+        }
+      },
+      "setupAttempt": {
+        "status": "pass",
+        "reason": "예약 완료 화면에 날짜, 시간, 이름이 모두 보입니다.",
+        "steps": 7,
+        "actions": [
+          "\"목 22\" 누르기",
+          "\"13:30 가능\" 누르기",
+          "\"이름\"에 \"심사테스트\" 입력",
+          "\"휴대폰 번호\"에 \"010-6527-3689\" 입력",
+          "\"예약하기\" 누르기",
+          "\"예약하기\" 누르기"
+        ]
+      },
+      "phasesTail": [
+        "+216.7s ac A8 → pass steps=1",
+        "+223.8s probe A9 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+231.4s ac A9 → not_verified steps=7",
+        "+235.3s ac A10 → fail steps=1",
+        "+235.4s single-file-fix skipped",
+        "+245.9s cleanup → not_verified leftover=1"
+      ],
+      "phases": [
+        "+30.2s probe CORE-1 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+61.2s probe CORE-1 #1 click=\"예약하기\" writes=3 local=false → server_write",
+        "+79.2s ac CORE-1 → not_verified(fail_not_reproduced) steps=6",
+        "+95.7s ac A1 → pass steps=1",
+        "+116.5s ac A2 → not_verified steps=7",
+        "+126.1s probe A4 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+136.2s ac A4 → not_verified steps=7",
+        "+150.9s probe SETUP-1 #1 click=\"예약하기\" writes=3 local=false → server_write",
+        "+154.0s setup:from SETUP-1 date=2026-10-22 time=10:00 writes=3",
+        "+154.0s setup:run → pass created=true",
+        "+176.1s ac A3 → pass steps=1",
+        "+184.8s ac A5 → not_verified(own_record_not_seen) steps=2",
+        "+199.7s setup:today → pass created=false date=?",
+        "+199.7s ac A6 → not_verified(precondition_not_met) today≠2026-10-22",
+        "+213.2s ac A7 → not_verified steps=5",
+        "+216.7s ac A8 → pass steps=1",
+        "+223.8s probe A9 #1 click=\"예약하기\" writes=0 local=false → no_change",
+        "+231.4s ac A9 → not_verified steps=7",
+        "+235.3s ac A10 → fail steps=1",
+        "+245.9s cleanup → not_verified leftover=1"
+      ],
+      "costUsd": {
+        "generation": 0,
+        "agent": 0.365
+      },
+      "costUsdTotal": 0.365,
+      "models": [
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-2026-03-05"
+      ],
+      "durationSec": 250,
+      "side": "hold",
+      "opposite": false,
+      "match": false,
+      "mustFailedExpected": [],
+      "mustIdentified": []
+    }
+  ]
+}
