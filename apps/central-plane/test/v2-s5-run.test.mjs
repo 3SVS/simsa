@@ -84,6 +84,69 @@ describe("확인 — 실행기의 독립 재실행", () => {
   });
 });
 
+describe("확인 — 실측 F10·F12(2026-10-23)에서 나온 경계", () => {
+  it("재실행마다 바뀌는 숫자(걸린 시간 등)는 같은 관찰로 본다 — 옛 확인은 F12 진짜 점검기를 pass_not_reproduced로 내림", async () => {
+    let n = 10;
+    const site = { "/": (s) => ({ status: 200, text: `점검기 ${s.clicked ? `응답 상태: 200 (열림) · 걸린 시간: ${(n += 3)}ms` : "주소를 넣으세요"}`, buttons: ["점검하기"] }) };
+    const onAct = (a, s) => {
+      if (a.type === "click") s.clicked = true;
+      return null;
+    };
+    let turn = 0;
+    const out = await runAgentV2Inspection({
+      targetUrl: `${ORIGIN}/`, intent: "점검", acs: [AC], fetchImpl: fakeFetch(RECON), testDataSeed: 1,
+      driver: makeFakeDriver(site, { origin: ORIGIN, onAct }),
+      llm: async ({ user }) => {
+        turn += 1;
+        if (turn === 1) return reply({ type: "fill", target: { label: "주소" }, value: "https://a.example" });
+        if (turn === 2) return reply({ type: "click", target: { role: "button", name: "점검하기" } });
+        const d = lastId(user, /diff\(changed\)/);
+        const s = lastId(user, /screen\(same\) · .*걸린 시간/);
+        const quote = /걸린 시간: \d+ms/.exec(user)[0];
+        return reply({ type: "judge", verdict: "pass", claim: "주소를 열어 응답을 알려 준다", artifactIds: [d, s], quotes: ["응답 상태: 200 (열림)", quote] });
+      },
+    });
+    assert.equal(out.verdicts[0].verdict, "pass", JSON.stringify(out.verdicts[0]));
+    assert.equal(out.verdicts[0].confirmed, true);
+  });
+
+  it("정찰 때 생긴 증거물(실행 전)의 인용은 재실행 대조에서 뺀다 — 옛 확인은 F10 고정 결과 mismatch를 못 확정", async () => {
+    const site = { "/": (s) => ({ status: 200, text: `내 서비스 점검 ${s.clicked ? "점수 78점 — 검사 완료" : "주소를 넣으세요"}`, buttons: ["검사하기"] }) };
+    const onAct = (a, s) => {
+      if (a.type === "click") s.clicked = true;
+      return null;
+    };
+    let turn = 0;
+    const out = await runAgentV2Inspection({
+      targetUrl: `${ORIGIN}/`, intent: "주소를 넣으면 실제로 열어 검토", acs: [AC], fetchImpl: fakeFetch(RECON), testDataSeed: 1,
+      driver: makeFakeDriver(site, { origin: ORIGIN, onAct }),
+      llm: async ({ user }) => {
+        turn += 1;
+        if (turn === 1) return reply({ type: "click", target: { role: "button", name: "검사하기" } });
+        const res = lastId(user, /screen\(same\) · .*점수 78점/);
+        return reply({ type: "judge", verdict: "mismatch", claim: "주소를 열지 않고 늘 같은 점수", artifactIds: ["E1", res], quotes: [`GET ${ORIGIN}/ → 200`, "점수 78점"] });
+      },
+    });
+    assert.equal(out.verdicts[0].verdict, "mismatch", JSON.stringify(out.verdicts[0]));
+    assert.equal(out.decision, "Needs Fix");
+  });
+
+  it("인용이 전부 실행 전 증거물이면 재실행으로 확인할 것이 없다 — fail·mismatch는 확정하지 않는다", async () => {
+    let turn = 0;
+    const out = await runAgentV2Inspection({
+      targetUrl: `${ORIGIN}/`, intent: "i", acs: [AC], fetchImpl: fakeFetch(RECON), testDataSeed: 1,
+      driver: makeFakeDriver({ "/": { status: 200, text: "고객 메모", buttons: ["저장"] } }, { origin: ORIGIN }),
+      llm: async () => {
+        turn += 1;
+        if (turn === 1) return reply({ type: "click", target: { role: "button", name: "저장" } });
+        return reply({ type: "judge", verdict: "mismatch", claim: "x", artifactIds: ["E1"], quotes: [`GET ${ORIGIN}/ → 200`] });
+      },
+    });
+    assert.equal(out.verdicts[0].verdict, "not_verified");
+    assert.ok(out.verdicts[0].reasons.includes("mismatch_not_reproduced"), out.verdicts[0].reasons.join(","));
+  });
+});
+
 describe("판정", () => {
   it("must 의도 불일치(재실행 확인됨)는 Needs Fix + intentMismatch — 옛 코드는 Not Verified(F10·F11)", async () => {
     const site = { "/": (s) => ({ status: 200, text: `내 서비스 점검 ${s.clicked ? "점수 78점 — 검사 완료" : "주소를 넣으세요"}`, buttons: ["검사하기"] }) };

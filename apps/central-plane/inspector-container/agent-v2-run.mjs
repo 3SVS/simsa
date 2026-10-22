@@ -185,7 +185,7 @@ export async function runAgentV2Inspection(o) {
         const r = ev.verifyVerdict(t.verdict, store, opts);
         if (t.verdict.verdict === "not_verified") return r;
         const onlyRepro = r.reasons.every((x) => x === "fail_not_reproduced" || x === "mismatch_not_reproduced");
-        if (onlyRepro) return confirm(t.verdict, r, opts);
+        if (onlyRepro) return confirm(t.verdict, r);
         if (nudges < MAX_VERIFIER_NUDGES && steps < maxSteps - 2) {
           nudges += 1;
           history.push(`(verifier rejected your ${t.verdict.verdict}: ${r.reasons.join(", ")} — ${nudgeFor(r.reasons)})`);
@@ -228,7 +228,7 @@ export async function runAgentV2Inspection(o) {
      * session "confirm" 증거물로 남긴다. 그 재실행 증거물을 재현 증거(reproArtifactIds)로 붙여 다시 검증한다 — pass는 같은 인용이
      * 재실행에서도 나와야 한다. 재실행할 수 없으면(삭제 확인 클릭·시간 부족) fail·mismatch는 원래 검증 결과(재현 없음 → 강등), pass는 그대로.
      */
-    async function confirm(verdict, first, opts) {
+    async function confirm(verdict, first) {
       if (!replayable || trace.length === 0 || Date.now() > deadline - 30_000) {
         plog(`v2:ac ${ac.id} confirm skipped (${!replayable ? "unsafe_click" : trace.length === 0 ? "no_actions" : "budget"})`);
         return { ...first, confirmed: false };
@@ -246,26 +246,35 @@ export async function runAgentV2Inspection(o) {
       // (중간 화면에 우연히 있던 글자로 재현을 인정하지 않는다 — 예: 저장 전 빈 목록 문구).
       const all = store.list();
       const stepOf = (pos, bs) => bs.filter((b) => b <= pos).length;
-      const has = (x, q) => norm(`${x.summary}\n${x.raw}`).includes(norm(q));
+      // 재실행마다 바뀌는 숫자(걸린 시간·크기·시각)는 같은 관찰로 본다(실측 F12) — 정확한 값은 원래 증거물에서 검증기가 이미 대조했다.
+      const masked = (t) => norm(t).replace(/\d+/g, "#");
+      const has = (x, q) => norm(`${x.summary}\n${x.raw}`).includes(norm(q)) || masked(`${x.summary}\n${x.raw}`).includes(masked(q));
       const cited = new Set([...verdict.artifactIds, ...(verdict.reproArtifactIds ?? [])]);
       const matched = new Set();
       let again = true;
+      let checked = 0;
       for (const q of verdict.quotes) {
         const wanted = new Set();
+        let preRunOnly = true;
         all.forEach((x, pos) => {
-          if (pos >= runStart && pos < replayStart && cited.has(x.id) && has(x, q)) wanted.add(stepOf(pos, bounds));
+          if (pos >= replayStart || !cited.has(x.id) || !has(x, q)) return;
+          if (pos >= runStart) {
+            preRunOnly = false;
+            wanted.add(stepOf(pos, bounds));
+          }
         });
+        // 정찰·계획처럼 실행 전에 생긴 증거물의 글자는 행동과 무관하게 같다 — 재실행 대조 대상이 아니다(실측 F10).
+        if (preRunOnly && all.some((x, pos) => pos < runStart && cited.has(x.id) && has(x, q))) continue;
+        checked += 1;
         const hit = all.findIndex((x, pos) => pos >= replayStart && has(x, q) && (wanted.size === 0 || wanted.has(stepOf(pos, replayBounds))));
         if (hit < 0) again = false;
         else matched.add(all[hit].id);
       }
-      plog(`v2:ac ${ac.id} confirm ${verdict.verdict} → ${again ? "reproduced" : "not reproduced"} (${trace.length} actions)`);
-      if (verdict.verdict === "pass") {
-        if (again) return { ...first, confirmed: true };
-        return { ...first, verdict: "not_verified", originalVerdict: "pass", reasons: ["pass_not_reproduced"], confirmed: false };
-      }
-      const r = ev.verifyVerdict({ ...verdict, reproArtifactIds: again ? [...matched] : (verdict.reproArtifactIds ?? []) }, store, opts);
-      return { ...r, confirmed: again && r.reasons.length === 0 };
+      if (checked === 0) again = false;
+      plog(`v2:ac ${ac.id} confirm ${verdict.verdict} → ${again ? "reproduced" : "not reproduced"} (${trace.length} actions, ${checked} quotes checked)`);
+      if (again) return { ...verdict, ...(verdict.verdict === "pass" ? {} : { reproArtifactIds: [...matched] }), reasons: [], confirmed: true };
+      const reason = verdict.verdict === "pass" ? "pass_not_reproduced" : verdict.verdict === "fail" ? "fail_not_reproduced" : "mismatch_not_reproduced";
+      return { ...verdict, verdict: "not_verified", originalVerdict: verdict.verdict, reasons: [reason], confirmed: false };
     }
   }
 

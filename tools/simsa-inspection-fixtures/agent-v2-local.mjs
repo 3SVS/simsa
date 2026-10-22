@@ -92,7 +92,8 @@ for (const t of targets) {
     row = {
       id: t.id, expected: t.expected, decision: r.decision, score: scoreV2(t.expected, r.decision, t.nullOk),
       entry: r.entry?.broken ?? null, facts: (r.facts ?? []).map((f) => `${f.rule}:${f.cls}`), hypotheses: (r.plan?.hypotheses ?? []).map((h) => `${h.id}:${h.cls}`),
-      verdicts: r.verdicts.map((v) => ({ acId: v.acId, verdict: v.verdict, claim: v.claim, reasons: v.reasons, artifactIds: v.artifactIds, quotes: v.quotes })),
+      verdicts: r.verdicts.map((v) => ({ acId: v.acId, verdict: v.verdict, originalVerdict: v.originalVerdict, confirmed: v.confirmed, claim: v.claim, reasons: v.reasons, artifactIds: v.artifactIds, reproArtifactIds: v.reproArtifactIds, quotes: v.quotes })),
+      intentMismatch: r.intentMismatch ?? [], defectGroups: r.defectGroups ?? [],
       artifacts: r.artifacts?.artifacts?.length ?? 0, llmCalls: r.llmCalls?.n ?? 0, tokens: usage, seconds: Math.round((Date.now() - started) / 1000), phases,
     };
   } catch (err) {
