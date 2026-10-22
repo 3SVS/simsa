@@ -112,6 +112,7 @@ export async function runAgentV2Inspection(o) {
       continue;
     }
     const hyps = plan.hypotheses.filter((h) => h.coversAcIds.includes(ac.id) && h.runnableNow);
+    const spanStart = store.list().length;
     let v = await runAc(ac, hyps, null);
     // 5) 클라이언트 UTC 날짜 가설이 덮는 기준: 통과였으면 실행기가 시계를 KST 00:30으로 옮겨 한 번 더 — 그때 실패(검증 통과)면 실패.
     if (v.verdict === "pass" && hyps.some((h) => h.experiment.kind === "clock_early_morning_kst") && Date.now() < deadline - 60_000) {
@@ -122,6 +123,10 @@ export async function runAgentV2Inspection(o) {
     }
     // S5d: "마감 − 단위"를 마지막 시작 칸으로 둔 앱을 실패로 읽은 판정은 확인 못 함으로(뒤집지 않는다).
     if (jd.closingSlotMisread(ac, v)) v = { ...v, verdict: "not_verified", originalVerdict: v.verdict, reasons: [...v.reasons, "closing_slot_interpretation"] };
+    // S6a·b: 확정된 실패·불일치의 원인 — 이 기준을 실행하는 동안 생긴 증거물 + 정적 사실(데이터 라벨의 원천).
+    if (v.verdict === "fail" || v.verdict === "mismatch") {
+      v = { ...v, cause: jd.classifyFailure(v, { acArtifacts: store.list().slice(spanStart), facts: recorded, hypotheses: plan.hypotheses }) };
+    }
     verdicts.push(v);
     plog(`v2:ac ${ac.id} → ${v.verdict}${v.reasons.length ? `(${v.reasons.join("+")})` : ""}`);
   }
@@ -137,7 +142,7 @@ export async function runAgentV2Inspection(o) {
       ? "Ready"
       : "Not Verified";
   // S5c 첫 지점 규칙: 같은 가설·같은 결함 분류의 실패는 결함 하나로(통계·데이터의 단위는 기준이 아니라 결함).
-  const defectGroups = jd.groupFailures(verdicts, plan.hypotheses, (Array.isArray(o.acs) ? o.acs : []).map((a) => a?.id).filter(Boolean));
+  const defectGroups = jd.groupFailures(verdicts, plan.hypotheses, (Array.isArray(o.acs) ? o.acs : []).map((a) => a?.id).filter(Boolean), (v) => v.cause?.cls ?? "other");
   return { ...base, decision, intentMismatch, defectGroups, entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
 
   /** 기준 하나 — 새 브라우저에서 시작, 증거물을 쌓으며 조작, 검증기와 실행기 재실행(확인 V)을 통과한 판정만 돌려준다. */

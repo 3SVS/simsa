@@ -63,6 +63,27 @@ describe("확인 — 실행기의 독립 재실행", () => {
     assert.equal(out.decision, "Needs Fix");
   });
 
+  it("(S6a) 확정된 fail에 증거 기반 원인이 붙고 결함 묶음도 그 분류를 쓴다 — 실행 중 콘솔의 서버 주소 해석 실패 → missing_backend_config", async () => {
+    const app = memoApp();
+    const site = { "/": (s) => ({ ...app.site["/"](s), consoleErrors: s.clicks.length ? ["Failed to load resource: net::ERR_NAME_NOT_RESOLVED"] : [] }) };
+    let turn = 0;
+    const out = await runAgentV2Inspection({
+      targetUrl: `${ORIGIN}/`, intent: "메모", acs: [AC], fetchImpl: fakeFetch(RECON), testDataSeed: 1,
+      driver: makeFakeDriver(site, { origin: ORIGIN, onAct: app.onAct }),
+      llm: async ({ user }) => {
+        turn += 1;
+        if (turn <= script.length) return reply(script[turn - 1]);
+        const after = lastId(user, /screen\(same\) · .*아직 저장된 메모가 없습니다/);
+        return reply({ type: "judge", verdict: "fail", claim: "저장해도 목록이 비어 있다", artifactIds: [after], quotes: ["(아직 저장된 메모가 없습니다)"] });
+      },
+    });
+    const v = out.verdicts[0];
+    assert.equal(v.verdict, "fail", JSON.stringify(v));
+    assert.equal(v.cause.cls, "missing_backend_config");
+    assert.equal(v.cause.basis, "console");
+    assert.deepEqual(out.defectGroups.map((g) => g.key), ["CORE-1:missing_backend_config"]);
+  });
+
   it("재실행에서 같은 글자가 안 나오면(한 번만 난 실패) fail을 확정하지 않는다", async () => {
     const app = memoApp({ flakyOnce: true });
     let turn = 0;
