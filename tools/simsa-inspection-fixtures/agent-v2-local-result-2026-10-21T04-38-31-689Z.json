@@ -1,0 +1,457 @@
+{
+ "label": "v2 로컬(브랜치 코드) — 모델 gpt-5.6-sol(OpenAI 직접, 프로덕션 V-5 후보 아님)",
+ "kstStart": "2026. 10. 21. PM 1:38:31",
+ "model": "gpt-5.6-sol",
+ "steps": 16,
+ "summary": {
+  "pass": 10,
+  "partial": 3,
+  "opposite": 1,
+  "errors": 0,
+  "tokens": {
+   "in": 54772,
+   "out": 4657
+  }
+ },
+ "rows": [
+  {
+   "id": "F1",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "심사테스트를 입력하고 추가 버튼을 누르니 목록에 나타났다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E8"
+     ],
+     "quotes": [
+      "\"추가\" 누르기 — 화면 바뀜",
+      "📝 심사테스트"
+     ]
+    }
+   ],
+   "artifacts": 8,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3469,
+    "out": 343
+   },
+   "seconds": 11,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+10.6s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F2",
+   "expected": "working",
+   "decision": "Not Verified",
+   "score": "partial",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "not_verified",
+     "claim": "모델 응답을 읽지 못했어요",
+     "reasons": [
+      "agent_error"
+     ],
+     "artifactIds": [],
+     "quotes": []
+    }
+   ],
+   "artifacts": 6,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3486,
+    "out": 231
+   },
+   "seconds": 11,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:plan facts=- hypotheses=-",
+    "+10.4s v2:ac CORE-1 → not_verified(agent_error)"
+   ]
+  },
+  {
+   "id": "F3",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "claim": "고객 메모를 입력하고 저장을 눌러도 목록에 저장된 메모가 나타나지 않는다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "💬 (아직 저장된 메모가 없습니다)",
+      "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+     ]
+    }
+   ],
+   "artifacts": 14,
+   "llmCalls": 6,
+   "tokens": {
+    "in": 8542,
+    "out": 591
+   },
+   "seconds": 21,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:plan facts=- hypotheses=-",
+    "+20.6s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "id": "F4",
+   "expected": "broken",
+   "decision": "Not Verified",
+   "score": "partial",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "not_verified",
+     "claim": "모델 응답을 읽지 못했어요",
+     "reasons": [
+      "agent_error"
+     ],
+     "artifactIds": [],
+     "quotes": []
+    }
+   ],
+   "artifacts": 6,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3459,
+    "out": 251
+   },
+   "seconds": 9,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:plan facts=- hypotheses=-",
+    "+8.7s v2:ac CORE-1 → not_verified(agent_error)"
+   ]
+  },
+  {
+   "id": "F5",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "blank_page",
+    "status": 200
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 1,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:entry broken blank_page"
+   ]
+  },
+  {
+   "id": "F6",
+   "expected": "broken",
+   "decision": "Not Verified",
+   "score": "partial",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "not_verified",
+     "claim": "기록을 추가하면 잠시 목록에 보이지만 저장되지 않아 새로고침 후 사라집니다.",
+     "reasons": [
+      "fail_not_reproduced"
+     ],
+     "artifactIds": [
+      "E6",
+      "E7",
+      "E9",
+      "E21",
+      "E22"
+     ],
+     "quotes": [
+      "📝 심사테스트 010-5242-3694",
+      "브라우저 저장소 그대로 · 서버 쓰기 0건",
+      "💬 (아직 기록이 없습니다)"
+     ]
+    }
+   ],
+   "artifacts": 22,
+   "llmCalls": 16,
+   "tokens": {
+    "in": 27084,
+    "out": 2307
+   },
+   "seconds": 70,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.2s v2:plan facts=- hypotheses=-",
+    "+63.1s v2:ac CORE-1 → not_verified(fail_not_reproduced)"
+   ]
+  },
+  {
+   "id": "F7",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "기록을 입력하고 추가를 누르면 브라우저에 저장되고 목록에 나타나며 새로고침 후에도 유지된다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E8",
+      "E9"
+     ],
+     "quotes": [
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "📝 심사테스트"
+     ]
+    }
+   ],
+   "artifacts": 9,
+   "llmCalls": 4,
+   "tokens": {
+    "in": 4996,
+    "out": 534
+   },
+   "seconds": 21,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+19.5s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F8",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "산책 기록 '심사테스트'를 추가하자 브라우저에 저장되고 목록에 나타났습니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "👟 심사테스트"
+     ]
+    }
+   ],
+   "artifacts": 8,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3736,
+    "out": 400
+   },
+   "seconds": 13,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+12.7s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F9",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "page_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 1,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.5s v2:entry broken page_not_found"
+   ]
+  },
+  {
+   "id": "F10",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "page_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 1,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:entry broken page_not_found"
+   ]
+  },
+  {
+   "id": "F11",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "page_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.2s v2:entry broken page_not_found"
+   ]
+  },
+  {
+   "id": "F12",
+   "expected": "working",
+   "decision": "Needs Fix",
+   "score": "opposite",
+   "entry": {
+    "cause": "page_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 1,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.2s v2:entry broken page_not_found"
+   ]
+  },
+  {
+   "id": "F13",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "page_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:entry broken page_not_found"
+   ]
+  },
+  {
+   "id": "F14",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "page_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:entry broken page_not_found"
+   ]
+  }
+ ]
+}

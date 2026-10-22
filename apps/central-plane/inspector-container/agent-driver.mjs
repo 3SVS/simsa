@@ -47,6 +47,8 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
   /** "dismiss"(기본) | "accept" — 허용된 내 기록 클릭(acceptDialog) 동안만 accept. */
   let dialogPolicy = "dismiss";
   const writes = [];
+  /** (v2 S4a) 쓰기 요청의 응답 — { at, line, status }. */
+  const writeResults = [];
   let storageMark = { at: Date.now(), local: "", session: "" };
   const readStorage = async () =>
     page
@@ -87,6 +89,12 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         networkErrors.push(`HTTP ${r.status()} ${r.request().method()} ${r.url().slice(0, 160)}`);
       } else if (r.status() >= 400 && r.request().resourceType() !== "document" && !isNoiseResource(r.url()) && ["xhr", "fetch"].includes(r.request().resourceType())) {
         networkErrors.push(`HTTP ${r.status()} ${r.request().method()} ${r.url().slice(0, 160)}`);
+      }
+      // (2026-10-21 v2 S4a) 쓰기 요청의 응답 코드 — v2 검증기의 "pass = 쓰기 2xx"(V-2)가 이 값을 본다. 요청 기록(writes)과 같은 줄 모양.
+      const rq = r.request();
+      const rt = rq.resourceType();
+      if ((rt === "xhr" || rt === "fetch") && rq.method() !== "GET" && rq.method() !== "OPTIONS" && !isNoiseResource(r.url())) {
+        writeResults.push({ at: Date.now(), line: `${rq.method()} ${r.url().slice(0, 140)}`, status: r.status() });
       }
     });
     // A2 탐침: 앱이 서버로 보낸 쓰기 요청(데이터 요청 중 GET이 아닌 것) — 시각과 함께.
@@ -303,6 +311,23 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     async observe() {
       const aria = await page.locator("body").ariaSnapshot({ timeout: 5000 }).catch(() => "");
       const hasPasswordField = (await page.locator("input[type=password]").count().catch(() => 0)) > 0;
+      // (v2 S4d F2) 라벨 없는 입력칸은 접근성 트리에 "- spinbutton"뿐이라 모델이 대상을 못 짚는다 — placeholder를 따로 싣는다.
+      const fields = await page
+        .evaluate(() => {
+          const out = [];
+          for (const el of document.querySelectorAll("input, textarea")) {
+            const type = (el.getAttribute("type") ?? "text").toLowerCase();
+            if (["hidden", "submit", "button", "checkbox", "radio", "file", "image", "reset", "password"].includes(type)) continue;
+            const ph = el.getAttribute("placeholder")?.trim();
+            const named = (el.labels && el.labels.length > 0) || el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.getAttribute("title");
+            if (!ph || named || el.getClientRects().length === 0) continue;
+            const role = type === "number" ? "spinbutton" : type === "search" ? "searchbox" : "textbox";
+            out.push(`${role} placeholder="${ph.slice(0, 60)}"`);
+            if (out.length >= 10) break;
+          }
+          return out;
+        })
+        .catch(() => []);
       return {
         url: page.url(),
         title: await page.title().catch(() => ""),
@@ -311,6 +336,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         networkErrors: networkErrors.slice(-10),
         consoleErrors: consoleErrors.slice(-10),
         hasPasswordField,
+        fields,
       };
     },
     /** 검증된 행동 하나(안전 판정은 agent-run이 이미 했다). 결과 문장은 기록·LLM에 들어가므로 값을 싣지 않는다. */
@@ -432,6 +458,10 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         localChanged: now.local !== storageMark.local,
         sessionChanged: now.session !== storageMark.session,
       };
+    },
+    /** (v2 S4a) 표시 이후 쓰기 요청의 응답 코드 — 증거물 request에 status로 붙는다. */
+    async writeResults() {
+      return writeResults.filter((w) => w.at >= storageMark.at).map((w) => ({ line: w.line, status: w.status }));
     },
     /** 직접 로그인 뒤의 브라우저 상태(쿠키·저장소) — 이 프로세스 메모리에만, 이 런 동안만 쓴다. */
     async captureState() {

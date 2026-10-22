@@ -1303,6 +1303,8 @@ export interface AgentObservation {
   networkErrors: string[];
   consoleErrors: string[];
   hasPasswordField: boolean;
+  /** 라벨 없는 입력칸의 placeholder 목록(v2 프롬프트만 쓴다). 옛 드라이버엔 없다. */
+  fields?: string[];
 }
 
 /** 한 턴의 사용자 메시지. 관찰은 상한을 둬 토큰을 묶는다. 비밀은 호출 전에 가려져 있어야 한다. */
