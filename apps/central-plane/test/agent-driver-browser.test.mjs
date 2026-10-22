@@ -50,6 +50,8 @@ const PAGES = {
   "/admin-flat": `<!doctype html><html><body><div><p>10:00 심사테스트 010-1111-2222</p><button>취소</button><p>13:00 심사테스트 010-2245-9715</p><button>취소</button></div></body></html>`,
   // (v2 S4a) 쓰기 요청 — 성공(201)·거절(400).
   "/writes": `<!doctype html><html><body><button onclick="fetch('/api/ok',{method:'POST',body:'{}'}).then(()=>document.getElementById('o').textContent='저장됨')">저장</button><button onclick="fetch('/api/bad',{method:'POST',body:'{}'}).then(()=>document.getElementById('o').textContent='거절됨')">잘못 저장</button><p id="o"></p></body></html>`,
+  // (v2 S4d F2 모양) 라벨 없는 숫자 칸 — 단서는 placeholder뿐.
+  "/nolabel": `<!doctype html><html><body><h1>단위 변환기</h1><input id="km" type="number" placeholder="예: 5"><button>변환하기</button></body></html>`,
   // (10-21 gemini 모양) 시술을 안 고르면 alert만 — 화면은 그대로.
   "/popup": `<!doctype html><html><body><button onclick="alert('시술 메뉴를 최소 하나 이상 선택해주세요.')">예약 완료하기</button></body></html>`,
   // (10-21 claude 모양) "예약하기"가 nav 탭(앞쪽, aria-current)과 폼 제출 버튼 두 개.
@@ -106,6 +108,14 @@ describe("agent 드라이버 — 실제 브라우저", { skip }, () => {
     await driver.goto(base + "/");
     await driver.setClock("2026-10-06T00:30:00+09:00");
     assert.match(await driver.bodyText(), /KST시각 00/);
+  });
+  it("(v2 S4d F2) 이름 없는 입력칸은 placeholder로 관찰 목록에 오르고, 그 placeholder로 채울 수 있다", async () => {
+    await driver.goto(base + "/nolabel");
+    const o = await driver.observe();
+    assert.match(o.aria, /- spinbutton\n/, "접근성 트리에는 이름이 없다(이 테스트의 전제)");
+    assert.deepEqual(o.fields, ['spinbutton placeholder="예: 5"']);
+    const r = await driver.act({ type: "fill", target: { placeholder: "예: 5" }, value: "10" });
+    assert.equal(r.ok, true, r.note);
   });
   it("B5: 원본 HTML을 받고, 고친 파일을 그 주소에 끼워 넣었다가 되돌린다", async () => {
     const src = await driver.fetchSource(base + "/");

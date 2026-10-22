@@ -185,7 +185,7 @@ export async function runAgentV2Inspection(o) {
       const t = ag.parseV2Turn(text, { acId: ac.id, origin });
       if (!t.ok) {
         invalid += 1;
-        history.push(`(rejected: ${t.error})`);
+        history.push(`(rejected: ${t.error}${rejectHint(t.error)})`);
         if (invalid >= MAX_INVALID_STREAK) return downgradedNv(ac, "모델 응답을 읽지 못했어요", "agent_error");
         continue;
       }
@@ -263,4 +263,13 @@ function nudgeFor(reasons) {
   if (reasons.includes("quote_not_in_artifacts")) tips.push("copy quotes exactly from the cited artifacts' text");
   if (reasons.includes("no_artifacts") || reasons.includes("unknown_artifact")) tips.push("cite existing artifact ids from 'Evidence so far'");
   return tips.join("; ") || "fix the judgement";
+}
+
+/** 거절된 답에 고칠 방법을 붙인다 — 이유 코드만 주면 모델이 같은 실수를 반복한다(실측 F2·F4 2026-10-22: 역할만 있는 대상 3연속). */
+function rejectHint(error) {
+  if (/_needs_target_and_value$|_needs_target$/.test(error)) return " — role alone is not enough: add the field's visible label, placeholder, name or text exactly as shown on screen";
+  if (error === "no_json_object") return " — reply with exactly one JSON object";
+  if (error === "set_clock_runner_only") return " — the runner checks other times itself; do not change the clock";
+  if (error.startsWith("judge_")) return " — follow the judge format: verdict, claim, artifactIds, quotes";
+  return "";
 }

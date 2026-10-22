@@ -311,6 +311,23 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
     async observe() {
       const aria = await page.locator("body").ariaSnapshot({ timeout: 5000 }).catch(() => "");
       const hasPasswordField = (await page.locator("input[type=password]").count().catch(() => 0)) > 0;
+      // (v2 S4d F2) 라벨 없는 입력칸은 접근성 트리에 "- spinbutton"뿐이라 모델이 대상을 못 짚는다 — placeholder를 따로 싣는다.
+      const fields = await page
+        .evaluate(() => {
+          const out = [];
+          for (const el of document.querySelectorAll("input, textarea")) {
+            const type = (el.getAttribute("type") ?? "text").toLowerCase();
+            if (["hidden", "submit", "button", "checkbox", "radio", "file", "image", "reset", "password"].includes(type)) continue;
+            const ph = el.getAttribute("placeholder")?.trim();
+            const named = (el.labels && el.labels.length > 0) || el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.getAttribute("title");
+            if (!ph || named || el.getClientRects().length === 0) continue;
+            const role = type === "number" ? "spinbutton" : type === "search" ? "searchbox" : "textbox";
+            out.push(`${role} placeholder="${ph.slice(0, 60)}"`);
+            if (out.length >= 10) break;
+          }
+          return out;
+        })
+        .catch(() => []);
       return {
         url: page.url(),
         title: await page.title().catch(() => ""),
@@ -319,6 +336,7 @@ export async function createPlaywrightDriver({ outDir, locale = "ko", isNoiseRes
         networkErrors: networkErrors.slice(-10),
         consoleErrors: consoleErrors.slice(-10),
         hasPasswordField,
+        fields,
       };
     },
     /** 검증된 행동 하나(안전 판정은 agent-run이 이미 했다). 결과 문장은 기록·LLM에 들어가므로 값을 싣지 않는다. */

@@ -143,6 +143,24 @@ describe("계획 → 실행 → 기계 검증", () => {
     assert.deepEqual(v.reasons, ["agent_error"]);
   });
 
+  it("역할만 있는 대상은 거절되고, 다음 턴에 무엇을 넣어야 하는지 알려 준다 — 실측 F2·F4(2026-10-22) 같은 실수 3번 반복", async () => {
+    const { site, onAct } = browserOnlySalon();
+    const prompts = [];
+    let turn = 0;
+    const out = await runAgentV2Inspection({
+      targetUrl: `${ORIGIN}/`, intent: "i", acs: [A4], fetchImpl: fakeFetch(RECON_FILES), testDataSeed: 1,
+      driver: makeFakeDriver(site, { origin: ORIGIN, onAct }),
+      llm: async ({ user }) => {
+        prompts.push(user);
+        turn += 1;
+        if (turn === 1) return reply({ type: "fill", target: { role: "spinbutton" }, value: "10" });
+        return reply({ type: "judge", verdict: "not_verified", claim: "확인 못 함", artifactIds: [], quotes: [] });
+      },
+    });
+    assert.match(prompts[1], /rejected: fill_needs_target_and_value — .*placeholder/, "거절 이유와 고칠 방법이 보인다");
+    assert.notDeepEqual(out.verdicts[0].reasons, ["agent_error"]);
+  });
+
   it("리포트에 증거물·계획·정적 사실이 실린다(판정의 근거를 다시 볼 수 있다)", async () => {
     const { site, onAct } = browserOnlySalon();
     const out = await runAgentV2Inspection({

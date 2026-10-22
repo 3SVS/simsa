@@ -23,7 +23,7 @@ export function v2SystemPrompt(locale: V2Locale = "ko", opts: { readOnly?: boole
     "Every tool result is recorded as an EVIDENCE ARTIFACT with an id like E12 (listed under 'Evidence so far' with its kind and a summary). Your final judgement must cite those ids.",
     'Reply with exactly one JSON object and nothing else: {"thought": "<short>", "action": {...}}.',
     "Actions:",
-    '- {"type":"click","target":{"role":"button","name":"예약하기"}}  (target keys: role, name, text, label, placeholder)',
+    '- {"type":"click","target":{"role":"button","name":"예약하기"}}  (target keys: role, name, text, label, placeholder — role alone is rejected; always include the visible label, placeholder, name or text)',
     '- {"type":"fill","target":{"label":"이름"},"value":"김서연"} | {"type":"select","target":{"label":"시간"},"value":"10:30"}',
     '- {"type":"press","key":"Enter"} | {"type":"goto","path":"/admin"} (only addresses shown on screen) | {"type":"reload"} | {"type":"back"} | {"type":"wait","ms":1000}',
     '- {"type":"new_session"}   (fresh browser: a DIFFERENT customer, or the owner on another device)',
@@ -98,6 +98,7 @@ export function v2TurnPrompt(args: {
     `Current screen: ${o.url}${o.hasPasswordField ? " (has a password field)" : ""}`,
     `Text: ${o.text.slice(0, OBS_TEXT_MAX)}`,
     `Accessibility tree: ${o.aria.slice(0, OBS_ARIA_MAX)}`,
+    ...(o.fields?.length ? [`Form fields: ${o.fields.join(" | ")}  (unlabelled — target them by placeholder)`] : []),
     ...(o.networkErrors.length ? [`Network errors: ${o.networkErrors.slice(-5).join(" | ")}`] : []),
     ...(o.consoleErrors.length ? [`Console errors: ${o.consoleErrors.slice(-5).join(" | ")}`] : []),
   ].join("\n");

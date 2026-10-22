@@ -74,4 +74,10 @@ describe("프롬프트", () => {
     assert.match(p, /Evidence so far:\nE1 · source · R2 client_only_storage — \//);
     assert.match(p, /second customer=심사테스트둘/);
   });
+  it("이름 없는 입력칸의 placeholder가 프롬프트에 실린다 — 실측 F2(2026-10-22): 접근성 트리엔 '- spinbutton'뿐이라 모델이 대상을 못 짚음", () => {
+    const p = A.v2TurnPrompt({ ac: AC, intent: "i", hypotheses: [], observation: { ...OBS, fields: ['spinbutton placeholder="예: 5"'] }, evidence: "", history: [], testData: { name: "a", altName: "b", phone: "010" }, stepsLeft: 5, nowLabel: "x" });
+    assert.match(p, /Form fields: spinbutton placeholder="예: 5"/);
+    const q = A.v2TurnPrompt({ ac: AC, intent: "i", hypotheses: [], observation: OBS, evidence: "", history: [], testData: { name: "a", altName: "b", phone: "010" }, stepsLeft: 5, nowLabel: "x" });
+    assert.doesNotMatch(q, /Form fields/, "필드 목록이 없으면(옛 드라이버·가짜 드라이버) 줄을 넣지 않는다");
+  });
 });
