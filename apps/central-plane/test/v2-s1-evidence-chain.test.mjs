@@ -112,7 +112,11 @@ describe("기계 검증기 (LLM 없음)", () => {
     const { s, ids } = salonStore();
     assert.equal(E.verifyVerdict({ acId: "A1", verdict: "not_verified", claim: "로그인 필요", artifactIds: [], quotes: [] }, s).verdict, "not_verified");
     assert.equal(E.verifyVerdict({ acId: "I", verdict: "mismatch", claim: "x", artifactIds: [], quotes: ["x"] }, s).verdict, "not_verified");
-    assert.equal(E.verifyVerdict({ acId: "I", verdict: "mismatch", claim: "예약 대신 소개 페이지", artifactIds: [ids.form], quotes: ["동네 미용실 예약"] }, s).verdict, "mismatch");
+    // S5(2026-10-22): mismatch도 fail처럼 독립 재실행 증거가 있어야 한다(설계 §2.2-5).
+    const m = { acId: "I", verdict: "mismatch", claim: "예약 대신 소개 페이지", artifactIds: [ids.form], quotes: ["동네 미용실 예약"] };
+    assert.deepEqual(E.verifyVerdict(m, s).reasons, ["mismatch_not_reproduced"]);
+    const again = s.add("screen", "confirm /: 동네 미용실 예약", "동네 미용실 예약", { session: "confirm" });
+    assert.equal(E.verifyVerdict({ ...m, reproArtifactIds: [again] }, s).verdict, "mismatch");
   });
   it("검증기를 통과하지 못한 판정은 리포트에 오르지 않는다 — verifyAll은 통과분과 강등분을 나눈다", () => {
     const { s, ids } = salonStore();

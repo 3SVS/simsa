@@ -178,7 +178,22 @@ export type DowngradeReason =
   | "no_quotes"
   | "quote_not_in_artifacts"
   | "pass_without_state_change"
-  | "fail_not_reproduced";
+  | "pass_quotes_only_initial_screen"
+  /** 실행기 재실행(확인 V)에서 pass의 인용이 다시 나오지 않음 — 실행기가 붙인다 */
+  | "pass_not_reproduced"
+  /** 마감 − 단위를 마지막 시작 칸으로 둔 앱을 실패로 읽음(v2-judge) — 실행기가 붙인다 */
+  | "closing_slot_interpretation"
+  | "fail_not_reproduced"
+  | "mismatch_without_observation"
+  | "mismatch_not_reproduced";
+
+/** 앱이 실제로 그렇게 동작했다는 관찰 종류(V-7: 코드·메모만으로 "생각과 달라요"를 내지 않는다). */
+const OBSERVED_KINDS: ReadonlySet<ArtifactKind> = new Set(["request", "screen", "diff", "storage", "console"]);
+
+export interface VerifyOptions {
+  /** 기준 시작 화면 증거물 — pass 인용이 전부 여기 이미 있던 글자(소개 문구)면 강등(S5). */
+  baselineIds?: readonly string[];
+}
 
 export interface VerifiedVerdict extends V2Verdict {
   /** 검증기가 강등했으면 원래 판정 */
@@ -195,7 +210,7 @@ function quotesFoundIn(quotes: readonly string[], arts: readonly Artifact[]): bo
 }
 
 /** 판정 하나를 기계로 검증한다. 통과하지 못하면 not_verified로 강등하고 사유를 남긴다. */
-export function verifyVerdict(v: V2Verdict, store: Pick<EvidenceStore, "get">): VerifiedVerdict {
+export function verifyVerdict(v: V2Verdict, store: Pick<EvidenceStore, "get">, opts: VerifyOptions = {}): VerifiedVerdict {
   if (v.verdict === "not_verified") return { ...v, reasons: [] };
   const reasons: DowngradeReason[] = [];
   if (v.artifactIds.length === 0) reasons.push("no_artifacts");
@@ -205,10 +220,15 @@ export function verifyVerdict(v: V2Verdict, store: Pick<EvidenceStore, "get">): 
   if (v.quotes.length === 0) reasons.push("no_quotes");
   else if (found.length > 0 && !quotesFoundIn(v.quotes, found)) reasons.push("quote_not_in_artifacts");
   if (v.verdict === "pass" && !found.some(isStateChangeArtifact)) reasons.push("pass_without_state_change");
-  if (v.verdict === "fail") {
+  if (v.verdict === "pass" && opts.baselineIds?.length && v.quotes.length > 0) {
+    const baseline = opts.baselineIds.map((id) => store.get(id)).filter((a): a is Artifact => Boolean(a));
+    if (baseline.length > 0 && v.quotes.every((q) => quotesFoundIn([q], baseline))) reasons.push("pass_quotes_only_initial_screen");
+  }
+  if (v.verdict === "mismatch" && found.length > 0 && !found.some((a) => OBSERVED_KINDS.has(a.kind))) reasons.push("mismatch_without_observation");
+  if (v.verdict === "fail" || v.verdict === "mismatch") {
     const repro = (v.reproArtifactIds ?? []).filter((id) => !v.artifactIds.includes(id)).map((id) => store.get(id));
     const reproFound = repro.filter((a): a is Artifact => Boolean(a));
-    if (reproFound.length === 0 || v.quotes.length === 0 || !quotesFoundIn(v.quotes, reproFound)) reasons.push("fail_not_reproduced");
+    if (reproFound.length === 0 || v.quotes.length === 0 || !quotesFoundIn(v.quotes, reproFound)) reasons.push(v.verdict === "fail" ? "fail_not_reproduced" : "mismatch_not_reproduced");
   }
   if (reasons.length === 0) return { ...v, reasons };
   return { ...v, verdict: "not_verified", originalVerdict: v.verdict, reasons: [...new Set(reasons)] };
