@@ -183,6 +183,8 @@ export type DowngradeReason =
   | "pass_not_reproduced"
   /** 마감 − 단위를 마지막 시작 칸으로 둔 앱을 실패로 읽음(v2-judge) — 실행기가 붙인다 */
   | "closing_slot_interpretation"
+  /** 다른 기준·이전 실행의 증거물을 인용 — 실행기가 붙인다 */
+  | "cites_other_run"
   | "fail_not_reproduced"
   | "mismatch_without_observation"
   | "mismatch_not_reproduced";

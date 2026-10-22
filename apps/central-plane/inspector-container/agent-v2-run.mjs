@@ -29,6 +29,7 @@ export const AGENT_V2_RUNNER_REV = "agent-v2-1";
 const DEFAULT_MAX_STEPS = 20;
 const MAX_VERIFIER_NUDGES = 2;
 const MAX_INVALID_STREAK = 3;
+const FIX_MAX_TOKENS = 4000;
 
 function kstParts(ms) {
   const d = new Date(ms + 9 * 3600_000);
@@ -92,7 +93,7 @@ export async function runAgentV2Inspection(o) {
     plog(`v2:entry broken ${entry.broken.cause}`);
     // 드라이버는 만들 때 이미 브라우저를 띄웠다 — 여기서 닫지 않으면 호출자 프로세스가 끝나지 않는다(S4d 실측).
     await o.driver.close?.().catch(() => {});
-    return { ...base, decision: "Needs Fix", entry: { ...entry, artifactId: entryId }, facts: [], plan: null, verdicts: [], artifacts: store.toJSON(), llmCalls };
+    return { ...base, decision: "Needs Fix", intentMismatch: [], defectGroups: [], fix: { attempted: false, reason: "entry_broken" }, entry: { ...entry, artifactId: entryId }, facts: [], plan: null, verdicts: [], artifacts: store.toJSON(), llmCalls };
   }
 
   // 2) 정적 사실 → 가설·계획
@@ -103,9 +104,14 @@ export async function runAgentV2Inspection(o) {
   plog(`v2:plan facts=${facts.map((f) => f.rule).join(",") || "-"} hypotheses=${plan.hypotheses.map((h) => `${h.id}:${h.cls}`).join(",") || "-"}`);
 
   // 3) 실행
+  /** 여기까지(정찰·정적 사실·계획)는 모든 기준이 같이 보는 증거물. 이후는 기준 실행마다 따로 — 다른 실행의 증거물은 보이지도, 인용되지도 않는다. */
+  const execStart = store.list().length;
   await o.driver.start(o.targetUrl);
   const system = ag.v2SystemPrompt(locale, { readOnly: o.readOnly === true });
   const verdicts = [];
+  /** 기준별 성공한 행동 순서(사람 말) — 고치기 요청의 재현 순서. */
+  const actionLog = new Map();
+  let fixing = false;
   for (const ac of acs) {
     if (Date.now() > deadline - 20_000) {
       verdicts.push({ acId: ac.id, verdict: "not_verified", claim: "시간 안에 이 기준까지 가지 못했어요", artifactIds: [], quotes: [], reasons: ["budget"] });
@@ -130,9 +136,11 @@ export async function runAgentV2Inspection(o) {
     verdicts.push(v);
     plog(`v2:ac ${ac.id} → ${v.verdict}${v.reasons.length ? `(${v.reasons.join("+")})` : ""}`);
   }
+  const mustIds = new Set(acs.filter((a) => a.priority === "must").map((a) => a.id));
+  // 7) 고치기(F, S6c) — 판정은 바꾸지 않는다. 고친 파일은 따로 내는 결과물이다.
+  const fix = await trySingleFileFix().catch((err) => ({ attempted: true, error: `fix_crashed: ${String(err?.message ?? err).slice(0, 80)}` }));
   await o.driver.close?.().catch(() => {});
 
-  const mustIds = new Set(acs.filter((a) => a.priority === "must").map((a) => a.id));
   const mustVerdicts = verdicts.filter((v) => mustIds.has(v.acId));
   // J: 검증·재실행을 통과한 must의 fail 또는 의도 불일치(V-7, "생각과 달라요")는 고쳐야 함. 불일치는 따로 표시한다.
   const intentMismatch = mustVerdicts.filter((v) => v.verdict === "mismatch").map((v) => v.acId);
@@ -143,7 +151,7 @@ export async function runAgentV2Inspection(o) {
       : "Not Verified";
   // S5c 첫 지점 규칙: 같은 가설·같은 결함 분류의 실패는 결함 하나로(통계·데이터의 단위는 기준이 아니라 결함).
   const defectGroups = jd.groupFailures(verdicts, plan.hypotheses, (Array.isArray(o.acs) ? o.acs : []).map((a) => a?.id).filter(Boolean), (v) => v.cause?.cls ?? "other");
-  return { ...base, decision, intentMismatch, defectGroups, entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
+  return { ...base, decision, intentMismatch, defectGroups, fix, entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
 
   /** 기준 하나 — 새 브라우저에서 시작, 증거물을 쌓으며 조작, 검증기와 실행기 재실행(확인 V)을 통과한 판정만 돌려준다. */
   async function runAc(ac, hyps, clockIso) {
@@ -161,13 +169,14 @@ export async function runAgentV2Inspection(o) {
     /** bounds[k] = k+1번째 행동을 시작할 때의 증거물 수 — 증거물이 몇 번째 행동 뒤에 생겼는지(단계)를 가른다. */
     const bounds = [];
     const runStart = store.list().length;
+    const view = { list: () => store.list().filter((_, i) => i < execStart || i >= runStart) };
     let replayable = true;
     let baselineId = null;
     while (steps < maxSteps && Date.now() < deadline - 10_000) {
       const obs = await observeInto(ctx);
       baselineId ??= obs.artifactId;
       const user = ag.v2TurnPrompt({
-        ac, intent: o.intent ?? "", hypotheses: hyps, observation: obs.obs, evidence: ag.artifactDigest(store), history, testData: data,
+        ac, intent: o.intent ?? "", hypotheses: hyps, observation: obs.obs, evidence: ag.artifactDigest(view), history, testData: data,
         stepsLeft: maxSteps - steps, nowLabel: kstParts(clockIso ? Date.parse(clockIso) : nowMs()).label,
       });
       let text;
@@ -187,7 +196,15 @@ export async function runAgentV2Inspection(o) {
       invalid = 0;
       if (t.kind === "judge") {
         const opts = baselineId ? { baselineIds: [baselineId] } : {};
-        const r = ev.verifyVerdict(t.verdict, store, opts);
+        // 다른 기준·이전 실행(고치기 전 원본 등)의 증거물 인용은 이 실행의 판정 근거가 아니다(실측 F4 10-23).
+        const order = new Map(store.list().map((x, i) => [x.id, i]));
+        const foreign = [...t.verdict.artifactIds, ...(t.verdict.reproArtifactIds ?? [])].some((id) => {
+          const i = order.get(id);
+          return i !== undefined && i >= execStart && i < runStart;
+        });
+        const r = foreign && t.verdict.verdict !== "not_verified"
+          ? { ...t.verdict, verdict: "not_verified", originalVerdict: t.verdict.verdict, reasons: ["cites_other_run"] }
+          : ev.verifyVerdict(t.verdict, store, opts);
         if (t.verdict.verdict === "not_verified") return r;
         const onlyRepro = r.reasons.every((x) => x === "fail_not_reproduced" || x === "mismatch_not_reproduced");
         if (onlyRepro) return confirm(t.verdict, r);
@@ -223,6 +240,7 @@ export async function runAgentV2Inspection(o) {
       if (res?.ok) {
         trace.push(a);
         bounds.push(at);
+        if (!clockIso && !fixing) actionLog.set(ac.id, trace.map((x) => red(pure.describeAction(x, locale))));
       }
       history.push(`${desc} → ${res?.ok ? "ok" : "failed"}: ${red(res?.note ?? "")}`);
     }
@@ -281,6 +299,75 @@ export async function runAgentV2Inspection(o) {
       const reason = verdict.verdict === "pass" ? "pass_not_reproduced" : verdict.verdict === "fail" ? "fail_not_reproduced" : "mismatch_not_reproduced";
       return { ...verdict, verdict: "not_verified", originalVerdict: verdict.verdict, reasons: [reason], confirmed: false };
     }
+  }
+
+  /**
+   * 고치기(F, 설계 §2.2-7): 확정된 must fail이 있고 한 파일 앱이면, 기준·재현 순서·원인(S6a 분류·위치·코드 조각)을 주고
+   * 정확히 한 번 맞는 편집만 받는다(v1 B5 single-file-fix 재사용). 고친 파일을 그 주소에 끼워 넣고 실패했던 기준을 v2 실행
+   * (검증기 + 재실행 확인)으로 다시 돌려 **확인된 pass만** validated. 끝나면 끼움을 되돌린다. 의도 불일치는 고치기 대상이 아니다.
+   */
+  async function trySingleFileFix() {
+    const failed = verdicts.filter((v) => v.verdict === "fail" && mustIds.has(v.acId));
+    if (failed.length === 0) return { attempted: false, reason: "no_failures" };
+    if (o.singleFileFix === false || !o.driver.fetchSource || !o.driver.serveOverride) return { attempted: false, reason: "unavailable" };
+    if (Date.now() > deadline - 120_000) return { attempted: false, reason: "budget" };
+    const sf = await import("./single-file-fix.mjs");
+    const source = await o.driver.fetchSource(o.targetUrl).catch(() => null);
+    if (!sf.isSingleFileApp(source, o.targetUrl)) return { attempted: false, reason: "not_single_file" };
+    const causeLine = (v) => {
+      const c = v.cause;
+      if (!c) return "";
+      const loc = c.location ? ` at ${c.location.file}${c.location.line ? `:${c.location.line}` : ""}` : "";
+      const code = c.sourceIds.map((id) => store.get(id)?.raw).filter(Boolean).join(" … ").slice(0, 300);
+      const ev = c.evidenceIds.map((id) => store.get(id)?.raw).filter(Boolean).join(" | ").slice(0, 300);
+      return ` · cause: ${c.cls}${loc}${code ? ` · code: ${code}` : ""}${ev ? ` · seen: ${ev}` : ""}`;
+    };
+    const rows = failed.map((v) => {
+      const ac = acs.find((a) => a.id === v.acId) ?? {};
+      return { id: v.acId, title: ac.title ?? "", then: ac.then ?? "", actions: actionLog.get(v.acId) ?? [], reason: `${v.claim}${causeLine(v)}`, evidence: v.quotes };
+    });
+    const text = await callLlm("You fix single-file web apps. Reply with JSON only.", sf.singleFileFixPrompt(source, rows, locale), FIX_MAX_TOKENS);
+    const parsed = pure.extractJsonObject(text) ?? {};
+    const cannotFix = Array.isArray(parsed.cannotFix) ? parsed.cannotFix.filter((x) => typeof x === "string").slice(0, 10).map((x) => red(x)) : [];
+    // 편집 없이 "한 파일로는 못 고침"(서버·DB·외부 키 필요)만 답했으면 오류가 아니라 정직한 결론이다(실측 F3·F6·F13).
+    if ((!Array.isArray(parsed.edits) || parsed.edits.length === 0) && cannotFix.length > 0) {
+      plog(`v2:fix cannot fix in a single file (${cannotFix.length})`);
+      return { attempted: true, reason: "cannot_fix_in_single_file", validated: [], stillFailing: [], cannotFix };
+    }
+    const applied = sf.applyExactEdits(source, parsed.edits);
+    if (!applied.ok) {
+      plog(`v2:fix edits rejected ${applied.error}`);
+      return { attempted: true, error: applied.error, cannotFix };
+    }
+    const diff = sf.editsDiff(parsed.edits).slice(0, 40_000);
+    const diffId = store.add("context", `고친 파일 편집 ${parsed.edits.length}개`, diff, {});
+    const validated = [];
+    const stillFailing = [];
+    await o.driver.serveOverride(o.targetUrl, applied.html);
+    fixing = true;
+    try {
+      for (const v of failed) {
+        if (Date.now() > deadline - 30_000) break;
+        const ac = acs.find((a) => a.id === v.acId);
+        if (!ac) continue;
+        const hyps = plan.hypotheses.filter((h) => h.coversAcIds.includes(ac.id) && h.runnableNow);
+        const r = await runAc(ac, hyps, null);
+        plog(`v2:fix ${ac.id} → ${r.verdict}${r.confirmed ? " (confirmed)" : ""}`);
+        (r.verdict === "pass" && r.confirmed === true ? validated : stillFailing).push(ac.id);
+      }
+    } finally {
+      fixing = false;
+      await o.driver.serveOverride(o.targetUrl, null).catch(() => {});
+    }
+    return {
+      attempted: true,
+      validated,
+      stillFailing,
+      cannotFix,
+      diff,
+      diffArtifactId: diffId,
+      ...(validated.length > 0 && applied.html.length <= sf.CORRECTED_FILE_REPORT_MAX ? { correctedHtml: applied.html } : {}),
+    };
   }
 
   /** 새 브라우저 하나 — session 표지("same" = 에이전트 실행, "confirm" = 실행기 재실행), 저장소 기준점, 콘솔·쓰기 누적 위치. */
@@ -363,6 +450,7 @@ function nudgeFor(reasons) {
   if (reasons.includes("pass_without_state_change")) tips.push("show a state change: a successful server write, a storage change, a before/after screen change, or the record seen in a new_session");
   if (reasons.includes("fail_not_reproduced")) tips.push("repeat the failing step independently (e.g. in a new_session) and cite those artifacts as reproArtifactIds");
   if (reasons.includes("quote_not_in_artifacts")) tips.push("copy quotes exactly from the cited artifacts' text");
+  if (reasons.includes("cites_other_run")) tips.push("cite only artifacts from this run (listed under Evidence so far) — act on the current screen first");
   if (reasons.includes("no_artifacts") || reasons.includes("unknown_artifact")) tips.push("cite existing artifact ids from 'Evidence so far'");
   return tips.join("; ") || "fix the judgement";
 }

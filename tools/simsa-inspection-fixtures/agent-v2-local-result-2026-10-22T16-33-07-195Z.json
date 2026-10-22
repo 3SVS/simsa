@@ -1,0 +1,829 @@
+{
+ "label": "v2 로컬(브랜치 코드) — 모델 gpt-5.6-sol(OpenAI 직접, 프로덕션 V-5 후보 아님)",
+ "kstStart": "2026. 10. 23. AM 1:33:07",
+ "model": "gpt-5.6-sol",
+ "steps": 16,
+ "summary": {
+  "pass": 14,
+  "partial": 0,
+  "opposite": 0,
+  "errors": 0,
+  "tokens": {
+   "in": 134966,
+   "out": 11437
+  }
+ },
+ "rows": [
+  {
+   "id": "F1",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "confirmed": true,
+     "claim": "할 일에 '심사테스트'를 입력하고 추가 버튼을 누르니 목록에 나타났습니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "\"추가\" 누르기 — 화면 바뀜",
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "📝 심사테스트"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 13,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3555,
+    "out": 258
+   },
+   "seconds": 37,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.6s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+23.7s v2:ac CORE-1 confirm pass → reproduced (2 actions, 3 quotes checked)",
+    "+23.7s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F2",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "confirmed": true,
+     "claim": "숫자 5를 입력하고 변환하기를 누르면 3.11마일 결과가 화면에 표시됩니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7"
+     ],
+     "quotes": [
+      "화면 바뀜",
+      "5 km = 3.11 miles 🎉"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 13,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3696,
+    "out": 315
+   },
+   "seconds": 80,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:plan facts=- hypotheses=-",
+    "+17.5s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+17.5s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F3",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "confirmed": true,
+     "claim": "고객 메모를 입력하고 저장해도 목록에 나타나지 않습니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E14"
+     ],
+     "reproArtifactIds": [
+      "E22"
+     ],
+     "quotes": [
+      "💬 (아직 저장된 메모가 없습니다)"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [
+    {
+     "key": "CORE-1:missing_backend_config",
+     "cls": "missing_backend_config",
+     "hypothesisId": null,
+     "acIds": [
+      "CORE-1"
+     ],
+     "rootAcId": "CORE-1"
+    }
+   ],
+   "fix": {
+    "attempted": true,
+    "reason": "cannot_fix_in_single_file",
+    "validated": [],
+    "stillFailing": [],
+    "cannotFix": [
+     "CORE-1: 서로 다른 새 브라우저 간에 고객 메모를 저장·공유하려면 실제 서버와 데이터베이스가 필요합니다. 현재 설정된 Supabase 주소와 키는 유효하지 않으며, 외부 서비스나 키를 추가하지 않고는 수정할 수 없습니다."
+    ],
+    "correctedHtmlBytes": 0
+   },
+   "causes": [
+    {
+     "acId": "CORE-1",
+     "cls": "missing_backend_config",
+     "basis": "console",
+     "evidenceIds": [
+      "E8",
+      "E15",
+      "E17",
+      "E18",
+      "E23",
+      "E29"
+     ],
+     "sourceIds": [],
+     "location": null
+    }
+   ],
+   "artifacts": 29,
+   "llmCalls": 8,
+   "tokens": {
+    "in": 11412,
+    "out": 880
+   },
+   "seconds": 107,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:plan facts=- hypotheses=-",
+    "+52.8s v2:ac CORE-1 confirm fail → reproduced (5 actions, 1 quotes checked)",
+    "+52.8s v2:ac CORE-1 → fail",
+    "+56.3s v2:fix cannot fix in a single file (1)"
+   ]
+  },
+  {
+   "id": "F4",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "confirmed": true,
+     "claim": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않고 결과 안내 문구가 그대로 남습니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7",
+      "E11",
+      "E12"
+     ],
+     "reproArtifactIds": [
+      "E18",
+      "E19"
+     ],
+     "quotes": [
+      "\"계산하기\" 누르기 — 화면 그대로",
+      "결과가 여기에 표시됩니다"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [
+    {
+     "key": "CORE-1:runtime_error",
+     "cls": "runtime_error",
+     "hypothesisId": null,
+     "acIds": [
+      "CORE-1"
+     ],
+     "rootAcId": "CORE-1"
+    }
+   ],
+   "fix": {
+    "attempted": true,
+    "validated": [
+     "CORE-1"
+    ],
+    "stillFailing": [],
+    "cannotFix": [],
+    "diff": "@@ edit 1\n-   const rates = undefined;\n-   const base = rates.USD; // TypeError: crashes before the handler binds\n+   const rates = { USD: 1400 };\n+   const base = rates.USD;",
+    "correctedHtmlBytes": 1822
+   },
+   "causes": [
+    {
+     "acId": "CORE-1",
+     "cls": "runtime_error",
+     "basis": "console",
+     "evidenceIds": [
+      "E4",
+      "E9",
+      "E14",
+      "E15",
+      "E16",
+      "E21"
+     ],
+     "sourceIds": [],
+     "location": null
+    }
+   ],
+   "artifacts": 41,
+   "llmCalls": 10,
+   "tokens": {
+    "in": 13153,
+    "out": 988
+   },
+   "seconds": 67,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+38.9s v2:ac CORE-1 confirm fail → reproduced (5 actions, 2 quotes checked)",
+    "+38.9s v2:ac CORE-1 → fail",
+    "+55.7s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+55.7s v2:fix CORE-1 → pass (confirmed)"
+   ]
+  },
+  {
+   "id": "F5",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "blank_page",
+    "status": 200
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "entry_broken",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 3,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken blank_page"
+   ]
+  },
+  {
+   "id": "F6",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "confirmed": true,
+     "claim": "기록을 추가해도 실제로 저장되지 않아 새로고침하면 목록에서 사라진다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E9"
+     ],
+     "reproArtifactIds": [
+      "E19",
+      "E21"
+     ],
+     "quotes": [
+      "브라우저 저장소 그대로 · 서버 쓰기 0건",
+      "💬 (아직 기록이 없습니다)"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [
+    {
+     "key": "CORE-1:data_not_persisted",
+     "cls": "data_not_persisted",
+     "hypothesisId": null,
+     "acIds": [
+      "CORE-1"
+     ],
+     "rootAcId": "CORE-1"
+    }
+   ],
+   "fix": {
+    "attempted": true,
+    "validated": [
+     "CORE-1"
+    ],
+    "stillFailing": [],
+    "cannotFix": [],
+    "diff": "@@ edit 1\n-   document.getElementById(\"add\").addEventListener(\"click\", () => {\n-     const v = document.getElementById(\"m\").value || \"기록\";\n-     const li = document.createElement(\"li\");\n-     li.textContent = \"📝 \" + v;\n-     document.getElementById(\"list\").appendChild(li);\n-     document.getElementById(\"m\").value = \"\";\n-     // 저장은 어디에도 하지 않는다 — 새로고침하면 전부 사라진다.\n-   });\n+   const list = document.getElementById(\"list\");\n+   const records = JSON.parse(localStorage.getItem(\"records\") || \"[]\");\n+   const render = () => {\n+     list.innerHTML = records.length ? \"\" : \"<li>💬 (아직 기록이 없습니다)</li>\";\n+     records.forEach(v => {\n+       const li = document.createElement(\"li\");\n+       li.textContent = \"📝 \" + v;\n+       list.appendChild(li);\n+     });\n+   };\n+   render();\n+   document.getElementById(\"add\").addEventListener(\"click\", () => {\n+     const input = document.getElementById(\"m\");\n+     const v = input.value || \"기록\";\n+     records.push(v);\n+     localStorage.setItem(\"records\", JSON.stringify(records));\n+     input.value = \"\";\n+     render();\n+   });",
+    "correctedHtmlBytes": 2206
+   },
+   "causes": [
+    {
+     "acId": "CORE-1",
+     "cls": "data_not_persisted",
+     "basis": "claim_text",
+     "evidenceIds": [],
+     "sourceIds": [],
+     "location": null
+    }
+   ],
+   "artifacts": 39,
+   "llmCalls": 14,
+   "tokens": {
+    "in": 18713,
+    "out": 2424
+   },
+   "seconds": 85,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+49.7s v2:ac CORE-1 confirm fail → reproduced (8 actions, 2 quotes checked)",
+    "+49.7s v2:ac CORE-1 → fail",
+    "+82.7s v2:ac CORE-1 confirm pass → reproduced (3 actions, 3 quotes checked)",
+    "+82.7s v2:fix CORE-1 → pass (confirmed)"
+   ]
+  },
+  {
+   "id": "F7",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "confirmed": true,
+     "claim": "심사테스트 기록을 입력하고 추가를 누르자 저장되어 목록에 나타났다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "📝 심사테스트"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 13,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3681,
+    "out": 361
+   },
+   "seconds": 19,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+17.4s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+17.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F8",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "confirmed": true,
+     "claim": "산책 기록을 입력하고 추가를 누르면 목록에 저장되어 나타난다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "화면 바뀜",
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "👟 심사테스트"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 13,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3832,
+    "out": 310
+   },
+   "seconds": 15,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+14.1s v2:ac CORE-1 confirm pass → reproduced (2 actions, 3 quotes checked)",
+    "+14.1s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F9",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "deployment_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "entry_broken",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 2,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken deployment_not_found"
+   ]
+  },
+  {
+   "id": "F10",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "confirmed": true,
+     "claim": "서비스 주소를 넣고 검사를 눌러도 실제 서비스 검토 결과를 알려주지 않고 같은 입력 화면만 다시 보여줍니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E5",
+      "E6"
+     ],
+     "reproArtifactIds": [
+      "E25",
+      "E24"
+     ],
+     "quotes": [
+      "URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.",
+      "내 서비스 검사하기 →"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [
+    {
+     "key": "CORE-1:broken_action",
+     "cls": "broken_action",
+     "hypothesisId": null,
+     "acIds": [
+      "CORE-1"
+     ],
+     "rootAcId": "CORE-1"
+    }
+   ],
+   "fix": {
+    "attempted": true,
+    "reason": "cannot_fix_in_single_file",
+    "validated": [],
+    "stillFailing": [],
+    "cannotFix": [
+     "CORE-1: 임의의 서비스 URL을 실제 사용자처럼 열어 기능을 검사하고 결과를 다른 브라우저와 공유하려면 브라우저 자동화, 교차 출처 페이지 접근, 결과 저장을 담당하는 서버가 필요합니다. 단일 정적 HTML에서는 동일 출처 정책(CORS) 때문에 외부 페이지의 동작과 응답을 검사할 수 없고, 검사 결과도 사용자·기기 간에 공유할 수 없습니다."
+    ],
+    "correctedHtmlBytes": 0
+   },
+   "causes": [
+    {
+     "acId": "CORE-1",
+     "cls": "broken_action",
+     "basis": "claim_text",
+     "evidenceIds": [],
+     "sourceIds": [],
+     "location": null
+    }
+   ],
+   "artifacts": 38,
+   "llmCalls": 16,
+   "tokens": {
+    "in": 33143,
+    "out": 2167
+   },
+   "seconds": 101,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+95.1s v2:ac CORE-1 confirm fail → reproduced (12 actions, 2 quotes checked)",
+    "+95.1s v2:ac CORE-1 → fail",
+    "+99.9s v2:fix cannot fix in a single file (1)"
+   ]
+  },
+  {
+   "id": "F11",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "mismatch",
+     "confirmed": true,
+     "claim": "서비스 주소를 등록해도 실제로 열어 검토하지 않고, 사용자가 진단 항목을 직접 표시하게 합니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E16"
+     ],
+     "reproArtifactIds": [
+      "E21",
+      "E30"
+     ],
+     "quotes": [
+      "POST http://127.0.0.1:8799/api/projects → 200",
+      "진단 0/10 — 각 항목을 직접 확인해 표시하세요."
+     ]
+    }
+   ],
+   "intentMismatch": [
+    "CORE-1"
+   ],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [
+    {
+     "acId": "CORE-1",
+     "cls": "intent_mismatch",
+     "basis": "verdict",
+     "evidenceIds": [],
+     "sourceIds": [],
+     "location": null
+    }
+   ],
+   "artifacts": 30,
+   "llmCalls": 8,
+   "tokens": {
+    "in": 15400,
+    "out": 1539
+   },
+   "seconds": 53,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+52.3s v2:ac CORE-1 confirm mismatch → reproduced (7 actions, 2 quotes checked)",
+    "+52.3s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "id": "F12",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "confirmed": true,
+     "claim": "사용자가 입력한 서비스 주소를 실제로 열어 보고 200 응답, 응답 크기, 걸린 시간을 알려준다.",
+     "reasons": [],
+     "artifactIds": [
+      "E5",
+      "E6"
+     ],
+     "quotes": [
+      "점검 결과 주소: 127.0.0.1:8799/real-echo-checker 응답 상태: 200 (열림) 응답"
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 14,
+   "llmCalls": 4,
+   "tokens": {
+    "in": 5492,
+    "out": 600
+   },
+   "seconds": 20,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+19.4s v2:ac CORE-1 confirm pass → reproduced (3 actions, 1 quotes checked)",
+    "+19.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F13",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R4:needs_api_key"
+   ],
+   "hypotheses": [
+    "H1:needs_api_key"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "confirmed": true,
+     "claim": "사용자가 서비스 주소를 넣어도 Claude API 키가 없으면 실제 점검을 시작할 수 없습니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E8",
+      "E15"
+     ],
+     "reproArtifactIds": [
+      "E21"
+     ],
+     "quotes": [
+      "먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+     ]
+    }
+   ],
+   "intentMismatch": [],
+   "defectGroups": [
+    {
+     "key": "H1:needs_api_key",
+     "cls": "needs_api_key",
+     "hypothesisId": "H1",
+     "acIds": [
+      "CORE-1"
+     ],
+     "rootAcId": "CORE-1"
+    }
+   ],
+   "fix": {
+    "attempted": true,
+    "reason": "cannot_fix_in_single_file",
+    "validated": [],
+    "stillFailing": [],
+    "cannotFix": [
+     "CORE-1: 사용자가 입력한 외부 서비스 주소를 실제 브라우저에서 열고 기능을 수행해 검증하려면 서버 측 브라우저 자동화와 검사 API가 필요합니다. 단일 정적 HTML의 클라이언트 코드만으로는 CORS·보안 정책을 우회해 임의의 외부 사이트를 점검할 수 없으며, Claude API도 키 없이 호출할 수 없습니다."
+    ],
+    "correctedHtmlBytes": 0
+   },
+   "causes": [
+    {
+     "acId": "CORE-1",
+     "cls": "needs_api_key",
+     "basis": "static_fact",
+     "evidenceIds": [],
+     "sourceIds": [
+      "E2"
+     ],
+     "location": {
+      "file": "http://127.0.0.1:8799/needs-api-key",
+      "line": null
+     }
+    }
+   ],
+   "artifacts": 29,
+   "llmCalls": 11,
+   "tokens": {
+    "in": 22889,
+    "out": 1595
+   },
+   "seconds": 49,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=R4 hypotheses=H1:needs_api_key",
+    "+45.4s v2:ac CORE-1 confirm fail → reproduced (9 actions, 1 quotes checked)",
+    "+45.4s v2:ac CORE-1 → fail",
+    "+48.6s v2:fix cannot fix in a single file (1)"
+   ]
+  },
+  {
+   "id": "F14",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "missing_index_file",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "intentMismatch": [],
+   "defectGroups": [],
+   "fix": {
+    "attempted": false,
+    "reason": "entry_broken",
+    "correctedHtmlBytes": 0
+   },
+   "causes": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken missing_index_file"
+   ]
+  }
+ ]
+}
