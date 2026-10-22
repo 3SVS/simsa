@@ -1,0 +1,519 @@
+{
+ "label": "v2 로컬(브랜치 코드) — 모델 gpt-5.6-sol(OpenAI 직접, 프로덕션 V-5 후보 아님)",
+ "kstStart": "2026. 10. 22. PM 11:00:02",
+ "model": "gpt-5.6-sol",
+ "steps": 16,
+ "summary": {
+  "pass": 12,
+  "partial": 2,
+  "opposite": 0,
+  "errors": 0,
+  "tokens": {
+   "in": 137203,
+   "out": 10319
+  }
+ },
+ "rows": [
+  {
+   "id": "F1",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "심사테스트를 입력하고 추가 버튼을 누르자 할 일 목록에 나타났습니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "\"추가\" 누르기 — 화면 바뀜",
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "📝 심사테스트"
+     ]
+    }
+   ],
+   "artifacts": 8,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3555,
+    "out": 300
+   },
+   "seconds": 11,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+11.0s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F2",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "숫자 5를 입력하고 변환하기를 누르면 3.11마일 결과가 보여요.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7"
+     ],
+     "quotes": [
+      "화면 바뀜",
+      "5 km = 3.11 miles 🎉"
+     ]
+    }
+   ],
+   "artifacts": 7,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3696,
+    "out": 294
+   },
+   "seconds": 10,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+9.9s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F3",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "claim": "고객 메모를 입력하고 저장해도 목록에 나타나지 않고, 새 브라우저에서 다시 해도 같은 문제가 생깁니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7"
+     ],
+     "quotes": [
+      "POST https://xyzzy-nonexistent-simsa-eval.supabase.co/rest/v1/notes",
+      "(아직 저장된 메모가 없습니다)"
+     ]
+    }
+   ],
+   "artifacts": 15,
+   "llmCalls": 7,
+   "tokens": {
+    "in": 10489,
+    "out": 758
+   },
+   "seconds": 24,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+23.3s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "id": "F4",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "claim": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않고 화면이 그대로입니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7"
+     ],
+     "quotes": [
+      "결과가 여기에 표시됩니다",
+      "\"계산하기\" 누르기 — 화면 그대로"
+     ]
+    }
+   ],
+   "artifacts": 12,
+   "llmCalls": 6,
+   "tokens": {
+    "in": 8115,
+    "out": 594
+   },
+   "seconds": 20,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+19.6s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "id": "F5",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "blank_page",
+    "status": 200
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken blank_page"
+   ]
+  },
+  {
+   "id": "F6",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "fail",
+     "claim": "기록을 추가하면 잠시 목록에 나타나지만 저장되지 않아 새로고침 후 사라집니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E12",
+      "E13"
+     ],
+     "quotes": [
+      "📝 심사테스트둘",
+      "💬 (아직 기록이 없습니다)"
+     ]
+    }
+   ],
+   "artifacts": 19,
+   "llmCalls": 13,
+   "tokens": {
+    "in": 20586,
+    "out": 2018
+   },
+   "seconds": 55,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+54.8s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "id": "F7",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "기록을 입력하고 추가를 누르면 브라우저 저장소에 저장되고 목록에 나타납니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E6",
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "화면 바뀜",
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "📝 심사테스트 010-5242-3694"
+     ]
+    }
+   ],
+   "artifacts": 8,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3729,
+    "out": 478
+   },
+   "seconds": 14,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+13.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F8",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "산책 기록에 심사테스트를 입력하고 추가를 누르자 목록에 저장되어 나타났습니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "👟 심사테스트"
+     ]
+    }
+   ],
+   "artifacts": 8,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3832,
+    "out": 426
+   },
+   "seconds": 13,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+12.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F9",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "deployment_not_found",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken deployment_not_found"
+   ]
+  },
+  {
+   "id": "F10",
+   "expected": "broken",
+   "decision": "Not Verified",
+   "score": "partial",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "mismatch",
+     "claim": "서비스 주소를 넣어도 실제 서비스를 열어 검사하지 않고 미리 준비된 /canned-result 화면으로 이동합니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E1",
+      "E20"
+     ],
+     "quotes": [
+      "GET http://127.0.0.1:8799/canned-result → 200",
+      "\"내 서비스 검사하기 →\" 누르기 — 화면 바뀜"
+     ]
+    }
+   ],
+   "artifacts": 22,
+   "llmCalls": 16,
+   "tokens": {
+    "in": 34228,
+    "out": 1920
+   },
+   "seconds": 71,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+71.0s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "id": "F11",
+   "expected": "broken",
+   "decision": "Not Verified",
+   "score": "partial",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "mismatch",
+     "claim": "서비스 주소는 등록됐지만 앱이 실제로 열어 작동 여부를 검토하지 않고, 사용자에게 10개 항목을 직접 확인하라고 합니다.",
+     "reasons": [],
+     "artifactIds": [
+      "E7",
+      "E8"
+     ],
+     "quotes": [
+      "프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.",
+      "개발 지시서: 먼저 진단 체크리스트를 완료하세요."
+     ]
+    }
+   ],
+   "artifacts": 8,
+   "llmCalls": 4,
+   "tokens": {
+    "in": 5770,
+    "out": 697
+   },
+   "seconds": 18,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+17.2s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "id": "F12",
+   "expected": "working",
+   "decision": "Ready",
+   "score": "pass",
+   "entry": null,
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "pass",
+     "claim": "사용자가 입력한 서비스 주소를 실제로 점검하고, 열림 여부와 응답 상태를 결과로 알려준다.",
+     "reasons": [],
+     "artifactIds": [
+      "E5",
+      "E6"
+     ],
+     "quotes": [
+      "점검 결과",
+      "주소: 127.0.0.1:8799/real-echo-checker",
+      "응답 상태: 200 (열림)"
+     ]
+    }
+   ],
+   "artifacts": 6,
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3862,
+    "out": 394
+   },
+   "seconds": 12,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+11.7s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "id": "F13",
+   "expected": "broken",
+   "decision": "Not Verified",
+   "score": "pass",
+   "entry": null,
+   "facts": [
+    "R4:needs_api_key"
+   ],
+   "hypotheses": [
+    "H1:needs_api_key"
+   ],
+   "verdicts": [
+    {
+     "acId": "CORE-1",
+     "verdict": "not_verified",
+     "claim": "사용자가 서비스 주소만 넣어 점검을 끝낼 수 없고, 먼저 Claude API 키를 직접 넣어야 해서 비개발자가 첫 단계에서 막힙니다.",
+     "reasons": [
+      "fail_not_reproduced"
+     ],
+     "artifactIds": [
+      "E17",
+      "E20"
+     ],
+     "quotes": [
+      "Claude API 키"
+     ]
+    }
+   ],
+   "artifacts": 23,
+   "llmCalls": 16,
+   "tokens": {
+    "in": 39341,
+    "out": 2440
+   },
+   "seconds": 66,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=R4 hypotheses=H1:needs_api_key",
+    "+65.7s v2:ac CORE-1 → not_verified(fail_not_reproduced)"
+   ]
+  },
+  {
+   "id": "F14",
+   "expected": "broken",
+   "decision": "Needs Fix",
+   "score": "pass",
+   "entry": {
+    "cause": "missing_index_file",
+    "status": 404
+   },
+   "facts": [],
+   "hypotheses": [],
+   "verdicts": [],
+   "artifacts": 1,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken missing_index_file"
+   ]
+  }
+ ]
+}
