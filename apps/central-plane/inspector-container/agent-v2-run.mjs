@@ -48,6 +48,7 @@ export async function runAgentV2Inspection(o) {
   const rc = await importPure("recon.js");
   const pl = await importPure("v2-plan.js");
   const ag = await importPure("v2-agent.js");
+  const jd = await importPure("v2-judge.js");
   const locale = o.locale === "en" ? "en" : "ko";
   const t0 = Date.now();
   const nowMs = () => (Number.isFinite(o.nowMs) ? o.nowMs : Date.now());
@@ -119,6 +120,8 @@ export async function runAgentV2Inspection(o) {
       plog(`v2:ac ${ac.id} clock ${iso} → ${night.verdict}`);
       if (night.verdict === "fail") v = { ...night, claim: `${night.claim} (한국 시간 새벽 0시 30분에)` };
     }
+    // S5d: "마감 − 단위"를 마지막 시작 칸으로 둔 앱을 실패로 읽은 판정은 확인 못 함으로(뒤집지 않는다).
+    if (jd.closingSlotMisread(ac, v)) v = { ...v, verdict: "not_verified", originalVerdict: v.verdict, reasons: [...v.reasons, "closing_slot_interpretation"] };
     verdicts.push(v);
     plog(`v2:ac ${ac.id} → ${v.verdict}${v.reasons.length ? `(${v.reasons.join("+")})` : ""}`);
   }
@@ -133,7 +136,9 @@ export async function runAgentV2Inspection(o) {
     : mustVerdicts.length > 0 && mustVerdicts.every((v) => v.verdict === "pass")
       ? "Ready"
       : "Not Verified";
-  return { ...base, decision, intentMismatch, entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
+  // S5c 첫 지점 규칙: 같은 가설·같은 결함 분류의 실패는 결함 하나로(통계·데이터의 단위는 기준이 아니라 결함).
+  const defectGroups = jd.groupFailures(verdicts, plan.hypotheses, (Array.isArray(o.acs) ? o.acs : []).map((a) => a?.id).filter(Boolean));
+  return { ...base, decision, intentMismatch, defectGroups, entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
 
   /** 기준 하나 — 새 브라우저에서 시작, 증거물을 쌓으며 조작, 검증기와 실행기 재실행(확인 V)을 통과한 판정만 돌려준다. */
   async function runAc(ac, hyps, clockIso) {

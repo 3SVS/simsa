@@ -135,6 +135,31 @@ describe("판정", () => {
     assert.equal(out.decision, "Not Verified");
   });
 
+  it("마감 시각 오독 fail은 확인 못 함으로 내리고, 실패는 결함 묶음(defectGroups)으로도 낸다", async () => {
+    const A1 = { id: "A1", title: "10:00~19:00, 30분 단위로 시간 선택", given: "날짜를 골랐다", when: "시간 목록을 본다", then: "오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다", priority: "must", confirmed: true };
+    const site = { "/": (s) => ({ status: 200, text: `시간 10:00 … 18:30 ${s.clicked ? "선택 완료" : ""}`, buttons: ["시간 보기"] }) };
+    const onAct = (a, s) => {
+      if (a.type === "click") s.clicked = true;
+      return null;
+    };
+    let turn = 0;
+    const out = await runAgentV2Inspection({
+      targetUrl: `${ORIGIN}/`, intent: "예약", acs: [A1], fetchImpl: fakeFetch(RECON), testDataSeed: 1,
+      driver: makeFakeDriver(site, { origin: ORIGIN, onAct }),
+      llm: async ({ user }) => {
+        turn += 1;
+        if (turn === 1) return reply({ type: "click", target: { role: "button", name: "시간 보기" } });
+        const s = lastId(user, /screen\(same\) · .*18:30/);
+        return reply({ type: "judge", verdict: "fail", claim: "시간이 18:30까지만 있고 19:00은 고를 수 없다", artifactIds: [s], quotes: ["18:30"] });
+      },
+    });
+    const v = out.verdicts[0];
+    assert.equal(v.verdict, "not_verified", JSON.stringify(v));
+    assert.ok(v.reasons.includes("closing_slot_interpretation"));
+    assert.equal(out.decision, "Not Verified");
+    assert.deepEqual(out.defectGroups, []);
+  });
+
   it("첫 화면에서 바로 고장이어도 브라우저를 닫는다 — 옛 코드는 열린 채 돌아와 하네스가 끝나지 않았다(S4d 실측)", async () => {
     const driver = makeFakeDriver({}, { origin: ORIGIN });
     let closed = 0;

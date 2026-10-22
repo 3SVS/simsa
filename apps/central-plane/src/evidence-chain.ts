@@ -181,6 +181,8 @@ export type DowngradeReason =
   | "pass_quotes_only_initial_screen"
   /** 실행기 재실행(확인 V)에서 pass의 인용이 다시 나오지 않음 — 실행기가 붙인다 */
   | "pass_not_reproduced"
+  /** 마감 − 단위를 마지막 시작 칸으로 둔 앱을 실패로 읽음(v2-judge) — 실행기가 붙인다 */
+  | "closing_slot_interpretation"
   | "fail_not_reproduced"
   | "mismatch_without_observation"
   | "mismatch_not_reproduced";
