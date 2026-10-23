@@ -113,6 +113,22 @@ describe("고치기 — 한 파일 앱", () => {
     assert.deepEqual(out.fix.stillFailing, ["CORE-1"]);
   });
 
+  it("(S7) 고치기 요청은 업무 값(가격·환율·세율 등)을 지어 넣지 말라고 하고, 모델이 적은 가정(assumptions)을 결과에 싣는다 — 실측 F4: 환율 1400을 지어 넣음", async () => {
+    const driver = calcDriver();
+    let fixPrompt = "";
+    const { llm } = agent({ edits: [] });
+    const wrapped = async (args) => {
+      if (/You fix single-file web apps/.test(args.system)) {
+        fixPrompt = args.user;
+        return JSON.stringify({ edits: [{ search: BROKEN_LINE, replace: "const rate = 0.00072; // FIXED" }], cannotFix: [], assumptions: ["환율 0.00072는 예시 값 — 실제 환율로 바꾸세요"] });
+      }
+      return llm(args);
+    };
+    const out = await runAgentV2Inspection({ targetUrl: `${ORIGIN}/`, intent: "환율", acs: [AC], fetchImpl: async () => new Response(HTML, { status: 200 }), driver, llm: wrapped, testDataSeed: 1 });
+    assert.match(fixPrompt, /Never invent business values/);
+    assert.deepEqual(out.fix.assumptions, ["환율 0.00072는 예시 값 — 실제 환율로 바꾸세요"]);
+  });
+
   it("고친 파일로도 여전히 실패면 stillFailing, 고친 파일을 내주지 않는다", async () => {
     const driver = calcDriver();
     const { llm } = agent({ edits: [{ search: BROKEN_LINE, replace: "const rate = rates.USD; // still broken" }] });
