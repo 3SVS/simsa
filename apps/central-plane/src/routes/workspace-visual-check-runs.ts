@@ -184,6 +184,8 @@ export type AgentDispatch = {
    * user(실유저) = 치울 여유가 없으면 만들지 않는다(setup_skipped_budget) — "치울 수 없는 것은 만들지 않는다".
    */
   setupPolicy?: "bench" | "user";
+  /** 검사 엔진 v2(S7b, V-8 — 스태프 `engine:"agent_v2"` 요청만). 없으면 v1. */
+  version?: "v2";
 };
 
 /** 오픈 베타: 이번 런이 agent 엔진 대신 기본 검수로 돈 이유(리포트에 그대로 안내). */
@@ -351,6 +353,7 @@ export async function dispatchInspection(
         ...(args.agent.caps ? { caps: args.agent.caps } : {}),
         ...(args.agent.readOnly ? { readOnly: true } : {}),
         setupPolicy: args.agent.setupPolicy ?? "user",
+        ...(args.agent.version ? { version: args.agent.version } : {}),
         llmUrl: `${base}${INSPECT_LLM_PATH}`,
         llmToken,
       },
@@ -658,10 +661,18 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     // 2026-10-05 agent 엔진(수용 기준 실행기) — **스태프 티어만**(서버 집행). 상한 슬롯보다 먼저 판정한다.
     const bodyRec = body as Record<string, unknown>;
     const requestedEngine = bodyRec["engine"];
-    if (requestedEngine !== undefined && requestedEngine !== "agent" && requestedEngine !== "classic") {
+    if (requestedEngine !== undefined && requestedEngine !== "agent" && requestedEngine !== "agent_v2" && requestedEngine !== "classic") {
       return c.json({ ok: false, error: "invalid_engine" }, 400);
     }
     const isStaff = tier === "staff";
+    // 검사 엔진 v2(V-8 LOCKED): 장비(스태프) 키 전용 — 공개 스위치와 무관. 로그인·가입은 v2 범위 밖이라 받지 않는다.
+    const engineV2 = requestedEngine === "agent_v2";
+    if (engineV2 && !isStaff) {
+      return c.json({ ok: false, error: "engine_v2_staff_only", tier }, 403);
+    }
+    if (engineV2 && (bodyRec["loginMode"] !== undefined && bodyRec["loginMode"] !== "none" || bodyRec["testCredentials"] !== undefined || bodyRec["withSignup"] === true)) {
+      return c.json({ ok: false, error: "engine_v2_login_unsupported" }, 400);
+    }
     // 오픈 베타: 공개 스위치가 켜지면 모든 사용자의 기본 검수가 agent 엔진(스태프는 늘 켜짐).
     const agentAllowed = isStaff || agentPublicOn(c.env);
     if (requestedEngine === "agent" && !agentAllowed) {
@@ -670,7 +681,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     let useAgent =
       agentAllowed &&
       requestedEngine !== "classic" &&
-      (requestedEngine === "agent" || wasAgentRun(sourceCheck) || agentPublicOn(c.env) || (isStaff && c.env.INSPECTION_ENGINE === "agent"));
+      (requestedEngine === "agent" || engineV2 || wasAgentRun(sourceCheck) || agentPublicOn(c.env) || (isStaff && c.env.INSPECTION_ENGINE === "agent"));
     // 서비스 하루 예산: 다 쓰면 스태프가 아닌 새 런은 기본 검수로(정직한 안내 — 조용한 실패 없음).
     let fallbackNote: string | null = null;
     if (useAgent && !isStaff && (await agentDailyBudgetReached(c.env))) {
@@ -796,7 +807,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const acceptancePlan = acceptancePlanFromDevSpec(project.devSpec);
     // agent 엔진: 재검수면 원 런의 AC 그대로, 아니면 지시서(유저 확인 표시 포함), 둘 다 없으면 런에서 추정.
     const agentDispatch: AgentDispatch | null = useAgent
-      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}), setupPolicy: isStaff ? "bench" : "user" }
+      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}), setupPolicy: isStaff ? "bench" : "user", ...(engineV2 ? { version: "v2" as const } : {}) }
       : null;
     if (testCredentials) {
       try {

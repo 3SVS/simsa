@@ -1,0 +1,1389 @@
+{
+ "label": "v2 벤치 #1 로컬(브랜치 코드) — 모델 gpt-5.6-sol(OpenAI 직접, 프로덕션 V-5 후보 아님) · A1~A10 주입",
+ "kstStart": "2026. 10. 23. PM 3:35:03",
+ "model": "gpt-5.6-sol",
+ "summary": {
+  "keyCells": 13,
+  "hits": 8,
+  "opposite": 0,
+  "extra": 3,
+  "derived": 1,
+  "decisionsOk": 6,
+  "errors": 0,
+  "tokens": {
+   "in": 1262764,
+   "out": 65942
+  }
+ },
+ "rows": [
+  {
+   "id": "chatgpt",
+   "expected": "broken",
+   "keyMustFailed": [
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7"
+   ],
+   "decision": "Needs Fix",
+   "hits": [
+    {
+     "acId": "A3",
+     "cause": "not_shared_across_users",
+     "basis": "claim_text"
+    },
+    {
+     "acId": "A4",
+     "cause": "missing_backend_config",
+     "basis": "claim_text"
+    },
+    {
+     "acId": "A5",
+     "cause": "missing_backend_config",
+     "basis": "claim_text"
+    },
+    {
+     "acId": "A6",
+     "cause": "missing_backend_config",
+     "basis": "claim_text"
+    },
+    {
+     "acId": "A7",
+     "cause": "missing_backend_config",
+     "basis": "claim_text"
+    }
+   ],
+   "misses": [],
+   "opposite": [],
+   "extra": [
+    {
+     "acId": "A2",
+     "cause": "intent_mismatch",
+     "claim": "휴대폰 번호가 비어 있어도 무엇이 잘못됐는지 알려 주지 않고 사이트 연결 설정 안내만 보여 줍니다."
+    }
+   ],
+   "derived": [],
+   "okDecision": true,
+   "verdicts": [
+    {
+     "acId": "A1",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약 화면에서 오전 10시부터 오후 7시까지 30분 단위 시간을 고를 수 있다.",
+     "quotes": [
+      "\"14:30\" 누르기 — 화면 바뀜",
+      "30분 단위"
+     ]
+    },
+    {
+     "acId": "A2",
+     "verdict": "mismatch",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "휴대폰 번호가 비어 있어도 무엇이 잘못됐는지 알려 주지 않고 사이트 연결 설정 안내만 보여 줍니다.",
+     "quotes": [
+      "브라우저 저장소 그대로 · 서버 쓰기 0건",
+      "관리자에게 사이트 연결 설정을 먼저 요청해주세요."
+     ],
+     "cause": {
+      "cls": "intent_mismatch",
+      "basis": "verdict",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A3",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약을 두 번 시도해도 서버에 저장되지 않아 다른 손님의 같은 시간 선택을 막지 못합니다.",
+     "quotes": [
+      "서버 쓰기 0건"
+     ],
+     "cause": {
+      "cls": "not_shared_across_users",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A4",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약을 두 번 제출해도 완료 화면에 날짜·시간·이름이 보이지 않고 사이트 연결 설정 안내만 나옵니다.",
+     "quotes": [
+      "관리자에게 사이트 연결 설정을 먼저 요청해주세요.",
+      "서버 쓰기 0건"
+     ],
+     "cause": {
+      "cls": "missing_backend_config",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A5",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약 제출 뒤 서버에 저장되지 않아 새 브라우저에서도 예약이 남지 않습니다.",
+     "quotes": [
+      "관리자에게 사이트 연결 설정을 먼저 요청해주세요.",
+      "서버 쓰기 0건"
+     ],
+     "cause": {
+      "cls": "missing_backend_config",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A6",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "서버가 연결되지 않아 오늘 예약이 저장되지 않고, 관리 화면에도 오늘 예약 목록이 시간순으로 보이지 않습니다.",
+     "quotes": [
+      "브라우저 저장소 그대로 · 서버 쓰기 0건",
+      "config.js에 Supabase 연결 정보를 입력해주세요."
+     ],
+     "cause": {
+      "cls": "missing_backend_config",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A7",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "서버 연결이 설정되지 않아 예약이 저장되지 않고 관리 목록에서 취소한 뒤 그 시간을 다시 예약할 수 없습니다.",
+     "quotes": [
+      "config.js에 Supabase 연결 정보를 입력해주세요.",
+      "브라우저 저장소 그대로 · 서버 쓰기 0건"
+     ],
+     "cause": {
+      "cls": "missing_backend_config",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A8",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "reasons": [
+      "pass_quotes_only_initial_screen"
+     ],
+     "claim": "가격이 커트 15,000원과 펌 60,000원처럼 원 단위로 보인다.",
+     "quotes": [
+      "커트 15,000원",
+      "펌 60,000원"
+     ]
+    },
+    {
+     "acId": "A9",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "휴대폰 화면에서 입력과 버튼 사용은 가능하지만, 예약하기를 눌러도 예약이 저장되지 않아 예약을 끝낼 수 없습니다.",
+     "quotes": [
+      "예약하기",
+      "브라우저 저장소 그대로 · 서버 쓰기 0건"
+     ],
+     "cause": {
+      "cls": "broken_action",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A10",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "관리 화면에 영어인 config.js와 Supabase가 포함된 문구가 있어 모든 글이 한국어가 아닙니다.",
+     "quotes": [
+      "config.js에 Supabase 연결 정보를 입력해주세요."
+     ],
+     "cause": {
+      "cls": "missing_backend_config",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    }
+   ],
+   "facts": [
+    "R1:missing_backend_config"
+   ],
+   "hypotheses": [
+    "H1:missing_backend_config"
+   ],
+   "defectGroups": [
+    {
+     "key": "A3:not_shared_across_users",
+     "cls": "not_shared_across_users",
+     "hypothesisId": null,
+     "acIds": [
+      "A3"
+     ],
+     "rootAcId": "A3"
+    },
+    {
+     "key": "H1:missing_backend_config",
+     "cls": "missing_backend_config",
+     "hypothesisId": "H1",
+     "acIds": [
+      "A4",
+      "A5",
+      "A6",
+      "A7"
+     ],
+     "rootAcId": "A4"
+    },
+    {
+     "key": "A9:broken_action",
+     "cls": "broken_action",
+     "hypothesisId": null,
+     "acIds": [
+      "A9"
+     ],
+     "rootAcId": "A9"
+    },
+    {
+     "key": "A10:missing_backend_config",
+     "cls": "missing_backend_config",
+     "hypothesisId": null,
+     "acIds": [
+      "A10"
+     ],
+     "rootAcId": "A10"
+    }
+   ],
+   "intentMismatch": [
+    "A2"
+   ],
+   "entry": null,
+   "fix": {
+    "attempted": false,
+    "reason": "not_single_file"
+   },
+   "usage": {
+    "calls": 104,
+    "in": 251174,
+    "out": 13341
+   },
+   "seconds": 535,
+   "phases": [
+    "+0.0s v2:recon",
+    "+2.7s v2:plan facts=R1 hypotheses=H1:missing_backend_config",
+    "+49.2s v2:ac A1 confirm pass → reproduced (4 actions, 2 quotes checked)",
+    "+49.2s v2:ac A1 → pass",
+    "+119.2s v2:ac A2 confirm mismatch → reproduced (12 actions, 2 quotes checked)",
+    "+119.2s v2:ac A2 → mismatch",
+    "+186.6s v2:ac A3 confirm fail → reproduced (13 actions, 1 quotes checked)",
+    "+186.6s v2:ac A3 → fail",
+    "+248.0s v2:ac A4 confirm fail → reproduced (12 actions, 2 quotes checked)",
+    "+248.0s v2:ac A4 → fail",
+    "+305.7s v2:ac A5 confirm fail → reproduced (12 actions, 2 quotes checked)",
+    "+305.7s v2:ac A5 → fail",
+    "+354.2s v2:ac A6 confirm fail → reproduced (9 actions, 2 quotes checked)",
+    "+354.2s v2:ac A6 → fail",
+    "+414.2s v2:ac A7 confirm fail → reproduced (11 actions, 2 quotes checked)",
+    "+414.2s v2:ac A7 → fail",
+    "+442.6s v2:ac A8 → not_verified(pass_quotes_only_initial_screen)",
+    "+508.6s v2:ac A9 confirm fail → reproduced (12 actions, 2 quotes checked)",
+    "+508.6s v2:ac A9 → fail",
+    "+533.4s v2:ac A10 confirm fail → reproduced (3 actions, 1 quotes checked)",
+    "+533.4s v2:ac A10 → fail"
+   ]
+  },
+  {
+   "id": "gemini",
+   "expected": "broken_or_hold",
+   "keyMustFailed": [
+    "A3",
+    "A6"
+   ],
+   "decision": "Needs Fix",
+   "hits": [
+    {
+     "acId": "A3",
+     "cause": "client_only_storage",
+     "basis": "static_fact"
+    },
+    {
+     "acId": "A6",
+     "cause": "client_only_storage",
+     "basis": "static_fact"
+    }
+   ],
+   "misses": [],
+   "opposite": [],
+   "extra": [],
+   "derived": [
+    {
+     "acId": "A5",
+     "cause": "client_only_storage",
+     "claim": "예약이 브라우저에만 저장되어 다른 방문자나 사장님 화면에는 남지 않는다."
+    }
+   ],
+   "okDecision": true,
+   "verdicts": [
+    {
+     "acId": "A1",
+     "verdict": "not_verified",
+     "originalVerdict": "fail",
+     "confirmed": true,
+     "reasons": [
+      "closing_slot_interpretation"
+     ],
+     "claim": "시간은 30분 단위로 나오지만 마지막 선택 가능 시간이 18:30이라서 19:00을 고를 수 없습니다.",
+     "quotes": [
+      "18:30"
+     ]
+    },
+    {
+     "acId": "A2",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "이름을 비우면 성함 입력 안내가 나오고 예약이 저장되지 않는다.",
+     "quotes": [
+      "브라우저 저장소 그대로",
+      "서버 쓰기 0건",
+      "화면 그대로"
+     ]
+    },
+    {
+     "acId": "A3",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "다른 손님도 이미 예약된 2026-10-24 10:00을 다시 예약할 수 있어 이중 예약이 됩니다.",
+     "quotes": [
+      "🎉 예약이 확정되었습니다!",
+      "새로고침을 해도 예약 정보가 유지됩니다."
+     ],
+     "cause": {
+      "cls": "client_only_storage",
+      "basis": "static_fact",
+      "evidenceIds": [],
+      "sourceIds": [
+       "E2"
+      ],
+      "location": {
+       "file": "https://elaborate-crostata-d9b61c.netlify.app/",
+       "line": null
+      }
+     }
+    },
+    {
+     "acId": "A4",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약 완료 화면에 예약 날짜와 시간, 예약자 이름이 보인다.",
+     "quotes": [
+      "🎉 예약이 확정되었습니다!",
+      "2026-10-24 10:00",
+      "심사테스트"
+     ]
+    },
+    {
+     "acId": "A5",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약이 브라우저에만 저장되어 다른 방문자나 사장님 화면에는 남지 않는다.",
+     "quotes": [
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "해당 날짜에 등록된 예약이 없습니다."
+     ],
+     "cause": {
+      "cls": "client_only_storage",
+      "basis": "static_fact",
+      "evidenceIds": [],
+      "sourceIds": [
+       "E2"
+      ],
+      "location": {
+       "file": "https://elaborate-crostata-d9b61c.netlify.app/",
+       "line": null
+      }
+     }
+    },
+    {
+     "acId": "A6",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "오늘 예약이 다른 기기의 관리 화면에 나타나지 않아 시간순 목록을 볼 수 없습니다.",
+     "quotes": [
+      "🎉 예약이 확정되었습니다!",
+      "해당 날짜에 등록된 예약이 없습니다."
+     ],
+     "cause": {
+      "cls": "client_only_storage",
+      "basis": "static_fact",
+      "evidenceIds": [],
+      "sourceIds": [
+       "E2"
+      ],
+      "location": {
+       "file": "https://elaborate-crostata-d9b61c.netlify.app/",
+       "line": null
+      }
+     }
+    },
+    {
+     "acId": "A7",
+     "verdict": "not_verified",
+     "originalVerdict": "fail",
+     "confirmed": false,
+     "reasons": [
+      "fail_not_reproduced"
+     ],
+     "claim": "취소한 18:00 시간은 다시 예약됐지만 예약이 브라우저에만 저장되어 다른 기기의 관리 화면에는 나타나지 않습니다.",
+     "quotes": [
+      "서버 쓰기 0건",
+      "🎉 예약이 확정되었습니다!",
+      "해당 날짜에 등록된 예약이 없습니다."
+     ]
+    },
+    {
+     "acId": "A8",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "시술을 선택하면 커트 가격이 15,000원처럼 원 단위로 보이고 선택 상태도 바뀐다.",
+     "quotes": [
+      "\"여성 커트 20,000원\" 누르기 — 화면 바뀜",
+      "남성 커트 15,000원"
+     ]
+    },
+    {
+     "acId": "A9",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "휴대폰 폭 390px에서 글자와 버튼을 사용할 수 있었고 예약이 정상적으로 완료되었습니다.",
+     "quotes": [
+      "\"예약 완료하기\" 누르기 — 화면 바뀜",
+      "브라우저 저장소 바뀜 · 서버 쓰기 0건",
+      "🎉 예약이 확정되었습니다!"
+     ]
+    },
+    {
+     "acId": "A10",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "손님 화면, 예약 완료 화면, 관리자 화면의 모든 문구가 한국어로 표시됩니다.",
+     "quotes": [
+      "🎉 예약이 확정되었습니다!",
+      "📅 예약 목록 관리",
+      "1. 날짜 및 시술 선택"
+     ]
+    }
+   ],
+   "facts": [
+    "R2:client_only_storage",
+    "R3:timezone_date"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage",
+    "H2:timezone_date"
+   ],
+   "defectGroups": [
+    {
+     "key": "H1:client_only_storage",
+     "cls": "client_only_storage",
+     "hypothesisId": "H1",
+     "acIds": [
+      "A3",
+      "A5",
+      "A6"
+     ],
+     "rootAcId": "A3"
+    }
+   ],
+   "intentMismatch": [],
+   "entry": null,
+   "fix": {
+    "attempted": true,
+    "reason": "cannot_fix_in_single_file",
+    "validated": [],
+    "stillFailing": [],
+    "cannotFix": [
+     "A3: 서로 다른 브라우저와 방문자 사이에서 예약 시간을 공유하고 원자적으로 이중 예약을 방지하려면 서버 측 데이터베이스와 예약 생성 API가 필요합니다. 현재 단일 정적 파일과 localStorage만으로는 구현할 수 없습니다.",
+     "A5: 새로고침 시 같은 브라우저에는 유지되지만 다른 방문자에게도 예약 상태를 공유하려면 서버 측 영구 저장소가 필요합니다. localStorage는 브라우저별로 격리되어 있어 구현할 수 없습니다.",
+     "A6: 다른 기기에서 생성한 오늘 예약을 관리자 화면에 표시하려면 모든 사용자가 공유하는 서버 측 데이터베이스와 조회 API가 필요합니다. 현재 클라이언트 전용 저장 방식으로는 구현할 수 없습니다."
+    ]
+   },
+   "usage": {
+    "calls": 113,
+    "in": 301842,
+    "out": 17713
+   },
+   "seconds": 600,
+   "phases": [
+    "+0.0s v2:recon",
+    "+1.3s v2:plan facts=R2,R3 hypotheses=H1:client_only_storage,H2:timezone_date",
+    "+74.0s v2:ac A1 confirm fail → reproduced (8 actions, 1 quotes checked)",
+    "+74.0s v2:ac A1 → not_verified(closing_slot_interpretation)",
+    "+186.7s v2:ac A2 confirm pass → reproduced (16 actions, 3 quotes checked)",
+    "+186.7s v2:ac A2 → pass",
+    "+261.5s v2:ac A3 confirm fail → reproduced (13 actions, 2 quotes checked)",
+    "+261.5s v2:ac A3 → fail",
+    "+289.3s v2:ac A4 confirm pass → reproduced (6 actions, 3 quotes checked)",
+    "+289.3s v2:ac A4 → pass",
+    "+348.3s v2:ac A5 confirm fail → reproduced (11 actions, 2 quotes checked)",
+    "+348.3s v2:ac A5 → fail",
+    "+397.3s v2:ac A6 confirm fail → reproduced (9 actions, 2 quotes checked)",
+    "+397.3s v2:ac A6 → fail",
+    "+490.1s v2:ac A7 confirm skipped (unsafe_click)",
+    "+490.1s v2:ac A7 → not_verified(fail_not_reproduced)",
+    "+512.4s v2:ac A8 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+512.4s v2:ac A8 → pass",
+    "+539.4s v2:ac A9 confirm pass → reproduced (5 actions, 3 quotes checked)",
+    "+539.4s v2:ac A9 → pass",
+    "+595.3s v2:ac A10 confirm pass → reproduced (9 actions, 3 quotes checked)",
+    "+595.3s v2:ac A10 → pass",
+    "+598.9s v2:fix cannot fix in a single file (3)"
+   ]
+  },
+  {
+   "id": "v0",
+   "expected": "broken_or_hold",
+   "keyMustFailed": [
+    "A6",
+    "A7"
+   ],
+   "decision": "Not Verified",
+   "hits": [],
+   "misses": [
+    {
+     "acId": "A6",
+     "verdict": "not_verified",
+     "reasons": [
+      "fail_not_reproduced"
+     ]
+    },
+    {
+     "acId": "A7",
+     "verdict": "not_verified",
+     "reasons": [
+      "fail_not_reproduced"
+     ]
+    }
+   ],
+   "opposite": [],
+   "extra": [],
+   "derived": [],
+   "okDecision": true,
+   "verdicts": [
+    {
+     "acId": "A1",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약 화면에서 오전 10시부터 오후 7시까지 30분 단위의 시간을 선택할 수 있다.",
+     "quotes": [
+      "10:00–19:00 10:00 10:30 11:00 11:30",
+      "\"10:00\" 누르기 — 화면 바뀜",
+      "\"19:00\" 누르기 — 화면 바뀜"
+     ]
+    },
+    {
+     "acId": "A2",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "이름이 없거나 휴대폰 번호 형식이 틀리면 예약되지 않고 이름과 휴대폰 번호를 정확히 입력하라는 안내가 나옵니다.",
+     "quotes": [
+      "이름과 휴대폰 번호를 정확히 입력해 주세요.",
+      "16:00"
+     ]
+    },
+    {
+     "acId": "A3",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "다른 손님의 새 브라우저에서는 이미 예약된 10월 23일 16:30을 고를 수 없습니다.",
+     "quotes": [
+      "예약 완료",
+      "예약 시간 16:30",
+      "회색으로 표시된 시간은 예약이 마감됐어요."
+     ]
+    },
+    {
+     "acId": "A4",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "예약을 완료하면 완료 화면에 예약 날짜, 시간, 이름이 보인다.",
+     "quotes": [
+      "예약 완료",
+      "예약 날짜 2026-10-23 예약 시간 17:00",
+      "예약자 심사테스트"
+     ]
+    },
+    {
+     "acId": "A5",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "예약을 마친 뒤 새 브라우저로 다시 열어도 17:30 시간이 마감 상태로 남아 있습니다.",
+     "quotes": [
+      "예약 완료",
+      "서버 쓰기 3건",
+      "17:30"
+     ]
+    },
+    {
+     "acId": "A6",
+     "verdict": "not_verified",
+     "originalVerdict": "fail",
+     "confirmed": false,
+     "reasons": [
+      "fail_not_reproduced"
+     ],
+     "claim": "오늘 날짜 예약이 있어도 관리 화면은 다른 날짜를 표시하며 오늘 예약을 시간순 목록으로 보여주지 않는다.",
+     "quotes": [
+      "예약 날짜 2026-10-23 예약 시간 18:00",
+      "2026-10-04 오늘 예약 · 시간순 0건",
+      "오늘 예약이 아직 없어요"
+     ]
+    },
+    {
+     "acId": "A7",
+     "verdict": "not_verified",
+     "originalVerdict": "fail",
+     "confirmed": false,
+     "reasons": [
+      "fail_not_reproduced"
+     ],
+     "claim": "예약이 완료되어도 관리 화면에 나타나지 않아 취소할 수 없고, 그 시간을 다시 예약 가능하게 만들 수 없습니다.",
+     "quotes": [
+      "예약 완료 방문 예약이 완료됐어요",
+      "2026-10-04 오늘 예약 · 시간순 0건"
+     ]
+    },
+    {
+     "acId": "A8",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "커트 가격이 예약 완료 화면에 15,000원으로 표시된다.",
+     "quotes": [
+      "결제 금액 15,000원"
+     ]
+    },
+    {
+     "acId": "A9",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "휴대폰 폭 390px에서 글자와 버튼을 사용할 수 있었고 심사테스트 이름으로 15:30 예약을 완료했다.",
+     "quotes": [
+      "\"10월 23일 (금) 15:30 예약하기\" 누르기 — 화면 바뀜",
+      "POST https://1-pi-three-qk0pjsjigw.vercel.app/ → 200",
+      "예약 완료 방문 예약이 완료됐어요 예약 내용을 확인해 주세요."
+     ]
+    },
+    {
+     "acId": "A10",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "손님 화면에 영어 문구가 있어 모든 글이 한국어가 아닙니다.",
+     "quotes": [
+      "SALON TODAY"
+     ],
+     "cause": {
+      "cls": "runtime_error",
+      "basis": "console",
+      "evidenceIds": [
+       "E461",
+       "E462",
+       "E463",
+       "E464",
+       "E465",
+       "E466",
+       "E467",
+       "E468",
+       "E469",
+       "E472",
+       "E473",
+       "E474",
+       "E475",
+       "E476",
+       "E477",
+       "E478",
+       "E479",
+       "E480"
+      ],
+      "sourceIds": [],
+      "location": null
+     }
+    }
+   ],
+   "facts": [
+    "R5:server_rendered_dates"
+   ],
+   "hypotheses": [
+    "H1:server_rendered_dates"
+   ],
+   "defectGroups": [
+    {
+     "key": "A10:runtime_error",
+     "cls": "runtime_error",
+     "hypothesisId": null,
+     "acIds": [
+      "A10"
+     ],
+     "rootAcId": "A10"
+    }
+   ],
+   "intentMismatch": [],
+   "entry": null,
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures"
+   },
+   "usage": {
+    "calls": 96,
+    "in": 275254,
+    "out": 12842
+   },
+   "seconds": 560,
+   "phases": [
+    "+0.0s v2:recon",
+    "+2.4s v2:plan facts=R5 hypotheses=H1:server_rendered_dates",
+    "+36.6s v2:ac A1 confirm pass → reproduced (3 actions, 3 quotes checked)",
+    "+36.6s v2:ac A1 → pass",
+    "+139.2s v2:ac A2 confirm pass → reproduced (19 actions, 2 quotes checked)",
+    "+139.2s v2:ac A2 → pass",
+    "+178.9s v2:ac A3 confirm pass → not reproduced (6 actions, 3 quotes checked)",
+    "+178.9s v2:ac A3 → not_verified(pass_not_reproduced)",
+    "+211.8s v2:ac A4 confirm pass → not reproduced (5 actions, 3 quotes checked)",
+    "+211.8s v2:ac A4 → not_verified(pass_not_reproduced)",
+    "+260.9s v2:ac A5 confirm pass → not reproduced (8 actions, 3 quotes checked)",
+    "+260.9s v2:ac A5 → not_verified(pass_not_reproduced)",
+    "+359.8s v2:ac A6 confirm fail → not reproduced (17 actions, 3 quotes checked)",
+    "+359.8s v2:ac A6 → not_verified(fail_not_reproduced)",
+    "+433.4s v2:ac A7 confirm fail → not reproduced (11 actions, 2 quotes checked)",
+    "+433.4s v2:ac A7 → not_verified(fail_not_reproduced)",
+    "+504.3s v2:ac A8 confirm pass → not reproduced (8 actions, 1 quotes checked)",
+    "+504.3s v2:ac A8 → not_verified(pass_not_reproduced)",
+    "+546.6s v2:ac A9 confirm pass → not reproduced (5 actions, 3 quotes checked)",
+    "+546.6s v2:ac A9 → not_verified(pass_not_reproduced)",
+    "+559.9s v2:ac A10 confirm fail → reproduced (1 actions, 1 quotes checked)",
+    "+559.9s v2:ac A10 → fail"
+   ]
+  },
+  {
+   "id": "bolt",
+   "expected": "broken_or_hold",
+   "keyMustFailed": [
+    "A6",
+    "A7"
+   ],
+   "decision": "Needs Fix",
+   "hits": [],
+   "misses": [
+    {
+     "acId": "A6",
+     "verdict": "not_verified",
+     "reasons": [
+      "pass_not_reproduced"
+     ]
+    },
+    {
+     "acId": "A7",
+     "verdict": "not_verified",
+     "reasons": []
+    }
+   ],
+   "opposite": [],
+   "extra": [
+    {
+     "acId": "A1",
+     "cause": "timezone_date",
+     "claim": "오늘이 10월 23일인데 예약 날짜 목록이 10월 22일부터 시작합니다."
+    }
+   ],
+   "derived": [],
+   "okDecision": true,
+   "verdicts": [
+    {
+     "acId": "A1",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "오늘이 10월 23일인데 예약 날짜 목록이 10월 22일부터 시작합니다.",
+     "quotes": [
+      "10월 22 목 10월 23 금 10월 24 토"
+     ],
+     "cause": {
+      "cls": "timezone_date",
+      "basis": "static_fact",
+      "evidenceIds": [],
+      "sourceIds": [
+       "E2"
+      ],
+      "location": {
+       "file": "https://hair-salon-booking-w-8vq8.bolt.host/assets/index-CWk_VfmX.js",
+       "line": null
+      }
+     }
+    },
+    {
+     "acId": "A2",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "이름이 없거나 휴대폰 번호 형식이 잘못되면 예약되지 않고 잘못된 항목을 알려 줍니다.",
+     "quotes": [
+      "이름을 입력해주세요.",
+      "올바른 휴대폰 번호를 입력해주세요.",
+      "서버 쓰기 0건"
+     ]
+    },
+    {
+     "acId": "A3",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "다른 손님은 이미 예약된 10월 24일 10:00 시간을 고를 수 없습니다.",
+     "quotes": [
+      "예약이 완료되었습니다!",
+      "취소선 = 예약 불가"
+     ]
+    },
+    {
+     "acId": "A4",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "예약 완료 화면에 예약 날짜, 시간, 이름이 보인다.",
+     "quotes": [
+      "POST https://gvpzjmjgojwdaxubqvtv.supabase.co/rest/v1/reservations?select=* → 201",
+      "예약이 완료되었습니다!",
+      "날짜 10월 24일 (토) 시간 10:30:00 이름 심사테스트"
+     ]
+    },
+    {
+     "acId": "A5",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "예약이 서버에 저장되어 새 브라우저로 다시 열어도 남아 있습니다.",
+     "quotes": [
+      "POST https://gvpzjmjgojwdaxubqvtv.supabase.co/rest/v1/reservations?select=* → 201",
+      "예약이 완료되었습니다!",
+      "예약 가능한 시간만 선택할 수 있어요"
+     ]
+    },
+    {
+     "acId": "A6",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "관리 화면에 오늘 예약 2건이 10:00부터 18:30까지 시간순으로 보인다.",
+     "quotes": [
+      "POST https://gvpzjmjgojwdaxubqvtv.supabase.co/rest/v1/reservations?select=* → 201",
+      "10/23 (금) 2 예약 건수 30,000원 예상 매출 새로고침 10:00:00 커트 심사테스트둘 010-5242-3694 15,000원 취소 18:30:"
+     ]
+    },
+    {
+     "acId": "A7",
+     "verdict": "not_verified",
+     "reasons": [],
+     "claim": "직접 만든 10:30 예약은 관리 목록에 보였지만 취소 실행이 차단되어 목록에서 사라지고 다시 선택되는지 확인할 수 없었습니다.",
+     "quotes": [
+      "예약이 완료되었습니다!",
+      "3 예약 건수"
+     ]
+    },
+    {
+     "acId": "A8",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약 화면에서 커트 가격이 15,000원처럼 원 단위 형식으로 보인다.",
+     "quotes": [
+      "커트 기본 커트 + 스타일링 15,000원"
+     ]
+    },
+    {
+     "acId": "A9",
+     "verdict": "not_verified",
+     "originalVerdict": "pass",
+     "confirmed": false,
+     "reasons": [
+      "pass_not_reproduced"
+     ],
+     "claim": "휴대폰 폭 390px에서 글자와 버튼을 사용할 수 있었고 예약을 끝까지 완료할 수 있다.",
+     "quotes": [
+      "예약 완료하기",
+      "POST https://gvpzjmjgojwdaxubqvtv.supabase.co/rest/v1/reservations?select=* → 201",
+      "예약이 완료되었습니다!"
+     ]
+    },
+    {
+     "acId": "A10",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    }
+   ],
+   "facts": [
+    "R3:timezone_date"
+   ],
+   "hypotheses": [
+    "H1:timezone_date"
+   ],
+   "defectGroups": [
+    {
+     "key": "H1:timezone_date",
+     "cls": "timezone_date",
+     "hypothesisId": "H1",
+     "acIds": [
+      "A1"
+     ],
+     "rootAcId": "A1"
+    }
+   ],
+   "intentMismatch": [],
+   "entry": null,
+   "fix": {
+    "attempted": false,
+    "reason": "not_single_file"
+   },
+   "usage": {
+    "calls": 121,
+    "in": 312649,
+    "out": 15335
+   },
+   "seconds": 734,
+   "phases": [
+    "+0.0s v2:recon",
+    "+3.0s v2:plan facts=R3 hypotheses=H1:timezone_date",
+    "+91.2s v2:ac A1 confirm fail → reproduced (11 actions, 1 quotes checked)",
+    "+91.2s v2:ac A1 → fail",
+    "+158.7s v2:ac A2 confirm pass → reproduced (11 actions, 3 quotes checked)",
+    "+158.7s v2:ac A2 → pass",
+    "+236.7s v2:ac A3 confirm pass → not reproduced (12 actions, 2 quotes checked)",
+    "+236.7s v2:ac A3 → not_verified(pass_not_reproduced)",
+    "+288.2s v2:ac A4 confirm pass → not reproduced (8 actions, 3 quotes checked)",
+    "+288.2s v2:ac A4 → not_verified(pass_not_reproduced)",
+    "+413.8s v2:ac A5 confirm pass → not reproduced (19 actions, 3 quotes checked)",
+    "+413.8s v2:ac A5 → not_verified(pass_not_reproduced)",
+    "+543.4s v2:ac A6 confirm pass → not reproduced (19 actions, 2 quotes checked)",
+    "+543.4s v2:ac A6 → not_verified(pass_not_reproduced)",
+    "+647.7s v2:ac A7 → not_verified",
+    "+664.3s v2:ac A8 confirm pass → reproduced (1 actions, 1 quotes checked)",
+    "+664.3s v2:ac A8 → pass",
+    "+718.5s v2:ac A9 confirm pass → not reproduced (8 actions, 3 quotes checked)",
+    "+718.5s v2:ac A9 → not_verified(pass_not_reproduced)",
+    "+733.0s v2:ac A10 → not_verified(llm_error)"
+   ]
+  },
+  {
+   "id": "claude",
+   "expected": "broken_or_hold",
+   "keyMustFailed": [
+    "A3",
+    "A6"
+   ],
+   "decision": "Needs Fix",
+   "hits": [
+    {
+     "acId": "A3",
+     "cause": "client_only_storage",
+     "basis": "static_fact"
+    }
+   ],
+   "misses": [
+    {
+     "acId": "A6",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ]
+    }
+   ],
+   "opposite": [],
+   "extra": [
+    {
+     "acId": "A1",
+     "cause": "other",
+     "claim": "시간 목록이 오후 6시 30분에서 끝나서 오후 7시를 고를 수 없습니다."
+    }
+   ],
+   "derived": [],
+   "okDecision": true,
+   "verdicts": [
+    {
+     "acId": "A1",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "시간 목록이 오후 6시 30분에서 끝나서 오후 7시를 고를 수 없습니다.",
+     "quotes": [
+      "오후 6:30"
+     ],
+     "cause": {
+      "cls": "other",
+      "basis": "claim_text",
+      "evidenceIds": [],
+      "sourceIds": [],
+      "location": null
+     }
+    },
+    {
+     "acId": "A2",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "휴대폰 번호가 없거나 형식에 맞지 않으면 오류를 알려 주고 예약하지 않습니다.",
+     "quotes": [
+      "휴대폰 번호를 010-1234-5678 형식으로 입력해 주세요.",
+      "브라우저 저장소 그대로 · 서버 쓰기 0건"
+     ]
+    },
+    {
+     "acId": "A3",
+     "verdict": "fail",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "다른 손님이 이미 예약된 10월 24일 오전 10시를 다시 골라 이중 예약할 수 있습니다.",
+     "quotes": [
+      "예약이 완료되었습니다",
+      "10월 24일 (토) 오전 10:00"
+     ],
+     "cause": {
+      "cls": "client_only_storage",
+      "basis": "static_fact",
+      "evidenceIds": [],
+      "sourceIds": [
+       "E2"
+      ],
+      "location": {
+       "file": "https://dreamy-babka-5f07cd.netlify.app/",
+       "line": null
+      }
+     }
+    },
+    {
+     "acId": "A4",
+     "verdict": "pass",
+     "confirmed": true,
+     "reasons": [],
+     "claim": "예약 후 완료 화면에 예약 날짜와 시간, 이름이 보인다.",
+     "quotes": [
+      "예약이 완료되었습니다",
+      "10월 24일 (토) 오전 10:00",
+      "예약자 심사테스트"
+     ]
+    },
+    {
+     "acId": "A5",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A6",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A7",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A8",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A9",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A10",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    }
+   ],
+   "facts": [
+    "R2:client_only_storage"
+   ],
+   "hypotheses": [
+    "H1:client_only_storage"
+   ],
+   "defectGroups": [
+    {
+     "key": "A1:other",
+     "cls": "other",
+     "hypothesisId": null,
+     "acIds": [
+      "A1"
+     ],
+     "rootAcId": "A1"
+    },
+    {
+     "key": "H1:client_only_storage",
+     "cls": "client_only_storage",
+     "hypothesisId": "H1",
+     "acIds": [
+      "A3"
+     ],
+     "rootAcId": "A3"
+    }
+   ],
+   "intentMismatch": [],
+   "entry": null,
+   "fix": {
+    "attempted": true,
+    "error": "fix_crashed: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using"
+   },
+   "usage": {
+    "calls": 41,
+    "in": 121845,
+    "out": 6711
+   },
+   "seconds": 261,
+   "phases": [
+    "+0.0s v2:recon",
+    "+1.3s v2:plan facts=R2 hypotheses=H1:client_only_storage",
+    "+67.6s v2:ac A1 confirm fail → reproduced (7 actions, 1 quotes checked)",
+    "+67.6s v2:ac A1 → fail",
+    "+154.0s v2:ac A2 confirm pass → reproduced (13 actions, 2 quotes checked)",
+    "+154.0s v2:ac A2 → pass",
+    "+215.9s v2:ac A3 confirm fail → reproduced (11 actions, 2 quotes checked)",
+    "+215.9s v2:ac A3 → fail",
+    "+243.1s v2:ac A4 confirm pass → reproduced (5 actions, 3 quotes checked)",
+    "+243.1s v2:ac A4 → pass",
+    "+246.4s v2:ac A5 → not_verified(llm_error)",
+    "+249.2s v2:ac A6 → not_verified(llm_error)",
+    "+252.4s v2:ac A7 → not_verified(llm_error)",
+    "+255.3s v2:ac A8 → not_verified(llm_error)",
+    "+257.7s v2:ac A9 → not_verified(llm_error)",
+    "+260.1s v2:ac A10 → not_verified(llm_error)"
+   ]
+  },
+  {
+   "id": "lovable",
+   "expected": "works",
+   "keyMustFailed": [],
+   "decision": "Not Verified",
+   "hits": [],
+   "misses": [],
+   "opposite": [],
+   "extra": [],
+   "derived": [],
+   "okDecision": true,
+   "verdicts": [
+    {
+     "acId": "A1",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A2",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A3",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A4",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A5",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A6",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A7",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A8",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A9",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    },
+    {
+     "acId": "A10",
+     "verdict": "not_verified",
+     "reasons": [
+      "llm_error"
+     ],
+     "claim": "모델 호출 실패: llm 429 {\"message\":\"You have no credits remaining. Add credits to continue using",
+     "quotes": []
+    }
+   ],
+   "facts": [],
+   "hypotheses": [],
+   "defectGroups": [],
+   "intentMismatch": [],
+   "entry": null,
+   "fix": {
+    "attempted": false,
+    "reason": "no_failures"
+   },
+   "usage": {
+    "calls": 0,
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 41,
+   "phases": [
+    "+0.0s v2:recon",
+    "+5.2s v2:plan facts=- hypotheses=-",
+    "+12.5s v2:ac A1 → not_verified(llm_error)",
+    "+16.1s v2:ac A2 → not_verified(llm_error)",
+    "+19.3s v2:ac A3 → not_verified(llm_error)",
+    "+22.8s v2:ac A4 → not_verified(llm_error)",
+    "+25.7s v2:ac A5 → not_verified(llm_error)",
+    "+28.8s v2:ac A6 → not_verified(llm_error)",
+    "+31.2s v2:ac A7 → not_verified(llm_error)",
+    "+34.1s v2:ac A8 → not_verified(llm_error)",
+    "+37.5s v2:ac A9 → not_verified(llm_error)",
+    "+40.6s v2:ac A10 → not_verified(llm_error)"
+   ]
+  }
+ ]
+}

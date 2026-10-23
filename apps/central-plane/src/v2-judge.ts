@@ -94,7 +94,7 @@ function closingOf(ac: { title?: string; given?: string; when?: string; then?: s
   return close === null ? null : { close, step: Number(step[1]) };
 }
 
-const LAST_AVAILABLE_RE = /까지만|까지 밖에|까지밖에|마지막|only (?:up )?(?:to|until)|last (?:slot|time)/;
+const LAST_AVAILABLE_RE = /까지만|까지 밖에|까지밖에|에서 끝|으로 끝|로 끝|마지막|only (?:up )?(?:to|until)|last (?:slot|time)|ends? at/;
 
 /**
  * fail 판정이 "마감 시각까지 시작 칸이 있어야 한다"로 잘못 읽은 것인가: 기준에 마감·단위가 있고, 판정이 "X까지만"이라 말한 X가
@@ -109,7 +109,7 @@ export function closingSlotMisread(ac: { title?: string; given?: string; when?: 
     const anchor = LAST_AVAILABLE_RE.exec(text);
     if (!anchor) continue;
     const before = timesIn(text).filter((t) => t.end <= anchor.index && anchor.index - t.end <= 4);
-    const after = /^(?:마지막|last|only)/.test(anchor[0]) ? timesIn(text.slice(anchor.index)).slice(0, 1) : [];
+    const after = /^(?:마지막|last|only|end)/.test(anchor[0]) ? timesIn(text.slice(anchor.index)).slice(0, 1) : [];
     const said = before.at(-1) ?? after[0];
     if (said) return said.minutes === lastStart;
   }

@@ -16,6 +16,8 @@ import { openSqliteD1, SQLITE_SKIP } from "./_sqlite-d1.mjs";
 
 const { createApp } = await import("../dist/router.js");
 const { runAgentInspection } = await import("../inspector-container/agent-run.mjs");
+const { runAgentV2Inspection } = await import("../inspector-container/agent-v2-run.mjs");
+const { buildV2Report } = await import("../dist/v2-report.js");
 const { createProxyLlm } = await import("../inspector-container/agent-llm.mjs");
 const { isRunRepairable } = await import("../dist/routes/workspace-repair-jobs.js");
 const { startBuildAutoCheck } = await import("../dist/workspace/build-deploy.js");
@@ -250,6 +252,53 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     assert.ok(result.report.notes.some((n) => n.includes("생각하신 것과 달라요")));
     // 계정이 없으니 관리 화면 기준은 고장이 아니라 확인 못 함
     assert.equal(result.report.acTable.find((r) => r.id === "AC-003").reasonCode, "login_required");
+  });
+
+  it("(v2 S7b, V-8) engine agent_v2는 스태프만 · 로그인 없이만 · 디스패치에 agent.version v2", async () => {
+    const spec = salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] });
+    T.addProject("proj_v2", "code", spec);
+    T.addProject("proj_v2_free", "code", spec, FREE);
+    const free = await T.post("/workspace/projects/proj_v2_free/visual-checks/run", { userKey: FREE, engine: "agent_v2" });
+    assert.equal(free.status, 403);
+    assert.equal((await free.json()).error, "engine_v2_staff_only");
+    const withLogin = await T.post("/workspace/projects/proj_v2/visual-checks/run", { userKey: STAFF, engine: "agent_v2", loginMode: "handover" });
+    assert.equal(withLogin.status, 400);
+    assert.equal((await withLogin.json()).error, "engine_v2_login_unsupported");
+    const n = T.dispatched.length;
+    const ok = await T.post("/workspace/projects/proj_v2/visual-checks/run", { userKey: STAFF, engine: "agent_v2" });
+    assert.ok(ok.status === 200 || ok.status === 202, await ok.clone().text());
+    assert.equal(T.dispatched.length, n + 1);
+    const payload = T.dispatched.at(-1);
+    assert.equal(payload.engine, "agent");
+    assert.equal(payload.agent.version, "v2");
+    assert.ok(payload.agent.acs.length > 0, "v2는 확인된 기준을 받아 간다");
+
+    // 컨테이너 쪽 v2 경로: 실행기 → 리포트 변환 → 같은 완료 콜백 → 저장(대시보드가 읽는 report_json)
+    const reply = (action) => JSON.stringify({ thought: "t", action });
+    const lastId = (u, re) => u.split("\n").filter((l) => re.test(l)).map((l) => /^(E\d+) ·/.exec(l)?.[1]).filter(Boolean).at(-1);
+    const turns = new Map();
+    const v2 = await runAgentV2Inspection({
+      targetUrl: payload.targetUrl, intent: payload.intent, locale: "ko", acs: payload.agent.acs, testDataSeed: 1,
+      fetchImpl: async () => new Response("<!doctype html><html><body><h1>동네 미용실 예약</h1></body></html>", { status: 200 }),
+      driver: makeFakeDriver(salonSite(), { origin: SITE, onAct }),
+      llm: async ({ user }) => {
+        const ac = /^Criterion (\S+)/m.exec(user)?.[1] ?? /\[(AC-\d+)\]/.exec(user)?.[1] ?? "x";
+        const n = (turns.get(ac) ?? 0) + 1;
+        turns.set(ac, n);
+        if (n === 1) return reply({ type: "fill", target: { label: "이름" }, value: "심사테스트" });
+        if (n === 2) return reply({ type: "click", target: { role: "button", name: "예약하기" } });
+        return reply({ type: "judge", verdict: "pass", claim: "예약하면 완료 화면이 보인다", artifactIds: [lastId(user, /storage\(changed\)/), lastId(user, /예약이 완료되었어요/)].filter(Boolean), quotes: ["예약이 완료되었어요"] });
+      },
+    });
+    const built = buildV2Report(v2, { targetUrl: payload.targetUrl, intent: payload.intent, acs: payload.agent.acs, acSource: payload.agent.acSource }, "ko");
+    const done = await T.post("/internal/visual-check-done", { runId: payload.runId, ok: true, decision: built.decision, works: built.works, report: built.report, agentPrompt: "" }, { authorization: `Bearer ${ICT}` });
+    assert.equal(done.status, 200, await done.clone().text());
+    const row = T.db.prepare(`SELECT status, decision, report_json FROM workspace_visual_checks WHERE id = ?`).get(payload.runId);
+    const stored = JSON.parse(row.report_json);
+    assert.equal(stored.engine, "agent", "대시보드는 기존 agent 리포트로 그린다");
+    assert.equal(stored.engineVersion, "v2");
+    assert.ok(Array.isArray(stored.v2.verdicts) && stored.v2.verdicts.length === payload.agent.acs.length);
+    assert.equal(row.decision, built.decision);
   });
 
   it("직접 로그인 넘겨주기: 동의 필수 · 런 토큰 · 소유자만 라이브 화면", async () => {

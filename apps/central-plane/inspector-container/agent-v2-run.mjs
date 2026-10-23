@@ -30,6 +30,9 @@ const DEFAULT_MAX_STEPS = 20;
 const MAX_VERIFIER_NUDGES = 2;
 const MAX_INVALID_STREAK = 3;
 const FIX_MAX_TOKENS = 4000;
+/** (S7) 실측 F4: 고친 파일이 환율을 지어 넣었다 — 작동하지만 틀린 앱이 된다. v1 공용 프롬프트는 두고 v2에서만 덧붙인다. */
+const NO_INVENTED_VALUES_RULE =
+  "Never invent business values (prices, exchange rates, tax rates, phone numbers, addresses, opening hours). If the fix needs a value the file and the criteria do not give, use a clearly marked placeholder and list it in \"assumptions\": [\"<what you assumed, in the user's language>\"]. Also list any limitation of the fix there (e.g. data is kept only in this browser).";
 
 function kstParts(ms) {
   const d = new Date(ms + 9 * 3600_000);
@@ -151,7 +154,7 @@ export async function runAgentV2Inspection(o) {
       : "Not Verified";
   // S5c 첫 지점 규칙: 같은 가설·같은 결함 분류의 실패는 결함 하나로(통계·데이터의 단위는 기준이 아니라 결함).
   const defectGroups = jd.groupFailures(verdicts, plan.hypotheses, (Array.isArray(o.acs) ? o.acs : []).map((a) => a?.id).filter(Boolean), (v) => v.cause?.cls ?? "other");
-  return { ...base, decision, intentMismatch, defectGroups, fix, entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
+  return { ...base, decision, intentMismatch, defectGroups, fix, actions: Object.fromEntries(actionLog), entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
 
   /** 기준 하나 — 새 브라우저에서 시작, 증거물을 쌓으며 조작, 검증기와 실행기 재실행(확인 V)을 통과한 판정만 돌려준다. */
   async function runAc(ac, hyps, clockIso) {
@@ -326,18 +329,19 @@ export async function runAgentV2Inspection(o) {
       const ac = acs.find((a) => a.id === v.acId) ?? {};
       return { id: v.acId, title: ac.title ?? "", then: ac.then ?? "", actions: actionLog.get(v.acId) ?? [], reason: `${v.claim}${causeLine(v)}`, evidence: v.quotes };
     });
-    const text = await callLlm("You fix single-file web apps. Reply with JSON only.", sf.singleFileFixPrompt(source, rows, locale), FIX_MAX_TOKENS);
+    const text = await callLlm("You fix single-file web apps. Reply with JSON only.", `${sf.singleFileFixPrompt(source, rows, locale)}\n\n${NO_INVENTED_VALUES_RULE}`, FIX_MAX_TOKENS);
     const parsed = pure.extractJsonObject(text) ?? {};
+    const assumptions = Array.isArray(parsed.assumptions) ? parsed.assumptions.filter((x) => typeof x === "string").slice(0, 10).map((x) => red(x).slice(0, 200)) : [];
     const cannotFix = Array.isArray(parsed.cannotFix) ? parsed.cannotFix.filter((x) => typeof x === "string").slice(0, 10).map((x) => red(x)) : [];
     // 편집 없이 "한 파일로는 못 고침"(서버·DB·외부 키 필요)만 답했으면 오류가 아니라 정직한 결론이다(실측 F3·F6·F13).
     if ((!Array.isArray(parsed.edits) || parsed.edits.length === 0) && cannotFix.length > 0) {
       plog(`v2:fix cannot fix in a single file (${cannotFix.length})`);
-      return { attempted: true, reason: "cannot_fix_in_single_file", validated: [], stillFailing: [], cannotFix };
+      return { attempted: true, reason: "cannot_fix_in_single_file", validated: [], stillFailing: [], cannotFix, assumptions };
     }
     const applied = sf.applyExactEdits(source, parsed.edits);
     if (!applied.ok) {
       plog(`v2:fix edits rejected ${applied.error}`);
-      return { attempted: true, error: applied.error, cannotFix };
+      return { attempted: true, error: applied.error, cannotFix, assumptions };
     }
     const diff = sf.editsDiff(parsed.edits).slice(0, 40_000);
     const diffId = store.add("context", `고친 파일 편집 ${parsed.edits.length}개`, diff, {});
@@ -364,6 +368,7 @@ export async function runAgentV2Inspection(o) {
       validated,
       stillFailing,
       cannotFix,
+      assumptions,
       diff,
       diffArtifactId: diffId,
       ...(validated.length > 0 && applied.html.length <= sf.CORRECTED_FILE_REPORT_MAX ? { correctedHtml: applied.html } : {}),
