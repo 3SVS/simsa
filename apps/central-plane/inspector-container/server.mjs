@@ -428,6 +428,8 @@ async function runAgentV2Job(payload, { outDir, locale, onPhase, phases }) {
       locale,
       acs,
       readOnly: agent.readOnly === true,
+      // S8 재검사: 원 런의 계획(Worker가 원 리포트에서 실어 보낸다) — 실행기가 형식·기준을 확인하고 쓴다.
+      previousPlan: agent.previousPlan ?? null,
       budgetMs: Math.min(AGENT_RUN_BUDGET_MS, Number(agent.caps?.maxMinutes) > 0 ? Number(agent.caps.maxMinutes) * 60_000 : AGENT_RUN_BUDGET_MS),
       // 시험 데이터 seed = runId에서(재현 가능).
       testDataSeed: [...String(payload.runId ?? "")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 100000, 7),
