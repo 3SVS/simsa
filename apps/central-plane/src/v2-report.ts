@@ -56,6 +56,8 @@ export interface V2ResultLike {
     correctedHtml?: string;
   } | null;
   actions?: Record<string, string[]>;
+  /** 이 런의 계획(가설·실험) — 재검사가 그대로 다시 쓴다(S8) */
+  plan?: unknown;
   artifacts?: { artifacts: V2ArtifactLike[]; truncated?: boolean };
 }
 
@@ -141,6 +143,7 @@ export function buildV2Report(
         }
       : null,
     artifactsTruncated: r.artifacts?.truncated === true,
+    plan: r.plan ?? null,
   };
   // 고친 파일을 내줄 때 그 가정·한계(이 브라우저에만 저장, 자리표시자 값)는 사용자가 반드시 읽어야 한다.
   const notes = validated ? [...base.notes, ...(fix?.assumptions ?? []).map((a) => ASSUMPTION_NOTE[L](a))] : base.notes;
