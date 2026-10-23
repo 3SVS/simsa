@@ -6,7 +6,7 @@
  * 가정·한계, 인용 증거물 요약)은 `report.v2`에 따로 싣는다 — 데이터(실패 사건 라벨)의 원천이 이 블록이다.
  * pass는 v2에서 상태 변화 증거물 + 실행기 재실행 확인을 거쳤으므로 exercised = { stateChange, verified: confirmed }.
  */
-import { buildAgentReport, type AcResult, type AcSource, type AgentAc, type AgentReport, type AgentSignals } from "./agent-inspection.js";
+import { buildAgentReport, DEFECT_CLASSES, type AcResult, type DefectClass, type AcSource, type AgentAc, type AgentReport, type AgentSignals } from "./agent-inspection.js";
 import type { ReportLocale } from "./nondev-report.js";
 
 interface V2ArtifactLike {
@@ -60,6 +60,7 @@ export interface V2ResultLike {
 }
 
 const EXCERPT_MAX = 300;
+const isDefectClass = (x: unknown): x is DefectClass => typeof x === "string" && (DEFECT_CLASSES as readonly string[]).includes(x);
 const MISMATCH_PREFIX = { ko: "생각과 달라요: ", en: "Not what you meant: " } as const;
 const ASSUMPTION_NOTE = { ko: (a: string) => `고친 파일 참고: ${a}`, en: (a: string) => `About the corrected file: ${a}` } as const;
 
@@ -143,7 +144,10 @@ export function buildV2Report(
   };
   // 고친 파일을 내줄 때 그 가정·한계(이 브라우저에만 저장, 자리표시자 값)는 사용자가 반드시 읽어야 한다.
   const notes = validated ? [...base.notes, ...(fix?.assumptions ?? []).map((a) => ASSUMPTION_NOTE[L](a))] : base.notes;
-  return { decision: decisionOf(base), works: base.works, report: { ...base, notes, engineVersion: "v2", v2 } };
+  // train L4: C13 집계(inspection_defects)가 읽는 agent.defects의 분류도 v2 증거 기반 원인으로(문장 단어 맞추기 대신).
+  const causeOf = new Map(verdicts.filter((v) => v.cause && isDefectClass(v.cause.cls)).map((v) => [v.acId, v.cause?.cls as DefectClass]));
+  const agent = { ...base.agent, defects: base.agent.defects.map((d) => (causeOf.has(d.acId) ? { ...d, defectClass: causeOf.get(d.acId) as DefectClass } : d)) };
+  return { decision: decisionOf(base), works: base.works, report: { ...base, agent, notes, engineVersion: "v2", v2 } };
 }
 
 /** 기존 리포트가 낸 결정(라벨이 아니라 값). buildAgentReport는 basis·works를 싣는다 — 같은 규칙을 다시 부른다. */

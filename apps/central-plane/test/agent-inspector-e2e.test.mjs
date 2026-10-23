@@ -293,6 +293,10 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     const built = buildV2Report(v2, { targetUrl: payload.targetUrl, intent: payload.intent, acs: payload.agent.acs, acSource: payload.agent.acSource }, "ko");
     const done = await T.post("/internal/visual-check-done", { runId: payload.runId, ok: true, decision: built.decision, works: built.works, report: built.report, agentPrompt: "" }, { authorization: `Bearer ${ICT}` });
     assert.equal(done.status, 200, await done.clone().text());
+    // train L3: 완료 콜백이 기계 후보 라벨을 남긴다(운영 정보 게이트 안 — 이 런은 허용) — 닫힌 어휘 칸만
+    const labels = T.db.prepare(`SELECT ac_id, source, h1, producer FROM label_ac_verdicts WHERE run_id = ?`).all(payload.runId);
+    assert.equal(labels.length, payload.agent.acs.length);
+    assert.ok(labels.every((l) => l.source === "machine" && l.h1 === "pass" && l.producer === "agent-v2-1"));
     const row = T.db.prepare(`SELECT status, decision, report_json FROM workspace_visual_checks WHERE id = ?`).get(payload.runId);
     const stored = JSON.parse(row.report_json);
     assert.equal(stored.engine, "agent", "대시보드는 기존 agent 리포트로 그린다");

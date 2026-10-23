@@ -107,13 +107,24 @@ function symptomOf(k: DefectClass, w1: FailureEvent["w1"], claim: string): Failu
   }
 }
 
-function stageOf(text: string, actions: string[], evidence: EvidenceLike[]): FailureEvent["w1"] {
+/** 문장·행동·증거에서 뜻이 분명한 단계(관리·수정·공유·지속·결과)만 — 없으면 null. */
+function semanticStage(text: string, actions: string[], evidence: EvidenceLike[]): FailureEvent["w1"] | null {
   const fresh = evidence.some((e) => /^fresh /.test(e.summary ?? ""));
   if (RE.admin.test(text)) return "admin";
   if (RE.modify.test(text)) return "modify";
   if (fresh || RE.share.test(text) || actions.some((a) => RE.share.test(a))) return "share";
   if (RE.persist.test(text) || actions.some((a) => RE.persist.test(a))) return "persist";
   if (RE.result.test(text)) return "result";
+  return null;
+}
+
+/**
+ * 실패가 **실제로 난** 단계: 판정 문장·그 기준의 행동·증거를 먼저 보고, 거기서 정해지지 않을 때만 기준 문장을 본다.
+ * (벤치 #1 A5 "새로고침해도 남는다(다른 방문자에게도)" — 실패 문장이 "새로고침하면 사라진다"면 persist다.)
+ */
+function stageOf(claim: string, acText: string, actions: string[], evidence: EvidenceLike[]): FailureEvent["w1"] {
+  const s = semanticStage(claim, actions, evidence) ?? semanticStage(acText, [], []);
+  if (s) return s;
   const filled = actions.some((a) => /입력|fill/.test(a));
   if (filled && actions.some((a) => /누르기|click/.test(a))) return "submit";
   if (filled) return "input";
@@ -200,9 +211,8 @@ export function machineCandidatesFromV2Report(
 
     if ((v.verdict !== "fail" && v.verdict !== "mismatch") || v.confirmed !== true) continue;
     const claim = v.claim ?? "";
-    const text = `${acText.get(row.id) ?? ""} ${claim}`;
     const k: DefectClass = v.verdict === "mismatch" ? "intent_mismatch" : isDefect(v.cause?.cls) ? v.cause.cls : "other";
-    const w1 = stageOf(text, actions, evidence);
+    const w1 = stageOf(claim, acText.get(row.id) ?? "", actions, evidence);
     const w3 = actionOf(w1, claim, actions);
     const observed = v.cause?.basis === "static_fact" || v.cause?.basis === "console" || v.verdict === "mismatch";
     const s: FailureEvent["s"] = row.priority !== "must" ? "S3" : w1 === "share" || w1 === "admin" || w1 === "modify" || w1 === "persist" || w3 === "time_change" ? "S2" : "S1";
