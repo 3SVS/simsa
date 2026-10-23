@@ -301,6 +301,31 @@ describe("agent 엔진 E2E — 세 문", { skip }, () => {
     assert.equal(row.decision, built.decision);
   });
 
+  it("(v2 S8) 재검사: v2 원 런이면 v2를 물려받고 원 계획을 실어 보낸다 → 완료 시 원 런과 비교·회차를 리포트에", async () => {
+    const origin = T.db.prepare(`SELECT id, report_json FROM workspace_visual_checks WHERE project_id = 'proj_v2' AND status = 'done' ORDER BY created_at DESC LIMIT 1`).get();
+    assert.ok(origin, "앞 테스트의 v2 런");
+    const originReport = JSON.parse(origin.report_json);
+    assert.ok(originReport.v2.plan && Array.isArray(originReport.v2.plan.acPlans), "원 리포트에 계획이 있다");
+    const re = await T.post("/workspace/projects/proj_v2/visual-checks/run", { userKey: STAFF, sourceCheckId: origin.id });
+    assert.ok(re.status === 200 || re.status === 202, await re.clone().text());
+    const payload = T.dispatched.at(-1);
+    assert.equal(payload.agent.version, "v2", "엔진 지정 없이 다시 확인 → v2 물려받음");
+    assert.deepEqual(payload.agent.previousPlan, originReport.v2.plan);
+    // 재검사 결과: AC-002가 이번엔 같은 원인으로 실패했다고 하자(나머지 통과)
+    const next = JSON.parse(JSON.stringify(originReport));
+    const v002 = next.v2.verdicts.find((v) => v.acId === "AC-002");
+    Object.assign(v002, { verdict: "fail", confirmed: true, cause: { cls: "client_only_storage", basis: "static_fact", location: null, source: [], seen: [] } });
+    next.acTable.find((r) => r.id === "AC-002").status = "fail";
+    delete next.v2.comparison;
+    const done = await T.post("/internal/visual-check-done", { runId: payload.runId, ok: true, decision: "Needs Fix", works: false, report: next, agentPrompt: "" }, { authorization: `Bearer ${ICT}` });
+    assert.equal(done.status, 200, await done.clone().text());
+    const stored = JSON.parse(T.db.prepare(`SELECT report_json FROM workspace_visual_checks WHERE id = ?`).get(payload.runId).report_json);
+    assert.deepEqual(stored.v2.comparison.newlyBroken, ["AC-002"]);
+    assert.equal(stored.v2.recheck.round, 1);
+    assert.equal(stored.v2.recheck.sourceCheckId, origin.id);
+    assert.equal(stored.v2.comparison.loop.done, false);
+  });
+
   it("직접 로그인 넘겨주기: 동의 필수 · 런 토큰 · 소유자만 라이브 화면", async () => {
     T.addProject("proj_live", "code", salonSpec({ source: "inferred", confirmed: ["AC-001", "AC-002", "AC-003"] }));
     const no = await T.post("/workspace/projects/proj_live/visual-checks/run", { userKey: STAFF, engine: "agent", loginMode: "handover" });
