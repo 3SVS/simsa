@@ -37,6 +37,11 @@ describe("마감 시각 해석", () => {
     assert.equal(J.closingSlotMisread(A1, fail("A1", "시간 목록이 오후 6시 30분까지만 있고 오후 7시는 고를 수 없다", ["오후 6:30"])), true);
     assert.equal(J.closingSlotMisread(A1, fail("A1", "18:30까지만 보이고 19:00 칸이 없다", ["18:30"])), true);
   });
+  it("'…에서 끝나서'·'…이 마지막' 같은 다른 표현도 같은 해석 — 실측 벤치 #1 claude A1(10-23) '오후 6시 30분에서 끝나서 오후 7시를 고를 수 없습니다'", () => {
+    assert.equal(J.closingSlotMisread(A1, fail("A1", "시간 목록이 오후 6시 30분에서 끝나서 오후 7시를 고를 수 없습니다.", ["오후 6:30"])), true);
+    assert.equal(J.closingSlotMisread(A1, fail("A1", "18:30이 마지막 칸이고 19:00은 없다", ["18:30"])), true);
+    assert.equal(J.closingSlotMisread(A1, fail("A1", "목록이 오후 6시에서 끝나 6시 30분을 고를 수 없다", ["18:00"])), false);
+  });
   it("진짜 빠진 시간(마감 1시간 전까지만 등)은 그대로 실패", () => {
     assert.equal(J.closingSlotMisread(A1, fail("A1", "오후 6시까지만 있고 6시 30분부터는 고를 수 없다", ["18:00"])), false);
     assert.equal(J.closingSlotMisread(A1, fail("A1", "오전 10시 칸이 없다", ["10:30"])), false);
