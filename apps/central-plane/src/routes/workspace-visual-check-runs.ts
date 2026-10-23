@@ -72,6 +72,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
+import { failureStats, recordMachineLabels } from "../dataset/record.js";
 import { getProject, type DbProject } from "../workspace/db.js";
 import { getProjectSourceById, listProjectSources } from "../workspace/project-sources-db.js";
 import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
@@ -894,6 +895,19 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     return c.json({ ok: true, since, rows: rows.results ?? [] });
   });
 
+  // ── GET /admin/failure-stats (train L5) — 빌더 × 여정 단계 × 증상 × 결함 분류 × 심각도. 내부 토큰만.
+  //    ?since=ISO(기본 90일) · ?source=machine|labeler_agent|user(기본 machine — 출처를 섞어 세지 않는다). 런 안 같은 결함 묶음 = 1건.
+  app.get("/admin/failure-stats", async (c) => {
+    const rejected = internalBearerRejection(c);
+    if (rejected) return rejected;
+    const sinceRaw = c.req.query("since");
+    const since = sinceRaw && Number.isFinite(Date.parse(sinceRaw)) ? new Date(sinceRaw).toISOString() : new Date(Date.now() - 90 * 86400_000).toISOString();
+    const sourceRaw = c.req.query("source");
+    const source = sourceRaw === "labeler_agent" || sourceRaw === "user" ? sourceRaw : "machine";
+    const rows = await failureStats(c.env, { since, source }).catch(() => []);
+    return c.json({ ok: true, since, source, rows });
+  });
+
   // ── 직접 로그인해서 넘겨주기(라이브 브라우저) ─────────────────────────────────
   // 카카오·구글·문자 인증처럼 우리가 대신 들어갈 수 없는 로그인을 **사용자가 직접** 한다. 화면은 이 런의 검수
   // 컨테이너 안 Chromium이고, Worker가 그 화면(JPEG)과 입력(클릭·글자·키)을 중계한다. 인증 두 겹:
@@ -1159,6 +1173,13 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     if (findingCodesJson !== null && body.report && typeof body.report === "object") {
       await recordAgentDefects(c.env, body.runId, body.report as Record<string, unknown>).catch((err) => {
         console.error("[visual-check-runs done] defect record failed:", err);
+      });
+    }
+    // train L3: v2 리포트 → 기계 후보 라벨(판정 + 실패 사건, 닫힌 어휘만 — migrations/0076). 같은 운영 정보 게이트.
+    // 표가 아직 없으면(0076 적용 전) 실패를 기록만 하고 넘어간다 — 검수 결과 전달은 막지 않는다.
+    if (body.report && typeof body.report === "object" && (body.report as Record<string, unknown>)["engineVersion"] === "v2" && (await opsMetaAllowedForRun(c.env, run, "inspection-done"))) {
+      await recordMachineLabels(c.env, { runId: body.runId, targetUrl: run.targetUrl, report: body.report as Record<string, unknown> }).catch((err) => {
+        console.error(JSON.stringify({ at: "visual-check-runs done", note: "machine label record failed", error: String((err as Error)?.message ?? err).slice(0, 120) }));
       });
     }
 
