@@ -53,7 +53,9 @@ function openAiLlm(usage) {
 }
 
 /** 앱 하나의 칸 채점(정답지 대조). */
-export function scoreApp(app, r) {
+export function scoreApp(app, r, kstHour = 12) {
+  // 정답지 timeDependent 칸(UTC 날짜 결함)은 KST 00~09시에만 드러난다 — 낮 실행에서 안 보인 것은 놓침이 아니다(v1 하네스와 같은 규칙).
+  const nightOnly = app.timeDependent === true && kstHour >= 9;
   const byAc = new Map((r.verdicts ?? []).map((v) => [v.acId, v]));
   const keyFail = new Set(app.mustFailed);
   const hits = [];
@@ -61,12 +63,14 @@ export function scoreApp(app, r) {
   const opposite = [];
   const extra = [];
   const derived = [];
+  const timeDependent = [];
   for (const id of MUST) {
     const v = byAc.get(id);
     const said = v?.verdict ?? "missing";
     if (keyFail.has(id)) {
       if (said === "fail" || said === "mismatch") hits.push({ acId: id, cause: v.cause?.cls ?? null, basis: v.cause?.basis ?? null });
       else if (said === "pass") opposite.push(id);
+      else if (nightOnly) timeDependent.push({ acId: id, verdict: said });
       else misses.push({ acId: id, verdict: said, reasons: v?.reasons ?? [] });
     } else if (said === "fail" || said === "mismatch") {
       const group = (r.defectGroups ?? []).find((g) => g.acIds.includes(id));
@@ -78,7 +82,7 @@ export function scoreApp(app, r) {
     app.expected === "broken" ? r.decision === "Needs Fix"
       : app.expected === "broken_or_hold" ? r.decision === "Needs Fix" || r.decision === "Not Verified"
         : r.decision === "Ready" || r.decision === "Not Verified";
-  return { hits, misses, opposite, extra, derived, okDecision };
+  return { hits, misses, opposite, extra, derived, timeDependent, okDecision };
 }
 
 const only = arg("only", "").split(",").filter(Boolean);
@@ -99,7 +103,7 @@ async function runApp(app) {
       targetUrl: app.url, intent: BENCH1_INTENT, locale: "ko", acs: BENCH1_PREREG_ACS, llm: openAiLlm(usage), driver,
       budgetMs: 20 * 60_000, testDataSeed: 4242, onPhase: (l) => phases.push(l),
     });
-    const score = scoreApp(app, r);
+    const score = scoreApp(app, r, Number(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul", hour: "numeric", hourCycle: "h23" })));
     return {
       id: app.id, expected: app.expected, keyMustFailed: app.mustFailed, decision: r.decision, ...score,
       verdicts: r.verdicts.map((v) => ({ acId: v.acId, verdict: v.verdict, originalVerdict: v.originalVerdict, confirmed: v.confirmed, reasons: v.reasons, claim: v.claim, quotes: v.quotes, cause: v.cause })),
@@ -139,6 +143,7 @@ for (let k = 1; k <= repeat; k += 1) {
   const totalKeyCells = apps.reduce((n, a) => n + a.mustFailed.length, 0);
   const summary = {
     keyCells: totalKeyCells,
+    timeDependentNotJudged: rows.reduce((n, r) => n + (r.timeDependent?.length ?? 0), 0),
     hits: rows.reduce((n, r) => n + (r.hits?.length ?? 0), 0),
     opposite: rows.reduce((n, r) => n + (r.opposite?.length ?? 0), 0),
     extra: rows.reduce((n, r) => n + (r.extra?.length ?? 0), 0),

@@ -345,6 +345,12 @@ const AGENT_HARD_MS = 15 * 60 * 1000;
 const HANDOVER_WAIT_MS = 10 * 60 * 1000;
 
 async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup }) {
+  // V-8: v2 실행기는 Worker가 장비(스태프) 키에서만 version "v2"로 보낸다. 그 밖은 전부 v1(대체 경로 유지).
+  // v2는 실행 중에 기준을 추정하지 않는다 — 확인된 기준이 없으면 v1(실행 중 추정)으로 돈다.
+  if (payload.agent?.version === "v2" && Array.isArray(payload.agent.acs) && payload.agent.acs.length > 0) {
+    onPhase("agent:v2");
+    return runAgentV2Job(payload, { outDir, locale, onPhase, phases });
+  }
   const { runAgentInspection, partialAgentResult } = await import("./agent-run.mjs");
   const progress = {};
   const { createPlaywrightDriver } = await import("./agent-driver.mjs");
@@ -397,6 +403,47 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
     const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");
     throw new Error(redactWith(secrets(), `${String(err?.message ?? err)} ||trace: ${trace}`).slice(0, 490));
   });
+}
+
+/**
+ * 검사 엔진 v2(S7b) — 정찰 → 계획 → 기준별 실행(증거물) → 검증·재실행 확인 → 원인 → 고치기. 결과는 기존 agent 리포트 모양
+ * (v2-report.js)으로 바꿔 같은 콜백으로 보낸다(대시보드 변경 없음, v2 전용 정보는 report.v2). 로그인·가입은 v2 범위 밖(로그인 없이).
+ * 실행기가 정상·조기 종료 모두 브라우저를 닫고, 시간 초과 때는 여기서 닫는다.
+ */
+async function runAgentV2Job(payload, { outDir, locale, onPhase, phases }) {
+  const { runAgentV2Inspection } = await import("./agent-v2-run.mjs");
+  const { createPlaywrightDriver } = await import("./agent-driver.mjs");
+  const { createProxyLlm } = await import("./agent-llm.mjs");
+  const dist = (name) => import(`./dist/${name}`).catch(() => import(`../dist/${name}`));
+  const { isNoiseResource } = await dist("nondev-report.js");
+  const { buildV2Report } = await dist("v2-report.js");
+  const { buildAgentAcFixPrompt } = await dist("agent-inspection.js");
+  const agent = payload.agent ?? {};
+  const acs = Array.isArray(agent.acs) ? agent.acs : [];
+  const driver = await createPlaywrightDriver({ outDir, locale, isNoiseResource });
+  const result = await withTimeout(
+    runAgentV2Inspection({
+      targetUrl: payload.targetUrl,
+      intent: payload.intent,
+      locale,
+      acs,
+      readOnly: agent.readOnly === true,
+      budgetMs: Math.min(AGENT_RUN_BUDGET_MS, Number(agent.caps?.maxMinutes) > 0 ? Number(agent.caps.maxMinutes) * 60_000 : AGENT_RUN_BUDGET_MS),
+      // 시험 데이터 seed = runId에서(재현 가능).
+      testDataSeed: [...String(payload.runId ?? "")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 100000, 7),
+      llm: createProxyLlm({ url: agent.llmUrl, token: agent.llmToken }),
+      driver,
+      onPhase,
+    }),
+    AGENT_HARD_MS,
+    `agent v2 inspection timed out after ${Math.round(AGENT_HARD_MS / 1000)}s`,
+  ).catch(async (err) => {
+    await driver.close().catch(() => {});
+    const trace = [phases[0], ...phases.slice(-9)].filter(Boolean).join(" | ");
+    throw new Error(`${String(err?.message ?? err)} ||trace: ${trace}`.slice(0, 490));
+  });
+  const built = buildV2Report(result, { targetUrl: payload.targetUrl, intent: payload.intent, acs, acSource: agent.acSource ?? "inferred_at_run" }, locale);
+  return { decision: built.decision, works: built.works, report: built.report, agentPrompt: buildAgentAcFixPrompt(built.report, locale), evidenceFiles: [] };
 }
 
 function withTimeout(promise, ms, message) {

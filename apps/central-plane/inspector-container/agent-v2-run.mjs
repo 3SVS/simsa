@@ -154,7 +154,7 @@ export async function runAgentV2Inspection(o) {
       : "Not Verified";
   // S5c 첫 지점 규칙: 같은 가설·같은 결함 분류의 실패는 결함 하나로(통계·데이터의 단위는 기준이 아니라 결함).
   const defectGroups = jd.groupFailures(verdicts, plan.hypotheses, (Array.isArray(o.acs) ? o.acs : []).map((a) => a?.id).filter(Boolean), (v) => v.cause?.cls ?? "other");
-  return { ...base, decision, intentMismatch, defectGroups, fix, entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
+  return { ...base, decision, intentMismatch, defectGroups, fix, actions: Object.fromEntries(actionLog), entry: { ...entry, artifactId: entryId }, facts, planArtifactId, plan, verdicts, artifacts: store.toJSON(), llmCalls };
 
   /** 기준 하나 — 새 브라우저에서 시작, 증거물을 쌓으며 조작, 검증기와 실행기 재실행(확인 V)을 통과한 판정만 돌려준다. */
   async function runAc(ac, hyps, clockIso) {

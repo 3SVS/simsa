@@ -47,9 +47,10 @@ RUN npm install --no-package-lock --loglevel=error
 
 # Canonical Simsa modules — compiled in-image from apps/central-plane/src so
 # the container always runs the exact logic the repo ships.
+# 2026-10-23 v2 S4~S7: 턴 프롬프트·파서(v2-agent) · 판정 후처리·원인(v2-judge) · 리포트 변환(v2-report).
 # 2026-10-21 v2 S1·S2·S3: 증거물 저장소·기계 검증기(evidence-chain) · 정찰 판단(recon) · AC 선행 조건(ac-semantics) · 가설·계획(v2-plan) — S4에서 실행기가 쓴다.
-COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts apps/central-plane/src/agent-inspection.ts apps/central-plane/src/evidence-chain.ts apps/central-plane/src/recon.ts apps/central-plane/src/ac-semantics.ts apps/central-plane/src/v2-plan.ts ./src/
-RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts src/agent-inspection.ts src/evidence-chain.ts src/recon.ts src/ac-semantics.ts src/v2-plan.ts \
+COPY apps/central-plane/src/visual-flow-plan.ts apps/central-plane/src/nondev-report.ts apps/central-plane/src/signup-plan.ts apps/central-plane/src/agent-inspection.ts apps/central-plane/src/evidence-chain.ts apps/central-plane/src/recon.ts apps/central-plane/src/ac-semantics.ts apps/central-plane/src/v2-plan.ts apps/central-plane/src/v2-agent.ts apps/central-plane/src/v2-judge.ts apps/central-plane/src/v2-report.ts ./src/
+RUN npx tsc src/visual-flow-plan.ts src/nondev-report.ts src/signup-plan.ts src/agent-inspection.ts src/evidence-chain.ts src/recon.ts src/ac-semantics.ts src/v2-plan.ts src/v2-agent.ts src/v2-judge.ts src/v2-report.ts \
     --outDir dist --module nodenext --moduleResolution nodenext \
     --target es2022 --skipLibCheck
 
@@ -69,6 +70,8 @@ COPY apps/central-plane/inspector-container/agent-llm.mjs ./agent-llm.mjs
 COPY apps/central-plane/inspector-container/single-file-fix.mjs ./single-file-fix.mjs
 # 2026-10-21 v2 S2 정찰 수집기(같은 출처 GET만, 실행 없음).
 COPY apps/central-plane/inspector-container/recon-collect.mjs ./recon-collect.mjs
+# 2026-10-23 v2 S7 실행기(장비 키 전용, V-8) — server.mjs가 agent.version "v2"일 때만 읽는다.
+COPY apps/central-plane/inspector-container/agent-v2-run.mjs ./agent-v2-run.mjs
 
 # Writable scratch space for per-run screenshots/video.
 RUN mkdir -p /var/lib/simsa && chmod 770 /var/lib/simsa

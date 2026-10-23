@@ -125,12 +125,13 @@ export function parseV2Turn(raw: unknown, ctx: { acId: string; origin: string })
   if (!obj) return { ok: false, error: "no_json_object" };
   const action = (obj["action"] && typeof obj["action"] === "object" ? obj["action"] : obj) as Record<string, unknown>;
   if (action["type"] === "judge") {
+    // `"error" in` 로 가른다 — 이미지 안 tsc는 strict 없이 돌아 `ok` 불리언 판별로는 좁혀지지 않는다(S7 이미지 tsc 재현).
     const v = parseV2Verdict({ ...action, acId: ctx.acId });
-    return v.ok ? { ok: true, kind: "judge", verdict: v.verdict } : { ok: false, error: `judge_${v.error}` };
+    return "error" in v ? { ok: false, error: `judge_${v.error}` } : { ok: true, kind: "judge", verdict: v.verdict };
   }
   if (action["type"] === "set_clock") return { ok: false, error: "set_clock_runner_only" };
   const a = parseAgentAction({ action }, ctx.origin);
-  if (!a.ok) return a;
+  if ("error" in a) return { ok: false, error: a.error };
   if (a.action.type === "judge") return { ok: false, error: "judge_v1_format" };
   return { ok: true, kind: "action", action: a.action };
 }
