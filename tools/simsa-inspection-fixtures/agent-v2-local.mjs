@@ -94,6 +94,8 @@ for (const t of targets) {
       entry: r.entry?.broken ?? null, facts: (r.facts ?? []).map((f) => `${f.rule}:${f.cls}`), hypotheses: (r.plan?.hypotheses ?? []).map((h) => `${h.id}:${h.cls}`),
       verdicts: r.verdicts.map((v) => ({ acId: v.acId, verdict: v.verdict, originalVerdict: v.originalVerdict, confirmed: v.confirmed, claim: v.claim, reasons: v.reasons, artifactIds: v.artifactIds, reproArtifactIds: v.reproArtifactIds, quotes: v.quotes })),
       intentMismatch: r.intentMismatch ?? [], defectGroups: r.defectGroups ?? [],
+      fix: r.fix ? { attempted: r.fix.attempted, reason: r.fix.reason, error: r.fix.error, validated: r.fix.validated, stillFailing: r.fix.stillFailing, cannotFix: r.fix.cannotFix, diff: r.fix.diff, correctedHtmlBytes: r.fix.correctedHtml?.length ?? 0 } : null,
+      causes: r.verdicts.filter((v) => v.cause).map((v) => ({ acId: v.acId, ...v.cause })),
       artifacts: r.artifacts?.artifacts?.length ?? 0, llmCalls: r.llmCalls?.n ?? 0, tokens: usage, seconds: Math.round((Date.now() - started) / 1000), phases,
     };
   } catch (err) {
@@ -103,7 +105,7 @@ for (const t of targets) {
     rmSync(outDir, { recursive: true, force: true });
   }
   rows.push(row);
-  console.log(`${t.id} expected=${t.expected} decision=${row.decision ?? "ERR"} score=${row.score ?? "error"} calls=${row.llmCalls ?? 0} tokens=${usage.in}/${usage.out} ${row.seconds ?? "?"}s ${row.error ?? ""}`);
+  console.log(`${t.id} expected=${t.expected} decision=${row.decision ?? "ERR"} score=${row.score ?? "error"} cause=${(row.causes ?? []).map((c) => c.cls).join(",") || "-"} fix=${row.fix ? (row.fix.attempted ? `v${(row.fix.validated ?? []).length}/s${(row.fix.stillFailing ?? []).length}${row.fix.error ? "/" + row.fix.error : ""}` : row.fix.reason) : "-"} calls=${row.llmCalls ?? 0} tokens=${usage.in}/${usage.out} ${row.seconds ?? "?"}s ${row.error ?? ""}`);
 }
 const summary = {
   pass: rows.filter((r) => r.score === "pass").length,

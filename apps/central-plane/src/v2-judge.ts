@@ -32,8 +32,16 @@ export interface DefectGroup {
   rootAcId: string;
 }
 
-/** 실패 판정을 결함 단위로 묶는다. acOrder = 사용자 기준 순서(표시·첫 지점 결정용). */
-export function groupFailures(verdicts: readonly JudgedVerdict[], hypotheses: readonly HypothesisRef[], acOrder: readonly string[]): DefectGroup[] {
+/**
+ * 실패 판정을 결함 단위로 묶는다. acOrder = 사용자 기준 순서(표시·첫 지점 결정용).
+ * classify를 주면 그 분류(S6a 증거 기반)로, 없으면 판정 문장 분류(classifyDefect)로 묶는다.
+ */
+export function groupFailures(
+  verdicts: readonly JudgedVerdict[],
+  hypotheses: readonly HypothesisRef[],
+  acOrder: readonly string[],
+  classify?: (v: JudgedVerdict) => DefectClass,
+): DefectGroup[] {
   const rank = (id: string) => {
     const i = acOrder.indexOf(id);
     return i < 0 ? Number.MAX_SAFE_INTEGER : i;
@@ -41,7 +49,7 @@ export function groupFailures(verdicts: readonly JudgedVerdict[], hypotheses: re
   const groups = new Map<string, DefectGroup>();
   const fails = verdicts.filter((v) => v.verdict === "fail").slice().sort((a, b) => rank(a.acId) - rank(b.acId));
   for (const v of fails) {
-    const cls = classifyDefect({ status: "fail", reason: v.claim, evidence: v.quotes });
+    const cls = classify ? classify(v) : classifyDefect({ status: "fail", reason: v.claim, evidence: v.quotes });
     const h = cls === "other" ? undefined : hypotheses.find((x) => x.cls === cls && x.coversAcIds.includes(v.acId));
     const key = h ? `${h.id}:${cls}` : `${v.acId}:${cls}`;
     const g = groups.get(key);
@@ -106,4 +114,100 @@ export function closingSlotMisread(ac: { title?: string; given?: string; when?: 
     if (said) return said.minutes === lastStart;
   }
   return false;
+}
+
+/** 정적 사실 기록(recon.recordStaticFacts 결과와 같은 모양). */
+export interface RecordedFactRef {
+  fact: { rule: string; cls: string; file: string; excerpt: string };
+  artifactId: string | null;
+}
+
+export interface FailureCause {
+  cls: DefectClass;
+  /** 무엇으로 정했나 — 의도 불일치 판정 · 정적 사실(+맞는 증거) · 콘솔 증거 · 판정 문장(마지막 수단) */
+  basis: "verdict" | "static_fact" | "console" | "claim_text";
+  /** 원인을 보여 주는 실행 증거물(콘솔 등) */
+  evidenceIds: string[];
+  /** 원인 코드 조각 증거물(source) */
+  sourceIds: string[];
+  /** 원인 위치 — 정적 사실의 파일, 또는 콘솔 오류 줄의 파일:줄. 모르면 null */
+  location: { file: string; line: number | null } | null;
+}
+
+interface ArtifactLike {
+  id: string;
+  kind: string;
+  summary: string;
+  raw: string;
+  meta?: Record<string, unknown>;
+}
+
+const NETWORK_FAIL_RE = /ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CERT|Failed to fetch|NetworkError/i;
+const UNCAUGHT_RE = /Uncaught|TypeError|ReferenceError|SyntaxError|RangeError/;
+const STACK_LOC_RE = /\(?((?:https?:\/\/|\/)[^\s()]+?):(\d+):\d+\)?/;
+const API_KEY_RE = /api ?키|api key|키를 (넣|입력)|키가 (없|필요)/i;
+
+/** 정적 사실의 분류가 실행 증거와 맞는가 — 사실만으로 단정하지 않는다(사실은 "위험", 증거가 "발생"). */
+function factConsistent(cls: string, v: JudgedVerdict, arts: readonly ArtifactLike[]): boolean {
+  const text = `${v.claim} ${v.quotes.join(" ")}`;
+  switch (cls) {
+    case "client_only_storage":
+      return arts.some((a) => (a.kind === "screen" && (a.meta?.["session"] === "fresh" || a.meta?.["session"] === "role")) || (a.kind === "storage" && a.meta?.["changed"] === true));
+    case "timezone_date":
+    case "server_rendered_dates":
+      return arts.some((a) => a.kind === "context" && /시계 변형|clock/.test(a.summary)) || /날짜|date|어제|내일/i.test(text);
+    case "needs_api_key":
+      return API_KEY_RE.test(text) || arts.some((a) => a.kind === "screen" && API_KEY_RE.test(a.raw));
+    case "missing_backend_config":
+      return arts.some((a) => a.kind === "console" && NETWORK_FAIL_RE.test(a.raw)) || arts.some((a) => a.kind === "request" && Number(a.meta?.["status"]) >= 400);
+    default:
+      return false;
+  }
+}
+
+const FACT_TO_DEFECT: Record<string, DefectClass> = {
+  missing_backend_config: "missing_backend_config",
+  client_only_storage: "client_only_storage",
+  timezone_date: "timezone_date",
+  server_rendered_dates: "timezone_date",
+  needs_api_key: "needs_api_key",
+};
+
+/**
+ * S6a·b: 실패(또는 불일치) 하나의 원인 분류 + 원인 위치. 우선순위:
+ *   ① 의도 불일치 판정 → intent_mismatch
+ *   ② 이 기준을 덮는 가설의 정적 사실 + 실행 증거가 맞음 → 그 분류(소스 증거물·파일)
+ *   ③ 이 기준 실행 중 콘솔: 네트워크 실패 → missing_backend_config, 잡히지 않은 오류 → runtime_error(스택의 파일:줄)
+ *   ④ 마지막 수단: 판정 문장(classifyDefect)
+ * acArtifacts = 그 기준을 실행하는 동안 생긴 증거물(재실행 포함).
+ */
+export function classifyFailure(
+  v: JudgedVerdict,
+  ctx: { acArtifacts: readonly ArtifactLike[]; facts: readonly RecordedFactRef[]; hypotheses: readonly HypothesisRef[] },
+): FailureCause {
+  if (v.verdict === "mismatch") return { cls: "intent_mismatch", basis: "verdict", evidenceIds: [], sourceIds: [], location: null };
+  for (const h of ctx.hypotheses) {
+    if (!h.coversAcIds.includes(v.acId)) continue;
+    const cls = FACT_TO_DEFECT[h.cls];
+    if (!cls) continue;
+    const facts = ctx.facts.filter((f) => FACT_TO_DEFECT[f.fact.cls] === cls);
+    if (facts.length === 0 || !factConsistent(h.cls, v, ctx.acArtifacts)) continue;
+    const first = facts[0];
+    return {
+      cls,
+      basis: "static_fact",
+      evidenceIds: [],
+      sourceIds: facts.map((f) => f.artifactId).filter((x): x is string => Boolean(x)),
+      location: first ? { file: first.fact.file, line: null } : null,
+    };
+  }
+  const consoles = ctx.acArtifacts.filter((a) => a.kind === "console");
+  const net = consoles.filter((a) => NETWORK_FAIL_RE.test(a.raw));
+  if (net.length > 0) return { cls: "missing_backend_config", basis: "console", evidenceIds: net.map((a) => a.id), sourceIds: [], location: null };
+  const crash = consoles.filter((a) => UNCAUGHT_RE.test(a.raw));
+  if (crash.length > 0) {
+    const m = crash.map((a) => STACK_LOC_RE.exec(a.raw)).find(Boolean);
+    return { cls: "runtime_error", basis: "console", evidenceIds: crash.map((a) => a.id), sourceIds: [], location: m ? { file: m[1] ?? "", line: Number(m[2]) } : null };
+  }
+  return { cls: classifyDefect({ status: "fail", reason: v.claim, evidence: v.quotes }), basis: "claim_text", evidenceIds: [], sourceIds: [], location: null };
 }
