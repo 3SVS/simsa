@@ -73,6 +73,7 @@ import { z } from "zod";
 import { corsMiddleware } from "./cors.js";
 import type { Env } from "../env.js";
 import { failureStats, recordMachineLabels } from "../dataset/record.js";
+import { compareV2Reports } from "../v2-recheck.js";
 import { getProject, type DbProject } from "../workspace/db.js";
 import { getProjectSourceById, listProjectSources } from "../workspace/project-sources-db.js";
 import { buildRunEnvelope, regionFromRequest } from "../workspace/envelope.js";
@@ -187,6 +188,8 @@ export type AgentDispatch = {
   setupPolicy?: "bench" | "user";
   /** 검사 엔진 v2(S7b, V-8 — 스태프 `engine:"agent_v2"` 요청만). 없으면 v1. */
   version?: "v2";
+  /** S8 재검사: 원 v2 런의 계획(가설·실험) — 실행기가 그대로 다시 쓴다. */
+  previousPlan?: unknown;
 };
 
 /** 오픈 베타: 이번 런이 agent 엔진 대신 기본 검수로 돈 이유(리포트에 그대로 안내). */
@@ -270,6 +273,27 @@ export async function recordAgentDefects(env: Env, runId: string, report: Record
 }
 
 /** 원 런이 agent 엔진이었는가(재검수·자동 재검수가 엔진을 물려받는다). */
+/** 원 런이 검사 엔진 v2였는가(재검사가 v2를 물려받는다, S8). */
+export function wasV2Run(run: Pick<DbVisualCheck, "reportJson"> | null): boolean {
+  return v2ReportOf(run) !== null;
+}
+
+function v2ReportOf(run: Pick<DbVisualCheck, "reportJson"> | null): Record<string, unknown> | null {
+  if (!run?.reportJson) return null;
+  try {
+    const r = JSON.parse(run.reportJson) as Record<string, unknown> | null;
+    return r && typeof r === "object" && r["engineVersion"] === "v2" && r["v2"] && typeof r["v2"] === "object" ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 원 v2 런의 계획(형식 확인은 실행기 몫 — 여기서는 객체인지만). */
+export function v2PlanOf(run: Pick<DbVisualCheck, "reportJson"> | null): unknown {
+  const plan = (v2ReportOf(run)?.["v2"] as Record<string, unknown> | undefined)?.["plan"];
+  return plan && typeof plan === "object" ? plan : null;
+}
+
 export function wasAgentRun(run: Pick<DbVisualCheck, "reportJson"> | null): boolean {
   if (!run?.reportJson) return false;
   try {
@@ -355,6 +379,7 @@ export async function dispatchInspection(
         ...(args.agent.readOnly ? { readOnly: true } : {}),
         setupPolicy: args.agent.setupPolicy ?? "user",
         ...(args.agent.version ? { version: args.agent.version } : {}),
+        ...(args.agent.version && args.agent.previousPlan ? { previousPlan: args.agent.previousPlan } : {}),
         llmUrl: `${base}${INSPECT_LLM_PATH}`,
         llmToken,
       },
@@ -667,11 +692,14 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     }
     const isStaff = tier === "staff";
     // 검사 엔진 v2(V-8 LOCKED): 장비(스태프) 키 전용 — 공개 스위치와 무관. 로그인·가입은 v2 범위 밖이라 받지 않는다.
-    const engineV2 = requestedEngine === "agent_v2";
+    // S8 재검사: 원 런이 v2면(스태프·엔진 지정 없음·로그인 요청 없음) v2를 물려받는다 — 같은 엔진·같은 계획으로 전후를 비교한다.
+    const loginRequested = (bodyRec["loginMode"] !== undefined && bodyRec["loginMode"] !== "none") || bodyRec["testCredentials"] !== undefined || bodyRec["withSignup"] === true;
+    const inheritV2 = requestedEngine === undefined && isStaff && !loginRequested && wasV2Run(sourceCheck);
+    const engineV2 = requestedEngine === "agent_v2" || inheritV2;
     if (engineV2 && !isStaff) {
       return c.json({ ok: false, error: "engine_v2_staff_only", tier }, 403);
     }
-    if (engineV2 && (bodyRec["loginMode"] !== undefined && bodyRec["loginMode"] !== "none" || bodyRec["testCredentials"] !== undefined || bodyRec["withSignup"] === true)) {
+    if (engineV2 && loginRequested) {
       return c.json({ ok: false, error: "engine_v2_login_unsupported" }, 400);
     }
     // 오픈 베타: 공개 스위치가 켜지면 모든 사용자의 기본 검수가 agent 엔진(스태프는 늘 켜짐).
@@ -808,7 +836,7 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
     const acceptancePlan = acceptancePlanFromDevSpec(project.devSpec);
     // agent 엔진: 재검수면 원 런의 AC 그대로, 아니면 지시서(유저 확인 표시 포함), 둘 다 없으면 런에서 추정.
     const agentDispatch: AgentDispatch | null = useAgent
-      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}), setupPolicy: isStaff ? "bench" : "user", ...(engineV2 ? { version: "v2" as const } : {}) }
+      ? { ...agentAcsForRun(sourceCheck, project.devSpec, project.entryPath), loginMode, caps: entitlementsFor(tier).agentRun, ...(readOnly ? { readOnly: true } : {}), setupPolicy: isStaff ? "bench" : "user", ...(engineV2 ? { version: "v2" as const, ...(v2PlanOf(sourceCheck) ? { previousPlan: v2PlanOf(sourceCheck) } : {}) } : {}) }
       : null;
     if (testCredentials) {
       try {
@@ -1134,6 +1162,14 @@ export function createWorkspaceVisualCheckRunRoutes(): Hono<{ Bindings: Env }> {
         const origin = await getVisualCheckById(c.env, run.sourceCheckId).catch(() => null);
         const cmp = compareAgentRuns(origin?.reportJson, body.report as { acTable?: unknown });
         if (cmp) (body.report as Record<string, unknown>)["agentComparison"] = { sourceCheckId: run.sourceCheckId, ...cmp };
+      }
+      // S8: v2 재검사는 원 런과 기준별·결함별로 비교하고(고친 파일 실제 통과 G4 포함) 회차·고리 끝을 싣는다.
+      if (run.sourceCheckId && (body.report as Record<string, unknown>)["engineVersion"] === "v2") {
+        const origin = await getVisualCheckById(c.env, run.sourceCheckId).catch(() => null);
+        const prev = v2ReportOf(origin);
+        const v2cmp = compareV2Reports(prev as Parameters<typeof compareV2Reports>[0], body.report as Parameters<typeof compareV2Reports>[1]);
+        const v2part = (body.report as Record<string, unknown>)["v2"];
+        if (v2cmp && v2part && typeof v2part === "object") Object.assign(v2part as Record<string, unknown>, { comparison: v2cmp, recheck: { round: v2cmp.loop.round, sourceCheckId: run.sourceCheckId } });
       }
       const enriched = enrichReportForStorage(body.report as Record<string, unknown>, run.locale ?? "ko");
       findingCodesJson = enriched.findingCodesJson;

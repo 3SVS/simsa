@@ -102,9 +102,14 @@ export async function runAgentV2Inspection(o) {
   // 2) 정적 사실 → 가설·계획
   const facts = rc.extractStaticFacts(recon.files);
   const recorded = rc.recordStaticFacts(store, facts);
-  const plan = pl.buildPlan({ acs, facts: recorded, nowKstHour: kstParts(nowMs()).hour });
-  const planArtifactId = pl.recordPlan(store, plan);
-  plog(`v2:plan facts=${facts.map((f) => f.rule).join(",") || "-"} hypotheses=${plan.hypotheses.map((h) => `${h.id}:${h.cls}`).join(",") || "-"}`);
+  // S8 재검사: 원 런의 계획(가설·실험)을 그대로 쓴다(설계 §2.2-8 "같은 계획을 다시") — 고친 뒤 정적 사실이 사라져도
+  // 원래 의심한 결함을 같은 실험으로 다시 확인해야 "해결"을 말할 수 있다. 형식이 깨졌거나 기준이 다르면 새로 만든다.
+  const reused = reusablePlan(o.previousPlan, acs, pl);
+  const plan = reused ?? pl.buildPlan({ acs, facts: recorded, nowKstHour: kstParts(nowMs()).hour });
+  const planArtifactId = reused
+    ? store.add("context", `계획 재사용(재검사) ${plan.version} — 가설 ${plan.hypotheses.length}개 · 기준 ${plan.acPlans.length}개`, JSON.stringify(plan))
+    : pl.recordPlan(store, plan);
+  plog(`v2:plan${reused ? " (reused)" : ""} facts=${facts.map((f) => f.rule).join(",") || "-"} hypotheses=${plan.hypotheses.map((h) => `${h.id}:${h.cls}`).join(",") || "-"}`);
 
   // 3) 실행
   /** 여기까지(정찰·정적 사실·계획)는 모든 기준이 같이 보는 증거물. 이후는 기준 실행마다 따로 — 다른 실행의 증거물은 보이지도, 인용되지도 않는다. */
@@ -438,6 +443,15 @@ export async function runAgentV2Inspection(o) {
   function downgradedNv(ac, claim, reason) {
     return { acId: ac.id, verdict: "not_verified", claim, artifactIds: [], quotes: [], reasons: [reason] };
   }
+}
+
+/** 원 런 계획을 쓸 수 있는가 — 형식이 맞고 이번 기준이 모두 그 계획에 있어야 한다. */
+function reusablePlan(prev, acs, pl) {
+  if (!prev || typeof prev !== "object") return null;
+  const p = pl.parseRecordedPlan(JSON.stringify(prev));
+  if (!p) return null;
+  const planned = new Set(p.acPlans.map((x) => x?.acId));
+  return acs.length > 0 && acs.every((a) => planned.has(a.id)) ? p : null;
 }
 
 const norm = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
