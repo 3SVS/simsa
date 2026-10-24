@@ -66,6 +66,12 @@ describe("v2 → agent 리포트", () => {
     assert.ok(withFix.notes.some((n) => /고친 파일 참고: 이 브라우저에만 저장/.test(n)), "고친 파일을 줄 때는 가정·한계가 사용자 메모에 보인다");
   });
 
+  it("(train L4) agent.defects(C13 빌더 × 분류 집계)의 분류도 v2 증거 기반 원인 — 판정 문장 단어 맞추기가 아니라", () => {
+    const { report } = R.buildV2Report(v2Result(), { targetUrl: "https://s.example/", intent: "미용실", acs: ACS, acSource: "interview" }, "ko");
+    const d = report.agent.defects.find((x) => x.acId === "A2");
+    assert.equal(d.defectClass, "client_only_storage");
+  });
+
   it("의도 불일치는 표에서 fail(이유 앞에 '생각과 달라요')이고 v2.intentMismatch로도 표시", () => {
     const r = v2Result({
       intentMismatch: ["A1"],
