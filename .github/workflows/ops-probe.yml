@@ -34,7 +34,7 @@ on:
         required: false
         default: 'envelope-fill-rate'
         type: choice
-        options: [latest-visual-check-fill, envelope-fill-rate, repair-fill-rate, agent-llm-usage-48h]
+        options: [latest-visual-check-fill, envelope-fill-rate, repair-fill-rate, agent-llm-usage-48h, failure-labels-fill]
       models:
         description: 'llm-probe 전용(v2 S0): 후보 모델 "vendor:model,…" — 서버 허용 목록 밖이면 400. 비우면 기본 3벤더'
         required: false
