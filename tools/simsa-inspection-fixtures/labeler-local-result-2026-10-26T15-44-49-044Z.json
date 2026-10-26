@@ -1,0 +1,164 @@
+{
+ "label": "라벨링 에이전트 로컬 실측(train L2) — 픽스처 정답지 대조 · 두 벤더 패스 일치도",
+ "kstStart": "2026. 10. 27. AM 12:44:49",
+ "passes": [
+  {
+   "passId": "B",
+   "vendor": "anthropic",
+   "model": "claude-opus-5-5"
+  }
+ ],
+ "steps": 24,
+ "summary": {
+  "gold": {
+   "B": {
+    "n": 3,
+    "h1Rate": 0.6666666666666666,
+    "sRate": null,
+    "falsePass": 0,
+    "falseFail": 0,
+    "gate": {
+     "h1": false,
+     "s": true,
+     "pass": false
+    }
+   }
+  },
+  "agreement": null,
+  "tokens": {
+   "B": {
+    "in": 0,
+    "out": 0
+   }
+  },
+  "errors": 0
+ },
+ "gold": {
+  "B": {
+   "n": 3,
+   "h1Correct": 2,
+   "h1Rate": 0.6666666666666666,
+   "sN": 0,
+   "sCorrect": 0,
+   "sRate": null,
+   "falsePass": 0,
+   "falseFail": 0,
+   "gate": {
+    "h1": false,
+    "s": true,
+    "pass": false
+   },
+   "misses": [
+    {
+     "appKey": "F5",
+     "acId": "CORE-1",
+     "expected": "fail",
+     "got": "cannot_verify(app_down)",
+     "field": "h1"
+    }
+   ]
+  }
+ },
+ "agreement": null,
+ "runs": [
+  {
+   "pass": "B",
+   "id": "F5",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "unknown",
+    "k": "other",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry blank_page (200)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 1,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:entry broken blank_page"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F9",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "routing_deploy",
+    "k": "route_404_missing_index",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry deployment_not_found (404)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken deployment_not_found"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F14",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "routing_deploy",
+    "k": "route_404_missing_index",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry missing_index_file (404)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken missing_index_file"
+   ]
+  }
+ ]
+}

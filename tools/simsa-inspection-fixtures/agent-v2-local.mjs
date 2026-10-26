@@ -22,24 +22,8 @@ const { createPlaywrightDriver } = await imp("inspector-container/agent-driver.m
 const { isNoiseResource } = await imp("dist/nondev-report.js");
 const { chromium } = createRequire(join(here, "..", "simsa-completion-loop-spike", "package.json"))("playwright");
 
-const FIXTURES = process.env.FIXTURES_BASE ?? "https://simsa-inspection-fixtures.seunghunbae.workers.dev";
-// eval-run.mjs TARGETS F1~F14와 같은 대상·정답(그 파일은 실행 스크립트라 가져올 수 없어 복사 — 바꾸면 둘 다).
-export const V2_TARGETS = [
-  { id: "F1", url: `${FIXTURES}/working-todo`, expected: "working", intent: "할 일을 입력하고 추가 버튼을 누르면 목록에 나타나야 한다" },
-  { id: "F2", url: `${FIXTURES}/noisy-working`, expected: "working", intent: "숫자를 입력하고 변환하기를 누르면 마일 결과가 보여야 한다" },
-  { id: "F3", url: `${FIXTURES}/potemkin-crm`, expected: "broken", intent: "고객 메모를 입력하고 저장을 누르면 저장된 메모가 목록에 나타나야 한다" },
-  { id: "F4", url: `${FIXTURES}/js-crash`, expected: "broken", intent: "원화 금액을 입력하고 계산하기를 누르면 달러 금액이 보여야 한다" },
-  { id: "F5", url: `${FIXTURES}/blank`, expected: "broken", intent: "방문자가 이 서비스가 무엇인지 화면에서 알 수 있어야 한다" },
-  { id: "F6", url: `${FIXTURES}/optimistic-ghost`, expected: "broken", intent: "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
-  { id: "F7", url: `${FIXTURES}/heavy-site`, expected: "working", nullOk: true, intent: "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
-  { id: "F8", url: `${FIXTURES}/geo-gated`, expected: "working", nullOk: true, intent: "산책 기록을 입력하고 추가를 누르면 목록에 저장되어 나타나야 한다" },
-  { id: "F9", url: `${FIXTURES}/http-404`, expected: "broken", intent: "방문자가 앱 화면을 열어 서비스를 쓸 수 있어야 한다" },
-  { id: "F10", url: `${FIXTURES}/canned-result`, expected: "broken", intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
-  { id: "F11", url: `${FIXTURES}/self-checklist`, expected: "broken", intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
-  { id: "F12", url: `${FIXTURES}/real-echo-checker`, expected: "working", nullOk: true, intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
-  { id: "F13", url: `${FIXTURES}/needs-api-key`, expected: "broken", nullOk: true, intent: "사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다" },
-  { id: "F14", url: `${FIXTURES}/static-site/`, expected: "broken", intent: "방문자가 앱 첫 화면을 열어 서비스를 쓸 수 있어야 한다" },
-];
+import { FIXTURES, V2_TARGETS } from "./v2-targets.mjs";
+export { V2_TARGETS };
 
 function arg(name, dflt) {
   const a = process.argv.find((x) => x.startsWith(`--${name}=`));

@@ -34,6 +34,8 @@ interface V2VerdictLike {
   quotes: string[];
   reasons: string[];
   confirmed?: boolean;
+  /** 라벨러 모드(train L2): 확정된 실패를 새 브라우저에서 다시 해 본 횟수 n · 재현된 횟수 k */
+  repro?: { k: number; n: number };
   cause?: V2CauseLike;
 }
 
@@ -43,6 +45,8 @@ export interface V2ResultLike {
   intentMismatch?: string[];
   entry?: { broken?: { cause: string; status?: number | null } | null } | null;
   verdicts?: V2VerdictLike[];
+  /** "labeler" = 라벨링 에이전트 패스(train L2) */
+  profile?: string;
   defectGroups?: Array<{ key: string; cls: string; hypothesisId: string | null; acIds: string[]; rootAcId: string }>;
   fix?: {
     attempted?: boolean;
@@ -104,6 +108,7 @@ export function buildV2Report(
   const validated = (fix?.validated ?? []).length > 0;
   const v2 = {
     runnerRev: r.runnerRev ?? null,
+    ...(r.profile ? { profile: r.profile } : {}),
     decision: r.decision ?? null,
     entry: r.entry?.broken ?? null,
     intentMismatch: r.intentMismatch ?? [],
@@ -113,6 +118,7 @@ export function buildV2Report(
       verdict: v.verdict,
       ...(v.originalVerdict ? { originalVerdict: v.originalVerdict } : {}),
       confirmed: v.confirmed === true,
+      ...(v.repro ? { repro: v.repro } : {}),
       reasons: v.reasons,
       claim: v.claim,
       quotes: v.quotes,

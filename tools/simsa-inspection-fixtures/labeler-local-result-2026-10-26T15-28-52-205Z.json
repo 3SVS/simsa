@@ -1,0 +1,492 @@
+{
+ "label": "라벨링 에이전트 로컬 실측(train L2) — 픽스처 정답지 대조 · 두 벤더 패스 일치도",
+ "kstStart": "2026. 10. 27. AM 12:28:52",
+ "passes": [
+  {
+   "passId": "B",
+   "vendor": "anthropic",
+   "model": "claude-opus-5-5"
+  }
+ ],
+ "steps": 24,
+ "summary": {
+  "gold": {
+   "B": {
+    "n": 14,
+    "h1Rate": 0.7857142857142857,
+    "sRate": 1,
+    "falsePass": 0,
+    "falseFail": 0,
+    "gate": {
+     "h1": false,
+     "s": true,
+     "pass": false
+    }
+   }
+  },
+  "agreement": null,
+  "tokens": {
+   "B": {
+    "in": 178927,
+    "out": 20966
+   }
+  },
+  "errors": 0
+ },
+ "gold": {
+  "B": {
+   "n": 14,
+   "h1Correct": 11,
+   "h1Rate": 0.7857142857142857,
+   "sN": 5,
+   "sCorrect": 5,
+   "sRate": 1,
+   "falsePass": 0,
+   "falseFail": 0,
+   "gate": {
+    "h1": false,
+    "s": true,
+    "pass": false
+   },
+   "misses": [
+    {
+     "appKey": "F5",
+     "acId": "CORE-1",
+     "expected": "fail",
+     "got": "none",
+     "field": "h1"
+    },
+    {
+     "appKey": "F9",
+     "acId": "CORE-1",
+     "expected": "fail|cannot_verify(app_down)",
+     "got": "none",
+     "field": "h1"
+    },
+    {
+     "appKey": "F14",
+     "acId": "CORE-1",
+     "expected": "fail|cannot_verify(app_down)",
+     "got": "none",
+     "field": "h1"
+    }
+   ]
+  }
+ },
+ "agreement": null,
+ "runs": [
+  {
+   "pass": "B",
+   "id": "F1",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "할 일 '심사테스트 우유 사기'를 입력하고 추가 버튼을 누르니 화면이 바뀌고 목록에 그 할 일이 나타났습니다.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 5407,
+    "out": 561
+   },
+   "seconds": 19,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:plan facts=- hypotheses=-",
+    "+17.7s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+17.7s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F2",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "숫자 5를 넣고 변환하기를 누르니 '결과가 여기에 표시됩니다'가 '5 km = 3.11 miles'로 바뀌어 마일 결과가 제대로 보였습니다.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 5558,
+    "out": 585
+   },
+   "seconds": 18,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+17.7s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+17.7s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F3",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "not_saved",
+    "c": "backend_missing",
+    "k": "missing_backend_config",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "메모를 입력하고 저장을 눌러도 존재하지 않는 서버 주소(ERR_NAME_NOT_RESOLVED)로 요청이 실패해 목록에 메모가 나타나지 않습니다."
+   },
+   "claim": "메모를 입력하고 저장을 눌러도 목록에 메모가 나타나지 않습니다. 저장 요청이 서버 주소를 찾지 못해 실패했고(ERR_NAME_NOT_RESOLVED), 새 브라우저에서 다시 해도 똑같았습니다.",
+   "llmCalls": 7,
+   "tokens": {
+    "in": 15425,
+    "out": 1765
+   },
+   "seconds": 90,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+39.7s v2:ac CORE-1 confirm fail → reproduced (5 actions, 2 quotes checked)",
+    "+54.3s v2:ac CORE-1 repro 3/3",
+    "+54.3s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F4",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "no_response",
+    "c": "client_state",
+    "k": "runtime_error",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "원화 10000을 넣고 계산하기를 누르면 환율(USD)을 읽다 스크립트 오류가 나서 달러 금액이 전혀 표시되지 않습니다."
+   },
+   "claim": "원화 10000을 넣고 계산하기를 눌러도 달러 금액이 나오지 않습니다. 화면에는 계속 '결과가 여기에 표시됩니다'만 보이고, 환율 값(USD)을 읽다가 오류가 나서 멈춥니다. 새 브라우저에서 다시 해도 똑같았습니다.",
+   "llmCalls": 7,
+   "tokens": {
+    "in": 14158,
+    "out": 1581
+   },
+   "seconds": 63,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+38.1s v2:ac CORE-1 confirm fail → reproduced (5 actions, 2 quotes checked)",
+    "+52.4s v2:ac CORE-1 repro 3/3",
+    "+52.4s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F5",
+   "expected": "broken",
+   "h1": null,
+   "h2": null,
+   "h3": null,
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 9,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken blank_page"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F6",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "persist",
+    "y": "not_saved",
+    "c": "unknown",
+    "k": "data_not_persisted",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": true,
+    "memo": "기록을 추가하면 목록에 잠깐 보이지만 서버나 브라우저 어디에도 저장되지 않아, 새로고침하면 사라집니다."
+   },
+   "claim": "기록을 입력하고 추가를 누르면 목록에 잠깐 보이지만 실제로는 어디에도 저장되지 않습니다. 새로고침하면 '아직 기록이 없습니다'로 돌아가 기록이 사라지고, 새 브라우저에서 다시 해도 똑같았습니다.",
+   "llmCalls": 10,
+   "tokens": {
+    "in": 22367,
+    "out": 2755
+   },
+   "seconds": 88,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+56.5s v2:ac CORE-1 confirm fail → reproduced (8 actions, 3 quotes checked)",
+    "+74.4s v2:ac CORE-1 repro 3/3",
+    "+74.4s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F7",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "'심사테스트'를 입력하고 추가를 누르니 목록에 나타났고, 새로고침해도 그대로 남아 있습니다. 다만 서버가 아니라 이 브라우저에만 저장되므로 다른 기기에서는 보이지 않을 수 있습니다.",
+   "llmCalls": 4,
+   "tokens": {
+    "in": 7705,
+    "out": 842
+   },
+   "seconds": 41,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+36.4s v2:ac CORE-1 confirm pass → reproduced (3 actions, 2 quotes checked)",
+    "+36.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F8",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "산책 기록을 입력하고 추가를 누르면 목록에 나타나고, 새로고침해도 남아 있습니다. 다만 기록은 서버가 아니라 이 브라우저 안에만 저장됩니다.",
+   "llmCalls": 4,
+   "tokens": {
+    "in": 7973,
+    "out": 858
+   },
+   "seconds": 30,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+23.9s v2:ac CORE-1 confirm pass → reproduced (3 actions, 2 quotes checked)",
+    "+23.9s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F9",
+   "expected": "broken",
+   "h1": null,
+   "h2": null,
+   "h3": null,
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 11,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken deployment_not_found"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F10",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "mismatch",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "result",
+    "y": "fake_result",
+    "c": "backend_missing",
+    "k": "canned_result",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": true,
+    "memo": "존재하지 않는 주소를 넣어도 서버 요청 없이 '검사 완료 · 78/100'과 정해진 문제 목록을 보여줘, 실제 검사가 이뤄지지 않습니다."
+   },
+   "claim": "주소를 넣으면 실제로 그 서비스를 열어 보지 않습니다. 존재하지 않는 주소(.invalid)를 넣어도 '검사 완료 · 78/100'과 정해진 문제 목록을 그대로 보여줍니다. 서버 요청도 0건이라 미리 만들어 둔 가짜 결과를 보여주는 것으로 보입니다.",
+   "llmCalls": 14,
+   "tokens": {
+    "in": 48759,
+    "out": 5218
+   },
+   "seconds": 179,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+119.0s v2:ac CORE-1 confirm mismatch → reproduced (12 actions, 2 quotes checked)",
+    "+161.2s v2:ac CORE-1 repro 3/3",
+    "+161.2s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F11",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "mismatch",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "result",
+    "y": "wrong_result",
+    "c": "spec_not_implemented",
+    "k": "intent_mismatch",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "'검토 시작하기'를 누르면 앱이 주소를 직접 열어 검토하지 않고, 사용자가 직접 표시해야 하는 '진단 0/10' 체크리스트만 보여 줍니다."
+   },
+   "claim": "주소를 넣고 '검토 시작하기'를 누르면 앱이 그 주소를 직접 열어 검토해 주지 않습니다. 대신 '진단 0/10' 상태의 체크리스트만 보여 주고, 사용자가 항목마다 직접 확인해서 표시하게 합니다.",
+   "llmCalls": 11,
+   "tokens": {
+    "in": 30037,
+    "out": 3959
+   },
+   "seconds": 165,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+75.4s v2:ac CORE-1 confirm mismatch → reproduced (9 actions, 2 quotes checked)",
+    "+101.6s v2:ac CORE-1 repro 3/3",
+    "+101.6s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F12",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "주소를 넣고 '점검하기'를 누르면 앱이 그 주소를 실제로 열어 봅니다. 있는 페이지는 '200 (열림)', 없는 페이지는 404로 서로 다르게 알려주므로 작동 여부를 제대로 알려줍니다.",
+   "llmCalls": 5,
+   "tokens": {
+    "in": 11091,
+    "out": 1519
+   },
+   "seconds": 31,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+30.0s v2:ac CORE-1 confirm pass → reproduced (4 actions, 3 quotes checked)",
+    "+30.0s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F13",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "needs_own_api_key",
+   "h3": "mostly",
+   "verdict": "not_verified",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "주소와 설명을 넣고 '점검 시작'을 눌렀지만, 앱이 Claude API 키를 먼저 넣으라고 해서 실제로 열어 보고 검토해 주는지는 확인할 수 없었어요.",
+   "llmCalls": 4,
+   "tokens": {
+    "in": 10447,
+    "out": 1323
+   },
+   "seconds": 22,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+21.7s v2:ac CORE-1 → not_verified"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F14",
+   "expected": "broken",
+   "h1": null,
+   "h2": null,
+   "h3": null,
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken missing_index_file"
+   ]
+  }
+ ]
+}

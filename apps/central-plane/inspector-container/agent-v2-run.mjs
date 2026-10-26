@@ -81,7 +81,11 @@ export async function runAgentV2Inspection(o) {
   const store = ev.createEvidenceStore({ redact: red });
   const acs = (Array.isArray(o.acs) ? pure.orderAcs(o.acs, o.maxAcs ?? 11) : []).filter((a) => a && a.id);
   const data = pure.koreanTestData(Number.isFinite(o.testDataSeed) ? o.testDataSeed : Date.now() % 100000);
-  const base = { engine: "agent_v2", runnerRev: AGENT_V2_RUNNER_REV, targetUrl: o.targetUrl };
+  // 라벨러 모드(train L2, 라벨링 설계 §0.0·§5-1 블라인드): 검수 엔진의 분석(정적 사실·가설·이전 계획)을 보지 않는다 — 앱 주소·기준·
+  // 테스트 데이터만으로 해 본다(같은 분석을 보면 같은 곳을 같이 놓친다 — 자기 채점 위험). 고치기 없음, 확정된 실패는 n번 재현.
+  // 표지는 모든 반환(첫 화면 즉시 고장 포함)에 붙는다 — 실측 F5·F9·F14(2026-10-27): 일찍 끝난 반환에 표지가 없어 라벨이 버려졌다.
+  const labeler = o.profile === "labeler";
+  const base = { engine: "agent_v2", runnerRev: AGENT_V2_RUNNER_REV, targetUrl: o.targetUrl, ...(labeler ? { profile: "labeler" } : {}) };
 
   // 1) 정찰 + 첫 화면 즉시 판정
   plog("v2:recon");
@@ -100,11 +104,11 @@ export async function runAgentV2Inspection(o) {
   }
 
   // 2) 정적 사실 → 가설·계획
-  const facts = rc.extractStaticFacts(recon.files);
+  const facts = labeler ? [] : rc.extractStaticFacts(recon.files);
   const recorded = rc.recordStaticFacts(store, facts);
   // S8 재검사: 원 런의 계획(가설·실험)을 그대로 쓴다(설계 §2.2-8 "같은 계획을 다시") — 고친 뒤 정적 사실이 사라져도
   // 원래 의심한 결함을 같은 실험으로 다시 확인해야 "해결"을 말할 수 있다. 형식이 깨졌거나 기준이 다르면 새로 만든다.
-  const reused = reusablePlan(o.previousPlan, acs, pl);
+  const reused = labeler ? null : reusablePlan(o.previousPlan, acs, pl);
   const plan = reused ?? pl.buildPlan({ acs, facts: recorded, nowKstHour: kstParts(nowMs()).hour });
   const planArtifactId = reused
     ? store.add("context", `계획 재사용(재검사) ${plan.version} — 가설 ${plan.hypotheses.length}개 · 기준 ${plan.acPlans.length}개`, JSON.stringify(plan))
@@ -146,7 +150,7 @@ export async function runAgentV2Inspection(o) {
   }
   const mustIds = new Set(acs.filter((a) => a.priority === "must").map((a) => a.id));
   // 7) 고치기(F, S6c) — 판정은 바꾸지 않는다. 고친 파일은 따로 내는 결과물이다.
-  const fix = await trySingleFileFix().catch((err) => ({ attempted: true, error: `fix_crashed: ${String(err?.message ?? err).slice(0, 80)}` }));
+  const fix = labeler ? { attempted: false, reason: "labeler_profile" } : await trySingleFileFix().catch((err) => ({ attempted: true, error: `fix_crashed: ${String(err?.message ?? err).slice(0, 80)}` }));
   await o.driver.close?.().catch(() => {});
 
   const mustVerdicts = verdicts.filter((v) => mustIds.has(v.acId));
@@ -264,6 +268,28 @@ export async function runAgentV2Inspection(o) {
         plog(`v2:ac ${ac.id} confirm skipped (${!replayable ? "unsafe_click" : trace.length === 0 ? "no_actions" : "budget"})`);
         return { ...first, confirmed: false };
       }
+      const first1 = await replayOnce(verdict);
+      plog(`v2:ac ${ac.id} confirm ${verdict.verdict} → ${first1.again ? "reproduced" : "not reproduced"} (${trace.length} actions, ${first1.checked} quotes checked)`);
+      if (!first1.again) {
+        const reason = verdict.verdict === "pass" ? "pass_not_reproduced" : verdict.verdict === "fail" ? "fail_not_reproduced" : "mismatch_not_reproduced";
+        return { ...verdict, verdict: "not_verified", originalVerdict: verdict.verdict, reasons: [reason], confirmed: false };
+      }
+      // 라벨러 모드: 실패·불일치는 실행기가 새 브라우저에서 n번(기본 3) 다시 해 재현성(R, 설계 §3)을 센다. 판정은 첫 재현으로 이미 확정.
+      let repro = null;
+      if (labeler && verdict.verdict !== "pass") {
+        const n = Math.max(1, Math.min(Number.isFinite(o.reproRuns) ? o.reproRuns : 3, 5));
+        repro = { k: 1, n: 1 };
+        while (repro.n < n && Date.now() < deadline - 30_000) {
+          repro.n += 1;
+          if ((await replayOnce(verdict)).again) repro.k += 1;
+        }
+        plog(`v2:ac ${ac.id} repro ${repro.k}/${repro.n}`);
+      }
+      return { ...verdict, ...(verdict.verdict === "pass" ? {} : { reproArtifactIds: [...first1.matched] }), reasons: [], confirmed: true, ...(repro ? { repro } : {}) };
+    }
+
+    /** 행동 순서를 새 브라우저에서 LLM 없이 한 번 다시 하고, 판정 인용이 같은 단계에서 다시 나오는지 본다. */
+    async function replayOnce(verdict) {
       const replayStart = store.list().length;
       const c = await openRun("confirm", clockIso);
       const replayBounds = [];
@@ -302,10 +328,7 @@ export async function runAgentV2Inspection(o) {
         else matched.add(all[hit].id);
       }
       if (checked === 0) again = false;
-      plog(`v2:ac ${ac.id} confirm ${verdict.verdict} → ${again ? "reproduced" : "not reproduced"} (${trace.length} actions, ${checked} quotes checked)`);
-      if (again) return { ...verdict, ...(verdict.verdict === "pass" ? {} : { reproArtifactIds: [...matched] }), reasons: [], confirmed: true };
-      const reason = verdict.verdict === "pass" ? "pass_not_reproduced" : verdict.verdict === "fail" ? "fail_not_reproduced" : "mismatch_not_reproduced";
-      return { ...verdict, verdict: "not_verified", originalVerdict: verdict.verdict, reasons: [reason], confirmed: false };
+      return { again, matched, checked };
     }
   }
 
