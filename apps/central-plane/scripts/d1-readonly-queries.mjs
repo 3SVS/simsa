@@ -11,6 +11,7 @@
  *                             + 날짜(일 단위)
  *   envelope-fill-rate        최근 검수 50행의 컬럼별 NULL 아님 개수
  *   repair-fill-rate          최근 수리 50행의 region·verify 연결·resolved 기록 개수
+ *   failure-labels-fill       실패 라벨 표(0076) 행 수·런 수·출처별 행 수·최근 날짜(어휘 값별 집계 없음)
  *
  * ★출력 채널이 공개다 (PR #561 검증 P2). 3SVS/simsa는 PUBLIC 저장소라 Actions job summary와
  * 로그를 로그인한 누구나 읽는다. 그래서 출력은 **개수·채움 여부·날짜뿐**이다 — id·*_id(런 id는
@@ -71,6 +72,17 @@ export const D1_READONLY_QUERIES = Object.freeze({
     "FROM llm_usage WHERE call_site = 'inspect_agent' AND created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days') GROUP BY job_id) r " +
     "ON r.job_id = u.job_id WHERE u.call_site = 'inspect_agent' " +
     "GROUP BY r.seq, u.model_requested, u.model_actual ORDER BY r.seq, calls DESC",
+  // 2026-10-26 train L 라이브 확인: 실패 라벨(0076) 표가 실제로 쌓이는지 — 표별 행 수·런 수·출처별 행 수·최근 날짜만.
+  // 어휘 값(빌더·단계·결함 분류)별 집계는 내지 않는다: 공개 로그이고, 그 집계 자체가 판매 대상 데이터다(설계 §9).
+  "failure-labels-fill":
+    "SELECT a.ac_rows AS ac_rows, a.ac_runs AS ac_runs, a.ac_machine AS ac_machine, a.ac_labeler AS ac_labeler, " +
+    "a.ac_user AS ac_user, a.ac_latest_day AS ac_latest_day, e.event_rows AS event_rows, e.event_runs AS event_runs, " +
+    "e.event_latest_day AS event_latest_day " +
+    "FROM (SELECT COUNT(*) AS ac_rows, COUNT(DISTINCT run_id) AS ac_runs, " +
+    "COALESCE(SUM(source = 'machine'), 0) AS ac_machine, COALESCE(SUM(source = 'labeler_agent'), 0) AS ac_labeler, " +
+    "COALESCE(SUM(source = 'user'), 0) AS ac_user, substr(MAX(created_at), 1, 10) AS ac_latest_day FROM label_ac_verdicts) a, " +
+    "(SELECT COUNT(*) AS event_rows, COUNT(DISTINCT run_id) AS event_runs, substr(MAX(created_at), 1, 10) AS event_latest_day " +
+    "FROM label_failure_events) e",
 });
 
 const WRITE_OR_ADMIN =

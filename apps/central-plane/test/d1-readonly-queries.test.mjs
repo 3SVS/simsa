@@ -36,7 +36,7 @@ async function load() {
   return mod;
 }
 
-const NAMES = ["latest-visual-check-fill", "envelope-fill-rate", "repair-fill-rate", "agent-llm-usage-48h"];
+const NAMES = ["latest-visual-check-fill", "envelope-fill-rate", "repair-fill-rate", "agent-llm-usage-48h", "failure-labels-fill"];
 
 /** Identifying / content columns that must never leave D1 through this tool. */
 const FORBIDDEN = [
@@ -94,7 +94,20 @@ const AGENT_USAGE_ITEMS = [
   "SUM(u.output_tokens) AS output_tokens",
 ];
 
-test("⑨ 이름 붙은 질의는 정확히 네 개", async () => {
+// 실패 라벨 채움(train L 라이브 확인): 표별 개수·런 수·출처별 개수·날짜만 — 어휘 값(빌더·단계·결함 분류) 없음.
+const FAILURE_LABEL_ITEMS = [
+  "a.ac_rows AS ac_rows",
+  "a.ac_runs AS ac_runs",
+  "a.ac_machine AS ac_machine",
+  "a.ac_labeler AS ac_labeler",
+  "a.ac_user AS ac_user",
+  "a.ac_latest_day AS ac_latest_day",
+  "e.event_rows AS event_rows",
+  "e.event_runs AS event_runs",
+  "e.event_latest_day AS event_latest_day",
+];
+
+test("⑨ 이름 붙은 질의는 정확히 다섯 개", async () => {
   const { D1_READONLY_QUERIES } = await load();
   assert.deepEqual(Object.keys(D1_READONLY_QUERIES).sort(), [...NAMES].sort());
   assert.ok(Object.isFrozen(D1_READONLY_QUERIES), "the table of queries is frozen");
@@ -150,6 +163,10 @@ test("⑨ PUBLIC 요약: 출력 항목은 개수·채움 여부·날짜뿐 — i
         assert.ok(AGENT_USAGE_ITEMS.includes(item), `${name}: "${item}" is not in the fixed list`);
         continue;
       }
+      if (name === "failure-labels-fill") {
+        assert.ok(FAILURE_LABEL_ITEMS.includes(item), `${name}: "${item}" is not in the fixed list`);
+        continue;
+      }
       assert.ok(ALLOWED_ITEM.some((re) => re.test(item)), `${name}: "${item}" is not a count / filled-flag / day`);
       const alias = /\bAS\s+([a-z_]+)$/i.exec(item)?.[1] ?? "";
       assert.ok(alias !== "id" && !/_id$/i.test(alias), `${name}: output column "${alias}" must not be an id`);
@@ -200,7 +217,7 @@ test("⑨ 실제 마이그레이션 스키마에서 세 질의가 실행된다 �
   const { D1_READONLY_QUERIES } = await load();
   const db = new DatabaseSync(":memory:");
   const mig = (f) => readFileSync(path.join(ROOT, "migrations", f), "utf8");
-  for (const f of ["0050_workspace_visual_checks.sql", "0051_workspace_repair_jobs.sql", "0052_repair_job_mode.sql", "0065_visual_check_locale.sql", "0070_llm_usage.sql"]) {
+  for (const f of ["0050_workspace_visual_checks.sql", "0051_workspace_repair_jobs.sql", "0052_repair_job_mode.sql", "0065_visual_check_locale.sql", "0070_llm_usage.sql", "0076_failure_labels.sql"]) {
     db.exec(mig(f));
   }
   // 0069 also alters workspace_projects (not needed here) — apply only the two tables' ALTERs.
@@ -217,11 +234,17 @@ test("⑨ 실제 마이그레이션 스키마에서 세 질의가 실행된다 �
   db.exec(`INSERT INTO llm_usage (id, created_at, job_kind, job_id, project_id, user_key_hash, vendor, model_requested, model_actual, call_site, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, cost_usd, unpriced, latency_ms, container_seconds)
            VALUES ('lu_1', '${recent}', 'inspection', 'wvc_secret1', 'wsp_p', 'uk_secret', 'openai', 'claude-haiku-4-5-20251001', 'gpt-5.4-mini-2026-03-17', 'inspect_agent', 1000, 0, 0, 50, 0.001, 0, 900, NULL)`);
 
+  // 실패 라벨: 런 id·앱 해시·빌더·결함 분류 값은 출력에 없어야 한다(개수·날짜만).
+  db.exec(`INSERT INTO label_ac_verdicts (label_id, run_id, app_id, ac_id, source, producer, h1, h3, h4, label_schema_version, taxonomy_version, axes_version, rubric_version, created_at)
+           VALUES ('lbl_secret1', 'wvc_secret1', 'app_secrethash', 'AC-001', 'machine', 'v2-runner', 'fail', 'x', 'y', 'v1', 't1', 'a1', 'r1', '2026-10-26T14:12:17.001Z')`);
+  db.exec(`INSERT INTO label_failure_events (failure_id, label_id, run_id, app_id, ac_id, builder, source, producer, w1, w2, w3, y, c, k, s, a, p, label_schema_version, taxonomy_version, axes_version, rubric_version, created_at)
+           VALUES ('fe_secret1', 'lbl_secret1', 'wvc_secret1', 'app_secrethash', 'AC-001', 'lovable', 'machine', 'v2-runner', 'save', '/memo', 'submit', 'silent_loss', 'missing_backend_config', 'K1', 'S2', 'auto', 1, 'v1', 't1', 'a1', 'r1', '2026-10-26T14:12:17.001Z')`);
+
   const out = {};
   // node:sqlite rows have a null prototype — spread them into plain objects.
   for (const name of NAMES) out[name] = db.prepare(D1_READONLY_QUERIES[name]).all().map((r) => ({ ...r }));
   const all = JSON.stringify(out);
-  for (const leak of ["wvc_secret1", "wvc_secret2", "wrj_secret1", "uk_secret", "wsp_p", "PH", "07:41", "08:02", "as_intended", "acme/app"]) {
+  for (const leak of ["wvc_secret1", "wvc_secret2", "wrj_secret1", "uk_secret", "wsp_p", "PH", "07:41", "08:02", "as_intended", "acme/app", "lbl_secret1", "fe_secret1", "app_secrethash", "lovable", "missing_backend_config", "silent_loss", "14:12"]) {
     assert.ok(!all.includes(leak), `published output must not contain "${leak}": ${all}`);
   }
   for (const rows of Object.values(out)) {
@@ -235,6 +258,9 @@ test("⑨ 실제 마이그레이션 스키마에서 세 질의가 실행된다 �
   assert.equal(out["envelope-fill-rate"][0].envelope_filled, 1);
   assert.equal(out["envelope-fill-rate"][0].finding_codes_filled, 0);
   assert.deepEqual(out["repair-fill-rate"], [{ rows_scanned: 1, region_filled: 1, verify_linked: 1, resolved_recorded: 1 }]);
+  assert.deepEqual(out["failure-labels-fill"], [
+    { ac_rows: 1, ac_runs: 1, ac_machine: 1, ac_labeler: 0, ac_user: 0, ac_latest_day: "2026-10-26", event_rows: 1, event_runs: 1, event_latest_day: "2026-10-26" },
+  ]);
 });
 
 // ─── how wrangler is run (PR #561 review P2 ×2) ──────────────────────────────
