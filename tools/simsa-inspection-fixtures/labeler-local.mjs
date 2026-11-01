@@ -92,8 +92,10 @@ function anthropicLlm(model, usage) {
  *   broken → fail(S1: 기준 하나뿐이고 그것이 핵심 일) · working → pass · nullOk → cannot_verify도 허용
  *   첫 화면이 안 열리는 픽스처(F9 404 · F14 index 없음) → cannot_verify/app_down도 허용(§2 H2 app_down)
  *   앱 키가 필요한 픽스처(F13) → cannot_verify는 needs_own_api_key일 때만
+ *   [개정 2026-11-02 Bae 결정] F5(빈 화면)도 첫 화면 고장과 같은 규칙 — fail·cannot_verify/app_down 둘 다 정답.
+ *     사후 개정이므로 결과 문서에 개정 전(13/14)·후 기록을 함께 남긴다.
  */
-const ENTRY_FIXTURES = new Set(["F9", "F14"]);
+const ENTRY_FIXTURES = new Set(["F5", "F9", "F14"]);
 function goldFor(t) {
   const base = { appKey: t.id, acId: "CORE-1", source: "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)" };
   if (t.expected === "broken") {
@@ -167,6 +169,6 @@ const summary = {
   errors: runs.filter((r) => r.error).length,
 };
 const file = join(here, `labeler-local-result-${stamp}.json`);
-writeFileSync(file, JSON.stringify({ label: "라벨링 에이전트 로컬 실측(train L2) — 픽스처 정답지 대조 · 두 벤더 패스 일치도", kstStart, passes: passIds.map((p) => PASSES[p]), steps, summary, gold, agreement, runs }, null, 1));
+writeFileSync(file, JSON.stringify({ label: "라벨링 에이전트 로컬 실측(train L2) — 픽스처 정답지 대조 · 두 벤더 패스 일치도", kstStart, passes: passIds.map((p) => PASSES[p]), steps, summary, gold, agreement, runs, perPass }, null, 1));
 console.log(JSON.stringify(summary), "→", file);
 process.exit(0);

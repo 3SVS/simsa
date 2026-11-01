@@ -1,0 +1,5107 @@
+{
+ "label": "라벨링 에이전트 로컬 실측(train L2) — 픽스처 정답지 대조 · 두 벤더 패스 일치도",
+ "kstStart": "2026. 11. 2. AM 1:40:25",
+ "passes": [
+  {
+   "passId": "A",
+   "vendor": "openai",
+   "model": "gpt-5.6-sol"
+  },
+  {
+   "passId": "B",
+   "vendor": "anthropic",
+   "model": "claude-opus-5-5"
+  }
+ ],
+ "steps": 24,
+ "summary": {
+  "gold": {
+   "A": {
+    "n": 14,
+    "h1Rate": 1,
+    "sRate": 0.8333333333333334,
+    "falsePass": 0,
+    "falseFail": 0,
+    "gate": {
+     "h1": true,
+     "s": true,
+     "pass": true
+    }
+   },
+   "B": {
+    "n": 14,
+    "h1Rate": 1,
+    "sRate": 1,
+    "falsePass": 0,
+    "falseFail": 0,
+    "gate": {
+     "h1": true,
+     "s": true,
+     "pass": true
+    }
+   }
+  },
+  "agreement": {
+   "pairedAcs": 14,
+   "h1Kappa": 0.8914728682170543,
+   "h1Po": 0.9285714285714286,
+   "w1": {
+    "n": 5,
+    "agree": 4,
+    "rate": 0.8
+   },
+   "sKappa": 1,
+   "yKappa": 1,
+   "aKappa": 1,
+   "meetsTargets": {
+    "h1": true,
+    "w1": true,
+    "y": true,
+    "s": true,
+    "a": true
+   },
+   "disputes": 2
+  },
+  "tokens": {
+   "A": {
+    "in": 145027,
+    "out": 12371
+   },
+   "B": {
+    "in": 163166,
+    "out": 20196
+   }
+  },
+  "errors": 0
+ },
+ "gold": {
+  "A": {
+   "n": 14,
+   "h1Correct": 14,
+   "h1Rate": 1,
+   "sN": 6,
+   "sCorrect": 5,
+   "sRate": 0.8333333333333334,
+   "falsePass": 0,
+   "falseFail": 0,
+   "gate": {
+    "h1": true,
+    "s": true,
+    "pass": true
+   },
+   "misses": [
+    {
+     "appKey": "F13",
+     "acId": "CORE-1",
+     "expected": "S1",
+     "got": "S2",
+     "field": "s"
+    }
+   ]
+  },
+  "B": {
+   "n": 14,
+   "h1Correct": 14,
+   "h1Rate": 1,
+   "sN": 5,
+   "sCorrect": 5,
+   "sRate": 1,
+   "falsePass": 0,
+   "falseFail": 0,
+   "gate": {
+    "h1": true,
+    "s": true,
+    "pass": true
+   },
+   "misses": []
+  }
+ },
+ "agreement": {
+  "passes": [
+   {
+    "passId": "A",
+    "vendor": "openai"
+   },
+   {
+    "passId": "B",
+    "vendor": "anthropic"
+   }
+  ],
+  "sameVendor": false,
+  "pairedAcs": 14,
+  "h1": {
+   "n": 14,
+   "po": 0.9285714285714286,
+   "kappa": 0.8914728682170543
+  },
+  "w1": {
+   "n": 5,
+   "agree": 4,
+   "rate": 0.8
+  },
+  "y": {
+   "n": 5,
+   "po": 1,
+   "kappa": 1
+  },
+  "s": {
+   "n": 5,
+   "po": 1,
+   "kappa": 1
+  },
+  "a": {
+   "n": 5,
+   "po": 1,
+   "kappa": 1
+  },
+  "c": {
+   "n": 5,
+   "po": 0.4,
+   "kappa": 0.28571428571428575
+  },
+  "meetsTargets": {
+   "h1": true,
+   "w1": true,
+   "y": true,
+   "s": true,
+   "a": true
+  },
+  "consensus": [
+   {
+    "appId": "app_0a45c35bbb87f74c",
+    "acId": "CORE-1",
+    "h1": "pass"
+   },
+   {
+    "appId": "app_c38fa91cfea03bc1",
+    "acId": "CORE-1",
+    "h1": "pass"
+   },
+   {
+    "appId": "app_94388b73f219c25f",
+    "acId": "CORE-1",
+    "h1": "fail"
+   },
+   {
+    "appId": "app_be740042d2bd99b2",
+    "acId": "CORE-1",
+    "h1": "fail"
+   },
+   {
+    "appId": "app_431f2beda5534249",
+    "acId": "CORE-1",
+    "h1": "cannot_verify"
+   },
+   {
+    "appId": "app_65e4192fd7d52cb4",
+    "acId": "CORE-1",
+    "h1": "fail"
+   },
+   {
+    "appId": "app_4728c2c5a8b095e2",
+    "acId": "CORE-1",
+    "h1": "pass"
+   },
+   {
+    "appId": "app_c50c853e9c7eda09",
+    "acId": "CORE-1",
+    "h1": "pass"
+   },
+   {
+    "appId": "app_c99bfdfeb220ff88",
+    "acId": "CORE-1",
+    "h1": "cannot_verify"
+   },
+   {
+    "appId": "app_36d62c2f2030ac8c",
+    "acId": "CORE-1",
+    "h1": "fail"
+   },
+   {
+    "appId": "app_857391102907bac3",
+    "acId": "CORE-1",
+    "h1": "fail"
+   },
+   {
+    "appId": "app_1d2fe69fb919d69e",
+    "acId": "CORE-1",
+    "h1": "pass"
+   },
+   {
+    "appId": "app_05cc5a290e5ed693",
+    "acId": "CORE-1",
+    "h1": "cannot_verify"
+   }
+  ],
+  "disputes": [
+   {
+    "appId": "app_4f59180a0031880b",
+    "acId": "CORE-1",
+    "field": "h1",
+    "values": {
+     "A": "fail",
+     "B": "cannot_verify"
+    },
+    "next": "ask_user"
+   },
+   {
+    "appId": "app_36d62c2f2030ac8c",
+    "acId": "CORE-1",
+    "field": "w1",
+    "values": {
+     "A": "submit",
+     "B": "result"
+    },
+    "next": "third_pass"
+   }
+  ]
+ },
+ "runs": [
+  {
+   "pass": "A",
+   "id": "F1",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "심사테스트를 입력하고 추가 버튼을 누르자 목록에 심사테스트가 나타났다.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3471,
+    "out": 335
+   },
+   "seconds": 14,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:plan facts=- hypotheses=-",
+    "+13.4s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+13.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F2",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "숫자 5를 입력하고 변환하기를 누르면 3.11마일 결과가 보여요.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3696,
+    "out": 292
+   },
+   "seconds": 16,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+15.6s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+15.6s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F3",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "not_saved",
+    "c": "external_integration",
+    "k": "missing_backend_config",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "고객 메모를 입력하고 저장해도 목록에 나타나지 않았습니다."
+   },
+   "claim": "고객 메모를 입력하고 저장을 눌러도 목록에 메모가 나타나지 않습니다.",
+   "llmCalls": 7,
+   "tokens": {
+    "in": 9714,
+    "out": 868
+   },
+   "seconds": 52,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+25.0s v2:ac CORE-1 confirm fail → reproduced (5 actions, 2 quotes checked)",
+    "+36.2s v2:ac CORE-1 repro 3/3",
+    "+36.2s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F4",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "no_response",
+    "c": "unknown",
+    "k": "broken_action",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않았습니다."
+   },
+   "claim": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않고 화면이 그대로입니다.",
+   "llmCalls": 7,
+   "tokens": {
+    "in": 9123,
+    "out": 718
+   },
+   "seconds": 38,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+24.6s v2:ac CORE-1 confirm fail → reproduced (5 actions, 2 quotes checked)",
+    "+34.7s v2:ac CORE-1 repro 3/3",
+    "+34.7s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F5",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "unknown",
+    "k": "other",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry blank_page (200)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 10,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken blank_page"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F6",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "persist",
+    "y": "not_saved",
+    "c": "unknown",
+    "k": "data_not_persisted",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": true,
+    "memo": "추가한 기록이 목록에 잠시 나타나지만 새로고침하면 사라져 저장되지 않습니다."
+   },
+   "claim": "기록은 추가 직후 목록에 잠시 나타나지만 새로고침하면 사라져 저장되지 않습니다.",
+   "llmCalls": 10,
+   "tokens": {
+    "in": 13825,
+    "out": 1223
+   },
+   "seconds": 61,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.1s v2:plan facts=- hypotheses=-",
+    "+38.1s v2:ac CORE-1 confirm fail → reproduced (8 actions, 2 quotes checked)",
+    "+57.0s v2:ac CORE-1 repro 3/3",
+    "+57.0s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F7",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나며 새로고침 후에도 유지됩니다.",
+   "llmCalls": 4,
+   "tokens": {
+    "in": 4954,
+    "out": 477
+   },
+   "seconds": 19,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+18.4s v2:ac CORE-1 confirm pass → reproduced (3 actions, 3 quotes checked)",
+    "+18.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F8",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "산책 기록에 '심사테스트'를 입력하고 추가하니 저장되어 목록에 나타났다.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3748,
+    "out": 324
+   },
+   "seconds": 12,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+11.4s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+11.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F9",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "routing_deploy",
+    "k": "route_404_missing_index",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry deployment_not_found (404)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 1,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken deployment_not_found"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F10",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "fake_result",
+    "c": "unknown",
+    "k": "canned_result",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": true,
+    "memo": "서비스 주소를 넣고 검사 버튼을 눌러도 실제 검토 없이 고정된 완료 점수만 표시됩니다."
+   },
+   "claim": "서비스 주소를 넣고 검사 버튼을 눌러도 실제 검토 결과가 나오지 않고 입력 화면에 그대로 머뭅니다.",
+   "llmCalls": 21,
+   "tokens": {
+    "in": 48630,
+    "out": 3366
+   },
+   "seconds": 165,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+108.0s v2:ac CORE-1 confirm fail → reproduced (16 actions, 2 quotes checked)",
+    "+156.9s v2:ac CORE-1 repro 3/3",
+    "+156.9s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F11",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "mismatch",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "result",
+    "y": "wrong_result",
+    "c": "spec_not_implemented",
+    "k": "intent_mismatch",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "서비스 주소를 제출해도 실제 사이트를 열어 검토하지 않고 수동 체크리스트만 표시됩니다."
+   },
+   "claim": "서비스 주소는 등록되지만 앱이 실제로 열어 작동 여부를 검토하지 않고, 사용자에게 체크리스트를 직접 확인하라고 합니다.",
+   "llmCalls": 9,
+   "tokens": {
+    "in": 16704,
+    "out": 2098
+   },
+   "seconds": 104,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+50.3s v2:ac CORE-1 confirm mismatch → reproduced (7 actions, 3 quotes checked)",
+    "+84.1s v2:ac CORE-1 repro 3/3",
+    "+84.1s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F12",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "사용자가 입력한 서비스 주소를 실제로 점검하고, 열린 상태와 응답 크기 및 걸린 시간을 결과로 알려준다.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 3862,
+    "out": 440
+   },
+   "seconds": 13,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+12.8s v2:ac CORE-1 confirm pass → reproduced (2 actions, 3 quotes checked)",
+    "+12.8s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F13",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "setup_required_message",
+    "c": "external_integration",
+    "k": "needs_api_key",
+    "s": "S2",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "서비스 주소를 제출해도 실제 점검 대신 Claude API 키 설정을 요구했다."
+   },
+   "claim": "서비스 주소를 넣어도 실제 점검 결과를 보여 주지 않고 Claude API 키를 먼저 요구한다.",
+   "llmCalls": 13,
+   "tokens": {
+    "in": 27300,
+    "out": 2230
+   },
+   "seconds": 80,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+58.6s v2:ac CORE-1 confirm fail → reproduced (11 actions, 2 quotes checked)",
+    "+76.5s v2:ac CORE-1 repro 3/3",
+    "+76.5s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "A",
+   "id": "F14",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "routing_deploy",
+    "k": "route_404_missing_index",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry missing_index_file (404)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 1,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken missing_index_file"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F1",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "할 일 '심사테스트 우유 사기'를 적고 추가 버튼을 누르니 화면이 바뀌면서 목록에 그 할 일이 나타났습니다.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 5407,
+    "out": 543
+   },
+   "seconds": 16,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+15.4s v2:ac CORE-1 confirm pass → reproduced (2 actions, 2 quotes checked)",
+    "+15.4s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F2",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "숫자 5를 입력하고 변환하기를 누르니 안내 문구가 사라지고 '5 km = 3.11 miles' 결과가 화면에 나타나, 마일 결과가 제대로 보입니다.",
+   "llmCalls": 3,
+   "tokens": {
+    "in": 5558,
+    "out": 590
+   },
+   "seconds": 20,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+19.0s v2:ac CORE-1 confirm pass → reproduced (2 actions, 3 quotes checked)",
+    "+19.0s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F3",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "not_saved",
+    "c": "backend_missing",
+    "k": "missing_backend_config",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "메모를 입력하고 저장을 눌러도 존재하지 않는 Supabase 주소로 요청이 실패해 목록에 메모가 나타나지 않습니다."
+   },
+   "claim": "고객 메모를 입력하고 저장을 눌러도 메모가 목록에 나타나지 않습니다. 저장 요청이 서버에 닿지 못하고 실패하며, 새 브라우저에서 다시 해도 똑같았습니다.",
+   "llmCalls": 7,
+   "tokens": {
+    "in": 15424,
+    "out": 1775
+   },
+   "seconds": 48,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+33.2s v2:ac CORE-1 confirm fail → reproduced (5 actions, 2 quotes checked)",
+    "+43.0s v2:ac CORE-1 repro 3/3",
+    "+43.0s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F4",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "submit",
+    "y": "no_response",
+    "c": "client_state",
+    "k": "runtime_error",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "계산하기를 누르면 환율(USD)을 읽지 못하는 오류가 나서 달러 금액이 표시되지 않습니다."
+   },
+   "claim": "원화 10000을 입력하고 계산하기를 눌러도 달러 금액이 나오지 않고 '결과가 여기에 표시됩니다' 문구만 그대로 남습니다. 화면 뒤에서는 환율(USD)을 읽지 못하는 오류가 납니다. 새 브라우저에서 다시 해도 같은 결과였습니다.",
+   "llmCalls": 7,
+   "tokens": {
+    "in": 14163,
+    "out": 1712
+   },
+   "seconds": 45,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+30.2s v2:ac CORE-1 confirm fail → reproduced (5 actions, 2 quotes checked)",
+    "+39.8s v2:ac CORE-1 repro 3/3",
+    "+39.8s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F5",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "unknown",
+    "k": "other",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry blank_page (200)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken blank_page"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F6",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "fail",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "persist",
+    "y": "not_saved",
+    "c": "unknown",
+    "k": "data_not_persisted",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": true,
+    "memo": "기록을 추가하면 목록에 잠깐 보이지만 서버에도 브라우저에도 저장되지 않아 새로고침하면 사라집니다."
+   },
+   "claim": "기록을 넣고 추가를 누르면 목록에 잠깐 보이지만, 서버에도 브라우저에도 저장되지 않아 새로고침하면 사라집니다. 새 브라우저에서 다시 해도 똑같았습니다.",
+   "llmCalls": 11,
+   "tokens": {
+    "in": 25406,
+    "out": 3036
+   },
+   "seconds": 76,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+55.3s v2:ac CORE-1 confirm fail → reproduced (9 actions, 3 quotes checked)",
+    "+70.4s v2:ac CORE-1 repro 3/3",
+    "+70.4s v2:ac CORE-1 → fail"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F7",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "기록을 입력하고 추가를 누르면 목록에 '심사테스트'가 나타나고, 새로고침해도 남아 있습니다. 다만 이 브라우저 안에만 저장되고 서버에는 저장되지 않습니다.",
+   "llmCalls": 4,
+   "tokens": {
+    "in": 7705,
+    "out": 899
+   },
+   "seconds": 23,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+22.3s v2:ac CORE-1 confirm pass → reproduced (3 actions, 3 quotes checked)",
+    "+22.3s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F8",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "산책 기록을 입력하고 추가를 누르면 목록에 나타나고, 새로고침한 뒤에도 그대로 남아 있습니다. 다만 서버가 아니라 이 브라우저에만 저장되므로 다른 기기나 브라우저에서는 보이지 않습니다.",
+   "llmCalls": 4,
+   "tokens": {
+    "in": 7973,
+    "out": 1001
+   },
+   "seconds": 23,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+22.7s v2:ac CORE-1 confirm pass → reproduced (3 actions, 2 quotes checked)",
+    "+22.7s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F9",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "routing_deploy",
+    "k": "route_404_missing_index",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry deployment_not_found (404)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken deployment_not_found"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F10",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "mismatch",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "result",
+    "y": "fake_result",
+    "c": "backend_missing",
+    "k": "canned_result",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": true,
+    "memo": "존재하지 않는 주소를 넣어도 서버 요청 없이 '서비스 건강도 78/100' 같은 미리 정해 둔 검사 결과가 나와, 실제 사이트 검사가 이루어지지 않습니다."
+   },
+   "claim": "존재하지 않는 주소(https://simsa-test-no-such-site-5242.invalid)를 넣어도 앱은 '검사 완료 · 서비스 건강도 78/100'과 '로그인 401 오류' 같은 결과를 보여 줍니다. 서버로 보낸 요청도 0건이어서, 실제로 사이트를 열어 검사하지 않고 미리 정해 둔 결과를 보여 주는 것으로 보입니다.",
+   "llmCalls": 9,
+   "tokens": {
+    "in": 26737,
+    "out": 3074
+   },
+   "seconds": 88,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+59.5s v2:ac CORE-1 confirm mismatch → reproduced (7 actions, 3 quotes checked)",
+    "+82.2s v2:ac CORE-1 repro 3/3",
+    "+82.2s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F11",
+   "expected": "broken",
+   "h1": "fail",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "mismatch",
+   "reasons": [],
+   "repro": {
+    "k": 3,
+    "n": 3
+   },
+   "event": {
+    "w1": "result",
+    "y": "wrong_result",
+    "c": "spec_not_implemented",
+    "k": "intent_mismatch",
+    "s": "S1",
+    "r": "always",
+    "a": "builder",
+    "p": false,
+    "memo": "'검토 시작하기'를 누르면 프로젝트는 서버에 저장되지만, 앱이 주소를 직접 열어 검토하지 않고 사용자가 직접 표시해야 하는 빈 체크리스트(진단 0/10)만 보여줍니다."
+   },
+   "claim": "주소를 넣고 '검토 시작하기'를 누르면 프로젝트는 서버에 저장됩니다. 하지만 앱이 그 주소를 직접 열어 검토해 결과를 알려주지는 않습니다. 기다려도 '진단 0/10'인 빈 체크리스트만 나오고, 사용자가 각 항목을 직접 확인해 표시해야 합니다.",
+   "llmCalls": 11,
+   "tokens": {
+    "in": 30344,
+    "out": 4308
+   },
+   "seconds": 89,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+65.0s v2:ac CORE-1 confirm mismatch → reproduced (9 actions, 2 quotes checked)",
+    "+82.7s v2:ac CORE-1 repro 3/3",
+    "+82.7s v2:ac CORE-1 → mismatch"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F12",
+   "expected": "working",
+   "h1": "pass",
+   "h2": null,
+   "h3": "sure",
+   "verdict": "pass",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "주소를 넣고 '점검하기'를 누르면 앱이 그 주소를 실제로 열어 봅니다. 정상 페이지는 200(열림), 없는 페이지는 404(오류)로 각각 다르게 알려 줍니다.",
+   "llmCalls": 6,
+   "tokens": {
+    "in": 13982,
+    "out": 1925
+   },
+   "seconds": 33,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+32.5s v2:ac CORE-1 confirm pass → reproduced (5 actions, 2 quotes checked)",
+    "+32.5s v2:ac CORE-1 → pass"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F13",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "needs_own_api_key",
+   "h3": "mostly",
+   "verdict": "not_verified",
+   "reasons": [],
+   "repro": null,
+   "event": null,
+   "claim": "주소와 설명을 넣고 '점검 시작'을 눌렀지만, 앱이 먼저 '연결 설정'에 Claude API 키를 넣으라고 안내해서 점검이 시작되지 않았습니다. 테스트에 쓸 API 키가 없어 실제로 서비스를 열어 보고 결과를 알려주는지는 확인하지 못했습니다.",
+   "llmCalls": 4,
+   "tokens": {
+    "in": 10467,
+    "out": 1333
+   },
+   "seconds": 20,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:plan facts=- hypotheses=-",
+    "+19.9s v2:ac CORE-1 → not_verified"
+   ]
+  },
+  {
+   "pass": "B",
+   "id": "F14",
+   "expected": "broken",
+   "h1": "cannot_verify",
+   "h2": "app_down",
+   "h3": "mostly",
+   "verdict": "entry_broken",
+   "reasons": [],
+   "repro": null,
+   "event": {
+    "w1": "entry",
+    "y": "blank_screen",
+    "c": "routing_deploy",
+    "k": "route_404_missing_index",
+    "s": "S1",
+    "r": null,
+    "a": "builder",
+    "p": false,
+    "memo": "entry missing_index_file (404)"
+   },
+   "claim": null,
+   "llmCalls": 0,
+   "tokens": {
+    "in": 0,
+    "out": 0
+   },
+   "seconds": 0,
+   "phases": [
+    "+0.0s v2:recon",
+    "+0.0s v2:entry broken missing_index_file"
+   ]
+  }
+ ],
+ "perPass": {
+  "A": {
+   "passId": "A",
+   "vendor": "openai",
+   "acLabels": [
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:40:39.516Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F1:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F1",
+     "appId": "app_0a45c35bbb87f74c",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "storage",
+       "quote": "local=true session=false writes=0"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "✅ 오늘 할 일\n할 일을 적고 추가 버튼을 누르세요\n추가\n📝 심사테스트"
+      }
+     ],
+     "h6": [
+      "\"예: 우유 사기\"에 \"심사테스트\" 입력",
+      "\"추가\" 누르기"
+     ],
+     "h8": "심사테스트를 입력하고 추가 버튼을 누르자 목록에 심사테스트가 나타났다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:40:55.746Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F2:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F2",
+     "appId": "app_c38fa91cfea03bc1",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "diff",
+       "quote": "\"변환하기\" 누르기\nclicked → http://127.0.0.1:8799/noisy-working"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "📏 단위 변환기\n킬로미터를 마일로 바꿔드려요\n변환하기\n5 km = 3.11 miles 🎉"
+      }
+     ],
+     "h6": [
+      "\"예: 5\"에 \"5\" 입력",
+      "\"변환하기\" 누르기"
+     ],
+     "h8": "숫자 5를 입력하고 변환하기를 누르면 3.11마일 결과가 보여요.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:41:44.982Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F3:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F3",
+     "appId": "app_94388b73f219c25f",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "request",
+       "quote": "POST https://xyzzy-nonexistent-simsa-eval.supabase.co/rest/v1/notes"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+      },
+      {
+       "artifactId": "E8",
+       "kind": "console",
+       "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+      },
+      {
+       "artifactId": "E21",
+       "kind": "screen",
+       "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+      },
+      {
+       "artifactId": "E22",
+       "kind": "console",
+       "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+      }
+     ],
+     "h6": [
+      "\"고객 이름과 메모\"에 \"심사테스트 010-5242-3694\" 입력",
+      "\"저장\" 누르기",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"고객 이름과 메모\"에 \"심사테스트둘 010-5242-3694\" 입력",
+      "\"저장\" 누르기"
+     ],
+     "h8": "고객 메모를 입력하고 저장을 눌러도 목록에 메모가 나타나지 않습니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:42:23.114Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F4:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F4",
+     "appId": "app_be740042d2bd99b2",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "diff",
+       "quote": "\"계산하기\" 누르기\nclicked → http://127.0.0.1:8799/js-crash"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+      },
+      {
+       "artifactId": "E18",
+       "kind": "diff",
+       "quote": "\"계산하기\" 누르기\nclicked → http://127.0.0.1:8799/js-crash"
+      },
+      {
+       "artifactId": "E19",
+       "kind": "screen",
+       "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+      }
+     ],
+     "h6": [
+      "\"예: 10000\"에 \"10000\" 입력",
+      "\"계산하기\" 누르기",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"예: 10000\"에 \"10000\" 입력",
+      "\"계산하기\" 누르기"
+     ],
+     "h8": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않고 화면이 그대로입니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:42:35.618Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F5:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F5",
+     "appId": "app_431f2beda5534249",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "cannot_verify",
+     "h2": "app_down",
+     "h3": "mostly",
+     "h4": "full",
+     "h5": [],
+     "h6": [],
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:43:33.781Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F6:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F6",
+     "appId": "app_65e4192fd7d52cb4",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "screen",
+       "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트"
+      },
+      {
+       "artifactId": "E9",
+       "kind": "screen",
+       "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)"
+      },
+      {
+       "artifactId": "E18",
+       "kind": "screen",
+       "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트"
+      }
+     ],
+     "h6": [
+      "\"기록할 내용\"에 \"심사테스트\" 입력",
+      "\"추가\" 누르기",
+      "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+      "새로고침",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"기록할 내용\"에 \"심사테스트둘\" 입력",
+      "\"추가\" 누르기",
+      "새로고침"
+     ],
+     "h8": "기록은 추가 직후 목록에 잠시 나타나지만 새로고침하면 사라져 저장되지 않습니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:43:55.219Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F7:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F7",
+     "appId": "app_4728c2c5a8b095e2",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E3",
+       "kind": "screen",
+       "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n💬 (아직 기록이 없습니다)"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "storage",
+       "quote": "local=true session=false writes=0"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+      },
+      {
+       "artifactId": "E8",
+       "kind": "screen",
+       "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+      }
+     ],
+     "h6": [
+      "\"기록할 내용\"에 \"심사테스트\" 입력",
+      "\"추가\" 누르기",
+      "새로고침"
+     ],
+     "h8": "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나며 새로고침 후에도 유지됩니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:44:07.128Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F8:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F8",
+     "appId": "app_c50c853e9c7eda09",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "storage",
+       "quote": "local=true session=false writes=0"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "🚶 동네 산책 기록\n현재 위치 (37.57, 126.98) 근처를 기록해요\n추가\n👟 심사테스트"
+      }
+     ],
+     "h6": [
+      "\"예: 한강공원 한 바퀴\"에 \"심사테스트\" 입력",
+      "\"추가\" 누르기"
+     ],
+     "h8": "산책 기록에 '심사테스트'를 입력하고 추가하니 저장되어 목록에 나타났다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:44:07.836Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F9:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F9",
+     "appId": "app_c99bfdfeb220ff88",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "cannot_verify",
+     "h2": "app_down",
+     "h3": "mostly",
+     "h4": "full",
+     "h5": [],
+     "h6": [],
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:46:45.178Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F10:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F10",
+     "appId": "app_36d62c2f2030ac8c",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E21",
+       "kind": "screen",
+       "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttp://127.0.0.1:1 · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동하지 않습니다 — 로그인 요청이 서버에서 401"
+      },
+      {
+       "artifactId": "E22",
+       "kind": "storage",
+       "quote": "local=false session=false writes=0"
+      },
+      {
+       "artifactId": "E45",
+       "kind": "screen",
+       "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttp://127.0.0.1:1 · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동하지 않습니다 — 로그인 요청이 서버에서 401"
+      }
+     ],
+     "h6": [
+      "\"서비스 주소\"에 \"http://127.0.0.1:8799/canned-result\" 입력",
+      "\"내 서비스 검사하기 →\" 누르기",
+      "3000ms 기다리기",
+      "\"서비스 주소\"에 \"http://127.0.0.1:1\" 입력",
+      "\"내 서비스 검사하기 →\" 누르기",
+      "5000ms 기다리기",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"서비스 주소\"에 \"http://127.0.0.1:8799/canned-result\" 입력",
+      "\"내 서비스 검사하기 →\" 누르기",
+      "\"서비스 주소\"에 \"http://127.0.0.1:1\" 입력",
+      "\"내 서비스 검사하기 →\" 누르기",
+      "5000ms 기다리기",
+      "1000ms 기다리기",
+      "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+      "1000ms 기다리기",
+      "다른 손님처럼 새 브라우저로 열기"
+     ],
+     "h8": "서비스 주소를 넣고 검사 버튼을 눌러도 실제 검토 결과가 나오지 않고 입력 화면에 그대로 머뭅니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:48:32.815Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F11:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F11",
+     "appId": "app_857391102907bac3",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E8",
+       "kind": "screen",
+       "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799/self-checklist\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가"
+      },
+      {
+       "artifactId": "E16",
+       "kind": "screen",
+       "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799/self-checklist\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가"
+      },
+      {
+       "artifactId": "E22",
+       "kind": "screen",
+       "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799/self-checklist\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가"
+      }
+     ],
+     "h6": [
+      "\"프로젝트 이름\"에 \"심사테스트\" 입력",
+      "\"프로젝트 URL\"에 \"http://127.0.0.1:8799/self-checklist\" 입력",
+      "\"검토 시작하기\" 누르기",
+      "\"통과\" 누르기",
+      "\"통과\" 누르기",
+      "\"확인불가\" 누르기",
+      "\"미검토\" 누르기"
+     ],
+     "h8": "서비스 주소는 등록되지만 앱이 실제로 열어 작동 여부를 검토하지 않고, 사용자에게 체크리스트를 직접 확인하라고 합니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:48:50.317Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F12:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F12",
+     "appId": "app_1d2fe69fb919d69e",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E5",
+       "kind": "diff",
+       "quote": "\"점검하기\" 누르기\nclicked → http://127.0.0.1:8799/real-echo-checker"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "screen",
+       "quote": "🔎 주소 점검기\n앱 주소를 넣으면 실제로 열어 보고 응답 상태를 알려드려요.\n앱 주소\n 점검하기\n점검 결과\n주소: 127.0.0.1:8799/real-echo-checker\n응답 상태: 200 (열림)\n응답 크기: 2486바이트 · 걸린 시간: 22ms"
+      }
+     ],
+     "h6": [
+      "\"앱 주소\"에 \"http://127.0.0.1:8799/real-echo-checker\" 입력",
+      "\"점검하기\" 누르기"
+     ],
+     "h8": "사용자가 입력한 서비스 주소를 실제로 점검하고, 열린 상태와 응답 크기 및 걸린 시간을 결과로 알려준다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:50:07.208Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F13:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F13",
+     "appId": "app_4f59180a0031880b",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E9",
+       "kind": "screen",
+       "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\nClaude API 키\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+      },
+      {
+       "artifactId": "E19",
+       "kind": "screen",
+       "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\nClaude API 키\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+      },
+      {
+       "artifactId": "E26",
+       "kind": "screen",
+       "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\nClaude API 키\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+      }
+     ],
+     "h6": [
+      "\"예) 회원가입하고 로그인하면, 내 할 일 목록을 추가·삭제할 수 있어야 해요.\"에 \"사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다\" 입력",
+      "\"https://my-app.vercel.app\"에 \"http://127.0.0.1:8799/needs-api-key\" 입력",
+      "\"점검 시작\" 누르기",
+      "\"연결 설정\" 누르기",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"예) 회원가입하고 로그인하면, 내 할 일 목록을 추가·삭제할 수 있어야 해요.\"에 \"사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다\" 입력",
+      "\"https://my-app.vercel.app\"에 \"http://127.0.0.1:8799/needs-api-key\" 입력",
+      "\"점검 시작\" 누르기",
+      "1000ms 기다리기",
+      "\"연결 설정\" 누르기",
+      "\"점검 시작\" 누르기"
+     ],
+     "h8": "서비스 주소를 넣어도 실제 점검 결과를 보여 주지 않고 Claude API 키를 먼저 요구한다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:50:11.932Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F14:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F14",
+     "appId": "app_05cc5a290e5ed693",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "cannot_verify",
+     "h2": "app_down",
+     "h3": "mostly",
+     "h4": "full",
+     "h5": [],
+     "h6": [],
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "failureEvents": [
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:41:44.982Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F3:CORE-1:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F3:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F3",
+     "appId": "app_94388b73f219c25f",
+     "acId": "CORE-1",
+     "w1": "submit",
+     "w2": "/potemkin-crm",
+     "w3": "click",
+     "y": "not_saved",
+     "c": "external_integration",
+     "k": "missing_backend_config",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": false,
+     "x": "config_only",
+     "location": null,
+     "defectGroup": "CORE-1:missing_backend_config",
+     "memo": "고객 메모를 입력하고 저장해도 목록에 나타나지 않았습니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:42:23.114Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F4:CORE-1:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F4:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F4",
+     "appId": "app_be740042d2bd99b2",
+     "acId": "CORE-1",
+     "w1": "submit",
+     "w2": "/js-crash",
+     "w3": "click",
+     "y": "no_response",
+     "c": "unknown",
+     "k": "broken_action",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": false,
+     "x": "unknown",
+     "location": null,
+     "defectGroup": "CORE-1:runtime_error",
+     "memo": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않았습니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:42:35.618Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F5:entry:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F5:entry:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F5",
+     "appId": "app_431f2beda5534249",
+     "acId": "entry",
+     "w1": "entry",
+     "w2": "/",
+     "w3": "none",
+     "y": "blank_screen",
+     "c": "unknown",
+     "k": "other",
+     "s": "S1",
+     "r": null,
+     "a": "builder",
+     "p": false,
+     "memo": "entry blank_page (200)",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:43:33.781Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F6:CORE-1:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F6:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F6",
+     "appId": "app_65e4192fd7d52cb4",
+     "acId": "CORE-1",
+     "w1": "persist",
+     "w2": "/optimistic-ghost",
+     "w3": "reload",
+     "y": "not_saved",
+     "c": "unknown",
+     "k": "data_not_persisted",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": true,
+     "x": "structural",
+     "location": null,
+     "defectGroup": "CORE-1:data_not_persisted",
+     "memo": "추가한 기록이 목록에 잠시 나타나지만 새로고침하면 사라져 저장되지 않습니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:44:07.836Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F9:entry:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F9:entry:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F9",
+     "appId": "app_c99bfdfeb220ff88",
+     "acId": "entry",
+     "w1": "entry",
+     "w2": "/",
+     "w3": "none",
+     "y": "blank_screen",
+     "c": "routing_deploy",
+     "k": "route_404_missing_index",
+     "s": "S1",
+     "r": null,
+     "a": "builder",
+     "p": false,
+     "memo": "entry deployment_not_found (404)",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:46:45.178Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F10:CORE-1:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F10:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F10",
+     "appId": "app_36d62c2f2030ac8c",
+     "acId": "CORE-1",
+     "w1": "submit",
+     "w2": "/canned-result",
+     "w3": "click",
+     "y": "fake_result",
+     "c": "unknown",
+     "k": "canned_result",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": true,
+     "x": "structural",
+     "location": null,
+     "defectGroup": "CORE-1:broken_action",
+     "memo": "서비스 주소를 넣고 검사 버튼을 눌러도 실제 검토 없이 고정된 완료 점수만 표시됩니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:48:32.815Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F11:CORE-1:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F11:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F11",
+     "appId": "app_857391102907bac3",
+     "acId": "CORE-1",
+     "w1": "result",
+     "w2": "/self-checklist",
+     "w3": "click",
+     "y": "wrong_result",
+     "c": "spec_not_implemented",
+     "k": "intent_mismatch",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": false,
+     "x": "structural",
+     "location": null,
+     "memo": "서비스 주소를 제출해도 실제 사이트를 열어 검토하지 않고 수동 체크리스트만 표시됩니다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:50:07.208Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F13:CORE-1:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F13:CORE-1:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F13",
+     "appId": "app_4f59180a0031880b",
+     "acId": "CORE-1",
+     "w1": "submit",
+     "w2": "/needs-api-key",
+     "w3": "click",
+     "y": "setup_required_message",
+     "c": "external_integration",
+     "k": "needs_api_key",
+     "s": "S2",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": false,
+     "x": "config_only",
+     "location": null,
+     "defectGroup": "CORE-1:needs_api_key",
+     "memo": "서비스 주소를 제출해도 실제 점검 대신 Claude API 키 설정을 요구했다.",
+     "model": "gpt-5.6-sol"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:A",
+     "createdAt": "2026-11-01T16:50:11.932Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_A_F14:entry:A:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_A_F14:entry:A",
+     "runId": "lab_2026-11-01T16-40-25-493Z_A_F14",
+     "appId": "app_05cc5a290e5ed693",
+     "acId": "entry",
+     "w1": "entry",
+     "w2": "/",
+     "w3": "none",
+     "y": "blank_screen",
+     "c": "routing_deploy",
+     "k": "route_404_missing_index",
+     "s": "S1",
+     "r": null,
+     "a": "builder",
+     "p": false,
+     "memo": "entry missing_index_file (404)",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "gold": [
+    {
+     "gold": {
+      "appKey": "F1",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:40:39.516Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F1:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F1",
+      "appId": "app_0a45c35bbb87f74c",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "storage",
+        "quote": "local=true session=false writes=0"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "✅ 오늘 할 일\n할 일을 적고 추가 버튼을 누르세요\n추가\n📝 심사테스트"
+       }
+      ],
+      "h6": [
+       "\"예: 우유 사기\"에 \"심사테스트\" 입력",
+       "\"추가\" 누르기"
+      ],
+      "h8": "심사테스트를 입력하고 추가 버튼을 누르자 목록에 심사테스트가 나타났다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F2",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:40:55.746Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F2:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F2",
+      "appId": "app_c38fa91cfea03bc1",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "diff",
+        "quote": "\"변환하기\" 누르기\nclicked → http://127.0.0.1:8799/noisy-working"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "📏 단위 변환기\n킬로미터를 마일로 바꿔드려요\n변환하기\n5 km = 3.11 miles 🎉"
+       }
+      ],
+      "h6": [
+       "\"예: 5\"에 \"5\" 입력",
+       "\"변환하기\" 누르기"
+      ],
+      "h8": "숫자 5를 입력하고 변환하기를 누르면 3.11마일 결과가 보여요.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F3",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:41:44.982Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F3:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F3",
+      "appId": "app_94388b73f219c25f",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "request",
+        "quote": "POST https://xyzzy-nonexistent-simsa-eval.supabase.co/rest/v1/notes"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+       },
+       {
+        "artifactId": "E8",
+        "kind": "console",
+        "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+       },
+       {
+        "artifactId": "E21",
+        "kind": "screen",
+        "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+       },
+       {
+        "artifactId": "E22",
+        "kind": "console",
+        "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+       }
+      ],
+      "h6": [
+       "\"고객 이름과 메모\"에 \"심사테스트 010-5242-3694\" 입력",
+       "\"저장\" 누르기",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"고객 이름과 메모\"에 \"심사테스트둘 010-5242-3694\" 입력",
+       "\"저장\" 누르기"
+      ],
+      "h8": "고객 메모를 입력하고 저장을 눌러도 목록에 메모가 나타나지 않습니다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:41:44.982Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F3:CORE-1:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F3:CORE-1:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F3",
+       "appId": "app_94388b73f219c25f",
+       "acId": "CORE-1",
+       "w1": "submit",
+       "w2": "/potemkin-crm",
+       "w3": "click",
+       "y": "not_saved",
+       "c": "external_integration",
+       "k": "missing_backend_config",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": false,
+       "x": "config_only",
+       "location": null,
+       "defectGroup": "CORE-1:missing_backend_config",
+       "memo": "고객 메모를 입력하고 저장해도 목록에 나타나지 않았습니다.",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F4",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:42:23.114Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F4:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F4",
+      "appId": "app_be740042d2bd99b2",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "diff",
+        "quote": "\"계산하기\" 누르기\nclicked → http://127.0.0.1:8799/js-crash"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+       },
+       {
+        "artifactId": "E18",
+        "kind": "diff",
+        "quote": "\"계산하기\" 누르기\nclicked → http://127.0.0.1:8799/js-crash"
+       },
+       {
+        "artifactId": "E19",
+        "kind": "screen",
+        "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+       }
+      ],
+      "h6": [
+       "\"예: 10000\"에 \"10000\" 입력",
+       "\"계산하기\" 누르기",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"예: 10000\"에 \"10000\" 입력",
+       "\"계산하기\" 누르기"
+      ],
+      "h8": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않고 화면이 그대로입니다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:42:23.114Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F4:CORE-1:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F4:CORE-1:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F4",
+       "appId": "app_be740042d2bd99b2",
+       "acId": "CORE-1",
+       "w1": "submit",
+       "w2": "/js-crash",
+       "w3": "click",
+       "y": "no_response",
+       "c": "unknown",
+       "k": "broken_action",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": false,
+       "x": "unknown",
+       "location": null,
+       "defectGroup": "CORE-1:runtime_error",
+       "memo": "원화 10000원을 입력하고 계산하기를 눌러도 달러 금액이 표시되지 않았습니다.",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F5",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "app_down"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:42:35.618Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F5:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F5",
+      "appId": "app_431f2beda5534249",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "cannot_verify",
+      "h2": "app_down",
+      "h3": "mostly",
+      "h4": "full",
+      "h5": [],
+      "h6": [],
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:42:35.618Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F5:entry:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F5:entry:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F5",
+       "appId": "app_431f2beda5534249",
+       "acId": "entry",
+       "w1": "entry",
+       "w2": "/",
+       "w3": "none",
+       "y": "blank_screen",
+       "c": "unknown",
+       "k": "other",
+       "s": "S1",
+       "r": null,
+       "a": "builder",
+       "p": false,
+       "memo": "entry blank_page (200)",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F6",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:43:33.781Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F6:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F6",
+      "appId": "app_65e4192fd7d52cb4",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "screen",
+        "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트"
+       },
+       {
+        "artifactId": "E9",
+        "kind": "screen",
+        "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)"
+       },
+       {
+        "artifactId": "E18",
+        "kind": "screen",
+        "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트"
+       }
+      ],
+      "h6": [
+       "\"기록할 내용\"에 \"심사테스트\" 입력",
+       "\"추가\" 누르기",
+       "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+       "새로고침",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"기록할 내용\"에 \"심사테스트둘\" 입력",
+       "\"추가\" 누르기",
+       "새로고침"
+      ],
+      "h8": "기록은 추가 직후 목록에 잠시 나타나지만 새로고침하면 사라져 저장되지 않습니다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:43:33.781Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F6:CORE-1:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F6:CORE-1:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F6",
+       "appId": "app_65e4192fd7d52cb4",
+       "acId": "CORE-1",
+       "w1": "persist",
+       "w2": "/optimistic-ghost",
+       "w3": "reload",
+       "y": "not_saved",
+       "c": "unknown",
+       "k": "data_not_persisted",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": true,
+       "x": "structural",
+       "location": null,
+       "defectGroup": "CORE-1:data_not_persisted",
+       "memo": "추가한 기록이 목록에 잠시 나타나지만 새로고침하면 사라져 저장되지 않습니다.",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F7",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass",
+       "cannot_verify"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:43:55.219Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F7:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F7",
+      "appId": "app_4728c2c5a8b095e2",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E3",
+        "kind": "screen",
+        "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n💬 (아직 기록이 없습니다)"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "storage",
+        "quote": "local=true session=false writes=0"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+       },
+       {
+        "artifactId": "E8",
+        "kind": "screen",
+        "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+       }
+      ],
+      "h6": [
+       "\"기록할 내용\"에 \"심사테스트\" 입력",
+       "\"추가\" 누르기",
+       "새로고침"
+      ],
+      "h8": "기록을 입력하고 추가를 누르면 목록에 저장되어 나타나며 새로고침 후에도 유지됩니다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F8",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass",
+       "cannot_verify"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:44:07.128Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F8:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F8",
+      "appId": "app_c50c853e9c7eda09",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "storage",
+        "quote": "local=true session=false writes=0"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "🚶 동네 산책 기록\n현재 위치 (37.57, 126.98) 근처를 기록해요\n추가\n👟 심사테스트"
+       }
+      ],
+      "h6": [
+       "\"예: 한강공원 한 바퀴\"에 \"심사테스트\" 입력",
+       "\"추가\" 누르기"
+      ],
+      "h8": "산책 기록에 '심사테스트'를 입력하고 추가하니 저장되어 목록에 나타났다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F9",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "app_down"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:44:07.836Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F9:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F9",
+      "appId": "app_c99bfdfeb220ff88",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "cannot_verify",
+      "h2": "app_down",
+      "h3": "mostly",
+      "h4": "full",
+      "h5": [],
+      "h6": [],
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:44:07.836Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F9:entry:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F9:entry:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F9",
+       "appId": "app_c99bfdfeb220ff88",
+       "acId": "entry",
+       "w1": "entry",
+       "w2": "/",
+       "w3": "none",
+       "y": "blank_screen",
+       "c": "routing_deploy",
+       "k": "route_404_missing_index",
+       "s": "S1",
+       "r": null,
+       "a": "builder",
+       "p": false,
+       "memo": "entry deployment_not_found (404)",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F10",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:46:45.178Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F10:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F10",
+      "appId": "app_36d62c2f2030ac8c",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E21",
+        "kind": "screen",
+        "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttp://127.0.0.1:1 · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동하지 않습니다 — 로그인 요청이 서버에서 401"
+       },
+       {
+        "artifactId": "E22",
+        "kind": "storage",
+        "quote": "local=false session=false writes=0"
+       },
+       {
+        "artifactId": "E45",
+        "kind": "screen",
+        "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttp://127.0.0.1:1 · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동하지 않습니다 — 로그인 요청이 서버에서 401"
+       }
+      ],
+      "h6": [
+       "\"서비스 주소\"에 \"http://127.0.0.1:8799/canned-result\" 입력",
+       "\"내 서비스 검사하기 →\" 누르기",
+       "3000ms 기다리기",
+       "\"서비스 주소\"에 \"http://127.0.0.1:1\" 입력",
+       "\"내 서비스 검사하기 →\" 누르기",
+       "5000ms 기다리기",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"서비스 주소\"에 \"http://127.0.0.1:8799/canned-result\" 입력",
+       "\"내 서비스 검사하기 →\" 누르기",
+       "\"서비스 주소\"에 \"http://127.0.0.1:1\" 입력",
+       "\"내 서비스 검사하기 →\" 누르기",
+       "5000ms 기다리기",
+       "1000ms 기다리기",
+       "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+       "1000ms 기다리기",
+       "다른 손님처럼 새 브라우저로 열기"
+      ],
+      "h8": "서비스 주소를 넣고 검사 버튼을 눌러도 실제 검토 결과가 나오지 않고 입력 화면에 그대로 머뭅니다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:46:45.178Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F10:CORE-1:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F10:CORE-1:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F10",
+       "appId": "app_36d62c2f2030ac8c",
+       "acId": "CORE-1",
+       "w1": "submit",
+       "w2": "/canned-result",
+       "w3": "click",
+       "y": "fake_result",
+       "c": "unknown",
+       "k": "canned_result",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": true,
+       "x": "structural",
+       "location": null,
+       "defectGroup": "CORE-1:broken_action",
+       "memo": "서비스 주소를 넣고 검사 버튼을 눌러도 실제 검토 없이 고정된 완료 점수만 표시됩니다.",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F11",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:48:32.815Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F11:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F11",
+      "appId": "app_857391102907bac3",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E8",
+        "kind": "screen",
+        "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799/self-checklist\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가"
+       },
+       {
+        "artifactId": "E16",
+        "kind": "screen",
+        "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799/self-checklist\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가"
+       },
+       {
+        "artifactId": "E22",
+        "kind": "screen",
+        "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799/self-checklist\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가"
+       }
+      ],
+      "h6": [
+       "\"프로젝트 이름\"에 \"심사테스트\" 입력",
+       "\"프로젝트 URL\"에 \"http://127.0.0.1:8799/self-checklist\" 입력",
+       "\"검토 시작하기\" 누르기",
+       "\"통과\" 누르기",
+       "\"통과\" 누르기",
+       "\"확인불가\" 누르기",
+       "\"미검토\" 누르기"
+      ],
+      "h8": "서비스 주소는 등록되지만 앱이 실제로 열어 작동 여부를 검토하지 않고, 사용자에게 체크리스트를 직접 확인하라고 합니다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:48:32.815Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F11:CORE-1:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F11:CORE-1:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F11",
+       "appId": "app_857391102907bac3",
+       "acId": "CORE-1",
+       "w1": "result",
+       "w2": "/self-checklist",
+       "w3": "click",
+       "y": "wrong_result",
+       "c": "spec_not_implemented",
+       "k": "intent_mismatch",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": false,
+       "x": "structural",
+       "location": null,
+       "memo": "서비스 주소를 제출해도 실제 사이트를 열어 검토하지 않고 수동 체크리스트만 표시됩니다.",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F12",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass",
+       "cannot_verify"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:48:50.317Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F12:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F12",
+      "appId": "app_1d2fe69fb919d69e",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E5",
+        "kind": "diff",
+        "quote": "\"점검하기\" 누르기\nclicked → http://127.0.0.1:8799/real-echo-checker"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "screen",
+        "quote": "🔎 주소 점검기\n앱 주소를 넣으면 실제로 열어 보고 응답 상태를 알려드려요.\n앱 주소\n 점검하기\n점검 결과\n주소: 127.0.0.1:8799/real-echo-checker\n응답 상태: 200 (열림)\n응답 크기: 2486바이트 · 걸린 시간: 22ms"
+       }
+      ],
+      "h6": [
+       "\"앱 주소\"에 \"http://127.0.0.1:8799/real-echo-checker\" 입력",
+       "\"점검하기\" 누르기"
+      ],
+      "h8": "사용자가 입력한 서비스 주소를 실제로 점검하고, 열린 상태와 응답 크기 및 걸린 시간을 결과로 알려준다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F13",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "needs_own_api_key"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:50:07.208Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F13:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F13",
+      "appId": "app_4f59180a0031880b",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E9",
+        "kind": "screen",
+        "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\nClaude API 키\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+       },
+       {
+        "artifactId": "E19",
+        "kind": "screen",
+        "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\nClaude API 키\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+       },
+       {
+        "artifactId": "E26",
+        "kind": "screen",
+        "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\nClaude API 키\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+       }
+      ],
+      "h6": [
+       "\"예) 회원가입하고 로그인하면, 내 할 일 목록을 추가·삭제할 수 있어야 해요.\"에 \"사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다\" 입력",
+       "\"https://my-app.vercel.app\"에 \"http://127.0.0.1:8799/needs-api-key\" 입력",
+       "\"점검 시작\" 누르기",
+       "\"연결 설정\" 누르기",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"예) 회원가입하고 로그인하면, 내 할 일 목록을 추가·삭제할 수 있어야 해요.\"에 \"사용자가 자기 서비스 주소를 넣으면 실제로 열어 보고 작동 여부를 검토해 알려줘야 한다\" 입력",
+       "\"https://my-app.vercel.app\"에 \"http://127.0.0.1:8799/needs-api-key\" 입력",
+       "\"점검 시작\" 누르기",
+       "1000ms 기다리기",
+       "\"연결 설정\" 누르기",
+       "\"점검 시작\" 누르기"
+      ],
+      "h8": "서비스 주소를 넣어도 실제 점검 결과를 보여 주지 않고 Claude API 키를 먼저 요구한다.",
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:50:07.208Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F13:CORE-1:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F13:CORE-1:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F13",
+       "appId": "app_4f59180a0031880b",
+       "acId": "CORE-1",
+       "w1": "submit",
+       "w2": "/needs-api-key",
+       "w3": "click",
+       "y": "setup_required_message",
+       "c": "external_integration",
+       "k": "needs_api_key",
+       "s": "S2",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": false,
+       "x": "config_only",
+       "location": null,
+       "defectGroup": "CORE-1:needs_api_key",
+       "memo": "서비스 주소를 제출해도 실제 점검 대신 Claude API 키 설정을 요구했다.",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F14",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "app_down"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:A",
+      "createdAt": "2026-11-01T16:50:11.932Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_A_F14:CORE-1:A",
+      "runId": "lab_2026-11-01T16-40-25-493Z_A_F14",
+      "appId": "app_05cc5a290e5ed693",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "cannot_verify",
+      "h2": "app_down",
+      "h3": "mostly",
+      "h4": "full",
+      "h5": [],
+      "h6": [],
+      "model": "gpt-5.6-sol"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:A",
+       "createdAt": "2026-11-01T16:50:11.932Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_A_F14:entry:A:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_A_F14:entry:A",
+       "runId": "lab_2026-11-01T16-40-25-493Z_A_F14",
+       "appId": "app_05cc5a290e5ed693",
+       "acId": "entry",
+       "w1": "entry",
+       "w2": "/",
+       "w3": "none",
+       "y": "blank_screen",
+       "c": "routing_deploy",
+       "k": "route_404_missing_index",
+       "s": "S1",
+       "r": null,
+       "a": "builder",
+       "p": false,
+       "memo": "entry missing_index_file (404)",
+       "model": "gpt-5.6-sol"
+      }
+     ]
+    }
+   ]
+  },
+  "B": {
+   "passId": "B",
+   "vendor": "anthropic",
+   "acLabels": [
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:50:27.860Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F1:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F1",
+     "appId": "app_0a45c35bbb87f74c",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E5",
+       "kind": "diff",
+       "quote": "\"추가\" 누르기\nclicked → http://127.0.0.1:8799/working-todo"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "storage",
+       "quote": "local=true session=false writes=0"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "✅ 오늘 할 일\n할 일을 적고 추가 버튼을 누르세요\n추가\n📝 심사테스트 우유 사기"
+      }
+     ],
+     "h6": [
+      "\"예: 우유 사기\"에 \"심사테스트 우유 사기\" 입력",
+      "\"추가\" 누르기"
+     ],
+     "h8": "할 일 '심사테스트 우유 사기'를 적고 추가 버튼을 누르니 화면이 바뀌면서 목록에 그 할 일이 나타났습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:50:48.295Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F2:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F2",
+     "appId": "app_c38fa91cfea03bc1",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E5",
+       "kind": "screen",
+       "quote": "📏 단위 변환기\n킬로미터를 마일로 바꿔드려요\n변환하기\n결과가 여기에 표시됩니다"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "diff",
+       "quote": "\"변환하기\" 누르기\nclicked → http://127.0.0.1:8799/noisy-working"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "📏 단위 변환기\n킬로미터를 마일로 바꿔드려요\n변환하기\n5 km = 3.11 miles 🎉"
+      }
+     ],
+     "h6": [
+      "\"예: 5\"에 \"5\" 입력",
+      "\"변환하기\" 누르기"
+     ],
+     "h8": "숫자 5를 입력하고 변환하기를 누르니 안내 문구가 사라지고 '5 km = 3.11 miles' 결과가 화면에 나타나, 마일 결과가 제대로 보입니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:51:31.753Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F3:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F3",
+     "appId": "app_94388b73f219c25f",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E5",
+       "kind": "diff",
+       "quote": "\"저장\" 누르기\nclicked → http://127.0.0.1:8799/potemkin-crm"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "request",
+       "quote": "POST https://xyzzy-nonexistent-simsa-eval.supabase.co/rest/v1/notes"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+      },
+      {
+       "artifactId": "E8",
+       "kind": "console",
+       "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+      },
+      {
+       "artifactId": "E21",
+       "kind": "screen",
+       "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+      },
+      {
+       "artifactId": "E22",
+       "kind": "console",
+       "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+      }
+     ],
+     "h6": [
+      "\"고객 이름과 메모\"에 \"심사테스트 010-5242-3694 다음 주 상담 예약\" 입력",
+      "\"저장\" 누르기",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"고객 이름과 메모\"에 \"심사테스트 010-5242-3694 다음 주 상담 예약\" 입력",
+      "\"저장\" 누르기"
+     ],
+     "h8": "고객 메모를 입력하고 저장을 눌러도 메모가 목록에 나타나지 않습니다. 저장 요청이 서버에 닿지 못하고 실패하며, 새 브라우저에서 다시 해도 똑같았습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:52:16.518Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F4:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F4",
+     "appId": "app_be740042d2bd99b2",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E4",
+       "kind": "console",
+       "quote": "Uncaught TypeError: Cannot read properties of undefined (reading 'USD')"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "diff",
+       "quote": "\"계산하기\" 누르기\nclicked → http://127.0.0.1:8799/js-crash"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+      },
+      {
+       "artifactId": "E14",
+       "kind": "console",
+       "quote": "Uncaught TypeError: Cannot read properties of undefined (reading 'USD')"
+      },
+      {
+       "artifactId": "E19",
+       "kind": "screen",
+       "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+      }
+     ],
+     "h6": [
+      "\"예: 10000\"에 \"10000\" 입력",
+      "\"계산하기\" 누르기",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"예: 10000\"에 \"10000\" 입력",
+      "\"계산하기\" 누르기"
+     ],
+     "h8": "원화 10000을 입력하고 계산하기를 눌러도 달러 금액이 나오지 않고 '결과가 여기에 표시됩니다' 문구만 그대로 남습니다. 화면 뒤에서는 환율(USD)을 읽지 못하는 오류가 납니다. 새 브라우저에서 다시 해도 같은 결과였습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:52:21.291Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F5:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F5",
+     "appId": "app_431f2beda5534249",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "cannot_verify",
+     "h2": "app_down",
+     "h3": "mostly",
+     "h4": "full",
+     "h5": [],
+     "h6": [],
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:53:32.188Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F6:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F6",
+     "appId": "app_65e4192fd7d52cb4",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "screen",
+       "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트 기록입니다"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "storage",
+       "quote": "local=false session=false writes=0"
+      },
+      {
+       "artifactId": "E9",
+       "kind": "screen",
+       "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)"
+      },
+      {
+       "artifactId": "E20",
+       "kind": "screen",
+       "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트 기록입니다"
+      },
+      {
+       "artifactId": "E21",
+       "kind": "storage",
+       "quote": "local=false session=false writes=0"
+      }
+     ],
+     "h6": [
+      "\"기록할 내용\"에 \"심사테스트 기록입니다\" 입력",
+      "\"추가\" 누르기",
+      "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+      "새로고침",
+      "다른 손님처럼 새 브라우저로 열기",
+      "\"기록할 내용\"에 \"심사테스트둘 기록입니다\" 입력",
+      "\"추가\" 누르기",
+      "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+      "새로고침"
+     ],
+     "h8": "기록을 넣고 추가를 누르면 목록에 잠깐 보이지만, 서버에도 브라우저에도 저장되지 않아 새로고침하면 사라집니다. 새 브라우저에서 다시 해도 똑같았습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:53:59.939Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F7:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F7",
+     "appId": "app_4728c2c5a8b095e2",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E5",
+       "kind": "diff",
+       "quote": "\"추가\" 누르기\nclicked → http://127.0.0.1:8799/heavy-site"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "storage",
+       "quote": "local=true session=false writes=0"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+      },
+      {
+       "artifactId": "E8",
+       "kind": "screen",
+       "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+      }
+     ],
+     "h6": [
+      "\"기록할 내용\"에 \"심사테스트\" 입력",
+      "\"추가\" 누르기",
+      "새로고침"
+     ],
+     "h8": "기록을 입력하고 추가를 누르면 목록에 '심사테스트'가 나타나고, 새로고침해도 남아 있습니다. 다만 이 브라우저 안에만 저장되고 서버에는 저장되지 않습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:54:23.061Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F8:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F8",
+     "appId": "app_c50c853e9c7eda09",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E5",
+       "kind": "diff",
+       "quote": "\"추가\" 누르기\nclicked → http://127.0.0.1:8799/geo-gated"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "storage",
+       "quote": "local=true session=false writes=0"
+      },
+      {
+       "artifactId": "E8",
+       "kind": "screen",
+       "quote": "🚶 동네 산책 기록\n현재 위치 (37.57, 126.98) 근처를 기록해요\n추가\n👟 심사테스트 한강공원 한 바퀴"
+      }
+     ],
+     "h6": [
+      "\"예: 한강공원 한 바퀴\"에 \"심사테스트 한강공원 한 바퀴\" 입력",
+      "\"추가\" 누르기",
+      "새로고침"
+     ],
+     "h8": "산책 기록을 입력하고 추가를 누르면 목록에 나타나고, 새로고침한 뒤에도 그대로 남아 있습니다. 다만 서버가 아니라 이 브라우저에만 저장되므로 다른 기기나 브라우저에서는 보이지 않습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:54:23.373Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F9:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F9",
+     "appId": "app_c99bfdfeb220ff88",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "cannot_verify",
+     "h2": "app_down",
+     "h3": "mostly",
+     "h4": "full",
+     "h5": [],
+     "h6": [],
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:55:45.806Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F10:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F10",
+     "appId": "app_36d62c2f2030ac8c",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E9",
+       "kind": "diff",
+       "quote": "\"내 서비스 검사하기 →\" 누르기\nclicked → http://127.0.0.1:8799/canned-result"
+      },
+      {
+       "artifactId": "E12",
+       "kind": "storage",
+       "quote": "local=false session=false writes=0"
+      },
+      {
+       "artifactId": "E13",
+       "kind": "screen",
+       "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttps://simsa-test-no-such-site-5242.invalid · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동"
+      },
+      {
+       "artifactId": "E24",
+       "kind": "screen",
+       "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttps://simsa-test-no-such-site-5242.invalid · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동"
+      },
+      {
+       "artifactId": "E23",
+       "kind": "storage",
+       "quote": "local=false session=false writes=0"
+      }
+     ],
+     "h6": [
+      "\"서비스 주소\"에 \"https://example.com\" 입력",
+      "\"내 서비스 검사하기 →\" 누르기",
+      "3000ms 기다리기",
+      "\"서비스 주소\"에 \"https://simsa-test-no-such-site-5242.invalid\" 입력",
+      "\"내 서비스 검사하기 →\" 누르기",
+      "5000ms 기다리기",
+      "저장된 곳 확인(서버인지 이 브라우저에만인지)"
+     ],
+     "h8": "존재하지 않는 주소(https://simsa-test-no-such-site-5242.invalid)를 넣어도 앱은 '검사 완료 · 서비스 건강도 78/100'과 '로그인 401 오류' 같은 결과를 보여 줍니다. 서버로 보낸 요청도 0건이어서, 실제로 사이트를 열어 검사하지 않고 미리 정해 둔 결과를 보여 주는 것으로 보입니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:57:14.357Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F11:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F11",
+     "appId": "app_857391102907bac3",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "fail",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E7",
+       "kind": "request",
+       "quote": "POST http://127.0.0.1:8799/api/projects"
+      },
+      {
+       "artifactId": "E8",
+       "kind": "screen",
+       "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+      },
+      {
+       "artifactId": "E9",
+       "kind": "screen",
+       "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+      },
+      {
+       "artifactId": "E17",
+       "kind": "screen",
+       "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+      },
+      {
+       "artifactId": "E22",
+       "kind": "request",
+       "quote": "POST http://127.0.0.1:8799/api/projects"
+      },
+      {
+       "artifactId": "E23",
+       "kind": "screen",
+       "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+      }
+     ],
+     "h6": [
+      "\"프로젝트 이름\"에 \"심사테스트\" 입력",
+      "\"프로젝트 URL\"에 \"http://127.0.0.1:8799\" 입력",
+      "\"검토 시작하기\" 누르기",
+      "4000ms 기다리기",
+      "새로고침",
+      "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+      "\"프로젝트 이름\"에 \"심사테스트\" 입력",
+      "\"프로젝트 URL\"에 \"http://127.0.0.1:8799\" 입력",
+      "\"검토 시작하기\" 누르기"
+     ],
+     "h8": "주소를 넣고 '검토 시작하기'를 누르면 프로젝트는 서버에 저장됩니다. 하지만 앱이 그 주소를 직접 열어 검토해 결과를 알려주지는 않습니다. 기다려도 '진단 0/10'인 빈 체크리스트만 나오고, 사용자가 각 항목을 직접 확인해 표시해야 합니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:57:52.986Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F12:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F12",
+     "appId": "app_1d2fe69fb919d69e",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "pass",
+     "h2": null,
+     "h3": "sure",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E5",
+       "kind": "diff",
+       "quote": "\"점검하기\" 누르기\nclicked → http://127.0.0.1:8799/real-echo-checker"
+      },
+      {
+       "artifactId": "E6",
+       "kind": "screen",
+       "quote": "🔎 주소 점검기\n앱 주소를 넣으면 실제로 열어 보고 응답 상태를 알려드려요.\n앱 주소\n 점검하기\n점검 결과\n주소: 127.0.0.1:8799/real-echo-checker\n응답 상태: 200 (열림)\n응답 크기: 2486바이트 · 걸린 시간: 41ms"
+      },
+      {
+       "artifactId": "E8",
+       "kind": "diff",
+       "quote": "\"점검하기\" 누르기\nclicked → http://127.0.0.1:8799/real-echo-checker"
+      },
+      {
+       "artifactId": "E9",
+       "kind": "screen",
+       "quote": "🔎 주소 점검기\n앱 주소를 넣으면 실제로 열어 보고 응답 상태를 알려드려요.\n앱 주소\n 점검하기\n점검 결과\n주소: 127.0.0.1:8799/no-such-page-simsa-404\n응답 상태: 404 (오류)\n응답 크기: 9바이트 · 걸린 시간: 5ms"
+      }
+     ],
+     "h6": [
+      "\"앱 주소\"에 \"http://127.0.0.1:8799/real-echo-checker\" 입력",
+      "\"점검하기\" 누르기",
+      "\"앱 주소\"에 \"http://127.0.0.1:8799/no-such-page-simsa-404\" 입력",
+      "\"점검하기\" 누르기",
+      "저장된 곳 확인(서버인지 이 브라우저에만인지)"
+     ],
+     "h8": "주소를 넣고 '점검하기'를 누르면 앱이 그 주소를 실제로 열어 봅니다. 정상 페이지는 200(열림), 없는 페이지는 404(오류)로 각각 다르게 알려 줍니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:58:13.157Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F13:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F13",
+     "appId": "app_4f59180a0031880b",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "cannot_verify",
+     "h2": "needs_own_api_key",
+     "h3": "mostly",
+     "h4": "full",
+     "h5": [
+      {
+       "artifactId": "E6",
+       "kind": "diff",
+       "quote": "\"점검 시작\" 누르기\nclicked → http://127.0.0.1:8799/needs-api-key"
+      },
+      {
+       "artifactId": "E7",
+       "kind": "screen",
+       "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+      }
+     ],
+     "h6": [
+      "\"예) 회원가입하고 로그인하면, 내 할 일 목록을 추가·삭제할 수 있어야 해요.\"에 \"심사테스트라는 이름과 010-5242-3694 전화번호로 예약을 넣으면 예약 목록에 보여야 해요.\" 입력",
+      "\"https://my-app.vercel.app\"에 \"https://example.com\" 입력",
+      "\"점검 시작\" 누르기"
+     ],
+     "h8": "주소와 설명을 넣고 '점검 시작'을 눌렀지만, 앱이 먼저 '연결 설정'에 Claude API 키를 넣으라고 안내해서 점검이 시작되지 않았습니다. 테스트에 쓸 API 키가 없어 실제로 서비스를 열어 보고 결과를 알려주는지는 확인하지 못했습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:58:13.497Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F14:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F14",
+     "appId": "app_05cc5a290e5ed693",
+     "acId": "CORE-1",
+     "priority": "must",
+     "h1": "cannot_verify",
+     "h2": "app_down",
+     "h3": "mostly",
+     "h4": "full",
+     "h5": [],
+     "h6": [],
+     "model": "claude-opus-5-5"
+    }
+   ],
+   "failureEvents": [
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:51:31.753Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F3:CORE-1:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F3:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F3",
+     "appId": "app_94388b73f219c25f",
+     "acId": "CORE-1",
+     "w1": "submit",
+     "w2": "/potemkin-crm",
+     "w3": "click",
+     "y": "not_saved",
+     "c": "backend_missing",
+     "k": "missing_backend_config",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": false,
+     "x": "config_only",
+     "location": null,
+     "defectGroup": "CORE-1:missing_backend_config",
+     "memo": "메모를 입력하고 저장을 눌러도 존재하지 않는 Supabase 주소로 요청이 실패해 목록에 메모가 나타나지 않습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:52:16.518Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F4:CORE-1:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F4:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F4",
+     "appId": "app_be740042d2bd99b2",
+     "acId": "CORE-1",
+     "w1": "submit",
+     "w2": "/js-crash",
+     "w3": "click",
+     "y": "no_response",
+     "c": "client_state",
+     "k": "runtime_error",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": false,
+     "x": "small_code",
+     "location": null,
+     "defectGroup": "CORE-1:runtime_error",
+     "memo": "계산하기를 누르면 환율(USD)을 읽지 못하는 오류가 나서 달러 금액이 표시되지 않습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:52:21.291Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F5:entry:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F5:entry:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F5",
+     "appId": "app_431f2beda5534249",
+     "acId": "entry",
+     "w1": "entry",
+     "w2": "/",
+     "w3": "none",
+     "y": "blank_screen",
+     "c": "unknown",
+     "k": "other",
+     "s": "S1",
+     "r": null,
+     "a": "builder",
+     "p": false,
+     "memo": "entry blank_page (200)",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:53:32.188Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F6:CORE-1:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F6:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F6",
+     "appId": "app_65e4192fd7d52cb4",
+     "acId": "CORE-1",
+     "w1": "persist",
+     "w2": "/optimistic-ghost",
+     "w3": "reload",
+     "y": "not_saved",
+     "c": "unknown",
+     "k": "data_not_persisted",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": true,
+     "x": "structural",
+     "location": null,
+     "defectGroup": "CORE-1:data_not_persisted",
+     "memo": "기록을 추가하면 목록에 잠깐 보이지만 서버에도 브라우저에도 저장되지 않아 새로고침하면 사라집니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:54:23.373Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F9:entry:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F9:entry:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F9",
+     "appId": "app_c99bfdfeb220ff88",
+     "acId": "entry",
+     "w1": "entry",
+     "w2": "/",
+     "w3": "none",
+     "y": "blank_screen",
+     "c": "routing_deploy",
+     "k": "route_404_missing_index",
+     "s": "S1",
+     "r": null,
+     "a": "builder",
+     "p": false,
+     "memo": "entry deployment_not_found (404)",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:55:45.806Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F10:CORE-1:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F10:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F10",
+     "appId": "app_36d62c2f2030ac8c",
+     "acId": "CORE-1",
+     "w1": "result",
+     "w2": "/canned-result",
+     "w3": "click",
+     "y": "fake_result",
+     "c": "backend_missing",
+     "k": "canned_result",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": true,
+     "x": "structural",
+     "location": null,
+     "memo": "존재하지 않는 주소를 넣어도 서버 요청 없이 '서비스 건강도 78/100' 같은 미리 정해 둔 검사 결과가 나와, 실제 사이트 검사가 이루어지지 않습니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:57:14.357Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F11:CORE-1:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F11:CORE-1:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F11",
+     "appId": "app_857391102907bac3",
+     "acId": "CORE-1",
+     "w1": "result",
+     "w2": "/self-checklist",
+     "w3": "click",
+     "y": "wrong_result",
+     "c": "spec_not_implemented",
+     "k": "intent_mismatch",
+     "s": "S1",
+     "r": "always",
+     "reproduced": {
+      "k": 3,
+      "n": 3
+     },
+     "a": "builder",
+     "p": false,
+     "x": "structural",
+     "location": null,
+     "memo": "'검토 시작하기'를 누르면 프로젝트는 서버에 저장되지만, 앱이 주소를 직접 열어 검토하지 않고 사용자가 직접 표시해야 하는 빈 체크리스트(진단 0/10)만 보여줍니다.",
+     "model": "claude-opus-5-5"
+    },
+    {
+     "source": "labeler_agent",
+     "producer": "labeler-v1:B",
+     "createdAt": "2026-11-01T16:58:13.497Z",
+     "versions": {
+      "labelSchema": "1",
+      "taxonomy": "defect-v1",
+      "axes": "index-design-2026-10-18",
+      "rubric": "labeling-v1-2026-10-21"
+     },
+     "failureId": "lab_2026-11-01T16-40-25-493Z_B_F14:entry:B:F1",
+     "labelId": "lab_2026-11-01T16-40-25-493Z_B_F14:entry:B",
+     "runId": "lab_2026-11-01T16-40-25-493Z_B_F14",
+     "appId": "app_05cc5a290e5ed693",
+     "acId": "entry",
+     "w1": "entry",
+     "w2": "/",
+     "w3": "none",
+     "y": "blank_screen",
+     "c": "routing_deploy",
+     "k": "route_404_missing_index",
+     "s": "S1",
+     "r": null,
+     "a": "builder",
+     "p": false,
+     "memo": "entry missing_index_file (404)",
+     "model": "claude-opus-5-5"
+    }
+   ],
+   "gold": [
+    {
+     "gold": {
+      "appKey": "F1",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:50:27.860Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F1:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F1",
+      "appId": "app_0a45c35bbb87f74c",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E5",
+        "kind": "diff",
+        "quote": "\"추가\" 누르기\nclicked → http://127.0.0.1:8799/working-todo"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "storage",
+        "quote": "local=true session=false writes=0"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "✅ 오늘 할 일\n할 일을 적고 추가 버튼을 누르세요\n추가\n📝 심사테스트 우유 사기"
+       }
+      ],
+      "h6": [
+       "\"예: 우유 사기\"에 \"심사테스트 우유 사기\" 입력",
+       "\"추가\" 누르기"
+      ],
+      "h8": "할 일 '심사테스트 우유 사기'를 적고 추가 버튼을 누르니 화면이 바뀌면서 목록에 그 할 일이 나타났습니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F2",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:50:48.295Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F2:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F2",
+      "appId": "app_c38fa91cfea03bc1",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E5",
+        "kind": "screen",
+        "quote": "📏 단위 변환기\n킬로미터를 마일로 바꿔드려요\n변환하기\n결과가 여기에 표시됩니다"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "diff",
+        "quote": "\"변환하기\" 누르기\nclicked → http://127.0.0.1:8799/noisy-working"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "📏 단위 변환기\n킬로미터를 마일로 바꿔드려요\n변환하기\n5 km = 3.11 miles 🎉"
+       }
+      ],
+      "h6": [
+       "\"예: 5\"에 \"5\" 입력",
+       "\"변환하기\" 누르기"
+      ],
+      "h8": "숫자 5를 입력하고 변환하기를 누르니 안내 문구가 사라지고 '5 km = 3.11 miles' 결과가 화면에 나타나, 마일 결과가 제대로 보입니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F3",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:51:31.753Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F3:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F3",
+      "appId": "app_94388b73f219c25f",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E5",
+        "kind": "diff",
+        "quote": "\"저장\" 누르기\nclicked → http://127.0.0.1:8799/potemkin-crm"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "request",
+        "quote": "POST https://xyzzy-nonexistent-simsa-eval.supabase.co/rest/v1/notes"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+       },
+       {
+        "artifactId": "E8",
+        "kind": "console",
+        "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+       },
+       {
+        "artifactId": "E21",
+        "kind": "screen",
+        "quote": "💼 고객 메모장\n고객 이름과 메모를 저장하고 관리하세요\n저장\n💬 (아직 저장된 메모가 없습니다)"
+       },
+       {
+        "artifactId": "E22",
+        "kind": "console",
+        "quote": "Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+       }
+      ],
+      "h6": [
+       "\"고객 이름과 메모\"에 \"심사테스트 010-5242-3694 다음 주 상담 예약\" 입력",
+       "\"저장\" 누르기",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"고객 이름과 메모\"에 \"심사테스트 010-5242-3694 다음 주 상담 예약\" 입력",
+       "\"저장\" 누르기"
+      ],
+      "h8": "고객 메모를 입력하고 저장을 눌러도 메모가 목록에 나타나지 않습니다. 저장 요청이 서버에 닿지 못하고 실패하며, 새 브라우저에서 다시 해도 똑같았습니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:51:31.753Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F3:CORE-1:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F3:CORE-1:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F3",
+       "appId": "app_94388b73f219c25f",
+       "acId": "CORE-1",
+       "w1": "submit",
+       "w2": "/potemkin-crm",
+       "w3": "click",
+       "y": "not_saved",
+       "c": "backend_missing",
+       "k": "missing_backend_config",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": false,
+       "x": "config_only",
+       "location": null,
+       "defectGroup": "CORE-1:missing_backend_config",
+       "memo": "메모를 입력하고 저장을 눌러도 존재하지 않는 Supabase 주소로 요청이 실패해 목록에 메모가 나타나지 않습니다.",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F4",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:52:16.518Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F4:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F4",
+      "appId": "app_be740042d2bd99b2",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E4",
+        "kind": "console",
+        "quote": "Uncaught TypeError: Cannot read properties of undefined (reading 'USD')"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "diff",
+        "quote": "\"계산하기\" 누르기\nclicked → http://127.0.0.1:8799/js-crash"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+       },
+       {
+        "artifactId": "E14",
+        "kind": "console",
+        "quote": "Uncaught TypeError: Cannot read properties of undefined (reading 'USD')"
+       },
+       {
+        "artifactId": "E19",
+        "kind": "screen",
+        "quote": "💱 환율 계산기\n원화를 달러로 계산해드려요\n계산하기\n결과가 여기에 표시됩니다"
+       }
+      ],
+      "h6": [
+       "\"예: 10000\"에 \"10000\" 입력",
+       "\"계산하기\" 누르기",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"예: 10000\"에 \"10000\" 입력",
+       "\"계산하기\" 누르기"
+      ],
+      "h8": "원화 10000을 입력하고 계산하기를 눌러도 달러 금액이 나오지 않고 '결과가 여기에 표시됩니다' 문구만 그대로 남습니다. 화면 뒤에서는 환율(USD)을 읽지 못하는 오류가 납니다. 새 브라우저에서 다시 해도 같은 결과였습니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:52:16.518Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F4:CORE-1:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F4:CORE-1:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F4",
+       "appId": "app_be740042d2bd99b2",
+       "acId": "CORE-1",
+       "w1": "submit",
+       "w2": "/js-crash",
+       "w3": "click",
+       "y": "no_response",
+       "c": "client_state",
+       "k": "runtime_error",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": false,
+       "x": "small_code",
+       "location": null,
+       "defectGroup": "CORE-1:runtime_error",
+       "memo": "계산하기를 누르면 환율(USD)을 읽지 못하는 오류가 나서 달러 금액이 표시되지 않습니다.",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F5",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "app_down"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:52:21.291Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F5:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F5",
+      "appId": "app_431f2beda5534249",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "cannot_verify",
+      "h2": "app_down",
+      "h3": "mostly",
+      "h4": "full",
+      "h5": [],
+      "h6": [],
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:52:21.291Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F5:entry:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F5:entry:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F5",
+       "appId": "app_431f2beda5534249",
+       "acId": "entry",
+       "w1": "entry",
+       "w2": "/",
+       "w3": "none",
+       "y": "blank_screen",
+       "c": "unknown",
+       "k": "other",
+       "s": "S1",
+       "r": null,
+       "a": "builder",
+       "p": false,
+       "memo": "entry blank_page (200)",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F6",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:53:32.188Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F6:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F6",
+      "appId": "app_65e4192fd7d52cb4",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "screen",
+        "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트 기록입니다"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "storage",
+        "quote": "local=false session=false writes=0"
+       },
+       {
+        "artifactId": "E9",
+        "kind": "screen",
+        "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)"
+       },
+       {
+        "artifactId": "E20",
+        "kind": "screen",
+        "quote": "📔 오늘의 기록장\n오늘 있었던 일을 기록해보세요\n추가\n💬 (아직 기록이 없습니다)\n📝 심사테스트 기록입니다"
+       },
+       {
+        "artifactId": "E21",
+        "kind": "storage",
+        "quote": "local=false session=false writes=0"
+       }
+      ],
+      "h6": [
+       "\"기록할 내용\"에 \"심사테스트 기록입니다\" 입력",
+       "\"추가\" 누르기",
+       "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+       "새로고침",
+       "다른 손님처럼 새 브라우저로 열기",
+       "\"기록할 내용\"에 \"심사테스트둘 기록입니다\" 입력",
+       "\"추가\" 누르기",
+       "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+       "새로고침"
+      ],
+      "h8": "기록을 넣고 추가를 누르면 목록에 잠깐 보이지만, 서버에도 브라우저에도 저장되지 않아 새로고침하면 사라집니다. 새 브라우저에서 다시 해도 똑같았습니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:53:32.188Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F6:CORE-1:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F6:CORE-1:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F6",
+       "appId": "app_65e4192fd7d52cb4",
+       "acId": "CORE-1",
+       "w1": "persist",
+       "w2": "/optimistic-ghost",
+       "w3": "reload",
+       "y": "not_saved",
+       "c": "unknown",
+       "k": "data_not_persisted",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": true,
+       "x": "structural",
+       "location": null,
+       "defectGroup": "CORE-1:data_not_persisted",
+       "memo": "기록을 추가하면 목록에 잠깐 보이지만 서버에도 브라우저에도 저장되지 않아 새로고침하면 사라집니다.",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F7",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass",
+       "cannot_verify"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:53:59.939Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F7:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F7",
+      "appId": "app_4728c2c5a8b095e2",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E5",
+        "kind": "diff",
+        "quote": "\"추가\" 누르기\nclicked → http://127.0.0.1:8799/heavy-site"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "storage",
+        "quote": "local=true session=false writes=0"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+       },
+       {
+        "artifactId": "E8",
+        "kind": "screen",
+        "quote": "🏔️ 오늘의 기록장\n무거운 랜딩 — 그래도 작동해야 합니다\n추가\n📝 심사테스트"
+       }
+      ],
+      "h6": [
+       "\"기록할 내용\"에 \"심사테스트\" 입력",
+       "\"추가\" 누르기",
+       "새로고침"
+      ],
+      "h8": "기록을 입력하고 추가를 누르면 목록에 '심사테스트'가 나타나고, 새로고침해도 남아 있습니다. 다만 이 브라우저 안에만 저장되고 서버에는 저장되지 않습니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F8",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass",
+       "cannot_verify"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:54:23.061Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F8:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F8",
+      "appId": "app_c50c853e9c7eda09",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E5",
+        "kind": "diff",
+        "quote": "\"추가\" 누르기\nclicked → http://127.0.0.1:8799/geo-gated"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "storage",
+        "quote": "local=true session=false writes=0"
+       },
+       {
+        "artifactId": "E8",
+        "kind": "screen",
+        "quote": "🚶 동네 산책 기록\n현재 위치 (37.57, 126.98) 근처를 기록해요\n추가\n👟 심사테스트 한강공원 한 바퀴"
+       }
+      ],
+      "h6": [
+       "\"예: 한강공원 한 바퀴\"에 \"심사테스트 한강공원 한 바퀴\" 입력",
+       "\"추가\" 누르기",
+       "새로고침"
+      ],
+      "h8": "산책 기록을 입력하고 추가를 누르면 목록에 나타나고, 새로고침한 뒤에도 그대로 남아 있습니다. 다만 서버가 아니라 이 브라우저에만 저장되므로 다른 기기나 브라우저에서는 보이지 않습니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F9",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "app_down"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:54:23.373Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F9:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F9",
+      "appId": "app_c99bfdfeb220ff88",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "cannot_verify",
+      "h2": "app_down",
+      "h3": "mostly",
+      "h4": "full",
+      "h5": [],
+      "h6": [],
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:54:23.373Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F9:entry:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F9:entry:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F9",
+       "appId": "app_c99bfdfeb220ff88",
+       "acId": "entry",
+       "w1": "entry",
+       "w2": "/",
+       "w3": "none",
+       "y": "blank_screen",
+       "c": "routing_deploy",
+       "k": "route_404_missing_index",
+       "s": "S1",
+       "r": null,
+       "a": "builder",
+       "p": false,
+       "memo": "entry deployment_not_found (404)",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F10",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:55:45.806Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F10:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F10",
+      "appId": "app_36d62c2f2030ac8c",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E9",
+        "kind": "diff",
+        "quote": "\"내 서비스 검사하기 →\" 누르기\nclicked → http://127.0.0.1:8799/canned-result"
+       },
+       {
+        "artifactId": "E12",
+        "kind": "storage",
+        "quote": "local=false session=false writes=0"
+       },
+       {
+        "artifactId": "E13",
+        "kind": "screen",
+        "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttps://simsa-test-no-such-site-5242.invalid · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동"
+       },
+       {
+        "artifactId": "E24",
+        "kind": "screen",
+        "quote": "✓ 작동해? AI 서비스 검증\nAI로 만든 서비스, 진짜 작동하나요? URL 하나만 넣어주세요. 실제 사용자처럼 써 보고 어디가 왜 고장났는지 찾아드립니다.\n서비스 주소\n서비스 설명 (선택)\n 내 서비스 검사하기 →\n✓ 검사 완료 · 서비스 건강도 78/100\nhttps://simsa-test-no-such-site-5242.invalid · 주요 사용자 흐름을 기준으로 검사했습니다.\n사용할 수 있지만 수정이 필요한 부분이 있습니다. 2개의 문제를 발견했습니다.\n✓ 8 정상 △ 1 주의 × 1 오류\n× 기능 오류 로그인 기능이 작동"
+       },
+       {
+        "artifactId": "E23",
+        "kind": "storage",
+        "quote": "local=false session=false writes=0"
+       }
+      ],
+      "h6": [
+       "\"서비스 주소\"에 \"https://example.com\" 입력",
+       "\"내 서비스 검사하기 →\" 누르기",
+       "3000ms 기다리기",
+       "\"서비스 주소\"에 \"https://simsa-test-no-such-site-5242.invalid\" 입력",
+       "\"내 서비스 검사하기 →\" 누르기",
+       "5000ms 기다리기",
+       "저장된 곳 확인(서버인지 이 브라우저에만인지)"
+      ],
+      "h8": "존재하지 않는 주소(https://simsa-test-no-such-site-5242.invalid)를 넣어도 앱은 '검사 완료 · 서비스 건강도 78/100'과 '로그인 401 오류' 같은 결과를 보여 줍니다. 서버로 보낸 요청도 0건이어서, 실제로 사이트를 열어 검사하지 않고 미리 정해 둔 결과를 보여 주는 것으로 보입니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:55:45.806Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F10:CORE-1:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F10:CORE-1:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F10",
+       "appId": "app_36d62c2f2030ac8c",
+       "acId": "CORE-1",
+       "w1": "result",
+       "w2": "/canned-result",
+       "w3": "click",
+       "y": "fake_result",
+       "c": "backend_missing",
+       "k": "canned_result",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": true,
+       "x": "structural",
+       "location": null,
+       "memo": "존재하지 않는 주소를 넣어도 서버 요청 없이 '서비스 건강도 78/100' 같은 미리 정해 둔 검사 결과가 나와, 실제 사이트 검사가 이루어지지 않습니다.",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F11",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:57:14.357Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F11:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F11",
+      "appId": "app_857391102907bac3",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "fail",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E7",
+        "kind": "request",
+        "quote": "POST http://127.0.0.1:8799/api/projects"
+       },
+       {
+        "artifactId": "E8",
+        "kind": "screen",
+        "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+       },
+       {
+        "artifactId": "E9",
+        "kind": "screen",
+        "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+       },
+       {
+        "artifactId": "E17",
+        "kind": "screen",
+        "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+       },
+       {
+        "artifactId": "E22",
+        "kind": "request",
+        "quote": "POST http://127.0.0.1:8799/api/projects"
+       },
+       {
+        "artifactId": "E23",
+        "kind": "screen",
+        "quote": "진단오딧\nAI로 만든 제품을 등록하고 검토를 시작해보세요.\n프로젝트 이름\n프로젝트 URL\n 검토 시작하기\n심사테스트 · http://127.0.0.1:8799\n프로젝트 상태: 검토중 · 진단 0/10 — 각 항목을 직접 확인해 표시하세요.\n핵심 기능이 정상적으로 작동하는가?\n통과실패확인불가미검토\n데이터 저장/불러오기가 정상 작동하는가?\n통과실패확인불가미검토\n사용자 입력이 올바르게 처리되는가?\n통과실패확인불가미검토\n에러 발생 시 적절한 예외 처리가 있는가?\n통과실패확인불가미검토\n페이지 새로고침 후에도 상태가 유지되는가?\n통과실패확인불"
+       }
+      ],
+      "h6": [
+       "\"프로젝트 이름\"에 \"심사테스트\" 입력",
+       "\"프로젝트 URL\"에 \"http://127.0.0.1:8799\" 입력",
+       "\"검토 시작하기\" 누르기",
+       "4000ms 기다리기",
+       "새로고침",
+       "저장된 곳 확인(서버인지 이 브라우저에만인지)",
+       "\"프로젝트 이름\"에 \"심사테스트\" 입력",
+       "\"프로젝트 URL\"에 \"http://127.0.0.1:8799\" 입력",
+       "\"검토 시작하기\" 누르기"
+      ],
+      "h8": "주소를 넣고 '검토 시작하기'를 누르면 프로젝트는 서버에 저장됩니다. 하지만 앱이 그 주소를 직접 열어 검토해 결과를 알려주지는 않습니다. 기다려도 '진단 0/10'인 빈 체크리스트만 나오고, 사용자가 각 항목을 직접 확인해 표시해야 합니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:57:14.357Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F11:CORE-1:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F11:CORE-1:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F11",
+       "appId": "app_857391102907bac3",
+       "acId": "CORE-1",
+       "w1": "result",
+       "w2": "/self-checklist",
+       "w3": "click",
+       "y": "wrong_result",
+       "c": "spec_not_implemented",
+       "k": "intent_mismatch",
+       "s": "S1",
+       "r": "always",
+       "reproduced": {
+        "k": 3,
+        "n": 3
+       },
+       "a": "builder",
+       "p": false,
+       "x": "structural",
+       "location": null,
+       "memo": "'검토 시작하기'를 누르면 프로젝트는 서버에 저장되지만, 앱이 주소를 직접 열어 검토하지 않고 사용자가 직접 표시해야 하는 빈 체크리스트(진단 0/10)만 보여줍니다.",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    },
+    {
+     "gold": {
+      "appKey": "F12",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "pass",
+       "cannot_verify"
+      ]
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:57:52.986Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F12:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F12",
+      "appId": "app_1d2fe69fb919d69e",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "pass",
+      "h2": null,
+      "h3": "sure",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E5",
+        "kind": "diff",
+        "quote": "\"점검하기\" 누르기\nclicked → http://127.0.0.1:8799/real-echo-checker"
+       },
+       {
+        "artifactId": "E6",
+        "kind": "screen",
+        "quote": "🔎 주소 점검기\n앱 주소를 넣으면 실제로 열어 보고 응답 상태를 알려드려요.\n앱 주소\n 점검하기\n점검 결과\n주소: 127.0.0.1:8799/real-echo-checker\n응답 상태: 200 (열림)\n응답 크기: 2486바이트 · 걸린 시간: 41ms"
+       },
+       {
+        "artifactId": "E8",
+        "kind": "diff",
+        "quote": "\"점검하기\" 누르기\nclicked → http://127.0.0.1:8799/real-echo-checker"
+       },
+       {
+        "artifactId": "E9",
+        "kind": "screen",
+        "quote": "🔎 주소 점검기\n앱 주소를 넣으면 실제로 열어 보고 응답 상태를 알려드려요.\n앱 주소\n 점검하기\n점검 결과\n주소: 127.0.0.1:8799/no-such-page-simsa-404\n응답 상태: 404 (오류)\n응답 크기: 9바이트 · 걸린 시간: 5ms"
+       }
+      ],
+      "h6": [
+       "\"앱 주소\"에 \"http://127.0.0.1:8799/real-echo-checker\" 입력",
+       "\"점검하기\" 누르기",
+       "\"앱 주소\"에 \"http://127.0.0.1:8799/no-such-page-simsa-404\" 입력",
+       "\"점검하기\" 누르기",
+       "저장된 곳 확인(서버인지 이 브라우저에만인지)"
+      ],
+      "h8": "주소를 넣고 '점검하기'를 누르면 앱이 그 주소를 실제로 열어 봅니다. 정상 페이지는 200(열림), 없는 페이지는 404(오류)로 각각 다르게 알려 줍니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F13",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "needs_own_api_key"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:58:13.157Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F13:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F13",
+      "appId": "app_4f59180a0031880b",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "cannot_verify",
+      "h2": "needs_own_api_key",
+      "h3": "mostly",
+      "h4": "full",
+      "h5": [
+       {
+        "artifactId": "E6",
+        "kind": "diff",
+        "quote": "\"점검 시작\" 누르기\nclicked → http://127.0.0.1:8799/needs-api-key"
+       },
+       {
+        "artifactId": "E7",
+        "kind": "screen",
+        "quote": "돌아가나\nAI로 만든 서비스, 진짜 돌아가는지 점검하고 고쳐 드립니다\n예시 결과 보기 · 연결 설정\n1 이 서비스는 원래 무엇을 해야 하나요?\n2 점검할 대상을 넣어 주세요\n3 점검 시작\n보통 1~3분 걸립니다.\n점검 시작\n먼저 '연결 설정'에 Claude API 키를 넣어 주세요. 키 없이 화면만 보시려면 위의 '예시 결과 보기'를 눌러 주세요."
+       }
+      ],
+      "h6": [
+       "\"예) 회원가입하고 로그인하면, 내 할 일 목록을 추가·삭제할 수 있어야 해요.\"에 \"심사테스트라는 이름과 010-5242-3694 전화번호로 예약을 넣으면 예약 목록에 보여야 해요.\" 입력",
+       "\"https://my-app.vercel.app\"에 \"https://example.com\" 입력",
+       "\"점검 시작\" 누르기"
+      ],
+      "h8": "주소와 설명을 넣고 '점검 시작'을 눌렀지만, 앱이 먼저 '연결 설정'에 Claude API 키를 넣으라고 안내해서 점검이 시작되지 않았습니다. 테스트에 쓸 API 키가 없어 실제로 서비스를 열어 보고 결과를 알려주는지는 확인하지 못했습니다.",
+      "model": "claude-opus-5-5"
+     },
+     "events": []
+    },
+    {
+     "gold": {
+      "appKey": "F14",
+      "acId": "CORE-1",
+      "source": "tools/simsa-inspection-fixtures/v2-targets.mjs (expected, 2026-10-21 이전 기록)",
+      "h1": [
+       "fail",
+       "cannot_verify"
+      ],
+      "h2": [
+       "app_down"
+      ],
+      "s": "S1"
+     },
+     "label": {
+      "source": "labeler_agent",
+      "producer": "labeler-v1:B",
+      "createdAt": "2026-11-01T16:58:13.497Z",
+      "versions": {
+       "labelSchema": "1",
+       "taxonomy": "defect-v1",
+       "axes": "index-design-2026-10-18",
+       "rubric": "labeling-v1-2026-10-21"
+      },
+      "labelId": "lab_2026-11-01T16-40-25-493Z_B_F14:CORE-1:B",
+      "runId": "lab_2026-11-01T16-40-25-493Z_B_F14",
+      "appId": "app_05cc5a290e5ed693",
+      "acId": "CORE-1",
+      "priority": "must",
+      "h1": "cannot_verify",
+      "h2": "app_down",
+      "h3": "mostly",
+      "h4": "full",
+      "h5": [],
+      "h6": [],
+      "model": "claude-opus-5-5"
+     },
+     "events": [
+      {
+       "source": "labeler_agent",
+       "producer": "labeler-v1:B",
+       "createdAt": "2026-11-01T16:58:13.497Z",
+       "versions": {
+        "labelSchema": "1",
+        "taxonomy": "defect-v1",
+        "axes": "index-design-2026-10-18",
+        "rubric": "labeling-v1-2026-10-21"
+       },
+       "failureId": "lab_2026-11-01T16-40-25-493Z_B_F14:entry:B:F1",
+       "labelId": "lab_2026-11-01T16-40-25-493Z_B_F14:entry:B",
+       "runId": "lab_2026-11-01T16-40-25-493Z_B_F14",
+       "appId": "app_05cc5a290e5ed693",
+       "acId": "entry",
+       "w1": "entry",
+       "w2": "/",
+       "w3": "none",
+       "y": "blank_screen",
+       "c": "routing_deploy",
+       "k": "route_404_missing_index",
+       "s": "S1",
+       "r": null,
+       "a": "builder",
+       "p": false,
+       "memo": "entry missing_index_file (404)",
+       "model": "claude-opus-5-5"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
