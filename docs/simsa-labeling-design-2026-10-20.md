@@ -272,3 +272,4 @@ v0 명세(2026-10-18)는 골격이다. 사람 라벨이 AC당 "판정 3택 + 결
 | 2026-10-24 | `train L start approved.` (Bae) | 스키마 코드·저장(§12-5) 착수. L1 Zod 스키마(`src/dataset/labels.ts`) · L2 v2 리포트 → 기계 후보(§7, `machine-candidates.ts`) · L3 저장 표 0076(닫힌 어휘만, **적용은 `migration 0076 apply approved.` 별도**) · L4 C13 분류를 증거 기반으로 · L5 관리자 집계 `/admin/failure-stats`. 라벨링 에이전트(두 벤더 블라인드 패스)·사용자 마이크로 라벨 UI는 다음 단계. 머지·배포는 별도 |
 | 2026-10-27 | `train L2 start approved` (Bae) | 라벨링 에이전트(§0.0) 코드: v2 실행기 라벨러 모드(블라인드·실패 3회 재현·고치기 없음) · 패스 → labeler_agent 행 · 두 패스 일치도(κ) · 사전 등록 정답지 채점(H1≥90%·S≥80%). 로컬 픽스처 실측까지. 프로덕션 저장 배선·머지·배포는 별도 |
 | 2026-11-02 | "2번은 둘 다 인정" (Bae) | 픽스처 정답지 사후 개정 1건: F5(빈 화면)를 F9·F14와 같은 첫 화면 고장 규칙으로 — fail·cannot_verify/app_down 둘 다 정답. 결과 문서에 개정 전·후를 함께 기록 |
+| 2026-11-02 | `PR #625 merge approved.` · `train L3 start approved` (Bae) | #625 머지(`d4b81eb`, 배포 없음). L3 코드: 라벨러 프로덕션 연결(직원 런만·수동·벤더 고정·마이그레이션 없음, `docs/dataset/train-l3-labeler-wiring-2026-11-02.md`). 머지·배포·첫 실행은 별도 |

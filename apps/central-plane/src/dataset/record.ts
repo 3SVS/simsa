@@ -24,6 +24,12 @@ export async function appIdFor(targetUrl: string): Promise<string> {
   return `app_${[...new Uint8Array(buf)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
+/** 원 런 리포트의 빌더(허용 목록 밖이면 unknown). */
+export function builderOfReport(report: Record<string, unknown>): string {
+  const agent = (report["agent"] && typeof report["agent"] === "object" ? report["agent"] : {}) as Record<string, unknown>;
+  return typeof agent["builder"] === "string" && (BUILDERS as readonly string[]).includes(agent["builder"]) ? agent["builder"] : "unknown";
+}
+
 export async function recordMachineLabels(
   env: Pick<Env, "DB">,
   args: { runId: string; targetUrl: string; report: Record<string, unknown>; now?: string },
@@ -32,12 +38,19 @@ export async function recordMachineLabels(
   const now = args.now ?? new Date().toISOString();
   const appId = await appIdFor(args.targetUrl);
   const agent = (args.report["agent"] && typeof args.report["agent"] === "object" ? args.report["agent"] : {}) as Record<string, unknown>;
-  const builder = typeof agent["builder"] === "string" && (BUILDERS as readonly string[]).includes(agent["builder"]) ? agent["builder"] : "unknown";
   const acs = Array.isArray(agent["acs"]) ? (agent["acs"] as Array<{ id: string; title?: string; then?: string; priority?: string }>) : [];
   const cand = machineCandidatesFromV2Report(args.report as Parameters<typeof machineCandidatesFromV2Report>[0], { runId: args.runId, appId, createdAt: now, acs });
+  return insertLabelRows(env, { acLabels: cand.acLabels, failureEvents: cand.failureEvents, builder: builderOfReport(args.report) });
+}
+
+/** 기계 후보·라벨러 공통 저장: Zod 검증 → 닫힌 어휘 칸만 0076에 append(label_id·failure_id 충돌은 무시). */
+export async function insertLabelRows(
+  env: Pick<Env, "DB">,
+  rows: { acLabels: readonly unknown[]; failureEvents: readonly unknown[]; builder: string },
+): Promise<{ acLabels: number; failures: number; invalid: number }> {
   let invalid = 0;
   const stmts = [];
-  for (const raw of cand.acLabels.slice(0, 40)) {
+  for (const raw of rows.acLabels.slice(0, 40)) {
     const p = AcLabel.safeParse(raw);
     if (!p.success) {
       invalid += 1;
@@ -57,7 +70,7 @@ export async function recordMachineLabels(
     );
   }
   const acCount = stmts.length;
-  for (const raw of cand.failureEvents.slice(0, 40)) {
+  for (const raw of rows.failureEvents.slice(0, 40)) {
     const p = FailureEvent.safeParse(raw);
     if (!p.success) {
       invalid += 1;
@@ -70,7 +83,7 @@ export async function recordMachineLabels(
            reproduced_k, reproduced_n, a, p, x, defect_group, label_schema_version, taxonomy_version, axes_version, rubric_version, supersedes, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(failure_id) DO NOTHING`,
       ).bind(
-        f.failureId, f.labelId, f.runId, f.appId, f.acId, builder, f.source, f.producer, f.model ?? null, f.w1, f.w2, f.w3, f.y, f.c, f.k, f.s, f.r,
+        f.failureId, f.labelId, f.runId, f.appId, f.acId, rows.builder, f.source, f.producer, f.model ?? null, f.w1, f.w2, f.w3, f.y, f.c, f.k, f.s, f.r,
         f.reproduced?.k ?? null, f.reproduced?.n ?? null, f.a, f.p ? 1 : 0, f.x ?? null, f.defectGroup ?? null,
         f.versions.labelSchema, f.versions.taxonomy, f.versions.axes, f.versions.rubric, f.supersedes ?? null, f.createdAt,
       ),

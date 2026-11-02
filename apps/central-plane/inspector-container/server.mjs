@@ -411,7 +411,7 @@ async function runAgentJob(payload, { outDir, locale, onPhase, phases, signup })
  * 실행기가 정상·조기 종료 모두 브라우저를 닫고, 시간 초과 때는 여기서 닫는다.
  */
 async function runAgentV2Job(payload, { outDir, locale, onPhase, phases }) {
-  const { runAgentV2Inspection } = await import("./agent-v2-run.mjs");
+  const { runAgentV2Inspection, labelerRunOptions } = await import("./agent-v2-run.mjs");
   const { createPlaywrightDriver } = await import("./agent-driver.mjs");
   const { createProxyLlm } = await import("./agent-llm.mjs");
   const dist = (name) => import(`./dist/${name}`).catch(() => import(`../dist/${name}`));
@@ -430,6 +430,8 @@ async function runAgentV2Job(payload, { outDir, locale, onPhase, phases }) {
       readOnly: agent.readOnly === true,
       // S8 재검사: 원 런의 계획(Worker가 원 리포트에서 실어 보낸다) — 실행기가 형식·기준을 확인하고 쓴다.
       previousPlan: agent.previousPlan ?? null,
+      // train L3: Worker가 라벨러 잡으로 보낸 경우에만 라벨러 모드(블라인드·재현 n회·고치기 없음).
+      ...labelerRunOptions(agent),
       budgetMs: Math.min(AGENT_RUN_BUDGET_MS, Number(agent.caps?.maxMinutes) > 0 ? Number(agent.caps.maxMinutes) * 60_000 : AGENT_RUN_BUDGET_MS),
       // 시험 데이터 seed = runId에서(재현 가능).
       testDataSeed: [...String(payload.runId ?? "")].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 100000, 7),

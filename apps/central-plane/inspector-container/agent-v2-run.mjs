@@ -46,6 +46,12 @@ function kstEarlyMorningIso(ms) {
   return new Date(`${day}T00:30:00+09:00`).toISOString();
 }
 
+/** 잡 페이로드 → 라벨러 옵션. 문자 그대로 "labeler"일 때만 켜진다 — 그 밖의 검수 런은 옛 동작 그대로. */
+export function labelerRunOptions(agent) {
+  if (agent?.profile !== "labeler") return {};
+  return { profile: "labeler", ...(Number.isInteger(agent.reproRuns) ? { reproRuns: agent.reproRuns } : {}) };
+}
+
 export async function runAgentV2Inspection(o) {
   const pure = await importPure("agent-inspection.js");
   const ev = await importPure("evidence-chain.js");
