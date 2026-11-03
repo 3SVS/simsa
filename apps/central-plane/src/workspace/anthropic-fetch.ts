@@ -154,6 +154,7 @@ export type AnthropicMessagesBody = {
   model: string;
   max_tokens: number;
   messages: Array<{ role: string; content: string }>;
+  output_config?: { effort: "low" | "medium" | "high" };
 };
 
 export type AnthropicMessagesData = {

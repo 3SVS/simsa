@@ -29,6 +29,7 @@ import { getVisualCheckById } from "../workspace/visual-check-db.js";
 import { worstCaseCallUsd } from "./build-llm-proxy.js";
 import { bearerOf, inspectAgentModelFor, reserveAgentSpend, settleAgentSpend, verifyRunToken } from "../workspace/inspection-agent.js";
 import { constantTimeEqual } from "../workspace/build-job-token.js";
+import { LabelerLlmError, labelerLlmCall, parseLabelerJobId } from "../workspace/labeler-llm.js";
 
 export const INSPECT_LLM_PATH = "/internal/inspect-llm/v1/messages";
 export const INSPECT_AGENT_CALL_SITE = "inspect_agent";
@@ -65,6 +66,36 @@ export function createInspectLlmProxyRoutes(fetchImpl: FetchLike = fetch.bind(gl
     if (!presented) return err(401, "unauthorized");
     const ict = env.INTERNAL_CALLBACK_TOKEN;
     if (typeof ict === "string" && ict.length > 0 && constantTimeEqual(presented, ict)) return err(403, "run_token_required");
+    // train L3: 라벨러 잡 토큰 — 검수 런이 아니므로 런 행 상태를 보지 않고, 벤더 고정·전용 원장 경로로 간다(workspace/labeler-llm.ts).
+    const labeler = await verifyRunToken(env, "labeler", presented);
+    if (labeler.ok) {
+      if (!inspectionEnabled(env)) return err(503, INSPECTION_DISABLED);
+      const job = parseLabelerJobId(labeler.runId);
+      const source = job ? await getVisualCheckById(env, job.runId) : null;
+      if (!source) return err(404, "run_not_found");
+      const raw = await c.req.text();
+      if (raw.length > MAX_BODY_BYTES) return err(413, "request_too_large");
+      let json: unknown;
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        return err(400, "invalid_json");
+      }
+      const body = BodySchema.safeParse(json);
+      if (!body.success) return err(400, "invalid_request");
+      try {
+        const text = await labelerLlmCall(
+          env,
+          fetchImpl,
+          labeler.runId,
+          { system: body.data.system, user: body.data.user, ...(body.data.maxTokens ? { maxTokens: body.data.maxTokens } : {}) },
+          { projectId: source.projectId, userKey: source.userKey },
+        );
+        return c.json({ ok: true, text });
+      } catch (e) {
+        return e instanceof LabelerLlmError ? err(e.status, e.code) : err(502, "upstream_failed");
+      }
+    }
     const auth = await verifyRunToken(env, "llm", presented);
     if (!auth.ok) return err(401, "unauthorized");
     const runId = auth.runId;

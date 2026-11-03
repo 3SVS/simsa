@@ -16,10 +16,12 @@ import { MIN_SECRET_LENGTH } from "../agent-inspection.js";
 
 // ─── 런 범위 토큰 ───────────────────────────────────────────────────────────────
 
-export type RunTokenKind = "llm" | "live";
+export type RunTokenKind = "llm" | "live" | "labeler";
 const TOKEN_SPEC: Record<RunTokenKind, { prefix: string; label: string; msg: string }> = {
   llm: { prefix: "irt1", label: "simsa/inspect-run-token/v1", msg: "simsa/inspect-run/v1:" },
   live: { prefix: "ilt1", label: "simsa/inspect-live-token/v1", msg: "simsa/inspect-live/v1:" },
+  // train L3: 라벨러 잡 범위 — 검수 런 토큰으로 라벨러 프록시 분기에 들어올 수 없게 종류를 가른다.
+  labeler: { prefix: "ilb1", label: "simsa/inspect-labeler-token/v1", msg: "simsa/inspect-labeler/v1:" },
 };
 const RUN_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const encoder = new TextEncoder();

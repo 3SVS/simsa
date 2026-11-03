@@ -53,6 +53,7 @@ import { createBuilderProbeRoutes } from "./routes/builder-probe.js";
 import { createWorkspaceBuildJobRoutes } from "./routes/workspace-build-jobs.js";
 import { createBuildLlmProxyRoutes } from "./routes/build-llm-proxy.js";
 import { createInspectLlmProxyRoutes } from "./routes/inspect-llm-proxy.js";
+import { createAdminLabelerRoutes } from "./routes/admin-labeler.js";
 import { createHostingDutiesRoutes } from "./routes/hosting-duties.js";
 import { createLlmProbeRoutes } from "./routes/llm-probe.js";
 import { createProbeMailRoutes } from "./routes/probe-mail.js";
@@ -97,6 +98,8 @@ export function createApp(opts: { fetch?: FetchLike } = {}): Hono<{ Bindings: En
   app.route("/", createBuildLlmProxyRoutes(fetchImpl));
   // 2026-10-05 검수 agent 엔진 전용 LLM 프록시(런 범위 토큰 · 서버 키 · 서버 권위 예산).
   app.route("/", createInspectLlmProxyRoutes(fetchImpl));
+  // train L3: 라벨링 에이전트 — 직원 런 수동 실행 · 완료 콜백 · 일치도(숫자만).
+  app.route("/", createAdminLabelerRoutes(fetchImpl));
   // B-7 호스팅 사업자 의무(D-6): 관리자 정지/해제(/admin/hosting/:slug/*) + 공개 신고(/hosting/report).
   app.route("/", createHostingDutiesRoutes(opts.fetch));
   app.route("/", createProbeMailRoutes());

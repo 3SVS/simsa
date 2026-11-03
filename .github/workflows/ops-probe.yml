@@ -3,6 +3,8 @@
 # 왜: LLM_PROBE_TOKEN은 repo secret에만 있고 노트북엔 없다(2026-09-24). 라이브 증거
 # (빌더 컨테이너 selfcheck, LLM 벤더 프로브)를 사람이 토큰을 복사하지 않고 얻기 위한 유일한 경로.
 # 토큰은 헤더로만 쓰이고 로그엔 마스킹된다. 쓰기 동작 없음(읽기·관측 전용 엔드포인트만).
+# 예외 train L3: `labeler-run`은 직원 런 하나에 라벨러 패스를 돌린다(돈이 든다 · 패스당 예산 상한 · 사용자 런은 서버가 거절).
+# 응답은 패스 표지·상태·숫자뿐이다.
 #
 # Train W · W-V-0 (2026-09-28): target `d1-readonly` — D1에 **이름 붙은 읽기 전용 질의**만 던져
 # 결과를 job summary에 남긴다(라이브 기준선: region·envelope_json·finding_codes_json 채움).
@@ -24,9 +26,9 @@ on:
         required: true
         default: 'builder-selfcheck'
         type: choice
-        options: [builder-selfcheck, llm-probe, probe-mail, d1-readonly]
+        options: [builder-selfcheck, llm-probe, probe-mail, d1-readonly, labeler-run, labeler-status]
       run_id:
-        description: 'probe-mail 전용: 확인할 runId (probe-<runId>@PROBE_MAIL_DOMAIN)'
+        description: 'probe-mail: 확인할 runId (probe-<runId>@PROBE_MAIL_DOMAIN) · labeler-run/status: 직원 런 id'
         required: false
         default: ''
       query:
@@ -35,6 +37,10 @@ on:
         default: 'envelope-fill-rate'
         type: choice
         options: [latest-visual-check-fill, envelope-fill-rate, repair-fill-rate, agent-llm-usage-48h, failure-labels-fill]
+      passes:
+        description: 'labeler-run 전용: 패스 A,B,C 중 쉼표로'
+        required: false
+        default: 'A,B'
       models:
         description: 'llm-probe 전용(v2 S0): 후보 모델 "vendor:model,…" — 서버 허용 목록 밖이면 400. 비우면 기본 3벤더'
         required: false
@@ -56,17 +62,25 @@ jobs:
       # 입력은 셸에 직접 끼우지 않고 env로 받아 글자 집합을 검사한다(워크플로 주입 방지).
       MODELS: ${{ inputs.models }}
       N: ${{ inputs.n }}
+      RUN_ID: ${{ inputs.run_id }}
+      PASSES: ${{ inputs.passes }}
     steps:
       - name: Probe
         run: |
           set -uo pipefail
           [[ "$MODELS" =~ ^[A-Za-z0-9._:,-]*$ ]] || { echo "::error::models 형식 오류"; exit 1; }
           [[ "$N" =~ ^[1-4]$ ]] || N=1
+          [[ "$RUN_ID" =~ ^[A-Za-z0-9_-]*$ ]] || { echo "::error::run_id 형식 오류"; exit 1; }
+          [[ "$PASSES" =~ ^[ABC](,[ABC]){0,2}$ ]] || { echo "::error::passes 형식 오류"; exit 1; }
           q="n=$N"; [ -n "$MODELS" ] && q="$q&models=$MODELS"
           case "${{ inputs.target }}" in
             builder-selfcheck) req=(-X GET "$BASE/internal/builder/selfcheck") ;;
             llm-probe)         req=(-X POST "$BASE/internal/llm-probe?$q") ;;
             probe-mail)        req=(-X GET "$BASE/internal/probe-mail?runId=${{ inputs.run_id }}"); TOKEN="$INTERNAL_TOKEN" ;;
+            labeler-run)
+              body=$(jq -cn --arg r "$RUN_ID" --arg p "$PASSES" '{runId:$r, passes:($p|split(","))}')
+              req=(-X POST -H "content-type: application/json" -d "$body" "$BASE/admin/labeler-runs"); TOKEN="$INTERNAL_TOKEN" ;;
+            labeler-status)    req=(-X GET "$BASE/admin/labeler-runs?runId=$RUN_ID"); TOKEN="$INTERNAL_TOKEN" ;;
           esac
           code=$(curl -sS -m 150 -o /tmp/out.json -w '%{http_code} %{time_total}' -H "Authorization: Bearer $TOKEN" "${req[@]}")
           echo "HTTP $code"
