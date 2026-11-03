@@ -48,6 +48,8 @@ export type SourceEvidence = {
   stack: StackHint;
   /** 무엇을 실제로 읽었는지 — 초안이 빈약할 때 이유를 설명하기 위해. */
   readSources: string[];
+  /** 앱 주소만: 페이지 응답 코드 또는 네트워크 오류. "못 읽음"과 "읽었는데 설명 없음"을 가른다. */
+  pageStatus?: number | "network_error";
 };
 
 async function fetchText(
@@ -394,6 +396,7 @@ export async function evidenceFromWebsite(url: string, fetchImpl: FetchLike): Pr
   let html = "";
   let hosting: StackHint["hosting"] | undefined;
   const readSources: string[] = [];
+  let pageStatus: number | "network_error" = "network_error";
   try {
     const r = await fetchImpl(url, {
       headers: { "user-agent": "simsa-central-plane/1.0" },
@@ -401,6 +404,7 @@ export async function evidenceFromWebsite(url: string, fetchImpl: FetchLike): Pr
       redirect: "follow",
     });
     hosting = hostingFromHeaders(r.headers, url);
+    pageStatus = r.status;
     if (r.ok) {
       html = (await r.text()).slice(0, 200_000);
       readSources.push("page");
@@ -419,6 +423,7 @@ export async function evidenceFromWebsite(url: string, fetchImpl: FetchLike): Pr
     ...(title ? { title } : {}),
     stack: { ...(hosting ? { hosting } : {}), tools: [] },
     readSources,
+    pageStatus,
   };
 }
 

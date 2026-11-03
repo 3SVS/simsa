@@ -249,6 +249,36 @@ test("★읽을 설명이 없으면 no_evidence — 빈 증거로 LLM을 부르�
   assert.equal(llmCalled, false, "★근거 없이 의도를 생성하러 가면 안 된다");
 });
 
+test("★앱 주소를 못 읽으면 unreadable + 응답 코드 — '설명이 없음'(no_evidence)으로 감추지 않는다", async () => {
+  const env = makeEnv();
+  globalThis.fetch = async () => new Response("<title>고객 메모장</title>", { status: 200 });
+  await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+    userKey: USER, type: "website", reference: "https://fixtures.example.workers.dev/potemkin-crm",
+  });
+  let llmCalled = false;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("anthropic") || String(url).includes("openai")) llmCalled = true;
+    return new Response("error code: 1042", { status: 404 });
+  };
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/infer-intent`, { userKey: USER });
+  assert.equal(res.status, 200);
+  assert.equal(res.json.inferred, null);
+  assert.equal(res.json.reason, "unreadable");
+  assert.equal(res.json.pageStatus, 404);
+  assert.equal(llmCalled, false);
+});
+
+test("앱 주소를 읽었는데 설명이 짧으면 그대로 no_evidence", async () => {
+  const env = makeEnv();
+  globalThis.fetch = async () => new Response("<div id=root></div>", { status: 200 });
+  await req(env, "POST", `/workspace/projects/${PROJECT}/sources`, {
+    userKey: USER, type: "website", reference: "https://spa.example.com/",
+  });
+  const res = await req(env, "POST", `/workspace/projects/${PROJECT}/infer-intent`, { userKey: USER });
+  assert.equal(res.json.reason, "no_evidence");
+  assert.equal(res.json.pageStatus, 200);
+});
+
 test("infer-intent도 소유권을 검사한다", async () => {
   const env = makeEnv();
   const res = await req(env, "POST", `/workspace/projects/${PROJECT}/infer-intent`, { userKey: OTHER });
