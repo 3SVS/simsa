@@ -149,6 +149,19 @@ describe("앱 주소 증거", () => {
     assert.deepEqual(ev.readSources, []);
     assert.equal(ev.stack.hosting, "vercel");
   });
+
+  it("★못 읽은 이유를 남긴다 — 응답 코드(같은 계정 workers.dev 1042 등)와 네트워크 오류", async () => {
+    const blocked = await evidenceFromWebsite("https://fixtures.example.workers.dev/potemkin-crm", async () =>
+      new Response("error code: 1042", { status: 404 }),
+    );
+    assert.equal(blocked.pageStatus, 404);
+    const down = await evidenceFromWebsite("https://down.example.com/", async () => {
+      throw new TypeError("fetch failed");
+    });
+    assert.equal(down.pageStatus, "network_error");
+    const ok = await evidenceFromWebsite("https://ok.example.com/", async () => new Response("<title>앱</title>", { status: 200 }));
+    assert.equal(ok.pageStatus, 200);
+  });
 });
 
 describe("★증거가 없으면 빈 아이디어를 돌려준다 (②) — 지어내지 않는 지점", () => {

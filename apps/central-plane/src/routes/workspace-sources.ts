@@ -220,6 +220,20 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
       declaredBuiltWith: owned.project.builtWith,
     });
 
+    // 앱 주소를 아예 못 읽었으면 "설명이 없음"이 아니라 "못 읽음"이다(공손한 실패 금지).
+    // 예: 같은 Cloudflare 계정의 workers.dev 주소는 Worker fetch에서 막힌다(1042).
+    if (!repo && !evidence.readSources.includes("page")) {
+      return c.json({
+        ok: true,
+        inferred: null,
+        reason: "unreadable",
+        readSources: evidence.readSources,
+        pageStatus: evidence.pageStatus,
+        stack: evidence.stack,
+        provenance,
+      });
+    }
+
     const idea = composeIdeaFromEvidence(evidence, locale);
     if (!idea) {
       // 읽을 수 있는 설명이 없었다. 그대로 말한다 — 사용자가 직접 적으면 된다.
@@ -228,6 +242,7 @@ export function createWorkspaceSourcesRoutes(): Hono<{ Bindings: Env }> {
         inferred: null,
         reason: "no_evidence",
         readSources: evidence.readSources,
+        ...(evidence.pageStatus !== undefined ? { pageStatus: evidence.pageStatus } : {}),
         stack: evidence.stack,
         provenance,
       });
