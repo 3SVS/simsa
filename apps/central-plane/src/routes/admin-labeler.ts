@@ -61,10 +61,6 @@ function failureClass(message: string): string {
   if (/inspect_llm_/i.test(message)) return "llm";
   return "other";
 }
-const noteKey = (jobId: string) => `labeler-job:${jobId}`;
-async function putNote(env: Env, jobId: string, note: Record<string, unknown>): Promise<void> {
-  await env.CENTRAL_CACHE?.put(noteKey(jobId), JSON.stringify(note), { expirationTtl: 30 * 86400 }).catch(() => undefined);
-}
 /** 잡 닫기: 예약 조건(spent < budget)이 다시는 참이 안 되게 맞춘다. budget_usd > 0 제약 때문에 쓴 돈이 0이어도 최소값을 둔다. */
 async function closeJob(env: Env, jobId: string): Promise<void> {
   await env.DB.prepare(`UPDATE inspection_agent_spend SET spent_usd = MAX(spent_usd, 0.000001), budget_usd = MAX(spent_usd, 0.000001) WHERE run_id = ?`).bind(jobId).run();
@@ -191,9 +187,8 @@ export function createAdminLabelerRoutes(fetchImpl: FetchLike = fetch.bind(globa
 
     if (!parsed.data.ok || !parsed.data.report) {
       const message = parsed.data.error ?? "no_report";
-      console.error(JSON.stringify({ event: "labeler_job_failed", job_id: jobId, reason: message.slice(0, 200) }));
+      console.error(JSON.stringify({ event: "labeler_job_failed", job_id: jobId, failure: failureClass(message), reason: message.slice(0, 200) }));
       await closeJob(env, jobId);
-      await putNote(env, jobId, { status: "failed", failure: failureClass(message) });
       return c.json({ ok: true, stored: false });
     }
 
@@ -203,15 +198,15 @@ export function createAdminLabelerRoutes(fetchImpl: FetchLike = fetch.bind(globa
     const report = parsed.data.report as Parameters<typeof labelerRowsFromV2Report>[0];
     const rows = labelerRowsFromV2Report(report, { runId: run.id, appId: await appIdFor(run.targetUrl), createdAt: new Date().toISOString(), acs }, pass);
     if (rows.acLabels.length === 0) {
+      console.error(JSON.stringify({ event: "labeler_job_failed", job_id: jobId, failure: "no_rows" }));
       await closeJob(env, jobId);
-      await putNote(env, jobId, { status: "failed", failure: "no_rows" });
       return c.json({ ok: true, stored: false });
     }
     const owner = { projectId: run.projectId, userKey: run.userKey };
     const refined = await refineEventsWithLabeler(rows.failureEvents, report, acs, (a) => labelerLlmCall(env, fetchImpl, jobId, a, owner));
     const stored = await insertLabelRows(env, { acLabels: rows.acLabels, failureEvents: refined.events, builder: builderOfReport(sourceReport) });
     await closeJob(env, jobId);
-    await putNote(env, jobId, { status: "done", ...stored, refineFailed: refined.failed });
+    console.log(JSON.stringify({ event: "labeler_job_done", job_id: jobId, ...stored, refineFailed: refined.failed }));
     return c.json({ ok: true, stored: true, ...stored });
   });
 
@@ -224,10 +219,14 @@ export function createAdminLabelerRoutes(fetchImpl: FetchLike = fetch.bind(globa
     const passes = [];
     for (const pass of Object.keys(LABELER_PASSES) as LabelerPassId[]) {
       const jobId = labelerJobId(runId, pass);
-      const spend = await env.DB.prepare(`SELECT spent_usd, calls FROM inspection_agent_spend WHERE run_id = ?`).bind(jobId).first<{ spent_usd: number; calls: number }>();
+      const spend = await env.DB.prepare(`SELECT spent_usd, budget_usd, calls FROM inspection_agent_spend WHERE run_id = ?`).bind(jobId).first<{ spent_usd: number; budget_usd: number; calls: number }>();
       if (!spend) continue;
-      const note = (await env.CENTRAL_CACHE?.get(noteKey(jobId), "json").catch(() => null)) as { status?: string; failure?: string } | null | undefined;
-      passes.push({ pass, vendor: LABELER_PASSES[pass].vendor, model: LABELER_PASSES[pass].model, spentUsd: spend.spent_usd, calls: spend.calls, status: note?.status ?? "running_or_unknown", ...(note?.failure ? { failure: note.failure } : {}), ...(await labelCounts(env, runId, pass)) });
+      // 상태는 D1에서만 읽는다(KV 바인딩 없음). 콜백이 잡을 닫으면 budget = spent → 닫힘. 닫혔는데 라벨 0행 = 실패
+      // (실패 분류는 console 로그 labeler_job_failed에만 — 공개 Actions 로그에 사유를 싣지 않는다).
+      const counts = await labelCounts(env, runId, pass);
+      const closed = spend.spent_usd >= spend.budget_usd;
+      const status = !closed ? "running" : counts.acLabels > 0 ? "done" : "failed";
+      passes.push({ pass, vendor: LABELER_PASSES[pass].vendor, model: LABELER_PASSES[pass].model, spentUsd: spend.spent_usd, calls: spend.calls, status, ...counts });
     }
     const [a, b] = [await loadPass(env, "A", { runId }), await loadPass(env, "B", { runId })];
     const agreement = a.acLabels.length && b.acLabels.length ? agreementNumbers(comparePasses(a, b)) : null;

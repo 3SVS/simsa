@@ -59,7 +59,6 @@ function setup({ vendor } = {}) {
   const { db, d1 } = opened;
   const dispatched = [];
   const vendorCalls = [];
-  const kv = new Map();
   const INSPECTOR = {
     idFromName: (n) => n,
     get: () => ({
@@ -91,10 +90,8 @@ function setup({ vendor } = {}) {
     ANTHROPIC_ENABLED: "off",
     INSPECTION_ENABLED: "on",
     PUBLIC_BASE_URL: BASE,
-    CENTRAL_CACHE: {
-      put: async (k, v) => void kv.set(k, v),
-      get: async (k, type) => (kv.has(k) ? (type === "json" ? JSON.parse(kv.get(k)) : kv.get(k)) : null),
-    },
+    // ★프로덕션 모양: CENTRAL_CACHE(KV)는 wrangler.toml에 바인딩이 없다. 예전 모크가 KV를 줘서
+    // "상태 = KV 메모"가 테스트에선 통과하고 프로덕션에선 늘 running_or_unknown이었다(2026-11-04 첫 실행).
   };
   const app = createApp({ fetch: fetchImpl });
   const call = (path, init = {}) => app.fetch(new Request(BASE + path, init), env, ctx);
@@ -107,7 +104,7 @@ function setup({ vendor } = {}) {
       `INSERT INTO workspace_visual_checks (id, project_id, user_key, target_url, intent, decision, works, status, executor, report_json, evidence_keys_json, locale, created_at, updated_at)
        VALUES (?, 'pp', ?, ?, '예약', 'Needs Fix', 0, ?, 'container', ?, '[]', 'ko', ?, ?)`,
     ).run(id, userKey, SITE, status, JSON.stringify(report), now, now);
-  return { ...opened, db, env, post, call, dispatched, vendorCalls, addRun, kv };
+  return { ...opened, db, env, post, call, dispatched, vendorCalls, addRun };
 }
 
 describe("라벨러 실행 — 직원 런만 · 블라인드", { skip: SQLITE_SKIP }, () => {
@@ -256,11 +253,20 @@ describe("완료 콜백 → labeler_agent 행 · 읽기는 숫자만", { skip: S
     assert.equal(t.db.prepare(`SELECT COUNT(*) AS n FROM label_ac_verdicts`).get().n, 0);
     await t.post("/internal/labeler-done", { runId: "lab_vc_1_B", ok: false, error: "agent v2 inspection timed out after 900s ||trace: https://salon.example/비밀" });
     const s = await status(t, "vc_1");
-    assert.deepEqual(s.passes.map((p) => [p.pass, p.status, p.failure]), [["A", "failed", "no_rows"], ["B", "failed", "timeout"]]);
+    assert.deepEqual(s.passes.map((p) => [p.pass, p.status]), [["A", "failed"], ["B", "failed"]]);
     assert.ok(!JSON.stringify(s).includes("salon.example"));
     assert.equal((await done(t, "lab_vc_9_A")).status, 404);
     assert.equal((await t.post("/internal/labeler-done", { runId: "vc_1", ok: false })).status, 400);
     assert.equal((await t.post("/internal/labeler-done", { runId: "lab_vc_1_A", ok: false }, {})).status, 401);
+  });
+
+  it("콜백 전에는 running — 상태는 D1(잡 닫힘 + 라벨 행)에서만 나온다", async () => {
+    const t = setup();
+    t.addRun("vc_1");
+    await t.post("/admin/labeler-runs", { runId: "vc_1", passes: ["A"] });
+    assert.deepEqual((await status(t, "vc_1")).passes.map((p) => [p.pass, p.status]), [["A", "running"]]);
+    await done(t, "lab_vc_1_A");
+    assert.deepEqual((await status(t, "vc_1")).passes.map((p) => [p.pass, p.status]), [["A", "done"]]);
   });
 
   it("다시 실행: 라벨 없이 끝난 패스만(retry) · 라벨이 있으면 거절(append-only)", async () => {
