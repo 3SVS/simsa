@@ -9,9 +9,9 @@
 | L3-1 | **대상 = 직원(벤치) 런만.** 사용자 런은 `staff_runs_only`로 거절한다. 사용자 앱은 동의 문구를 정리한 뒤 별도 승인 | 사용자 앱 화면을 다른 벤더에 다시 보이는 일은 동의 범위 문제다. 벤치 앱은 우리 앱이다 |
 | L3-2 | **수동 실행.** `POST /admin/labeler-runs` · ops-probe `labeler-run`. 자동 샘플링은 프로덕션 비용을 잰 뒤 | 자동은 상한을 정한 뒤에 켠다 |
 | L3-3 | **패스별 벤더 고정, 대체 금지.** A = OpenAI `gpt-5.6-sol`, B = Anthropic `claude-opus-5-5`(effort high, max_tokens≥8000), C = OpenAI `gpt-5.4`(칸 분쟁용 세 번째 패스) | 대체가 켜지면 두 패스가 몰래 같은 벤더가 되어 κ가 의미를 잃는다. 막히면 그 패스가 실패하는 것이 맞다 |
-| L3-4 | **마이그레이션 없음.** 잡 상태 = `inspection_agent_spend` 행(잡 id `lab_<runId>_<패스>`, 예산 $5·200호출) + 0076 라벨 행 + KV 메모(실패 사유 분류, 30일) | 되돌리기 쉽다 |
+| L3-4 | **마이그레이션 없음.** 잡 상태 = `inspection_agent_spend` 행(잡 id `lab_<runId>_<패스>`, 예산 $5·200호출) + 0076 라벨 행. 상태 = 잡 닫힘(budget = spent) × 라벨 행 수 → running / done / failed. *[정정 2026-11-04] 처음엔 KV 메모였으나 프로덕션에 KV 바인딩(CENTRAL_CACHE)이 없어 늘 running_or_unknown이었다 — D1에서만 읽게 고침, 실패 분류는 console 로그에만* | 되돌리기 쉽다 |
 | L3-5 | **사용자 화면과 분리.** 검수 행을 만들지 않고 전용 콜백 `/internal/labeler-done`으로만 받는다. 원장 호출 지점 `inspect_labeler` — 사용자 검수 하루 예산(`inspect_agent`)을 쓰지 않는다 | 검수 결과·재검수·과금과 섞이지 않게 |
-| L3-6 | **읽기 = 숫자만.** `GET /admin/labeler-runs?runId=` · `GET /admin/labeler-agreement` · ops-probe `labeler-status`. 분쟁은 건수만, 어느 런·기준인지는 내지 않는다. 실패 사유는 분류만(timeout·budget·llm·no_rows·other), 원문은 console에만 | 레포가 공개라 Actions 로그를 누구나 읽는다 |
+| L3-6 | **읽기 = 숫자만.** `GET /admin/labeler-runs?runId=` · `GET /admin/labeler-agreement` · ops-probe `labeler-status`. 분쟁은 건수만, 어느 런·기준인지는 내지 않는다. 실패 분류(timeout·budget·llm·no_rows·other)와 원문은 console 로그에만 | 레포가 공개라 Actions 로그를 누구나 읽는다 |
 | L3-7 | **분쟁.** 칸 분쟁 → 세 번째 패스 C를 같은 엔드포인트로 수동 실행. H1 분쟁 → 사용자 질문은 마이크로 라벨 UI(다음 트레인) | §0.0 규칙 그대로 |
 
 토큰은 종류를 가른다(`ilb1`). 검수 런 토큰으로는 라벨러 경로에 못 들어온다. 블라인드(§5-1): 컨테이너에는 주소·의도·기준(허용 목록 칸만)만 보낸다. 원 런의 리포트·계획·판정은 보내지 않는다.
