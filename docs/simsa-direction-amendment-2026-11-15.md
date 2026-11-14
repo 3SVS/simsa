@@ -53,3 +53,5 @@
 - Replit 앱 테스트: https://docs.replit.com/replitai/app-testing
 - AI 기본법 시행: https://www.ddaily.co.kr/page/view/2026012112024216108 · 확인제: https://www.ddaily.co.kr/page/view/2026071414510894297
 - 모델 단가: https://developers.openai.com/api/docs/pricing · https://platform.claude.com/docs/en/about-claude/pricing (2026-11-15 조회)
+
+> **[정정 2026-11-15]** D14·D15의 "ISO/IEC 25059"는 **ISO/IEC 25010:2023**으로 읽는다(25059는 AI 시스템 자체의 품질 모델, Simsa 대상은 AI가 만든 일반 웹앱). 25059는 앱 안 AI 기능에만 보조로 쓴다. 근거·대응표: `docs/dataset/external-taxonomy-map-v1-2026-11-15.md`.
